@@ -33,7 +33,7 @@ License: AGPLv3 open source
 - **Phase 1 Part A (done):** real editing. Selection, cut/copy/paste/delete/trim, insert silence, gain, normalize (peak or LUFS), fades with four shapes, reverse, invert, DC removal, unlimited undo with a History panel, Save/Save As to WAV/FLAC/AIFF/Ogg with bit depth and dither, WAV markers preserved, unsaved-changes prompts. Core tests (storage, undo, DSP, EBU loudness reference) run in CI.
 - **Phase 1 Part B (done):** markers and regions (keys, Markers panel, saved in WAV), live peak/true-peak/LUFS meters, loudness statistics, log-frequency spectral display, panels that pop out into their own Hyprland-tiled windows with the layout remembered, colour themes with third-party JSON themes (docs/themes.md).
 - **Phase 1 Part C (done):** Master Section with 8 plugin slots (VST3, LV2, LADSPA via JUCE hosting), master gain and bypass, keyboard parameter editor plus the plugin's own window under XWayland, render in place (undoable) or to a new file with dither, latency compensated, chain remembered. Verified with LSP plugins.
-- **Phase 1 status:** core done. Still open from the Phase 1 list: slot solo, Master Section presets, split waveform/spectral view and FFT settings. Added after the owner's first Omarchy test: Delete shows a hint when nothing is selected, window opacity control, waveform colour picker. Next UI candidate: the Ableton/Bitwig-style device chain row (2.4). Not yet tried on real audio hardware or a real Hyprland session (next: the owner's Omarchy test).
+- **Phase 1 status:** core done. Still open from the Phase 1 list: slot solo, Master Section presets, split waveform/spectral view and FFT settings. Added after the owner's first Omarchy test: Delete shows a hint when nothing is selected, window opacity control, waveform colour picker. Next candidates: the Ableton/Bitwig-style device chain row (2.4) and OBS-style recording/capture (2.1b). Not yet tried on real audio hardware or a real Hyprland session (next: the owner's Omarchy test).
 - **Next:** Phase 2 (spectral editing and repair, plan section 5).
 
 ---
@@ -67,6 +67,17 @@ Priority key: **P0** = MVP, **P1** = v1.0, **P2** = later.
 - P1 Sample rate conversion (high-quality SoX/r8brain-style) and bit-depth conversion with dither (TPDF, noise-shaped)
 - P1 Loop point and sampler (smpl/inst chunk) editing
 - P2 Pitch/time stretching (Rubber Band library)
+
+### 2.1b Recording and capture, like OBS (requested 2026-10-17)
+- P1 Record dialog (`Ctrl+R`): pick the source, see live meters, set sample rate, bit depth and channels, record into a new file or at the cursor
+- P1 Sources, each picked from a list that updates when devices come and go:
+  - **Desktop audio**: everything you hear (the monitor of the current output, e.g. AirPods Max or speakers)
+  - **Any input device**: microphone, audio interface (RA T4, Scarlett...), built-in input
+  - **One application**: e.g. only the browser or only a game, like OBS's application audio capture
+  - Several at once, mixed or kept on separate channels
+- P1 Built on PipeWire (the Omarchy/Arch default): native PipeWire capture of sink monitors, nodes and apps, with the JACK route (pipewire-jack) as a fallback; plain ALSA input where PipeWire is missing
+- P1 Safety: pre-record buffer (catch the last few seconds before you pressed record), clip warning, disk-space check, crash-safe writing so a crash or power cut keeps what was recorded
+- P2 Timer and level-triggered start/stop (start on sound, stop after silence), split into files at silence (handy for vinyl and tape), punch-in (below)
 
 ### 2.2 Spectral editing and restoration (Audition core, requested as a headline feature)
 Modeled on Audition's Spectral Frequency Display, working on the same audio as the waveform, with every edit undoable.
@@ -471,6 +482,7 @@ Key design choices:
 **Exit:** a user can open a file, fix levels, cut it, run it through LV2 plugins, hit a loudness target and export. This is the first public alpha.
 
 ### Phase 1.5: Multi-channel foundation
+- Recording and capture like OBS: desktop audio, any input, one app (2.1b P1)
 - Device chain row at the bottom of the window for the Master Section (2.4 P1), if not built sooner
 - Make playback, meters, Master Section and render work for any channel count, with speaker layouts and downmix monitoring (2.11 P0)
 - Built-in Stereoize (mono to stereo)
