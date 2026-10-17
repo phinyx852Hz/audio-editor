@@ -23,6 +23,7 @@ License: AGPLv3 open source
 | Scarlett / Clarett integration based on Geoffrey Bennett's Linux driver and GUI | 2.9b |
 | Ableton-style library and browser that searches files, plugins, stock effects and presets | 2.9c |
 | Optimized for Arch, Omarchy and Hyprland, with panels that pop out to tiles | 3 |
+| Multi-channel (5.1 to 7.1.4) and Ambisonics, stereo upmix, built-in mono-to-stereo | 2.11 |
 
 ## Where things stand (2026-10-17)
 - **Plan:** this document, covering every requirement above.
@@ -283,6 +284,26 @@ One browser panel (dockable, pops out to its own tile) with a single search fiel
 
 ---
 
+### 2.11 Multi-channel and Ambisonics (requirement, added 2026-10-17)
+Multi-channel means one file with many channels (5.1, 7.1, 7.1.4, Ambisonics), not many tracks.
+
+| Feature | Priority |
+|---|---|
+| Channel-agnostic engine: playback, meters, Master Section and render for any channel count (today they assume stereo) | P0 |
+| Speaker layouts read and written from WAV `WAVE_FORMAT_EXTENSIBLE` channel masks, plus BWF/ADM and CAF; layout shown per lane (L, R, C, LFE, Ls, Rs...) | P0 |
+| Per-channel solo/mute, channel routing to device outputs, downmix monitoring on stereo hardware (ITU-R BS.775 coefficients) | P0 |
+| Multi-channel loudness (BS.1770 channel weights, LFE excluded) and per-channel true peak | P0 |
+| Channel tools: extract, insert, swap, reorder, split to mono files, merge mono files into one file | P1 |
+| Ambisonics, first and higher order (FOA to 7th), AmbiX (ACN/SN3D) native, FuMa import and export | P1 |
+| Ambisonic encoder (place mono or stereo sources), rotate (yaw, pitch, roll), mirror, order change | P1 |
+| Ambisonic decoders: binaural for headphones (SOFA HRTF files via libmysofa) and to speaker layouts (AllRAD) | P1 |
+| Upmix stereo to 5.1, 7.1, 7.1.4 or Ambisonics: STFT-based primary/ambient split, centre extraction, ambience to surrounds, adjustable width and LFE crossover, fold-down check | P1 |
+| Mono to stereo ("stereoize"): complementary comb or all-pass decorrelation, frequency-dependent spread, Haas option, a mono-compatibility meter that proves L+R still sums back cleanly | P1 |
+| Surround and Ambisonic visualisation: per-channel meters, energy map (sphere) for Ambisonics, phase scope per pair | P2 |
+| Host multi-channel plugins (IEM Plugin Suite, SPARTA, ambiX on Linux) with full bus layouts in the Master Section | P1 |
+
+Building blocks: the IEM Plugin Suite (GPLv3, Linux VST3/LV2) works as hosted plugins straight away. Spatial_Audio_Framework (SAF, ISC-licensed core) and libmysofa (BSD) can supply built-in encoders, decoders and HRTF loading.
+
 ## 3. Recommended Linux tech stack
 
 ### Pick: **C++20 + JUCE 8** engine, with PipeWire/JACK/ALSA audio via JUCE, CMake build
@@ -442,6 +463,11 @@ Key design choices:
 
 **Exit:** a user can open a file, fix levels, cut it, run it through LV2 plugins, hit a loudness target and export. This is the first public alpha.
 
+### Phase 1.5: Multi-channel foundation
+- Make playback, meters, Master Section and render work for any channel count, with speaker layouts and downmix monitoring (2.11 P0)
+- Built-in Stereoize (mono to stereo)
+- Done early because every later feature (repair, Montage, export) depends on how channels are handled
+
 ### Phase 2: Repair lab (Audition-level restoration)
 - Spectral selection tools (marquee, lasso, brush, harmonics) and spectral edits
 - Auto Heal and Spot Healing Brush
@@ -454,6 +480,7 @@ Key design choices:
 **Exit:** podcast/dialogue cleanup and vinyl restoration workflows work end to end.
 
 ### Phase 3: Mastering desk (WaveLab-level)
+- Ambisonics (encode, rotate, binaural and speaker decode) and stereo upmix to surround or Ambisonics (2.11 P1)
 - Built-in mastering processors (EQ, multiband comp, true-peak limiter, width)
 - Spectrum, phase correlation, vectorscope
 - Analyze menu: Audio File Comparator, 3D Frequency, Global, Loudness and Visual Analysis
