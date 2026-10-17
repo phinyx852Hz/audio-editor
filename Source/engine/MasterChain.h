@@ -84,7 +84,7 @@ private:
 
     class PluginWindow;
 
-    static void addExtraFormats (juce::AudioPluginFormatManager&);   // formats JUCE does not have (CLAP)
+    static void addExtraFormats (juce::AudioPluginFormatManager&);   // formats JUCE does not have: CLAP
 
     std::unique_ptr<juce::AudioPluginInstance> createInstance (const juce::PluginDescription&, juce::String& error) const;
     void preparePlugin (juce::AudioPluginInstance&, double rate, int blockSize) const;

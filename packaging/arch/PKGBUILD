@@ -10,9 +10,10 @@ depends=('qt6-base' 'qt6-wayland' 'alsa-lib' 'libpipewire' 'freetype2' 'fontconf
 optdepends=('pipewire-jack: JACK output through PipeWire (recommended; jack2 also works)'
             'realtime-privileges: realtime scheduling for audio threads'
             "xorg-xwayland: show plugins' own windows on Wayland"
-            'lsp-plugins: a large free set of mastering plugins (LV2/VST3)')
-# X11 headers are for JUCE (juceaide and plugin windows); ladspa.h for LADSPA hosting
-makedepends=('git' 'cmake' 'ninja' 'ladspa' 'libx11' 'libxrandr'
+            'lsp-plugins: a large free set of mastering plugins (LV2/VST3/CLAP)'
+            'yabridge: Windows VST3 and CLAP plugins through Wine')
+# X11 headers are for JUCE (juceaide and plugin windows); ladspa.h and clap for plugin hosting
+makedepends=('git' 'cmake' 'ninja' 'ladspa' 'clap' 'libx11' 'libxrandr'
              'libxinerama' 'libxcursor' 'libxcomposite' 'libxext' 'mesa')
 provides=('phinyx')
 conflicts=('phinyx')

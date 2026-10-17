@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MasterChain.h"
 #include "BuiltinEffects.h"
+#include "ClapFormat.h"
 #include "../core/Dsp.h"
 
 #include <algorithm>
@@ -33,8 +34,9 @@ private:
 };
 
 //==============================================================================
-void MasterChain::addExtraFormats (juce::AudioPluginFormatManager&)
+void MasterChain::addExtraFormats (juce::AudioPluginFormatManager& manager)
 {
+    manager.addFormat (std::make_unique<ClapPluginFormat>());
 }
 
 MasterChain::MasterChain()
@@ -105,8 +107,13 @@ int MasterChain::startScan()
 
     scanQueue.clear();
     for (auto* format : formats.getFormats())
-        for (const auto& file : format->searchPathsForPlugins (format->getDefaultLocationsToSearch(), true, false))
+    {
+        // LV2 names a bundle once for each plugin in it; look inside each bundle once.
+        auto files = format->searchPathsForPlugins (format->getDefaultLocationsToSearch(), true, false);
+        files.removeDuplicates (false);
+        for (const auto& file : files)
             scanQueue.add ({ format, file });
+    }
 
     scanIndex = 0;
     crashedThisScan = 0;

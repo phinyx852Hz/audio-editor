@@ -48,6 +48,7 @@ target_sources(${APP_ID} PRIVATE
     Source/engine/AudioCapture.cpp
     Source/engine/AudioEngine.cpp
     Source/engine/BuiltinEffects.cpp
+    Source/engine/ClapFormat.cpp
     Source/engine/MasterChain.cpp
     Source/ui/CommandRegistry.cpp
     Source/ui/Dialogs.cpp
@@ -60,6 +61,28 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/Spectrogram.cpp
     Source/ui/Theme.cpp
     Source/ui/WaveformView.cpp)
+
+# CLAP plugin hosting needs only the CLAP headers: a local checkout, the
+# system's (clap/clap.h, e.g. the clap package), or the pinned release.
+set(CLAP_DIR "" CACHE PATH "Path to a local CLAP SDK checkout (the folder holding include/clap)")
+if(CLAP_DIR)
+    set(PHINYX_CLAP_INCLUDE "${CLAP_DIR}/include")
+else()
+    find_path(PHINYX_CLAP_INCLUDE clap/clap.h)
+    if(NOT PHINYX_CLAP_INCLUDE)
+        include(FetchContent)
+        FetchContent_Declare(clap
+            GIT_REPOSITORY https://github.com/free-audio/clap.git
+            GIT_TAG 1.2.7
+            GIT_SHALLOW TRUE)
+        FetchContent_GetProperties(clap)
+        if(NOT clap_POPULATED)
+            FetchContent_Populate(clap)
+        endif()
+        set(PHINYX_CLAP_INCLUDE "${clap_SOURCE_DIR}/include")
+    endif()
+endif()
+target_include_directories(${APP_ID} SYSTEM PRIVATE ${PHINYX_CLAP_INCLUDE})
 
 # JACK headers come from jack2 or pipewire-jack. JUCE loads libjack at run time,
 # so JACK output works with either; without headers PHINYX builds ALSA-only.

@@ -3,7 +3,7 @@
 A keyboard-first audio editor and mastering suite for Linux, combining the best of
 Adobe Audition, Sound Forge and WaveLab. Optimized for Arch Linux, Omarchy and Hyprland.
 
-Status: Phase 1 complete: a usable editor with markers, meters, spectrogram, themes and a plugin Master Section. Not yet tested on real audio hardware. See the full plan in [docs/plan.md](docs/plan.md).
+Status: Phase 2 complete: a usable editor with markers, meters, spectrogram, themes, a plugin Master Section and a spectral repair lab. Not yet tested on real audio hardware. See the full plan in [docs/plan.md](docs/plan.md).
 
 Built with a Qt 6 interface (native Wayland) on top of a JUCE 8 audio engine.
 
@@ -28,7 +28,7 @@ Built with a Qt 6 interface (native Wayland) on top of a JUCE 8 audio engine.
 - Spectral display (`Shift+D`): log-frequency spectrogram of every channel, still fully editable
 - Meters (`Ctrl+Shift+L`): sample peak bars with peak hold, true peak, and momentary/short-term/integrated loudness (ITU-R BS.1770 / EBU R128) during playback; `Ctrl+Alt+R` resets them. Loudness statistics of the selection or file (`Ctrl+Shift+A`): integrated LUFS, loudness range, true peak.
 - Panels (Master Section, Meters, Markers, History) dock in the window or pop out into their own window with `Ctrl+Alt+P`, so Hyprland tiles them like any other window; all shortcuts work there too. The layout is remembered.
-- Master Section (`Ctrl+Shift+E`), like WaveLab's: 8 plugin slots plus master gain, applied to everything you play. Hosts VST3, LV2 and LADSPA effects (scan with `Ctrl+Alt+Shift+S`, add with `Ctrl+Alt+E`). In the slot list `Enter` opens a keyboard-friendly parameter editor (type to filter, arrows to adjust), `E` opens the plugin's own window (needs XWayland), `B` bypasses, `Del` removes, `Ctrl+Up`/`Down` reorders. `Ctrl+Shift+B` bypasses the whole section. Render (`Ctrl+Shift+Enter`) applies it to the audio as an undoable edit, or writes a new file with bit depth and dither; plugin latency is compensated. The chain is remembered between sessions.
+- Master Section (`Ctrl+Shift+E`), like WaveLab's: 8 plugin slots plus master gain, applied to everything you play. Hosts VST3, CLAP, LV2 and LADSPA effects (scan with `Ctrl+Alt+Shift+S`, add with `Ctrl+Alt+E`). Each plugin file is checked by a separate helper copy of PHINYX, so a plugin that crashes or hangs while being scanned is just skipped from then on and never takes the editor down. Windows plugins work through [yabridge](https://github.com/robbert-vdh/yabridge): after `yabridgectl sync`, its VST3 and CLAP copies in `~/.vst3/yabridge` and `~/.clap/yabridge` are found by the next scan (VST2 is not supported). In the slot list `Enter` opens a keyboard-friendly parameter editor (type to filter, arrows to adjust), `E` opens the plugin's own window (needs XWayland), `B` bypasses, `Del` removes, `Ctrl+Up`/`Down` reorders. `Ctrl+Shift+B` bypasses the whole section. Render (`Ctrl+Shift+Enter`) applies it to the audio as an undoable edit, or writes a new file with bit depth and dither; plugin latency is compensated. The chain is remembered between sessions.
 - Device chain (`Ctrl+Shift+C`), like Ableton and Bitwig: the Master Section's plugins as cards along the bottom of the window, left to right into the master gain. Each card has on/off, solo (hear only that plugin while playing), its first knobs, a level bar, Edit and Window buttons. Keys: `Left`/`Right` pick a card, `Up`/`Down` pick a knob, `+`/`-` turn it (`Shift` or `Page Up`/`Down` for bigger steps), `F2` or just typing a number sets an exact value (so does double-clicking a knob; `Enter` sets it, `Esc` cancels), `Enter` edits all parameters, `Insert` adds a plugin after the card, `Del` removes it, `B` bypasses, `S` solos, `E` opens the plugin's window, `Ctrl+Left`/`Right` moves it, `Esc` goes back to the waveform. Drag a card by its name to move it with the mouse.
 - Focus follows the mouse (View > Focus Follows Mouse, on by default), like Hyprland: point at the waveform, the device chain or a panel and your keys go there, no click needed. It never pulls focus out of a text field or dialog.
 - Window opacity: slider at the bottom right or View > Window Opacity; `Ctrl+Alt+-` and `Ctrl+Alt+=` change it. Your compositor's own opacity (for example a Hyprland window rule) still applies on top.
@@ -43,7 +43,7 @@ Built with a Qt 6 interface (native Wayland) on top of a JUCE 8 audio engine.
 
 ## Build and run (Arch Linux)
 ```sh
-sudo pacman -S --needed base-devel git cmake ninja qt6-base qt6-wayland alsa-lib libpipewire ladspa \
+sudo pacman -S --needed base-devel git cmake ninja qt6-base qt6-wayland alsa-lib libpipewire ladspa clap \
   freetype2 fontconfig libx11 libxrandr libxinerama libxcursor libxcomposite libxext mesa
 git clone https://github.com/phinyx852Hz/audio-editor
 cd audio-editor
@@ -56,7 +56,9 @@ Do not install `jack2` on Omarchy or any PipeWire system: it conflicts with `pip
 
 JUCE 8.0.15 is downloaded automatically during the first configure (the freetype/X11 packages above are only needed to build JUCE's small `juceaide` helper); pass `-DJUCE_DIR=/path/to/JUCE` to use a local checkout.
 
-For plugins, `sudo pacman -S lsp-plugins` gives a large free mastering set (EQ, compressors, limiters).
+The `clap` package provides the CLAP plugin headers; without it they are downloaded during configure (or pass `-DCLAP_DIR=/path/to/clap`).
+
+For plugins, `sudo pacman -S lsp-plugins` gives a large free mastering set (EQ, compressors, limiters). `sudo pacman -S dragonfly-reverb` adds free reverbs, as CLAP among others.
 
 To install system wide instead, use the PKGBUILD: `cd packaging/arch && makepkg -si`.
 
