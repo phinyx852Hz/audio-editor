@@ -218,6 +218,14 @@ void MainWindow::registerCommands()
     add ("repair.autoHeal", Category::repair, tr ("&Auto Heal"), { KS (Qt::CTRL | Qt::Key_U) }, [this] { autoHeal(); });
     add ("repair.spectralGain", Category::repair, tr ("Spectral &Gain..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_G) },
          [this] { spectralGain(); });
+    add ("repair.learnNoise", Category::repair, tr ("&Learn Noise Profile"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_N) },
+         [this] { learnNoise(); });
+    add ("repair.noiseReduction", Category::repair, tr ("&Noise Reduction..."), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_N) },
+         [this] { noiseReduction(); });
+    add ("repair.declick", Category::repair, tr ("De&Click..."), {}, [this] { declick(); });
+    add ("repair.declip", Category::repair, tr ("DeCli&p..."), {}, [this] { declip(); });
+    add ("repair.dehum", Category::repair, tr ("De&Hum..."), {}, [this] { dehum(); });
+    add ("repair.deess", Category::repair, tr ("De&Ess..."), {}, [this] { deess(); });
     add ("repair.frequencyRange", Category::repair, tr ("&Frequency Range..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_F) },
          [this] { chooseFrequencyRange(); });
     add ("repair.allFrequencies", Category::repair, tr ("A&ll Frequencies"), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_F) },
@@ -388,8 +396,9 @@ void MainWindow::buildMenus()
         { tr ("&Process"),   { "process.gain", "process.normalize", "-", "process.fadeIn", "process.fadeOut", "-",
                                "process.fadeShape.linear", "process.fadeShape.equalPower", "process.fadeShape.exponential",
                                "process.fadeShape.sCurve", "-", "process.reverse", "process.invert", "process.dcOffset", "-", "process.stereoize" } },
-        { tr ("&Repair"),    { "repair.autoHeal", "repair.spectralGain", "-", "repair.frequencyRange", "repair.allFrequencies", "-",
-                               "view.spectral" } },
+        { tr ("&Repair"),    { "repair.autoHeal", "repair.spectralGain", "-", "repair.learnNoise", "repair.noiseReduction", "-",
+                               "repair.declick", "repair.declip", "repair.dehum", "repair.deess", "-",
+                               "repair.frequencyRange", "repair.allFrequencies", "-", "view.spectral" } },
         { tr ("&Markers"),   { "marker.add", "marker.addRegion", "-", "marker.next", "marker.previous", "-", "view.markers" } },
         { tr ("&Analyze"),   { "analyze.loudness", "-", "view.meters", "analyze.resetMeters", "-", "view.spectral" } },
         { tr ("Ma&ster"),    { "view.master", "view.chain", "master.addPlugin", "master.bypass", "-", "master.render", "-", "master.scan" } },
@@ -616,7 +625,8 @@ void MainWindow::updateCommandStates()
                             "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
                             "select.toStart", "select.toEnd", "process.gain", "process.normalize",
                             "process.reverse", "process.invert", "process.dcOffset", "process.stereoize",
-                            "repair.spectralGain", "repair.frequencyRange", "repair.allFrequencies",
+                            "repair.spectralGain", "repair.frequencyRange", "repair.allFrequencies", "repair.learnNoise",
+                            "repair.noiseReduction", "repair.declick", "repair.declip", "repair.dehum", "repair.deess",
                             "transport.playStop", "transport.stop", "transport.start", "transport.end",
                             "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge",
                             "view.zoomIn", "view.zoomOut", "view.zoomFit" })
@@ -1395,6 +1405,244 @@ void MainWindow::autoHeal()
 
     commit (tr ("Auto Heal"), std::move (result), selStart, selEnd, selEnd - selStart);
     waveform->setFocus();
+}
+
+AudioDataPtr MainWindow::runRepair (const QString& title, std::function<AudioDataPtr (repair::Progress)> work)
+{
+    auto progress = std::make_shared<std::atomic<float>> (0.0f);
+    auto cancel = std::make_shared<std::atomic<bool>> (false);
+    engine.stop();
+
+    QProgressDialog dialog (title + QStringLiteral ("..."), tr ("Cancel"), 0, 1000, this);
+    dialog.setWindowTitle (title);
+    dialog.setWindowModality (Qt::WindowModal);
+    dialog.setMinimumDuration (400);
+    connect (&dialog, &QProgressDialog::canceled, this, [cancel] { cancel->store (true); });
+
+    QFutureWatcher<AudioDataPtr> watcher;
+    QEventLoop loop;
+    connect (&watcher, &QFutureWatcher<AudioDataPtr>::finished, &loop, &QEventLoop::quit);
+    QTimer poll;
+    connect (&poll, &QTimer::timeout, this, [&] { dialog.setValue ((int) (progress->load() * 1000.0f)); });
+    poll.start (50);
+
+    watcher.setFuture (QtConcurrent::run ([work, progress, cancel] { return work ({ progress.get(), cancel.get() }); }));
+    loop.exec();
+    poll.stop();
+    dialog.reset();
+    return cancel->load() ? nullptr : watcher.result();
+}
+
+void MainWindow::commitRepair (const QString& description, AudioDataPtr result, Frame start, Frame end)
+{
+    if (result == nullptr)
+        return;
+    commit (description, std::move (result), start, end, end - start);
+    waveform->setFocus();
+}
+
+void MainWindow::learnNoise()
+{
+    const auto d = data();
+    if (d == nullptr || ! requireSelection())
+        return;
+
+    auto profile = repair::learnNoise (*d, selStart, selEnd);
+    if (! profile.isValid())
+    {
+        statusBar()->showMessage (tr ("Select at least a quarter of a second of noise on its own, then learn it again"), 8000);
+        return;
+    }
+    noiseProfile = std::move (profile);
+    statusBar()->showMessage (tr ("Learned the noise from %1 s. Now select what to clean (or nothing for the whole file) and press %2")
+                                  .arg ((double) noiseProfile.learnedFrom / d->sampleRate(), 0, 'f', 2)
+                                  .arg (commands.action (QStringLiteral ("repair.noiseReduction"))->shortcut().toString (QKeySequence::NativeText)),
+                              10000);
+}
+
+void MainWindow::noiseReduction()
+{
+    const auto d = data();
+    if (d == nullptr)
+        return;
+    if (! noiseProfile.isValid() || std::abs (noiseProfile.sampleRate - d->sampleRate()) > 0.5)
+    {
+        QMessageBox::information (this, tr ("Noise Reduction"),
+                                  tr ("First teach PHINYX what the noise sounds like:\n\n"
+                                      "1. Select a part with only the noise (hiss, hum, room tone), at least a quarter of a second.\n"
+                                      "2. Press %1 (Repair > Learn Noise Profile).\n"
+                                      "3. Select what to clean, or nothing for the whole file, and open Noise Reduction again.")
+                                      .arg (commands.action (QStringLiteral ("repair.learnNoise"))->shortcut().toString (QKeySequence::NativeText)));
+        return;
+    }
+
+    ValuesDialog dialog (tr ("Noise Reduction"),
+                         tr ("Turns down everything that sounds like the learned noise, %1. Start gentle: a little noise left sounds "
+                             "more natural than a watery, over-processed result.").arg (hasSelection() ? tr ("in the selection") : tr ("in the whole file")),
+                         {
+                             { QStringLiteral ("repair/noise/reduction"), tr ("&Reduce noise by:"), 12.0, 3.0, 40.0, 1.0, 0, tr (" dB"),
+                               tr ("How far the noise is turned down"), {} },
+                             { QStringLiteral ("repair/noise/sensitivity"), tr ("&Sensitivity:"), 6.0, 0.0, 24.0, 1.0, 0, tr (" dB"),
+                               tr ("How far above the noise a sound must be to be kept. Higher removes more but can dull quiet sounds"), {} },
+                             { QStringLiteral ("repair/noise/release"), tr ("Re&lease:"), 100.0, 20.0, 500.0, 10.0, 0, tr (" ms"),
+                               tr ("How long the reduction takes to come back after a sound; longer is smoother"), {} },
+                         }, this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    repair::NoiseReductionSettings settings { dialog.value (0), dialog.value (1), dialog.value (2) };
+    const auto [s, e] = processRange();
+    const auto profile = noiseProfile;
+    auto result = runRepair (tr ("Noise Reduction"), [d, s, e, profile, settings] (repair::Progress p)
+    {
+        return repair::reduceNoise (*d, s, e, profile, settings, p);
+    });
+    commitRepair (tr ("Noise Reduction %1 dB").arg (settings.reductionDb, 0, 'f', 0), std::move (result), s, e);
+}
+
+void MainWindow::declick()
+{
+    const auto d = data();
+    if (d == nullptr)
+        return;
+
+    ValuesDialog dialog (tr ("DeClick"),
+                         tr ("Finds clicks and crackle %1 and rebuilds each one from the sound around it.")
+                             .arg (hasSelection() ? tr ("in the selection") : tr ("in the whole file")),
+                         { { QStringLiteral ("repair/declick/sensitivity"), tr ("&Sensitivity:"), 1.0, 0, 0, 1, 0, {},
+                             tr ("High finds quieter clicks but may touch sharp drum hits"),
+                             { tr ("Low (loud clicks only)"), tr ("Medium"), tr ("High (vinyl crackle)") } } },
+                         this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    const double thresholds[] { 9.0, 6.5, 4.5 };
+    const auto threshold = thresholds[std::clamp ((int) dialog.value (0), 0, 2)];
+    const auto [s, e] = processRange();
+    auto report = std::make_shared<repair::Report>();
+    auto result = runRepair (tr ("DeClick"), [d, s, e, threshold, report] (repair::Progress p)
+    {
+        return repair::declick (*d, s, e, threshold, *report, p);
+    });
+    if (result == nullptr)
+        return;
+    if (report->fixed == 0)
+    {
+        statusBar()->showMessage (tr ("No clicks found. Try a higher sensitivity, or Auto Heal (Ctrl+U) on a selected click"), 8000);
+        return;
+    }
+    commitRepair (tr ("DeClick (%n click(s))", nullptr, report->fixed), std::move (result), s, e);
+    statusBar()->showMessage (tr ("Fixed %n click(s)", nullptr, report->fixed)
+                                  + (report->skipped > 0 ? tr ("; %n longer one(s) left for Auto Heal", nullptr, report->skipped) : QString()), 8000);
+}
+
+void MainWindow::declip()
+{
+    const auto d = data();
+    if (d == nullptr)
+        return;
+
+    ValuesDialog dialog (tr ("DeClip"),
+                         tr ("Rebuilds the tops of waves that were cut off by recording too loud, %1. "
+                             "The rebuilt peaks can go above 0 dB, so Normalize afterwards.")
+                             .arg (hasSelection() ? tr ("in the selection") : tr ("in the whole file")),
+                         { { QStringLiteral ("repair/declip/level"), tr ("&Clipped at or above:"), 99.0, 80.0, 100.0, 0.5, 1, tr (" % of the peak"),
+                             tr ("Samples at least this loud, in runs of two or more, count as clipped"), {} } },
+                         this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    const auto level = dialog.value (0);
+    const auto [s, e] = processRange();
+    auto report = std::make_shared<repair::Report>();
+    auto result = runRepair (tr ("DeClip"), [d, s, e, level, report] (repair::Progress p)
+    {
+        return repair::declip (*d, s, e, level, *report, p);
+    });
+    if (result == nullptr)
+        return;
+    if (report->fixed == 0)
+    {
+        statusBar()->showMessage (tr ("No clipping found"), 6000);
+        return;
+    }
+    commitRepair (tr ("DeClip"), result, s, e);
+    const auto peak = result->peakAbs (s, e);
+    statusBar()->showMessage (tr ("Rebuilt %n clipped peak(s)", nullptr, report->fixed)
+                                  + (peak > 1.0f ? tr ("; they now reach %1 dB, so Normalize (Ctrl+Shift+N) before saving")
+                                                       .arg (20.0 * std::log10 (peak), 0, 'f', 1)
+                                                 : QString()), 10000);
+}
+
+void MainWindow::dehum()
+{
+    const auto d = data();
+    if (d == nullptr)
+        return;
+
+    ValuesDialog dialog (tr ("DeHum"),
+                         tr ("Removes mains hum and its overtones with very narrow notches, %1.")
+                             .arg (hasSelection() ? tr ("in the selection") : tr ("in the whole file")),
+                         {
+                             { QStringLiteral ("repair/dehum/frequency"), tr ("&Hum at:"), 0.0, 0, 0, 1, 0, {},
+                               tr ("Find looks for 50 or 60 Hz hum (and its exact pitch) by itself"),
+                               { tr ("Find it"), tr ("50 Hz (Europe, Asia, Africa, Australia)"), tr ("60 Hz (Americas, parts of Asia)"), {} } },
+                             { QStringLiteral ("repair/dehum/harmonics"), tr ("&Overtones:"), 8.0, 1.0, 30.0, 1.0, 0, {},
+                               tr ("How many multiples of the hum to remove; buzzy hum needs more"), {} },
+                             { QStringLiteral ("repair/dehum/width"), tr ("&Width:"), 1.5, 0.3, 10.0, 0.1, 1, tr (" Hz"),
+                               tr ("Narrower touches less of the music; wider catches hum that drifts"), {} },
+                         }, this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    const auto [s, e] = processRange();
+    repair::HumSettings settings;
+    settings.harmonics = (int) dialog.value (1);
+    settings.widthHz = dialog.value (2);
+    const auto choice = (int) dialog.value (0);
+    if (choice == 0)
+    {
+        QApplication::setOverrideCursor (Qt::WaitCursor);
+        settings.frequency = repair::findHum (*d, s, e);
+        QApplication::restoreOverrideCursor();
+        if (settings.frequency <= 0.0)
+        {
+            QMessageBox::information (this, tr ("DeHum"), tr ("No clear 50 or 60 Hz hum was found here. If you can hear one, choose 50 or 60 Hz yourself."));
+            return;
+        }
+    }
+    else
+        settings.frequency = choice == 1 ? 50.0 : 60.0;
+
+    auto result = runRepair (tr ("DeHum"), [d, s, e, settings] (repair::Progress p) { return repair::dehum (*d, s, e, settings, p); });
+    commitRepair (tr ("DeHum %1 Hz").arg (settings.frequency, 0, 'f', 2), std::move (result), s, e);
+    statusBar()->showMessage (tr ("Removed hum at %1 Hz and %n overtone(s)", nullptr, settings.harmonics - 1).arg (settings.frequency, 0, 'f', 2), 8000);
+}
+
+void MainWindow::deess()
+{
+    const auto d = data();
+    if (d == nullptr)
+        return;
+
+    ValuesDialog dialog (tr ("DeEss"),
+                         tr ("Turns down sharp \"s\" and \"sh\" sounds in a voice, %1, only at the moments they get loud.")
+                             .arg (hasSelection() ? tr ("in the selection") : tr ("in the whole file")),
+                         {
+                             { QStringLiteral ("repair/deess/threshold"), tr ("&Threshold:"), -30.0, -60.0, 0.0, 1.0, 0, tr (" dB"),
+                               tr ("Esses louder than this are turned down; lower catches more"), {} },
+                             { QStringLiteral ("repair/deess/from"), tr ("&From:"), 5000.0, 2000.0, 12000.0, 250.0, 0, tr (" Hz"),
+                               tr ("Where the esses start; around 4 to 6 kHz for most voices"), {} },
+                             { QStringLiteral ("repair/deess/max"), tr ("&At most:"), 10.0, 1.0, 24.0, 1.0, 0, tr (" dB"),
+                               tr ("The most an ess is turned down"), {} },
+                         }, this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    repair::DeEssSettings settings { dialog.value (0), dialog.value (1), dialog.value (2) };
+    const auto [s, e] = processRange();
+    auto result = runRepair (tr ("DeEss"), [d, s, e, settings] (repair::Progress p) { return repair::deess (*d, s, e, settings, p); });
+    commitRepair (tr ("DeEss"), std::move (result), s, e);
 }
 
 void MainWindow::spectralGain()

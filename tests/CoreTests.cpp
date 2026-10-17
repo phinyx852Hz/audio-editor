@@ -6,6 +6,7 @@
 #include "../Source/core/Fft.h"
 #include "../Source/core/Repair.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <functional>
@@ -282,6 +283,127 @@ namespace
         check (repair::autoHeal (*clean, { 0, 96000 }, error) == nullptr, "auto heal refuses the whole file");
     }
 
+    void testRestoration()
+    {
+        const double rate = 48000.0;
+        std::mt19937 random (11);
+        std::normal_distribution<float> gauss (0.0f, 1.0f);
+        auto tone = [&] (Frame f, double hz, double amp) { return (float) (amp * std::sin (2.0 * M_PI * hz * f / rate)); };
+
+        // Noise reduction: learn from a noise-only second, then reduce under a tone.
+        std::vector<float> hiss (192000);
+        for (auto& h : hiss)
+            h = 0.02f * gauss (random);
+        auto noisy = makeSignal (192000, [&] (Frame f) { return hiss[(size_t) f] + (f >= 48000 ? tone (f, 440.0, 0.3) : 0.0f); });
+        const auto profile = repair::learnNoise (*noisy, 0, 48000);
+        check (profile.isValid() && profile.learnedFrom == 48000, "learn a noise profile");
+        repair::NoiseReductionSettings nr;
+        nr.reductionDb = 20.0;
+        auto cleaned = repair::reduceNoise (*noisy, 0, 192000, profile, nr);
+        check (cleaned != nullptr && cleaned->length() == noisy->length(), "noise reduction keeps the length");
+        if (cleaned != nullptr)
+        {
+            auto pure = makeSignal (192000, [&] (Frame f) { return f >= 48000 ? tone (f, 440.0, 0.3) : 0.0f; });
+            const auto before = rmsDifference (*noisy, *pure, 60000, 180000);
+            const auto after = rmsDifference (*cleaned, *pure, 60000, 180000);
+            check (after < before * 0.2, "noise reduction lowers the hiss under a tone ("
+                   + std::to_string (before) + " -> " + std::to_string (after) + ")");
+            check (near (toneLevel (*cleaned, 60000, 180000, 440.0), 0.3, 0.01), "noise reduction keeps the tone");
+            const auto alone = rmsDifference (*cleaned, *makeSignal (192000, [] (Frame) { return 0.0f; }), 10000, 40000);
+            check (alone < 0.02 * 0.15, "noise reduction turns noise alone down by the set amount (" + std::to_string (alone) + ")");
+        }
+
+        // DeClick: 40 clicks on music-like audio (two tones and a little hiss).
+        std::vector<Frame> clickAt;
+        for (int i = 0; i < 40; ++i)
+            clickAt.push_back (5000 + i * 4500 + (Frame) (random() % 300));
+        auto music = [&] (Frame f) { return tone (f, 220.0, 0.3) + tone (f, 1330.0, 0.1) + 0.002f * hiss[(size_t) f] / 0.02f; };
+        auto clicked = makeSignal (192000, [&] (Frame f)
+        {
+            float c = 0.0f;
+            for (auto at : clickAt)
+                if (f >= at && f < at + 6)
+                    c = (f - at) % 2 ? 0.5f : -0.6f;
+            return music (f) + c;
+        });
+        auto smooth = makeSignal (192000, music);
+        repair::Report report;
+        auto declicked = repair::declick (*clicked, 0, 192000, 6.0, report);
+        check (declicked != nullptr && report.fixed >= 38 && report.fixed <= 46, "declick finds the clicks (" + std::to_string (report.fixed)
+               + " fixed, " + std::to_string (report.skipped) + " skipped)");
+        if (declicked != nullptr)
+        {
+            const auto left = rmsDifference (*declicked, *smooth, 0, 192000);
+            check (left < 0.003, "declick leaves little of the clicks (" + std::to_string (left) + ")");
+        }
+        repair::Report none;
+        repair::declick (*smooth, 0, 192000, 6.0, none);
+        check (none.fixed <= 2, "declick leaves clean audio alone (" + std::to_string (none.fixed) + " found)");
+
+        // DeClip: a 300 Hz sine of amplitude 1.2 clipped at 0.9.
+        auto loud = makeSignal (48000, [&] (Frame f) { return tone (f, 300.0, 1.2); });
+        auto clipped = makeSignal (48000, [&] (Frame f) { return std::clamp (tone (f, 300.0, 1.2), -0.9f, 0.9f); });
+        auto unclipped = repair::declip (*clipped, 0, 48000, 99.0, report);
+        check (unclipped != nullptr && report.fixed > 500, "declip finds the clipped peaks (" + std::to_string (report.fixed) + ")");
+        if (unclipped != nullptr)
+        {
+            const auto before = rmsDifference (*clipped, *loud, 5000, 43000);
+            const auto after = rmsDifference (*unclipped, *loud, 5000, 43000);
+            check (after < before * 0.3, "declip rebuilds the peaks (" + std::to_string (before) + " -> " + std::to_string (after) + ")");
+        }
+
+        // DeHum: 50 Hz hum and harmonics under a 1 kHz tone.
+        auto hummed = makeSignal (192000, [&] (Frame f)
+        {
+            return tone (f, 1000.0, 0.3) + tone (f, 50.0, 0.1) + tone (f, 150.0, 0.05) + tone (f, 250.0, 0.03);
+        });
+        const auto hum = repair::findHum (*hummed, 0, 192000);
+        check (near (hum, 50.0, 0.05), "find the hum at 50 Hz (" + std::to_string (hum) + ")");
+        repair::HumSettings hs;
+        hs.frequency = hum;
+        auto dehummed = repair::dehum (*hummed, 0, 192000, hs);
+        if (dehummed != nullptr)
+        {
+            check (toneLevel (*dehummed, 96000, 190000, 50.0) < 0.003 && toneLevel (*dehummed, 96000, 190000, 150.0) < 0.002,
+                   "dehum removes the hum (" + std::to_string (toneLevel (*dehummed, 96000, 190000, 50.0)) + ")");
+            check (near (toneLevel (*dehummed, 96000, 190000, 1000.0), 0.3, 0.005), "dehum keeps the tone");
+            check (toneLevel (*dehummed, 0, 24000, 50.0) < 0.001, "dehum also works from the very start of the file ("
+                   + std::to_string (toneLevel (*dehummed, 0, 24000, 50.0)) + ")");
+        }
+        check (repair::findHum (*smooth, 0, 192000) == 0.0, "no hum found in audio without hum");
+
+        // DeEss: a loud 7 kHz burst is turned down, the 200 Hz tone under it is not.
+        auto sss = makeSignal (96000, [&] (Frame f)
+        {
+            const auto s = f >= 40000 && f < 56000 ? tone (f, 6100.0, 0.15) + tone (f, 7300.0, 0.15) + tone (f, 8700.0, 0.1) : 0.0f;
+            return tone (f, 200.0, 0.3) + s;
+        });
+        repair::DeEssSettings es;
+        auto deessed = repair::deess (*sss, 0, 96000, es);
+        if (deessed != nullptr)
+        {
+            auto plain = makeSignal (96000, [&] (Frame f) { return tone (f, 200.0, 0.3); });
+            const auto before = rmsDifference (*sss, *plain, 42000, 54000);
+            const auto after = rmsDifference (*deessed, *plain, 42000, 54000);
+            check (after < before * 0.5, "deess turns the burst down (" + std::to_string (before) + " -> " + std::to_string (after) + ")");
+            check (near (toneLevel (*deessed, 42000, 54000, 200.0), 0.3, 0.005), "deess keeps the low tone");
+            check (rmsDifference (*deessed, *sss, 5000, 30000) < 1.0e-4, "deess leaves quiet passages alone");
+        }
+
+        // Interpolation fills a gap in a tone almost exactly.
+        std::vector<float> x (4000);
+        for (int i = 0; i < 4000; ++i)
+            x[(size_t) i] = tone (i, 700.0, 0.5);
+        auto truth = x;
+        for (int i = 2000; i < 2060; ++i)
+            x[(size_t) i] = 0.0f;
+        check (repair::interpolateGap (x, 2000, 60), "interpolate a 60-sample gap");
+        double worst = 0.0;
+        for (int i = 2000; i < 2060; ++i)
+            worst = std::max (worst, (double) std::abs (x[(size_t) i] - truth[(size_t) i]));
+        check (worst < 0.01, "the gap matches the tone (" + std::to_string (worst) + ")");
+    }
+
     void testLayouts()
     {
         check (dsp::speakerLayout (6).name == "5.1" && dsp::channelName (3, 6) == "LFE" && dsp::channelName (4, 6) == "Ls",
@@ -379,6 +501,7 @@ int main()
     testStereoize();
     testSpectrum();
     testRepair();
+    testRestoration();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");

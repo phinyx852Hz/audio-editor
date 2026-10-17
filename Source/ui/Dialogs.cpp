@@ -7,6 +7,8 @@
 #include "../engine/AudioEngine.h"
 
 #include <QCheckBox>
+#include <QStandardPaths>
+#include <QSettings>
 #include <QColorDialog>
 #include <QComboBox>
 #include <QGridLayout>
@@ -534,6 +536,77 @@ SpectralGainDialog::SpectralGainDialog (double initialDb, const QString& what, Q
 double SpectralGainDialog::gainDb() const
 {
     return gainBox->value() <= gainBox->minimum() ? repair::removeDb : gainBox->value();
+}
+
+//==============================================================================
+ValuesDialog::ValuesDialog (const QString& title, const QString& about, QList<Field> f, QWidget* parent)
+    : QDialog (parent), fields (std::move (f))
+{
+    setWindowTitle (title);
+    QSettings settings (QStandardPaths::writableLocation (QStandardPaths::GenericConfigLocation) + QStringLiteral ("/" APP_ID "/settings.ini"), QSettings::IniFormat);
+
+    auto* text = new QLabel (about, this);
+    text->setWordWrap (true);
+    auto* form = new QFormLayout;
+    for (const auto& field : fields)
+    {
+        const auto value = settings.value (field.key, field.defaultValue).toDouble();
+        QWidget* editor = nullptr;
+        if (! field.choices.isEmpty())
+        {
+            auto* box = new QComboBox (this);
+            box->addItems (field.choices);
+            box->setCurrentIndex (std::clamp ((int) value, 0, (int) field.choices.size() - 1));
+            editor = box;
+        }
+        else
+        {
+            auto* box = new QDoubleSpinBox (this);
+            box->setRange (field.minimum, field.maximum);
+            box->setSingleStep (field.step);
+            box->setDecimals (field.decimals);
+            box->setSuffix (field.suffix);
+            box->setValue (std::clamp (value, field.minimum, field.maximum));
+            box->setAccelerated (true);
+            editor = box;
+        }
+        editor->setToolTip (field.tip);
+        form->addRow (field.label, editor);
+        editors.push_back (editor);
+    }
+
+    auto* buttons = new QDialogButtonBox (QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    auto* layout = new QVBoxLayout (this);
+    layout->addWidget (text);
+    layout->addLayout (form);
+    layout->addWidget (buttons);
+    connect (buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect (buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+
+    if (! editors.isEmpty())
+    {
+        editors.front()->setFocus();
+        if (auto* spin = qobject_cast<QDoubleSpinBox*> (editors.front()))
+            spin->selectAll();
+    }
+}
+
+double ValuesDialog::value (int index) const
+{
+    auto* editor = editors.value (index);
+    if (auto* box = qobject_cast<QComboBox*> (editor))
+        return box->currentIndex();
+    if (auto* spin = qobject_cast<QDoubleSpinBox*> (editor))
+        return spin->value();
+    return 0.0;
+}
+
+void ValuesDialog::accept()
+{
+    QSettings settings (QStandardPaths::writableLocation (QStandardPaths::GenericConfigLocation) + QStringLiteral ("/" APP_ID "/settings.ini"), QSettings::IniFormat);
+    for (int i = 0; i < fields.size(); ++i)
+        settings.setValue (fields[i].key, value (i));
+    QDialog::accept();
 }
 
 NormalizeDialog::Mode NormalizeDialog::mode() const { return modeBox->currentIndex() == 0 ? Mode::peak : Mode::loudness; }

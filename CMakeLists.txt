@@ -42,6 +42,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/AudioDocument.cpp
     Source/core/Dsp.cpp
     Source/core/Repair.cpp
+    Source/core/Restoration.cpp
     Source/core/Fft.cpp
     Source/engine/AudioCapture.cpp
     Source/engine/AudioEngine.cpp
@@ -125,6 +126,7 @@ if(PHINYX_BUILD_TESTS)
         Source/core/AudioDocument.cpp
         Source/core/Dsp.cpp
         Source/core/Repair.cpp
+        Source/core/Restoration.cpp
         Source/core/Fft.cpp)
     add_test(NAME core COMMAND phinyx-core-tests)
 endif()

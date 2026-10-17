@@ -2,6 +2,7 @@
 #pragma once
 
 #include "../core/AudioDocument.h"
+#include "../core/Repair.h"
 #include "../core/Dsp.h"
 #include "../engine/AudioCapture.h"
 #include "../engine/AudioEngine.h"
@@ -87,6 +88,15 @@ private:
     void normalize();
     void stereoize();
     void autoHeal();
+    void learnNoise();
+    void noiseReduction();
+    void declick();
+    void declip();
+    void dehum();
+    void deess();
+    // Runs a restoration on a worker thread with a progress bar; null when cancelled.
+    AudioDataPtr runRepair (const QString& title, std::function<AudioDataPtr (repair::Progress)> work);
+    void commitRepair (const QString& description, AudioDataPtr result, Frame start, Frame end);
     void spectralGain();
     void chooseFrequencyRange();
     void setBand (double lowHz, double highHz);
@@ -152,6 +162,7 @@ private:
     Frame cursor = 0, selStart = 0, selEnd = 0, selAnchor = 0;
     double bandLow = 0.0, bandHigh = 0.0;   // the selection's frequency band in Hz, none when high <= low
     double spectralGainDb = -12.0;
+    repair::NoiseProfile noiseProfile;   // learned with Learn Noise Profile, for this session
     AudioDataPtr clipboard;
     dsp::FadeShape fadeShape = dsp::FadeShape::equalPower;
     SaveOptions saveOptions;

@@ -145,6 +145,34 @@ private:
     class QDoubleSpinBox* gainBox;
 };
 
+// A small form of numbers and choices for a process, e.g. DeClick or DeHum.
+// Each value is remembered under its settings key between uses.
+class ValuesDialog final : public QDialog
+{
+    Q_OBJECT
+
+public:
+    struct Field
+    {
+        QString key;             // settings key, e.g. "repair/declick/sensitivity"
+        QString label;
+        double defaultValue = 0.0;
+        double minimum = 0.0, maximum = 100.0, step = 1.0;
+        int decimals = 0;
+        QString suffix;
+        QString tip;
+        QStringList choices;     // when set: a list to pick from, and the value is the index
+    };
+
+    ValuesDialog (const QString& title, const QString& about, QList<Field> fields, QWidget* parent);
+    double value (int index) const;
+    void accept() override;      // also remembers the values
+
+private:
+    QList<Field> fields;
+    QList<QWidget*> editors;
+};
+
 // Personal colours for the waveform display, on top of the theme. Changes show
 // immediately; Cancel or Esc puts the previous colours back.
 class WaveformColorsDialog final : public QDialog
