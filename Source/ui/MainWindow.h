@@ -98,6 +98,7 @@ private:
 
     // Cursor and selection
     bool hasSelection() const { return selEnd > selStart; }
+    bool requireSelection();  // shows a hint when nothing is selected
     void setCursor (Frame);
     void moveCursorBy (double seconds);
     void selectRange (Frame anchor, Frame head);

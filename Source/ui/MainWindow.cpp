@@ -134,7 +134,7 @@ void MainWindow::registerCommands()
     add ("edit.cut", Category::edit, tr ("Cu&t"), { KS (Qt::CTRL | Qt::Key_X) }, [this] { cut(); });
     add ("edit.copy", Category::edit, tr ("&Copy"), { KS (Qt::CTRL | Qt::Key_C) }, [this] { copy(); });
     add ("edit.paste", Category::edit, tr ("&Paste"), { KS (Qt::CTRL | Qt::Key_V) }, [this] { paste(); });
-    add ("edit.delete", Category::edit, tr ("&Delete"), { KS (Qt::Key_Delete) }, [this] { deleteSelection(); });
+    add ("edit.delete", Category::edit, tr ("&Delete"), { KS (Qt::Key_Delete), KS (Qt::Key_Backspace) }, [this] { deleteSelection(); });
     add ("edit.trim", Category::edit, tr ("T&rim to Selection"), { KS (Qt::CTRL | Qt::Key_T) }, [this] { trimToSelection(); });
     add ("edit.insertSilence", Category::edit, tr ("Insert &Silence..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_S) },
          [this] { insertSilence(); });
@@ -233,7 +233,7 @@ void MainWindow::registerCommands()
          [this] { waveform->zoomBy (2.0); });
     add ("view.zoomFit", Category::view, tr ("Zoom to &Fit"), { KS (Qt::CTRL | Qt::Key_0) }, [this] { waveform->zoomToFit(); });
     add ("view.zoomSelection", Category::view, tr ("Zoom to &Selection"), { KS (Qt::CTRL | Qt::Key_E) },
-         [this] { waveform->zoomToSelection(); });
+         [this] { if (requireSelection()) waveform->zoomToSelection(); });
     add ("view.history", Category::view, tr ("&History Panel"), { KS (Qt::CTRL | Qt::Key_H) },
          [this] { historyPanel->toggle(); lastPanel = historyPanel; });
     add ("view.markers", Category::view, tr ("&Markers Panel"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_M) },
@@ -451,12 +451,15 @@ void MainWindow::updateCommandStates()
                             "view.zoomIn", "view.zoomOut", "view.zoomFit" })
         commands.action (QString::fromLatin1 (id))->setEnabled (open);
 
+    // Selection commands stay enabled so pressing their key without a selection
+    // explains what is missing instead of silently doing nothing.
     for (const auto* id : { "edit.cut", "edit.copy", "edit.delete", "edit.trim", "process.fadeIn", "process.fadeOut",
                             "view.zoomSelection" })
-        commands.action (QString::fromLatin1 (id))->setEnabled (sel);
+        commands.action (QString::fromLatin1 (id))->setEnabled (open);
+    Q_UNUSED (sel);
 
     commands.action (QStringLiteral ("edit.paste"))->setEnabled (open && clipboard != nullptr);
-    commands.action (QStringLiteral ("marker.addRegion"))->setEnabled (sel);
+    commands.action (QStringLiteral ("marker.addRegion"))->setEnabled (open);
     commands.action (QStringLiteral ("master.render"))->setEnabled (open);
 
     for (const auto* id : { "marker.add", "marker.next", "marker.previous", "analyze.loudness" })
@@ -743,7 +746,7 @@ void MainWindow::jumpToHistory (int index)
 
 void MainWindow::copy()
 {
-    if (! hasSelection())
+    if (! requireSelection())
         return;
 
     clipboard = data()->slice (selStart, selEnd);
@@ -778,7 +781,7 @@ void MainWindow::paste()
 
 void MainWindow::deleteSelection()
 {
-    if (! hasSelection())
+    if (! requireSelection())
         return;
 
     const auto start = selStart, end = selEnd;
@@ -789,7 +792,7 @@ void MainWindow::deleteSelection()
 
 void MainWindow::trimToSelection()
 {
-    if (! hasSelection())
+    if (! requireSelection())
         return;
 
     const auto d = data();
@@ -907,7 +910,7 @@ void MainWindow::normalize()
 
 void MainWindow::fade (bool in)
 {
-    if (! hasSelection())
+    if (! requireSelection())
         return;
 
     const auto s = selStart, e = selEnd;
@@ -951,7 +954,7 @@ void MainWindow::addMarker()
 
 void MainWindow::addRegion()
 {
-    if (! hasSelection())
+    if (! requireSelection())
         return;
 
     auto markers = doc.current().markers;
@@ -1204,6 +1207,17 @@ void MainWindow::renderMaster()
         QMessageBox::warning (this, tr ("Render"), tr ("Could not save %1:\n%2").arg (path, QString::fromStdString (error)));
     else
         statusBar()->showMessage (tr ("Rendered to %1").arg (QFileInfo (path).fileName()), 6000);
+}
+
+bool MainWindow::requireSelection()
+{
+    if (hasSelection())
+        return true;
+
+    if (data() != nullptr)
+        statusBar()->showMessage (tr ("Select some audio first: drag across the waveform, or hold Shift and press "
+                                      "the arrow keys. Ctrl+A selects everything."), 6000);
+    return false;
 }
 
 //==============================================================================
