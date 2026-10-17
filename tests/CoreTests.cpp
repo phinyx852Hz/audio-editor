@@ -623,6 +623,76 @@ namespace
         check (repair::findSimilar (*plain, { 47900, 48500 }, 0, plain->length(), 0.8).empty(),
                "find similar finds nothing when the example does not stand out");
     }
+
+    void testConvert()
+    {
+        // 48 kHz to 44.1 kHz: the tone keeps its level and shape.
+        auto sine = makeSignal (96000, [] (Frame f) { return (float) (0.5 * std::sin (2.0 * M_PI * 1000.0 * f / 48000.0)); });
+        auto down = dsp::resample (*sine, 44100.0);
+        check (down != nullptr && down->length() == 88200 && down->sampleRate() == 44100.0, "resample to 44.1 kHz gives the right length");
+        if (down != nullptr)
+        {
+            auto ideal = makeSignal (88200, [] (Frame f) { return (float) (0.5 * std::sin (2.0 * M_PI * 1000.0 * f / 44100.0)); }, 44100.0);
+            const auto error = rmsDifference (*down, *ideal, 4000, 84000);
+            check (error < 2.0e-4, "resampled tone matches the ideal (" + std::to_string (error) + ")");
+        }
+
+        // Down to 16 kHz: a 10 kHz tone is above the new limit and must not fold back to 6 kHz.
+        auto high = makeSignal (96000, [] (Frame f) { return (float) (0.5 * std::sin (2.0 * M_PI * 10000.0 * f / 48000.0)
+                                                                      + 0.3 * std::sin (2.0 * M_PI * 1000.0 * f / 48000.0)); });
+        auto low = dsp::resample (*high, 16000.0);
+        if (low != nullptr)
+        {
+            check (toneLevel (*low, 2000, 30000, 6000.0) < 2.0e-4, "no aliasing when resampling down ("
+                   + std::to_string (toneLevel (*low, 2000, 30000, 6000.0)) + ")");
+            check (near (toneLevel (*low, 2000, 30000, 1000.0), 0.3, 0.003), "the tone below the limit is kept");
+        }
+        else
+            check (false, "resample to 16 kHz");
+
+        // Up and back down again.
+        auto up = dsp::resample (*sine, 96000.0);
+        auto back = up != nullptr ? dsp::resample (*up, 48000.0) : nullptr;
+        check (back != nullptr && back->length() == sine->length() && rmsDifference (*back, *sine, 4000, 92000) < 2.0e-4,
+               "resampling up and back down returns the original");
+
+        // Quantizing to 16 bits puts every sample on the grid, close to the original.
+        auto quiet = makeSignal (48000, [] (Frame f) { return (float) (0.001 * std::sin (2.0 * M_PI * 440.0 * f / 48000.0)); });
+        auto plain = dsp::quantize (*quiet, 16, dsp::Dither::tpdf);
+        auto shaped = dsp::quantize (*quiet, 16, dsp::Dither::shaped);
+        const auto x = samples (*quiet, 0, 48000), p = samples (*plain, 0, 48000), q = samples (*shaped, 0, 48000);
+        bool onGrid = true;
+        double worst = 0.0;
+        for (size_t i = 0; i < x.size(); ++i)
+        {
+            onGrid = onGrid && std::abs (p[i] * 32768.0f - std::round (p[i] * 32768.0f)) < 1.0e-3f;
+            worst = std::max (worst, (double) std::abs (p[i] - x[i]));
+        }
+        check (onGrid && worst < 1.5 / 32768.0, "16-bit quantize with dither stays within the dither");
+
+        // Noise shaping: less of the error at low frequencies (its spectrum at a few points below 2 kHz).
+        auto lowNoise = [&] (const std::vector<float>& y)
+        {
+            double total = 0.0;
+            for (double hz = 150.0; hz < 2000.0; hz += 100.0)
+            {
+                double re = 0.0, im = 0.0;
+                for (size_t i = 0; i < y.size(); ++i)
+                {
+                    const auto e = (double) y[i] - x[i];
+                    re += e * std::cos (2.0 * M_PI * hz * (double) i / 48000.0);
+                    im -= e * std::sin (2.0 * M_PI * hz * (double) i / 48000.0);
+                }
+                total += re * re + im * im;
+            }
+            return total;
+        };
+        check (lowNoise (q) < lowNoise (p) * 0.1, "noise shaping moves the dither noise out of the low frequencies");
+
+        auto stereo = dsp::toStereo (sine);
+        auto mono = dsp::toMono (*stereo);
+        check (mono->numChannels() == 1 && rmsDifference (*mono, *sine, 0, 96000) < 1.0e-7, "stereo of equal sides mixes back to the mono");
+    }
 }
 
 int main()
@@ -636,6 +706,7 @@ int main()
     testRepair();
     testRestoration();
     testShapes();
+    testConvert();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");

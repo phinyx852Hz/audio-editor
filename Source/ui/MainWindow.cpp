@@ -216,6 +216,8 @@ void MainWindow::registerCommands()
     add ("process.invert", Category::process, tr ("In&vert Polarity"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_I) },
          [this] { simpleProcess (tr ("Invert"), &dsp::invert); });
     add ("process.stereoize", Category::process, tr ("&Stereoize..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_W) }, [this] { stereoize(); });
+    add ("process.convert", Category::process, tr ("&Convert Sample Type..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_T) },
+         [this] { convertSampleType(); });
     add ("repair.autoHeal", Category::repair, tr ("&Auto Heal"), { KS (Qt::CTRL | Qt::Key_U) }, [this] { autoHeal(); });
     add ("repair.spectralGain", Category::repair, tr ("Spectral &Gain..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_G) },
          [this] { spectralGain(); });
@@ -418,7 +420,7 @@ void MainWindow::buildMenus()
                                "select.toStart", "select.toEnd" } },
         { tr ("&Process"),   { "process.gain", "process.normalize", "-", "process.fadeIn", "process.fadeOut", "-",
                                "process.fadeShape.linear", "process.fadeShape.equalPower", "process.fadeShape.exponential",
-                               "process.fadeShape.sCurve", "-", "process.reverse", "process.invert", "process.dcOffset", "-", "process.stereoize" } },
+                               "process.fadeShape.sCurve", "-", "process.reverse", "process.invert", "process.dcOffset", "-", "process.stereoize", "process.convert" } },
         { tr ("&Repair"),    { "view.diagnostics", "-", "repair.autoHeal", "repair.spectralGain", "repair.findSimilar", "-", "repair.learnNoise", "repair.noiseReduction", "-",
                                "repair.declick", "repair.declip", "repair.dehum", "repair.deess", "-",
                                "repair.toolBox", "repair.toolLasso", "repair.toolBrush", "repair.toolSpotHeal",
@@ -658,7 +660,8 @@ void MainWindow::updateCommandStates()
     for (const auto* id : { "file.save", "file.saveAs", "file.close", "edit.insertSilence", "edit.copyToNew", "select.all", "select.none",
                             "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
                             "select.toStart", "select.toEnd", "process.gain", "process.normalize",
-                            "process.reverse", "process.invert", "process.dcOffset", "process.stereoize",
+                            "process.reverse", "process.invert", "process.dcOffset", "process.stereoize", "process.convert",
+                            "repair.findSimilar", "repair.addHarmonics",
                             "repair.spectralGain", "repair.frequencyRange", "repair.allFrequencies", "repair.learnNoise",
                             "repair.noiseReduction", "repair.declick", "repair.declip", "repair.dehum", "repair.deess",
                             "transport.playStop", "transport.stop", "transport.start", "transport.end",
@@ -1395,6 +1398,90 @@ void MainWindow::stereoize()
     doc.apply (tr ("Stereoize").toStdString(), { std::move (result), doc.current().markers });
     refreshFromDocument (true);
     waveform->setFocus();
+}
+
+void MainWindow::convertSampleType()
+{
+    const auto d = data();
+    if (d == nullptr)
+        return;
+
+    const double rates[] { 0, 8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000 };
+    QStringList rateNames { tr ("Keep %1 Hz").arg ((int) d->sampleRate()) };
+    for (size_t i = 1; i < std::size (rates); ++i)
+        rateNames << tr ("%1 Hz").arg ((int) rates[i]);
+    const auto channelsNow = QString::fromStdString (dsp::speakerLayout (d->numChannels()).name);
+    const int depths[] { 0, 24, 16, 8 };
+
+    // The choices start at "keep" each time rather than at what was picked last.
+    for (auto key : { "convert/rate", "convert/channels", "convert/bits" })
+        appSettings().remove (QString::fromLatin1 (key));
+    ValuesDialog dialog (tr ("Convert Sample Type"),
+                         tr ("Changes the whole file's sample rate, channels or bit depth. The rate change uses a high-quality "
+                             "filter; a lower bit depth is applied now, so you hear exactly what will be saved."),
+                         {
+                             { QStringLiteral ("convert/rate"), tr ("Sample &rate:"), 0, 0, 0, 1, 0, {}, {}, rateNames },
+                             { QStringLiteral ("convert/channels"), tr ("&Channels:"), 0, 0, 0, 1, 0, {}, {},
+                               { tr ("Keep %1").arg (channelsNow), tr ("Mono (mix all channels)"), tr ("Stereo") } },
+                             { QStringLiteral ("convert/bits"), tr ("&Bit depth:"), 0, 0, 0, 1, 0, {}, {},
+                               { tr ("Keep (32-bit float while editing)"), tr ("24-bit"), tr ("16-bit"), tr ("8-bit") } },
+                             { QStringLiteral ("convert/dither"), tr ("&Dither:"), 2, 0, 0, 1, 0, {},
+                               tr ("Dither hides the rounding of a lower bit depth as faint hiss; noise shaping moves that hiss "
+                                   "where it is hardest to hear"),
+                               { tr ("None"), tr ("TPDF"), tr ("TPDF with noise shaping") } },
+                         }, this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    waveform->setFocus();
+
+    const auto newRate = rates[std::clamp ((int) dialog.value (0), 0, (int) std::size (rates) - 1)];
+    const auto channels = (int) dialog.value (1);
+    const auto bits = depths[std::clamp ((int) dialog.value (2), 0, 3)];
+    const auto dither = (dsp::Dither) std::clamp ((int) dialog.value (3), 0, 2);
+    const auto changeRate = newRate > 0.0 && std::abs (newRate - d->sampleRate()) > 0.5;
+    const auto changeChannels = (channels == 1 && d->numChannels() != 1) || (channels == 2 && d->numChannels() != 2);
+    if (! changeRate && ! changeChannels && bits == 0)
+        return;
+
+    auto result = runRepair (tr ("Convert Sample Type"), [=] (repair::Progress p)
+    {
+        auto current = d;
+        if (changeChannels)
+            current = channels == 1 ? dsp::toMono (*current) : dsp::toStereo (dsp::toMono (*current));
+        // Each step reports a third of the way.
+        auto step = [&p] (int n) { return [&p, n] (float f) { p.report ((n + f) / 3.0f); return ! p.cancelled(); }; };
+        if (current != nullptr && changeRate)
+            current = dsp::resample (*current, newRate, step (1));
+        if (current != nullptr && bits > 0)
+            current = dsp::quantize (*current, bits, dither, step (2));
+        return current;
+    });
+    if (result == nullptr)
+        return;
+
+    // Markers keep their place in time.
+    auto markers = doc.current().markers;
+    const auto scale = result->sampleRate() / d->sampleRate();
+    for (auto& m : markers)
+    {
+        m.start = std::llround ((double) m.start * scale);
+        m.end = std::llround ((double) m.end * scale);
+    }
+    cursor = selStart = selEnd = selAnchor = std::llround ((double) cursor * scale);
+
+    QStringList what;
+    if (changeRate)
+        what << tr ("%1 Hz").arg ((int) newRate);
+    if (changeChannels)
+        what << (channels == 1 ? tr ("mono") : tr ("stereo"));
+    if (bits > 0)
+    {
+        what << tr ("%1-bit").arg (bits);
+        saveOptions.bitDepth = std::max (16, bits);   // saved at that depth (8-bit is kept in 16-bit files)
+    }
+    doc.apply (tr ("Convert to %1").arg (what.join (QStringLiteral (", "))).toStdString(), { std::move (result), std::move (markers) });
+    refreshFromDocument (false);
+    statusBar()->showMessage (tr ("Converted to %1.").arg (what.join (QStringLiteral (", "))), 5000);
 }
 
 void MainWindow::setBand (double lowHz, double highHz)

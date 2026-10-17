@@ -573,4 +573,180 @@ namespace dsp
             for (auto& s : ch)
                 s += (dist (rng) + dist (rng)) * lsb;
     }
+
+    //==========================================================================
+    AudioDataPtr toMono (const AudioData& d)
+    {
+        AudioData::Builder out (1, d.sampleRate());
+        const auto channels = d.numChannels();
+        std::vector<std::vector<float>> x ((size_t) channels, std::vector<float> (AudioChunk::maxFrames));
+        std::vector<float*> ptrs;
+        for (auto& c : x)
+            ptrs.push_back (c.data());
+        std::vector<float> mono (AudioChunk::maxFrames);
+        const float* monoPtr = mono.data();
+        for (Frame pos = 0; pos < d.length(); pos += AudioChunk::maxFrames)
+        {
+            const auto n = (int) std::min<Frame> (AudioChunk::maxFrames, d.length() - pos);
+            d.read (pos, n, ptrs.data());
+            for (int i = 0; i < n; ++i)
+            {
+                float sum = 0.0f;
+                for (auto& c : x)
+                    sum += c[(size_t) i];
+                mono[(size_t) i] = sum / (float) channels;
+            }
+            out.append (&monoPtr, n);
+        }
+        return out.finish();
+    }
+
+    namespace
+    {
+        // Zeroth-order modified Bessel function, for the Kaiser window.
+        double besselI0 (double x)
+        {
+            double sum = 1.0, term = 1.0;
+            for (int k = 1; k < 50; ++k)
+            {
+                term *= (x / (2.0 * k)) * (x / (2.0 * k));
+                sum += term;
+                if (term < sum * 1.0e-12)
+                    break;
+            }
+            return sum;
+        }
+
+        // The filter, tabulated: a Kaiser-windowed sinc over `zeroCrossings` either side.
+        struct SincTable
+        {
+            static constexpr int zeroCrossings = 32, perUnit = 4096;
+            static constexpr double beta = 9.6;   // about -96 dB side lobes
+            std::vector<float> values;
+
+            SincTable() : values ((size_t) (zeroCrossings * perUnit + 2), 0.0f)
+            {
+                const auto norm = besselI0 (beta);
+                for (int i = 0; i <= zeroCrossings * perUnit; ++i)
+                {
+                    const auto x = (double) i / perUnit;
+                    const auto r = x / zeroCrossings;
+                    const auto sinc = i == 0 ? 1.0 : std::sin (pi * x) / (pi * x);
+                    values[(size_t) i] = (float) (sinc * besselI0 (beta * std::sqrt (std::max (0.0, 1.0 - r * r))) / norm);
+                }
+            }
+
+            float at (double x) const   // x in zero crossings, may be negative
+            {
+                x = std::abs (x) * perUnit;
+                const auto i = (size_t) x;
+                if (i >= values.size() - 1)
+                    return 0.0f;
+                const auto f = (float) (x - (double) i);
+                return values[i] + (values[i + 1] - values[i]) * f;
+            }
+        };
+    }
+
+    AudioDataPtr resample (const AudioData& d, double newRate, const ProgressCallback& progress)
+    {
+        if (newRate <= 0.0 || d.sampleRate() <= 0.0)
+            return nullptr;
+        static const SincTable table;
+        const auto ratio = newRate / d.sampleRate();
+        // Below the lower Nyquist frequency, with room for the filter to fall.
+        const auto scale = std::min (1.0, ratio) * 0.95;
+        const auto reach = (int) std::ceil (SincTable::zeroCrossings / scale);   // input samples either side
+        const auto outLength = (Frame) std::llround ((double) d.length() * ratio);
+        const auto channels = d.numChannels();
+
+        AudioData::Builder out (channels, newRate);
+        constexpr int block = AudioChunk::maxFrames;
+        std::vector<std::vector<float>> y ((size_t) channels, std::vector<float> (block));
+        std::vector<float> taps;
+        for (Frame first = 0; first < outLength; first += block)
+        {
+            const auto n = (int) std::min<Frame> (block, outLength - first);
+            const auto from = (Frame) std::floor ((double) first / ratio) - reach;
+            const auto to = (Frame) std::ceil ((double) (first + n) / ratio) + reach + 1;
+            std::vector<std::vector<float>> x ((size_t) channels, std::vector<float> ((size_t) (to - from)));
+            std::vector<float*> ptrs;
+            for (auto& c : x)
+                ptrs.push_back (c.data());
+            d.read (from, (int) (to - from), ptrs.data());
+
+            for (int m = 0; m < n; ++m)
+            {
+                const auto t = (double) (first + m) / ratio;   // the output sample's position in input samples
+                const auto centre = (Frame) std::floor (t);
+                taps.resize ((size_t) (2 * reach));
+                for (int k = 0; k < 2 * reach; ++k)
+                    taps[(size_t) k] = (float) scale * table.at ((t - (double) (centre - reach + 1 + k)) * scale);
+                const auto offset = (size_t) (centre - reach + 1 - from);
+                for (int ch = 0; ch < channels; ++ch)
+                {
+                    const auto* in = x[(size_t) ch].data() + offset;
+                    float sum = 0.0f;
+                    for (int k = 0; k < 2 * reach; ++k)
+                        sum += in[k] * taps[(size_t) k];
+                    y[(size_t) ch][(size_t) m] = sum;
+                }
+            }
+
+            std::vector<const float*> rows;
+            for (auto& c : y)
+                rows.push_back (c.data());
+            out.append (rows.data(), n);
+            if (progress && ! progress ((float) (first + n) / (float) outLength))
+                return nullptr;
+        }
+        return out.finish();
+    }
+
+    AudioDataPtr quantize (const AudioData& d, int bits, Dither dither, const ProgressCallback& progress)
+    {
+        bits = std::clamp (bits, 8, 24);
+        const auto steps = (float) (1 << (bits - 1));
+        const auto lsb = 1.0f / steps;
+        std::mt19937 rng (20261017);
+        std::uniform_real_distribution<float> uniform (-0.5f, 0.5f);
+        // Noise shaping: the rounding error is fed back through (1 - z^-1)^2, which
+        // moves its noise towards high frequencies.
+        std::vector<std::array<float, 2>> errors ((size_t) d.numChannels(), { 0.0f, 0.0f });
+
+        AudioData::Builder out (d.numChannels(), d.sampleRate());
+        const auto channels = d.numChannels();
+        std::vector<std::vector<float>> x ((size_t) channels, std::vector<float> (AudioChunk::maxFrames));
+        std::vector<float*> ptrs;
+        for (auto& c : x)
+            ptrs.push_back (c.data());
+        for (Frame pos = 0; pos < d.length(); pos += AudioChunk::maxFrames)
+        {
+            const auto n = (int) std::min<Frame> (AudioChunk::maxFrames, d.length() - pos);
+            d.read (pos, n, ptrs.data());
+            for (int ch = 0; ch < channels; ++ch)
+            {
+                auto& e = errors[(size_t) ch];
+                for (int i = 0; i < n; ++i)
+                {
+                    auto v = x[(size_t) ch][(size_t) i];
+                    if (dither == Dither::shaped)
+                        v -= 2.0f * e[0] - e[1];
+                    const auto noise = dither == Dither::none ? 0.0f : (uniform (rng) + uniform (rng)) * lsb;
+                    const auto q = std::clamp (std::round ((v + noise) * steps), -steps, steps - 1.0f) / steps;
+                    if (dither == Dither::shaped)
+                    {
+                        e[1] = e[0];
+                        e[0] = std::clamp (q - v, -4.0f * lsb, 4.0f * lsb);   // bounded, so a clipped peak cannot run away
+                    }
+                    x[(size_t) ch][(size_t) i] = q;
+                }
+            }
+            std::vector<const float*> rows (ptrs.begin(), ptrs.end());
+            out.append (rows.data(), n);
+            if (progress && ! progress ((float) (pos + n) / (float) d.length()))
+                return nullptr;
+        }
+        return out.finish();
+    }
 }

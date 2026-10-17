@@ -87,6 +87,7 @@ private:
     void gain();
     void normalize();
     void stereoize();
+    void convertSampleType();
     void autoHeal();
     void learnNoise();
     void noiseReduction();

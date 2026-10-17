@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cmath>
+#include <functional>
 #include <random>
 #include <string>
 #include <vector>
@@ -64,6 +65,21 @@ namespace dsp
 
     // A mono file as two equal channels (other files are returned as they are).
     AudioDataPtr toStereo (const AudioDataPtr&);
+    // Every channel averaged into one.
+    AudioDataPtr toMono (const AudioData&);
+
+    // Called with progress from 0 to 1; return false to stop (the result is then null).
+    using ProgressCallback = std::function<bool (float)>;
+
+    // Sample-rate conversion with a windowed-sinc (Kaiser) filter: flat to 95 % of
+    // the lower Nyquist frequency, more than 90 dB of rejection above it.
+    AudioDataPtr resample (const AudioData&, double newRate, const ProgressCallback& = {});
+
+    // Rounds every sample to `bits` (8 to 24) with optional dither, so the file
+    // sounds now as it will once saved at that depth. Noise shaping moves the
+    // dither noise up to where hearing is least sensitive.
+    enum class Dither { none, tpdf, shaped };
+    AudioDataPtr quantize (const AudioData&, int bits, Dither, const ProgressCallback& = {});
 
     // ITU-R BS.1770 K-weighting: high shelf followed by high pass.
     class KWeighting
