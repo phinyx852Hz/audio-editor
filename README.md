@@ -58,7 +58,7 @@ JUCE 8.0.15 is downloaded automatically during the first configure (the freetype
 
 The `clap` package provides the CLAP plugin headers; without it they are downloaded during configure (or pass `-DCLAP_DIR=/path/to/clap`).
 
-For plugins, `sudo pacman -S lsp-plugins` gives a large free mastering set (EQ, compressors, limiters). `sudo pacman -S dragonfly-reverb` adds free reverbs, as CLAP among others.
+For plugins, `sudo pacman -S lsp-plugins` gives a large free mastering set (EQ, compressors, limiters). `sudo pacman -S dragonfly-reverb-clap` adds free CLAP reverbs; `sudo pacman -S clap-plugins` installs every CLAP plugin Arch packages.
 
 To install system wide instead, use the PKGBUILD: `cd packaging/arch && makepkg -si`.
 
