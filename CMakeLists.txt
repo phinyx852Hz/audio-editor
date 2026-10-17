@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 cmake_minimum_required(VERSION 3.22)
 
-project(Phinyx VERSION 0.4.0 LANGUAGES C CXX)
+project(Phinyx VERSION 0.5.0 LANGUAGES C CXX)
 
 # The app's names live here so a rename touches one place.
 set(APP_ID "phinyx" CACHE STRING "Lowercase id: binary, config folder, Wayland app-id")
@@ -43,9 +43,11 @@ target_sources(${APP_ID} PRIVATE
     Source/core/Dsp.cpp
     Source/core/Fft.cpp
     Source/engine/AudioEngine.cpp
+    Source/engine/MasterChain.cpp
     Source/ui/CommandRegistry.cpp
     Source/ui/Dialogs.cpp
     Source/ui/MainWindow.cpp
+    Source/ui/MasterPanel.cpp
     Source/ui/Panels.cpp
     Source/ui/Spectrogram.cpp
     Source/ui/Theme.cpp
@@ -60,7 +62,10 @@ target_compile_definitions(${APP_ID} PRIVATE
     JUCE_USE_CURL=0
     JUCE_ALSA=1
     JUCE_JACK=1
-    JUCE_MODAL_LOOPS_PERMITTED=1)
+    JUCE_MODAL_LOOPS_PERMITTED=1
+    JUCE_PLUGINHOST_VST3=1
+    JUCE_PLUGINHOST_LV2=1
+    JUCE_PLUGINHOST_LADSPA=1)
 
 target_link_libraries(${APP_ID}
     PRIVATE
@@ -68,6 +73,7 @@ target_link_libraries(${APP_ID}
         Qt6::Concurrent
         juce::juce_audio_devices
         juce::juce_audio_formats
+        juce::juce_audio_processors
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags)

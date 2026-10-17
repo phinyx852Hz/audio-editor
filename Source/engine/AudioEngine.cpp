@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "AudioEngine.h"
 #include "../core/Dsp.h"
+#include "MasterChain.h"
 
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -80,6 +81,31 @@ namespace
     };
 
     // Sits after the transport and measures what is actually sent to the outputs.
+    // Runs the Master Section on whatever is played.
+    class MasterSource final : public juce::AudioSource
+    {
+    public:
+        MasterSource (juce::AudioSource& in, MasterChain& c) : input (in), chain (c) {}
+
+        void prepareToPlay (int blockSize, double sampleRate) override
+        {
+            input.prepareToPlay (blockSize, sampleRate);
+            chain.prepare (sampleRate, blockSize);
+        }
+
+        void releaseResources() override { input.releaseResources(); }
+
+        void getNextAudioBlock (const juce::AudioSourceChannelInfo& info) override
+        {
+            input.getNextAudioBlock (info);
+            chain.processRealtime (*info.buffer, info.startSample, info.numSamples);
+        }
+
+    private:
+        juce::AudioSource& input;
+        MasterChain& chain;
+    };
+
     class MeterSource final : public juce::AudioSource
     {
     public:
@@ -190,10 +216,12 @@ struct AudioEngine::Impl
         deviceManager.closeAudioDevice();
     }
 
+    MasterChain master;
     juce::AudioDeviceManager deviceManager;
     DocumentSource document;
     juce::AudioTransportSource transport;
-    MeterSource meter { transport };
+    MasterSource masterSource { transport, master };
+    MeterSource meter { masterSource };
     juce::AudioSourcePlayer player;
     double sourceRate = 0.0;
 };
@@ -322,6 +350,39 @@ std::vector<MeterBlock> AudioEngine::takeMeterBlocks()
 void AudioEngine::dispatchMessages()
 {
     juce::MessageManager::getInstance()->runDispatchLoopUntil (0);
+}
+
+//==============================================================================
+void AudioEngine::setConfigFolder (const std::string& folder) { impl->master.setConfigFolder (juce::File (folder)); }
+
+std::vector<PluginInfo> AudioEngine::knownPlugins() const            { return impl->master.knownPlugins(); }
+std::vector<std::string> AudioEngine::pluginSearchFolders() const    { return impl->master.searchFolders(); }
+int AudioEngine::startPluginScan()                                   { return impl->master.startScan(); }
+bool AudioEngine::scanNextPlugin (std::string& file)                 { return impl->master.scanNext (file); }
+std::string AudioEngine::finishPluginScan()                          { return impl->master.finishScan(); }
+
+std::string AudioEngine::loadMasterPlugin (int slot, const std::string& id) { return impl->master.load (slot, id); }
+void AudioEngine::clearMasterSlot (int slot)                         { impl->master.clear (slot); }
+void AudioEngine::moveMasterSlot (int from, int to)                  { impl->master.move (from, to); }
+void AudioEngine::setMasterSlotBypassed (int slot, bool b)           { impl->master.setBypassed (slot, b); }
+MasterSlotInfo AudioEngine::masterSlot (int slot) const              { return impl->master.info (slot); }
+void AudioEngine::setMasterGainDb (double db)                        { impl->master.setGainDb (db); }
+double AudioEngine::masterGainDb() const                             { return impl->master.gainDb(); }
+void AudioEngine::setMasterBypassed (bool b)                         { impl->master.setAllBypassed (b); }
+bool AudioEngine::isMasterBypassed() const                           { return impl->master.isAllBypassed(); }
+bool AudioEngine::masterIsActive() const                             { return impl->master.isActive(); }
+
+std::vector<PluginParameterInfo> AudioEngine::masterSlotParameters (int slot) const { return impl->master.parameters (slot); }
+void AudioEngine::setMasterSlotParameter (int slot, int index, float v)            { impl->master.setParameter (slot, index, v); }
+bool AudioEngine::canShowPluginWindow (int slot) const               { return impl->master.canShowWindow (slot); }
+void AudioEngine::showPluginWindow (int slot)                        { impl->master.showWindow (slot); }
+void AudioEngine::saveMasterSection() const                          { impl->master.save(); }
+std::string AudioEngine::restoreMasterSection()                      { return impl->master.restore(); }
+
+AudioDataPtr AudioEngine::renderThroughMaster (const AudioData& data, Frame start, Frame end, std::string& error,
+                                               std::atomic<float>* progress, const std::atomic<bool>* cancel)
+{
+    return impl->master.render (data, start, end, error, progress, cancel);
 }
 
 std::vector<std::string> AudioEngine::readableExtensions()

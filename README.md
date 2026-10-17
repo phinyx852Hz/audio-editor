@@ -3,7 +3,7 @@
 A keyboard-first audio editor and mastering suite for Linux, combining the best of
 Adobe Audition, Sound Forge and WaveLab. Optimized for Arch Linux, Omarchy and Hyprland.
 
-Status: Phase 1 in progress. Editing, markers, meters, spectrogram and themes work; the Master Section comes next. See the full plan in [docs/plan.md](docs/plan.md).
+Status: Phase 1 complete: a usable editor with markers, meters, spectrogram, themes and a plugin Master Section. Not yet tested on real audio hardware. See the full plan in [docs/plan.md](docs/plan.md).
 
 Built with a Qt 6 interface (native Wayland) on top of a JUCE 8 audio engine.
 
@@ -17,17 +17,18 @@ Built with a Qt 6 interface (native Wayland) on top of a JUCE 8 audio engine.
 - Markers and regions: `M` adds a marker at the cursor, `Shift+M` makes a region from the selection, `'` and `;` jump to the next/previous marker. The Markers panel (`Ctrl+Shift+M`) lists them: `Enter` jumps, `F2` renames, `Del` removes. Markers are saved inside WAV files.
 - Spectral display (`Shift+D`): log-frequency spectrogram of every channel, still fully editable
 - Meters (`Ctrl+Shift+L`): sample peak bars with peak hold, true peak, and momentary/short-term/integrated loudness (ITU-R BS.1770 / EBU R128) during playback; `Ctrl+Alt+R` resets them. Loudness statistics of the selection or file (`Ctrl+Shift+A`): integrated LUFS, loudness range, true peak.
-- Panels (Meters, Markers, History) dock in the window or pop out into their own window with `Ctrl+Alt+P`, so Hyprland tiles them like any other window; all shortcuts work there too. The layout is remembered.
+- Panels (Master Section, Meters, Markers, History) dock in the window or pop out into their own window with `Ctrl+Alt+P`, so Hyprland tiles them like any other window; all shortcuts work there too. The layout is remembered.
+- Master Section (`Ctrl+Shift+E`), like WaveLab's: 8 plugin slots plus master gain, applied to everything you play. Hosts VST3, LV2 and LADSPA effects (scan with `Ctrl+Alt+Shift+S`, add with `Ctrl+Alt+E`). In the slot list `Enter` opens a keyboard-friendly parameter editor (type to filter, arrows to adjust), `E` opens the plugin's own window (needs XWayland), `B` bypasses, `Del` removes, `Ctrl+Up`/`Down` reorders. `Ctrl+Shift+B` bypasses the whole section. Render (`Ctrl+Shift+Enter`) applies it to the audio as an undoable edit, or writes a new file with bit depth and dither; plugin latency is compensated. The chain is remembered between sessions.
 - Themes (`Ctrl+Shift+T`): PHINYX Dark and Light built in, plus your own JSON themes in `~/.local/share/phinyx/themes` (see [docs/themes.md](docs/themes.md))
 - Every action is a command with a keybinding:
   - `Ctrl+Shift+P` or `F1`: command palette, searches every command and shows its shortcut
-  - `F10` or `Alt+F/E/P/M/A/T/V/O/H`: open menus, then arrow keys
+  - `F10` or `Alt+F/E/P/M/A/S/T/V/O/H`: open menus, then arrow keys
   - `Ctrl+Shift+K`: change any key binding, with conflict detection; saved to `~/.config/phinyx/keymap.ini`
   - `Ctrl+,`: choose the audio output device
 
 ## Build and run (Arch Linux)
 ```sh
-sudo pacman -S --needed base-devel git cmake ninja qt6-base qt6-wayland alsa-lib jack2 \
+sudo pacman -S --needed base-devel git cmake ninja qt6-base qt6-wayland alsa-lib jack2 ladspa \
   freetype2 fontconfig libx11 libxrandr libxinerama libxcursor libxcomposite libxext mesa
 git clone https://github.com/phinyx852Hz/audio-editor
 cd audio-editor
@@ -37,6 +38,8 @@ cmake --build build
 ```
 Run the core tests with `ctest --test-dir build`.
 JUCE 8.0.15 is downloaded automatically during the first configure (the freetype/X11 packages above are only needed to build JUCE's small `juceaide` helper); pass `-DJUCE_DIR=/path/to/JUCE` to use a local checkout.
+
+For plugins, `sudo pacman -S lsp-plugins` gives a large free mastering set (EQ, compressors, limiters).
 
 To install system wide instead, use the PKGBUILD: `cd packaging/arch && makepkg -si`.
 

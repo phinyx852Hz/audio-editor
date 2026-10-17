@@ -119,10 +119,35 @@ void DockablePanel::show (bool giveFocus)
     {
         dockWidget->show();
         dockWidget->raise();
+
+        // A restored layout can leave a dock squeezed to nothing; give it room.
+        QTimer::singleShot (0, this, [this]
+        {
+            if (window != nullptr || dockWidget->isFloating() || ! dockWidget->isVisible())
+                return;
+
+            const auto hint = contentWidget->sizeHint().expandedTo (QSize (220, 180));
+            if (dockWidget->height() < 80)
+                mainWindow.resizeDocks ({ dockWidget }, { hint.height() }, Qt::Vertical);
+            if (dockWidget->width() < 80)
+                mainWindow.resizeDocks ({ dockWidget }, { hint.width() }, Qt::Horizontal);
+        });
     }
 
     if (giveFocus && contentWidget->focusPolicy() != Qt::NoFocus)
+    {
         contentWidget->setFocus (Qt::ShortcutFocusReason);
+
+        // A dock that was hidden only becomes focusable once laid out, so ask again then.
+        QTimer::singleShot (0, contentWidget, [w = contentWidget]
+        {
+            if (w->isVisible())
+            {
+                w->window()->activateWindow();
+                w->setFocus (Qt::ShortcutFocusReason);
+            }
+        });
+    }
 }
 
 void DockablePanel::hide()

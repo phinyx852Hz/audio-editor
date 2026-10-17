@@ -6,6 +6,7 @@
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QDir>
+#include <QStandardPaths>
 
 int main (int argc, char* argv[])
 {
@@ -32,6 +33,8 @@ int main (int argc, char* argv[])
     parser.process (app);
 
     AudioEngine engine;
+    engine.setConfigFolder ((QStandardPaths::writableLocation (QStandardPaths::GenericConfigLocation)
+                             + QStringLiteral ("/" APP_ID)).toStdString());
     const auto deviceError = engine.openDefaultDevice();
 
     int result = 0;

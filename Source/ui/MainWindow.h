@@ -13,6 +13,7 @@
 
 class DockablePanel;
 class MarkerList;
+class MasterPanel;
 class MeterPanel;
 class QLabel;
 class QListWidget;
@@ -91,6 +92,10 @@ private:
 
     void showLoudnessStatistics();
 
+    // Master Section
+    void renderMaster();
+    AudioDataPtr renderWithProgress (Frame start, Frame end, std::string& error);
+
     // Cursor and selection
     bool hasSelection() const { return selEnd > selStart; }
     void setCursor (Frame);
@@ -111,11 +116,15 @@ private:
     QListWidget* historyList = nullptr;
     MarkerList* markerList = nullptr;
     MeterPanel* meterPanel = nullptr;
+    MasterPanel* masterWidget = nullptr;
+    DockablePanel* masterPanel = nullptr;
     DockablePanel* historyPanel = nullptr;
     DockablePanel* markerPanel = nullptr;
     DockablePanel* metersPanel = nullptr;
     QList<DockablePanel*> panels;
     DockablePanel* lastPanel = nullptr;
+    QByteArray defaultLayout;
+    static constexpr int layoutVersion = 1;
 
     Frame cursor = 0, selStart = 0, selEnd = 0, selAnchor = 0;
     AudioDataPtr clipboard;

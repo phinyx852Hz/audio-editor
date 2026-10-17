@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MainWindow.h"
 #include "Dialogs.h"
+#include "MasterPanel.h"
 #include "Panels.h"
 #include "Theme.h"
 #include "WaveformView.h"
@@ -20,6 +21,9 @@
 #include <QListWidget>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QProgressDialog>
+#include <QPushButton>
+#include <QEventLoop>
 #include <QStatusBar>
 #include <QTimer>
 #include <QtConcurrent/QtConcurrentRun>
@@ -46,6 +50,7 @@ namespace
         const QString process   = QObject::tr ("Process");
         const QString markers   = QObject::tr ("Markers");
         const QString analyze   = QObject::tr ("Analyze");
+        const QString master    = QObject::tr ("Master Section");
         const QString transport = QObject::tr ("Transport");
         const QString view      = QObject::tr ("View");
         const QString options   = QObject::tr ("Options");
@@ -191,6 +196,25 @@ void MainWindow::registerCommands()
     add ("analyze.resetMeters", Category::analyze, tr ("&Reset Meters"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_R) },
          [this] { meterPanel->reset(); });
 
+    add ("view.master", Category::master, tr ("&Master Section"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_E) },
+         [this] { masterPanel->toggle(); lastPanel = masterPanel; });
+    add ("master.addPlugin", Category::master, tr ("&Add Plugin..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_E) }, [this]
+    {
+        masterPanel->show (true);
+        lastPanel = masterPanel;
+        masterWidget->choosePlugin (-1);
+    });
+    add ("master.bypass", Category::master, tr ("&Bypass Master Section"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_B) }, [this]
+    {
+        engine.setMasterBypassed (! engine.isMasterBypassed());
+        masterWidget->refresh();
+        commands.action (QStringLiteral ("master.bypass"))->setChecked (engine.isMasterBypassed());
+        statusBar()->showMessage (engine.isMasterBypassed() ? tr ("Master Section bypassed") : tr ("Master Section on"), 3000);
+    })->setCheckable (true);
+    add ("master.render", Category::master, tr ("&Render..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_Return) }, [this] { renderMaster(); });
+    add ("master.scan", Category::master, tr ("&Scan Plugins"), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_S) },
+         [this] { masterWidget->scanPlugins(); });
+
     add ("transport.playStop", Category::transport, tr ("&Play / Stop"), { KS (Qt::Key_Space) }, [this] { togglePlayback(); });
     add ("transport.stop", Category::transport, tr ("&Stop"), { KS (Qt::Key_K) }, [this] { engine.stop(); });
     add ("transport.start", Category::transport, tr ("Go to S&tart"), { KS (Qt::Key_Home) }, [this] { setCursor (0); });
@@ -222,6 +246,16 @@ void MainWindow::registerCommands()
             p->setPoppedOut (! p->isPoppedOut());
         else
             statusBar()->showMessage (tr ("Open a panel first, for example the meters with Ctrl+Shift+L"), 5000);
+    });
+    add ("view.resetLayout", Category::view, tr ("&Reset Panel Layout"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_0) }, [this]
+    {
+        for (auto* p : panels)
+            p->hide();
+        restoreState (defaultLayout, layoutVersion);
+        for (auto* p : panels)
+            p->hide();
+        activateWindow();
+        waveform->setFocus();
     });
     add ("view.spectral", Category::view, tr ("&Spectral Display"), { KS (Qt::SHIFT | Qt::Key_D) }, [this]
     {
@@ -267,10 +301,11 @@ void MainWindow::buildMenus()
                                "process.fadeShape.sCurve", "-", "process.reverse", "process.invert", "process.dcOffset" } },
         { tr ("&Markers"),   { "marker.add", "marker.addRegion", "-", "marker.next", "marker.previous", "-", "view.markers" } },
         { tr ("&Analyze"),   { "analyze.loudness", "-", "view.meters", "analyze.resetMeters", "-", "view.spectral" } },
+        { tr ("Ma&ster"),    { "view.master", "master.addPlugin", "master.bypass", "-", "master.render", "-", "master.scan" } },
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
-                               "view.spectral", "-", "view.history", "view.markers", "view.meters", "view.popOut", "-",
+                               "view.spectral", "-", "view.master", "view.history", "view.markers", "view.meters", "view.popOut", "view.resetLayout", "-",
                                "view.focusWaveform" } },
         { tr ("&Options"),   { "options.audio", "options.keymap", "options.theme" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
@@ -309,10 +344,19 @@ void MainWindow::buildPanels()
 
     meterPanel = new MeterPanel (this);
 
+    masterWidget = new MasterPanel (engine, waveform, this);
+    connect (masterWidget, &MasterPanel::renderRequested, this, &MainWindow::renderMaster);
+    connect (masterWidget, &MasterPanel::message, this, [this] (const QString& text)
+    {
+        if (! text.isEmpty())
+            statusBar()->showMessage (text, 6000);
+    });
+
     metersPanel = new DockablePanel (*this, QStringLiteral ("metersPanel"), tr ("Meters"), meterPanel, Qt::RightDockWidgetArea);
     markerPanel = new DockablePanel (*this, QStringLiteral ("markersPanel"), tr ("Markers"), markerList, Qt::BottomDockWidgetArea);
     historyPanel = new DockablePanel (*this, QStringLiteral ("historyPanel"), tr ("History"), historyList, Qt::RightDockWidgetArea);
-    panels = { metersPanel, markerPanel, historyPanel };
+    masterPanel = new DockablePanel (*this, QStringLiteral ("masterPanel"), tr ("Master Section"), masterWidget, Qt::RightDockWidgetArea);
+    panels = { masterPanel, metersPanel, markerPanel, historyPanel };
 }
 
 DockablePanel* MainWindow::focusedOrLastPanel() const
@@ -337,15 +381,24 @@ void MainWindow::restoreLayout()
 {
     auto settings = appSettings();
     restoreGeometry (settings.value (QStringLiteral ("window/geometry")).toByteArray());
-    restoreState (settings.value (QStringLiteral ("window/state")).toByteArray());
 
     const bool spectral = settings.value (QStringLiteral ("view/spectral"), false).toBool();
     waveform->setSpectral (spectral);
     commands.action (QStringLiteral ("view.spectral"))->setChecked (spectral);
 
-    // Pop panels out again once the main window is on screen, so it opens first.
+    // Load plugins and pop panels out again once the main window is on screen, so it opens first.
     QTimer::singleShot (0, this, [this]
     {
+        // Dock layouts restore reliably only once the window exists on screen.
+        defaultLayout = saveState (layoutVersion);
+        restoreState (appSettings().value (QStringLiteral ("window/state")).toByteArray(), layoutVersion);
+
+        const auto problems = QString::fromStdString (engine.restoreMasterSection());
+        masterWidget->refresh();
+        commands.action (QStringLiteral ("master.bypass"))->setChecked (engine.isMasterBypassed());
+        if (! problems.isEmpty())
+            QMessageBox::warning (this, tr ("Master Section"), tr ("Some plugins could not be loaded:\n%1").arg (problems));
+
         auto s = appSettings();
         for (auto* p : panels)
             if (s.value (QStringLiteral ("panels/%1/poppedOut").arg (p->id()), false).toBool())
@@ -369,8 +422,9 @@ void MainWindow::saveLayout()
     }
 
     settings.setValue (QStringLiteral ("window/geometry"), saveGeometry());
-    settings.setValue (QStringLiteral ("window/state"), saveState());
+    settings.setValue (QStringLiteral ("window/state"), saveState (layoutVersion));
     settings.setValue (QStringLiteral ("view/spectral"), waveform->isSpectral());
+    engine.saveMasterSection();
 }
 
 void MainWindow::openMenuBar()
@@ -403,6 +457,7 @@ void MainWindow::updateCommandStates()
 
     commands.action (QStringLiteral ("edit.paste"))->setEnabled (open && clipboard != nullptr);
     commands.action (QStringLiteral ("marker.addRegion"))->setEnabled (sel);
+    commands.action (QStringLiteral ("master.render"))->setEnabled (open);
 
     for (const auto* id : { "marker.add", "marker.next", "marker.previous", "analyze.loudness" })
         commands.action (QString::fromLatin1 (id))->setEnabled (open);
@@ -1014,6 +1069,141 @@ void MainWindow::showLoudnessStatistics()
                                fmt (r.samplePeakDb, "dBFS")),
                      QMessageBox::Ok, this);
     box.exec();
+}
+
+//==============================================================================
+AudioDataPtr MainWindow::renderWithProgress (Frame start, Frame end, std::string& error)
+{
+    auto progress = std::make_shared<std::atomic<float>> (0.0f);
+    auto cancel = std::make_shared<std::atomic<bool>> (false);
+    auto source = data();
+    engine.stop();
+
+    QProgressDialog dialog (tr ("Rendering through the Master Section..."), tr ("Cancel"), 0, 1000, this);
+    dialog.setWindowTitle (tr ("Render"));
+    dialog.setWindowModality (Qt::WindowModal);
+    dialog.setMinimumDuration (300);
+    connect (&dialog, &QProgressDialog::canceled, this, [cancel] { cancel->store (true); });
+
+    struct Result { AudioDataPtr data; std::string error; };
+    QFutureWatcher<Result> watcher;
+    QEventLoop loop;
+    connect (&watcher, &QFutureWatcher<Result>::finished, &loop, &QEventLoop::quit);
+
+    QTimer poll;
+    connect (&poll, &QTimer::timeout, this, [&] { dialog.setValue ((int) (progress->load() * 1000.0f)); });
+    poll.start (50);
+
+    watcher.setFuture (QtConcurrent::run ([this, source, start, end, progress, cancel]
+    {
+        Result r;
+        r.data = engine.renderThroughMaster (*source, start, end, r.error, progress.get(), cancel.get());
+        return r;
+    }));
+
+    loop.exec();
+    poll.stop();
+    dialog.reset();
+
+    auto result = watcher.result();
+    error = result.error;
+    return result.data;
+}
+
+void MainWindow::renderMaster()
+{
+    const auto d = data();
+    if (d == nullptr)
+        return;
+
+    if (! engine.masterIsActive())
+    {
+        QMessageBox::information (this, tr ("Render"),
+                                  tr ("The Master Section is empty or bypassed, so rendering would not change anything.\n"
+                                      "Add a plugin with Ctrl+Alt+E or change the master gain first."));
+        return;
+    }
+
+    QMessageBox ask (QMessageBox::Question, tr ("Render"),
+                     tr ("Render the audio through the Master Section.\n\n"
+                         "Apply to Audio processes the selection (or the whole file) as an undoable edit, then bypasses "
+                         "the Master Section so the effect is not heard twice.\n"
+                         "Save to New File writes the whole file through the Master Section to a new file and leaves "
+                         "this one unchanged."),
+                     QMessageBox::Cancel, this);
+    auto* apply = ask.addButton (tr ("&Apply to Audio"), QMessageBox::AcceptRole);
+    auto* toFile = ask.addButton (tr ("Save to &New File..."), QMessageBox::AcceptRole);
+    ask.setDefaultButton (apply);
+    ask.exec();
+
+    std::string error;
+
+    if (ask.clickedButton() == apply)
+    {
+        const auto [s, e] = processRange();
+        auto result = renderWithProgress (s, e, error);
+        if (result == nullptr)
+        {
+            if (error != "Cancelled")
+                QMessageBox::warning (this, tr ("Render"), QString::fromStdString (error));
+            return;
+        }
+
+        commit (tr ("Master Section"), std::move (result), s, e, e - s);
+        engine.setMasterBypassed (true);
+        masterWidget->refresh();
+        commands.action (QStringLiteral ("master.bypass"))->setChecked (true);
+        statusBar()->showMessage (tr ("Rendered. The Master Section is now bypassed; Ctrl+Shift+B turns it back on."), 8000);
+        return;
+    }
+
+    if (ask.clickedButton() != toFile)
+        return;
+
+    QStringList filters;
+    for (const auto& ext : AudioEngine::writableExtensions())
+    {
+        const auto x = QString::fromStdString (ext);
+        filters << tr ("%1 (*.%2)").arg (x.toUpper(), x);
+    }
+
+    QFileInfo current (QString::fromStdString (doc.path()));
+    QString selectedFilter = filters.first();
+    auto path = QFileDialog::getSaveFileName (this, tr ("Render to New File"),
+                                              current.absolutePath() + QLatin1Char ('/') + current.completeBaseName()
+                                                  + tr (" (mastered)") + QStringLiteral (".wav"),
+                                              filters.join (QStringLiteral (";;")), &selectedFilter);
+    if (path.isEmpty())
+        return;
+
+    const auto writable = AudioEngine::writableExtensions();
+    if (std::find (writable.begin(), writable.end(), QFileInfo (path).suffix().toLower().toStdString()) == writable.end())
+    {
+        const auto from = selectedFilter.indexOf (QStringLiteral ("*.")) + 2;
+        path += QLatin1Char ('.') + selectedFilter.mid (from, selectedFilter.indexOf (QLatin1Char (')')) - from);
+    }
+
+    auto options = saveOptions;
+    SaveOptionsDialog optionsDialog (QFileInfo (path).suffix(), options, this);
+    if (optionsDialog.exec() != QDialog::Accepted)
+        return;
+
+    auto rendered = renderWithProgress (0, d->length(), error);
+    if (rendered == nullptr)
+    {
+        if (error != "Cancelled")
+            QMessageBox::warning (this, tr ("Render"), QString::fromStdString (error));
+        return;
+    }
+
+    QApplication::setOverrideCursor (Qt::WaitCursor);
+    const bool ok = AudioEngine::saveFile (path.toStdString(), *rendered, doc.current().markers, options, error);
+    QApplication::restoreOverrideCursor();
+
+    if (! ok)
+        QMessageBox::warning (this, tr ("Render"), tr ("Could not save %1:\n%2").arg (path, QString::fromStdString (error)));
+    else
+        statusBar()->showMessage (tr ("Rendered to %1").arg (QFileInfo (path).fileName()), 6000);
 }
 
 //==============================================================================
