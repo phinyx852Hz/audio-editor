@@ -58,7 +58,8 @@ Priority key: **P0** = MVP, **P1** = v1.0, **P2** = later.
 - P0 Open/save WAV, AIFF, FLAC, MP3, Ogg/Opus; 16/24/32-bit int, 32/64-bit float; up to 384 kHz; mono to 8+ channels
 - P0 Sample-accurate selection, zoom from overview to sample level, snap to zero crossings
 - P0 Cut/copy/paste/delete/trim/crop, silence insert, mix-paste
-- P0 Copy to New (`Shift+C`, done 2026-10-17): selection or whole file into a new untitled window, markers included
+- P0 Editor tabs, one file each with its own history, selection and zoom (done 2026-10-17)
+- P0 Copy to New (`Shift+C`, done 2026-10-17): selection or whole file into a new untitled tab, markers included
 - P0 Fade in/out with curve shapes, crossfades at edit points
 - P0 Normalize (peak and LUFS), gain, invert, reverse, DC offset removal
 - P0 Unlimited undo/redo with a history list

@@ -14,7 +14,6 @@
 #include <QDateTime>
 #include <QDir>
 #include <QDockWidget>
-#include <QProcess>
 #include <QSettings>
 #include <QSlider>
 #include <QWidgetAction>
@@ -33,7 +32,9 @@
 #include <QPushButton>
 #include <QEventLoop>
 #include <QStatusBar>
+#include <QTabBar>
 #include <QTimer>
+#include <QVBoxLayout>
 #include <QtConcurrent/QtConcurrentRun>
 
 #include <algorithm>
@@ -72,7 +73,27 @@ MainWindow::MainWindow (AudioEngine& e)
     setWindowTitle (QStringLiteral (APP_DISPLAY_NAME));
     resize (1100, 620);
     Theme::makeTranslucent (this);
-    setCentralWidget (waveform);
+    tabBar = new QTabBar (this);
+    tabBar->setDocumentMode (true);
+    tabBar->setTabsClosable (true);
+    tabBar->setExpanding (false);
+    tabBar->setFocusPolicy (Qt::NoFocus);  // Ctrl+Tab and Ctrl+Shift+Tab switch tabs
+    tabBar->setAccessibleName (tr ("Open files"));
+    tabBar->addTab (QString());
+    connect (tabBar, &QTabBar::currentChanged, this, [this] (int index) { switchToTab (index); });
+    connect (tabBar, &QTabBar::tabCloseRequested, this, [this] (int index)
+    {
+        switchToTab (index);
+        closeTab();
+    });
+
+    auto* editor = new QWidget (this);
+    auto* editorLayout = new QVBoxLayout (editor);
+    editorLayout->setContentsMargins (0, 0, 0, 0);
+    editorLayout->setSpacing (0);
+    editorLayout->addWidget (tabBar);
+    editorLayout->addWidget (waveform, 1);
+    setCentralWidget (editor);
     statusBar()->addWidget (statusLabel, 1);
     statusLabel->setAccessibleName (tr ("Status"));
     statusBar()->addPermanentWidget (new QLabel (tr ("Opacity"), this));
@@ -137,6 +158,11 @@ void MainWindow::registerCommands()
     add ("file.save", Category::file, tr ("&Save"), { KS (Qt::CTRL | Qt::Key_S) }, [this] { save(); });
     add ("file.saveAs", Category::file, tr ("Save &As..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_S) }, [this] { saveAs(); });
     add ("file.close", Category::file, tr ("&Close"), { KS (Qt::CTRL | Qt::Key_W) }, [this] { closeFile(); });
+    add ("file.nextTab", Category::file, tr ("Ne&xt Tab"), { KS (Qt::CTRL | Qt::Key_Tab), KS (Qt::CTRL | Qt::Key_PageDown) },
+         [this] { if (tabs.size() > 1) tabBar->setCurrentIndex ((activeTab + 1) % (int) tabs.size()); });
+    add ("file.previousTab", Category::file, tr ("Pre&vious Tab"),
+         { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_Backtab), KS (Qt::CTRL | Qt::SHIFT | Qt::Key_Tab), KS (Qt::CTRL | Qt::Key_PageUp) },
+         [this] { if (tabs.size() > 1) tabBar->setCurrentIndex ((activeTab + (int) tabs.size() - 1) % (int) tabs.size()); });
     add ("file.quit", Category::file, tr ("&Quit"), { KS (Qt::CTRL | Qt::Key_Q) }, [this] { close(); });
 
     add ("edit.undo", Category::edit, tr ("&Undo"), { KS (Qt::CTRL | Qt::Key_Z) }, [this] { undo(); });
@@ -314,7 +340,7 @@ void MainWindow::buildMenus()
 {
     // Menu titles carry & mnemonics, so Alt+F, Alt+E, Alt+P, Alt+M, Alt+A... open them.
     const QList<QPair<QString, QStringList>> layout {
-        { tr ("&File"),      { "file.open", "file.save", "file.saveAs", "-", "file.close", "-", "file.quit" } },
+        { tr ("&File"),      { "file.open", "file.save", "file.saveAs", "-", "file.close", "file.nextTab", "file.previousTab", "-", "file.quit" } },
         { tr ("&Edit"),      { "edit.undo", "edit.redo", "-", "edit.cut", "edit.copy", "edit.copyToNew", "edit.paste", "edit.delete", "-",
                                "edit.trim", "edit.insertSilence", "-", "select.all", "select.none", "-",
                                "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
@@ -562,6 +588,8 @@ void MainWindow::updateCommandStates()
 
 void MainWindow::updateTitle()
 {
+    updateTabBar();
+
     if (! doc.isOpen())
     {
         setWindowTitle (QStringLiteral (APP_DISPLAY_NAME));
@@ -570,6 +598,139 @@ void MainWindow::updateTitle()
 
     const auto name = doc.path().empty() ? tr ("Untitled") : QFileInfo (QString::fromStdString (doc.path())).fileName();
     setWindowTitle ((doc.isModified() ? QStringLiteral ("*") : QString()) + name + QStringLiteral (" - " APP_DISPLAY_NAME));
+}
+
+//==============================================================================
+QString MainWindow::tabName (const AudioDocument& d) const
+{
+    if (! d.isOpen())
+        return tr ("(empty)");
+
+    const auto name = d.path().empty() ? tr ("Untitled") : QFileInfo (QString::fromStdString (d.path())).fileName();
+    return d.isModified() ? name + QStringLiteral (" *") : name;
+}
+
+void MainWindow::updateTabBar()
+{
+    if (tabBar == nullptr)
+        return;
+
+    for (int i = 0; i < (int) tabs.size(); ++i)
+    {
+        const auto& d = i == activeTab ? doc : tabs[(size_t) i].doc;
+        tabBar->setTabText (i, tabName (d));
+        tabBar->setTabToolTip (i, QString::fromStdString (d.path()));
+    }
+
+    tabBar->setVisible (tabs.size() > 1 || doc.isOpen());
+}
+
+void MainWindow::parkActiveTab()
+{
+    auto& t = tabs[(size_t) activeTab];
+    t.doc = std::move (doc);
+    t.cursor = cursor;
+    t.selStart = selStart;
+    t.selEnd = selEnd;
+    t.selAnchor = selAnchor;
+    t.saveOptions = saveOptions;
+    t.optionsConfirmedFor = optionsConfirmedFor;
+    t.view = waveform->view();
+    doc = AudioDocument();
+}
+
+void MainWindow::unparkTab (int index)
+{
+    activeTab = index;
+    auto& t = tabs[(size_t) index];
+    doc = std::move (t.doc);
+    t.doc = AudioDocument();
+    cursor = t.cursor;
+    selStart = t.selStart;
+    selEnd = t.selEnd;
+    selAnchor = t.selAnchor;
+    saveOptions = t.saveOptions;
+    optionsConfirmedFor = t.optionsConfirmedFor;
+}
+
+void MainWindow::switchToTab (int index)
+{
+    if (index == activeTab || index < 0 || index >= (int) tabs.size())
+        return;
+
+    if (loading)
+    {
+        // A file is still being read into the current tab; stay on it.
+        const QSignalBlocker block (tabBar);
+        tabBar->setCurrentIndex (activeTab);
+        return;
+    }
+
+    engine.stop();
+    parkActiveTab();
+    unparkTab (index);
+
+    const auto view = tabs[(size_t) index].view;
+    refreshFromDocument (false);
+    waveform->setView (view.first, view.second);
+    {
+        const QSignalBlocker block (tabBar);
+        tabBar->setCurrentIndex (index);
+    }
+    waveform->setFocus();
+}
+
+void MainWindow::newTab()
+{
+    engine.stop();
+    parkActiveTab();
+    tabs.push_back (TabState());
+    activeTab = (int) tabs.size() - 1;
+    cursor = selStart = selEnd = selAnchor = 0;
+    optionsConfirmedFor.clear();
+    {
+        const QSignalBlocker block (tabBar);
+        tabBar->addTab (QString());
+        tabBar->setCurrentIndex (activeTab);
+    }
+    waveform->clear();
+    refreshFromDocument (false);
+}
+
+bool MainWindow::closeTab()
+{
+    if (loading || ! confirmDiscard())
+        return false;
+
+    engine.stop();
+
+    if (tabs.size() == 1)
+    {
+        doc = AudioDocument();
+        cursor = selStart = selEnd = selAnchor = 0;
+        waveform->clear();
+        refreshFromDocument (false);
+        return true;
+    }
+
+    // Drop this tab and show its neighbour.
+    const auto closing = activeTab;
+    tabs.erase (tabs.begin() + closing);
+    {
+        const QSignalBlocker block (tabBar);
+        tabBar->removeTab (closing);
+    }
+    const auto next = std::min (closing, (int) tabs.size() - 1);
+    const auto view = tabs[(size_t) next].view;
+    unparkTab (next);
+    {
+        const QSignalBlocker block (tabBar);
+        tabBar->setCurrentIndex (next);
+    }
+    refreshFromDocument (false);
+    waveform->setView (view.first, view.second);
+    waveform->setFocus();
+    return true;
 }
 
 void MainWindow::updateStatus()
@@ -647,8 +808,11 @@ void MainWindow::showOpenDialog()
 
 void MainWindow::openFile (const QString& path)
 {
-    if (loading || ! confirmDiscard())
+    if (loading)
         return;
+
+    if (doc.isOpen())
+        newTab();
 
     engine.stop();
     loading = true;
@@ -674,21 +838,16 @@ void MainWindow::loadFinished()
     if (r.data == nullptr)
     {
         waveform->setLoading (false);
-        refreshFromDocument (false);
+        if (tabs.size() > 1)
+            closeTab();  // the empty tab opened for this file
+        else
+            refreshFromDocument (false);
         QMessageBox::warning (this, tr ("Open failed"),
                               tr ("Could not open %1:\n%2").arg (r.path, QString::fromStdString (r.error)));
         return;
     }
 
     doc.reset (r.data, std::move (r.markers), r.path.toStdString());
-    if (! untitledSource.isEmpty() && r.path == untitledSource)
-    {
-        // A Copy to New: an unsaved, untitled document; the temporary file is no longer needed.
-        doc.setPath ({});
-        doc.markUnsaved();
-        QFile::remove (r.path);
-    }
-    untitledSource.clear();
     cursor = selStart = selEnd = selAnchor = 0;
     optionsConfirmedFor.clear();
     refreshFromDocument (false);
@@ -713,14 +872,7 @@ bool MainWindow::confirmDiscard()
 
 void MainWindow::closeFile()
 {
-    if (loading || ! confirmDiscard())
-        return;
-
-    engine.stop();
-    doc = AudioDocument();
-    cursor = selStart = selEnd = selAnchor = 0;
-    waveform->clear();
-    refreshFromDocument (false);
+    closeTab();
 }
 
 bool MainWindow::save()
@@ -850,53 +1002,32 @@ void MainWindow::copy()
 
 void MainWindow::copyToNew()
 {
-    if (data() == nullptr)
+    if (data() == nullptr || loading)
         return;
 
-    const auto [start, end] = hasSelection() ? std::pair (selStart, selEnd) : std::pair (Frame (0), data()->length());
-    const auto piece = data()->slice (start, end);
+    const bool whole = ! hasSelection();
+    const auto [start, end] = whole ? std::pair (Frame (0), data()->length()) : std::pair (selStart, selEnd);
+    auto piece = data()->slice (start, end);
 
     // Markers inside the copied range come along, moved to the new start.
     std::vector<Marker> markers;
-    for (auto m : doc.current().markers)
+    for (auto mk : doc.current().markers)
     {
-        if (m.start < start || m.start >= end)
+        if (mk.start < start || mk.start >= end)
             continue;
-        m.start -= start;
-        m.end = std::min (m.end, end) - start;
-        markers.push_back (m);
+        mk.start -= start;
+        mk.end = std::min (mk.end, end) - start;
+        markers.push_back (mk);
     }
 
-    // Hand the audio to a new PHINYX window through a temporary file; the new
-    // window opens it as "Untitled" and deletes the file.
-    const auto folder = QStandardPaths::writableLocation (QStandardPaths::CacheLocation) + QStringLiteral ("/copy-to-new");
-    QDir().mkpath (folder);
-    const auto path = folder + QStringLiteral ("/%1.wav").arg (QDateTime::currentDateTime().toString (QStringLiteral ("yyyyMMdd-hhmmss-zzz")));
-
-    SaveOptions options;
-    options.bitDepth = 32;  // float, so nothing is lost
-    options.dither = false;
-    std::string error;
-    if (! AudioEngine::saveFile (path.toStdString(), *piece, markers, options, error))
-    {
-        QMessageBox::warning (this, tr ("Copy to New"), tr ("Could not copy the audio:\n%1").arg (QString::fromStdString (error)));
-        return;
-    }
-
-    if (! QProcess::startDetached (QCoreApplication::applicationFilePath(), { QStringLiteral ("--new-from"), path }))
-    {
-        QFile::remove (path);
-        QMessageBox::warning (this, tr ("Copy to New"), tr ("Could not start a new PHINYX window."));
-        return;
-    }
-
-    statusBar()->showMessage (hasSelection() ? tr ("Copied the selection to a new window") : tr ("Copied the whole file to a new window"), 6000);
-}
-
-void MainWindow::openAsUntitled (const QString& path)
-{
-    untitledSource = path;
-    openFile (path);
+    const auto options = saveOptions;
+    newTab();
+    doc.reset (std::move (piece), std::move (markers), {});
+    doc.markUnsaved();
+    saveOptions = options;
+    refreshFromDocument (false);
+    waveform->setFocus();
+    statusBar()->showMessage (whole ? tr ("Copied the whole file to a new tab") : tr ("Copied the selection to a new tab"), 6000);
 }
 
 void MainWindow::warnAboutDesktopShortcuts()
@@ -1447,10 +1578,26 @@ void MainWindow::togglePlayback()
 
 void MainWindow::closeEvent (QCloseEvent* e)
 {
-    if (loading || ! confirmDiscard())
+    if (loading)
     {
         e->ignore();
         return;
+    }
+
+    // Ask about each tab with unsaved changes, showing it while asking.
+    for (int i = 0; i < (int) tabs.size(); ++i)
+    {
+        const bool modified = i == activeTab ? doc.isOpen() && doc.isModified()
+                                             : tabs[(size_t) i].doc.isOpen() && tabs[(size_t) i].doc.isModified();
+        if (! modified)
+            continue;
+
+        switchToTab (i);
+        if (! confirmDiscard())
+        {
+            e->ignore();
+            return;
+        }
     }
 
     engine.stop();

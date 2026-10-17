@@ -29,10 +29,7 @@ public:
     explicit MainWindow (AudioEngine&);
     ~MainWindow() override;
 
-    void openFile (const QString& path);
-
-    // Opens a temporary file as a new untitled document and deletes the file (Copy to New).
-    void openAsUntitled (const QString& path);
+    void openFile (const QString& path);  // in a new tab when the current one holds a file
 
 protected:
     void closeEvent (QCloseEvent*) override;
@@ -73,7 +70,7 @@ private:
     void redo();
     void jumpToHistory (int index);
     void copy();
-    void copyToNew();  // selection (or the whole file) into a new PHINYX window
+    void copyToNew();  // selection (or the whole file) into a new untitled tab
     void warnAboutDesktopShortcuts();
     void cut();
     void paste();
@@ -150,5 +147,28 @@ private:
     QFutureWatcher<LoadResult> loadWatcher;
     std::shared_ptr<std::atomic<float>> loadProgress;
     bool loading = false;
-    QString untitledSource;  // temporary file being opened as an untitled copy
+
+    // Editor tabs, one file each. The active tab's document, cursor and
+    // selection live in the members above while it is active; the others are
+    // parked here and swapped in when their tab is chosen.
+    struct TabState
+    {
+        AudioDocument doc;
+        Frame cursor = 0, selStart = 0, selEnd = 0, selAnchor = 0;
+        SaveOptions saveOptions;
+        QString optionsConfirmedFor;
+        std::pair<double, double> view { 0.0, 0.0 };
+    };
+
+    void newTab();
+    void switchToTab (int index);
+    void parkActiveTab();
+    void unparkTab (int index);
+    void updateTabBar();
+    bool closeTab();                 // the active tab; asks about unsaved changes
+    QString tabName (const AudioDocument&) const;
+
+    class QTabBar* tabBar = nullptr;
+    std::vector<TabState> tabs { TabState() };
+    int activeTab = 0;
 };

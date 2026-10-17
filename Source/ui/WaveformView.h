@@ -27,6 +27,10 @@ public:
     void setCursorFrame (Frame);
     void setSelection (Frame start, Frame end);  // empty when start == end
 
+    // Visible range in frames, so each editor tab can keep its own zoom.
+    std::pair<double, double> view() const { return { viewStart, viewLength }; }
+    void setView (double start, double length);
+
     void zoomBy (double factor);
     void zoomToFit();
     void zoomToSelection();

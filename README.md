@@ -11,7 +11,8 @@ Built with a Qt 6 interface (native Wayland) on top of a JUCE 8 audio engine.
 - Open WAV/AIFF/FLAC/Ogg/MP3 (`Ctrl+O`, or pass a file on the command line); save as WAV/FLAC/AIFF/Ogg (`Ctrl+S`, `Ctrl+Shift+S`) with bit depth and TPDF dither. WAV markers (cue points and regions) are kept.
 - Playback through ALSA or JACK/PipeWire (`Space`), cursor movement (`Left`/`Right`, `Ctrl+Left`/`Ctrl+Right`, `J`/`L`, `Home`/`End`), zoom (`+`/`-`, `Ctrl+0`, `Ctrl+E` to the selection, `Ctrl`+mouse wheel)
 - Selection by mouse drag, `Shift`+click, `Shift`+arrows/`J`/`L`/`Home`/`End`, `Ctrl+A`; `Esc` clears it
-- Copy to New (`Shift+C`), like Audition and WaveLab: opens the selection (or the whole file) in a new untitled PHINYX window, markers included
+- Tabs: each open file gets its own tab above the waveform, with its own undo history, selection and zoom. `Ctrl+O` opens into a new tab, `Ctrl+Tab`/`Ctrl+Shift+Tab` (or `Ctrl+Page Down`/`Up`) switch tabs, `Ctrl+W` closes one. Copy and paste work between tabs.
+- Copy to New (`Shift+C`), like Audition and WaveLab: puts the selection (or the whole file) in a new untitled tab, markers included
 - Editing: cut/copy/paste/delete (`Ctrl+X`/`C`/`V`, `Del` or `Backspace` on a selection; select by dragging, `Shift`+arrows or `Ctrl+A`), trim to selection (`Ctrl+T`), insert silence (`Ctrl+Alt+S`)
 - Processing (on the selection, or the whole file when nothing is selected): gain (`Ctrl+G`), normalize to peak dBFS or integrated LUFS (`Ctrl+Shift+N`), fade in/out with four curve shapes (`Ctrl+Shift+I`/`O`), reverse (`Ctrl+Shift+R`), invert (`Ctrl+Alt+I`), DC offset removal (`Ctrl+Alt+D`)
 - Unlimited undo/redo (`Ctrl+Z`, `Ctrl+Shift+Z`) and a History panel (`Ctrl+H`, `Enter` jumps to a step, `Esc` returns to the waveform); you are asked before unsaved changes are lost

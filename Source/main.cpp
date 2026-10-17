@@ -30,10 +30,6 @@ int main (int argc, char* argv[])
     parser.addHelpOption();
     parser.addVersionOption();
     parser.addPositionalArgument (QStringLiteral ("file"), QStringLiteral ("Audio file to open."));
-    const QCommandLineOption newFrom (QStringLiteral ("new-from"),
-                                      QStringLiteral ("Open a temporary file as a new untitled document and delete it (used by Copy to New)."),
-                                      QStringLiteral ("file"));
-    parser.addOption (newFrom);
     parser.process (app);
 
     AudioEngine engine;
@@ -46,9 +42,7 @@ int main (int argc, char* argv[])
         MainWindow window (engine);
         window.show();
 
-        if (parser.isSet (newFrom))
-            window.openAsUntitled (QDir::current().absoluteFilePath (parser.value (newFrom)));
-        else if (! parser.positionalArguments().isEmpty())
+        if (! parser.positionalArguments().isEmpty())
             window.openFile (QDir::current().absoluteFilePath (parser.positionalArguments().first()));
 
         result = app.exec();

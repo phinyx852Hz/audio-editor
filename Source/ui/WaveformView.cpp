@@ -137,6 +137,17 @@ void WaveformView::zoomBy (double factor)
     update();
 }
 
+void WaveformView::setView (double start, double length)
+{
+    if (length <= 0.0)
+        return;
+
+    viewStart = start;
+    viewLength = length;
+    clampView();
+    update();
+}
+
 void WaveformView::zoomToFit()
 {
     viewStart = 0.0;
