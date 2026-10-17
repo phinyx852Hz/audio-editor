@@ -1,0 +1,872 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+#include "ChainRow.h"
+#include "MasterPanel.h"
+#include "Theme.h"
+
+#include <QApplication>
+#include <QDial>
+#include <QDrag>
+#include <QDragEnterEvent>
+#include <QFontMetrics>
+#include <QHBoxLayout>
+#include <QKeyEvent>
+#include <QLabel>
+#include <QMimeData>
+#include <QPainter>
+#include <QScrollArea>
+#include <QScrollBar>
+#include <QToolButton>
+#include <QVBoxLayout>
+
+#include <algorithm>
+#include <cmath>
+
+namespace
+{
+    const QString slotMime = QStringLiteral ("application/x-phinyx-chain-slot");
+    constexpr int dialResolution = 1000;
+    constexpr int maxKnobs = 4;
+
+    QToolButton* smallButton (const QString& text, const QString& tip, QWidget* parent, bool checkable = false)
+    {
+        auto* b = new QToolButton (parent);
+        b->setText (text);
+        b->setToolTip (tip);
+        b->setAccessibleName (tip);
+        b->setCheckable (checkable);
+        b->setFocusPolicy (Qt::NoFocus);
+        b->setAutoRaise (true);
+        return b;
+    }
+
+    QString elided (const QString& text, const QFont& font, int width)
+    {
+        return QFontMetrics (font).elidedText (text, Qt::ElideRight, width);
+    }
+}
+
+//==============================================================================
+LevelBar::LevelBar (QWidget* parent) : QWidget (parent)
+{
+    setFixedWidth (6);
+    setMinimumHeight (40);
+    setToolTip (tr ("Output level of this plugin"));
+}
+
+void LevelBar::push (float linearPeak)
+{
+    const auto db = linearPeak > 0.0f ? 20.0f * std::log10 (linearPeak) : -100.0f;
+    const auto next = std::max (db, shownDb - 3.0f);  // falls about 30 dB per second
+    if (std::abs (next - shownDb) > 0.05f)
+    {
+        shownDb = next;
+        update();
+    }
+}
+
+void LevelBar::paintEvent (QPaintEvent*)
+{
+    QPainter g (this);
+    const auto& theme = Theme::current();
+    g.fillRect (rect(), Theme::withOpacity (theme.color (QStringLiteral ("meterBackground"))));
+
+    const auto fraction = std::clamp ((shownDb + 60.0f) / 60.0f, 0.0f, 1.0f);
+    const auto h = (int) std::lround (fraction * height());
+    const auto key = shownDb > -0.1f ? QStringLiteral ("meterHigh") : shownDb > -9.0f ? QStringLiteral ("meterMid")
+                                                                                       : QStringLiteral ("meterLow");
+    g.fillRect (QRect (0, height() - h, width(), h), theme.color (key));
+}
+
+//==============================================================================
+DeviceCard::DeviceCard (AudioEngine& e, Kind k, int slot, QWidget* parent)
+    : QFrame (parent), engine (e), cardKind (k), slotIndex (slot)
+{
+    setFocusPolicy (Qt::NoFocus);
+    setFixedWidth (k == Kind::add ? 110 : k == Kind::master ? 120 : 236);
+    setMinimumHeight (150);
+
+    auto* layout = new QVBoxLayout (this);
+    layout->setContentsMargins (8, 6, 8, 6);
+    layout->setSpacing (3);
+
+    if (k == Kind::add)
+    {
+        auto* add = smallButton (tr ("+\nAdd plugin"), tr ("Add a plugin (Insert)"), this);
+        add->setToolButtonStyle (Qt::ToolButtonTextOnly);
+        add->setSizePolicy (QSizePolicy::Expanding, QSizePolicy::Expanding);
+        layout->addWidget (add);
+        connect (add, &QToolButton::clicked, this, &DeviceCard::addRequested);
+        watch (add);
+        return;
+    }
+
+    auto* header = new QHBoxLayout;
+    header->setSpacing (2);
+    power = smallButton (tr ("On"), k == Kind::master ? tr ("Master Section on or bypassed (B)") : tr ("Plugin on or bypassed (B)"), this, true);
+    title = new QLabel (this);
+    title->setFont ([&] { auto f = font(); f.setBold (true); return f; }());
+    header->addWidget (power);
+    header->addWidget (title, 1);
+
+    if (k == Kind::plugin)
+    {
+        solo = smallButton (tr ("S"), tr ("Solo: hear only this plugin while playing (S)"), this, true);
+        header->addWidget (solo);
+    }
+
+    layout->addLayout (header);
+
+    detail = new QLabel (this);
+    detail->setForegroundRole (QPalette::PlaceholderText);
+    layout->addWidget (detail);
+
+    auto* body = new QHBoxLayout;
+    body->setSpacing (4);
+    auto* knobGrid = new QHBoxLayout;
+    knobGrid->setSpacing (2);
+    body->addLayout (knobGrid, 1);
+    layout->addLayout (body, 1);
+
+    if (k == Kind::plugin)
+    {
+        const auto info = engine.masterSlot (slot);
+        title->setText (elided (QString::fromStdString (info.name), title->font(), 150));
+        title->setToolTip (QString::fromStdString (info.name));
+
+        // The first few continuous parameters; switches and the plugin's own bypass are left to Edit.
+        const auto params = engine.masterSlotParameters (slot);
+        for (int i = 0; i < (int) params.size() && (int) knobs.size() < maxKnobs; ++i)
+        {
+            const auto& p = params[(size_t) i];
+            const auto name = QString::fromStdString (p.name);
+            if (! p.isBoolean && p.numSteps != 2 && ! name.contains (QStringLiteral ("bypass"), Qt::CaseInsensitive))
+                addKnob (i, name, p.numSteps);
+        }
+    }
+    else
+    {
+        title->setText (tr ("Master"));
+        addKnob (-1, tr ("Gain"), 0);
+    }
+
+    for (auto& kn : knobs)
+    {
+        auto* column = new QVBoxLayout;
+        column->setSpacing (0);
+        column->addWidget (kn.dial, 0, Qt::AlignHCenter);
+        column->addWidget (kn.name);
+        column->addWidget (kn.value);
+        knobGrid->addLayout (column);
+    }
+
+    if (knobs.empty())
+    {
+        auto* none = new QLabel (tr ("No adjustable parameters"), this);
+        none->setForegroundRole (QPalette::PlaceholderText);
+        none->setWordWrap (true);
+        knobGrid->addWidget (none);
+    }
+
+    if (k == Kind::plugin)
+    {
+        level = new LevelBar (this);
+        body->addWidget (level);
+
+        auto* footer = new QHBoxLayout;
+        auto* edit = smallButton (tr ("Edit..."), tr ("All parameters (Enter)"), this);
+        auto* window = smallButton (tr ("Window"), tr ("The plugin's own window (E)"), this);
+        footer->addWidget (edit);
+        footer->addWidget (window);
+        footer->addStretch (1);
+        layout->addLayout (footer);
+        connect (edit, &QToolButton::clicked, this, &DeviceCard::editRequested);
+        connect (window, &QToolButton::clicked, this, &DeviceCard::windowRequested);
+        watch (edit);
+        watch (window);
+
+        connect (power, &QToolButton::clicked, this, [this] (bool on)
+        {
+            engine.setMasterSlotBypassed (slotIndex, ! on);
+            Q_EMIT changed();
+        });
+        connect (solo, &QToolButton::clicked, this, [this] (bool on)
+        {
+            engine.setMasterSoloSlot (on ? slotIndex : -1);
+            Q_EMIT changed();
+        });
+        watch (solo);
+    }
+    else
+    {
+        connect (power, &QToolButton::clicked, this, [this] (bool on)
+        {
+            engine.setMasterBypassed (! on);
+            Q_EMIT changed();
+        });
+    }
+
+    watch (power);
+    watch (title);
+    watch (detail);
+    sync();
+}
+
+void DeviceCard::watch (QWidget* w)
+{
+    w->installEventFilter (this);
+}
+
+void DeviceCard::addKnob (int parameter, const QString& name, int steps)
+{
+    Knob kn;
+    kn.parameter = parameter;
+    kn.steps = steps;
+    kn.dial = new QDial (this);
+    kn.dial->setFixedSize (40, 40);
+    kn.dial->setFocusPolicy (Qt::NoFocus);
+    kn.dial->setWrapping (false);
+    kn.dial->setAccessibleName (name);
+    if (parameter < 0)
+        kn.dial->setRange (-120, 48);  // master gain in half-dB steps
+    else
+        kn.dial->setRange (0, steps > 1 ? steps - 1 : dialResolution);
+
+    kn.name = new QLabel (elided (name, font(), 50), this);
+    kn.name->setToolTip (name);
+    kn.name->setAlignment (Qt::AlignHCenter);
+    kn.value = new QLabel (this);
+    kn.value->setAlignment (Qt::AlignHCenter);
+    kn.value->setForegroundRole (QPalette::PlaceholderText);
+    auto small = font();
+    small.setPointSizeF (small.pointSizeF() * 0.85);
+    kn.name->setFont (small);
+    kn.value->setFont (small);
+    kn.name->setFixedWidth (52);
+    kn.value->setFixedWidth (52);
+
+    const auto index = knobs.size();
+    connect (kn.dial, &QDial::valueChanged, this, [this, index] (int position)
+    {
+        if (! syncing)
+            knobMoved (knobs[index], position);
+    });
+    watch (kn.dial);
+    watch (kn.name);
+    watch (kn.value);
+    knobs.push_back (kn);
+}
+
+void DeviceCard::knobMoved (const Knob& kn, int position)
+{
+    if (kn.parameter < 0)
+        engine.setMasterGainDb (position * 0.5);
+    else
+        engine.setMasterSlotParameter (slotIndex, kn.parameter,
+                                       (float) position / (float) std::max (1, kn.dial->maximum()));
+    sync();
+}
+
+void DeviceCard::setKnobFromEngine (Knob& kn)
+{
+    QString text;
+    int position = 0;
+
+    if (kn.parameter < 0)
+    {
+        const auto db = engine.masterGainDb();
+        position = (int) std::lround (db * 2.0);
+        text = QString::asprintf ("%+.1f dB", db);
+    }
+    else
+    {
+        const auto p = engine.masterSlotParameter (slotIndex, kn.parameter);
+        position = (int) std::lround (p.value * kn.dial->maximum());
+        text = QString::fromStdString (p.valueText);
+    }
+
+    if (! kn.dial->isSliderDown())
+        kn.dial->setValue (position);
+    kn.value->setText (elided (text, kn.value->font(), 52));
+    kn.value->setToolTip (text);
+}
+
+void DeviceCard::sync()
+{
+    if (cardKind == Kind::add)
+        return;
+
+    syncing = true;
+    for (auto& kn : knobs)
+        setKnobFromEngine (kn);
+
+    if (cardKind == Kind::plugin)
+    {
+        const auto info = engine.masterSlot (slotIndex);
+        power->setChecked (! info.bypassed);
+        power->setText (info.bypassed ? tr ("Off") : tr ("On"));
+        solo->setChecked (engine.masterSoloSlot() == slotIndex);
+
+        auto text = QString::fromStdString (info.format);
+        if (info.latencySamples > 0)
+            text += tr ("  %1 smp latency").arg (info.latencySamples);
+        if (engine.masterSoloSlot() == slotIndex)
+            text += tr ("  SOLO");
+        detail->setText (text);
+        title->setForegroundRole (info.bypassed || engine.isMasterBypassed() ? QPalette::PlaceholderText : QPalette::WindowText);
+        level->push (engine.takeMasterSlotPeak (slotIndex));
+    }
+    else
+    {
+        power->setChecked (! engine.isMasterBypassed());
+        power->setText (engine.isMasterBypassed() ? tr ("Off") : tr ("On"));
+        detail->setText (engine.isMasterBypassed() ? tr ("Bypassed") : (engine.masterSoloSlot() >= 0 ? tr ("Solo active") : QString()));
+    }
+    syncing = false;
+}
+
+void DeviceCard::nudge (int index, double steps)
+{
+    if (index < 0 || index >= (int) knobs.size())
+        return;
+
+    auto& kn = knobs[(size_t) index];
+    const auto perStep = kn.parameter < 0 || kn.steps > 1 ? 1.0 : dialResolution / 100.0;
+    const auto target = std::clamp ((int) std::lround (kn.dial->value() + steps * perStep), kn.dial->minimum(), kn.dial->maximum());
+    kn.dial->setValue (target);  // valueChanged sends it to the engine
+}
+
+void DeviceCard::setSelected (bool isSelected, bool rowFocused, int knob)
+{
+    if (selected == isSelected && focused == rowFocused && selectedKnob == knob)
+        return;
+
+    selected = isSelected;
+    focused = rowFocused;
+    selectedKnob = isSelected ? knob : -1;
+
+    for (int i = 0; i < (int) knobs.size(); ++i)
+    {
+        auto f = knobs[(size_t) i].name->font();
+        f.setBold (i == selectedKnob);
+        f.setUnderline (i == selectedKnob && focused);
+        knobs[(size_t) i].name->setFont (f);
+        knobs[(size_t) i].name->setForegroundRole (i == selectedKnob && focused ? QPalette::Link : QPalette::WindowText);
+    }
+
+    update();
+}
+
+void DeviceCard::paintEvent (QPaintEvent*)
+{
+    QPainter g (this);
+    g.setRenderHint (QPainter::Antialiasing);
+    const auto r = QRectF (rect()).adjusted (1.5, 1.5, -1.5, -1.5);
+
+    g.setPen (Qt::NoPen);
+    g.setBrush (palette().color (cardKind == Kind::add ? QPalette::Window : QPalette::Base));
+    g.drawRoundedRect (r, 6, 6);
+
+    auto pen = QPen (palette().color (QPalette::Mid), 1.0);
+    if (selected)
+        pen = QPen (palette().color (focused ? QPalette::Link : QPalette::Highlight), focused ? 2.0 : 1.5);
+    g.setPen (pen);
+    g.setBrush (Qt::NoBrush);
+    g.drawRoundedRect (r, 6, 6);
+}
+
+bool DeviceCard::eventFilter (QObject* watched, QEvent* e)
+{
+    if (e->type() == QEvent::MouseButtonPress)
+    {
+        int index = -1;
+        for (int i = 0; i < (int) knobs.size(); ++i)
+            if (watched == knobs[(size_t) i].dial || watched == knobs[(size_t) i].name || watched == knobs[(size_t) i].value)
+                index = i;
+        Q_EMIT activated (index);
+
+        // A knob's labels would pass the press on to the card, which selects the card instead.
+        if (index >= 0 && qobject_cast<QLabel*> (watched) != nullptr)
+            return true;
+    }
+
+    // Other labels pass presses on to the card, so dragging by the title moves the plugin.
+    return false;
+}
+
+void DeviceCard::mousePressEvent (QMouseEvent* e)
+{
+    pressPos = e->position().toPoint();
+    Q_EMIT activated (-1);
+}
+
+void DeviceCard::mouseMoveEvent (QMouseEvent* e)
+{
+    if (cardKind != Kind::plugin || ! (e->buttons() & Qt::LeftButton)
+        || (e->position().toPoint() - pressPos).manhattanLength() < QApplication::startDragDistance())
+        return;
+
+    auto* mime = new QMimeData;
+    mime->setData (slotMime, QByteArray::number (slotIndex));
+    auto* drag = new QDrag (this);
+    drag->setMimeData (mime);
+    drag->setPixmap (grab().scaledToWidth (width() / 2, Qt::SmoothTransformation));
+    drag->exec (Qt::MoveAction);
+}
+
+//==============================================================================
+ChainRow::ChainRow (AudioEngine& e, QWidget* homeWidget, QWidget* parent)
+    : QWidget (parent), engine (e), home (homeWidget), scroll (new QScrollArea (this)), strip (new QWidget)
+{
+    setAccessibleName (tr ("Device chain"));
+    setAccessibleDescription (tr ("Left and Right pick a plugin, Up and Down pick a knob, plus and minus turn it, Enter edits all "
+                                  "parameters, Insert adds a plugin, Delete removes it, B bypasses, S solos, E opens its window, "
+                                  "Control with Left or Right moves it."));
+    setFocusPolicy (Qt::StrongFocus);
+    setAcceptDrops (true);
+    setMinimumHeight (175);
+
+    stripLayout = new QHBoxLayout (strip);
+    stripLayout->setContentsMargins (6, 4, 6, 4);
+    stripLayout->setSpacing (4);
+    strip->setAutoFillBackground (false);
+
+    scroll->setWidget (strip);
+    scroll->setWidgetResizable (true);
+    scroll->setFrameShape (QFrame::NoFrame);
+    scroll->setFocusPolicy (Qt::NoFocus);
+    scroll->setVerticalScrollBarPolicy (Qt::ScrollBarAlwaysOff);
+    scroll->viewport()->setAutoFillBackground (false);
+    scroll->horizontalScrollBar()->setFocusPolicy (Qt::NoFocus);
+
+    auto* layout = new QVBoxLayout (this);
+    layout->setContentsMargins (0, 0, 0, 0);
+    layout->addWidget (scroll);
+
+    connect (&timer, &QTimer::timeout, this, [this]
+    {
+        if (signature() != lastSignature)
+            rebuild();
+        else
+            for (auto* c : cards)
+                c->sync();
+    });
+    timer.start (100);
+    rebuild();
+}
+
+QString ChainRow::signature() const
+{
+    QString s = engine.isMasterBypassed() ? QStringLiteral ("B") : QStringLiteral ("-");
+    for (int i = 0; i < AudioEngine::numMasterSlots; ++i)
+        s += QLatin1Char ('|') + QString::fromStdString (engine.masterSlot (i).pluginId);
+    return s;
+}
+
+void ChainRow::rebuild()
+{
+    const auto* old = currentCard();
+    const auto oldSlot = old != nullptr ? old->slot() : -1;
+    const auto oldKind = old != nullptr ? old->kind() : DeviceCard::Kind::plugin;
+
+    for (auto* c : cards)
+        c->deleteLater();
+    cards.clear();
+    while (auto* item = stripLayout->takeAt (0))
+    {
+        if (auto* w = item->widget())
+            w->deleteLater();
+        delete item;
+    }
+
+    auto addArrow = [this]
+    {
+        auto* arrow = new QLabel (QStringLiteral ("›"), strip);  // single right-pointing angle quote
+        arrow->setForegroundRole (QPalette::PlaceholderText);
+        stripLayout->addWidget (arrow);
+    };
+
+    auto addCard = [this] (DeviceCard::Kind kind, int slot)
+    {
+        auto* card = new DeviceCard (engine, kind, slot, strip);
+        const auto index = (int) cards.size();
+        cards.push_back (card);
+        stripLayout->addWidget (card);
+
+        connect (card, &DeviceCard::activated, this, [this, index] (int k)
+        {
+            select (index, k);
+            setFocus (Qt::MouseFocusReason);
+        });
+        connect (card, &DeviceCard::changed, this, [this]
+        {
+            for (auto* c : cards)
+                c->sync();
+            Q_EMIT chainChanged();
+        });
+        connect (card, &DeviceCard::editRequested, this, [this, slot] { editParameters (slot); });
+        connect (card, &DeviceCard::windowRequested, this, [this, slot] { showWindow (slot); });
+        connect (card, &DeviceCard::addRequested, this, [this] { insertAfter (lastPluginSlot()); });
+    };
+
+    for (int i = 0; i < AudioEngine::numMasterSlots; ++i)
+    {
+        if (! engine.masterSlot (i).empty)
+        {
+            addCard (DeviceCard::Kind::plugin, i);
+            addArrow();
+        }
+    }
+
+    addCard (DeviceCard::Kind::add, -1);
+    addArrow();
+    addCard (DeviceCard::Kind::master, -1);
+    stripLayout->addStretch (1);
+
+    lastSignature = signature();
+
+    // Keep the same card selected when it still exists; otherwise start at the first card.
+    int index = oldKind == DeviceCard::Kind::plugin ? std::min (current, (int) cards.size() - 1) : 0;
+    for (int i = 0; i < (int) cards.size(); ++i)
+        if (old != nullptr && oldKind != DeviceCard::Kind::add && cards[(size_t) i]->kind() == oldKind
+            && (oldKind != DeviceCard::Kind::plugin || cards[(size_t) i]->slot() == oldSlot))
+            index = i;
+
+    current = -1;
+    select (index, knob);
+}
+
+DeviceCard* ChainRow::currentCard() const
+{
+    return current >= 0 && current < (int) cards.size() ? cards[(size_t) current] : nullptr;
+}
+
+int ChainRow::lastPluginSlot() const
+{
+    int last = -1;
+    for (auto* c : cards)
+        if (c->kind() == DeviceCard::Kind::plugin)
+            last = c->slot();
+    return last;
+}
+
+void ChainRow::select (int card, int k)
+{
+    if (cards.empty())
+        return;
+
+    current = std::clamp (card, 0, (int) cards.size() - 1);
+    auto* c = cards[(size_t) current];
+    knob = c->numKnobs() == 0 ? -1 : std::clamp (k, -1, c->numKnobs() - 1);
+    showSelection();
+    scroll->ensureWidgetVisible (c, 8, 0);
+}
+
+void ChainRow::showSelection()
+{
+    for (int i = 0; i < (int) cards.size(); ++i)
+        cards[(size_t) i]->setSelected (i == current, hasFocus(), knob);
+}
+
+void ChainRow::focusInEvent (QFocusEvent* e)
+{
+    QWidget::focusInEvent (e);
+    showSelection();
+}
+
+void ChainRow::focusOutEvent (QFocusEvent* e)
+{
+    QWidget::focusOutEvent (e);
+    showSelection();
+}
+
+bool ChainRow::handles (const QKeyEvent* k)
+{
+    const auto mods = k->modifiers() & ~Qt::KeypadModifier;
+    const auto key = k->key();
+
+    if (mods == Qt::ControlModifier)
+        return key == Qt::Key_Left || key == Qt::Key_Right;
+
+    if (mods == Qt::ShiftModifier)
+        return key == Qt::Key_Plus || key == Qt::Key_Equal || key == Qt::Key_Minus || key == Qt::Key_Underscore;
+
+    if (mods != Qt::NoModifier)
+        return false;
+
+    switch (key)
+    {
+        case Qt::Key_Left: case Qt::Key_Right: case Qt::Key_Up: case Qt::Key_Down:
+        case Qt::Key_Plus: case Qt::Key_Equal: case Qt::Key_Minus: case Qt::Key_PageUp: case Qt::Key_PageDown:
+        case Qt::Key_Return: case Qt::Key_Enter: case Qt::Key_Insert: case Qt::Key_Delete: case Qt::Key_Backspace:
+        case Qt::Key_B: case Qt::Key_S: case Qt::Key_E: case Qt::Key_Escape:
+            return true;
+        default:
+            return false;  // Space and everything else stay with the editor's shortcuts
+    }
+}
+
+bool ChainRow::event (QEvent* e)
+{
+    // Claim the keys this row uses before the window's shortcuts see them.
+    if (e->type() == QEvent::ShortcutOverride && handles (static_cast<QKeyEvent*> (e)))
+    {
+        e->accept();
+        return true;
+    }
+
+    return QWidget::event (e);
+}
+
+void ChainRow::keyPressEvent (QKeyEvent* k)
+{
+    if (! handles (k))
+    {
+        QWidget::keyPressEvent (k);
+        return;
+    }
+
+    auto* card = currentCard();
+    const auto ctrl = (k->modifiers() & Qt::ControlModifier) != 0;
+    const auto shift = (k->modifiers() & Qt::ShiftModifier) != 0;
+    const auto isPlugin = card != nullptr && card->kind() == DeviceCard::Kind::plugin;
+
+    switch (k->key())
+    {
+        case Qt::Key_Escape:
+            home->window()->activateWindow();
+            home->setFocus (Qt::ShortcutFocusReason);
+            break;
+
+        case Qt::Key_Left:
+        case Qt::Key_Right:
+        {
+            const auto delta = k->key() == Qt::Key_Left ? -1 : 1;
+            if (! ctrl)
+            {
+                select (current + delta, knob);
+                break;
+            }
+
+            // Move the plugin past its neighbour.
+            const auto neighbour = current + delta;
+            if (isPlugin && neighbour >= 0 && neighbour < (int) cards.size()
+                && cards[(size_t) neighbour]->kind() == DeviceCard::Kind::plugin)
+                movePlugin (card->slot(), cards[(size_t) neighbour]->slot());
+            break;
+        }
+
+        case Qt::Key_Up:   select (current, knob - 1); break;
+        case Qt::Key_Down: select (current, knob + 1); break;
+
+        case Qt::Key_Plus: case Qt::Key_Equal:
+        case Qt::Key_Minus: case Qt::Key_Underscore:
+        case Qt::Key_PageUp: case Qt::Key_PageDown:
+        {
+            if (card == nullptr || card->numKnobs() == 0)
+                break;
+            if (knob < 0)
+                select (current, 0);
+
+            const auto up = k->key() == Qt::Key_Plus || k->key() == Qt::Key_Equal || k->key() == Qt::Key_PageUp;
+            const auto big = shift || k->key() == Qt::Key_PageUp || k->key() == Qt::Key_PageDown;
+            card->nudge (knob, (up ? 1.0 : -1.0) * (big ? 10.0 : 1.0));
+            break;
+        }
+
+        case Qt::Key_Return:
+        case Qt::Key_Enter:
+            if (isPlugin)
+                editParameters (card->slot());
+            else if (card != nullptr && card->kind() == DeviceCard::Kind::add)
+                insertAfter (lastPluginSlot());
+            break;
+
+        case Qt::Key_Insert:
+            insertAfter (isPlugin ? card->slot() : lastPluginSlot());
+            break;
+
+        case Qt::Key_Delete:
+        case Qt::Key_Backspace:
+            removeCurrent();
+            break;
+
+        case Qt::Key_B: toggleBypass(); break;
+        case Qt::Key_S: toggleSolo(); break;
+        case Qt::Key_E:
+            if (isPlugin)
+                showWindow (card->slot());
+            break;
+
+        default:
+            break;
+    }
+}
+
+void ChainRow::insertAfter (int slot)
+{
+    int empty = -1;
+    for (int i = 0; i < AudioEngine::numMasterSlots && empty < 0; ++i)
+        if (engine.masterSlot (i).empty)
+            empty = i;
+
+    if (empty < 0)
+    {
+        Q_EMIT message (tr ("All %1 slots are in use; remove a plugin first").arg (AudioEngine::numMasterSlots));
+        return;
+    }
+
+    if (! choosePlugin || ! choosePlugin (empty))
+    {
+        setFocus (Qt::OtherFocusReason);
+        return;
+    }
+
+    // Moving shifts the plugins in between, so the new one lands right after `slot`.
+    int target = empty;
+    if (slot < 0)
+        target = 0;
+    else if (empty > slot)
+        target = slot + 1;
+    else if (empty < slot)
+        target = slot;
+
+    if (target != empty)
+        engine.moveMasterSlot (empty, target);
+
+    rebuild();
+    for (int i = 0; i < (int) cards.size(); ++i)
+        if (cards[(size_t) i]->kind() == DeviceCard::Kind::plugin && cards[(size_t) i]->slot() == target)
+            select (i, -1);
+
+    Q_EMIT chainChanged();
+    window()->activateWindow();
+    setFocus (Qt::OtherFocusReason);
+}
+
+void ChainRow::movePlugin (int from, int to)
+{
+    if (from == to || from < 0 || to < 0)
+        return;
+
+    engine.moveMasterSlot (from, to);
+    rebuild();
+    for (int i = 0; i < (int) cards.size(); ++i)
+        if (cards[(size_t) i]->kind() == DeviceCard::Kind::plugin && cards[(size_t) i]->slot() == to)
+            select (i, knob);
+
+    Q_EMIT chainChanged();
+}
+
+void ChainRow::removeCurrent()
+{
+    auto* card = currentCard();
+    if (card == nullptr || card->kind() != DeviceCard::Kind::plugin)
+        return;
+
+    const auto name = QString::fromStdString (engine.masterSlot (card->slot()).name);
+    engine.clearMasterSlot (card->slot());
+    rebuild();
+    Q_EMIT chainChanged();
+    Q_EMIT message (tr ("Removed %1").arg (name));
+}
+
+void ChainRow::toggleBypass()
+{
+    auto* card = currentCard();
+    if (card == nullptr)
+        return;
+
+    if (card->kind() == DeviceCard::Kind::plugin)
+    {
+        const auto info = engine.masterSlot (card->slot());
+        engine.setMasterSlotBypassed (card->slot(), ! info.bypassed);
+        Q_EMIT message (info.bypassed ? tr ("%1 on").arg (QString::fromStdString (info.name))
+                                      : tr ("%1 bypassed").arg (QString::fromStdString (info.name)));
+    }
+    else if (card->kind() == DeviceCard::Kind::master)
+        engine.setMasterBypassed (! engine.isMasterBypassed());
+    else
+        return;
+
+    for (auto* c : cards)
+        c->sync();
+    Q_EMIT chainChanged();
+}
+
+void ChainRow::toggleSolo()
+{
+    auto* card = currentCard();
+    if (card == nullptr || card->kind() != DeviceCard::Kind::plugin)
+    {
+        if (engine.masterSoloSlot() >= 0)
+            engine.setMasterSoloSlot (-1);
+    }
+    else
+    {
+        const auto on = engine.masterSoloSlot() != card->slot();
+        engine.setMasterSoloSlot (on ? card->slot() : -1);
+        Q_EMIT message (on ? tr ("Solo: hearing only %1 (renders still use the whole chain)")
+                                 .arg (QString::fromStdString (engine.masterSlot (card->slot()).name))
+                           : tr ("Solo off"));
+    }
+
+    for (auto* c : cards)
+        c->sync();
+    Q_EMIT chainChanged();
+}
+
+void ChainRow::editParameters (int slot)
+{
+    if (engine.masterSlot (slot).empty)
+        return;
+
+    auto* dialog = new ParameterDialog (engine, slot, window());
+    dialog->setAttribute (Qt::WA_DeleteOnClose);
+    dialog->show();
+}
+
+void ChainRow::showWindow (int slot)
+{
+    const auto info = engine.masterSlot (slot);
+    if (engine.canShowPluginWindow (slot))
+        engine.showPluginWindow (slot);
+    else if (! info.empty)
+        Q_EMIT message (info.hasEditor ? tr ("Plugin windows need XWayland or X11; use Enter for the parameter editor")
+                                       : tr ("This plugin has no window of its own; use Enter for the parameter editor"));
+}
+
+int ChainRow::cardAt (const QPoint& pos) const
+{
+    for (int i = 0; i < (int) cards.size(); ++i)
+    {
+        const auto r = QRect (cards[(size_t) i]->mapTo (this, QPoint (0, 0)), cards[(size_t) i]->size());
+        if (pos.x() < r.right())
+            return i;
+    }
+    return (int) cards.size() - 1;
+}
+
+void ChainRow::dragEnterEvent (QDragEnterEvent* e)
+{
+    if (e->mimeData()->hasFormat (slotMime))
+        e->acceptProposedAction();
+}
+
+void ChainRow::dragMoveEvent (QDragMoveEvent* e)
+{
+    if (e->mimeData()->hasFormat (slotMime))
+        e->acceptProposedAction();
+}
+
+void ChainRow::dropEvent (QDropEvent* e)
+{
+    if (! e->mimeData()->hasFormat (slotMime))
+        return;
+
+    const auto from = e->mimeData()->data (slotMime).toInt();
+    const auto index = cardAt (e->position().toPoint());
+    auto to = cards[(size_t) index]->kind() == DeviceCard::Kind::plugin ? cards[(size_t) index]->slot() : lastPluginSlot();
+    e->acceptProposedAction();
+    movePlugin (from, to);
+    setFocus (Qt::MouseFocusReason);
+}

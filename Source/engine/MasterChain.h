@@ -38,7 +38,13 @@ public:
     bool isAllBypassed() const   { return allBypassed; }
     bool isActive() const;
 
+    // Solo: while listening, only this slot runs (-1 = none). Renders ignore it.
+    void setSolo (int slot)  { soloSlot = slot; }
+    int solo() const         { return soloSlot; }
+    float takePeak (int slot);  // output peak since the last call, while listening
+
     std::vector<PluginParameterInfo> parameters (int slot) const;
+    PluginParameterInfo parameter (int slot, int index) const;
     void setParameter (int slot, int index, float value);
 
     bool canShowWindow (int slot) const;
@@ -66,7 +72,7 @@ private:
 
     std::unique_ptr<juce::AudioPluginInstance> createInstance (const juce::PluginDescription&, juce::String& error) const;
     void preparePlugin (juce::AudioPluginInstance&, double rate, int blockSize) const;
-    void processChain (juce::AudioBuffer<float>& io, int startSample, int numSamples);  // lock must be held
+    void processChain (juce::AudioBuffer<float>& io, int startSample, int numSamples, bool listening);  // lock must be held
     int totalLatency() const;
     juce::File pluginListFile() const   { return configFolder.getChildFile ("plugins.xml"); }
     juce::File deadMansPedal() const    { return configFolder.getChildFile ("plugin-scan-in-progress.txt"); }
@@ -91,5 +97,7 @@ private:
     std::atomic<float> gain { 1.0f };
     double gainDecibels = 0.0;
     std::atomic<bool> allBypassed { false };
+    std::atomic<int> soloSlot { -1 };
+    std::array<std::atomic<float>, AudioEngine::numMasterSlots> peaks {};
     static constexpr int maxChannels = 16;
 };

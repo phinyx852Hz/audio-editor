@@ -47,6 +47,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/CommandRegistry.cpp
     Source/ui/Dialogs.cpp
     Source/ui/MainWindow.cpp
+    Source/ui/ChainRow.cpp
     Source/ui/MasterPanel.cpp
     Source/ui/Panels.cpp
     Source/ui/Spectrogram.cpp

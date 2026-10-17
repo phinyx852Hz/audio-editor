@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MainWindow.h"
+#include "ChainRow.h"
 #include "Dialogs.h"
 #include "MasterPanel.h"
 #include "Panels.h"
@@ -240,6 +241,8 @@ void MainWindow::registerCommands()
     add ("view.zoomFit", Category::view, tr ("Zoom to &Fit"), { KS (Qt::CTRL | Qt::Key_0) }, [this] { waveform->zoomToFit(); });
     add ("view.zoomSelection", Category::view, tr ("Zoom to &Selection"), { KS (Qt::CTRL | Qt::Key_E) },
          [this] { if (requireSelection()) waveform->zoomToSelection(); });
+    add ("view.chain", Category::master, tr ("Device &Chain"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_C) },
+         [this] { chainPanel->toggle(); });
     add ("view.history", Category::view, tr ("&History Panel"), { KS (Qt::CTRL | Qt::Key_H) },
          [this] { historyPanel->toggle(); lastPanel = historyPanel; });
     add ("view.markers", Category::view, tr ("&Markers Panel"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_M) },
@@ -316,11 +319,11 @@ void MainWindow::buildMenus()
                                "process.fadeShape.sCurve", "-", "process.reverse", "process.invert", "process.dcOffset" } },
         { tr ("&Markers"),   { "marker.add", "marker.addRegion", "-", "marker.next", "marker.previous", "-", "view.markers" } },
         { tr ("&Analyze"),   { "analyze.loudness", "-", "view.meters", "analyze.resetMeters", "-", "view.spectral" } },
-        { tr ("Ma&ster"),    { "view.master", "master.addPlugin", "master.bypass", "-", "master.render", "-", "master.scan" } },
+        { tr ("Ma&ster"),    { "view.master", "view.chain", "master.addPlugin", "master.bypass", "-", "master.render", "-", "master.scan" } },
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
-                               "view.spectral", "-", "view.master", "view.history", "view.markers", "view.meters", "view.popOut", "view.resetLayout", "-",
+                               "view.spectral", "-", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.popOut", "view.resetLayout", "-",
                                "opacity", "-", "view.focusWaveform" } },
         { tr ("&Options"),   { "options.audio", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
@@ -415,7 +418,26 @@ void MainWindow::buildPanels()
     markerPanel = new DockablePanel (*this, QStringLiteral ("markersPanel"), tr ("Markers"), markerList, Qt::BottomDockWidgetArea);
     historyPanel = new DockablePanel (*this, QStringLiteral ("historyPanel"), tr ("History"), historyList, Qt::RightDockWidgetArea);
     masterPanel = new DockablePanel (*this, QStringLiteral ("masterPanel"), tr ("Master Section"), masterWidget, Qt::RightDockWidgetArea);
-    panels = { masterPanel, metersPanel, markerPanel, historyPanel };
+    chainRow = new ChainRow (engine, waveform, this);
+    chainRow->choosePlugin = [this] (int slot)
+    {
+        masterWidget->choosePlugin (slot);
+        return ! engine.masterSlot (slot).empty;
+    };
+    connect (chainRow, &ChainRow::chainChanged, this, [this]
+    {
+        masterWidget->refresh();
+        commands.action (QStringLiteral ("master.bypass"))->setChecked (engine.isMasterBypassed());
+    });
+    connect (chainRow, &ChainRow::message, this, [this] (const QString& text) { statusBar()->showMessage (text, 6000); });
+
+    // The chain row spans the whole width along the bottom, under the side panels.
+    setCorner (Qt::BottomLeftCorner, Qt::BottomDockWidgetArea);
+    setCorner (Qt::BottomRightCorner, Qt::BottomDockWidgetArea);
+    chainPanel = new DockablePanel (*this, QStringLiteral ("chainPanel"), tr ("Device Chain"), chainRow, Qt::BottomDockWidgetArea);
+    chainPanel->dock()->show();
+
+    panels = { masterPanel, chainPanel, metersPanel, markerPanel, historyPanel };
 }
 
 DockablePanel* MainWindow::focusedOrLastPanel() const

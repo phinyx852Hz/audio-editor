@@ -11,6 +11,7 @@
 #include <atomic>
 #include <memory>
 
+class ChainRow;
 class DockablePanel;
 class MarkerList;
 class MasterPanel;
@@ -124,6 +125,8 @@ private:
     MeterPanel* meterPanel = nullptr;
     MasterPanel* masterWidget = nullptr;
     DockablePanel* masterPanel = nullptr;
+    ChainRow* chainRow = nullptr;
+    DockablePanel* chainPanel = nullptr;
     DockablePanel* historyPanel = nullptr;
     DockablePanel* markerPanel = nullptr;
     DockablePanel* metersPanel = nullptr;
@@ -131,7 +134,7 @@ private:
     QList<QSlider*> opacitySliders;
     DockablePanel* lastPanel = nullptr;
     QByteArray defaultLayout;
-    static constexpr int layoutVersion = 1;
+    static constexpr int layoutVersion = 2;  // 2: device chain row at the bottom
 
     Frame cursor = 0, selStart = 0, selEnd = 0, selAnchor = 0;
     AudioDataPtr clipboard;

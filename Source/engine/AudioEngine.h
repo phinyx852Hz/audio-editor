@@ -119,7 +119,13 @@ public:
     bool isMasterBypassed() const;
     bool masterIsActive() const;  // any plugin running or gain not 0 dB
 
+    // Solo hears one slot alone in context while playing (-1 = none); renders ignore it.
+    void setMasterSoloSlot (int slot);
+    int masterSoloSlot() const;
+    float takeMasterSlotPeak (int slot);  // a slot's output peak since the last call (linear)
+
     std::vector<PluginParameterInfo> masterSlotParameters (int slot) const;
+    PluginParameterInfo masterSlotParameter (int slot, int index) const;
     void setMasterSlotParameter (int slot, int index, float normalisedValue);
 
     // The plugin's own window. Needs X11 or XWayland.

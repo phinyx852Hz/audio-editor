@@ -7,6 +7,8 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QPaintEvent>
+#include <QPainter>
 #include <QPalette>
 #include <QSettings>
 #include <QStandardPaths>
@@ -316,11 +318,33 @@ void Theme::setOpacity (double value)
     updateTranslucentWindows();
 }
 
+namespace
+{
+    // Paints a translucent window's background (with WA_TranslucentBackground Qt leaves it empty).
+    class BackgroundPainter final : public QObject
+    {
+    public:
+        using QObject::QObject;
+
+        bool eventFilter (QObject* watched, QEvent* e) override
+        {
+            if (e->type() == QEvent::Paint)
+            {
+                auto* w = static_cast<QWidget*> (watched);
+                QPainter g (w);
+                g.setCompositionMode (QPainter::CompositionMode_Source);
+                g.fillRect (static_cast<QPaintEvent*> (e)->rect(), w->palette().window());
+            }
+            return false;
+        }
+    };
+}
+
 void Theme::makeTranslucent (QWidget* window)
 {
     window->setAttribute (Qt::WA_TranslucentBackground);
-    window->setAutoFillBackground (true);
     window->setPalette (translucentPalette());
+    window->installEventFilter (new BackgroundPainter (window));
 }
 
 const Theme& Theme::base() { return baseTheme(); }

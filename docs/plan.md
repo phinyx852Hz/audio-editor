@@ -33,7 +33,7 @@ License: AGPLv3 open source
 - **Phase 1 Part A (done):** real editing. Selection, cut/copy/paste/delete/trim, insert silence, gain, normalize (peak or LUFS), fades with four shapes, reverse, invert, DC removal, unlimited undo with a History panel, Save/Save As to WAV/FLAC/AIFF/Ogg with bit depth and dither, WAV markers preserved, unsaved-changes prompts. Core tests (storage, undo, DSP, EBU loudness reference) run in CI.
 - **Phase 1 Part B (done):** markers and regions (keys, Markers panel, saved in WAV), live peak/true-peak/LUFS meters, loudness statistics, log-frequency spectral display, panels that pop out into their own Hyprland-tiled windows with the layout remembered, colour themes with third-party JSON themes (docs/themes.md).
 - **Phase 1 Part C (done):** Master Section with 8 plugin slots (VST3, LV2, LADSPA via JUCE hosting), master gain and bypass, keyboard parameter editor plus the plugin's own window under XWayland, render in place (undoable) or to a new file with dither, latency compensated, chain remembered. Verified with LSP plugins.
-- **Phase 1 status:** core done. Still open from the Phase 1 list: slot solo, Master Section presets, split waveform/spectral view and FFT settings. Added after the owner's first Omarchy test: Delete shows a hint when nothing is selected, window opacity control, waveform colour picker. Next candidates: the Ableton/Bitwig-style device chain row (2.4) and OBS-style recording/capture (2.1b). Not yet tried on real audio hardware or a real Hyprland session (next: the owner's Omarchy test).
+- **Phase 1 status:** core done. Still open from the Phase 1 list: Master Section presets, split waveform/spectral view and FFT settings. Added after the owner's first Omarchy test: Delete shows a hint when nothing is selected, window opacity control, waveform colour picker. Device chain row (2.4) done, with slot solo. Next candidate: OBS-style recording/capture (2.1b). Not yet tried on real audio hardware or a real Hyprland session (next: the owner's Omarchy test).
 - **Next:** Phase 2 (spectral editing and repair, plan section 5).
 
 ---
@@ -124,7 +124,7 @@ Decided: **no mixer** (no buses, sends or mixing console). The app stays an edit
   - Presets for the whole section, A/B/C/D snapshots, chain import/export shared with batch
   - Fully keyboard driven: move between slots with arrows, `Enter` opens the plugin, keys for bypass, solo, move up/down, insert, remove
   - **Pops out to its own window** with one command or button, so on Hyprland it lands in its own tile (see 2.10)
-- P1 **Device chain row like Ableton and Bitwig** (requested 2026-10-17): a strip along the bottom of the main window showing the chain left to right as device cards, signal flowing left to right into the master gain and meters
+- P1 **Device chain row like Ableton and Bitwig** (requested 2026-10-17; first version done the same day: cards with on/off, solo, first four knobs, level bar, Edit and Window, full keyboard control, drag to reorder; still to do: pinning chosen knobs, collapse, gain-reduction display, dropping from the browser): a strip along the bottom of the main window showing the chain left to right as device cards, signal flowing left to right into the master gain and meters
   - Each card: plugin name, on/off, solo, a few main knobs (the plugin's first or user-pinned parameters), a small level/gain-reduction indicator, collapse to a narrow bar, and a button for the full parameter editor or plugin window
   - Same chain as the Master Section list (one model, two views); later reused for per-clip chains in the Montage and batch chains
   - Keyboard: a key focuses the row, `Left`/`Right` move between cards, `Up`/`Down` between knobs, `+`/`-` adjust, `Insert` adds after the focused card, `Ctrl+Left`/`Right` reorders, `Del` removes; drag to reorder with the mouse
@@ -483,7 +483,6 @@ Key design choices:
 
 ### Phase 1.5: Multi-channel foundation
 - Recording and capture like OBS: desktop audio, any input, one app (2.1b P1)
-- Device chain row at the bottom of the window for the Master Section (2.4 P1), if not built sooner
 - Make playback, meters, Master Section and render work for any channel count, with speaker layouts and downmix monitoring (2.11 P0)
 - Built-in Stereoize (mono to stereo)
 - Done early because every later feature (repair, Montage, export) depends on how channels are handled

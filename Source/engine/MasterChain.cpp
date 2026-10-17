@@ -203,6 +203,8 @@ void MasterChain::clear (int index)
         const juce::ScopedLock sl (lock);
         old = std::move (slots[(size_t) index].plugin);
         slots[(size_t) index] = {};
+        if (soloSlot == index)
+            soloSlot = -1;
     }
 }
 
@@ -213,6 +215,7 @@ void MasterChain::move (int from, int to)
         return;
 
     const juce::ScopedLock sl (lock);
+    soloSlot = -1;
     auto rotateOne = [&] (auto& array)
     {
         if (from < to)
@@ -297,6 +300,31 @@ std::vector<PluginParameterInfo> MasterChain::parameters (int index) const
     }
 
     return result;
+}
+
+PluginParameterInfo MasterChain::parameter (int index, int parameter) const
+{
+    PluginParameterInfo info;
+    if (index < 0 || index >= (int) slots.size() || slots[(size_t) index].plugin == nullptr)
+        return info;
+
+    const auto& params = slots[(size_t) index].plugin->getParameters();
+    if (parameter < 0 || parameter >= params.size())
+        return info;
+
+    auto* p = params[parameter];
+    info.name = p->getName (64).toStdString();
+    info.value = p->getValue();
+    info.valueText = (p->getCurrentValueAsText() + " " + p->getLabel()).trim().toStdString();
+    info.isBoolean = p->isBoolean();
+    const auto steps = p->getNumSteps();
+    info.numSteps = steps > 1 && steps <= 1000 ? steps : 0;
+    return info;
+}
+
+float MasterChain::takePeak (int index)
+{
+    return index >= 0 && index < (int) peaks.size() ? peaks[(size_t) index].exchange (0.0f, std::memory_order_relaxed) : 0.0f;
 }
 
 void MasterChain::setParameter (int index, int parameter, float value)
@@ -437,11 +465,12 @@ void MasterChain::processRealtime (juce::AudioBuffer<float>& buffer, int startSa
         return;
     }
 
-    processChain (buffer, startSample, numSamples);
+    processChain (buffer, startSample, numSamples, true);
 }
 
-void MasterChain::processChain (juce::AudioBuffer<float>& io, int startSample, int numSamples)
+void MasterChain::processChain (juce::AudioBuffer<float>& io, int startSample, int numSamples, bool listening)
 {
+    const auto solo = listening ? soloSlot.load() : -1;
     const auto ioChannels = std::min (io.getNumChannels(), maxChannels);
     const auto g = gain.load();
 
@@ -457,9 +486,10 @@ void MasterChain::processChain (juce::AudioBuffer<float>& io, int startSample, i
                 scratch.clear (ch, 0, n);
         }
 
-        for (auto& s : slots)
+        for (size_t index = 0; index < slots.size(); ++index)
         {
-            if (s.plugin == nullptr || s.bypassed || s.plugin->isSuspended())
+            auto& s = slots[index];
+            if (s.plugin == nullptr || s.bypassed || s.plugin->isSuspended() || (solo >= 0 && solo != (int) index))
                 continue;
 
             const auto channels = std::clamp (std::max (s.plugin->getTotalNumInputChannels(), s.plugin->getTotalNumOutputChannels()),
@@ -471,6 +501,15 @@ void MasterChain::processChain (juce::AudioBuffer<float>& io, int startSample, i
             // A mono-out plugin feeds both sides.
             if (s.plugin->getTotalNumOutputChannels() == 1 && ioChannels > 1)
                 scratch.copyFrom (1, 0, scratch, 0, 0, n);
+
+            if (listening)
+            {
+                float peak = 0.0f;
+                for (int ch = 0; ch < std::min (ioChannels, 2); ++ch)
+                    peak = std::max (peak, scratch.getMagnitude (ch, 0, n));
+                if (peak > peaks[index].load (std::memory_order_relaxed))
+                    peaks[index].store (peak, std::memory_order_relaxed);
+            }
         }
 
         for (int ch = 0; ch < ioChannels; ++ch)
@@ -516,7 +555,7 @@ AudioDataPtr MasterChain::render (const AudioData& data, Frame start, Frame end,
             for (int i = 0; i < 4; ++i)
             {
                 io.clear();
-                processChain (io, 0, renderBlock);
+                processChain (io, 0, renderBlock, false);
             }
 
             if (! juce::MessageManager::getInstance()->isThisTheMessageThread())
@@ -549,7 +588,7 @@ AudioDataPtr MasterChain::render (const AudioData& data, Frame start, Frame end,
         consumed += renderBlock;
 
         if (! allBypassed)
-            processChain (io, 0, renderBlock);
+            processChain (io, 0, renderBlock, false);
 
         const auto skip = (int) std::min<Frame> (toSkip, renderBlock);
         toSkip -= skip;
