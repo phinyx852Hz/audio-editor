@@ -713,6 +713,7 @@ namespace
 
         ~ClapEditor() override
         {
+            owner.editorBeingDeleted (this);   // or JUCE thinks the window is still open and never makes another
             owner.editorGone (this);
             if (created)
             {

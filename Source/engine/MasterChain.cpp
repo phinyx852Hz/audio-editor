@@ -2,6 +2,7 @@
 #include "MasterChain.h"
 #include "BuiltinEffects.h"
 #include "ClapFormat.h"
+#include "X11Windows.h"
 #include "../core/Dsp.h"
 
 #include <algorithm>
@@ -547,7 +548,7 @@ bool MasterChain::canShowWindow (int index) const
 {
     const auto* display = std::getenv ("DISPLAY");
     return index >= 0 && index < (int) slots.size() && slots[(size_t) index].plugin != nullptr
-        && slots[(size_t) index].plugin->hasEditor() && display != nullptr && *display != 0;
+        && slots[(size_t) index].plugin->hasEditor() && display != nullptr && *display != 0 && ! x11::connectionLost();
 }
 
 void MasterChain::showWindow (int index)
@@ -555,9 +556,10 @@ void MasterChain::showWindow (int index)
     if (! canShowWindow (index))
         return;
 
-    if (auto& w = windows[(size_t) index])
+    // A second press closes the window again (the Window button and E toggle it).
+    if (windows[(size_t) index] != nullptr)
     {
-        w->toFront (true);
+        windows[(size_t) index].reset();
         return;
     }
 
@@ -577,6 +579,14 @@ void MasterChain::showWindow (int index)
                         windows[i].reset();
             });
         });
+
+    if (auto* peer = windows[(size_t) index]->getPeer())
+        x11::setWindowClass (peer->getNativeHandle());
+    x11::surviveLostConnection ([this]
+    {
+        for (auto& w : windows)
+            w.reset();
+    });
 }
 
 //==============================================================================

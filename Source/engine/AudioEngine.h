@@ -144,6 +144,7 @@ public:
 
     // The plugin's own window. Needs X11 or XWayland.
     bool canShowPluginWindow (int slot) const;
+    bool pluginWindowsLost() const;   // the window manager force-closed one; the rest need a restart
     void showPluginWindow (int slot);
 
     void saveMasterSection() const;

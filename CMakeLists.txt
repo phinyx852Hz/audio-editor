@@ -50,6 +50,7 @@ target_sources(${APP_ID} PRIVATE
     Source/engine/BuiltinEffects.cpp
     Source/engine/ClapFormat.cpp
     Source/engine/MasterChain.cpp
+    Source/engine/X11Windows.cpp
     Source/ui/CommandRegistry.cpp
     Source/ui/Dialogs.cpp
     Source/ui/MainWindow.cpp
