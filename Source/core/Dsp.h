@@ -26,6 +26,21 @@ namespace dsp
     AudioDataPtr removeDcOffset (const AudioData&, Frame start, Frame end);
     AudioDataPtr silence (int numChannels, double sampleRate, Frame length);
 
+    // Mono to stereo (Stereoize). Inside [start, end) the mono signal (or the mid of
+    // a stereo file) gets a delayed copy of its upper part added to the left and
+    // subtracted from the right, so left + right is still exactly the original:
+    // the result folds back to mono without comb filtering. Bass below bassHz stays
+    // centred. Returns a two-channel copy of the whole file; outside the range a
+    // mono file plays the same on both sides and a stereo file is unchanged.
+    struct StereoizeSettings
+    {
+        double width = 0.6;      // 0..1, the level of the added side signal
+        double delayMs = 12.0;   // 1..40
+        double bassHz = 200.0;   // 0 = everything is widened
+    };
+
+    AudioDataPtr stereoize (const AudioData&, Frame start, Frame end, const StereoizeSettings&);
+
     // ITU-R BS.1770 K-weighting: high shelf followed by high pass.
     class KWeighting
     {

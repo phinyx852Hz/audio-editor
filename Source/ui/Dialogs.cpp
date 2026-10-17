@@ -406,6 +406,59 @@ NormalizeDialog::NormalizeDialog (QWidget* parent)
     modeBox->setFocus();
 }
 
+StereoizeDialog::StereoizeDialog (const dsp::StereoizeSettings& initial, bool wholeFile, int fileChannels, QWidget* parent)
+    : QDialog (parent), widthBox (new QSpinBox (this)), delayBox (new QDoubleSpinBox (this)), bassBox (new QSpinBox (this))
+{
+    setWindowTitle (tr ("Stereoize"));
+
+    widthBox->setRange (0, 100);
+    widthBox->setSuffix (tr (" %"));
+    widthBox->setValue ((int) std::lround (initial.width * 100.0));
+    widthBox->setToolTip (tr ("How wide the result sounds. 0% leaves it mono."));
+
+    delayBox->setRange (1.0, 40.0);
+    delayBox->setDecimals (1);
+    delayBox->setSingleStep (1.0);
+    delayBox->setSuffix (tr (" ms"));
+    delayBox->setValue (initial.delayMs);
+    delayBox->setToolTip (tr ("Shorter sounds brighter and tighter, longer sounds roomier"));
+
+    bassBox->setRange (0, 1000);
+    bassBox->setSingleStep (10);
+    bassBox->setSuffix (tr (" Hz"));
+    bassBox->setSpecialValueText (tr ("Off (widen everything)"));
+    bassBox->setValue ((int) std::lround (initial.bassHz));
+    bassBox->setToolTip (tr ("Bass below this stays in the centre, which keeps the low end solid"));
+
+    auto* about = new QLabel (this);
+    about->setWordWrap (true);
+    const auto what = fileChannels == 1 ? tr ("Turns this mono file into stereo.") : tr ("Rebuilds the stereo image from the middle of the sound.");
+    const auto where = wholeFile ? tr ("It applies to the whole file.") : tr ("It applies to the selection; a mono file becomes stereo, the same on both sides outside it.");
+    about->setText (what + QLatin1Char (' ') + where + QLatin1Char (' ')
+                    + tr ("Played back in mono it sounds exactly like the original."));
+
+    auto* form = new QFormLayout;
+    form->addRow (tr ("&Width:"), widthBox);
+    form->addRow (tr ("&Delay:"), delayBox);
+    form->addRow (tr ("Keep &bass centred below:"), bassBox);
+
+    auto* buttons = new QDialogButtonBox (QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    auto* layout = new QVBoxLayout (this);
+    layout->addWidget (about);
+    layout->addLayout (form);
+    layout->addWidget (buttons);
+
+    connect (buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect (buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    widthBox->setFocus();
+    widthBox->selectAll();
+}
+
+dsp::StereoizeSettings StereoizeDialog::settings() const
+{
+    return { widthBox->value() / 100.0, delayBox->value(), (double) bassBox->value() };
+}
+
 NormalizeDialog::Mode NormalizeDialog::mode() const { return modeBox->currentIndex() == 0 ? Mode::peak : Mode::loudness; }
 double NormalizeDialog::target() const              { return targetBox->value(); }
 

@@ -85,6 +85,7 @@ private:
     std::pair<Frame, Frame> processRange() const;
     void gain();
     void normalize();
+    void stereoize();
     void fade (bool in);
     void simpleProcess (const QString& description, AudioDataPtr (*fn) (const AudioData&, Frame, Frame));
 

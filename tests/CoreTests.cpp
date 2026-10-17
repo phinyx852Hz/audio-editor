@@ -121,6 +121,27 @@ namespace
         check (near (sampleAt (*folded, 0, 5), 0.0, 1.0e-6), "stereo into mono averages (the ramp's sides are opposite)");
     }
 
+    void testStereoize()
+    {
+        auto mono = makeSine (1, 48000, 1000.0, 0.5);
+        auto wide = dsp::stereoize (*mono, 0, mono->length(), {});
+        check (wide->numChannels() == 2 && wide->length() == mono->length(), "stereoize makes a stereo copy");
+
+        double maxSumError = 0.0, sideEnergy = 0.0;
+        for (Frame f = 0; f < wide->length(); f += 37)
+        {
+            const auto l = sampleAt (*wide, 0, f), r = sampleAt (*wide, 1, f), m = sampleAt (*mono, 0, f);
+            maxSumError = std::max (maxSumError, std::abs ((double) (l + r) * 0.5 - m));
+            sideEnergy += (double) (l - r) * (l - r);
+        }
+        check (maxSumError < 1.0e-6, "stereoize folds back to the original mono");
+        check (sideEnergy > 1.0, "stereoize adds width");
+
+        auto part = dsp::stereoize (*mono, 10000, 20000, {});
+        check (sampleAt (*part, 0, 5000) == sampleAt (*part, 1, 5000) && sampleAt (*part, 0, 30000) == sampleAt (*mono, 0, 30000),
+               "outside the range both sides equal the mono file");
+    }
+
     void testLayouts()
     {
         check (dsp::speakerLayout (6).name == "5.1" && dsp::channelName (3, 6) == "LFE" && dsp::channelName (4, 6) == "Ls",
@@ -215,6 +236,7 @@ int main()
     testDocument();
     testDsp();
     testLayouts();
+    testStereoize();
     testSpectrum();
 
     if (failures == 0)

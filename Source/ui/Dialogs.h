@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #pragma once
 
+#include "../core/Dsp.h"
+
 #include <QDialog>
 
 class AudioEngine;
@@ -98,6 +100,21 @@ public:
 private:
     QComboBox* modeBox;
     class QDoubleSpinBox* targetBox;
+};
+
+// Settings for Stereoize (mono to stereo). Values are kept between uses.
+class StereoizeDialog final : public QDialog
+{
+    Q_OBJECT
+
+public:
+    StereoizeDialog (const dsp::StereoizeSettings& initial, bool wholeFile, int fileChannels, QWidget* parent);
+    dsp::StereoizeSettings settings() const;
+
+private:
+    class QSpinBox* widthBox;
+    class QDoubleSpinBox* delayBox;
+    class QSpinBox* bassBox;
 };
 
 // Personal colours for the waveform display, on top of the theme. Changes show

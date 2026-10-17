@@ -55,6 +55,85 @@ namespace dsp
         });
     }
 
+    AudioDataPtr stereoize (const AudioData& d, Frame start, Frame end, const StereoizeSettings& settings)
+    {
+        const auto rate = d.sampleRate();
+        const auto inChannels = d.numChannels();
+        start = std::clamp<Frame> (start, 0, d.length());
+        end = std::clamp<Frame> (end, start, d.length());
+
+        // Second-order Butterworth high pass, so the bass is left out of the side signal.
+        double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0;
+        if (settings.bassHz > 0.0)
+        {
+            const auto w0 = 2.0 * M_PI * std::min (settings.bassHz, rate * 0.45) / rate;
+            const auto alpha = std::sin (w0) / (2.0 * M_SQRT1_2);
+            const auto c = std::cos (w0), a0 = 1.0 + alpha;
+            b0 = (1.0 + c) / 2.0 / a0;
+            b1 = -(1.0 + c) / a0;
+            b2 = b0;
+            a1 = -2.0 * c / a0;
+            a2 = (1.0 - alpha) / a0;
+        }
+        double x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+
+        const auto delay = std::max<size_t> (1, (size_t) std::lround (std::clamp (settings.delayMs, 1.0, 40.0) * rate / 1000.0));
+        std::vector<float> ring (delay, 0.0f);
+        size_t ringPos = 0;
+        const auto width = (float) std::clamp (settings.width, 0.0, 1.0);
+        const auto edge = std::max<Frame> (1, (Frame) (rate * 0.01));   // 10 ms fade in and out of the effect
+
+        AudioData::Builder out (2, rate);
+        std::vector<std::vector<float>> in ((size_t) inChannels, std::vector<float> (AudioChunk::maxFrames));
+        std::vector<float*> inPtrs;
+        for (auto& v : in)
+            inPtrs.push_back (v.data());
+        std::vector<float> left (AudioChunk::maxFrames), right (AudioChunk::maxFrames);
+        const float* outPtrs[2] { left.data(), right.data() };
+
+        for (Frame pos = 0; pos < d.length();)
+        {
+            // Blocks never straddle the range edges.
+            const auto limit = pos < start ? start : (pos < end ? end : d.length());
+            const auto n = (int) std::min<Frame> (AudioChunk::maxFrames, limit - pos);
+            d.read (pos, n, inPtrs.data());
+            const bool inside = pos >= start && pos < end;
+
+            for (int i = 0; i < n; ++i)
+            {
+                if (! inside)
+                {
+                    left[(size_t) i] = in[0][(size_t) i];
+                    right[(size_t) i] = in[inChannels > 1 ? 1 : 0][(size_t) i];
+                    continue;
+                }
+
+                float mid = 0.0f;
+                for (int ch = 0; ch < inChannels; ++ch)
+                    mid += in[(size_t) ch][(size_t) i];
+                mid /= (float) inChannels;
+
+                const auto high = b0 * mid + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+                x2 = x1; x1 = mid; y2 = y1; y1 = high;
+
+                const auto delayed = ring[ringPos];
+                ring[ringPos] = (float) high;
+                ringPos = (ringPos + 1) % delay;
+
+                const auto at = pos + i;
+                const auto ramp = (float) std::min ({ 1.0, (double) (at - start + 1) / (double) edge, (double) (end - at) / (double) edge });
+                const auto side = width * ramp * delayed;
+                left[(size_t) i] = mid + side;
+                right[(size_t) i] = mid - side;
+            }
+
+            out.append (outPtrs, n);
+            pos += n;
+        }
+
+        return out.finish();
+    }
+
     AudioDataPtr fadeIn (const AudioData& d, Frame s, Frame e, FadeShape shape)  { return fade (d, s, e, shape, true); }
     AudioDataPtr fadeOut (const AudioData& d, Frame s, Frame e, FadeShape shape) { return fade (d, s, e, shape, false); }
 

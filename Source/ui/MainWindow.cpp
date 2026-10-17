@@ -205,6 +205,7 @@ void MainWindow::registerCommands()
          [this] { simpleProcess (tr ("Reverse"), &dsp::reverse); });
     add ("process.invert", Category::process, tr ("In&vert Polarity"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_I) },
          [this] { simpleProcess (tr ("Invert"), &dsp::invert); });
+    add ("process.stereoize", Category::process, tr ("&Stereoize..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_W) }, [this] { stereoize(); });
     add ("process.dcOffset", Category::process, tr ("Remove &DC Offset"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_D) },
          [this] { simpleProcess (tr ("Remove DC Offset"), &dsp::removeDcOffset); });
 
@@ -368,7 +369,7 @@ void MainWindow::buildMenus()
                                "select.toStart", "select.toEnd" } },
         { tr ("&Process"),   { "process.gain", "process.normalize", "-", "process.fadeIn", "process.fadeOut", "-",
                                "process.fadeShape.linear", "process.fadeShape.equalPower", "process.fadeShape.exponential",
-                               "process.fadeShape.sCurve", "-", "process.reverse", "process.invert", "process.dcOffset" } },
+                               "process.fadeShape.sCurve", "-", "process.reverse", "process.invert", "process.dcOffset", "-", "process.stereoize" } },
         { tr ("&Markers"),   { "marker.add", "marker.addRegion", "-", "marker.next", "marker.previous", "-", "view.markers" } },
         { tr ("&Analyze"),   { "analyze.loudness", "-", "view.meters", "analyze.resetMeters", "-", "view.spectral" } },
         { tr ("Ma&ster"),    { "view.master", "view.chain", "master.addPlugin", "master.bypass", "-", "master.render", "-", "master.scan" } },
@@ -594,7 +595,7 @@ void MainWindow::updateCommandStates()
     for (const auto* id : { "file.save", "file.saveAs", "file.close", "edit.insertSilence", "edit.copyToNew", "select.all", "select.none",
                             "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
                             "select.toStart", "select.toEnd", "process.gain", "process.normalize",
-                            "process.reverse", "process.invert", "process.dcOffset",
+                            "process.reverse", "process.invert", "process.dcOffset", "process.stereoize",
                             "transport.playStop", "transport.stop", "transport.start", "transport.end",
                             "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge",
                             "view.zoomIn", "view.zoomOut", "view.zoomFit" })
@@ -1266,6 +1267,44 @@ void MainWindow::gain()
     auto result = dsp::applyGain (*data(), s, e, db);
     QApplication::restoreOverrideCursor();
     commit (tr ("Gain %1 dB").arg (db, 0, 'f', 1), std::move (result), s, e, e - s);
+}
+
+void MainWindow::stereoize()
+{
+    const auto d = data();
+    if (d == nullptr)
+        return;
+
+    if (d->numChannels() > 2)
+    {
+        statusBar()->showMessage (tr ("Stereoize works on mono and stereo files"), 6000);
+        return;
+    }
+
+    auto settings = appSettings();
+    dsp::StereoizeSettings initial;
+    initial.width = settings.value (QStringLiteral ("stereoize/width"), initial.width).toDouble();
+    initial.delayMs = settings.value (QStringLiteral ("stereoize/delayMs"), initial.delayMs).toDouble();
+    initial.bassHz = settings.value (QStringLiteral ("stereoize/bassHz"), initial.bassHz).toDouble();
+
+    StereoizeDialog dialog (initial, ! hasSelection(), d->numChannels(), this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    const auto chosen = dialog.settings();
+    settings.setValue (QStringLiteral ("stereoize/width"), chosen.width);
+    settings.setValue (QStringLiteral ("stereoize/delayMs"), chosen.delayMs);
+    settings.setValue (QStringLiteral ("stereoize/bassHz"), chosen.bassHz);
+
+    const auto [s, e] = processRange();
+    QApplication::setOverrideCursor (Qt::WaitCursor);
+    auto result = dsp::stereoize (*d, s, e, chosen);
+    QApplication::restoreOverrideCursor();
+
+    // The whole file is replaced (a mono file gains a channel); its length and markers stay the same.
+    doc.apply (tr ("Stereoize").toStdString(), { std::move (result), doc.current().markers });
+    refreshFromDocument (true);
+    waveform->setFocus();
 }
 
 void MainWindow::normalize()
