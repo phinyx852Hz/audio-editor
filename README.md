@@ -29,6 +29,7 @@ Built with a Qt 6 interface (native Wayland) on top of a JUCE 8 audio engine.
 - Meters (`Ctrl+Shift+L`): sample peak bars with peak hold, true peak, and momentary/short-term/integrated loudness (ITU-R BS.1770 / EBU R128) during playback; `Ctrl+Alt+R` resets them. Loudness statistics of the selection or file (`Ctrl+Shift+A`): integrated LUFS, loudness range, true peak.
 - Panels (Master Section, Meters, Markers, History) dock in the window or pop out into their own window with `Ctrl+Alt+P`, so Hyprland tiles them like any other window; all shortcuts work there too. The layout is remembered.
 - Master Section (`Ctrl+Shift+E`), like WaveLab's: 8 plugin slots plus master gain, applied to everything you play. Hosts VST3, CLAP, LV2 and LADSPA effects (scan with `Ctrl+Alt+Shift+S`, add with `Ctrl+Alt+E`). Each plugin file is checked by a separate helper copy of PHINYX, so a plugin that crashes or hangs while being scanned is just skipped from then on and never takes the editor down. Windows plugins work through [yabridge](https://github.com/robbert-vdh/yabridge): after `yabridgectl sync`, its VST3 and CLAP copies in `~/.vst3/yabridge` and `~/.clap/yabridge` are found by the next scan (VST2 is not supported). In the slot list `Enter` opens a keyboard-friendly parameter editor (type to filter, arrows to adjust), `E` opens the plugin's own window (needs XWayland) and closes it again, `B` bypasses, `Del` removes, `Ctrl+Up`/`Down` reorders. `Ctrl+Shift+B` bypasses the whole section. Render (`Ctrl+Shift+Enter`) applies it to the audio as an undoable edit, or writes a new file with bit depth and dither; plugin latency is compensated. The chain is remembered between sessions.
+- Stock plugins (Phase 3), listed under Built-in in Add plugin: ToneShiftEQ (12-band EQ with dynamic bands), Wolf Shaper (waveshaper with a drawable curve), LSP Clipper and LSP Multiband Clipper (mono and stereo). They are built with PHINYX and open in one PHINYX frame: a header with the plugin's name and credit, A/B compare (B starts as a copy of A; Copy puts what you hear onto the other side) and On/Off; input and output meters at the sides; the plugin's own view in the middle; and a footer of knobs for its main controls, which are also the knobs on its Device Chain card. The frame takes its colours from your theme.
 - Device chain (`Ctrl+Shift+C`), like Ableton and Bitwig: the Master Section's plugins as cards along the bottom of the window, left to right into the master gain. Each card has on/off, solo (hear only that plugin while playing), its first knobs, a level bar, Edit and Window buttons. Keys: `Left`/`Right` pick a card, `Up`/`Down` pick a knob, `+`/`-` turn it (`Shift` or `Page Up`/`Down` for bigger steps), `F2` or just typing a number sets an exact value (so does double-clicking a knob; `Enter` sets it, `Esc` cancels), `Enter` edits all parameters, `Insert` adds a plugin after the card, `Del` removes it, `B` bypasses, `S` solos, `E` opens the plugin's window, `Ctrl+Left`/`Right` moves it, `Esc` goes back to the waveform. Drag a card by its name to move it with the mouse. Knobs are drawn like Ableton Live's, with the value filled in along an arc (the master gain fills from 0 dB); drag up or down to turn one, with `Shift` for fine steps.
 - Focus follows the mouse (View > Focus Follows Mouse, on by default), like Hyprland: point at the waveform, the device chain or a panel and your keys go there, no click needed. It never pulls focus out of a text field or dialog.
 - Window opacity: slider at the bottom right or View > Window Opacity; `Ctrl+Alt+-` and `Ctrl+Alt+=` change it. Your compositor's own opacity (for example a Hyprland window rule) still applies on top.
@@ -44,7 +45,7 @@ Built with a Qt 6 interface (native Wayland) on top of a JUCE 8 audio engine.
 ## Build and run (Arch Linux)
 ```sh
 sudo pacman -S --needed base-devel git cmake ninja qt6-base qt6-wayland alsa-lib libpipewire ladspa clap \
-  freetype2 fontconfig libx11 libxrandr libxinerama libxcursor libxcomposite libxext mesa
+  freetype2 fontconfig libx11 libxrandr libxinerama libxcursor libxcomposite libxext mesa cairo libsndfile
 git clone https://github.com/phinyx852Hz/audio-editor
 cd audio-editor
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
@@ -58,7 +59,9 @@ JUCE 8.0.15 is downloaded automatically during the first configure (the freetype
 
 The `clap` package provides the CLAP plugin headers; without it they are downloaded during configure (or pass `-DCLAP_DIR=/path/to/clap`).
 
-For plugins, `sudo pacman -S lsp-plugins` gives a large free mastering set (EQ, compressors, limiters). `sudo pacman -S dragonfly-reverb-clap` adds free CLAP reverbs; `sudo pacman -S clap-plugins` installs every CLAP plugin Arch packages.
+The stock plugins are downloaded and built from their own repositories (pinned versions) during the first build, which needs `cairo` and `libsndfile`; add `-DPHINYX_STOCK_PLUGINS=OFF` to build without them.
+
+For more plugins, `sudo pacman -S lsp-plugins` gives a large free mastering set (EQ, compressors, limiters). `sudo pacman -S dragonfly-reverb-clap` adds free CLAP reverbs; `sudo pacman -S clap-plugins` installs every CLAP plugin Arch packages.
 
 To install system wide instead, use the PKGBUILD: `cd packaging/arch && makepkg -si`.
 
@@ -69,3 +72,8 @@ PHINYX runs natively on Wayland. Its window class is `phinyx`, so you can target
 
 ## License
 GNU Affero General Public License v3.0 only. See `LICENSE`. JUCE is used under its AGPLv3 license; Qt under the LGPLv3.
+
+Stock plugins, with thanks to their authors (licence texts are installed next to them in `lib/phinyx/stock/licenses`):
+- [ToneShiftEQ](https://github.com/brummer10/ToneShiftEQ) by brummer10, BSD-3-Clause, with [libxputty](https://github.com/brummer10/libxputty) (0BSD)
+- [Wolf Shaper](https://github.com/wolf-plugins/wolf-shaper) by Patrick Desaulniers, GPL-3.0, on [DPF](https://github.com/DISTRHO/DPF) (ISC)
+- [LSP Clipper and LSP Multiband Clipper](https://lsp-plug.in) by Vladimir Sadovnikov, LGPL-3.0-or-later

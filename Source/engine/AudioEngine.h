@@ -5,6 +5,7 @@
 #include "../core/AudioDocument.h"
 
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -48,6 +49,15 @@ struct MasterSlotInfo
     int latencySamples = 0;
     bool hasEditor = false;
     int channels = 0;         // how many of the file's channels the plugin processes; the rest pass through
+    std::vector<int> mainParameters;   // a stock plugin's main controls (its frame's footer), by parameter index
+};
+
+// Theme colours for the frame stock plugins open in, as 0xAARRGGBB.
+struct PluginFrameColours
+{
+    std::uint32_t window = 0xff202124, panel = 0xff2b2d31, text = 0xffe8e8e8, dimText = 0xff8a8d91,
+                  accent = 0xff4a90d9, mid = 0xff45484d, meterBackground = 0xff16171a,
+                  meterLow = 0xff3cb371, meterMid = 0xffe0b040, meterHigh = 0xffe04040;
 };
 
 struct PluginParameterInfo
@@ -146,6 +156,7 @@ public:
     bool canShowPluginWindow (int slot) const;
     bool pluginWindowsLost() const;   // the window manager force-closed one; the rest need a restart
     void showPluginWindow (int slot);
+    void setPluginFrameColours (const PluginFrameColours&);   // call again when the theme changes
 
     void saveMasterSection() const;
     std::string restoreMasterSection();  // returns problems, empty when all went well

@@ -212,9 +212,13 @@ DeviceCard::DeviceCard (AudioEngine& e, Kind k, int slot, QWidget* parent)
         title->setText (elided (QString::fromStdString (info.name), title->font(), 150));
         title->setToolTip (QString::fromStdString (info.name));
 
-        // The first few continuous parameters; switches and the plugin's own bypass are left to Edit.
+        // A stock plugin's main controls, the same as its window's footer; otherwise the first
+        // few continuous parameters. Switches and the plugin's own bypass are left to Edit.
         const auto params = engine.masterSlotParameters (slot);
-        for (int i = 0; i < (int) params.size() && (int) knobs.size() < maxKnobs; ++i)
+        for (const auto i : info.mainParameters)
+            if (i >= 0 && i < (int) params.size() && (int) knobs.size() < maxKnobs)
+                addKnob (i, QString::fromStdString (params[(size_t) i].name), params[(size_t) i].numSteps);
+        for (int i = 0; i < (int) params.size() && (int) knobs.size() < maxKnobs && info.mainParameters.empty(); ++i)
         {
             const auto& p = params[(size_t) i];
             const auto name = QString::fromStdString (p.name);

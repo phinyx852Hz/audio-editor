@@ -13,7 +13,8 @@ jobs:
         # freetype/fontconfig/X11 headers are only needed to build JUCE's juceaide helper at configure time
         run: |
           pacman -Syu --noconfirm --needed git cmake ninja qt6-base qt6-wayland alsa-lib libpipewire pipewire-jack \
-            ladspa clap freetype2 fontconfig libx11 libxrandr libxinerama libxcursor libxcomposite libxext mesa
+            ladspa clap freetype2 fontconfig libx11 libxrandr libxinerama libxcursor libxcomposite libxext mesa \
+            cairo libsndfile
       - uses: actions/checkout@v4
       - name: Configure
         # Fails if PipeWire was not found, since then recording would be left out
@@ -27,7 +28,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: phinyx-arch
-          path: build/phinyx_artefacts/Release/phinyx
+          path: |
+            build/phinyx_artefacts/Release/phinyx
+            build/stock
 
   ubuntu:
     runs-on: ubuntu-24.04
@@ -37,7 +40,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ninja-build qt6-base-dev libgl1-mesa-dev libasound2-dev libjack-jackd2-dev libpipewire-0.3-dev ladspa-sdk \
             libfreetype-dev libfontconfig1-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev \
-            libxcomposite-dev libxext-dev
+            libxcomposite-dev libxext-dev libcairo2-dev libsndfile1-dev
       - uses: actions/checkout@v4
       - name: Configure
         # Fails if PipeWire was not found, since then recording would be left out

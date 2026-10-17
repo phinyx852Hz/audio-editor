@@ -50,6 +50,8 @@ target_sources(${APP_ID} PRIVATE
     Source/engine/BuiltinEffects.cpp
     Source/engine/ClapFormat.cpp
     Source/engine/MasterChain.cpp
+    Source/engine/StockFrame.cpp
+    Source/engine/StockPlugins.cpp
     Source/engine/X11Windows.cpp
     Source/ui/CommandRegistry.cpp
     Source/ui/Dialogs.cpp
@@ -138,6 +140,20 @@ target_link_libraries(${APP_ID}
         juce::juce_recommended_warning_flags)
 
 include(GNUInstallDirs)
+
+# Stock plugins (cmake/StockPlugins.cmake). Off builds PHINYX without them.
+option(PHINYX_STOCK_PLUGINS "Build and bundle the stock plugins" ON)
+if(PHINYX_STOCK_PLUGINS)
+    include(cmake/StockPlugins.cmake)
+else()
+    set(PHINYX_STOCK_DIR "${CMAKE_BINARY_DIR}/stock")
+    set(PHINYX_STOCK_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/${APP_ID}/stock")
+endif()
+file(RELATIVE_PATH stock_relative "/${CMAKE_INSTALL_BINDIR}" "/${PHINYX_STOCK_INSTALL_DIR}")
+target_compile_definitions(${APP_ID} PRIVATE
+    PHINYX_STOCK_RELATIVE="${stock_relative}"
+    PHINYX_STOCK_BUILD_DIR="${PHINYX_STOCK_DIR}")
+
 install(TARGETS ${APP_ID} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES packaging/phinyx.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 

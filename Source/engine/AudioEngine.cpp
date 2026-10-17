@@ -3,6 +3,7 @@
 #include "../core/Dsp.h"
 #include "../core/FlacTags.h"
 #include "MasterChain.h"
+#include "StockFrame.h"
 #include "X11Windows.h"
 
 #include <juce_audio_devices/juce_audio_devices.h>
@@ -552,6 +553,7 @@ void AudioEngine::setMasterSlotParameter (int slot, int index, float v)         
 bool AudioEngine::canShowPluginWindow (int slot) const               { return impl->master.canShowWindow (slot); }
 bool AudioEngine::pluginWindowsLost() const                          { return x11::connectionLost(); }
 void AudioEngine::showPluginWindow (int slot)                        { impl->master.showWindow (slot); }
+void AudioEngine::setPluginFrameColours (const PluginFrameColours& c) { StockFrame::setColours (c); }
 void AudioEngine::saveMasterSection() const                          { impl->master.save(); }
 std::string AudioEngine::restoreMasterSection()                      { return impl->master.restore(); }
 

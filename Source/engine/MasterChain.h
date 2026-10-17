@@ -80,11 +80,21 @@ private:
         std::unique_ptr<juce::AudioPluginInstance> plugin;
         juce::PluginDescription description;
         bool bypassed = false;
+        int compareSide = 0;              // A/B compare in the stock plugin frame: 0 = A, 1 = B
+        juce::MemoryBlock otherSide;      // the settings of the side not being heard; empty until B is first used
     };
 
     class PluginWindow;
 
     static void addExtraFormats (juce::AudioPluginFormatManager&);   // formats JUCE does not have: CLAP
+    // Runs `scanInThisProcess` in a copy of PHINYX; false if that crashed or hung.
+    static bool scanOutOfProcess (const juce::AudioPluginFormat&, const juce::String& file, int timeoutMs,
+                                  juce::OwnedArray<juce::PluginDescription>& found);
+    void loadStockPlugins();
+    std::unique_ptr<juce::PluginDescription> findDescription (const std::string& pluginId) const;
+    int slotOf (const juce::AudioPluginInstance*) const;
+    void setCompareSide (int slot, int side);
+    void copyCompareSide (int slot);
 
     std::unique_ptr<juce::AudioPluginInstance> createInstance (const juce::PluginDescription&, juce::String& error) const;
     void preparePlugin (juce::AudioPluginInstance&, double rate, int blockSize) const;
@@ -94,9 +104,11 @@ private:
     juce::File pluginListFile() const   { return configFolder.getChildFile ("plugins.xml"); }
     juce::File deadMansPedal() const    { return configFolder.getChildFile ("plugin-scan-in-progress.txt"); }
     juce::File masterFile() const       { return configFolder.getChildFile ("master-section.xml"); }
+    juce::File stockListFile() const    { return configFolder.getChildFile ("stock-plugins.xml"); }
 
     juce::AudioPluginFormatManager formats;
     juce::KnownPluginList pluginList;
+    juce::KnownPluginList stockList;   // the stock plugins found in stock::folder()
     juce::File configFolder;
 
     struct ScanItem { juce::AudioPluginFormat* format; juce::String file; };
@@ -117,5 +129,6 @@ private:
     std::atomic<bool> allBypassed { false };
     std::atomic<int> soloSlot { -1 };
     std::array<std::atomic<float>, AudioEngine::numMasterSlots> peaks {};
+    std::array<std::array<std::atomic<float>, 4>, AudioEngine::numMasterSlots> frameLevels {};   // in L/R, out L/R peaks
     static constexpr int maxChannels = 16;
 };

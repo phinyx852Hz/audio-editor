@@ -2,6 +2,8 @@
 #include "MasterChain.h"
 #include "BuiltinEffects.h"
 #include "ClapFormat.h"
+#include "StockFrame.h"
+#include "StockPlugins.h"
 #include "X11Windows.h"
 #include "../core/Dsp.h"
 
@@ -13,12 +15,13 @@
 class MasterChain::PluginWindow final : public juce::DocumentWindow
 {
 public:
-    PluginWindow (juce::AudioProcessorEditor* editor, const juce::String& title, std::function<void()> onClose)
+    // `content` is the plugin's editor, or a StockFrame holding it.
+    PluginWindow (juce::Component* content, bool canResize, const juce::String& title, std::function<void()> onClose)
         : DocumentWindow (title, juce::Colours::black, DocumentWindow::closeButton), closed (std::move (onClose))
     {
         setUsingNativeTitleBar (true);
-        setContentOwned (editor, true);
-        setResizable (editor->isResizable(), false);
+        setContentOwned (content, true);
+        setResizable (canResize, false);
         centreWithSize (getWidth(), getHeight());
         setVisible (true);
         toFront (true);
@@ -64,6 +67,66 @@ void MasterChain::setConfigFolder (const juce::File& folder)
 
     if (auto xml = juce::XmlDocument::parse (pluginListFile()))
         pluginList.recreateFromXml (*xml);
+
+    loadStockPlugins();
+}
+
+void MasterChain::loadStockPlugins()
+{
+    // Remembered from the last start; a stock file that is new or changed
+    // (PHINYX was updated) is looked at again.
+    if (auto xml = juce::XmlDocument::parse (stockListFile()))
+        stockList.recreateFromXml (*xml);
+
+    const auto folder = stock::folder();
+    juce::AudioPluginFormat* clap = nullptr;
+    for (auto* f : formats.getFormats())
+        if (f->getName() == ClapPluginFormat::formatName)
+            clap = f;
+    if (clap == nullptr)
+        return;
+
+    for (const auto& d : stockList.getTypes())
+        if (stock::find (d) == nullptr || ! clap->doesPluginStillExist (d))
+            stockList.removeType (d);
+
+    bool changed = false;
+    for (const auto& info : stock::all())
+    {
+        const auto file = folder.getChildFile (info.file);
+        if (folder == juce::File() || ! file.existsAsFile() || stockList.isListingUpToDate (file.getFullPathName(), *clap))
+            continue;
+
+        for (const auto& d : stockList.getTypes())
+            if (d.fileOrIdentifier == file.getFullPathName())
+                stockList.removeType (d);
+
+        juce::OwnedArray<juce::PluginDescription> found;
+        if (scanOutOfProcess (*clap, file.getFullPathName(), 60000, found))
+            for (auto* d : found)
+            {
+                d->name = info.namePrefix + d->name;
+                if (info.maker != nullptr)
+                    d->manufacturerName = info.maker;
+                stockList.addType (*d);
+            }
+        changed = true;
+    }
+
+    if (changed)
+        if (auto xml = stockList.createXml())
+            xml->writeTo (stockListFile());
+}
+
+std::unique_ptr<juce::PluginDescription> MasterChain::findDescription (const std::string& pluginId) const
+{
+    for (const auto& d : builtin::descriptions())
+        if (d.createIdentifierString().toStdString() == pluginId)
+            return std::make_unique<juce::PluginDescription> (d);
+
+    if (auto d = stockList.getTypeForIdentifierString (pluginId))
+        return d;
+    return pluginList.getTypeForIdentifierString (pluginId);
 }
 
 //==============================================================================
@@ -71,13 +134,15 @@ std::vector<PluginInfo> MasterChain::knownPlugins() const
 {
     std::vector<PluginInfo> result;
     auto all = builtin::descriptions();
-    for (const auto& d : pluginList.getTypes())
-        all.push_back (d);
+    for (const auto* list : { &stockList, &pluginList })
+        for (const auto& d : list->getTypes())
+            all.push_back (d);
 
     for (const auto& d : all)
         if (! d.isInstrument)
-            result.push_back ({ d.createIdentifierString().toStdString(), d.name.toStdString(),
-                                d.manufacturerName.toStdString(), d.pluginFormatName.toStdString(), d.category.toStdString() });
+            result.push_back ({ d.createIdentifierString().toStdString(), d.name.toStdString(), d.manufacturerName.toStdString(),
+                                stock::find (d) != nullptr ? builtin::formatName : d.pluginFormatName.toStdString(),
+                                d.category.toStdString() });
 
     std::sort (result.begin(), result.end(), [] (const PluginInfo& a, const PluginInfo& b)
     {
@@ -133,37 +198,43 @@ bool MasterChain::scanNext (std::string& fileBeingScanned)
     if (pluginList.getBlacklistedFiles().contains (item.file) || pluginList.isListingUpToDate (item.file, *item.format))
         return true;
 
+    // Windows plugins through yabridge start Wine first, which can take a while.
+    const auto timeoutMs = item.file.containsIgnoreCase ("yabridge") ? 180000 : 60000;
+    juce::OwnedArray<juce::PluginDescription> found;
+    if (! scanOutOfProcess (*item.format, item.file, timeoutMs, found))
+    {
+        pluginList.addToBlacklist (item.file);
+        ++crashedThisScan;
+        return true;
+    }
+
+    for (auto* d : found)
+        pluginList.addType (*d);
+    return true;
+}
+
+bool MasterChain::scanOutOfProcess (const juce::AudioPluginFormat& format, const juce::String& file, int timeoutMs,
+                                    juce::OwnedArray<juce::PluginDescription>& found)
+{
     // Look inside the file from a separate process (see scanInThisProcess).
     const auto output = juce::File::createTempFile (".xml");
     juce::ChildProcess child;
     const juce::StringArray command { juce::File::getSpecialLocation (juce::File::currentExecutableFile).getFullPathName(),
-                                      scanOption, item.format->getName(), item.file, output.getFullPathName() };
-    // Windows plugins through yabridge start Wine first, which can take a while.
-    const auto timeoutMs = item.file.containsIgnoreCase ("yabridge") ? 180000 : 60000;
+                                      scanOption, format.getName(), file, output.getFullPathName() };
     const auto started = child.start (command, 0);
     const auto finished = started && child.waitForProcessToFinish (timeoutMs);
     if (started && ! finished)
         child.kill();
 
-    if (! finished || child.getExitCode() != 0)
-    {
-        pluginList.addToBlacklist (item.file);
-        ++crashedThisScan;
-        output.deleteFile();
-        return true;
-    }
+    const auto ok = finished && child.getExitCode() == 0;
+    if (ok)
+        if (auto xml = juce::XmlDocument::parse (output))
+            for (auto* e : xml->getChildIterator())
+                if (auto d = std::make_unique<juce::PluginDescription>(); d->loadFromXml (*e))
+                    found.add (std::move (d));
 
-    if (auto xml = juce::XmlDocument::parse (output))
-    {
-        for (auto* e : xml->getChildIterator())
-        {
-            juce::PluginDescription d;
-            if (d.loadFromXml (*e))
-                pluginList.addType (d);
-        }
-    }
     output.deleteFile();
-    return true;
+    return ok;
 }
 
 int MasterChain::scanInThisProcess (const juce::String& formatName, const juce::String& file, const juce::File& output)
@@ -296,12 +367,7 @@ std::string MasterChain::load (int index, const std::string& pluginId)
     if (index < 0 || index >= (int) slots.size())
         return "No such slot";
 
-    std::unique_ptr<juce::PluginDescription> description;
-    for (const auto& d : builtin::descriptions())
-        if (d.createIdentifierString().toStdString() == pluginId)
-            description = std::make_unique<juce::PluginDescription> (d);
-    if (description == nullptr)
-        description = pluginList.getTypeForIdentifierString (pluginId);
+    auto description = findDescription (pluginId);
     if (description == nullptr)
         return "This plugin is not in the plugin list. Scan for plugins again.";
 
@@ -317,7 +383,7 @@ std::string MasterChain::load (int index, const std::string& pluginId)
     {
         const juce::ScopedLock sl (lock);
         old = std::move (slots[(size_t) index].plugin);
-        slots[(size_t) index] = { std::move (instance), *description, false };
+        slots[(size_t) index] = { std::move (instance), *description, false, 0, {} };
     }
 
     return {};  // `old` is released here, outside the lock
@@ -376,7 +442,19 @@ MasterSlotInfo MasterChain::info (int index) const
     const auto& s = slots[(size_t) index];
     i.empty = false;
     i.name = s.description.name.toStdString();
-    i.format = s.description.pluginFormatName.toStdString();
+    const auto* stockInfo = stock::find (s.description);
+    i.format = stockInfo != nullptr ? builtin::formatName : s.description.pluginFormatName.toStdString();
+    if (stockInfo != nullptr)
+    {
+        const auto& params = s.plugin->getParameters();
+        for (const auto* wanted : stockInfo->footer)
+            for (int p = 0; p < params.size(); ++p)
+                if (params[p]->getName (64) == wanted)
+                {
+                    i.mainParameters.push_back (p);
+                    break;
+                }
+    }
     i.pluginId = s.description.createIdentifierString().toStdString();
     i.bypassed = s.bypassed;
     i.latencySamples = s.plugin->getLatencySamples();
@@ -568,7 +646,29 @@ void MasterChain::showWindow (int index)
     if (editor == nullptr)
         return;
 
-    windows[(size_t) index] = std::make_unique<PluginWindow> (editor, slots[(size_t) index].description.name + " - " APP_DISPLAY_NAME,
+    // Stock plugins open in the PHINYX frame.
+    juce::Component* content = editor;
+    const auto& description = slots[(size_t) index].description;
+    if (const auto* info = stock::find (description))
+    {
+        StockFrame::Hooks hooks;
+        hooks.isBypassed = [this, plugin] { const auto i = slotOf (plugin); return i >= 0 && slots[(size_t) i].bypassed; };
+        hooks.setBypassed = [this, plugin] (bool b) { setBypassed (slotOf (plugin), b); };
+        hooks.compareSide = [this, plugin] { const auto i = slotOf (plugin); return i >= 0 ? slots[(size_t) i].compareSide : 0; };
+        hooks.setCompareSide = [this, plugin] (int side) { setCompareSide (slotOf (plugin), side); };
+        hooks.copyCompareSide = [this, plugin] { copyCompareSide (slotOf (plugin)); };
+        hooks.takeLevels = [this, plugin]
+        {
+            std::array<float, 4> result {};
+            if (const auto i = slotOf (plugin); i >= 0)
+                for (size_t k = 0; k < 4; ++k)
+                    result[k] = frameLevels[(size_t) i][k].exchange (0.0f, std::memory_order_relaxed);
+            return result;
+        };
+        content = new StockFrame (editor, *plugin, *info, description.name, std::move (hooks));
+    }
+
+    windows[(size_t) index] = std::make_unique<PluginWindow> (content, editor->isResizable(), description.name + " - " APP_DISPLAY_NAME,
         [this, plugin]
         {
             // Close later: the window cannot delete itself from its own callback.
@@ -587,6 +687,38 @@ void MasterChain::showWindow (int index)
         for (auto& w : windows)
             w.reset();
     });
+}
+
+int MasterChain::slotOf (const juce::AudioPluginInstance* plugin) const
+{
+    for (size_t i = 0; i < slots.size(); ++i)
+        if (plugin != nullptr && slots[i].plugin.get() == plugin)
+            return (int) i;
+    return -1;
+}
+
+void MasterChain::setCompareSide (int index, int side)
+{
+    if (index < 0 || index >= (int) slots.size() || slots[(size_t) index].plugin == nullptr)
+        return;
+
+    auto& s = slots[(size_t) index];
+    if (side == s.compareSide)
+        return;
+
+    // Swap the settings being heard with the other side's; B starts as a copy of A.
+    juce::MemoryBlock current;
+    s.plugin->getStateInformation (current);
+    if (s.otherSide.getSize() > 0)
+        s.plugin->setStateInformation (s.otherSide.getData(), (int) s.otherSide.getSize());
+    s.otherSide = std::move (current);
+    s.compareSide = side;
+}
+
+void MasterChain::copyCompareSide (int index)
+{
+    if (index >= 0 && index < (int) slots.size() && slots[(size_t) index].plugin != nullptr)
+        slots[(size_t) index].plugin->getStateInformation (slots[(size_t) index].otherSide);
 }
 
 //==============================================================================
@@ -635,6 +767,17 @@ std::string MasterChain::restore()
             || ! d.loadFromXml (*slot->getFirstChildElement()))
             continue;
 
+        // A stock plugin saved from another place (the build folder, an older
+        // install) loads from where the stock plugins are now.
+        const auto saved = juce::File::createFileWithoutCheckingPath (d.fileOrIdentifier);
+        const auto savedFile = saved.getFileName();
+        if (d.pluginFormatName == ClapPluginFormat::formatName && stock::find (d) == nullptr
+            && saved.getParentDirectory().getFileName() == "stock")
+            for (const auto& candidate : stockList.getTypes())
+                if (candidate.uniqueId == d.uniqueId
+                    && juce::File::createFileWithoutCheckingPath (candidate.fileOrIdentifier).getFileName() == savedFile)
+                    d = candidate;
+
         juce::String error;
         auto instance = createInstance (d, error);
         if (instance == nullptr)
@@ -649,7 +792,7 @@ std::string MasterChain::restore()
 
         preparePlugin (*instance, rate, blockSize);
         const juce::ScopedLock sl (lock);
-        slots[(size_t) index] = { std::move (instance), d, slot->getBoolAttribute ("bypassed", false) };
+        slots[(size_t) index] = { std::move (instance), d, slot->getBoolAttribute ("bypassed", false), 0, {} };
     }
 
     return problems.joinIntoString ("\n").toStdString();
@@ -710,6 +853,20 @@ void MasterChain::processChain (juce::AudioBuffer<float>& io, int startSample, i
 
             const auto channels = std::clamp (std::max (s.plugin->getTotalNumInputChannels(), s.plugin->getTotalNumOutputChannels()),
                                               1, maxChannels);
+            // For the meters at the sides of a stock plugin's frame.
+            auto& levels = frameLevels[index];
+            auto raise = [&] (size_t k, int ch)
+            {
+                const auto peak = scratch.getMagnitude (std::min (ch, ioChannels - 1), 0, n);
+                if (peak > levels[k].load (std::memory_order_relaxed))
+                    levels[k].store (peak, std::memory_order_relaxed);
+            };
+            if (listening)
+            {
+                raise (0, 0);
+                raise (1, 1);
+            }
+
             juce::AudioBuffer<float> proxy (scratch.getArrayOfWritePointers(), channels, n);
             s.plugin->processBlock (proxy, midi);
             midi.clear();
@@ -717,6 +874,12 @@ void MasterChain::processChain (juce::AudioBuffer<float>& io, int startSample, i
             // A mono-out plugin feeds both sides.
             if (s.plugin->getTotalNumOutputChannels() == 1 && ioChannels > 1)
                 scratch.copyFrom (1, 0, scratch, 0, 0, n);
+
+            if (listening)
+            {
+                raise (2, 0);
+                raise (3, 1);
+            }
 
             if (listening)
             {

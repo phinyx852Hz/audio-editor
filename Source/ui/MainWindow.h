@@ -35,8 +35,10 @@ public:
 
 protected:
     void closeEvent (QCloseEvent*) override;
+    void changeEvent (QEvent*) override;
 
 private:
+    void sendThemeToPluginFrames();
     struct LoadResult
     {
         QString path;

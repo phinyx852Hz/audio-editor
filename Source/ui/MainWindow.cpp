@@ -82,6 +82,7 @@ MainWindow::MainWindow (AudioEngine& e)
     setWindowTitle (QStringLiteral (APP_DISPLAY_NAME));
     resize (1100, 620);
     Theme::makeTranslucent (this);
+    sendThemeToPluginFrames();
     tabBar = new QTabBar (this);
     tabBar->setDocumentMode (true);
     tabBar->setTabsClosable (true);
@@ -2578,6 +2579,31 @@ void MainWindow::togglePlayback()
 
     engine.setPositionFrames (hasSelection() ? selStart : cursor);
     engine.play();
+}
+
+void MainWindow::changeEvent (QEvent* e)
+{
+    if (e->type() == QEvent::PaletteChange)
+        sendThemeToPluginFrames();
+    QMainWindow::changeEvent (e);
+}
+
+void MainWindow::sendThemeToPluginFrames()
+{
+    const auto& t = Theme::current();
+    const auto c = [&] (const char* key) { return (std::uint32_t) t.color (QString::fromLatin1 (key)).rgba(); };
+    PluginFrameColours f;
+    f.window = c ("window");
+    f.panel = c ("button");
+    f.text = c ("windowText");
+    f.dimText = c ("placeholderText");
+    f.accent = c ("highlight");
+    f.mid = c ("mid");
+    f.meterBackground = c ("meterBackground");
+    f.meterLow = c ("meterLow");
+    f.meterMid = c ("meterMid");
+    f.meterHigh = c ("meterHigh");
+    engine.setPluginFrameColours (f);
 }
 
 void MainWindow::closeEvent (QCloseEvent* e)
