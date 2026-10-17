@@ -4,9 +4,12 @@
 #include "../Source/core/AudioDocument.h"
 #include "../Source/core/Dsp.h"
 #include "../Source/core/Fft.h"
+#include "../Source/core/Repair.h"
 
 #include <cmath>
 #include <cstdio>
+#include <functional>
+#include <random>
 #include <string>
 
 namespace
@@ -142,6 +145,143 @@ namespace
                "outside the range both sides equal the mono file");
     }
 
+    // Builds a mono file from a function of the frame number.
+    AudioDataPtr makeSignal (Frame length, const std::function<float (Frame)>& f, double rate = 48000.0)
+    {
+        AudioData::Builder b (1, rate);
+        std::vector<float> block (4096);
+        const float* ptr = block.data();
+        for (Frame pos = 0; pos < length; pos += 4096)
+        {
+            const auto n = (int) std::min<Frame> (4096, length - pos);
+            for (int i = 0; i < n; ++i)
+                block[(size_t) i] = f (pos + i);
+            b.append (&ptr, n);
+        }
+        return b.finish();
+    }
+
+    std::vector<float> samples (const AudioData& d, Frame start, Frame end)
+    {
+        std::vector<float> out ((size_t) (end - start));
+        float* p = out.data();
+        d.read (start, (int) (end - start), &p);
+        return out;
+    }
+
+    // Level of one frequency over [start, end) (Goertzel, amplitude of a sine).
+    double toneLevel (const AudioData& d, Frame start, Frame end, double hz)
+    {
+        const auto x = samples (d, start, end);
+        const auto w = 2.0 * M_PI * hz / d.sampleRate();
+        double re = 0.0, im = 0.0;
+        for (size_t i = 0; i < x.size(); ++i)
+        {
+            re += x[i] * std::cos (w * (double) i);
+            im -= x[i] * std::sin (w * (double) i);
+        }
+        return 2.0 * std::sqrt (re * re + im * im) / (double) x.size();
+    }
+
+    double rmsDifference (const AudioData& a, const AudioData& b, Frame start, Frame end)
+    {
+        const auto x = samples (a, start, end), y = samples (b, start, end);
+        double sum = 0.0;
+        for (size_t i = 0; i < x.size(); ++i)
+            sum += (double) (x[i] - y[i]) * (x[i] - y[i]);
+        return std::sqrt (sum / (double) x.size());
+    }
+
+    bool sameOutside (const AudioData& a, const AudioData& b, Frame start, Frame end)
+    {
+        const auto x = samples (a, 0, a.length()), y = samples (b, 0, b.length());
+        for (Frame f = 0; f < (Frame) x.size(); ++f)
+            if ((f < start || f >= end) && x[(size_t) f] != y[(size_t) f])
+                return false;
+        return x.size() == y.size();
+    }
+
+    void testRepair()
+    {
+        const double rate = 48000.0;
+        auto twoTones = makeSignal (96000, [] (Frame f) { return (float) (0.3 * std::sin (2.0 * M_PI * 500.0 * f / 48000.0)
+                                                                         + 0.3 * std::sin (2.0 * M_PI * 3000.0 * f / 48000.0)); });
+
+        // Spectral gain: 0 dB changes nothing; removing a band takes out only that band.
+        auto same = repair::spectralGain (*twoTones, { 30000, 60000, 2000.0, 4000.0 }, 0.0);
+        check (rmsDifference (*same, *twoTones, 0, 96000) < 1.0e-6, "spectral gain of 0 dB leaves the audio alone");
+
+        auto cut = repair::spectralGain (*twoTones, { 30000, 60000, 2000.0, 4000.0 }, repair::removeDb);
+        check (toneLevel (*cut, 40000, 50000, 3000.0) < 0.003, "band removal takes out the 3 kHz tone ("
+               + std::to_string (toneLevel (*cut, 40000, 50000, 3000.0)) + ")");
+        check (near (toneLevel (*cut, 40000, 50000, 500.0), 0.3, 0.01), "band removal keeps the 500 Hz tone");
+        check (sameOutside (*cut, *twoTones, 30000 - 4096, 60000 + 4096), "band removal leaves audio away from the box untouched");
+
+        // Auto Heal of a click on a tone with a little noise.
+        std::mt19937 random (7);
+        std::normal_distribution<float> noise (0.0f, 0.01f);
+        std::vector<float> hiss (96000);
+        for (auto& h : hiss)
+            h = noise (random);
+        auto clean = makeSignal (96000, [&] (Frame f) { return (float) (0.4 * std::sin (2.0 * M_PI * 440.0 * f / rate)) + hiss[(size_t) f]; });
+        auto clicked = makeSignal (96000, [&] (Frame f)
+        {
+            const auto c = (f >= 48000 && f < 48020) ? 0.9f * ((f % 2) ? 1.0f : -1.0f) : 0.0f;
+            return (float) (0.4 * std::sin (2.0 * M_PI * 440.0 * f / rate)) + hiss[(size_t) f] + c;
+        });
+        std::string error;
+        auto healed = repair::autoHeal (*clicked, { 47990, 48030 }, error);
+        check (healed != nullptr, "auto heal of a click: " + error);
+        if (healed != nullptr)
+        {
+            const auto before = rmsDifference (*clicked, *clean, 47900, 48100);
+            const auto after = rmsDifference (*healed, *clean, 47900, 48100);
+            check (after < 0.02 && after < before * 0.1, "auto heal removes a click (error " + std::to_string (before)
+                   + " -> " + std::to_string (after) + ")");
+            check (sameOutside (*healed, *clicked, 47990 - 4096, 48030 + 4096), "auto heal leaves audio away from the click untouched");
+        }
+
+        // A 0.3 s burst of loud noise (a cough) over a steady tone.
+        std::vector<float> burst (96000);
+        for (auto& b : burst)
+            b = noise (random) * 30.0f;
+        auto coughed = makeSignal (96000, [&] (Frame f)
+        {
+            const auto in = f >= 40000 && f < 54400;
+            return (float) (0.4 * std::sin (2.0 * M_PI * 440.0 * f / rate)) + hiss[(size_t) f] + (in ? burst[(size_t) f] : 0.0f);
+        });
+        auto cured = repair::autoHeal (*coughed, { 40000, 54400 }, error);
+        check (cured != nullptr, "auto heal of a cough: " + error);
+        if (cured != nullptr)
+        {
+            const auto after = rmsDifference (*cured, *clean, 40000, 54400);
+            check (after < 0.03, "auto heal replaces a cough with the tone (error " + std::to_string (after) + ")");
+            check (near (toneLevel (*cured, 42000, 52000, 440.0), 0.4, 0.06), "the healed tone keeps its level ("
+                   + std::to_string (toneLevel (*cured, 42000, 52000, 440.0)) + ")");
+            // The background hiss carries on at the same level rather than going quiet.
+            auto toneOnly = makeSignal (96000, [&] (Frame f) { return (float) (0.4 * std::sin (2.0 * M_PI * 440.0 * f / rate)); });
+            const auto hissLevel = rmsDifference (*cured, *toneOnly, 42000, 52000);
+            check (hissLevel > 0.007 && hissLevel < 0.014, "the healed hiss keeps its level (" + std::to_string (hissLevel) + ")");
+        }
+
+        // A phone ring healed in its band only: the tone underneath stays.
+        auto ringing = makeSignal (96000, [&] (Frame f)
+        {
+            const auto ring = f >= 30000 && f < 54000 ? 0.3 * std::sin (2.0 * M_PI * 5000.0 * f / rate) : 0.0;
+            return (float) (0.4 * std::sin (2.0 * M_PI * 300.0 * f / rate) + ring) + hiss[(size_t) f];
+        });
+        auto quiet = repair::autoHeal (*ringing, { 30000, 54000, 4000.0, 6500.0 }, error);
+        check (quiet != nullptr, "band heal: " + error);
+        if (quiet != nullptr)
+        {
+            check (toneLevel (*quiet, 34000, 50000, 5000.0) < 0.01, "band heal removes the ring ("
+                   + std::to_string (toneLevel (*quiet, 34000, 50000, 5000.0)) + ")");
+            check (near (toneLevel (*quiet, 34000, 50000, 300.0), 0.4, 0.01), "band heal keeps the tone below");
+        }
+
+        check (repair::autoHeal (*clean, { 0, 96000 }, error) == nullptr, "auto heal refuses the whole file");
+    }
+
     void testLayouts()
     {
         check (dsp::speakerLayout (6).name == "5.1" && dsp::channelName (3, 6) == "LFE" && dsp::channelName (4, 6) == "Ls",
@@ -238,6 +378,7 @@ int main()
     testLayouts();
     testStereoize();
     testSpectrum();
+    testRepair();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");

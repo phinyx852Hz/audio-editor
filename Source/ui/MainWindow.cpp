@@ -3,6 +3,7 @@
 #include "ChainRow.h"
 #include "DesktopShortcuts.h"
 #include "Dialogs.h"
+#include "../core/Repair.h"
 #include "MasterPanel.h"
 #include "Panels.h"
 #include "RecordDialog.h"
@@ -52,12 +53,19 @@ namespace
         return QString::asprintf ("%02lld:%02lld.%03lld", ms / 60000, (ms / 1000) % 60, ms % 1000);
     }
 
+    QString formatHz (double hz)
+    {
+        return hz >= 1000.0 ? QObject::tr ("%1 kHz").arg (hz / 1000.0, 0, 'f', hz >= 10000.0 ? 1 : 2)
+                            : QObject::tr ("%1 Hz").arg ((int) std::lround (hz));
+    }
+
     namespace Category
     {
         const QString file      = QObject::tr ("File");
         const QString edit      = QObject::tr ("Edit");
         const QString select    = QObject::tr ("Selection");
         const QString process   = QObject::tr ("Process");
+        const QString repair    = QObject::tr ("Repair");
         const QString markers   = QObject::tr ("Markers");
         const QString analyze   = QObject::tr ("Analyze");
         const QString master    = QObject::tr ("Master Section");
@@ -108,6 +116,7 @@ MainWindow::MainWindow (AudioEngine& e)
 
     connect (waveform, &WaveformView::cursorRequested, this, &MainWindow::setCursor);
     connect (waveform, &WaveformView::selectionRequested, this, &MainWindow::selectRange);
+    connect (waveform, &WaveformView::bandRequested, this, &MainWindow::setBand);
     connect (&loadWatcher, &QFutureWatcher<LoadResult>::finished, this, &MainWindow::loadFinished);
 
     auto* uiTimer = new QTimer (this);
@@ -206,6 +215,13 @@ void MainWindow::registerCommands()
     add ("process.invert", Category::process, tr ("In&vert Polarity"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_I) },
          [this] { simpleProcess (tr ("Invert"), &dsp::invert); });
     add ("process.stereoize", Category::process, tr ("&Stereoize..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_W) }, [this] { stereoize(); });
+    add ("repair.autoHeal", Category::repair, tr ("&Auto Heal"), { KS (Qt::CTRL | Qt::Key_U) }, [this] { autoHeal(); });
+    add ("repair.spectralGain", Category::repair, tr ("Spectral &Gain..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_G) },
+         [this] { spectralGain(); });
+    add ("repair.frequencyRange", Category::repair, tr ("&Frequency Range..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_F) },
+         [this] { chooseFrequencyRange(); });
+    add ("repair.allFrequencies", Category::repair, tr ("A&ll Frequencies"), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_F) },
+         [this] { setBand (0.0, 0.0); });
     add ("process.dcOffset", Category::process, tr ("Remove &DC Offset"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_D) },
          [this] { simpleProcess (tr ("Remove DC Offset"), &dsp::removeDcOffset); });
 
@@ -304,6 +320,8 @@ void MainWindow::registerCommands()
     add ("view.spectral", Category::view, tr ("&Spectral Display"), { KS (Qt::SHIFT | Qt::Key_D) }, [this]
     {
         waveform->setSpectral (! waveform->isSpectral());
+        if (! waveform->isSpectral())
+            setBand (0.0, 0.0);   // a frequency box only makes sense where it can be seen
         commands.action (QStringLiteral ("view.spectral"))->setChecked (waveform->isSpectral());
     })->setCheckable (true);
     add ("view.opacityUp", Category::view, tr ("More &Opaque"),
@@ -370,6 +388,8 @@ void MainWindow::buildMenus()
         { tr ("&Process"),   { "process.gain", "process.normalize", "-", "process.fadeIn", "process.fadeOut", "-",
                                "process.fadeShape.linear", "process.fadeShape.equalPower", "process.fadeShape.exponential",
                                "process.fadeShape.sCurve", "-", "process.reverse", "process.invert", "process.dcOffset", "-", "process.stereoize" } },
+        { tr ("&Repair"),    { "repair.autoHeal", "repair.spectralGain", "-", "repair.frequencyRange", "repair.allFrequencies", "-",
+                               "view.spectral" } },
         { tr ("&Markers"),   { "marker.add", "marker.addRegion", "-", "marker.next", "marker.previous", "-", "view.markers" } },
         { tr ("&Analyze"),   { "analyze.loudness", "-", "view.meters", "analyze.resetMeters", "-", "view.spectral" } },
         { tr ("Ma&ster"),    { "view.master", "view.chain", "master.addPlugin", "master.bypass", "-", "master.render", "-", "master.scan" } },
@@ -596,6 +616,7 @@ void MainWindow::updateCommandStates()
                             "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
                             "select.toStart", "select.toEnd", "process.gain", "process.normalize",
                             "process.reverse", "process.invert", "process.dcOffset", "process.stereoize",
+                            "repair.spectralGain", "repair.frequencyRange", "repair.allFrequencies",
                             "transport.playStop", "transport.stop", "transport.start", "transport.end",
                             "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge",
                             "view.zoomIn", "view.zoomOut", "view.zoomFit" })
@@ -603,7 +624,7 @@ void MainWindow::updateCommandStates()
 
     // Selection commands stay enabled so pressing their key without a selection
     // explains what is missing instead of silently doing nothing.
-    for (const auto* id : { "edit.cut", "edit.copy", "edit.delete", "edit.trim", "process.fadeIn", "process.fadeOut",
+    for (const auto* id : { "edit.cut", "edit.copy", "edit.delete", "edit.trim", "process.fadeIn", "process.fadeOut", "repair.autoHeal",
                             "view.zoomSelection" })
         commands.action (QString::fromLatin1 (id))->setEnabled (open);
     Q_UNUSED (sel);
@@ -670,6 +691,8 @@ void MainWindow::parkActiveTab()
     t.selStart = selStart;
     t.selEnd = selEnd;
     t.selAnchor = selAnchor;
+    t.bandLow = bandLow;
+    t.bandHigh = bandHigh;
     t.saveOptions = saveOptions;
     t.optionsConfirmedFor = optionsConfirmedFor;
     t.view = waveform->view();
@@ -686,6 +709,9 @@ void MainWindow::unparkTab (int index)
     selStart = t.selStart;
     selEnd = t.selEnd;
     selAnchor = t.selAnchor;
+    bandLow = t.bandLow;
+    bandHigh = t.bandHigh;
+    waveform->setBand (bandLow, bandHigh);
     saveOptions = t.saveOptions;
     optionsConfirmedFor = t.optionsConfirmedFor;
 }
@@ -785,6 +811,8 @@ void MainWindow::updateStatus()
             text += tr ("   Selection %1 to %2 (%3)")
                         .arg (formatTime ((double) selStart / rate), formatTime ((double) selEnd / rate),
                               formatTime ((double) (selEnd - selStart) / rate));
+        if (hasSelection() && hasBand())
+            text += tr (", %1 to %2").arg (formatHz (bandLow), formatHz (bandHigh));
 
         const auto layout = QString::fromStdString (dsp::speakerLayout (d->numChannels()).name);
         text += QStringLiteral ("   %1 Hz, %2").arg ((int) rate).arg (layout);
@@ -1197,6 +1225,16 @@ void MainWindow::deleteSelection()
     if (! requireSelection())
         return;
 
+    if (hasBand())
+    {
+        // Delete in a frequency box removes those frequencies; the length stays.
+        QApplication::setOverrideCursor (Qt::WaitCursor);
+        auto result = repair::spectralGain (*data(), { selStart, selEnd, bandLow, bandHigh }, repair::removeDb);
+        QApplication::restoreOverrideCursor();
+        commit (tr ("Delete %1 to %2").arg (formatHz (bandLow), formatHz (bandHigh)), std::move (result), selStart, selEnd, selEnd - selStart);
+        return;
+    }
+
     const auto start = selStart, end = selEnd;
     auto result = data()->replaced (start, end, nullptr);
     cursor = selStart = selEnd = selAnchor = start;
@@ -1304,6 +1342,80 @@ void MainWindow::stereoize()
     // The whole file is replaced (a mono file gains a channel); its length and markers stay the same.
     doc.apply (tr ("Stereoize").toStdString(), { std::move (result), doc.current().markers });
     refreshFromDocument (true);
+    waveform->setFocus();
+}
+
+void MainWindow::setBand (double lowHz, double highHz)
+{
+    if (highHz <= lowHz)
+        lowHz = highHz = 0.0;
+    if (std::abs (lowHz - bandLow) < 1.0e-9 && std::abs (highHz - bandHigh) < 1.0e-9)
+        return;
+
+    bandLow = lowHz;
+    bandHigh = highHz;
+    waveform->setBand (bandLow, bandHigh);
+    updateStatus();
+}
+
+void MainWindow::chooseFrequencyRange()
+{
+    const auto d = data();
+    if (d == nullptr)
+        return;
+
+    FrequencyRangeDialog dialog (bandLow, bandHigh, d->sampleRate() / 2.0, this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    setBand (dialog.lowHz(), dialog.highHz());
+    waveform->setFocus();
+    if (hasBand() && ! waveform->isSpectral())
+        commands.action (QStringLiteral ("view.spectral"))->trigger();   // show the box
+    if (hasBand() && ! hasSelection())
+        statusBar()->showMessage (tr ("Now select the time range; edits apply to %1 to %2 inside it.")
+                                      .arg (formatHz (bandLow), formatHz (bandHigh)), 6000);
+}
+
+void MainWindow::autoHeal()
+{
+    const auto d = data();
+    if (d == nullptr || ! requireSelection())
+        return;
+
+    std::string error;
+    QApplication::setOverrideCursor (Qt::WaitCursor);
+    auto result = repair::autoHeal (*d, { selStart, selEnd, bandLow, bandHigh }, error);
+    QApplication::restoreOverrideCursor();
+    if (result == nullptr)
+    {
+        QMessageBox::information (this, tr ("Auto Heal"), QString::fromStdString (error));
+        return;
+    }
+
+    commit (tr ("Auto Heal"), std::move (result), selStart, selEnd, selEnd - selStart);
+    waveform->setFocus();
+}
+
+void MainWindow::spectralGain()
+{
+    const auto d = data();
+    if (d == nullptr)
+        return;
+
+    const auto [s, e] = processRange();
+    const auto what = hasBand() ? tr ("%1 to %2 in the selection").arg (formatHz (bandLow), formatHz (bandHigh))
+                                : hasSelection() ? tr ("the selection") : tr ("the whole file");
+    SpectralGainDialog dialog (spectralGainDb, what, this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    spectralGainDb = std::max (-60.0, dialog.gainDb());
+    QApplication::setOverrideCursor (Qt::WaitCursor);
+    auto result = repair::spectralGain (*d, { s, e, bandLow, bandHigh }, dialog.gainDb());
+    QApplication::restoreOverrideCursor();
+    const auto name = dialog.gainDb() <= repair::removeDb ? tr ("Spectral Remove") : tr ("Spectral Gain %1 dB").arg (dialog.gainDb(), 0, 'f', 1);
+    commit (name, std::move (result), s, e, e - s);
     waveform->setFocus();
 }
 
@@ -1683,6 +1795,7 @@ void MainWindow::setCursor (Frame f)
 
     cursor = selAnchor = std::clamp<Frame> (f, 0, d->length());
     selStart = selEnd = cursor;
+    setBand (0.0, 0.0);
     engine.setPositionFrames (cursor);
     waveform->setCursorFrame (cursor);
     waveform->setSelection (selStart, selEnd);

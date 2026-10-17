@@ -86,6 +86,11 @@ private:
     void gain();
     void normalize();
     void stereoize();
+    void autoHeal();
+    void spectralGain();
+    void chooseFrequencyRange();
+    void setBand (double lowHz, double highHz);
+    bool hasBand() const { return bandHigh > bandLow; }
     void fade (bool in);
     void simpleProcess (const QString& description, AudioDataPtr (*fn) (const AudioData&, Frame, Frame));
 
@@ -145,6 +150,8 @@ private:
     static constexpr int layoutVersion = 2;  // 2: device chain row at the bottom
 
     Frame cursor = 0, selStart = 0, selEnd = 0, selAnchor = 0;
+    double bandLow = 0.0, bandHigh = 0.0;   // the selection's frequency band in Hz, none when high <= low
+    double spectralGainDb = -12.0;
     AudioDataPtr clipboard;
     dsp::FadeShape fadeShape = dsp::FadeShape::equalPower;
     SaveOptions saveOptions;
@@ -161,6 +168,7 @@ private:
     {
         AudioDocument doc;
         Frame cursor = 0, selStart = 0, selEnd = 0, selAnchor = 0;
+        double bandLow = 0.0, bandHigh = 0.0;
         SaveOptions saveOptions;
         QString optionsConfirmedFor;
         std::pair<double, double> view { 0.0, 0.0 };

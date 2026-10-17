@@ -13,6 +13,7 @@ public:
 
     int size() const { return n; }
     void forward (std::vector<std::complex<float>>& data) const;  // in place, data.size() == size()
+    void inverse (std::vector<std::complex<float>>& data) const;  // in place, scaled by 1/size()
 
 private:
     int n;

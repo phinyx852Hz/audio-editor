@@ -117,6 +117,34 @@ private:
     class QSpinBox* bassBox;
 };
 
+// The frequency band of a spectral selection, typed in (0 to 0 = every frequency).
+class FrequencyRangeDialog final : public QDialog
+{
+    Q_OBJECT
+
+public:
+    FrequencyRangeDialog (double lowHz, double highHz, double nyquist, QWidget* parent);
+    double lowHz() const;
+    double highHz() const;
+
+private:
+    class QSpinBox* lowBox;
+    class QSpinBox* highBox;
+};
+
+// Turn a spectral selection down or up; at the bottom of the range it is removed.
+class SpectralGainDialog final : public QDialog
+{
+    Q_OBJECT
+
+public:
+    SpectralGainDialog (double initialDb, const QString& what, QWidget* parent);
+    double gainDb() const;
+
+private:
+    class QDoubleSpinBox* gainBox;
+};
+
 // Personal colours for the waveform display, on top of the theme. Changes show
 // immediately; Cancel or Esc puts the previous colours back.
 class WaveformColorsDialog final : public QDialog

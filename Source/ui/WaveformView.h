@@ -35,13 +35,19 @@ public:
     void zoomToFit();
     void zoomToSelection();
 
-    // Spectral display (log frequency) instead of the waveform.
+    // Spectral display (log frequency) instead of the waveform. There a drag
+    // selects a box of time and frequency; a drag over nearly the whole height
+    // selects every frequency.
     void setSpectral (bool);
     bool isSpectral() const { return spectral; }
+
+    // The selection's frequency band in Hz (none when high <= low), drawn as a box in the spectral view.
+    void setBand (double lowHz, double highHz);
 
 Q_SIGNALS:
     void cursorRequested (Frame);
     void selectionRequested (Frame anchor, Frame end);
+    void bandRequested (double lowHz, double highHz);   // high <= low: every frequency
 
 protected:
     void paintEvent (QPaintEvent*) override;
@@ -59,6 +65,9 @@ private:
     void keepVisible (Frame);
     void clampView();
     void requestSpectrogram();
+    double laneHeight() const;
+    double yToHz (double yInLane) const;
+    double hzToY (double hz) const;   // within a lane
 
     struct SpectrogramKey
     {
@@ -76,6 +85,9 @@ private:
     double viewStart = 0.0, viewLength = 0.0;  // in frames
     Frame cursor = 0, selStart = 0, selEnd = 0;
     Frame dragAnchor = -1;
+    double dragAnchorY = 0.0;
+    int dragLane = 0;
+    double bandLow = 0.0, bandHigh = 0.0;
     bool loading = false;
     float loadProgress = 0.0f;
 

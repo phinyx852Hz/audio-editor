@@ -38,7 +38,9 @@ License: AGPLv3 open source
 - **Phase 1.5 Part B (done):** any channel count (up to 16 played and metered). Speaker layouts by channel count in WAV order (mono to 7.1.4), labelled lanes and meters, BS.1770 surround weights, stereo fold-down monitoring by default with an opt-in to separate outputs (reordered for ALSA devices), Master Section and render at the file's channel count (stereo-only plugins process L/R, the rest pass through), WAV channel mask on save, sensible channel mapping on paste, record in quad, 5.1 or 7.1. Tested: mono, 5.1 and 7.1 tones through a real PipeWire server, fold-down and separate outputs measured per speaker, 5.1 render to a new file. Still open from 2.11: changing a file's layout (upmix, downmix to a new file, reorder), per-channel solo/mute while listening, layouts read from the WAV channel mask instead of assumed.
 - **Phase 1.5 Part C (done):** built-in Stereoize (`Ctrl+Alt+W`): complementary delay on the high-passed mid signal, so left + right equals the original exactly (mono-compatible), with width, delay and keep-bass-centred settings remembered; on a mono file the whole file becomes stereo, the effect applies to the selection; undoable. Phase 1.5 is complete.
 - **Stereoize as a live effect (done, owner request 2026-10-17):** Stereoize also loads into the Device Chain / Master Section as a built-in effect (format "Built-in") with Width, Delay and Bass knobs that work while playing, type-in values, save/restore with the chain, and a click-free delay change. A mono file is now heard on both sides, so widening is audible, and Master Section renders of a mono file come out stereo when the chain makes the sides differ (otherwise they stay mono). Apply to Audio now splices a selection's render back into the file instead of replacing the file with it.
-- **Next:** Phase 2 (spectral editing and repair, plan section 5).
+- **Phase 2 plan (owner said go, 2026-10-17):** Part A spectral selection, spectral edits and Auto Heal; Part B noise reduction from a learned profile plus DeClick, DeClip, DeHum, DeEss; Part C Spot Healing Brush, lasso and brush selection, harmonics, find-similar; Part D Diagnostics scan panel; Part E CLAP/LADSPA/yabridge and out-of-process scanning, sample-rate and bit-depth conversion, metadata editor.
+- **Phase 2 Part A (done):** Repair menu. Box selection of time and frequency in the spectral view (log scale, same mapping as the display; a near full-height drag means every frequency), typed band (`Ctrl+Alt+F`), All Frequencies (`Ctrl+Alt+Shift+F`). Engine in `Source/core/Repair.cpp`: STFT (periodic Hann, 75 % overlap) where only the change is overlap-added back, so audio outside the box and its feather (1/6 octave, window length in time) is bit-identical. Auto Heal (`Ctrl+U`, up to 4 s): per bin, robust level and phase turn learned from 6 frames each side; steady bins continue their phase from both sides (blended), noisy bins are refilled with fresh noise at the learned level; window 256 to 2048 samples sized to the gap (4096 for a band). Spectral Gain (`Ctrl+Alt+G`) and Delete in a box. Tests: click, 0.3 s cough over a tone (error at the hiss level, hiss level kept within 1 dB), 5 kHz ring healed by band with the 300 Hz tone untouched, band removal -80 dB. Still open from 2.2: copy/paste of spectral regions, apply an effect or plugin to a box, pitch display, FFT settings, mel/linear scales.
+- **Next:** Phase 2 Part B (noise reduction and the De- tools).
 
 ---
 
@@ -498,7 +500,7 @@ Key design choices:
 
 ### Phase 2: Repair lab (Audition-level restoration)
 - Spectral selection tools (marquee, lasso, brush, harmonics) and spectral edits
-- Auto Heal and Spot Healing Brush
+- Auto Heal (done, Part A) and Spot Healing Brush
 - Noise print reduction, DeClick, DeClip, DeHum, DeEss
 - Diagnostics scan panel
 - CLAP and LADSPA hosting, yabridge support, out-of-process scanner

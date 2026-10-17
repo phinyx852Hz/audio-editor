@@ -32,6 +32,36 @@ void WaveformView::setSpectral (bool on)
     update();
 }
 
+void WaveformView::setBand (double lowHz, double highHz)
+{
+    if (std::abs (lowHz - bandLow) < 1.0e-9 && std::abs (highHz - bandHigh) < 1.0e-9)
+        return;
+
+    bandLow = lowHz;
+    bandHigh = highHz;
+    update();
+}
+
+double WaveformView::laneHeight() const
+{
+    return (double) height() / std::max (1, data ? data->numChannels() : 1);
+}
+
+// The same log scale as the spectrogram: 20 Hz at the bottom of a lane, half the sample rate at the top.
+double WaveformView::yToHz (double y) const
+{
+    const auto nyquist = data ? data->sampleRate() / 2.0 : 24000.0;
+    const auto t = std::clamp (y / std::max (1.0, laneHeight()), 0.0, 1.0);
+    return 20.0 * std::pow (nyquist / 20.0, 1.0 - t);
+}
+
+double WaveformView::hzToY (double hz) const
+{
+    const auto nyquist = data ? data->sampleRate() / 2.0 : 24000.0;
+    hz = std::clamp (hz, 20.0, nyquist);
+    return (1.0 - std::log (hz / 20.0) / std::log (nyquist / 20.0)) * laneHeight();
+}
+
 WaveformView::SpectrogramKey WaveformView::currentKey() const
 {
     return { data.get(), viewStart, viewLength, size(), Theme::current().name };
@@ -291,7 +321,23 @@ void WaveformView::paintEvent (QPaintEvent*)
         if (selEnd > selStart)
         {
             const auto x1 = frameToX (selStart), x2 = frameToX (selEnd);
-            g.fillRect (QRectF (x1, 0, std::max (1.0, x2 - x1), height()), theme.color (QStringLiteral ("selection")));
+            const auto colour = theme.color (QStringLiteral ("selection"));
+            if (spectral && bandHigh > bandLow)
+            {
+                // A box per lane around the selected frequencies.
+                auto edge = colour;
+                edge.setAlpha (255);
+                for (int ch = 0; ch < numChannels; ++ch)
+                {
+                    const auto top = laneHeight * ch + hzToY (bandHigh), bottom = laneHeight * ch + hzToY (bandLow);
+                    const QRectF box (x1, top, std::max (1.0, x2 - x1), std::max (1.0, bottom - top));
+                    g.fillRect (box, colour);
+                    g.setPen (QPen (edge, 1.0));
+                    g.drawRect (box);
+                }
+            }
+            else
+                g.fillRect (QRectF (x1, 0, std::max (1.0, x2 - x1), height()), colour);
         }
 
         for (const auto& m : markers)
@@ -348,6 +394,8 @@ void WaveformView::mousePressEvent (QMouseEvent* e)
     }
 
     dragAnchor = f;
+    dragLane = std::clamp ((int) (e->position().y() / laneHeight()), 0, std::max (0, data->numChannels() - 1));
+    dragAnchorY = e->position().y() - dragLane * laneHeight();
     Q_EMIT cursorRequested (f);
 }
 
@@ -357,6 +405,16 @@ void WaveformView::mouseMoveEvent (QMouseEvent* e)
         return;
 
     Q_EMIT selectionRequested (dragAnchor, xToFrame (e->position().x()));
+
+    if (spectral)
+    {
+        const auto y = std::clamp (e->position().y() - dragLane * laneHeight(), 0.0, laneHeight());
+        const auto tall = std::abs (y - dragAnchorY) >= laneHeight() * 0.9;
+        if (tall)
+            Q_EMIT bandRequested (0.0, 0.0);
+        else
+            Q_EMIT bandRequested (yToHz (std::max (y, dragAnchorY)), yToHz (std::min (y, dragAnchorY)));
+    }
 }
 
 void WaveformView::mouseReleaseEvent (QMouseEvent*)

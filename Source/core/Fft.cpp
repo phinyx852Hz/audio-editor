@@ -44,6 +44,16 @@ void Fft::forward (std::vector<std::complex<float>>& data) const
     }
 }
 
+void Fft::inverse (std::vector<std::complex<float>>& data) const
+{
+    for (auto& v : data)
+        v = std::conj (v);
+    forward (data);
+    const auto scale = 1.0f / (float) n;
+    for (auto& v : data)
+        v = std::conj (v) * scale;
+}
+
 SpectrumAnalyzer::SpectrumAnalyzer (int order) : fft (order), window ((size_t) fft.size()), buffer ((size_t) fft.size())
 {
     double sum = 0.0;

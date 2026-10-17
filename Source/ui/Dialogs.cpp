@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "Dialogs.h"
+#include "../core/Repair.h"
 #include "CommandRegistry.h"
 #include "DesktopShortcuts.h"
 #include "Theme.h"
@@ -457,6 +458,82 @@ StereoizeDialog::StereoizeDialog (const dsp::StereoizeSettings& initial, bool wh
 dsp::StereoizeSettings StereoizeDialog::settings() const
 {
     return { widthBox->value() / 100.0, delayBox->value(), (double) bassBox->value() };
+}
+
+//==============================================================================
+FrequencyRangeDialog::FrequencyRangeDialog (double lowHz, double highHz, double nyquist, QWidget* parent)
+    : QDialog (parent), lowBox (new QSpinBox (this)), highBox (new QSpinBox (this))
+{
+    setWindowTitle (tr ("Frequency Range"));
+    const auto top = (int) std::floor (nyquist);
+    for (auto* box : { lowBox, highBox })
+    {
+        box->setRange (0, top);
+        box->setSingleStep (50);
+        box->setSuffix (tr (" Hz"));
+        box->setAccelerated (true);
+    }
+    lowBox->setValue ((int) std::lround (lowHz));
+    highBox->setValue (highHz > lowHz ? (int) std::lround (highHz) : top);
+
+    auto* about = new QLabel (tr ("Spectral edits, Auto Heal and Delete then work only on these frequencies "
+                                  "inside the time selection. From 0 Hz to %1 Hz means every frequency.").arg (top), this);
+    about->setWordWrap (true);
+
+    auto* form = new QFormLayout;
+    form->addRow (tr ("&From:"), lowBox);
+    form->addRow (tr ("&To:"), highBox);
+
+    auto* buttons = new QDialogButtonBox (QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    auto* layout = new QVBoxLayout (this);
+    layout->addWidget (about);
+    layout->addLayout (form);
+    layout->addWidget (buttons);
+    connect (buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect (buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    lowBox->setFocus();
+    lowBox->selectAll();
+}
+
+double FrequencyRangeDialog::lowHz() const  { return std::min (lowBox->value(), highBox->value()); }
+double FrequencyRangeDialog::highHz() const
+{
+    // The full range is stored as "no band".
+    const auto lo = std::min (lowBox->value(), highBox->value()), hi = std::max (lowBox->value(), highBox->value());
+    return lo == 0 && hi == highBox->maximum() ? 0.0 : hi;
+}
+
+SpectralGainDialog::SpectralGainDialog (double initialDb, const QString& what, QWidget* parent)
+    : QDialog (parent), gainBox (new QDoubleSpinBox (this))
+{
+    setWindowTitle (tr ("Spectral Gain"));
+    gainBox->setRange (-60.0, 20.0);
+    gainBox->setDecimals (1);
+    gainBox->setSingleStep (1.0);
+    gainBox->setSuffix (tr (" dB"));
+    gainBox->setSpecialValueText (tr ("Remove"));
+    gainBox->setValue (initialDb);
+
+    auto* about = new QLabel (tr ("Turns %1 down or up, with soft edges so nothing clicks. "
+                                  "Below 0 dB is quieter; the lowest setting removes it.").arg (what), this);
+    about->setWordWrap (true);
+
+    auto* form = new QFormLayout;
+    form->addRow (tr ("&Gain:"), gainBox);
+    auto* buttons = new QDialogButtonBox (QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    auto* layout = new QVBoxLayout (this);
+    layout->addWidget (about);
+    layout->addLayout (form);
+    layout->addWidget (buttons);
+    connect (buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect (buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    gainBox->setFocus();
+    gainBox->selectAll();
+}
+
+double SpectralGainDialog::gainDb() const
+{
+    return gainBox->value() <= gainBox->minimum() ? repair::removeDb : gainBox->value();
 }
 
 NormalizeDialog::Mode NormalizeDialog::mode() const { return modeBox->currentIndex() == 0 ? Mode::peak : Mode::loudness; }
