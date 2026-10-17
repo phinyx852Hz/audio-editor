@@ -33,9 +33,14 @@ private:
 };
 
 //==============================================================================
+void MasterChain::addExtraFormats (juce::AudioPluginFormatManager&)
+{
+}
+
 MasterChain::MasterChain()
 {
     juce::addDefaultFormatsToManager (formats);
+    addExtraFormats (formats);
     scratch.setSize (maxChannels, blockSize);
 }
 
@@ -104,6 +109,7 @@ int MasterChain::startScan()
             scanQueue.add ({ format, file });
 
     scanIndex = 0;
+    crashedThisScan = 0;
     pluginsBefore = pluginList.getNumTypes();
     return scanQueue.size();
 }
@@ -116,14 +122,62 @@ bool MasterChain::scanNext (std::string& fileBeingScanned)
     const auto item = scanQueue[scanIndex++];
     fileBeingScanned = item.file.toStdString();
 
-    if (pluginList.getBlacklistedFiles().contains (item.file))
+    if (pluginList.getBlacklistedFiles().contains (item.file) || pluginList.isListingUpToDate (item.file, *item.format))
         return true;
 
-    deadMansPedal().replaceWithText (item.file);
-    juce::OwnedArray<juce::PluginDescription> found;
-    pluginList.scanAndAddFile (item.file, true, found, *item.format);
-    deadMansPedal().deleteFile();
+    // Look inside the file from a separate process (see scanInThisProcess).
+    const auto output = juce::File::createTempFile (".xml");
+    juce::ChildProcess child;
+    const juce::StringArray command { juce::File::getSpecialLocation (juce::File::currentExecutableFile).getFullPathName(),
+                                      scanOption, item.format->getName(), item.file, output.getFullPathName() };
+    // Windows plugins through yabridge start Wine first, which can take a while.
+    const auto timeoutMs = item.file.containsIgnoreCase ("yabridge") ? 180000 : 60000;
+    const auto started = child.start (command, 0);
+    const auto finished = started && child.waitForProcessToFinish (timeoutMs);
+    if (started && ! finished)
+        child.kill();
+
+    if (! finished || child.getExitCode() != 0)
+    {
+        pluginList.addToBlacklist (item.file);
+        ++crashedThisScan;
+        output.deleteFile();
+        return true;
+    }
+
+    if (auto xml = juce::XmlDocument::parse (output))
+    {
+        for (auto* e : xml->getChildIterator())
+        {
+            juce::PluginDescription d;
+            if (d.loadFromXml (*e))
+                pluginList.addType (d);
+        }
+    }
+    output.deleteFile();
     return true;
+}
+
+int MasterChain::scanInThisProcess (const juce::String& formatName, const juce::String& file, const juce::File& output)
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    juce::AudioPluginFormatManager formats;
+    juce::addDefaultFormatsToManager (formats);
+    addExtraFormats (formats);
+
+    for (auto* format : formats.getFormats())
+    {
+        if (format->getName() != formatName)
+            continue;
+
+        juce::OwnedArray<juce::PluginDescription> found;
+        format->findAllTypesForFile (found, file);
+        juce::XmlElement list ("PLUGINS");
+        for (auto* d : found)
+            list.addChildElement (d->createXml().release());
+        return list.writeTo (output) ? 0 : 2;
+    }
+    return 3;
 }
 
 std::string MasterChain::finishScan()
@@ -140,8 +194,10 @@ std::string MasterChain::finishScan()
     auto summary = juce::String (total) + (total == 1 ? " effect plugin" : " effect plugins") + " available";
     if (added > 0)
         summary << " (" << added << " new)";
-    if (! pluginList.getBlacklistedFiles().isEmpty())
-        summary << ". Skipped " << pluginList.getBlacklistedFiles().size() << " that crashed while scanning";
+    if (crashedThisScan > 0)
+        summary << ". " << crashedThisScan << (crashedThisScan == 1 ? " file" : " files") << " crashed or hung while being checked and will be skipped";
+    else if (! pluginList.getBlacklistedFiles().isEmpty())
+        summary << ". Skipping " << pluginList.getBlacklistedFiles().size() << " that crashed before";
 
     return summary.toStdString();
 }

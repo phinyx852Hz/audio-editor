@@ -26,6 +26,13 @@ public:
     bool scanNext (std::string& fileBeingScanned);
     std::string finishScan();
 
+    // Each plugin file is examined by a separate copy of PHINYX started with
+    // --scan-plugin, so a plugin that crashes or hangs while loading only takes
+    // that copy down; it is then skipped from then on. This is that copy's job:
+    // writes what `file` holds to `output` as XML; returns the exit code.
+    static int scanInThisProcess (const juce::String& formatName, const juce::String& file, const juce::File& output);
+    static constexpr const char* scanOption = "--scan-plugin";
+
     // Slots. All of these run on the message thread.
     std::string load (int slot, const std::string& pluginId);
     void clear (int slot);
@@ -77,6 +84,8 @@ private:
 
     class PluginWindow;
 
+    static void addExtraFormats (juce::AudioPluginFormatManager&);   // formats JUCE does not have (CLAP)
+
     std::unique_ptr<juce::AudioPluginInstance> createInstance (const juce::PluginDescription&, juce::String& error) const;
     void preparePlugin (juce::AudioPluginInstance&, double rate, int blockSize) const;
     void applyLayout (juce::AudioPluginInstance&, int numChannels) const;
@@ -92,7 +101,7 @@ private:
 
     struct ScanItem { juce::AudioPluginFormat* format; juce::String file; };
     juce::Array<ScanItem> scanQueue;
-    int scanIndex = 0, pluginsBefore = 0;
+    int scanIndex = 0, pluginsBefore = 0, crashedThisScan = 0;
 
     std::array<Slot, AudioEngine::numMasterSlots> slots;
     std::array<std::unique_ptr<PluginWindow>, AudioEngine::numMasterSlots> windows;

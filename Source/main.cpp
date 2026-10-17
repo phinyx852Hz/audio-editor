@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "engine/AudioEngine.h"
+#include "engine/MasterChain.h"
 #include "ui/MainWindow.h"
 #include "ui/Theme.h"
 
@@ -10,6 +11,10 @@
 
 int main (int argc, char* argv[])
 {
+    // A copy started to look inside one plugin file, away from the editor (see MasterChain).
+    if (argc == 5 && std::string (argv[1]) == MasterChain::scanOption)
+        return MasterChain::scanInThisProcess (argv[2], argv[3], juce::File (argv[4]));
+
     QApplication app (argc, argv);
     QApplication::setApplicationName (QStringLiteral (APP_ID));
     QApplication::setApplicationDisplayName (QStringLiteral (APP_DISPLAY_NAME));
