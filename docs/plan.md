@@ -126,7 +126,7 @@ Decided: **no mixer** (no buses, sends or mixing console). The app stays an edit
   - Presets for the whole section, A/B/C/D snapshots, chain import/export shared with batch
   - Fully keyboard driven: move between slots with arrows, `Enter` opens the plugin, keys for bypass, solo, move up/down, insert, remove
   - **Pops out to its own window** with one command or button, so on Hyprland it lands in its own tile (see 2.10)
-- P1 **Device chain row like Ableton and Bitwig** (requested 2026-10-17; first version done the same day: cards with on/off, solo, first four knobs, level bar, Edit and Window, full keyboard control, drag to reorder; still to do: pinning chosen knobs, collapse, gain-reduction display, dropping from the browser): a strip along the bottom of the main window showing the chain left to right as device cards, signal flowing left to right into the master gain and meters
+- P1 **Device chain row like Ableton and Bitwig** (requested 2026-10-17; first version done the same day: cards with on/off, solo, first four knobs, level bar, Edit and Window, full keyboard control, drag to reorder; typing exact values by double-click, F2 or digits; still to do: pinning chosen knobs, collapse, gain-reduction display, dropping from the browser): a strip along the bottom of the main window showing the chain left to right as device cards, signal flowing left to right into the master gain and meters
   - Each card: plugin name, on/off, solo, a few main knobs (the plugin's first or user-pinned parameters), a small level/gain-reduction indicator, collapse to a narrow bar, and a button for the full parameter editor or plugin window
   - Same chain as the Master Section list (one model, two views); later reused for per-clip chains in the Montage and batch chains
   - Keyboard: a key focuses the row, `Left`/`Right` move between cards, `Up`/`Down` between knobs, `+`/`-` adjust, `Insert` adds after the focused card, `Ctrl+Left`/`Right` reorders, `Del` removes; drag to reorder with the mouse
@@ -261,6 +261,7 @@ Every menu item and every process (edit, effect, analysis, render, batch) is a r
 - P1 Built-in theme tweaker that edits values live and saves as a new theme, so users can make themes without writing files by hand
 - P1 Published, versioned theme format spec and a starter template so others can build themes; validation with clear errors and fallback to defaults for missing values
 - P0 Waveform colour picker (done 2026-10-17): Options > Waveform Colors (`Ctrl+Shift+W`) sets personal waveform, background, selection, cursor, centre line, marker and region colours on top of any theme
+- P0 Focus follows mouse inside the app, like Hyprland (done 2026-10-17, View menu, on by default)
 - P0 Window opacity control (done 2026-10-17): slider in the status bar and View > Window Opacity, `Ctrl+Alt+-` / `Ctrl+Alt+=`, remembered; works with the compositor's own opacity
 - P2 Scriptable layout (WALTER-style in REAPER) for moving and resizing elements, and a theme repository/browser
 

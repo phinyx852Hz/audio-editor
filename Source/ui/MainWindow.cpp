@@ -309,6 +309,15 @@ void MainWindow::registerCommands()
          [this] { changeOpacity (Theme::opacity() - 0.05, true); });
     add ("view.opacityFull", Category::view, tr ("&Fully Opaque"), {}, [this] { changeOpacity (1.0, true); });
 
+    add ("view.focusFollowsMouse", Category::view, tr ("Focus Follows &Mouse"), {}, [this]
+    {
+        const bool on = commands.action (QStringLiteral ("view.focusFollowsMouse"))->isChecked();
+        focusFollowsMouse->setEnabled (on);
+        statusBar()->showMessage (on ? tr ("Focus follows the mouse: point at the waveform, device chain or a panel to type there")
+                                     : tr ("Focus follows clicks"), 5000);
+    });
+    commands.action (QStringLiteral ("view.focusFollowsMouse"))->setCheckable (true);
+
     add ("view.focusWaveform", Category::view, tr ("Focus &Waveform"), { KS (Qt::Key_F6) }, [this]
     {
         activateWindow();
@@ -355,7 +364,7 @@ void MainWindow::buildMenus()
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
                                "view.spectral", "-", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.popOut", "view.resetLayout", "-",
-                               "opacity", "-", "view.focusWaveform" } },
+                               "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
         { tr ("&Options"),   { "options.audio", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
     };
@@ -469,6 +478,10 @@ void MainWindow::buildPanels()
     chainPanel->dock()->show();
 
     panels = { masterPanel, chainPanel, metersPanel, markerPanel, historyPanel };
+
+    focusFollowsMouse = new FocusFollowsMouse (this);
+    focusFollowsMouse->setAreas ({ waveform, chainRow, masterWidget, markerList, historyList });
+    qApp->installEventFilter (focusFollowsMouse);
 }
 
 DockablePanel* MainWindow::focusedOrLastPanel() const
@@ -493,6 +506,10 @@ void MainWindow::restoreLayout()
 {
     auto settings = appSettings();
     restoreGeometry (settings.value (QStringLiteral ("window/geometry")).toByteArray());
+
+    const bool followMouse = settings.value (QStringLiteral ("view/focusFollowsMouse"), true).toBool();
+    focusFollowsMouse->setEnabled (followMouse);
+    commands.action (QStringLiteral ("view.focusFollowsMouse"))->setChecked (followMouse);
 
     const bool spectral = settings.value (QStringLiteral ("view/spectral"), false).toBool();
     waveform->setSpectral (spectral);
@@ -537,6 +554,7 @@ void MainWindow::saveLayout()
     settings.setValue (QStringLiteral ("window/geometry"), saveGeometry());
     settings.setValue (QStringLiteral ("window/state"), saveState (layoutVersion));
     settings.setValue (QStringLiteral ("view/spectral"), waveform->isSpectral());
+    settings.setValue (QStringLiteral ("view/focusFollowsMouse"), focusFollowsMouse->isEnabled());
     engine.saveMasterSection();
 }
 

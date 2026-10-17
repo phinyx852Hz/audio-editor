@@ -374,6 +374,7 @@ bool AudioEngine::masterIsActive() const                             { return im
 
 std::vector<PluginParameterInfo> AudioEngine::masterSlotParameters (int slot) const { return impl->master.parameters (slot); }
 PluginParameterInfo AudioEngine::masterSlotParameter (int slot, int index) const   { return impl->master.parameter (slot, index); }
+bool AudioEngine::setMasterSlotParameterText (int slot, int index, const std::string& text) { return impl->master.setParameterFromText (slot, index, text); }
 void AudioEngine::setMasterSoloSlot (int slot)                       { impl->master.setSolo (slot); }
 int AudioEngine::masterSoloSlot() const                              { return impl->master.solo(); }
 float AudioEngine::takeMasterSlotPeak (int slot)                     { return impl->master.takePeak (slot); }

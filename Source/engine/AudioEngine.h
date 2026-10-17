@@ -126,6 +126,8 @@ public:
 
     std::vector<PluginParameterInfo> masterSlotParameters (int slot) const;
     PluginParameterInfo masterSlotParameter (int slot, int index) const;
+    // Sets a parameter from typed text such as "-6", "-6 dB" or "RMS"; false when it cannot be understood.
+    bool setMasterSlotParameterText (int slot, int index, const std::string& text);
     void setMasterSlotParameter (int slot, int index, float normalisedValue);
 
     // The plugin's own window. Needs X11 or XWayland.

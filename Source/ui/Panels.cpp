@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "Panels.h"
+#include <QAbstractSpinBox>
+#include <QLineEdit>
 #include "../core/Dsp.h"
 #include "Theme.h"
 
@@ -35,6 +37,37 @@ namespace
 }
 
 //==============================================================================
+QWidget* FocusFollowsMouse::areaOf (QWidget* w) const
+{
+    for (auto* a : areas)
+        if (w != nullptr && (w == a || a->isAncestorOf (w)))
+            return a;
+    return nullptr;
+}
+
+bool FocusFollowsMouse::eventFilter (QObject* watched, QEvent* e)
+{
+    if (! enabled || e->type() != QEvent::Enter || ! watched->isWidgetType())
+        return false;
+
+    auto* area = areaOf (static_cast<QWidget*> (watched));
+    if (area == nullptr || ! area->isVisible() || QApplication::mouseButtons() != Qt::NoButton
+        || QApplication::activePopupWidget() != nullptr || QApplication::activeModalWidget() != nullptr
+        || ! area->window()->isActiveWindow())
+        return false;
+
+    // Leave a text field or anything outside the areas alone; just move between areas.
+    auto* focused = QApplication::focusWidget();
+    const auto* from = areaOf (focused);
+    if (from == area || (focused != nullptr && from == nullptr))
+        return false;
+    if (qobject_cast<QLineEdit*> (focused) != nullptr || qobject_cast<QAbstractSpinBox*> (focused) != nullptr)
+        return false;
+
+    area->setFocus (Qt::MouseFocusReason);
+    return false;
+}
+
 NavigationKeyGuard::NavigationKeyGuard (QWidget* home, QList<int> extraKeys, QObject* parent)
     : QObject (parent), homeWidget (home), extra (std::move (extraKeys))
 {

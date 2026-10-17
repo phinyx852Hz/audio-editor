@@ -16,6 +16,28 @@ class QMainWindow;
 // Window shortcuts such as Space, arrows and Delete would otherwise steal keys
 // from panels. A panel keeps its navigation keys (plus any extra keys it
 // handles itself), and Escape returns focus to the home widget.
+// Focus follows the mouse inside PHINYX, like Hyprland does between windows:
+// pointing at the waveform, the device chain or a panel gives it the keyboard.
+// Only moves focus between these areas, never out of a text field or dialog.
+class FocusFollowsMouse final : public QObject
+{
+public:
+    explicit FocusFollowsMouse (QObject* parent) : QObject (parent) {}
+
+    void setAreas (QList<QWidget*> a) { areas = std::move (a); }
+    void setEnabled (bool on)         { enabled = on; }
+    bool isEnabled() const            { return enabled; }
+
+protected:
+    bool eventFilter (QObject*, QEvent*) override;
+
+private:
+    QWidget* areaOf (QWidget*) const;
+
+    QList<QWidget*> areas;
+    bool enabled = true;
+};
+
 class NavigationKeyGuard final : public QObject
 {
 public:

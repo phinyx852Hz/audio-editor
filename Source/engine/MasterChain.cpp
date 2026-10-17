@@ -322,6 +322,81 @@ PluginParameterInfo MasterChain::parameter (int index, int parameter) const
     return info;
 }
 
+bool MasterChain::setParameterFromText (int index, int parameter, const std::string& typed)
+{
+    if (index < 0 || index >= (int) slots.size() || slots[(size_t) index].plugin == nullptr)
+        return false;
+
+    const auto& params = slots[(size_t) index].plugin->getParameters();
+    if (parameter < 0 || parameter >= params.size())
+        return false;
+
+    auto* p = params[parameter];
+    const auto text = juce::String (typed).trim();
+    if (text.isEmpty())
+        return false;
+
+    // The number a parameter shows for a normalised value, e.g. "-6.0 dB" -> -6.
+    auto shown = [p] (float v)
+    {
+        const auto t = p->getText (v, 64);
+        if (t.containsIgnoreCase ("inf"))
+            return t.trimStart().startsWithChar ('-') ? -1.0e12 : 1.0e12;  // "-inf dB" is silence, not zero
+        return t.retainCharacters ("+-.0123456789eE").getDoubleValue();
+    };
+    const auto infinite = text.containsIgnoreCase ("inf");
+    const auto isNumber = infinite || text.containsAnyOf ("0123456789");
+    const auto target = infinite ? (text.startsWithChar ('-') ? -1.0e12 : 1.0e12)
+                                 : text.retainCharacters ("+-.0123456789eE").getDoubleValue();
+    auto close = [&] (float v) { return std::abs (shown (v) - target) <= std::max (0.005, std::abs (target) * 0.005); };
+
+    // Ask the plugin first; many understand their own units.
+    const auto asked = std::clamp (p->getValueForText (text), 0.0f, 1.0f);
+    if (! isNumber || close (asked))
+    {
+        if (! isNumber)
+        {
+            // A choice such as "RMS": find the step whose label matches.
+            const auto steps = std::max (2, std::min (p->getNumSteps(), 1000));
+            for (int i = 0; i < steps; ++i)
+            {
+                const auto v = (float) i / (float) (steps - 1);
+                if (p->getText (v, 64).trim().equalsIgnoreCase (text))
+                {
+                    p->setValueNotifyingHost (v);
+                    return true;
+                }
+            }
+            if (! p->getText (asked, 64).trim().equalsIgnoreCase (text))
+                return false;
+        }
+
+        p->setValueNotifyingHost (asked);
+        return true;
+    }
+
+    // Otherwise search for the value that displays the typed number (displays rise or fall steadily).
+    float lo = 0.0f, hi = 1.0f;
+    const bool rising = shown (1.0f) >= shown (0.0f);
+    if ((rising && (target < shown (0.0f) || target > shown (1.0f))) || (! rising && (target > shown (0.0f) || target < shown (1.0f))))
+    {
+        p->setValueNotifyingHost ((target < shown (0.0f)) == rising ? 0.0f : 1.0f);  // out of range: go to the nearest end
+        return true;
+    }
+
+    for (int i = 0; i < 40; ++i)
+    {
+        const auto mid = (lo + hi) * 0.5f;
+        if ((shown (mid) < target) == rising)
+            lo = mid;
+        else
+            hi = mid;
+    }
+
+    p->setValueNotifyingHost ((lo + hi) * 0.5f);
+    return true;
+}
+
 float MasterChain::takePeak (int index)
 {
     return index >= 0 && index < (int) peaks.size() ? peaks[(size_t) index].exchange (0.0f, std::memory_order_relaxed) : 0.0f;

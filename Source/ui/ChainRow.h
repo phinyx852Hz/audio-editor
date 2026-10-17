@@ -9,6 +9,7 @@
 #include <vector>
 
 class QDial;
+class QLineEdit;
 class QHBoxLayout;
 class QLabel;
 class QScrollArea;
@@ -45,6 +46,7 @@ public:
     void setSelected (bool selected, bool rowFocused, int knob);
     void sync();                            // follows the engine: values, bypass, solo, level
     void nudge (int knob, double steps);    // one step is 1% (or one notch of a stepped parameter)
+    void editValue (int knob, const QString& startText = {});  // type an exact value; Enter sets it, Esc cancels
 
 Q_SIGNALS:
     void activated (int knob);              // clicked; knob is -1 for the card itself
@@ -52,6 +54,8 @@ Q_SIGNALS:
     void editRequested();
     void windowRequested();
     void addRequested();
+    void valueEditFinished();
+    void message (const QString&);
 
 protected:
     void paintEvent (QPaintEvent*) override;
@@ -73,6 +77,7 @@ private:
     void setKnobFromEngine (Knob&);
     void knobMoved (const Knob&, int position);
     void watch (QWidget*);
+    void applyTypedValue (int knob, const QString& text);
 
     AudioEngine& engine;
     Kind cardKind;
@@ -86,12 +91,14 @@ private:
     bool selected = false, focused = false, syncing = false;
     int selectedKnob = -1;
     QPoint pressPos;
+    QLineEdit* valueEditor = nullptr;
 };
 
 // Ableton/Bitwig-style device chain along the bottom of the window: the Master
 // Section's plugins as cards, signal flowing left to right into the master gain.
 // Keys: Left/Right pick a card, Up/Down pick a knob, +/- (Shift for bigger steps,
-// or Page Up/Down) turn it, Enter edits all parameters, Insert adds a plugin after
+// or Page Up/Down) turn it, F2 or a digit types an exact value (so does a double
+// click), Enter edits all parameters, Insert adds a plugin after
 // the card, Delete removes it, B bypasses, S solos, E opens the plugin's window,
 // Ctrl+Left/Right moves the plugin, Esc returns to the waveform.
 class ChainRow final : public QWidget

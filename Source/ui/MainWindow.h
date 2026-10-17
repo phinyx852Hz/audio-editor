@@ -134,6 +134,7 @@ private:
     DockablePanel* metersPanel = nullptr;
     QList<DockablePanel*> panels;
     QList<QSlider*> opacitySliders;
+    class FocusFollowsMouse* focusFollowsMouse = nullptr;
     DockablePanel* lastPanel = nullptr;
     QByteArray defaultLayout;
     static constexpr int layoutVersion = 2;  // 2: device chain row at the bottom

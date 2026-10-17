@@ -11,6 +11,7 @@
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMimeData>
 #include <QPainter>
 #include <QScrollArea>
@@ -335,6 +336,76 @@ void DeviceCard::nudge (int index, double steps)
     kn.dial->setValue (target);  // valueChanged sends it to the engine
 }
 
+void DeviceCard::editValue (int index, const QString& startText)
+{
+    if (index < 0 || index >= (int) knobs.size() || valueEditor != nullptr)
+        return;
+
+    const auto& kn = knobs[(size_t) index];
+    QString current;
+    if (kn.parameter < 0)
+        current = QString::number (engine.masterGainDb(), 'f', 1);
+    else
+        current = QString::fromStdString (engine.masterSlotParameter (slotIndex, kn.parameter).valueText);
+
+    valueEditor = new QLineEdit (this);
+    valueEditor->setAccessibleName (tr ("Type a value for %1").arg (kn.dial->accessibleName()));
+    valueEditor->setToolTip (tr ("Type a value, then Enter. Esc cancels."));
+    valueEditor->setText (startText.isEmpty() ? current : startText);
+    valueEditor->setAlignment (Qt::AlignHCenter);
+
+    // Over the knob's value, a little wider so units fit.
+    auto r = kn.value->geometry().adjusted (-14, -3, 14, 3);
+    r.moveLeft (std::clamp (r.left(), 2, width() - r.width() - 2));
+    valueEditor->setGeometry (r);
+    valueEditor->installEventFilter (this);
+    valueEditor->show();
+    valueEditor->setFocus (Qt::OtherFocusReason);
+    if (startText.isEmpty())
+        valueEditor->selectAll();
+
+    connect (valueEditor, &QLineEdit::editingFinished, this, [this, index]
+    {
+        auto* editor = valueEditor;
+        if (editor == nullptr)
+            return;
+
+        valueEditor = nullptr;
+        if (! editor->property ("cancelled").toBool())
+            applyTypedValue (index, editor->text());
+        editor->hide();
+        editor->deleteLater();
+        Q_EMIT valueEditFinished();
+    });
+}
+
+void DeviceCard::applyTypedValue (int index, const QString& text)
+{
+    const auto& kn = knobs[(size_t) index];
+
+    if (kn.parameter < 0)
+    {
+        bool ok = false;
+        auto cleaned = text;
+        cleaned.remove (QStringLiteral ("dB"), Qt::CaseInsensitive);
+        const auto db = cleaned.trimmed().toDouble (&ok);
+        if (! ok)
+        {
+            Q_EMIT message (tr ("Type a number of decibels, for example -3 or 1.5"));
+            return;
+        }
+        engine.setMasterGainDb (std::clamp (db, -60.0, 24.0));
+    }
+    else if (! engine.setMasterSlotParameterText (slotIndex, kn.parameter, text.toStdString()))
+    {
+        Q_EMIT message (tr ("%1 does not understand \"%2\"").arg (kn.dial->accessibleName(), text));
+        return;
+    }
+
+    sync();
+    Q_EMIT changed();
+}
+
 void DeviceCard::setSelected (bool isSelected, bool rowFocused, int knob)
 {
     if (selected == isSelected && focused == rowFocused && selectedKnob == knob)
@@ -376,6 +447,30 @@ void DeviceCard::paintEvent (QPaintEvent*)
 
 bool DeviceCard::eventFilter (QObject* watched, QEvent* e)
 {
+    if (watched == valueEditor && e->type() == QEvent::KeyPress)
+    {
+        // Finish here, so the key is not passed on to the row (where Enter opens the parameter editor).
+        const auto key = static_cast<QKeyEvent*> (e)->key();
+        if (key == Qt::Key_Escape)
+            valueEditor->setProperty ("cancelled", true);
+        if (key == Qt::Key_Escape || key == Qt::Key_Return || key == Qt::Key_Enter)
+        {
+            valueEditor->clearFocus();  // ends the edit; applies it unless cancelled
+            return true;
+        }
+    }
+
+    if (e->type() == QEvent::MouseButtonDblClick)
+    {
+        for (int i = 0; i < (int) knobs.size(); ++i)
+            if (watched == knobs[(size_t) i].dial || watched == knobs[(size_t) i].name || watched == knobs[(size_t) i].value)
+            {
+                Q_EMIT activated (i);
+                editValue (i);
+                return true;
+            }
+    }
+
     if (e->type() == QEvent::MouseButtonPress)
     {
         int index = -1;
@@ -418,7 +513,8 @@ ChainRow::ChainRow (AudioEngine& e, QWidget* homeWidget, QWidget* parent)
     : QWidget (parent), engine (e), home (homeWidget), scroll (new QScrollArea (this)), strip (new QWidget)
 {
     setAccessibleName (tr ("Device chain"));
-    setAccessibleDescription (tr ("Left and Right pick a plugin, Up and Down pick a knob, plus and minus turn it, Enter edits all "
+    setAccessibleDescription (tr ("Left and Right pick a plugin, Up and Down pick a knob, plus and minus turn it, F2 or a number "
+                                  "types an exact value, Enter edits all "
                                   "parameters, Insert adds a plugin, Delete removes it, B bypasses, S solos, E opens its window, "
                                   "Control with Left or Right moves it."));
     setFocusPolicy (Qt::StrongFocus);
@@ -504,6 +600,8 @@ void ChainRow::rebuild()
             Q_EMIT chainChanged();
         });
         connect (card, &DeviceCard::editRequested, this, [this, slot] { editParameters (slot); });
+        connect (card, &DeviceCard::message, this, &ChainRow::message);
+        connect (card, &DeviceCard::valueEditFinished, this, [this] { setFocus (Qt::OtherFocusReason); });
         connect (card, &DeviceCard::windowRequested, this, [this, slot] { showWindow (slot); });
         connect (card, &DeviceCard::addRequested, this, [this] { insertAfter (lastPluginSlot()); });
     };
@@ -599,6 +697,9 @@ bool ChainRow::handles (const QKeyEvent* k)
         case Qt::Key_Plus: case Qt::Key_Equal: case Qt::Key_Minus: case Qt::Key_PageUp: case Qt::Key_PageDown:
         case Qt::Key_Return: case Qt::Key_Enter: case Qt::Key_Insert: case Qt::Key_Delete: case Qt::Key_Backspace:
         case Qt::Key_B: case Qt::Key_S: case Qt::Key_E: case Qt::Key_Escape:
+        case Qt::Key_F2: case Qt::Key_Period:
+        case Qt::Key_0: case Qt::Key_1: case Qt::Key_2: case Qt::Key_3: case Qt::Key_4:
+        case Qt::Key_5: case Qt::Key_6: case Qt::Key_7: case Qt::Key_8: case Qt::Key_9:
             return true;
         default:
             return false;  // Space and everything else stay with the editor's shortcuts
@@ -689,6 +790,20 @@ void ChainRow::keyPressEvent (QKeyEvent* k)
         case Qt::Key_Backspace:
             removeCurrent();
             break;
+
+        case Qt::Key_F2:
+        case Qt::Key_Period:
+        case Qt::Key_0: case Qt::Key_1: case Qt::Key_2: case Qt::Key_3: case Qt::Key_4:
+        case Qt::Key_5: case Qt::Key_6: case Qt::Key_7: case Qt::Key_8: case Qt::Key_9:
+        {
+            // F2, or just start typing a number, to set the selected knob exactly.
+            if (card == nullptr || card->numKnobs() == 0)
+                break;
+            if (knob < 0)
+                select (current, 0);
+            card->editValue (knob, k->key() == Qt::Key_F2 ? QString() : k->text());
+            break;
+        }
 
         case Qt::Key_B: toggleBypass(); break;
         case Qt::Key_S: toggleSolo(); break;

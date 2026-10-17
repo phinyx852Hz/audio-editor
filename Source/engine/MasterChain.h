@@ -46,6 +46,7 @@ public:
     std::vector<PluginParameterInfo> parameters (int slot) const;
     PluginParameterInfo parameter (int slot, int index) const;
     void setParameter (int slot, int index, float value);
+    bool setParameterFromText (int slot, int index, const std::string& text);
 
     bool canShowWindow (int slot) const;
     void showWindow (int slot);
