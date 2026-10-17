@@ -42,6 +42,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/AudioDocument.cpp
     Source/core/Dsp.cpp
     Source/core/Fft.cpp
+    Source/engine/AudioCapture.cpp
     Source/engine/AudioEngine.cpp
     Source/engine/MasterChain.cpp
     Source/ui/CommandRegistry.cpp
@@ -51,6 +52,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/DesktopShortcuts.cpp
     Source/ui/MasterPanel.cpp
     Source/ui/Panels.cpp
+    Source/ui/RecordDialog.cpp
     Source/ui/Spectrogram.cpp
     Source/ui/Theme.cpp
     Source/ui/WaveformView.cpp)
@@ -66,7 +68,23 @@ else()
     message(STATUS "jack/jack.h not found: building without the JACK backend (ALSA and PipeWire's ALSA still work)")
 endif()
 
+# Recording (desktop audio, inputs, single apps) talks to PipeWire directly.
+# Without libpipewire-0.3 PHINYX still builds; it just cannot record.
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(PIPEWIRE QUIET IMPORTED_TARGET libpipewire-0.3)
+endif()
+if(PIPEWIRE_FOUND)
+    set(PHINYX_PIPEWIRE 1)
+    target_include_directories(${APP_ID} SYSTEM PRIVATE ${PIPEWIRE_INCLUDE_DIRS})
+    target_link_libraries(${APP_ID} PRIVATE PkgConfig::PIPEWIRE)
+else()
+    set(PHINYX_PIPEWIRE 0)
+    message(STATUS "libpipewire-0.3 not found: building without recording")
+endif()
+
 target_compile_definitions(${APP_ID} PRIVATE
+    PHINYX_PIPEWIRE=${PHINYX_PIPEWIRE}
     APP_ID="${APP_ID}"
     APP_DISPLAY_NAME="${APP_DISPLAY_NAME}"
     APP_VERSION="${PROJECT_VERSION}"

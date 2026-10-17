@@ -5,6 +5,7 @@
 #include "Dialogs.h"
 #include "MasterPanel.h"
 #include "Panels.h"
+#include "RecordDialog.h"
 #include "Theme.h"
 #include "WaveformView.h"
 
@@ -133,6 +134,7 @@ MainWindow::MainWindow (AudioEngine& e)
     });
     uiTimer->start (30);
 
+    updateTitle();
     updateCommandStates();
     waveform->setFocus();
 }
@@ -155,6 +157,7 @@ void MainWindow::registerCommands()
     };
 
     add ("file.open", Category::file, tr ("&Open..."), { KS::Open }, [this] { showOpenDialog(); });
+    add ("file.record", Category::file, tr ("&Record..."), { KS (Qt::CTRL | Qt::Key_R) }, [this] { record(); });
     add ("file.save", Category::file, tr ("&Save"), { KS (Qt::CTRL | Qt::Key_S) }, [this] { save(); });
     add ("file.saveAs", Category::file, tr ("Save &As..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_S) }, [this] { saveAs(); });
     add ("file.close", Category::file, tr ("&Close"), { KS (Qt::CTRL | Qt::Key_W) }, [this] { closeFile(); });
@@ -349,7 +352,7 @@ void MainWindow::buildMenus()
 {
     // Menu titles carry & mnemonics, so Alt+F, Alt+E, Alt+P, Alt+M, Alt+A... open them.
     const QList<QPair<QString, QStringList>> layout {
-        { tr ("&File"),      { "file.open", "file.save", "file.saveAs", "-", "file.close", "file.nextTab", "file.previousTab", "-", "file.quit" } },
+        { tr ("&File"),      { "file.open", "file.record", "-", "file.save", "file.saveAs", "-", "file.close", "file.nextTab", "file.previousTab", "-", "file.quit" } },
         { tr ("&Edit"),      { "edit.undo", "edit.redo", "-", "edit.cut", "edit.copy", "edit.copyToNew", "edit.paste", "edit.delete", "-",
                                "edit.trim", "edit.insertSilence", "-", "select.all", "select.none", "-",
                                "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
@@ -536,6 +539,7 @@ void MainWindow::restoreLayout()
         activateWindow();
         waveform->setFocus();
         QTimer::singleShot (1500, this, &MainWindow::warnAboutDesktopShortcuts);
+        QTimer::singleShot (0, this, &MainWindow::recoverRecordings);
     });
 }
 
@@ -1046,6 +1050,82 @@ void MainWindow::copyToNew()
     refreshFromDocument (false);
     waveform->setFocus();
     statusBar()->showMessage (whole ? tr ("Copied the whole file to a new tab") : tr ("Copied the selection to a new tab"), 6000);
+}
+
+void MainWindow::record()
+{
+    if (loading)
+        return;
+
+    if (! AudioCapture::isAvailable())
+    {
+        QMessageBox::information (this, tr ("Record"), tr ("This build of %1 was made without PipeWire, so it cannot record.").arg (QStringLiteral (APP_DISPLAY_NAME)));
+        return;
+    }
+
+    RecordDialog dialog (capture, data(), doc.isOpen() ? tabName (doc).remove (QStringLiteral (" *")) : QString(), this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    auto take = dialog.take();
+    if (take == nullptr || take->length() == 0)
+        return;
+
+    const auto seconds = (double) take->length() / take->sampleRate();
+    if (dialog.insertAtCursor() && data() != nullptr)
+    {
+        const auto start = cursor;
+        const auto len = take->length();
+        auto result = data()->replaced (start, start, take.get());
+        selStart = selAnchor = start;
+        selEnd = cursor = start + len;
+        commit (tr ("Record"), std::move (result), start, start, len);
+    }
+    else
+    {
+        if (doc.isOpen())
+            newTab();
+        doc.reset (std::move (take), {}, {});
+        doc.markUnsaved();
+        cursor = selStart = selEnd = selAnchor = 0;
+        refreshFromDocument (false);
+    }
+
+    waveform->setFocus();
+    statusBar()->showMessage (tr ("Recorded %1 s").arg (seconds, 0, 'f', 1), 6000);
+}
+
+void MainWindow::recoverRecordings()
+{
+    const auto count = RecordingFile::countLeftBehind();
+    if (count == 0)
+        return;
+
+    const auto app = QStringLiteral (APP_DISPLAY_NAME);
+    const auto question = count == 1
+        ? tr ("%1 closed while recording. Recover the recording? It will be saved in your Music folder and opened.").arg (app)
+        : tr ("%1 closed while recording. Recover the %2 recordings? They will be saved in your Music folder and opened.").arg (app).arg (count);
+    const auto answer = QMessageBox::question (this, tr ("Recover Recordings"), question,
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+    if (answer != QMessageBox::Yes)
+        return;
+
+    const auto paths = RecordingFile::recoverAll();
+    if (paths.isEmpty())
+        return;
+
+    statusBar()->showMessage (tr ("Recovered to %1").arg (QFileInfo (paths.first()).absolutePath()), 10000);
+    // Files load one at a time; open the next when the previous has finished.
+    auto* opener = new QTimer (this);
+    connect (opener, &QTimer::timeout, this, [this, opener, queue = paths] () mutable
+    {
+        if (loading)
+            return;
+        if (queue.isEmpty())
+            return opener->deleteLater();
+        openFile (queue.takeFirst());
+    });
+    opener->start (100);
 }
 
 void MainWindow::warnAboutDesktopShortcuts()

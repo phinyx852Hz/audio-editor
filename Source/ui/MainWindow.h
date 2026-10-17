@@ -3,6 +3,7 @@
 
 #include "../core/AudioDocument.h"
 #include "../core/Dsp.h"
+#include "../engine/AudioCapture.h"
 #include "../engine/AudioEngine.h"
 #include "CommandRegistry.h"
 
@@ -72,6 +73,8 @@ private:
     void copy();
     void copyToNew();  // selection (or the whole file) into a new untitled tab
     void warnAboutDesktopShortcuts();
+    void record();              // Record dialog: desktop audio, an input or one app
+    void recoverRecordings();   // offers takes left behind by a crash
     void cut();
     void paste();
     void deleteSelection();
@@ -119,6 +122,7 @@ private:
 
     AudioEngine& engine;
     CommandRegistry commands;
+    AudioCapture capture;
     AudioDocument doc;
     WaveformView* waveform;
     QLabel* statusLabel;

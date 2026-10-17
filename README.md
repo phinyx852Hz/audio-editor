@@ -12,6 +12,7 @@ Built with a Qt 6 interface (native Wayland) on top of a JUCE 8 audio engine.
 - Playback through ALSA or JACK/PipeWire (`Space`), cursor movement (`Left`/`Right`, `Ctrl+Left`/`Ctrl+Right`, `J`/`L`, `Home`/`End`), zoom (`+`/`-`, `Ctrl+0`, `Ctrl+E` to the selection, `Ctrl`+mouse wheel)
 - Selection by mouse drag, `Shift`+click, `Shift`+arrows/`J`/`L`/`Home`/`End`, `Ctrl+A`; `Esc` clears it
 - Tabs: each open file gets its own tab above the waveform, with its own undo history, selection and zoom. `Ctrl+O` opens into a new tab, `Ctrl+Tab`/`Ctrl+Shift+Tab` (or `Ctrl+Page Down`/`Up`) switch tabs, `Ctrl+W` closes one. Copy and paste work between tabs.
+- Record (`Ctrl+R`), like OBS: record what you hear on the desktop (any output, e.g. AirPods or speakers), any input (microphone, audio interface), or just one application (only the browser, only a game). The list updates as devices and apps come and go. Live meters with a clip light (click it to clear), a pre-record buffer that keeps the last few seconds before you pressed Record, and a disk-space estimate. The take goes into a new tab or at the cursor as an undoable edit. `Enter` starts and stops. While recording, a safety copy is written to `~/.cache/phinyx/recordings`; if PHINYX closes unexpectedly, the next start offers to recover it into `~/Music/PHINYX Recovered`. Needs PipeWire (the Arch and Omarchy default).
 - Copy to New (`Shift+C`), like Audition and WaveLab: puts the selection (or the whole file) in a new untitled tab, markers included
 - Editing: cut/copy/paste/delete (`Ctrl+X`/`C`/`V`, `Del` or `Backspace` on a selection; select by dragging, `Shift`+arrows or `Ctrl+A`), trim to selection (`Ctrl+T`), insert silence (`Ctrl+Alt+S`)
 - Processing (on the selection, or the whole file when nothing is selected): gain (`Ctrl+G`), normalize to peak dBFS or integrated LUFS (`Ctrl+Shift+N`), fade in/out with four curve shapes (`Ctrl+Shift+I`/`O`), reverse (`Ctrl+Shift+R`), invert (`Ctrl+Alt+I`), DC offset removal (`Ctrl+Alt+D`)
@@ -35,7 +36,7 @@ Built with a Qt 6 interface (native Wayland) on top of a JUCE 8 audio engine.
 
 ## Build and run (Arch Linux)
 ```sh
-sudo pacman -S --needed base-devel git cmake ninja qt6-base qt6-wayland alsa-lib ladspa \
+sudo pacman -S --needed base-devel git cmake ninja qt6-base qt6-wayland alsa-lib libpipewire ladspa \
   freetype2 fontconfig libx11 libxrandr libxinerama libxcursor libxcomposite libxext mesa
 git clone https://github.com/phinyx852Hz/audio-editor
 cd audio-editor

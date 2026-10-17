@@ -6,7 +6,7 @@ pkgdesc="PHINYX: keyboard-first audio editor and mastering suite for Linux"
 arch=('x86_64')
 url="https://github.com/phinyx852Hz/audio-editor"
 license=('AGPL-3.0-only')
-depends=('qt6-base' 'qt6-wayland' 'alsa-lib' 'freetype2' 'fontconfig')
+depends=('qt6-base' 'qt6-wayland' 'alsa-lib' 'libpipewire' 'freetype2' 'fontconfig')
 optdepends=('pipewire-jack: JACK output through PipeWire (recommended; jack2 also works)'
             'realtime-privileges: realtime scheduling for audio threads'
             "xorg-xwayland: show plugins' own windows on Wayland"

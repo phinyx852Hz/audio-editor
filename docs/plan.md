@@ -33,8 +33,9 @@ License: AGPLv3 open source
 - **Phase 1 Part A (done):** real editing. Selection, cut/copy/paste/delete/trim, insert silence, gain, normalize (peak or LUFS), fades with four shapes, reverse, invert, DC removal, unlimited undo with a History panel, Save/Save As to WAV/FLAC/AIFF/Ogg with bit depth and dither, WAV markers preserved, unsaved-changes prompts. Core tests (storage, undo, DSP, EBU loudness reference) run in CI.
 - **Phase 1 Part B (done):** markers and regions (keys, Markers panel, saved in WAV), live peak/true-peak/LUFS meters, loudness statistics, log-frequency spectral display, panels that pop out into their own Hyprland-tiled windows with the layout remembered, colour themes with third-party JSON themes (docs/themes.md).
 - **Phase 1 Part C (done):** Master Section with 8 plugin slots (VST3, LV2, LADSPA via JUCE hosting), master gain and bypass, keyboard parameter editor plus the plugin's own window under XWayland, render in place (undoable) or to a new file with dither, latency compensated, chain remembered. Verified with LSP plugins.
-- **Phase 1 status:** core done. Still open from the Phase 1 list: Master Section presets, split waveform/spectral view and FFT settings. Added after the owner's first Omarchy test: Delete shows a hint when nothing is selected, window opacity control, waveform colour picker. Device chain row (2.4) done, with slot solo. Next candidate: OBS-style recording/capture (2.1b). Not yet tried on real audio hardware or a real Hyprland session (next: the owner's Omarchy test).
-- **Next:** Phase 2 (spectral editing and repair, plan section 5).
+- **Phase 1 status:** core done. Still open from the Phase 1 list: Master Section presets, split waveform/spectral view and FFT settings. Added after the owner's first Omarchy test: Delete shows a hint when nothing is selected, window opacity control, waveform colour picker. Device chain row (2.4) done, with slot solo. Not yet tried on real audio hardware or a real Hyprland session (next: the owner's Omarchy test).
+- **Phase 1.5 Part A (done):** recording and capture like OBS (2.1b P1): `Ctrl+R` records desktop audio, any input or one application through native PipeWire, with live meters and clip light, pre-record buffer, disk-space estimate, a new tab or insert at the cursor, and a crash-safe copy recovered on the next start. Tested against a real PipeWire server (desktop monitor, an app stream, the app ending mid-take, a killed process). Still open from 2.1b P1: several sources at once, bit depth choice (takes are 32-bit float until saved), plain-ALSA input without PipeWire.
+- **Next:** Phase 1.5 Part B (multi-channel), then Part C (Stereoize), then Phase 2 (spectral editing and repair, plan section 5).
 
 ---
 
@@ -487,7 +488,7 @@ Key design choices:
 **Exit:** a user can open a file, fix levels, cut it, run it through LV2 plugins, hit a loudness target and export. This is the first public alpha.
 
 ### Phase 1.5: Multi-channel foundation
-- Recording and capture like OBS: desktop audio, any input, one app (2.1b P1)
+- Recording and capture like OBS: desktop audio, any input, one app (2.1b P1). Done, except several sources at once.
 - Make playback, meters, Master Section and render work for any channel count, with speaker layouts and downmix monitoring (2.11 P0)
 - Built-in Stereoize (mono to stereo)
 - Done early because every later feature (repair, Montage, export) depends on how channels are handled
