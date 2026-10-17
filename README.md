@@ -18,14 +18,15 @@ Built with a Qt 6 interface (native Wayland) on top of a JUCE 8 audio engine.
 
 ## Build and run (Arch Linux)
 ```sh
-sudo pacman -S --needed base-devel git cmake ninja qt6-base qt6-wayland alsa-lib jack2
+sudo pacman -S --needed base-devel git cmake ninja qt6-base qt6-wayland alsa-lib jack2 \
+  freetype2 fontconfig libx11 libxrandr libxinerama libxcursor libxcomposite libxext mesa
 git clone https://github.com/phinyx852Hz/audio-editor
 cd audio-editor
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ./build/phinyx_artefacts/Release/phinyx
 ```
-JUCE 8.0.15 is downloaded automatically during the first configure; pass `-DJUCE_DIR=/path/to/JUCE` to use a local checkout.
+JUCE 8.0.15 is downloaded automatically during the first configure (the freetype/X11 packages above are only needed to build JUCE's small `juceaide` helper); pass `-DJUCE_DIR=/path/to/JUCE` to use a local checkout.
 
 To install system wide instead, use the PKGBUILD: `cd packaging/arch && makepkg -si`.
 
