@@ -1,17 +1,22 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MainWindow.h"
 #include "Dialogs.h"
+#include "Panels.h"
+#include "Theme.h"
 #include "WaveformView.h"
 
 #include <QActionGroup>
 #include <QApplication>
 #include <QCloseEvent>
 #include <QDockWidget>
+#include <QSettings>
+#include <QStandardPaths>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QInputDialog>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -39,57 +44,13 @@ namespace
         const QString edit      = QObject::tr ("Edit");
         const QString select    = QObject::tr ("Selection");
         const QString process   = QObject::tr ("Process");
+        const QString markers   = QObject::tr ("Markers");
+        const QString analyze   = QObject::tr ("Analyze");
         const QString transport = QObject::tr ("Transport");
         const QString view      = QObject::tr ("View");
         const QString options   = QObject::tr ("Options");
         const QString help      = QObject::tr ("Help");
     }
-
-    // Window shortcuts such as Space, arrows and Delete would otherwise steal
-    // keys from list panels. This lets a panel keep its navigation keys, and
-    // Escape hands focus back to the waveform.
-    class NavigationKeyGuard final : public QObject
-    {
-    public:
-        NavigationKeyGuard (QWidget* home, QObject* parent) : QObject (parent), homeWidget (home) {}
-
-    protected:
-        bool eventFilter (QObject*, QEvent* e) override
-        {
-            if (e->type() != QEvent::ShortcutOverride && e->type() != QEvent::KeyPress)
-                return false;
-
-            auto* k = static_cast<QKeyEvent*> (e);
-
-            if (k->key() == Qt::Key_Escape && k->modifiers() == Qt::NoModifier)
-            {
-                if (e->type() == QEvent::ShortcutOverride)
-                    e->accept();
-                else
-                    homeWidget->setFocus (Qt::ShortcutFocusReason);
-                return e->type() == QEvent::KeyPress;
-            }
-
-            if (e->type() == QEvent::ShortcutOverride && (k->modifiers() & ~Qt::KeypadModifier) == Qt::NoModifier)
-            {
-                switch (k->key())
-                {
-                    case Qt::Key_Up: case Qt::Key_Down: case Qt::Key_Left: case Qt::Key_Right:
-                    case Qt::Key_Home: case Qt::Key_End: case Qt::Key_PageUp: case Qt::Key_PageDown:
-                    case Qt::Key_Return: case Qt::Key_Enter: case Qt::Key_Space:
-                        e->accept();
-                        break;
-                    default:
-                        break;
-                }
-            }
-
-            return false;
-        }
-
-    private:
-        QWidget* homeWidget;
-    };
 }
 
 MainWindow::MainWindow (AudioEngine& e)
@@ -101,10 +62,11 @@ MainWindow::MainWindow (AudioEngine& e)
     statusBar()->addWidget (statusLabel, 1);
     statusLabel->setAccessibleName (tr ("Status"));
 
-    buildHistoryPanel();
+    buildPanels();
     registerCommands();
     commands.load();
     buildMenus();
+    restoreLayout();
 
     connect (waveform, &WaveformView::cursorRequested, this, &MainWindow::setCursor);
     connect (waveform, &WaveformView::selectionRequested, this, &MainWindow::selectRange);
@@ -123,6 +85,12 @@ MainWindow::MainWindow (AudioEngine& e)
 
         if (loading && loadProgress)
             waveform->setLoading (true, loadProgress->load());
+
+        meterPanel->addBlocks (engine.takeMeterBlocks());
+
+        for (auto* p : panels)
+            if (p->containsFocus())
+                lastPanel = p;
 
         updateStatus();
     });
@@ -211,6 +179,18 @@ void MainWindow::registerCommands()
         shapes->addAction (a);
     }
 
+    add ("marker.add", Category::markers, tr ("&Add Marker"), { KS (Qt::Key_M) }, [this] { addMarker(); });
+    add ("marker.addRegion", Category::markers, tr ("Add &Region from Selection"), { KS (Qt::SHIFT | Qt::Key_M) },
+         [this] { addRegion(); });
+    add ("marker.next", Category::markers, tr ("Go to &Next Marker"), { KS (Qt::Key_Apostrophe) }, [this] { jumpToAdjacentMarker (true); });
+    add ("marker.previous", Category::markers, tr ("Go to &Previous Marker"), { KS (Qt::Key_Semicolon) },
+         [this] { jumpToAdjacentMarker (false); });
+
+    add ("analyze.loudness", Category::analyze, tr ("&Loudness Statistics..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_A) },
+         [this] { showLoudnessStatistics(); });
+    add ("analyze.resetMeters", Category::analyze, tr ("&Reset Meters"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_R) },
+         [this] { meterPanel->reset(); });
+
     add ("transport.playStop", Category::transport, tr ("&Play / Stop"), { KS (Qt::Key_Space) }, [this] { togglePlayback(); });
     add ("transport.stop", Category::transport, tr ("&Stop"), { KS (Qt::Key_K) }, [this] { engine.stop(); });
     add ("transport.start", Category::transport, tr ("Go to S&tart"), { KS (Qt::Key_Home) }, [this] { setCursor (0); });
@@ -230,27 +210,36 @@ void MainWindow::registerCommands()
     add ("view.zoomFit", Category::view, tr ("Zoom to &Fit"), { KS (Qt::CTRL | Qt::Key_0) }, [this] { waveform->zoomToFit(); });
     add ("view.zoomSelection", Category::view, tr ("Zoom to &Selection"), { KS (Qt::CTRL | Qt::Key_E) },
          [this] { waveform->zoomToSelection(); });
-    add ("view.history", Category::view, tr ("&History Panel"), { KS (Qt::CTRL | Qt::Key_H) }, [this]
+    add ("view.history", Category::view, tr ("&History Panel"), { KS (Qt::CTRL | Qt::Key_H) },
+         [this] { historyPanel->toggle(); lastPanel = historyPanel; });
+    add ("view.markers", Category::view, tr ("&Markers Panel"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_M) },
+         [this] { markerPanel->toggle(); lastPanel = markerPanel; });
+    add ("view.meters", Category::view, tr ("&Level Meters"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_L) },
+         [this] { metersPanel->toggle(); lastPanel = metersPanel; });
+    add ("view.popOut", Category::view, tr ("&Pop Out / Dock Panel"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_P) }, [this]
     {
-        // First press shows and focuses the panel; pressing again from inside it hides it.
-        if (historyDock->isVisible() && historyList->hasFocus())
-        {
-            historyDock->hide();
-            waveform->setFocus();
-        }
+        if (auto* p = focusedOrLastPanel())
+            p->setPoppedOut (! p->isPoppedOut());
         else
-        {
-            historyDock->show();
-            historyDock->raise();
-            historyList->setFocus (Qt::ShortcutFocusReason);
-        }
+            statusBar()->showMessage (tr ("Open a panel first, for example the meters with Ctrl+Shift+L"), 5000);
     });
-    add ("view.focusWaveform", Category::view, tr ("Focus &Waveform"), { KS (Qt::Key_F6) }, [this] { waveform->setFocus(); });
+    add ("view.spectral", Category::view, tr ("&Spectral Display"), { KS (Qt::SHIFT | Qt::Key_D) }, [this]
+    {
+        waveform->setSpectral (! waveform->isSpectral());
+        commands.action (QStringLiteral ("view.spectral"))->setChecked (waveform->isSpectral());
+    })->setCheckable (true);
+    add ("view.focusWaveform", Category::view, tr ("Focus &Waveform"), { KS (Qt::Key_F6) }, [this]
+    {
+        activateWindow();
+        waveform->setFocus();
+    });
 
     add ("options.audio", Category::options, tr ("&Audio Settings..."), { KS (Qt::CTRL | Qt::Key_Comma) },
          [this] { AudioSettingsDialog (engine, this).exec(); });
     add ("options.keymap", Category::options, tr ("&Keyboard Shortcuts..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_K) },
          [this] { KeymapDialog (commands, this).exec(); });
+    add ("options.theme", Category::options, tr ("&Theme..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_T) },
+         [this] { ThemeDialog (this).exec(); });
 
     add ("help.palette", Category::help, tr ("&Command Palette..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_P), KS (Qt::Key_F1) },
          [this] { CommandPalette (commands, this).exec(); });
@@ -266,7 +255,7 @@ void MainWindow::registerCommands()
 
 void MainWindow::buildMenus()
 {
-    // Menu titles carry & mnemonics, so Alt+F, Alt+E, Alt+P... open them.
+    // Menu titles carry & mnemonics, so Alt+F, Alt+E, Alt+P, Alt+M, Alt+A... open them.
     const QList<QPair<QString, QStringList>> layout {
         { tr ("&File"),      { "file.open", "file.save", "file.saveAs", "-", "file.close", "-", "file.quit" } },
         { tr ("&Edit"),      { "edit.undo", "edit.redo", "-", "edit.cut", "edit.copy", "edit.paste", "edit.delete", "-",
@@ -276,11 +265,14 @@ void MainWindow::buildMenus()
         { tr ("&Process"),   { "process.gain", "process.normalize", "-", "process.fadeIn", "process.fadeOut", "-",
                                "process.fadeShape.linear", "process.fadeShape.equalPower", "process.fadeShape.exponential",
                                "process.fadeShape.sCurve", "-", "process.reverse", "process.invert", "process.dcOffset" } },
+        { tr ("&Markers"),   { "marker.add", "marker.addRegion", "-", "marker.next", "marker.previous", "-", "view.markers" } },
+        { tr ("&Analyze"),   { "analyze.loudness", "-", "view.meters", "analyze.resetMeters", "-", "view.spectral" } },
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
-                               "view.history", "view.focusWaveform" } },
-        { tr ("&Options"),   { "options.audio", "options.keymap" } },
+                               "view.spectral", "-", "view.history", "view.markers", "view.meters", "view.popOut", "-",
+                               "view.focusWaveform" } },
+        { tr ("&Options"),   { "options.audio", "options.keymap", "options.theme" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
     };
 
@@ -297,21 +289,88 @@ void MainWindow::buildMenus()
     }
 }
 
-void MainWindow::buildHistoryPanel()
+void MainWindow::buildPanels()
 {
-    historyDock = new QDockWidget (tr ("History"), this);
-    historyDock->setObjectName (QStringLiteral ("historyPanel"));
-    historyList = new QListWidget (historyDock);
-    historyList->setAccessibleName (tr ("Undo history"));
-    historyList->installEventFilter (new NavigationKeyGuard (waveform, historyList));
-    historyDock->setWidget (historyList);
-    addDockWidget (Qt::RightDockWidgetArea, historyDock);
-    historyDock->hide();
+    setDockOptions (QMainWindow::AnimatedDocks | QMainWindow::AllowTabbedDocks);
 
+    historyList = new QListWidget (this);
+    historyList->setAccessibleName (tr ("Undo history"));
+    historyList->installEventFilter (new NavigationKeyGuard (waveform, {}, historyList));
     connect (historyList, &QListWidget::itemActivated, this, [this] (QListWidgetItem* item)
     {
         jumpToHistory (historyList->row (item));
     });
+
+    markerList = new MarkerList (this);
+    markerList->installEventFilter (new NavigationKeyGuard (waveform, { Qt::Key_Delete, Qt::Key_Backspace, Qt::Key_F2 }, markerList));
+    connect (markerList, &MarkerList::jumpRequested, this, &MainWindow::jumpToMarker);
+    connect (markerList, &MarkerList::renameRequested, this, &MainWindow::renameMarker);
+    connect (markerList, &MarkerList::deleteRequested, this, &MainWindow::deleteMarker);
+
+    meterPanel = new MeterPanel (this);
+
+    metersPanel = new DockablePanel (*this, QStringLiteral ("metersPanel"), tr ("Meters"), meterPanel, Qt::RightDockWidgetArea);
+    markerPanel = new DockablePanel (*this, QStringLiteral ("markersPanel"), tr ("Markers"), markerList, Qt::BottomDockWidgetArea);
+    historyPanel = new DockablePanel (*this, QStringLiteral ("historyPanel"), tr ("History"), historyList, Qt::RightDockWidgetArea);
+    panels = { metersPanel, markerPanel, historyPanel };
+}
+
+DockablePanel* MainWindow::focusedOrLastPanel() const
+{
+    for (auto* p : panels)
+        if (p->containsFocus())
+            return p;
+
+    return lastPanel != nullptr && lastPanel->isShown() ? lastPanel : nullptr;
+}
+
+namespace
+{
+    QSettings appSettings()
+    {
+        return QSettings (QStandardPaths::writableLocation (QStandardPaths::GenericConfigLocation)
+                              + QStringLiteral ("/" APP_ID "/settings.ini"), QSettings::IniFormat);
+    }
+}
+
+void MainWindow::restoreLayout()
+{
+    auto settings = appSettings();
+    restoreGeometry (settings.value (QStringLiteral ("window/geometry")).toByteArray());
+    restoreState (settings.value (QStringLiteral ("window/state")).toByteArray());
+
+    const bool spectral = settings.value (QStringLiteral ("view/spectral"), false).toBool();
+    waveform->setSpectral (spectral);
+    commands.action (QStringLiteral ("view.spectral"))->setChecked (spectral);
+
+    // Pop panels out again once the main window is on screen, so it opens first.
+    QTimer::singleShot (0, this, [this]
+    {
+        auto s = appSettings();
+        for (auto* p : panels)
+            if (s.value (QStringLiteral ("panels/%1/poppedOut").arg (p->id()), false).toBool())
+                p->setPoppedOut (true);
+
+        activateWindow();
+        waveform->setFocus();
+    });
+}
+
+void MainWindow::saveLayout()
+{
+    auto settings = appSettings();
+
+    for (auto* p : panels)
+    {
+        const bool popped = p->isPoppedOut() && p->isShown();
+        settings.setValue (QStringLiteral ("panels/%1/poppedOut").arg (p->id()), popped);
+        if (p->isPoppedOut())
+            p->hide();  // docks it back so the app can exit
+    }
+
+    settings.setValue (QStringLiteral ("window/geometry"), saveGeometry());
+    settings.setValue (QStringLiteral ("window/state"), saveState());
+    settings.setValue (QStringLiteral ("view/spectral"), waveform->isSpectral());
 }
 
 void MainWindow::openMenuBar()
@@ -343,6 +402,10 @@ void MainWindow::updateCommandStates()
         commands.action (QString::fromLatin1 (id))->setEnabled (sel);
 
     commands.action (QStringLiteral ("edit.paste"))->setEnabled (open && clipboard != nullptr);
+    commands.action (QStringLiteral ("marker.addRegion"))->setEnabled (sel);
+
+    for (const auto* id : { "marker.add", "marker.next", "marker.previous", "analyze.loudness" })
+        commands.action (QString::fromLatin1 (id))->setEnabled (open);
 
     auto* undoAction = commands.action (QStringLiteral ("edit.undo"));
     auto* redoAction = commands.action (QStringLiteral ("edit.redo"));
@@ -407,6 +470,8 @@ void MainWindow::refreshFromDocument (bool keepView)
     waveform->setSelection (selStart, selEnd);
     if (! engine.isPlaying())
         engine.setPositionFrames (cursor);
+
+    markerList->setMarkers (d ? doc.current().markers : std::vector<Marker>(), d ? d->sampleRate() : 48000.0);
 
     historyList->clear();
     if (doc.isOpen())
@@ -808,6 +873,150 @@ void MainWindow::simpleProcess (const QString& description, AudioDataPtr (*fn) (
 }
 
 //==============================================================================
+void MainWindow::commitMarkers (const QString& description, std::vector<Marker> markers)
+{
+    doc.apply (description.toStdString(), { doc.current().data, std::move (markers) });
+    refreshFromDocument (true);
+}
+
+void MainWindow::addMarker()
+{
+    if (data() == nullptr)
+        return;
+
+    auto markers = doc.current().markers;
+    Marker m;
+    m.id = doc.nextMarkerId();
+    m.start = m.end = cursor;
+    m.name = tr ("Marker %1").arg (m.id).toStdString();
+    markers.push_back (m);
+    commitMarkers (tr ("Add Marker"), std::move (markers));
+    statusBar()->showMessage (tr ("Added %1").arg (QString::fromStdString (m.name)), 3000);
+}
+
+void MainWindow::addRegion()
+{
+    if (! hasSelection())
+        return;
+
+    auto markers = doc.current().markers;
+    Marker m;
+    m.id = doc.nextMarkerId();
+    m.type = Marker::Type::region;
+    m.start = selStart;
+    m.end = selEnd;
+    m.name = tr ("Region %1").arg (m.id).toStdString();
+    markers.push_back (m);
+    commitMarkers (tr ("Add Region"), std::move (markers));
+    statusBar()->showMessage (tr ("Added %1").arg (QString::fromStdString (m.name)), 3000);
+}
+
+void MainWindow::jumpToMarker (int id)
+{
+    for (const auto& m : doc.current().markers)
+        if (m.id == id)
+        {
+            if (m.isRegion())
+                selectRange (m.start, m.end);
+            else
+                setCursor (m.start);
+            return;
+        }
+}
+
+void MainWindow::jumpToAdjacentMarker (bool forward)
+{
+    if (data() == nullptr)
+        return;
+
+    // Region ends count as stops too, so ; and ' walk through every boundary.
+    std::vector<Frame> stops;
+    for (const auto& m : doc.current().markers)
+    {
+        stops.push_back (m.start);
+        if (m.isRegion())
+            stops.push_back (m.end);
+    }
+
+    std::sort (stops.begin(), stops.end());
+    if (forward)
+    {
+        const auto it = std::upper_bound (stops.begin(), stops.end(), cursor);
+        if (it != stops.end())
+            setCursor (*it);
+    }
+    else
+    {
+        const auto it = std::lower_bound (stops.begin(), stops.end(), cursor);
+        if (it != stops.begin())
+            setCursor (*std::prev (it));
+    }
+}
+
+void MainWindow::renameMarker (int id)
+{
+    auto markers = doc.current().markers;
+    for (auto& m : markers)
+        if (m.id == id)
+        {
+            bool ok = false;
+            const auto name = QInputDialog::getText (this, tr ("Rename Marker"), tr ("&Name:"), QLineEdit::Normal,
+                                                     QString::fromStdString (m.name), &ok);
+            if (! ok || name.toStdString() == m.name)
+                return;
+
+            m.name = name.toStdString();
+            commitMarkers (tr ("Rename Marker"), std::move (markers));
+            markerList->setFocus();
+            return;
+        }
+}
+
+void MainWindow::deleteMarker (int id)
+{
+    auto markers = doc.current().markers;
+    const auto before = markers.size();
+    markers.erase (std::remove_if (markers.begin(), markers.end(), [id] (const Marker& m) { return m.id == id; }), markers.end());
+
+    if (markers.size() != before)
+    {
+        commitMarkers (tr ("Delete Marker"), std::move (markers));
+        markerList->setFocus();
+    }
+}
+
+void MainWindow::showLoudnessStatistics()
+{
+    const auto d = data();
+    if (d == nullptr)
+        return;
+
+    const auto [s, e] = processRange();
+    QApplication::setOverrideCursor (Qt::WaitCursor);
+    const auto r = dsp::measureLoudness (*d, s, e);
+    QApplication::restoreOverrideCursor();
+
+    auto fmt = [] (double v, const char* unit)
+    {
+        return v <= -199.0 ? QStringLiteral ("-inf %1").arg (QLatin1String (unit))
+                           : QStringLiteral ("%1 %2").arg (v, 0, 'f', 1).arg (QLatin1String (unit));
+    };
+
+    const auto what = hasSelection() ? tr ("Selection") : tr ("Whole file");
+    QMessageBox box (QMessageBox::Information, tr ("Loudness Statistics"),
+                     tr ("<b>%1</b> (%2)<table cellspacing=6>"
+                         "<tr><td>Integrated loudness</td><td align=right>%3</td></tr>"
+                         "<tr><td>Loudness range</td><td align=right>%4</td></tr>"
+                         "<tr><td>True peak</td><td align=right>%5</td></tr>"
+                         "<tr><td>Sample peak</td><td align=right>%6</td></tr></table>")
+                         .arg (what, formatTime ((double) (e - s) / d->sampleRate()), fmt (r.integratedLufs, "LUFS"),
+                               QStringLiteral ("%1 LU").arg (r.loudnessRange, 0, 'f', 1), fmt (r.truePeakDb, "dBTP"),
+                               fmt (r.samplePeakDb, "dBFS")),
+                     QMessageBox::Ok, this);
+    box.exec();
+}
+
+//==============================================================================
 void MainWindow::setCursor (Frame f)
 {
     const auto d = data();
@@ -883,5 +1092,6 @@ void MainWindow::closeEvent (QCloseEvent* e)
 
     engine.stop();
     commands.save();
+    saveLayout();
     e->accept();
 }

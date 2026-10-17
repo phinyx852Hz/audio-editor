@@ -30,7 +30,8 @@ License: AGPLv3 open source
 - **Also in place:** Arch + Ubuntu CI, an AUR-style PKGBUILD (`phinyx-git`), README.
 - **Decided:** AGPLv3; Qt 6 UI + JUCE engine; name PHINYX.
 - **Phase 1 Part A (done):** real editing. Selection, cut/copy/paste/delete/trim, insert silence, gain, normalize (peak or LUFS), fades with four shapes, reverse, invert, DC removal, unlimited undo with a History panel, Save/Save As to WAV/FLAC/AIFF/Ogg with bit depth and dither, WAV markers preserved, unsaved-changes prompts. Core tests (storage, undo, DSP, EBU loudness reference) run in CI.
-- **Next:** Phase 1 Part B (markers, meters, spectrogram, pop-out panels, themes), then Part C (Master Section with plugin slots).
+- **Phase 1 Part B (done):** markers and regions (keys, Markers panel, saved in WAV), live peak/true-peak/LUFS meters, loudness statistics, log-frequency spectral display, panels that pop out into their own Hyprland-tiled windows with the layout remembered, colour themes with third-party JSON themes (docs/themes.md).
+- **Next:** Phase 1 Part C (Master Section with plugin slots).
 
 ---
 

@@ -11,7 +11,9 @@
 #include <atomic>
 #include <memory>
 
-class QDockWidget;
+class DockablePanel;
+class MarkerList;
+class MeterPanel;
 class QLabel;
 class QListWidget;
 class WaveformView;
@@ -40,7 +42,10 @@ private:
 
     void registerCommands();
     void buildMenus();
-    void buildHistoryPanel();
+    void buildPanels();
+    void restoreLayout();
+    void saveLayout();
+    DockablePanel* focusedOrLastPanel() const;
     void updateStatus();
     void updateCommandStates();
     void updateTitle();
@@ -75,6 +80,17 @@ private:
     void fade (bool in);
     void simpleProcess (const QString& description, AudioDataPtr (*fn) (const AudioData&, Frame, Frame));
 
+    // Markers
+    void commitMarkers (const QString& description, std::vector<Marker>);
+    void addMarker();
+    void addRegion();
+    void jumpToMarker (int id);
+    void jumpToAdjacentMarker (bool forward);
+    void renameMarker (int id);
+    void deleteMarker (int id);
+
+    void showLoudnessStatistics();
+
     // Cursor and selection
     bool hasSelection() const { return selEnd > selStart; }
     void setCursor (Frame);
@@ -92,8 +108,14 @@ private:
     AudioDocument doc;
     WaveformView* waveform;
     QLabel* statusLabel;
-    QDockWidget* historyDock = nullptr;
     QListWidget* historyList = nullptr;
+    MarkerList* markerList = nullptr;
+    MeterPanel* meterPanel = nullptr;
+    DockablePanel* historyPanel = nullptr;
+    DockablePanel* markerPanel = nullptr;
+    DockablePanel* metersPanel = nullptr;
+    QList<DockablePanel*> panels;
+    DockablePanel* lastPanel = nullptr;
 
     Frame cursor = 0, selStart = 0, selEnd = 0, selAnchor = 0;
     AudioDataPtr clipboard;

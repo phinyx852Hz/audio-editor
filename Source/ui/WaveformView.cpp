@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "WaveformView.h"
+#include "Spectrogram.h"
+#include "Theme.h"
 
 #include <QMouseEvent>
 #include <QPainter>
 #include <QWheelEvent>
+#include <QtConcurrent/QtConcurrentRun>
 #include <algorithm>
 #include <cmath>
 
@@ -13,6 +16,36 @@ WaveformView::WaveformView (QWidget* parent) : QWidget (parent)
     setAccessibleName (tr ("Waveform"));
     setAccessibleDescription (tr ("Audio waveform. Arrow keys move the cursor, Shift+arrows select, Space plays."));
     setMinimumSize (320, 160);
+
+    connect (&spectrogramWatcher, &QFutureWatcher<QImage>::finished, this, [this]
+    {
+        spectrogram = spectrogramWatcher.result();
+        spectrogramKey = pendingKey;
+        update();  // paints, and asks again if the view changed meanwhile
+    });
+}
+
+void WaveformView::setSpectral (bool on)
+{
+    spectral = on;
+    update();
+}
+
+WaveformView::SpectrogramKey WaveformView::currentKey() const
+{
+    return { data.get(), viewStart, viewLength, size(), Theme::current().name };
+}
+
+void WaveformView::requestSpectrogram()
+{
+    if (! data || spectrogramWatcher.isRunning() || currentKey() == spectrogramKey)
+        return;
+
+    pendingKey = currentKey();
+    spectrogramWatcher.setFuture (QtConcurrent::run ([d = data, key = pendingKey, gradient = Theme::current().spectrogram]
+    {
+        return renderSpectrogram (*d, key.viewStart, key.viewLength, key.size, gradient);
+    }));
 }
 
 void WaveformView::setData (AudioDataPtr d, bool keepView)
@@ -42,6 +75,8 @@ void WaveformView::clear()
 {
     data.reset();
     markers.clear();
+    spectrogram = QImage();
+    spectrogramKey = {};
     viewStart = viewLength = 0.0;
     cursor = selStart = selEnd = 0;
     update();
@@ -144,7 +179,8 @@ void WaveformView::paintEvent (QPaintEvent*)
 {
     QPainter g (this);
     const auto pal = palette();
-    g.fillRect (rect(), pal.color (QPalette::Base));
+    const auto& theme = Theme::current();
+    g.fillRect (rect(), theme.color (QStringLiteral ("waveformBackground")));
 
     if (! data || data->numChannels() == 0)
     {
@@ -159,77 +195,96 @@ void WaveformView::paintEvent (QPaintEvent*)
         const auto numChannels = d.numChannels();
         const auto laneHeight = (double) height() / numChannels;
 
-        if (selEnd > selStart)
+        if (spectral)
         {
-            auto sel = pal.color (QPalette::Highlight);
-            sel.setAlpha (60);
-            const auto x1 = frameToX (selStart), x2 = frameToX (selEnd);
-            g.fillRect (QRectF (x1, 0, std::max (1.0, x2 - x1), height()), sel);
+            requestSpectrogram();
+            if (! spectrogram.isNull())
+                g.drawImage (rect(), spectrogram);  // stretched while a fresh one renders
+            else
+            {
+                g.setPen (pal.color (QPalette::PlaceholderText));
+                g.drawText (rect(), Qt::AlignCenter, tr ("Computing spectrogram..."));
+            }
+        }
+        else
+        {
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                const auto mid = laneHeight * (ch + 0.5);
+                const auto half = laneHeight * 0.45;
+
+                g.setPen (theme.color (QStringLiteral ("centerLine")));
+                g.drawLine (QPointF (0, mid), QPointF (width(), mid));
+                if (ch > 0)
+                    g.drawLine (QPointF (0, laneHeight * ch), QPointF (width(), laneHeight * ch));
+
+                g.setPen (theme.color (QStringLiteral ("waveform")));
+                const auto framesPerPixel = viewLength / std::max (1, width());
+
+                if (framesPerPixel < 1.0)
+                {
+                    // Zoomed in past one frame per pixel: draw the samples as a line.
+                    const auto first = (Frame) std::floor (viewStart);
+                    const auto count = (int) std::ceil (viewLength) + 2;
+                    std::vector<std::vector<float>> all ((size_t) numChannels, std::vector<float> ((size_t) count));
+                    std::vector<float*> ptrs;
+                    for (auto& c : all)
+                        ptrs.push_back (c.data());
+
+                    d.read (first, count, ptrs.data());
+                    QPointF prev;
+                    for (int i = 0; i < count && first + i <= d.length(); ++i)
+                    {
+                        const QPointF p (frameToX (first + i), mid - all[(size_t) ch][(size_t) i] * half);
+                        if (i > 0)
+                            g.drawLine (prev, p);
+                        prev = p;
+                    }
+                    continue;
+                }
+
+                for (int x = 0; x < width(); ++x)
+                {
+                    const auto s = (Frame) (viewStart + x * framesPerPixel);
+                    const auto e = std::max (s + 1, (Frame) (viewStart + (x + 1) * framesPerPixel));
+                    if (s >= d.length())
+                        break;
+
+                    float lo = 0.0f, hi = 0.0f;
+                    d.minMax (ch, s, std::min (e, d.length()), lo, hi);
+                    g.drawLine (QPointF (x, mid - hi * half), QPointF (x, mid - lo * half));
+                }
+            }
         }
 
-        for (int ch = 0; ch < numChannels; ++ch)
+        if (selEnd > selStart)
         {
-            const auto mid = laneHeight * (ch + 0.5);
-            const auto half = laneHeight * 0.45;
-
-            g.setPen (pal.color (QPalette::Mid));
-            g.drawLine (QPointF (0, mid), QPointF (width(), mid));
-            if (ch > 0)
-                g.drawLine (QPointF (0, laneHeight * ch), QPointF (width(), laneHeight * ch));
-
-            g.setPen (pal.color (QPalette::Highlight));
-            const auto framesPerPixel = viewLength / std::max (1, width());
-
-            if (framesPerPixel < 1.0)
-            {
-                // Zoomed in past one frame per pixel: draw the samples as a line.
-                const auto first = (Frame) std::floor (viewStart);
-                const auto count = (int) std::ceil (viewLength) + 2;
-                std::vector<std::vector<float>> all ((size_t) numChannels, std::vector<float> ((size_t) count));
-                std::vector<float*> ptrs;
-                for (auto& c : all)
-                    ptrs.push_back (c.data());
-
-                d.read (first, count, ptrs.data());
-                QPointF prev;
-                for (int i = 0; i < count && first + i <= d.length(); ++i)
-                {
-                    const QPointF p (frameToX (first + i), mid - all[(size_t) ch][(size_t) i] * half);
-                    if (i > 0)
-                        g.drawLine (prev, p);
-                    prev = p;
-                }
-                continue;
-            }
-
-            for (int x = 0; x < width(); ++x)
-            {
-                const auto s = (Frame) (viewStart + x * framesPerPixel);
-                const auto e = std::max (s + 1, (Frame) (viewStart + (x + 1) * framesPerPixel));
-                if (s >= d.length())
-                    break;
-
-                float lo = 0.0f, hi = 0.0f;
-                d.minMax (ch, s, std::min (e, d.length()), lo, hi);
-                g.drawLine (QPointF (x, mid - hi * half), QPointF (x, mid - lo * half));
-            }
+            const auto x1 = frameToX (selStart), x2 = frameToX (selEnd);
+            g.fillRect (QRectF (x1, 0, std::max (1.0, x2 - x1), height()), theme.color (QStringLiteral ("selection")));
         }
 
         for (const auto& m : markers)
         {
             const auto x = frameToX (m.start);
-            auto colour = pal.color (QPalette::Link);
-            g.setPen (QPen (colour, 1.0, m.isRegion() ? Qt::DashLine : Qt::SolidLine));
-            g.drawLine (QPointF (x, 0), QPointF (x, height()));
+            const auto colour = theme.color (m.isRegion() ? QStringLiteral ("region") : QStringLiteral ("marker"));
+
             if (m.isRegion())
             {
                 const auto x2 = frameToX (m.end);
+                auto band = colour;
+                band.setAlpha (40);
+                g.fillRect (QRectF (x, 0, x2 - x, 16), band);
+                g.setPen (QPen (colour, 1.0, Qt::DashLine));
                 g.drawLine (QPointF (x2, 0), QPointF (x2, height()));
             }
+
+            g.setPen (QPen (colour, 1.0, m.isRegion() ? Qt::DashLine : Qt::SolidLine));
+            g.drawLine (QPointF (x, 0), QPointF (x, height()));
+            g.setPen (colour);
             g.drawText (QPointF (x + 3, 12), QString::fromStdString (m.name));
         }
 
-        g.setPen (QPen (pal.color (QPalette::BrightText), 1.0));
+        g.setPen (QPen (theme.color (QStringLiteral ("cursor")), 1.0));
         const auto cx = frameToX (cursor);
         g.drawLine (QPointF (cx, 0), QPointF (cx, height()));
     }

@@ -1,12 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "Dialogs.h"
 #include "CommandRegistry.h"
+#include "Theme.h"
 #include "../engine/AudioEngine.h"
 
 #include <QCheckBox>
 #include <QComboBox>
 #include <QCoreApplication>
+#include <QDesktopServices>
 #include <QDialogButtonBox>
+#include <QDir>
+#include <QListWidget>
+#include <QUrl>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QHeaderView>
@@ -379,3 +384,94 @@ NormalizeDialog::NormalizeDialog (QWidget* parent)
 
 NormalizeDialog::Mode NormalizeDialog::mode() const { return modeBox->currentIndex() == 0 ? Mode::peak : Mode::loudness; }
 double NormalizeDialog::target() const              { return targetBox->value(); }
+
+//==============================================================================
+ThemeDialog::ThemeDialog (QWidget* parent)
+    : QDialog (parent), list (new QListWidget (this)), info (new QLabel (this)), originalName (Theme::current().name)
+{
+    setWindowTitle (tr ("Theme"));
+    resize (460, 360);
+    list->setAccessibleName (tr ("Themes"));
+    info->setWordWrap (true);
+    info->setTextInteractionFlags (Qt::TextSelectableByMouse);
+
+    auto* buttons = new QDialogButtonBox (QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    auto* folder = buttons->addButton (tr ("Open Themes &Folder"), QDialogButtonBox::ActionRole);
+    auto* refresh = buttons->addButton (tr ("Re&load"), QDialogButtonBox::ActionRole);
+    for (auto* b : buttons->buttons())
+        if (auto* push = qobject_cast<QPushButton*> (b))
+            push->setAutoDefault (false);
+
+    auto* label = new QLabel (tr ("&Themes (add your own as JSON files in the themes folder):"), this);
+    label->setBuddy (list);
+    label->setWordWrap (true);
+
+    auto* layout = new QVBoxLayout (this);
+    layout->addWidget (label);
+    layout->addWidget (list, 1);
+    layout->addWidget (info);
+    layout->addWidget (buttons);
+
+    connect (list, &QListWidget::currentRowChanged, this, &ThemeDialog::preview);
+    connect (list, &QListWidget::itemActivated, this, &QDialog::accept);
+    connect (buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect (buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    connect (refresh, &QPushButton::clicked, this, &ThemeDialog::reload);
+    connect (folder, &QPushButton::clicked, this, []
+    {
+        QDir().mkpath (Theme::userThemeFolder());
+        QDesktopServices::openUrl (QUrl::fromLocalFile (Theme::userThemeFolder()));
+    });
+
+    reload();
+    list->setFocus();
+}
+
+void ThemeDialog::reload()
+{
+    QStringList errors;
+    const auto themes = Theme::available (&errors);
+    const auto selected = list->currentItem() != nullptr ? list->currentItem()->text() : Theme::current().name;
+
+    const QSignalBlocker blocker (list);
+    list->clear();
+    for (const auto& t : themes)
+    {
+        list->addItem (t.name);
+        if (t.name == selected)
+            list->setCurrentRow (list->count() - 1);
+    }
+
+    if (list->currentRow() < 0)
+        list->setCurrentRow (0);
+
+    auto text = tr ("Themes folder: %1").arg (Theme::userThemeFolder());
+    if (! errors.isEmpty())
+        text += QStringLiteral ("\n") + tr ("Skipped: %1").arg (errors.join (QStringLiteral ("; ")));
+    info->setText (text);
+}
+
+void ThemeDialog::preview()
+{
+    if (list->currentItem() == nullptr)
+        return;
+
+    for (const auto& t : Theme::available())
+        if (t.name == list->currentItem()->text())
+        {
+            Theme::apply (t);
+            return;
+        }
+}
+
+void ThemeDialog::done (int result)
+{
+    if (result == QDialog::Accepted)
+        Theme::saveName (Theme::current().name);
+    else
+        for (const auto& t : Theme::available())
+            if (t.name == originalName)
+                Theme::apply (t);
+
+    QDialog::done (result);
+}

@@ -3,6 +3,7 @@
 #include "../Source/core/AudioData.h"
 #include "../Source/core/AudioDocument.h"
 #include "../Source/core/Dsp.h"
+#include "../Source/core/Fft.h"
 
 #include <cmath>
 #include <cstdio>
@@ -167,6 +168,19 @@ namespace
         auto cleaned = dsp::removeDcOffset (*offset, 0, offset->length());
         check (near (sampleAt (*cleaned, 0, 24000), 0.0, 1e-4), "DC removed");
     }
+
+    void testSpectrum()
+    {
+        // A full-scale sine centred on bin 64 of a 1024-point analysis reads about 0 dB there.
+        SpectrumAnalyzer analyzer (10);
+        std::vector<float> input (1024), out ((size_t) analyzer.numBins());
+        for (int i = 0; i < 1024; ++i)
+            input[(size_t) i] = (float) std::sin (2.0 * M_PI * 64.0 * i / 1024.0);
+
+        analyzer.magnitudesDb (input.data(), out.data());
+        check (near (out[64], 0.0, 0.1), "sine bin level " + std::to_string (out[64]));
+        check (out[200] < -100.0f, "far bins are quiet");
+    }
 }
 
 int main()
@@ -174,6 +188,7 @@ int main()
     testStorage();
     testDocument();
     testDsp();
+    testSpectrum();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");

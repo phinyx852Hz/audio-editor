@@ -3,7 +3,7 @@
 A keyboard-first audio editor and mastering suite for Linux, combining the best of
 Adobe Audition, Sound Forge and WaveLab. Optimized for Arch Linux, Omarchy and Hyprland.
 
-Status: Phase 1 in progress. Basic editing works; markers, meters, spectrogram and the Master Section come next. See the full plan in [docs/plan.md](docs/plan.md).
+Status: Phase 1 in progress. Editing, markers, meters, spectrogram and themes work; the Master Section comes next. See the full plan in [docs/plan.md](docs/plan.md).
 
 Built with a Qt 6 interface (native Wayland) on top of a JUCE 8 audio engine.
 
@@ -14,9 +14,14 @@ Built with a Qt 6 interface (native Wayland) on top of a JUCE 8 audio engine.
 - Editing: cut/copy/paste/delete (`Ctrl+X`/`C`/`V`, `Del`), trim to selection (`Ctrl+T`), insert silence (`Ctrl+Alt+S`)
 - Processing (on the selection, or the whole file when nothing is selected): gain (`Ctrl+G`), normalize to peak dBFS or integrated LUFS (`Ctrl+Shift+N`), fade in/out with four curve shapes (`Ctrl+Shift+I`/`O`), reverse (`Ctrl+Shift+R`), invert (`Ctrl+Alt+I`), DC offset removal (`Ctrl+Alt+D`)
 - Unlimited undo/redo (`Ctrl+Z`, `Ctrl+Shift+Z`) and a History panel (`Ctrl+H`, `Enter` jumps to a step, `Esc` returns to the waveform); you are asked before unsaved changes are lost
+- Markers and regions: `M` adds a marker at the cursor, `Shift+M` makes a region from the selection, `'` and `;` jump to the next/previous marker. The Markers panel (`Ctrl+Shift+M`) lists them: `Enter` jumps, `F2` renames, `Del` removes. Markers are saved inside WAV files.
+- Spectral display (`Shift+D`): log-frequency spectrogram of every channel, still fully editable
+- Meters (`Ctrl+Shift+L`): sample peak bars with peak hold, true peak, and momentary/short-term/integrated loudness (ITU-R BS.1770 / EBU R128) during playback; `Ctrl+Alt+R` resets them. Loudness statistics of the selection or file (`Ctrl+Shift+A`): integrated LUFS, loudness range, true peak.
+- Panels (Meters, Markers, History) dock in the window or pop out into their own window with `Ctrl+Alt+P`, so Hyprland tiles them like any other window; all shortcuts work there too. The layout is remembered.
+- Themes (`Ctrl+Shift+T`): PHINYX Dark and Light built in, plus your own JSON themes in `~/.local/share/phinyx/themes` (see [docs/themes.md](docs/themes.md))
 - Every action is a command with a keybinding:
   - `Ctrl+Shift+P` or `F1`: command palette, searches every command and shows its shortcut
-  - `F10` or `Alt+F/E/P/T/V/O/H`: open menus, then arrow keys
+  - `F10` or `Alt+F/E/P/M/A/T/V/O/H`: open menus, then arrow keys
   - `Ctrl+Shift+K`: change any key binding, with conflict detection; saved to `~/.config/phinyx/keymap.ini`
   - `Ctrl+,`: choose the audio output device
 
@@ -37,7 +42,8 @@ To install system wide instead, use the PKGBUILD: `cd packaging/arch && makepkg 
 
 ## Hyprland
 PHINYX runs natively on Wayland. Its window class is `phinyx`, so you can target it in `hyprland.conf`, e.g.
-`windowrulev2 = workspace 3, class:^(phinyx)$`.
+`windowrulev2 = workspace 3, class:^(phinyx)$`. Popped-out panels share that class and have titles like
+`Meters - PHINYX`, so you can place them separately, e.g. `windowrulev2 = monitor 1, title:^(Meters - PHINYX)$`.
 
 ## License
 GNU Affero General Public License v3.0 only. See `LICENSE`. JUCE is used under its AGPLv3 license; Qt under the LGPLv3.

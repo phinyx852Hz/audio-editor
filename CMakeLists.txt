@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 cmake_minimum_required(VERSION 3.22)
 
-project(Phinyx VERSION 0.3.0 LANGUAGES C CXX)
+project(Phinyx VERSION 0.4.0 LANGUAGES C CXX)
 
 # The app's names live here so a rename touches one place.
 set(APP_ID "phinyx" CACHE STRING "Lowercase id: binary, config folder, Wayland app-id")
@@ -41,10 +41,14 @@ target_sources(${APP_ID} PRIVATE
     Source/core/AudioData.cpp
     Source/core/AudioDocument.cpp
     Source/core/Dsp.cpp
+    Source/core/Fft.cpp
     Source/engine/AudioEngine.cpp
     Source/ui/CommandRegistry.cpp
     Source/ui/Dialogs.cpp
     Source/ui/MainWindow.cpp
+    Source/ui/Panels.cpp
+    Source/ui/Spectrogram.cpp
+    Source/ui/Theme.cpp
     Source/ui/WaveformView.cpp)
 
 target_compile_definitions(${APP_ID} PRIVATE
@@ -80,6 +84,7 @@ if(PHINYX_BUILD_TESTS)
         tests/CoreTests.cpp
         Source/core/AudioData.cpp
         Source/core/AudioDocument.cpp
-        Source/core/Dsp.cpp)
+        Source/core/Dsp.cpp
+        Source/core/Fft.cpp)
     add_test(NAME core COMMAND phinyx-core-tests)
 endif()

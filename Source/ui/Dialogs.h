@@ -99,3 +99,22 @@ private:
     QComboBox* modeBox;
     class QDoubleSpinBox* targetBox;
 };
+
+// Choose a colour theme. Moving through the list previews it; Esc restores the old one.
+class ThemeDialog final : public QDialog
+{
+    Q_OBJECT
+
+public:
+    explicit ThemeDialog (QWidget* parent);
+
+    void done (int result) override;
+
+private:
+    void reload();
+    void preview();
+
+    class QListWidget* list;
+    QLabel* info;
+    QString originalName;
+};
