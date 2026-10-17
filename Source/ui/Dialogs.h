@@ -100,6 +100,24 @@ private:
     class QDoubleSpinBox* targetBox;
 };
 
+// Personal colours for the waveform display, on top of the theme. Changes show
+// immediately; Cancel or Esc puts the previous colours back.
+class WaveformColorsDialog final : public QDialog
+{
+    Q_OBJECT
+
+public:
+    explicit WaveformColorsDialog (QWidget* parent);
+
+    void done (int result) override;
+
+private:
+    void refresh();
+
+    QMap<QString, QColor> original;
+    QList<QPair<QString, class QPushButton*>> swatches;
+};
+
 // Choose a colour theme. Moving through the list previews it; Esc restores the old one.
 class ThemeDialog final : public QDialog
 {

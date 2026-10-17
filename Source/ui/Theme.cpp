@@ -40,6 +40,12 @@ namespace
         return theme;
     }
 
+    Theme& baseTheme()
+    {
+        static Theme theme = Theme::builtIns().first();
+        return theme;
+    }
+
     Theme makeTheme (const QString& name, bool dark, std::initializer_list<std::pair<const char*, const char*>> colors,
                      std::initializer_list<const char*> spectrogram)
     {
@@ -243,8 +249,13 @@ namespace
     }
 }
 
-void Theme::apply (const Theme& theme)
+void Theme::apply (const Theme& chosen)
 {
+    baseTheme() = chosen;
+    auto theme = chosen;
+    const auto overrides = colorOverrides();
+    for (auto it = overrides.begin(); it != overrides.end(); ++it)
+        theme.colors.insert (it.key(), it.value());
     currentTheme() = theme;
 
     if (qApp->style()->name().compare (QStringLiteral ("fusion"), Qt::CaseInsensitive) != 0)
@@ -273,6 +284,9 @@ void Theme::apply (const Theme& theme)
     p.setColor (QPalette::Disabled, QPalette::WindowText, c ("disabledText"));
     QApplication::setPalette (p);
     updateTranslucentWindows();
+
+    for (auto* w : QApplication::topLevelWidgets())
+        w->update();
 }
 
 QString Theme::savedName()
@@ -307,4 +321,52 @@ void Theme::makeTranslucent (QWidget* window)
     window->setAttribute (Qt::WA_TranslucentBackground);
     window->setAutoFillBackground (true);
     window->setPalette (translucentPalette());
+}
+
+const Theme& Theme::base() { return baseTheme(); }
+
+QString Theme::formatColor (const QColor& c)
+{
+    auto text = c.name (QColor::HexRgb);
+    if (c.alpha() != 255)
+        text += QStringLiteral ("%1").arg (c.alpha(), 2, 16, QLatin1Char ('0'));
+    return text.toUpper();
+}
+
+QMap<QString, QColor> Theme::colorOverrides()
+{
+    QSettings settings (settingsPath(), QSettings::IniFormat);
+    settings.beginGroup (QStringLiteral ("colors"));
+    QMap<QString, QColor> result;
+    const auto keys = colorKeys();
+    for (const auto& key : settings.childKeys())
+    {
+        const auto c = parseColor (settings.value (key).toString());
+        if (keys.contains (key) && c.isValid())
+            result.insert (key, c);
+    }
+    return result;
+}
+
+void Theme::setColorOverrides (const QMap<QString, QColor>& overrides)
+{
+    {
+        QSettings settings (settingsPath(), QSettings::IniFormat);
+        settings.remove (QStringLiteral ("colors"));
+        settings.beginGroup (QStringLiteral ("colors"));
+        for (auto it = overrides.begin(); it != overrides.end(); ++it)
+            if (it.value().isValid())
+                settings.setValue (it.key(), formatColor (it.value()));
+    }
+    apply (Theme (baseTheme()));
+}
+
+void Theme::setColorOverride (const QString& key, const QColor& colour)
+{
+    auto overrides = colorOverrides();
+    if (colour.isValid())
+        overrides.insert (key, colour);
+    else
+        overrides.remove (key);
+    setColorOverrides (overrides);
 }

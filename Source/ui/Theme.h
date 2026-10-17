@@ -37,6 +37,14 @@ struct Theme
     static QString savedName();
     static void saveName (const QString&);
 
+    // Personal colour choices (View > Waveform Colors) that apply on top of any theme.
+    // Stored in settings.ini; an invalid colour removes the override.
+    static const Theme& base();  // the chosen theme without personal colours
+    static QMap<QString, QColor> colorOverrides();
+    static void setColorOverride (const QString& key, const QColor&);
+    static void setColorOverrides (const QMap<QString, QColor>&);
+    static QString formatColor (const QColor&);  // #RRGGBBAA, or #RRGGBB when opaque
+
     // Window opacity, from minOpacity to 1. Backgrounds of translucent windows
     // are drawn with this alpha; text and waveforms stay solid. The compositor's
     // own opacity (for example a Hyprland window rule) still applies on top.

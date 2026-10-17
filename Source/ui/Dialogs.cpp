@@ -5,7 +5,11 @@
 #include "../engine/AudioEngine.h"
 
 #include <QCheckBox>
+#include <QColorDialog>
 #include <QComboBox>
+#include <QGridLayout>
+#include <QPainter>
+#include <QPixmap>
 #include <QCoreApplication>
 #include <QDesktopServices>
 #include <QDialogButtonBox>
@@ -384,6 +388,115 @@ NormalizeDialog::NormalizeDialog (QWidget* parent)
 
 NormalizeDialog::Mode NormalizeDialog::mode() const { return modeBox->currentIndex() == 0 ? Mode::peak : Mode::loudness; }
 double NormalizeDialog::target() const              { return targetBox->value(); }
+
+//==============================================================================
+WaveformColorsDialog::WaveformColorsDialog (QWidget* parent)
+    : QDialog (parent), original (Theme::colorOverrides())
+{
+    setWindowTitle (tr ("Waveform Colors"));
+
+    const QList<QPair<QString, QString>> rows {
+        { QStringLiteral ("waveform"),           tr ("&Waveform") },
+        { QStringLiteral ("waveformBackground"), tr ("&Background") },
+        { QStringLiteral ("selection"),          tr ("&Selection") },
+        { QStringLiteral ("cursor"),             tr ("&Cursor") },
+        { QStringLiteral ("centerLine"),         tr ("Center &line") },
+        { QStringLiteral ("marker"),             tr ("&Markers") },
+        { QStringLiteral ("region"),             tr ("&Regions") },
+    };
+
+    auto* grid = new QGridLayout;
+    for (int i = 0; i < rows.size(); ++i)
+    {
+        const auto key = rows[i].first;
+        const auto name = rows[i].second;
+
+        auto* label = new QLabel (name, this);
+        auto* swatch = new QPushButton (this);
+        swatch->setAutoDefault (false);
+        swatch->setMinimumWidth (170);
+        label->setBuddy (swatch);
+        auto* reset = new QPushButton (tr ("Theme default"), this);
+        reset->setAutoDefault (false);
+        reset->setAccessibleName (tr ("Reset %1 to the theme's colour").arg (QString (name).remove (QLatin1Char ('&'))));
+
+        grid->addWidget (label, i, 0);
+        grid->addWidget (swatch, i, 1);
+        grid->addWidget (reset, i, 2);
+        swatches.push_back ({ key, swatch });
+
+        connect (swatch, &QPushButton::clicked, this, [this, key, name]
+        {
+            const auto chosen = QColorDialog::getColor (Theme::current().color (key), this,
+                                                        QString (name).remove (QLatin1Char ('&')),
+                                                        QColorDialog::ShowAlphaChannel);
+            if (chosen.isValid())
+            {
+                Theme::setColorOverride (key, chosen);
+                refresh();
+            }
+        });
+        connect (reset, &QPushButton::clicked, this, [this, key]
+        {
+            Theme::setColorOverride (key, {});
+            refresh();
+        });
+    }
+
+    auto* buttons = new QDialogButtonBox (QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    auto* resetAll = buttons->addButton (tr ("Reset &All"), QDialogButtonBox::ResetRole);
+    for (auto* b : buttons->buttons())
+        if (auto* push = qobject_cast<QPushButton*> (b))
+            push->setAutoDefault (false);
+
+    auto* note = new QLabel (tr ("Press Enter or Space on a colour to change it. These colours apply on top of any theme."), this);
+    note->setWordWrap (true);
+
+    auto* layout = new QVBoxLayout (this);
+    layout->addLayout (grid);
+    layout->addWidget (note);
+    layout->addWidget (buttons);
+
+    connect (buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect (buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    connect (resetAll, &QPushButton::clicked, this, [this]
+    {
+        auto overrides = Theme::colorOverrides();
+        for (const auto& s : swatches)
+            overrides.remove (s.first);
+        Theme::setColorOverrides (overrides);
+        refresh();
+    });
+
+    refresh();
+    swatches.first().second->setFocus();
+}
+
+void WaveformColorsDialog::refresh()
+{
+    const auto overrides = Theme::colorOverrides();
+    for (const auto& [key, swatch] : swatches)
+    {
+        const auto c = Theme::current().color (key);
+        QPixmap chip (28, 14);
+        chip.fill (Qt::transparent);
+        QPainter g (&chip);
+        g.fillRect (chip.rect(), Qt::black);
+        g.fillRect (chip.rect(), c);
+        g.end();
+        swatch->setIcon (chip);
+        swatch->setIconSize (chip.size());
+        swatch->setText (Theme::formatColor (c) + (overrides.contains (key) ? QString() : tr (" (theme)")));
+    }
+}
+
+void WaveformColorsDialog::done (int result)
+{
+    if (result != QDialog::Accepted)
+        Theme::setColorOverrides (original);
+
+    QDialog::done (result);
+}
 
 //==============================================================================
 ThemeDialog::ThemeDialog (QWidget* parent)

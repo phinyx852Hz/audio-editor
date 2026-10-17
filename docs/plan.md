@@ -33,7 +33,7 @@ License: AGPLv3 open source
 - **Phase 1 Part A (done):** real editing. Selection, cut/copy/paste/delete/trim, insert silence, gain, normalize (peak or LUFS), fades with four shapes, reverse, invert, DC removal, unlimited undo with a History panel, Save/Save As to WAV/FLAC/AIFF/Ogg with bit depth and dither, WAV markers preserved, unsaved-changes prompts. Core tests (storage, undo, DSP, EBU loudness reference) run in CI.
 - **Phase 1 Part B (done):** markers and regions (keys, Markers panel, saved in WAV), live peak/true-peak/LUFS meters, loudness statistics, log-frequency spectral display, panels that pop out into their own Hyprland-tiled windows with the layout remembered, colour themes with third-party JSON themes (docs/themes.md).
 - **Phase 1 Part C (done):** Master Section with 8 plugin slots (VST3, LV2, LADSPA via JUCE hosting), master gain and bypass, keyboard parameter editor plus the plugin's own window under XWayland, render in place (undoable) or to a new file with dither, latency compensated, chain remembered. Verified with LSP plugins.
-- **Phase 1 status:** core done. Still open from the Phase 1 list: slot solo, Master Section presets, split waveform/spectral view and FFT settings. Added after the owner's first Omarchy test: Delete shows a hint when nothing is selected, window opacity control. Next UI candidate: the Ableton/Bitwig-style device chain row (2.4). Not yet tried on real audio hardware or a real Hyprland session (next: the owner's Omarchy test).
+- **Phase 1 status:** core done. Still open from the Phase 1 list: slot solo, Master Section presets, split waveform/spectral view and FFT settings. Added after the owner's first Omarchy test: Delete shows a hint when nothing is selected, window opacity control, waveform colour picker. Next UI candidate: the Ableton/Bitwig-style device chain row (2.4). Not yet tried on real audio hardware or a real Hyprland session (next: the owner's Omarchy test).
 - **Next:** Phase 2 (spectral editing and repair, plan section 5).
 
 ---
@@ -246,6 +246,7 @@ Every menu item and every process (edit, effect, analysis, render, batch) is a r
 - P1 Theme manager: preview, switch instantly without restart, set per-workspace themes
 - P1 Built-in theme tweaker that edits values live and saves as a new theme, so users can make themes without writing files by hand
 - P1 Published, versioned theme format spec and a starter template so others can build themes; validation with clear errors and fallback to defaults for missing values
+- P0 Waveform colour picker (done 2026-10-17): Options > Waveform Colors (`Ctrl+Shift+W`) sets personal waveform, background, selection, cursor, centre line, marker and region colours on top of any theme
 - P0 Window opacity control (done 2026-10-17): slider in the status bar and View > Window Opacity, `Ctrl+Alt+-` / `Ctrl+Alt+=`, remembered; works with the compositor's own opacity
 - P2 Scriptable layout (WALTER-style in REAPER) for moving and resizing elements, and a theme repository/browser
 

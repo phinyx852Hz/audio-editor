@@ -285,6 +285,8 @@ void MainWindow::registerCommands()
          [this] { AudioSettingsDialog (engine, this).exec(); });
     add ("options.keymap", Category::options, tr ("&Keyboard Shortcuts..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_K) },
          [this] { KeymapDialog (commands, this).exec(); });
+    add ("options.waveformColors", Category::options, tr ("&Waveform Colors..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_W) },
+         [this] { WaveformColorsDialog (this).exec(); });
     add ("options.theme", Category::options, tr ("&Theme..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_T) },
          [this] { ThemeDialog (this).exec(); });
 
@@ -320,7 +322,7 @@ void MainWindow::buildMenus()
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
                                "view.spectral", "-", "view.master", "view.history", "view.markers", "view.meters", "view.popOut", "view.resetLayout", "-",
                                "opacity", "-", "view.focusWaveform" } },
-        { tr ("&Options"),   { "options.audio", "options.keymap", "options.theme" } },
+        { tr ("&Options"),   { "options.audio", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
     };
 
