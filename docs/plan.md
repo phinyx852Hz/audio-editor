@@ -33,7 +33,7 @@ License: AGPLv3 open source
 - **Phase 1 Part A (done):** real editing. Selection, cut/copy/paste/delete/trim, insert silence, gain, normalize (peak or LUFS), fades with four shapes, reverse, invert, DC removal, unlimited undo with a History panel, Save/Save As to WAV/FLAC/AIFF/Ogg with bit depth and dither, WAV markers preserved, unsaved-changes prompts. Core tests (storage, undo, DSP, EBU loudness reference) run in CI.
 - **Phase 1 Part B (done):** markers and regions (keys, Markers panel, saved in WAV), live peak/true-peak/LUFS meters, loudness statistics, log-frequency spectral display, panels that pop out into their own Hyprland-tiled windows with the layout remembered, colour themes with third-party JSON themes (docs/themes.md).
 - **Phase 1 Part C (done):** Master Section with 8 plugin slots (VST3, LV2, LADSPA via JUCE hosting), master gain and bypass, keyboard parameter editor plus the plugin's own window under XWayland, render in place (undoable) or to a new file with dither, latency compensated, chain remembered. Verified with LSP plugins.
-- **Phase 1 status:** core done. Still open from the Phase 1 list: slot solo, Master Section presets, split waveform/spectral view and FFT settings. Not yet tried on real audio hardware or a real Hyprland session (next: the owner's Omarchy test).
+- **Phase 1 status:** core done. Still open from the Phase 1 list: slot solo, Master Section presets, split waveform/spectral view and FFT settings. Added after the owner's first Omarchy test: Delete shows a hint when nothing is selected, window opacity control. Next UI candidate: the Ableton/Bitwig-style device chain row (2.4). Not yet tried on real audio hardware or a real Hyprland session (next: the owner's Omarchy test).
 - **Next:** Phase 2 (spectral editing and repair, plan section 5).
 
 ---
@@ -113,6 +113,11 @@ Decided: **no mixer** (no buses, sends or mixing console). The app stays an edit
   - Presets for the whole section, A/B/C/D snapshots, chain import/export shared with batch
   - Fully keyboard driven: move between slots with arrows, `Enter` opens the plugin, keys for bypass, solo, move up/down, insert, remove
   - **Pops out to its own window** with one command or button, so on Hyprland it lands in its own tile (see 2.10)
+- P1 **Device chain row like Ableton and Bitwig** (requested 2026-10-17): a strip along the bottom of the main window showing the chain left to right as device cards, signal flowing left to right into the master gain and meters
+  - Each card: plugin name, on/off, solo, a few main knobs (the plugin's first or user-pinned parameters), a small level/gain-reduction indicator, collapse to a narrow bar, and a button for the full parameter editor or plugin window
+  - Same chain as the Master Section list (one model, two views); later reused for per-clip chains in the Montage and batch chains
+  - Keyboard: a key focuses the row, `Left`/`Right` move between cards, `Up`/`Down` between knobs, `+`/`-` adjust, `Insert` adds after the focused card, `Ctrl+Left`/`Right` reorders, `Del` removes; drag to reorder with the mouse
+  - Drop a plugin from the browser (2.9c) between cards to insert it there; dockable and pop-out like every panel
 - P1 Spectrum analyzer, phase correlation meter, goniometer/vectorscope
 - P1 Built-in mastering processors: parametric EQ (linear and minimum phase), multiband compressor, limiter (true-peak aware), stereo width, de-esser
 - P1 Loudness targeting presets (Spotify -14 LUFS, Apple -16, broadcast -23 / -24) with Match Loudness
@@ -241,6 +246,7 @@ Every menu item and every process (edit, effect, analysis, render, batch) is a r
 - P1 Theme manager: preview, switch instantly without restart, set per-workspace themes
 - P1 Built-in theme tweaker that edits values live and saves as a new theme, so users can make themes without writing files by hand
 - P1 Published, versioned theme format spec and a starter template so others can build themes; validation with clear errors and fallback to defaults for missing values
+- P0 Window opacity control (done 2026-10-17): slider in the status bar and View > Window Opacity, `Ctrl+Alt+-` / `Ctrl+Alt+=`, remembered; works with the compositor's own opacity
 - P2 Scriptable layout (WALTER-style in REAPER) for moving and resizing elements, and a theme repository/browser
 
 ### 2.9 MIDI controller mapping (Ableton-style)
@@ -464,6 +470,7 @@ Key design choices:
 **Exit:** a user can open a file, fix levels, cut it, run it through LV2 plugins, hit a loudness target and export. This is the first public alpha.
 
 ### Phase 1.5: Multi-channel foundation
+- Device chain row at the bottom of the window for the Master Section (2.4 P1), if not built sooner
 - Make playback, meters, Master Section and render work for any channel count, with speaker layouts and downmix monitoring (2.11 P0)
 - Built-in Stereoize (mono to stereo)
 - Done early because every later feature (repair, Montage, export) depends on how channels are handled

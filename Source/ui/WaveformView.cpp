@@ -180,7 +180,9 @@ void WaveformView::paintEvent (QPaintEvent*)
     QPainter g (this);
     const auto pal = palette();
     const auto& theme = Theme::current();
-    g.fillRect (rect(), theme.color (QStringLiteral ("waveformBackground")));
+    g.setCompositionMode (QPainter::CompositionMode_Source);  // replace, so the window's opacity shows through
+    g.fillRect (rect(), Theme::withOpacity (theme.color (QStringLiteral ("waveformBackground"))));
+    g.setCompositionMode (QPainter::CompositionMode_SourceOver);
 
     if (! data || data->numChannels() == 0)
     {
@@ -199,7 +201,11 @@ void WaveformView::paintEvent (QPaintEvent*)
         {
             requestSpectrogram();
             if (! spectrogram.isNull())
+            {
+                g.setOpacity (Theme::opacity());
                 g.drawImage (rect(), spectrogram);  // stretched while a fresh one renders
+                g.setOpacity (1.0);
+            }
             else
             {
                 g.setPen (pal.color (QPalette::PlaceholderText));

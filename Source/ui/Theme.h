@@ -7,6 +7,8 @@
 #include <QStringList>
 #include <QVector>
 
+class QWidget;
+
 // Colour themes. Built-in themes ship with the app; anyone can add more as
 // JSON files in ~/.local/share/phinyx/themes (see docs/themes.md). A theme
 // file names a built-in "base" and overrides any of its colours.
@@ -34,4 +36,13 @@ struct Theme
     // Remembered choice, stored in ~/.config/phinyx/settings.ini.
     static QString savedName();
     static void saveName (const QString&);
+
+    // Window opacity, from minOpacity to 1. Backgrounds of translucent windows
+    // are drawn with this alpha; text and waveforms stay solid. The compositor's
+    // own opacity (for example a Hyprland window rule) still applies on top.
+    static constexpr double minOpacity = 0.2;
+    static double opacity();
+    static void setOpacity (double);   // updates every translucent window and remembers the value
+    static void makeTranslucent (QWidget* window);  // call before the window is first shown
+    static QColor withOpacity (QColor);
 };

@@ -188,6 +188,7 @@ void DockablePanel::setPoppedOut (bool popOut)
     window->setWindowTitle (title + QStringLiteral (" - " APP_DISPLAY_NAME));
     window->setAttribute (Qt::WA_DeleteOnClose, false);
     window->installEventFilter (this);
+    Theme::makeTranslucent (window);
 
     // Every command shortcut works in the popped-out window too.
     window->addActions (mainWindow.actions());

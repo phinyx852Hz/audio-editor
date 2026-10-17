@@ -17,6 +17,7 @@ class MasterPanel;
 class MeterPanel;
 class QLabel;
 class QListWidget;
+class QSlider;
 class WaveformView;
 
 class MainWindow final : public QMainWindow
@@ -92,6 +93,10 @@ private:
 
     void showLoudnessStatistics();
 
+    // Window opacity (see Theme::setOpacity)
+    void changeOpacity (double value, bool announce);
+    QSlider* makeOpacitySlider (QWidget* parent);
+
     // Master Section
     void renderMaster();
     AudioDataPtr renderWithProgress (Frame start, Frame end, std::string& error);
@@ -123,6 +128,7 @@ private:
     DockablePanel* markerPanel = nullptr;
     DockablePanel* metersPanel = nullptr;
     QList<DockablePanel*> panels;
+    QList<QSlider*> opacitySliders;
     DockablePanel* lastPanel = nullptr;
     QByteArray defaultLayout;
     static constexpr int layoutVersion = 1;

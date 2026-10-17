@@ -11,9 +11,12 @@
 #include <QCloseEvent>
 #include <QDockWidget>
 #include <QSettings>
+#include <QSlider>
+#include <QWidgetAction>
 #include <QStandardPaths>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QHBoxLayout>
 #include <QInputDialog>
 #include <QKeyEvent>
 #include <QLabel>
@@ -63,9 +66,12 @@ MainWindow::MainWindow (AudioEngine& e)
 {
     setWindowTitle (QStringLiteral (APP_DISPLAY_NAME));
     resize (1100, 620);
+    Theme::makeTranslucent (this);
     setCentralWidget (waveform);
     statusBar()->addWidget (statusLabel, 1);
     statusLabel->setAccessibleName (tr ("Status"));
+    statusBar()->addPermanentWidget (new QLabel (tr ("Opacity"), this));
+    statusBar()->addPermanentWidget (makeOpacitySlider (this));
 
     buildPanels();
     registerCommands();
@@ -262,6 +268,13 @@ void MainWindow::registerCommands()
         waveform->setSpectral (! waveform->isSpectral());
         commands.action (QStringLiteral ("view.spectral"))->setChecked (waveform->isSpectral());
     })->setCheckable (true);
+    add ("view.opacityUp", Category::view, tr ("More &Opaque"),
+         { KS (Qt::CTRL | Qt::ALT | Qt::Key_Equal), KS (Qt::CTRL | Qt::ALT | Qt::Key_Plus) },
+         [this] { changeOpacity (Theme::opacity() + 0.05, true); });
+    add ("view.opacityDown", Category::view, tr ("More &Transparent"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_Minus) },
+         [this] { changeOpacity (Theme::opacity() - 0.05, true); });
+    add ("view.opacityFull", Category::view, tr ("&Fully Opaque"), {}, [this] { changeOpacity (1.0, true); });
+
     add ("view.focusWaveform", Category::view, tr ("Focus &Waveform"), { KS (Qt::Key_F6) }, [this]
     {
         activateWindow();
@@ -306,7 +319,7 @@ void MainWindow::buildMenus()
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
                                "view.spectral", "-", "view.master", "view.history", "view.markers", "view.meters", "view.popOut", "view.resetLayout", "-",
-                               "view.focusWaveform" } },
+                               "opacity", "-", "view.focusWaveform" } },
         { tr ("&Options"),   { "options.audio", "options.keymap", "options.theme" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
     };
@@ -318,10 +331,54 @@ void MainWindow::buildMenus()
         {
             if (id == QLatin1String ("-"))
                 menu->addSeparator();
+            else if (id == QLatin1String ("opacity"))
+            {
+                auto* sub = menu->addMenu (tr ("Window Opaci&ty"));
+                auto* box = new QWidget (sub);
+                auto* row = new QHBoxLayout (box);
+                row->setContentsMargins (24, 6, 12, 6);
+                row->addWidget (new QLabel (tr ("Opacity"), box));
+                row->addWidget (makeOpacitySlider (box));
+                auto* sliderAction = new QWidgetAction (sub);
+                sliderAction->setDefaultWidget (box);
+                sub->addAction (sliderAction);
+                sub->addSeparator();
+                for (const auto* a : { "view.opacityUp", "view.opacityDown", "view.opacityFull" })
+                    sub->addAction (commands.action (QString::fromLatin1 (a)));
+            }
             else
                 menu->addAction (commands.action (id));
         }
     }
+}
+
+QSlider* MainWindow::makeOpacitySlider (QWidget* parent)
+{
+    auto* slider = new QSlider (Qt::Horizontal, parent);
+    slider->setRange ((int) std::lround (Theme::minOpacity * 100.0), 100);
+    slider->setValue ((int) std::lround (Theme::opacity() * 100.0));
+    slider->setFixedWidth (120);
+    slider->setFocusPolicy (Qt::NoFocus);  // keys stay with the editor; Ctrl+Alt+- and Ctrl+Alt+= change it
+    slider->setAccessibleName (tr ("Window opacity"));
+    slider->setToolTip (tr ("Window opacity (Ctrl+Alt+- and Ctrl+Alt+=)"));
+    connect (slider, &QSlider::valueChanged, this, [this] (int v) { changeOpacity (v / 100.0, false); });
+    opacitySliders.push_back (slider);
+    return slider;
+}
+
+void MainWindow::changeOpacity (double value, bool announce)
+{
+    Theme::setOpacity (value);
+    const auto percent = (int) std::lround (Theme::opacity() * 100.0);
+
+    for (auto* s : opacitySliders)
+    {
+        const QSignalBlocker block (s);
+        s->setValue (percent);
+    }
+
+    if (announce)
+        statusBar()->showMessage (tr ("Window opacity %1%").arg (percent), 2000);
 }
 
 void MainWindow::buildPanels()

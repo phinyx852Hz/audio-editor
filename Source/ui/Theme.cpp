@@ -12,6 +12,9 @@
 #include <QStandardPaths>
 #include <QStyle>
 #include <QStyleFactory>
+#include <QWidget>
+#include <algorithm>
+#include <cmath>
 
 namespace
 {
@@ -200,6 +203,46 @@ QVector<Theme> Theme::available (QStringList* errors)
 
 const Theme& Theme::current() { return currentTheme(); }
 
+namespace
+{
+    QString settingsPath()
+    {
+        return QStandardPaths::writableLocation (QStandardPaths::GenericConfigLocation)
+             + QStringLiteral ("/" APP_ID "/settings.ini");
+    }
+
+    double& opacityValue()
+    {
+        static double value = std::clamp (QSettings (settingsPath(), QSettings::IniFormat)
+                                              .value (QStringLiteral ("appearance/opacity"), 1.0).toDouble(),
+                                          Theme::minOpacity, 1.0);
+        return value;
+    }
+
+    // The application palette with see-through backgrounds.
+    QPalette translucentPalette()
+    {
+        auto p = QApplication::palette();
+        for (auto group : { QPalette::Active, QPalette::Inactive, QPalette::Disabled })
+            for (auto role : { QPalette::Window, QPalette::Base, QPalette::AlternateBase, QPalette::Button })
+                p.setColor (group, role, Theme::withOpacity (p.color (group, role)));
+        return p;
+    }
+
+    void updateTranslucentWindows()
+    {
+        const auto p = translucentPalette();
+        for (auto* w : QApplication::topLevelWidgets())
+        {
+            if (w->testAttribute (Qt::WA_TranslucentBackground))
+            {
+                w->setPalette (p);
+                w->update();
+            }
+        }
+    }
+}
+
 void Theme::apply (const Theme& theme)
 {
     currentTheme() = theme;
@@ -229,18 +272,39 @@ void Theme::apply (const Theme& theme)
     p.setColor (QPalette::Disabled, QPalette::ButtonText, c ("disabledText"));
     p.setColor (QPalette::Disabled, QPalette::WindowText, c ("disabledText"));
     QApplication::setPalette (p);
+    updateTranslucentWindows();
 }
 
 QString Theme::savedName()
 {
-    QSettings settings (QStandardPaths::writableLocation (QStandardPaths::GenericConfigLocation)
-                            + QStringLiteral ("/" APP_ID "/settings.ini"), QSettings::IniFormat);
+    QSettings settings (settingsPath(), QSettings::IniFormat);
     return settings.value (QStringLiteral ("appearance/theme")).toString();
 }
 
 void Theme::saveName (const QString& name)
 {
-    QSettings settings (QStandardPaths::writableLocation (QStandardPaths::GenericConfigLocation)
-                            + QStringLiteral ("/" APP_ID "/settings.ini"), QSettings::IniFormat);
+    QSettings settings (settingsPath(), QSettings::IniFormat);
     settings.setValue (QStringLiteral ("appearance/theme"), name);
+}
+
+double Theme::opacity() { return opacityValue(); }
+
+QColor Theme::withOpacity (QColor c)
+{
+    c.setAlphaF (c.alphaF() * (float) opacityValue());
+    return c;
+}
+
+void Theme::setOpacity (double value)
+{
+    opacityValue() = std::round (std::clamp (value, minOpacity, 1.0) * 100.0) / 100.0;
+    QSettings (settingsPath(), QSettings::IniFormat).setValue (QStringLiteral ("appearance/opacity"), opacityValue());
+    updateTranslucentWindows();
+}
+
+void Theme::makeTranslucent (QWidget* window)
+{
+    window->setAttribute (Qt::WA_TranslucentBackground);
+    window->setAutoFillBackground (true);
+    window->setPalette (translucentPalette());
 }
