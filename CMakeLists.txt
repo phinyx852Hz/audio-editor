@@ -53,6 +53,17 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/Theme.cpp
     Source/ui/WaveformView.cpp)
 
+# JACK headers come from jack2 or pipewire-jack. JUCE loads libjack at run time,
+# so JACK output works with either; without headers PHINYX builds ALSA-only.
+include(CheckIncludeFile)
+check_include_file(jack/jack.h PHINYX_HAVE_JACK_HEADERS)
+if(PHINYX_HAVE_JACK_HEADERS)
+    set(PHINYX_JACK 1)
+else()
+    set(PHINYX_JACK 0)
+    message(STATUS "jack/jack.h not found: building without the JACK backend (ALSA and PipeWire's ALSA still work)")
+endif()
+
 target_compile_definitions(${APP_ID} PRIVATE
     APP_ID="${APP_ID}"
     APP_DISPLAY_NAME="${APP_DISPLAY_NAME}"
@@ -61,7 +72,7 @@ target_compile_definitions(${APP_ID} PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_ALSA=1
-    JUCE_JACK=1
+    JUCE_JACK=${PHINYX_JACK}
     JUCE_MODAL_LOOPS_PERMITTED=1
     JUCE_PLUGINHOST_VST3=1
     JUCE_PLUGINHOST_LV2=1

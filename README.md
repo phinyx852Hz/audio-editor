@@ -28,7 +28,7 @@ Built with a Qt 6 interface (native Wayland) on top of a JUCE 8 audio engine.
 
 ## Build and run (Arch Linux)
 ```sh
-sudo pacman -S --needed base-devel git cmake ninja qt6-base qt6-wayland alsa-lib jack2 ladspa \
+sudo pacman -S --needed base-devel git cmake ninja qt6-base qt6-wayland alsa-lib ladspa \
   freetype2 fontconfig libx11 libxrandr libxinerama libxcursor libxcomposite libxext mesa
 git clone https://github.com/phinyx852Hz/audio-editor
 cd audio-editor
@@ -37,6 +37,8 @@ cmake --build build
 ./build/phinyx_artefacts/Release/phinyx
 ```
 Run the core tests with `ctest --test-dir build`.
+Do not install `jack2` on Omarchy or any PipeWire system: it conflicts with `pipewire-jack`, which PHINYX uses for JACK output. Keep `pipewire-jack`.
+
 JUCE 8.0.15 is downloaded automatically during the first configure (the freetype/X11 packages above are only needed to build JUCE's small `juceaide` helper); pass `-DJUCE_DIR=/path/to/JUCE` to use a local checkout.
 
 For plugins, `sudo pacman -S lsp-plugins` gives a large free mastering set (EQ, compressors, limiters).
