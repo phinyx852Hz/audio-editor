@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "Dialogs.h"
 #include "CommandRegistry.h"
+#include "DesktopShortcuts.h"
 #include "Theme.h"
 #include "../engine/AudioEngine.h"
 
@@ -126,8 +127,8 @@ KeymapDialog::KeymapDialog (CommandRegistry& cm, QWidget* parent)
     setWindowTitle (tr ("Keyboard Shortcuts"));
     resize (620, 640);
 
-    tree->setColumnCount (2);
-    tree->setHeaderLabels ({ tr ("Command"), tr ("Shortcuts") });
+    tree->setColumnCount (3);
+    tree->setHeaderLabels ({ tr ("Command"), tr ("Shortcuts"), tr ("Note") });
     tree->header()->setSectionResizeMode (0, QHeaderView::Stretch);
     tree->setAccessibleName (tr ("Commands and their shortcuts"));
 
@@ -144,7 +145,9 @@ KeymapDialog::KeymapDialog (CommandRegistry& cm, QWidget* parent)
         if (auto* pb = qobject_cast<QPushButton*> (b))
             pb->setAutoDefault (false);
 
-    auto* hint = new QLabel (tr ("Select a command and press Enter to change its shortcut. Changes are saved automatically."), this);
+    auto* hint = new QLabel (tr ("Select a command and press Enter to change its shortcut. Changes are saved automatically.")
+                             + (DesktopShortcuts::taken().isEmpty() ? QString()
+                                : tr (" Shortcuts your desktop (Hyprland) already uses are marked in the Note column.")), this);
     hint->setWordWrap (true);
 
     auto* layout = new QVBoxLayout (this);
@@ -184,8 +187,16 @@ void KeymapDialog::rebuild()
             parent->setExpanded (true);
         }
 
-        auto* item = new QTreeWidgetItem (parent, { c.name(), c.shortcutText() });
+        // Keys the desktop (Hyprland) keeps for itself never reach PHINYX.
+        QStringList notes;
+        for (const auto& key : c.action->shortcuts())
+            if (const auto owner = DesktopShortcuts::owner (key); ! owner.isEmpty())
+                notes << tr ("%1 is taken by %2").arg (key.toString (QKeySequence::NativeText), owner);
+
+        auto* item = new QTreeWidgetItem (parent, { c.name(), c.shortcutText(), notes.join (QStringLiteral ("; ")) });
         item->setData (0, Qt::UserRole, c.id);
+        if (! notes.isEmpty())
+            item->setForeground (2, palette().color (QPalette::Link));
 
         if (c.id == currentId || tree->currentItem() == nullptr)
             tree->setCurrentItem (item);
@@ -218,6 +229,15 @@ void KeymapDialog::editSelected()
 
     // Only the first chord is used; multi-chord sequences are a later feature.
     const QKeySequence seq (editor->keySequence()[0]);
+
+    if (const auto owner = DesktopShortcuts::owner (seq); ! owner.isEmpty())
+    {
+        if (QMessageBox::question (this, tr ("Taken by the desktop"),
+                tr ("%1 is used by your desktop (%2), so PHINYX would never receive it. Use it anyway?")
+                    .arg (seq.toString (QKeySequence::NativeText), owner))
+            != QMessageBox::Yes)
+            return;
+    }
 
     if (const auto* other = commands.findConflict (seq, id))
     {

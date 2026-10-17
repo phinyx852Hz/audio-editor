@@ -58,6 +58,7 @@ Priority key: **P0** = MVP, **P1** = v1.0, **P2** = later.
 - P0 Open/save WAV, AIFF, FLAC, MP3, Ogg/Opus; 16/24/32-bit int, 32/64-bit float; up to 384 kHz; mono to 8+ channels
 - P0 Sample-accurate selection, zoom from overview to sample level, snap to zero crossings
 - P0 Cut/copy/paste/delete/trim/crop, silence insert, mix-paste
+- P0 Copy to New (`Shift+C`, done 2026-10-17): selection or whole file into a new untitled window, markers included
 - P0 Fade in/out with curve shapes, crossfades at edit points
 - P0 Normalize (peak and LUFS), gain, invert, reverse, DC offset removal
 - P0 Unlimited undo/redo with a history list
@@ -244,6 +245,7 @@ Every menu item and every process (edit, effect, analysis, render, batch) is a r
 - P1 Keymap editor with conflict detection, import/export, saved under `~/.config/<app>/keymap.xml` (XDG)
 - P1 Linux-friendly defaults: avoids keys GNOME/KDE grab globally (Super combos, Ctrl+Alt+arrows, Ctrl+Alt+T); optional presets matching Audition and WaveLab bindings
 - P1 Screen reader support through JUCE accessibility (AT-SPI on Linux)
+- P0 Desktop shortcut check (done 2026-10-17): on Hyprland, read `hyprctl binds -j` and flag PHINYX shortcuts the desktop already takes (startup notice and a Note column in Keyboard Shortcuts); never use the Super key
 - P2 Chorded / leader-key sequences and recordable keyboard macros
 
 ### 2.8b Themes and skins (REAPER-style, third-party themes)

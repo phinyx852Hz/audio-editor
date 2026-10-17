@@ -31,6 +31,9 @@ public:
 
     void openFile (const QString& path);
 
+    // Opens a temporary file as a new untitled document and deletes the file (Copy to New).
+    void openAsUntitled (const QString& path);
+
 protected:
     void closeEvent (QCloseEvent*) override;
 
@@ -70,6 +73,8 @@ private:
     void redo();
     void jumpToHistory (int index);
     void copy();
+    void copyToNew();  // selection (or the whole file) into a new PHINYX window
+    void warnAboutDesktopShortcuts();
     void cut();
     void paste();
     void deleteSelection();
@@ -145,4 +150,5 @@ private:
     QFutureWatcher<LoadResult> loadWatcher;
     std::shared_ptr<std::atomic<float>> loadProgress;
     bool loading = false;
+    QString untitledSource;  // temporary file being opened as an untitled copy
 };

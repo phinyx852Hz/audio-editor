@@ -55,6 +55,7 @@ public:
 
     bool isModified() const { return position != savedPosition; }
     void markSaved()        { savedPosition = position; }
+    void markUnsaved()      { savedPosition = -1; }  // e.g. a new untitled copy that has never been saved
 
     int nextMarkerId();
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MainWindow.h"
 #include "ChainRow.h"
+#include "DesktopShortcuts.h"
 #include "Dialogs.h"
 #include "MasterPanel.h"
 #include "Panels.h"
@@ -10,7 +11,10 @@
 #include <QActionGroup>
 #include <QApplication>
 #include <QCloseEvent>
+#include <QDateTime>
+#include <QDir>
 #include <QDockWidget>
+#include <QProcess>
 #include <QSettings>
 #include <QSlider>
 #include <QWidgetAction>
@@ -140,6 +144,7 @@ void MainWindow::registerCommands()
          [this] { redo(); });
     add ("edit.cut", Category::edit, tr ("Cu&t"), { KS (Qt::CTRL | Qt::Key_X) }, [this] { cut(); });
     add ("edit.copy", Category::edit, tr ("&Copy"), { KS (Qt::CTRL | Qt::Key_C) }, [this] { copy(); });
+    add ("edit.copyToNew", Category::edit, tr ("Copy to Ne&w"), { KS (Qt::SHIFT | Qt::Key_C) }, [this] { copyToNew(); });
     add ("edit.paste", Category::edit, tr ("&Paste"), { KS (Qt::CTRL | Qt::Key_V) }, [this] { paste(); });
     add ("edit.delete", Category::edit, tr ("&Delete"), { KS (Qt::Key_Delete), KS (Qt::Key_Backspace) }, [this] { deleteSelection(); });
     add ("edit.trim", Category::edit, tr ("T&rim to Selection"), { KS (Qt::CTRL | Qt::Key_T) }, [this] { trimToSelection(); });
@@ -310,7 +315,7 @@ void MainWindow::buildMenus()
     // Menu titles carry & mnemonics, so Alt+F, Alt+E, Alt+P, Alt+M, Alt+A... open them.
     const QList<QPair<QString, QStringList>> layout {
         { tr ("&File"),      { "file.open", "file.save", "file.saveAs", "-", "file.close", "-", "file.quit" } },
-        { tr ("&Edit"),      { "edit.undo", "edit.redo", "-", "edit.cut", "edit.copy", "edit.paste", "edit.delete", "-",
+        { tr ("&Edit"),      { "edit.undo", "edit.redo", "-", "edit.cut", "edit.copy", "edit.copyToNew", "edit.paste", "edit.delete", "-",
                                "edit.trim", "edit.insertSilence", "-", "select.all", "select.none", "-",
                                "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
                                "select.toStart", "select.toEnd" } },
@@ -487,6 +492,7 @@ void MainWindow::restoreLayout()
 
         activateWindow();
         waveform->setFocus();
+        QTimer::singleShot (1500, this, &MainWindow::warnAboutDesktopShortcuts);
     });
 }
 
@@ -523,7 +529,7 @@ void MainWindow::updateCommandStates()
     const bool open = doc.isOpen() && ! loading;
     const bool sel = open && hasSelection();
 
-    for (const auto* id : { "file.save", "file.saveAs", "file.close", "edit.insertSilence", "select.all", "select.none",
+    for (const auto* id : { "file.save", "file.saveAs", "file.close", "edit.insertSilence", "edit.copyToNew", "select.all", "select.none",
                             "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
                             "select.toStart", "select.toEnd", "process.gain", "process.normalize",
                             "process.reverse", "process.invert", "process.dcOffset",
@@ -675,6 +681,14 @@ void MainWindow::loadFinished()
     }
 
     doc.reset (r.data, std::move (r.markers), r.path.toStdString());
+    if (! untitledSource.isEmpty() && r.path == untitledSource)
+    {
+        // A Copy to New: an unsaved, untitled document; the temporary file is no longer needed.
+        doc.setPath ({});
+        doc.markUnsaved();
+        QFile::remove (r.path);
+    }
+    untitledSource.clear();
     cursor = selStart = selEnd = selAnchor = 0;
     optionsConfirmedFor.clear();
     refreshFromDocument (false);
@@ -832,6 +846,70 @@ void MainWindow::copy()
 
     clipboard = data()->slice (selStart, selEnd);
     updateCommandStates();
+}
+
+void MainWindow::copyToNew()
+{
+    if (data() == nullptr)
+        return;
+
+    const auto [start, end] = hasSelection() ? std::pair (selStart, selEnd) : std::pair (Frame (0), data()->length());
+    const auto piece = data()->slice (start, end);
+
+    // Markers inside the copied range come along, moved to the new start.
+    std::vector<Marker> markers;
+    for (auto m : doc.current().markers)
+    {
+        if (m.start < start || m.start >= end)
+            continue;
+        m.start -= start;
+        m.end = std::min (m.end, end) - start;
+        markers.push_back (m);
+    }
+
+    // Hand the audio to a new PHINYX window through a temporary file; the new
+    // window opens it as "Untitled" and deletes the file.
+    const auto folder = QStandardPaths::writableLocation (QStandardPaths::CacheLocation) + QStringLiteral ("/copy-to-new");
+    QDir().mkpath (folder);
+    const auto path = folder + QStringLiteral ("/%1.wav").arg (QDateTime::currentDateTime().toString (QStringLiteral ("yyyyMMdd-hhmmss-zzz")));
+
+    SaveOptions options;
+    options.bitDepth = 32;  // float, so nothing is lost
+    options.dither = false;
+    std::string error;
+    if (! AudioEngine::saveFile (path.toStdString(), *piece, markers, options, error))
+    {
+        QMessageBox::warning (this, tr ("Copy to New"), tr ("Could not copy the audio:\n%1").arg (QString::fromStdString (error)));
+        return;
+    }
+
+    if (! QProcess::startDetached (QCoreApplication::applicationFilePath(), { QStringLiteral ("--new-from"), path }))
+    {
+        QFile::remove (path);
+        QMessageBox::warning (this, tr ("Copy to New"), tr ("Could not start a new PHINYX window."));
+        return;
+    }
+
+    statusBar()->showMessage (hasSelection() ? tr ("Copied the selection to a new window") : tr ("Copied the whole file to a new window"), 6000);
+}
+
+void MainWindow::openAsUntitled (const QString& path)
+{
+    untitledSource = path;
+    openFile (path);
+}
+
+void MainWindow::warnAboutDesktopShortcuts()
+{
+    QStringList clashes;
+    for (const auto& c : commands.all())
+        for (const auto& key : c.action->shortcuts())
+            if (! DesktopShortcuts::owner (key).isEmpty())
+                clashes << QStringLiteral ("%1 (%2)").arg (key.toString (QKeySequence::NativeText), c.name());
+
+    if (! clashes.isEmpty())
+        statusBar()->showMessage (tr ("Your desktop already uses %n PHINYX shortcut(s): %1. Change them in Options > Keyboard Shortcuts.",
+                                      nullptr, (int) clashes.size()).arg (clashes.join (QStringLiteral (", "))), 15000);
 }
 
 void MainWindow::cut()
