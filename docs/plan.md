@@ -1,6 +1,6 @@
-# Linux Audio Editor & Mastering Suite: Plan
+# PHINYX: Plan
 
-Working title: **Linux Audio Editor & Mastering Suite** (name TBD)
+Name: **PHINYX** (system id `phinyx`; repository: github.com/phinyx852Hz/audio-editor)
 Target: native desktop app, Linux only, optimized for Arch Linux, Omarchy and Hyprland (x86_64 first, aarch64 later)
 Goal: combine the basic and best features of Adobe Audition, Sound Forge and WaveLab in one app.
 License: AGPLv3 open source
@@ -26,10 +26,10 @@ License: AGPLv3 open source
 
 ## Where things stand (2026-10-17)
 - **Plan:** this document, covering every requirement above.
-- **Code:** a Phase 0 scaffold in the project files at `app/audio-editor`. It builds, opens a file, shows the waveform, plays it through ALSA or JACK/PipeWire, and every action is a command with a key binding. That includes a command palette (`Ctrl+Shift+P` / `F1`), menus by `F10` / `Alt`+letter, and a key remapping editor (`Ctrl+Shift+K`). It was tested by keyboard on a virtual display; audio output itself wasn't tested because no sound device was available there.
-- **Also in place:** an Arch build workflow (CI), an AUR PKGBUILD and a README.
-- **Open decision:** the interface toolkit. JUCE has no native Wayland support, so on Hyprland it runs through XWayland. The recommendation is a Qt 6 interface on top of the JUCE audio engine (see "UI toolkit decision for Wayland" in section 3).
-- **Blocked:** no GitHub account is linked yet, so the code isn't in a repository.
+- **Code:** github.com/phinyx852Hz/audio-editor. Phase 0 foundation, rebuilt on Qt 6 (native Wayland) with a JUCE audio engine underneath. It opens a file, shows the waveform, plays it through ALSA or JACK/PipeWire, and every action is a remappable command: command palette (`Ctrl+Shift+P` / `F1`), menus by `F10` / `Alt`+letter, shortcut editor with conflict detection (`Ctrl+Shift+K`). Tested by keyboard on a virtual X11 display; not yet run on a real Wayland/Hyprland session or with a real sound device.
+- **Also in place:** Arch + Ubuntu CI, an AUR-style PKGBUILD (`phinyx-git`), README.
+- **Decided:** AGPLv3; Qt 6 UI + JUCE engine; name PHINYX.
+- **Next:** Phase 1, the first usable editor.
 
 ---
 
@@ -283,7 +283,7 @@ One browser panel (dockable, pops out to its own tile) with a single search fiel
 
 ### Pick: **C++20 + JUCE 8** engine, with PipeWire/JACK/ALSA audio via JUCE, CMake build
 
-(The UI toolkit on top of it, JUCE or Qt 6, is the open decision in "UI toolkit decision for Wayland" above.)
+The UI is **Qt 6** (decided; see "UI toolkit decision for Wayland" above). JUCE provides only the audio engine: devices, codecs, DSP and plugin hosting.
 
 Why this is the pick:
 - **Audio-first framework.** JUCE gives audio device I/O (ALSA, JACK, and PipeWire through its JACK/ALSA layers), sample-accurate buffers, file codecs, DSP modules, and plugin **hosting for VST3, LV2 and (via extensions) CLAP** out of the box. Building those from scratch in other stacks is months of work.
@@ -320,9 +320,9 @@ The app is optimized first for **Arch Linux**, including **Omarchy** (DHH's Arch
 - **Packaging priority:** AUR first (`audio-editor` and `audio-editor-git` PKGBUILDs), then Flatpak and AppImage for other distros.
 - **Docs:** a Hyprland/Omarchy setup page with example `windowrule`s, PipeWire low-latency settings (`pipewire-jack`, quantum), and realtime privileges (`realtime-privileges` group on Arch).
 
-### UI toolkit decision for Wayland (open, awaiting the user's pick)
-- **Proposed: Qt 6 UI + JUCE headless engine.** Qt 6 is native Wayland, sharp at fractional scales, has mature keyboard mnemonics, AT-SPI accessibility, style sheets for skinning, and dock widgets that float out as real windows (KDDockWidgets). JUCE 8 now ships `juce_audio_processors_headless` (plugin hosting for VST3/LV2/LADSPA with no GUI dependency), so the engine keeps JUCE's audio devices, codecs, DSP and plugin hosting. Plugin editor windows run in a separate helper process under XWayland (Linux plugin GUIs are X11 anyway), which also isolates plugin crashes.
-- **Alternative: all-JUCE (current scaffold).** Simpler, one framework, already builds and runs. Runs via XWayland on Hyprland; tiling works, but it is not native Wayland and needs `xwayland { force_zero_scaling = true }` plus app-side scaling to stay sharp.
+### UI toolkit decision for Wayland (decided 2026-10-17: Qt 6 UI + JUCE engine)
+- **Chosen: Qt 6 UI + JUCE headless engine.** Qt 6 is native Wayland, sharp at fractional scales, has mature keyboard mnemonics, AT-SPI accessibility, style sheets for skinning, and dock widgets that float out as real windows (KDDockWidgets). JUCE 8 now ships `juce_audio_processors_headless` (plugin hosting for VST3/LV2/LADSPA with no GUI dependency), so the engine keeps JUCE's audio devices, codecs, DSP and plugin hosting. Plugin editor windows run in a separate helper process under XWayland (Linux plugin GUIs are X11 anyway), which also isolates plugin crashes.
+- **Rejected: all-JUCE (the first scaffold).** Simpler, one framework, already builds and runs. Runs via XWayland on Hyprland; tiling works, but it is not native Wayland and needs `xwayland { force_zero_scaling = true }` plus app-side scaling to stay sharp.
 
 ### Audio backend on Linux
 - **PipeWire** is the default on Arch (and Omarchy), Fedora, Ubuntu and Debian, and it exposes a JACK-compatible API. Target **JACK API through PipeWire** as the primary path (low latency, routing with other apps), with **direct ALSA** as a fallback for minimal systems.
@@ -418,7 +418,7 @@ Key design choices:
 - App shell with central command registry, keymap, command palette, menus (done in the scaffold)
 - Audio device setup dialog (JACK/PipeWire + ALSA)
 - License decision: done, AGPLv3
-- UI toolkit decision for Wayland (JUCE vs Qt 6 UI)
+- UI toolkit decision for Wayland: done, Qt 6
 - AUR PKGBUILD
 
 **Exit:** app opens on Hyprland, plays a WAV through PipeWire, everything reachable by keyboard, CI builds it on Arch.
@@ -488,7 +488,8 @@ Key design choices:
 ## 7. Immediate next steps
 - ~~Decide license model~~ Done: AGPLv3 open source
 - ~~Scaffold Phase 0~~ Done: app shell, command registry, keymap, command palette, Arch CI, PKGBUILD
-- Decide the interface toolkit (Qt 6 + JUCE engine recommended, or all-JUCE)
-- Connect GitHub and push the scaffold to a repository
+- ~~Decide the interface toolkit~~ Done: Qt 6 UI + JUCE engine
+- ~~Push to a repository~~ Done: github.com/phinyx852Hz/audio-editor
+- Start Phase 1: editing, undo, markers, meters, Master Section, spectrogram view
 - Prototype the paged audio document and waveform view, since they decide how the whole app feels
 - First Audacity reuse candidates: `au3-fft`, `au3-dynamic-range-processor`, NoiseReduction (see 3b)

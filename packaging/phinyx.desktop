@@ -1,9 +1,11 @@
 [Desktop Entry]
 Type=Application
-Name=Audio Editor
-Comment=Audio editor and mastering suite
-Exec=AudioEditor %F
+Name=PHINYX
+GenericName=Audio Editor
+Comment=Keyboard-first audio editor and mastering suite
+Exec=phinyx %F
 Icon=audio-x-generic
 Terminal=false
 Categories=AudioVideo;Audio;AudioVideoEditing;
 MimeType=audio/x-wav;audio/wav;audio/flac;audio/x-aiff;audio/mpeg;audio/ogg;
+StartupWMClass=phinyx

@@ -1,16 +1,24 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 cmake_minimum_required(VERSION 3.22)
 
-project(AudioEditor VERSION 0.1.0 LANGUAGES C CXX)
+project(Phinyx VERSION 0.2.0 LANGUAGES C CXX)
+
+# The app's names live here so a rename touches one place.
+set(APP_ID "phinyx" CACHE STRING "Lowercase id: binary, config folder, Wayland app-id")
+set(APP_DISPLAY_NAME "PHINYX" CACHE STRING "Name shown to users")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_AUTOMOC ON)
 
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    message(FATAL_ERROR "This application targets Linux only.")
+    message(FATAL_ERROR "${APP_DISPLAY_NAME} targets Linux only.")
 endif()
 
-# Use a local JUCE checkout (needed for offline Flatpak builds) or fetch the pinned tag.
+find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Concurrent)
+
+# JUCE provides the audio engine only (devices, codecs, DSP, plugin hosting); no JUCE UI.
+# Use a local checkout (needed for offline package builds) or fetch the pinned tag.
 set(JUCE_DIR "" CACHE PATH "Path to a local JUCE checkout")
 if(JUCE_DIR)
     add_subdirectory(${JUCE_DIR} juce EXCLUDE_FROM_ALL)
@@ -23,34 +31,40 @@ else()
     FetchContent_MakeAvailable(juce)
 endif()
 
-juce_add_gui_app(AudioEditor
-    PRODUCT_NAME "Audio Editor"
-    COMPANY_NAME "Audio Editor Project"
+# A JUCE console target lets us supply our own main() and run the Qt event loop.
+juce_add_console_app(${APP_ID}
+    PRODUCT_NAME "${APP_ID}"
     VERSION ${PROJECT_VERSION})
 
-target_sources(AudioEditor PRIVATE
-    Source/Main.cpp
-    Source/MainComponent.cpp
-    Source/WaveformView.cpp
-    Source/CommandPalette.cpp)
+target_sources(${APP_ID} PRIVATE
+    Source/main.cpp
+    Source/engine/AudioEngine.cpp
+    Source/ui/CommandRegistry.cpp
+    Source/ui/Dialogs.cpp
+    Source/ui/MainWindow.cpp
+    Source/ui/WaveformView.cpp)
 
-target_compile_definitions(AudioEditor PRIVATE
+target_compile_definitions(${APP_ID} PRIVATE
+    APP_ID="${APP_ID}"
+    APP_DISPLAY_NAME="${APP_DISPLAY_NAME}"
+    APP_VERSION="${PROJECT_VERSION}"
+    QT_NO_KEYWORDS
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_ALSA=1
     JUCE_JACK=1
-    JUCE_DISPLAY_SPLASH_SCREEN=0
-    JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:AudioEditor,JUCE_PRODUCT_NAME>"
-    JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:AudioEditor,JUCE_VERSION>")
+    JUCE_MODAL_LOOPS_PERMITTED=1)
 
-target_link_libraries(AudioEditor
+target_link_libraries(${APP_ID}
     PRIVATE
-        juce::juce_audio_utils
-        juce::juce_dsp
+        Qt6::Widgets
+        Qt6::Concurrent
+        juce::juce_audio_devices
+        juce::juce_audio_formats
     PUBLIC
         juce::juce_recommended_config_flags
-        juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
 
-install(TARGETS AudioEditor RUNTIME DESTINATION bin)
-install(FILES packaging/audio-editor.desktop DESTINATION share/applications)
+include(GNUInstallDirs)
+install(TARGETS ${APP_ID} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(FILES packaging/phinyx.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)

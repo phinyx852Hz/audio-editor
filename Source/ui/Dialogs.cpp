@@ -1,0 +1,281 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+#include "Dialogs.h"
+#include "CommandRegistry.h"
+#include "../engine/AudioEngine.h"
+
+#include <QComboBox>
+#include <QCoreApplication>
+#include <QDialogButtonBox>
+#include <QHeaderView>
+#include <QKeyEvent>
+#include <QKeySequenceEdit>
+#include <QLabel>
+#include <QLineEdit>
+#include <QMessageBox>
+#include <QPushButton>
+#include <QTimer>
+#include <QTreeWidget>
+#include <QVBoxLayout>
+
+//==============================================================================
+CommandPalette::CommandPalette (CommandRegistry& cm, QWidget* parent)
+    : QDialog (parent), commands (cm), search (new QLineEdit (this)), list (new QTreeWidget (this))
+{
+    setWindowTitle (tr ("Command Palette"));
+    resize (640, 440);
+
+    search->setPlaceholderText (tr ("Type to search commands and shortcuts..."));
+    search->setAccessibleName (tr ("Search commands"));
+    search->installEventFilter (this);
+
+    list->setColumnCount (3);
+    list->setHeaderLabels ({ tr ("Command"), tr ("Category"), tr ("Shortcut") });
+    list->setRootIsDecorated (false);
+    list->setAllColumnsShowFocus (true);
+    list->header()->setSectionResizeMode (0, QHeaderView::Stretch);
+    list->setAccessibleName (tr ("Commands"));
+
+    auto* layout = new QVBoxLayout (this);
+    layout->addWidget (search);
+    layout->addWidget (list);
+
+    connect (search, &QLineEdit::textChanged, this, &CommandPalette::refilter);
+    connect (list, &QTreeWidget::itemActivated, this, &CommandPalette::runSelected);
+
+    refilter();
+    search->setFocus();
+}
+
+void CommandPalette::refilter()
+{
+    const auto tokens = search->text().split (QLatin1Char (' '), Qt::SkipEmptyParts);
+    list->clear();
+
+    for (const auto& c : commands.all())
+    {
+        const auto haystack = c.category + QLatin1Char (' ') + c.name() + QLatin1Char (' ') + c.shortcutText();
+        const bool matches = std::all_of (tokens.begin(), tokens.end(),
+                                          [&] (const QString& t) { return haystack.contains (t, Qt::CaseInsensitive); });
+
+        if (! matches)
+            continue;
+
+        auto* item = new QTreeWidgetItem (list, { c.name(), c.category, c.shortcutText() });
+        item->setData (0, Qt::UserRole, c.id);
+        item->setDisabled (! c.action->isEnabled());
+    }
+
+    if (list->topLevelItemCount() > 0)
+        list->setCurrentItem (list->topLevelItem (0));
+}
+
+bool CommandPalette::eventFilter (QObject* obj, QEvent* event)
+{
+    if (obj == search && event->type() == QEvent::KeyPress)
+    {
+        const auto key = static_cast<QKeyEvent*> (event)->key();
+
+        if (key == Qt::Key_Up || key == Qt::Key_Down || key == Qt::Key_PageUp || key == Qt::Key_PageDown)
+        {
+            QCoreApplication::sendEvent (list, event);
+            return true;
+        }
+
+        if (key == Qt::Key_Return || key == Qt::Key_Enter)
+        {
+            runSelected();
+            return true;
+        }
+    }
+
+    return QDialog::eventFilter (obj, event);
+}
+
+void CommandPalette::runSelected()
+{
+    auto* item = list->currentItem();
+    if (item == nullptr || item->isDisabled())
+        return;
+
+    auto* action = commands.action (item->data (0, Qt::UserRole).toString());
+    accept();
+
+    // Run after the palette has closed so focus is back on the main window.
+    QTimer::singleShot (0, action, &QAction::trigger);
+}
+
+//==============================================================================
+KeymapDialog::KeymapDialog (CommandRegistry& cm, QWidget* parent)
+    : QDialog (parent), commands (cm), tree (new QTreeWidget (this))
+{
+    setWindowTitle (tr ("Keyboard Shortcuts"));
+    resize (620, 640);
+
+    tree->setColumnCount (2);
+    tree->setHeaderLabels ({ tr ("Command"), tr ("Shortcuts") });
+    tree->header()->setSectionResizeMode (0, QHeaderView::Stretch);
+    tree->setAccessibleName (tr ("Commands and their shortcuts"));
+
+    auto* edit  = new QPushButton (tr ("&Change..."), this);
+    auto* clear = new QPushButton (tr ("C&lear"), this);
+    auto* reset = new QPushButton (tr ("&Reset All to Defaults"), this);
+    auto* buttons = new QDialogButtonBox (QDialogButtonBox::Close, this);
+    buttons->addButton (edit, QDialogButtonBox::ActionRole);
+    buttons->addButton (clear, QDialogButtonBox::ActionRole);
+    buttons->addButton (reset, QDialogButtonBox::ResetRole);
+
+    // Enter in the list must edit the selected shortcut, never trigger a button.
+    for (auto* b : buttons->buttons())
+        if (auto* pb = qobject_cast<QPushButton*> (b))
+            pb->setAutoDefault (false);
+
+    auto* hint = new QLabel (tr ("Select a command and press Enter to change its shortcut. Changes are saved automatically."), this);
+    hint->setWordWrap (true);
+
+    auto* layout = new QVBoxLayout (this);
+    layout->addWidget (hint);
+    layout->addWidget (tree);
+    layout->addWidget (buttons);
+
+    connect (tree, &QTreeWidget::itemActivated, this, &KeymapDialog::editSelected);
+    connect (edit, &QPushButton::clicked, this, &KeymapDialog::editSelected);
+    connect (clear, &QPushButton::clicked, this, &KeymapDialog::clearSelected);
+    connect (reset, &QPushButton::clicked, this, [this]
+    {
+        commands.resetToDefaults();
+        commands.save();
+        rebuild();
+    });
+    connect (buttons, &QDialogButtonBox::rejected, this, &QDialog::accept);
+
+    rebuild();
+    QTimer::singleShot (0, tree, [this] { tree->setFocus(); });
+}
+
+void KeymapDialog::rebuild()
+{
+    const auto currentId = tree->currentItem() ? tree->currentItem()->data (0, Qt::UserRole).toString() : QString();
+    tree->clear();
+
+    QMap<QString, QTreeWidgetItem*> categories;
+
+    for (const auto& c : commands.all())
+    {
+        auto*& parent = categories[c.category];
+        if (parent == nullptr)
+        {
+            parent = new QTreeWidgetItem (tree, { c.category });
+            parent->setFlags (Qt::ItemIsEnabled);
+            parent->setExpanded (true);
+        }
+
+        auto* item = new QTreeWidgetItem (parent, { c.name(), c.shortcutText() });
+        item->setData (0, Qt::UserRole, c.id);
+
+        if (c.id == currentId || tree->currentItem() == nullptr)
+            tree->setCurrentItem (item);
+    }
+}
+
+void KeymapDialog::editSelected()
+{
+    auto* item = tree->currentItem();
+    if (item == nullptr || item->data (0, Qt::UserRole).isNull())
+        return;
+
+    const auto id = item->data (0, Qt::UserRole).toString();
+
+    QDialog dialog (this);
+    dialog.setWindowTitle (tr ("Change Shortcut: %1").arg (item->text (0)));
+    auto* editor = new QKeySequenceEdit (&dialog);
+    auto* buttons = new QDialogButtonBox (QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    auto* layout = new QVBoxLayout (&dialog);
+    layout->addWidget (new QLabel (tr ("Press the new key combination, then Enter. Esc cancels."), &dialog));
+    layout->addWidget (editor);
+    layout->addWidget (buttons);
+    connect (buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect (buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    connect (editor, &QKeySequenceEdit::editingFinished, &dialog, &QDialog::accept);
+    editor->setFocus();
+
+    if (dialog.exec() != QDialog::Accepted || editor->keySequence().isEmpty())
+        return;
+
+    // Only the first chord is used; multi-chord sequences are a later feature.
+    const QKeySequence seq (editor->keySequence()[0]);
+
+    if (const auto* other = commands.findConflict (seq, id))
+    {
+        const auto answer = QMessageBox::question (this, tr ("Shortcut in use"),
+            tr ("%1 is already used by \"%2\". Move it to \"%3\"?")
+                .arg (seq.toString (QKeySequence::NativeText), other->name(), item->text (0)));
+
+        if (answer != QMessageBox::Yes)
+            return;
+
+        auto keys = other->action->shortcuts();
+        keys.removeAll (seq);
+        commands.setShortcuts (other->id, keys);
+    }
+
+    commands.setShortcuts (id, { seq });
+    commands.save();
+    rebuild();
+}
+
+void KeymapDialog::clearSelected()
+{
+    auto* item = tree->currentItem();
+    if (item == nullptr || item->data (0, Qt::UserRole).isNull())
+        return;
+
+    commands.setShortcuts (item->data (0, Qt::UserRole).toString(), {});
+    commands.save();
+    rebuild();
+}
+
+//==============================================================================
+AudioSettingsDialog::AudioSettingsDialog (AudioEngine& e, QWidget* parent)
+    : QDialog (parent), engine (e), outputs (new QComboBox (this)), status (new QLabel (this))
+{
+    setWindowTitle (tr ("Audio Settings"));
+    resize (520, 160);
+
+    const auto current = engine.currentOutput();
+
+    for (const auto& choice : engine.availableOutputs())
+    {
+        outputs->addItem (QString::fromStdString (choice.type + ": " + choice.name),
+                          QStringList { QString::fromStdString (choice.type), QString::fromStdString (choice.name) });
+
+        if (choice.type == current.type && choice.name == current.name)
+            outputs->setCurrentIndex (outputs->count() - 1);
+    }
+
+    auto* label = new QLabel (tr ("&Output device:"), this);
+    label->setBuddy (outputs);
+    status->setText (QString::fromStdString (engine.deviceDescription()));
+    status->setWordWrap (true);
+
+    auto* buttons = new QDialogButtonBox (QDialogButtonBox::Apply | QDialogButtonBox::Close, this);
+    auto* layout = new QVBoxLayout (this);
+    layout->addWidget (label);
+    layout->addWidget (outputs);
+    layout->addWidget (status);
+    layout->addWidget (buttons);
+
+    connect (buttons->button (QDialogButtonBox::Apply), &QPushButton::clicked, this, &AudioSettingsDialog::apply);
+    connect (buttons, &QDialogButtonBox::rejected, this, &QDialog::accept);
+    outputs->setFocus();
+}
+
+void AudioSettingsDialog::apply()
+{
+    const auto choice = outputs->currentData().toStringList();
+    if (choice.size() != 2)
+        return;
+
+    const auto error = engine.selectOutput ({ choice[0].toStdString(), choice[1].toStdString() });
+    status->setText (error.empty() ? QString::fromStdString (engine.deviceDescription())
+                                   : tr ("Could not open device: %1").arg (QString::fromStdString (error)));
+}
