@@ -352,6 +352,56 @@ namespace
             check (after < before * 0.3, "declip rebuilds the peaks (" + std::to_string (before) + " -> " + std::to_string (after) + ")");
         }
 
+        // Diagnostics: the same clicks and clipping listed, then repaired from the list.
+        const auto clicks = repair::findClicks (*clicked, 0, 192000, 6.0);
+        int listedAt = 0;
+        for (auto at : clickAt)
+            listedAt += std::any_of (clicks.begin(), clicks.end(), [at] (const repair::Problem& p) { return p.start <= at && p.end >= at + 6; }) ? 1 : 0;
+        check (clicks.size() >= 38 && clicks.size() <= 46 && listedAt >= 38, "diagnostics list the clicks (" + std::to_string (clicks.size())
+               + " listed, " + std::to_string (listedAt) + " of 40 in the right place)");
+        auto fromList = repair::repairProblems (*clicked, clicks, report);
+        check (fromList != nullptr && report.fixed == (int) clicks.size(), "repair the listed clicks (" + std::to_string (report.fixed) + ")");
+        if (fromList != nullptr)
+            check (rmsDifference (*fromList, *smooth, 0, 192000) < 0.003, "repairing from the list leaves little of the clicks");
+        check (repair::findClicks (*smooth, 0, 192000, 6.0).size() <= 2, "diagnostics find no clicks in clean audio");
+
+        const auto clips = repair::findClipping (*clipped, 0, 48000, 99.0);
+        check (clips.size() > 500 && clips[0].kind == repair::Problem::Kind::clipping, "diagnostics list the clipping (" + std::to_string (clips.size()) + ")");
+        auto unclippedFromList = repair::repairProblems (*clipped, clips, report);
+        if (unclippedFromList != nullptr)
+            check (rmsDifference (*unclippedFromList, *loud, 5000, 43000) < rmsDifference (*clipped, *loud, 5000, 43000) * 0.3,
+                   "repairing the listed clipping rebuilds the peaks");
+        else
+            check (false, "repairing the listed clipping");
+
+        // Dropouts: three gaps of digital silence in a tone, and silence at the start that is not one.
+        const std::vector<std::pair<Frame, Frame>> gaps { { 30000, 30096 }, { 60000, 61000 }, { 100000, 114400 } };
+        auto steady = makeSignal (192000, [&] (Frame f) { return f < 4800 ? 0.0f : tone (f, 440.0, 0.3); });
+        auto dropped = makeSignal (192000, [&] (Frame f)
+        {
+            for (auto [a, b] : gaps)
+                if (f >= a && f < b)
+                    return 0.0f;
+            return f < 4800 ? 0.0f : tone (f, 440.0, 0.3);
+        });
+        const auto drops = repair::findDropouts (*dropped, 0, 192000);
+        bool dropsRight = drops.size() == gaps.size();
+        for (size_t i = 0; dropsRight && i < drops.size(); ++i)
+            dropsRight = std::llabs (drops[i].start - gaps[i].first) <= 1 && std::llabs (drops[i].end - gaps[i].second) <= 1;
+        check (dropsRight, "diagnostics find the three dropouts (" + std::to_string (drops.size()) + ")");
+        auto filled = repair::repairProblems (*dropped, drops, report);
+        check (filled != nullptr && report.fixed == 3, "repair the dropouts (" + std::to_string (report.fixed) + ")");
+        if (filled != nullptr)
+            check (rmsDifference (*filled, *steady, 29000, 62000) < 0.01 && toneLevel (*filled, 102000, 112000, 440.0) > 0.25,
+                   "the dropouts are filled with the tone");
+
+        // Silence: two seconds of near silence in the middle.
+        auto paused = makeSignal (192000, [&] (Frame f) { return f >= 48000 && f < 144000 ? 0.0003f * hiss[(size_t) f] / 0.02f : tone (f, 440.0, 0.3); });
+        const auto quiet = repair::findSilence (*paused, 0, 192000, -50.0, 1.0);
+        check (quiet.size() == 1 && std::llabs (quiet[0].start - 48000) <= 480 && std::llabs (quiet[0].end - 144000) <= 480,
+               "diagnostics find the silent stretch");
+        check (repair::findSilence (*paused, 0, 192000, -50.0, 2.5).empty(), "silence shorter than asked for is not listed");
+
         // DeHum: 50 Hz hum and harmonics under a 1 kHz tone.
         auto hummed = makeSignal (192000, [&] (Frame f)
         {

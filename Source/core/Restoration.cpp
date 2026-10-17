@@ -307,6 +307,175 @@ namespace
         std::nth_element (v.begin(), v.begin() + (long) v.size() / 2, v.end());
         return 1.4826 * v[v.size() / 2];
     }
+
+    //==========================================================================
+    // Detection shared by the fix tools and the Diagnostics scans.
+    constexpr int clickOrder = 20, clickWindow = 1024;
+    constexpr int clipOrder = 40, maxClipRun = 512;
+
+    int maxClickLength (double rate) { return std::max (8, (int) (0.0025 * rate)); }   // longer than 2.5 ms is not a click
+
+    struct Span
+    {
+        int start = 0, end = 0;
+        double strength = 0.0;   // clicks: how many times the local spread
+    };
+
+    // Clicks in x[from, to), each with two samples of room either side to rebuild.
+    // `threshold` is in robust standard deviations of the prediction error.
+    std::vector<Span> findClickSpans (const std::vector<float>& x, int from, int to, double threshold)
+    {
+        std::vector<Span> clicks;
+        // Prediction error of a model fitted to this stretch: clicks stand out as spikes.
+        std::vector<double> r ((size_t) clickOrder + 1, 0.0);
+        addAutocorrelation (x.data() + from, to - from, clickOrder, r);
+        const auto a = levinson (r, clickOrder);
+        if (a.empty())
+            return clicks;
+
+        std::vector<double> error ((size_t) x.size(), 0.0);
+        for (int i = std::max (from, clickOrder); i < to; ++i)
+        {
+            double e = 0.0;
+            for (int j = 0; j <= clickOrder; ++j)
+                e += a[(size_t) j] * x[(size_t) (i - j)];
+            error[(size_t) i] = e;
+        }
+
+        // Flag errors far above the local typical size; group flags close together.
+        for (int w = from; w < to; w += clickWindow)
+        {
+            const auto spread = robustSpread (error, std::max (from, w - clickWindow), std::min (to, w + 2 * clickWindow));
+            if (spread <= 1.0e-9)
+                continue;
+            for (int i = w; i < std::min (to, w + clickWindow); ++i)
+            {
+                const auto strength = std::abs (error[(size_t) i]) / spread;
+                if (strength > threshold)
+                {
+                    if (! clicks.empty() && i - clicks.back().end < 24)
+                    {
+                        clicks.back().end = i + 1;
+                        clicks.back().strength = std::max (clicks.back().strength, strength);
+                    }
+                    else
+                        clicks.push_back ({ i, i + 1, strength });
+                }
+            }
+        }
+        for (auto& c : clicks)
+        {
+            c.start = std::max (0, c.start - 2);
+            c.end = std::min ((int) x.size(), c.end + 2);
+        }
+        return clicks;
+    }
+
+    // Runs of two or more samples at or above `level`, all on one side, starting in [from, to).
+    // Runs too long, or too near the start of x, to rebuild are counted in `tooLong`.
+    std::vector<Span> findClipRuns (const std::vector<float>& x, int from, int to, float level, int& tooLong)
+    {
+        std::vector<Span> runs;
+        for (int i = from; i < to;)
+        {
+            if (std::abs (x[(size_t) i]) < level)
+            {
+                ++i;
+                continue;
+            }
+            auto j = i + 1;
+            while (j < (int) x.size() - clipOrder && std::abs (x[(size_t) j]) >= level && (x[(size_t) j] > 0) == (x[(size_t) i] > 0))
+                ++j;
+            if (j - i >= 2)
+            {
+                if (j - i > maxClipRun || i - clipOrder < 0)
+                    ++tooLong;
+                else
+                    runs.push_back ({ i, j, 0.0 });
+            }
+            i = j;
+        }
+        return runs;
+    }
+
+    // Rebuilds clipped runs of x together from a model of the audio around them.
+    void rebuildClipRuns (std::vector<float>& x, const std::vector<Span>& runs, float level)
+    {
+        if (runs.empty())
+            return;
+        std::vector<int> missing;
+        std::vector<float> signs;
+        for (const auto& r : runs)
+        {
+            signs.push_back (x[(size_t) r.start] > 0.0f ? 1.0f : -1.0f);
+            for (int k = r.start; k < r.end; ++k)
+                missing.push_back (k);
+        }
+
+        // Model the stretch (twice: the second time from the rebuilt audio, which is closer to the truth).
+        const auto lo = std::max (0, missing.front() - 2048), hi = std::min ((int) x.size(), missing.back() + 2048);
+        for (int pass = 0; pass < 2; ++pass)
+        {
+            std::vector<double> r ((size_t) clipOrder + 1, 0.0);
+            addAutocorrelation (x.data() + lo, hi - lo, clipOrder, r);
+            fillMissing (x, missing, levinson (r, clipOrder));
+        }
+
+        // A clipped sample was at least as loud as the clip level.
+        for (size_t i = 0; i < runs.size(); ++i)
+            for (int k = runs[i].start; k < runs[i].end; ++k)
+                x[(size_t) k] = signs[i] * std::max (std::abs (x[(size_t) k]), level);
+    }
+
+    // The clip level for a range: `levelPercent` of its loudest sample, or 0 when it is silent.
+    float clipLevel (const AudioData& d, Frame start, Frame end, double levelPercent)
+    {
+        const auto peak = d.peakAbs (start, end);
+        return peak < 1.0e-6f ? 0.0f : (float) (peak * std::clamp (levelPercent, 50.0, 100.0) / 100.0 - 1.0e-7);
+    }
+
+    // Calls `scan (channel, x, from, to, first)` for every block of [start, end) and
+    // channel, where x[i] is the audio at frame first + i. False when cancelled.
+    template <typename Scan>
+    bool scanBlocks (const AudioData& d, Frame start, Frame end, Scan&& scan, Progress progress)
+    {
+        start = std::clamp<Frame> (start, 0, d.length());
+        end = std::clamp<Frame> (end, start, d.length());
+        for (Frame a = start; a < end; a += blockFrames)
+        {
+            const auto b = std::min (end, a + blockFrames);
+            const auto first = a - blockMargin;
+            auto x = readChannels (d, first, (int) (b - a) + 2 * blockMargin);
+            for (int ch = 0; ch < d.numChannels(); ++ch)
+                scan (ch, x[(size_t) ch], blockMargin, blockMargin + (int) (b - a), first);
+            progress.report ((float) (b - start) / (float) (end - start));
+            if (progress.cancelled())
+                return false;
+        }
+        return true;
+    }
+
+    uint64_t channelBit (int ch) { return ch < 64 ? (uint64_t) 1 << ch : 0; }
+
+    // Sorts problems and joins those that overlap (the same event seen on several channels).
+    std::vector<Problem> merged (std::vector<Problem> found)
+    {
+        std::sort (found.begin(), found.end(), [] (const Problem& a, const Problem& b) { return a.start < b.start; });
+        std::vector<Problem> out;
+        for (const auto& p : found)
+        {
+            if (! out.empty() && out.back().kind == p.kind && p.start <= out.back().end)
+            {
+                auto& last = out.back();
+                last.end = std::max (last.end, p.end);
+                last.channels |= p.channels;
+                last.size = std::max (last.size, p.size);
+            }
+            else
+                out.push_back (p);
+        }
+        return out;
+    }
 }
 
 //==============================================================================
@@ -421,50 +590,14 @@ AudioDataPtr reduceNoise (const AudioData& d, Frame start, Frame end, const Nois
 AudioDataPtr declick (const AudioData& d, Frame start, Frame end, double sensitivity, Report& report, Progress progress)
 {
     report = {};
-    const auto maxClick = std::max (8, (int) (0.0025 * d.sampleRate()));   // longer than 2.5 ms is not a click
-    constexpr int order = 20, window = 1024;
+    const auto maxClick = maxClickLength (d.sampleRate());
     const auto threshold = std::max (2.0, sensitivity);
 
     return fixBlocks (d, start, end, [&] (std::vector<float>& x, int from, int to)
     {
-        // Prediction error of a model fitted to this block: clicks stand out as spikes.
-        std::vector<double> r ((size_t) order + 1, 0.0);
-        addAutocorrelation (x.data() + from, to - from, order, r);
-        const auto a = levinson (r, order);
-        if (a.empty())
-            return;
-
-        std::vector<double> error ((size_t) x.size(), 0.0);
-        for (int i = from; i < to; ++i)
+        for (const auto& c : findClickSpans (x, from, to, threshold))
         {
-            double e = 0.0;
-            for (int j = 0; j <= order; ++j)
-                e += a[(size_t) j] * x[(size_t) (i - j)];
-            error[(size_t) i] = e;
-        }
-
-        // Flag errors far above the local typical size; group flags close together.
-        std::vector<std::pair<int, int>> clicks;
-        for (int w = from; w < to; w += window)
-        {
-            const auto spread = robustSpread (error, std::max (from, w - window), std::min (to, w + 2 * window));
-            if (spread <= 1.0e-9)
-                continue;
-            for (int i = w; i < std::min (to, w + window); ++i)
-                if (std::abs (error[(size_t) i]) > threshold * spread)
-                {
-                    if (! clicks.empty() && i - clicks.back().second < 24)
-                        clicks.back().second = i + 1;
-                    else
-                        clicks.push_back ({ i, i + 1 });
-                }
-        }
-
-        for (auto [s, e] : clicks)
-        {
-            s -= 2;
-            e += 2;
-            if (e - s > maxClick || ! interpolateGap (x, s, e - s))
+            if (c.end - c.start > maxClick || ! interpolateGap (x, c.start, c.end - c.start))
                 ++report.skipped;
             else
                 ++report.fixed;
@@ -478,63 +611,14 @@ AudioDataPtr declip (const AudioData& d, Frame start, Frame end, double levelPer
     report = {};
     start = std::clamp<Frame> (start, 0, d.length());
     end = std::clamp<Frame> (end, start, d.length());
-    const auto peak = d.peakAbs (start, end);
-    if (peak < 1.0e-6f)
+    const auto level = clipLevel (d, start, end, levelPercent);
+    if (level <= 0.0f)
         return nullptr;
-
-    const auto level = (float) (peak * std::clamp (levelPercent, 50.0, 100.0) / 100.0 - 1.0e-7);
-    constexpr int order = 40, maxRun = 512;
 
     return fixBlocks (d, start, end, [&] (std::vector<float>& x, int from, int to)
     {
-        // Runs of two or more samples at the clipping level, all on one side.
-        std::vector<int> missing;
-        std::vector<std::pair<int, int>> runs;
-        std::vector<float> signs;
-        for (int i = from; i < to;)
-        {
-            if (std::abs (x[(size_t) i]) < level)
-            {
-                ++i;
-                continue;
-            }
-            auto j = i + 1;
-            while (j < (int) x.size() - order && std::abs (x[(size_t) j]) >= level && (x[(size_t) j] > 0) == (x[(size_t) i] > 0))
-                ++j;
-            if (j - i >= 2)
-            {
-                if (j - i > maxRun || i - order < 0)
-                    ++report.skipped;
-                else
-                {
-                    runs.push_back ({ i, j });
-                    signs.push_back (x[(size_t) i] > 0.0f ? 1.0f : -1.0f);
-                    for (int k = i; k < j; ++k)
-                        missing.push_back (k);
-                }
-            }
-            i = j;
-        }
-        if (missing.empty())
-            return;
-
-        // Model the block (twice: the second time from the rebuilt audio, which is closer to the truth).
-        const auto lo = std::max (0, missing.front() - 2048), hi = std::min ((int) x.size(), missing.back() + 2048);
-        for (int pass = 0; pass < 2; ++pass)
-        {
-            std::vector<double> r ((size_t) order + 1, 0.0);
-            addAutocorrelation (x.data() + lo, hi - lo, order, r);
-            fillMissing (x, missing, levinson (r, order));
-        }
-
-        // A clipped sample was at least as loud as the clip level.
-        for (size_t r = 0; r < runs.size(); ++r)
-        {
-            const auto [s, e] = runs[r];
-            const auto sign = signs[r];
-            for (int k = s; k < e; ++k)
-                x[(size_t) k] = sign * std::max (std::abs (x[(size_t) k]), level);
-        }
+        const auto runs = findClipRuns (x, from, to, level, report.skipped);
+        rebuildClipRuns (x, runs, level);
         report.fixed += (int) runs.size();
     }, progress);
 }
@@ -763,5 +847,238 @@ AudioDataPtr deess (const AudioData& d, Frame start, Frame end, const DeEssSetti
         for (int k = 0; k < bins; ++k)
             spectrum[(size_t) k] *= 1.0f + (gain - 1.0f) * mask[(size_t) k];
     }, progress);
+}
+
+//==============================================================================
+std::vector<Problem> findClicks (const AudioData& d, Frame start, Frame end, double sensitivity, Progress progress)
+{
+    std::vector<Problem> found;
+    const auto maxClick = maxClickLength (d.sampleRate());
+    const auto threshold = std::max (2.0, sensitivity);
+    const auto finished = scanBlocks (d, start, end, [&] (int ch, const std::vector<float>& x, int from, int to, Frame first)
+    {
+        for (const auto& c : findClickSpans (x, from, to, threshold))
+            if (c.end - c.start <= maxClick)
+                found.push_back ({ Problem::Kind::click, first + c.start, first + c.end, channelBit (ch), c.strength });
+    }, progress);
+    return finished ? merged (std::move (found)) : std::vector<Problem>();
+}
+
+std::vector<Problem> findClipping (const AudioData& d, Frame start, Frame end, double levelPercent, Progress progress)
+{
+    std::vector<Problem> found;
+    start = std::clamp<Frame> (start, 0, d.length());
+    end = std::clamp<Frame> (end, start, d.length());
+    const auto level = clipLevel (d, start, end, levelPercent);
+    if (level <= 0.0f)
+        return found;
+
+    const auto finished = scanBlocks (d, start, end, [&] (int ch, const std::vector<float>& x, int from, int to, Frame first)
+    {
+        int tooLong = 0;
+        for (const auto& r : findClipRuns (x, from, to, level, tooLong))
+            found.push_back ({ Problem::Kind::clipping, first + r.start, first + r.end, channelBit (ch), level });
+    }, progress);
+    return finished ? merged (std::move (found)) : std::vector<Problem>();
+}
+
+std::vector<Problem> findDropouts (const AudioData& d, Frame start, Frame end, Progress progress)
+{
+    std::vector<Problem> found;
+    start = std::clamp<Frame> (start, 0, d.length());
+    end = std::clamp<Frame> (end, start, d.length());
+    const auto rate = d.sampleRate();
+    const auto shortest = std::max<Frame> (8, (Frame) (0.001 * rate)), longest = (Frame) rate;
+    const auto around = std::max (16, (int) (0.01 * rate));
+
+    // Loud enough to count as sound: -60 dBFS RMS over 10 ms.
+    auto sounding = [&] (Frame from)
+    {
+        auto x = readChannels (d, from, around);
+        for (const auto& c : x)
+        {
+            double sum = 0.0;
+            for (auto v : c)
+                sum += (double) v * v;
+            if (sum / around > 1.0e-6)
+                return true;
+        }
+        return false;
+    };
+
+    Frame runStart = -1;
+    for (Frame a = start; a < end; a += blockFrames)
+    {
+        const auto b = std::min (end, a + blockFrames);
+        auto x = readChannels (d, a, (int) (b - a));
+        for (Frame f = a; f < b; ++f)
+        {
+            bool silent = true;
+            for (const auto& c : x)
+                if (std::abs (c[(size_t) (f - a)]) > 1.0e-7f)
+                {
+                    silent = false;
+                    break;
+                }
+            if (silent)
+            {
+                if (runStart < 0)
+                    runStart = f;
+                continue;
+            }
+            if (runStart > start && f - runStart >= shortest && f - runStart <= longest
+                && sounding (runStart - around) && sounding (f))
+                found.push_back ({ Problem::Kind::dropout, runStart, f, 0, 0.0 });
+            runStart = -1;
+        }
+        progress.report ((float) (b - start) / (float) (end - start));
+        if (progress.cancelled())
+            return {};
+    }
+    return found;
+}
+
+std::vector<Problem> findSilence (const AudioData& d, Frame start, Frame end, double thresholdDb, double minSeconds, Progress progress)
+{
+    std::vector<Problem> found;
+    start = std::clamp<Frame> (start, 0, d.length());
+    end = std::clamp<Frame> (end, start, d.length());
+    const auto window = std::max<Frame> (16, (Frame) (0.01 * d.sampleRate()));
+    const auto limit = std::pow (10.0, thresholdDb / 10.0);   // mean square
+    const auto shortest = std::max<Frame> (window, (Frame) (minSeconds * d.sampleRate()));
+    const auto perBlock = std::max<Frame> (1, blockFrames / window) * window;
+
+    Frame runStart = -1;
+    auto close = [&] (Frame at)
+    {
+        if (runStart >= 0 && at - runStart >= shortest)
+            found.push_back ({ Problem::Kind::silence, runStart, at, 0, 0.0 });
+        runStart = -1;
+    };
+
+    for (Frame a = start; a < end; a += perBlock)
+    {
+        const auto b = std::min (end, a + perBlock);
+        auto x = readChannels (d, a, (int) (b - a));
+        for (Frame w = a; w < b; w += window)
+        {
+            const auto n = (int) std::min (window, b - w);
+            double loudest = 0.0;
+            for (const auto& c : x)
+            {
+                double sum = 0.0;
+                for (int i = 0; i < n; ++i)
+                    sum += (double) c[(size_t) (w - a + i)] * c[(size_t) (w - a + i)];
+                loudest = std::max (loudest, sum / n);
+            }
+            if (loudest < limit)
+            {
+                if (runStart < 0)
+                    runStart = w;
+            }
+            else
+                close (w);
+        }
+        progress.report ((float) (b - start) / (float) (end - start));
+        if (progress.cancelled())
+            return {};
+    }
+    close (end);
+    return found;
+}
+
+//==============================================================================
+AudioDataPtr repairProblems (const AudioData& d, const std::vector<Problem>& problems, Report& report, Progress progress)
+{
+    report = {};
+    std::vector<Problem> list, longDropouts;
+    constexpr int longestGap = 512;   // interpolateGap's limit; longer dropouts are healed spectrally
+    for (const auto& p : problems)
+    {
+        if (p.end <= p.start || p.start < 0 || p.end > d.length() || p.kind == Problem::Kind::silence)
+            continue;
+        if (p.kind == Problem::Kind::dropout && p.end - p.start > longestGap)
+            longDropouts.push_back (p);
+        else
+            list.push_back (p);
+    }
+    std::sort (list.begin(), list.end(), [] (const Problem& a, const Problem& b) { return a.start < b.start; });
+
+    // Problems close together are fixed in one stretch with room for context either
+    // side; the audio between stretches is shared with the original, not copied.
+    constexpr Frame room = blockMargin;
+    const auto channels = d.numChannels();
+    AudioData::Builder out (channels, d.sampleRate());
+    Frame written = 0;
+    for (size_t i = 0; i < list.size();)
+    {
+        auto first = list[i].start, last = list[i].end;
+        auto j = i + 1;
+        while (j < list.size() && list[j].start < last + 2 * room && last - first < blockFrames)
+            last = std::max (last, list[j++].end);
+
+        const auto base = first - room;
+        auto x = readChannels (d, base, (int) (last - first + 2 * room));
+        for (auto k = i; k < j; ++k)
+        {
+            const auto& p = list[k];
+            const auto s = (int) (p.start - base), e = (int) (p.end - base);
+            bool fixed = false, failed = false;
+            for (int ch = 0; ch < channels; ++ch)
+            {
+                if (p.channels != 0 && ch < 64 && (p.channels & channelBit (ch)) == 0)
+                    continue;
+                auto& c = x[(size_t) ch];
+                if (p.kind == Problem::Kind::clipping)
+                {
+                    int tooLong = 0;
+                    const auto runs = findClipRuns (c, s, e, (float) p.size, tooLong);
+                    rebuildClipRuns (c, runs, (float) p.size);
+                    fixed = fixed || ! runs.empty();
+                }
+                else if (interpolateGap (c, s, e - s))
+                    fixed = true;
+                else
+                    failed = true;
+            }
+            if (fixed && ! failed)
+                ++report.fixed;
+            else
+                ++report.skipped;
+        }
+
+        out.appendShared (d, written, first);
+        std::vector<const float*> rows;
+        for (auto& c : x)
+            rows.push_back (c.data() + room);
+        out.append (rows.data(), (int) (last - first));
+        written = last;
+        i = j;
+
+        progress.report ((float) i / (float) (list.size() + longDropouts.size()));
+        if (progress.cancelled())
+            return nullptr;
+    }
+    out.appendShared (d, written, d.length());
+    AudioDataPtr result = out.finish();
+
+    for (size_t k = 0; k < longDropouts.size(); ++k)
+    {
+        std::string error;
+        SpectralRegion r;
+        r.start = longDropouts[k].start;
+        r.end = longDropouts[k].end;
+        if (auto healed = autoHeal (*result, r, error))
+        {
+            result = std::move (healed);
+            ++report.fixed;
+        }
+        else
+            ++report.skipped;
+        progress.report ((float) (list.size() + k + 1) / (float) (list.size() + longDropouts.size()));
+        if (progress.cancelled())
+            return nullptr;
+    }
+    return report.fixed > 0 ? result : nullptr;
 }
 }

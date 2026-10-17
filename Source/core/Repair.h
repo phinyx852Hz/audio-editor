@@ -152,6 +152,29 @@ namespace repair
     };
     AudioDataPtr deess (const AudioData&, Frame start, Frame end, const DeEssSettings&, Progress = {});
 
+    //==========================================================================
+    // Diagnostics: scans that list problems without changing anything, so they
+    // can be reviewed, repaired one by one or all at once, or marked.
+    struct Problem
+    {
+        enum class Kind { click, clipping, dropout, silence };
+        Kind kind = Kind::click;
+        Frame start = 0, end = 0;
+        uint64_t channels = 0;   // a bit per channel (the first 64); 0 means every channel
+        double size = 0.0;       // click: times louder than the audio around it; clipping: the clip level
+    };
+
+    std::vector<Problem> findClicks (const AudioData&, Frame start, Frame end, double sensitivity, Progress = {});
+    std::vector<Problem> findClipping (const AudioData&, Frame start, Frame end, double levelPercent, Progress = {});
+    // Stretches of digital silence (at least 1 ms) with sound on both sides: lost samples.
+    std::vector<Problem> findDropouts (const AudioData&, Frame start, Frame end, Progress = {});
+    // Stretches quieter than thresholdDb (RMS over 10 ms) for at least minSeconds.
+    std::vector<Problem> findSilence (const AudioData&, Frame start, Frame end, double thresholdDb, double minSeconds, Progress = {});
+
+    // Rebuilds listed clicks, clipping and dropouts (silence is left alone).
+    // Null when cancelled or when nothing could be repaired.
+    AudioDataPtr repairProblems (const AudioData&, const std::vector<Problem>&, Report&, Progress = {});
+
     // Fills x[gapStart, gapStart + gapLength) from an autoregressive model of the
     // samples around it (least-squares interpolation). x must hold enough audio
     // either side. Returns false when the gap is too long.

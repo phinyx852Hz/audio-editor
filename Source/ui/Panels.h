@@ -2,6 +2,7 @@
 #pragma once
 
 #include "../core/AudioDocument.h"
+#include "../core/Repair.h"
 #include "../engine/AudioEngine.h"
 
 #include <QElapsedTimer>
@@ -10,8 +11,13 @@
 #include <QWidget>
 #include <vector>
 
+class QComboBox;
 class QDockWidget;
+class QDoubleSpinBox;
+class QLabel;
 class QMainWindow;
+class QPushButton;
+class QStackedWidget;
 
 // Window shortcuts such as Space, arrows and Delete would otherwise steal keys
 // from panels. A panel keeps its navigation keys (plus any extra keys it
@@ -135,4 +141,59 @@ private:
     std::vector<double> powers;          // every 100 ms block since reset, for integrated loudness
     double momentary = -200.0, shortTerm = -200.0, integrated = -200.0;
     QElapsedTimer clock;
+};
+
+// Diagnostics, like Audition's: pick what to look for (clicks, clipping,
+// dropouts, silence), scan the selection or the whole file, then go through the
+// list. Enter (or moving through the list) shows a problem in the waveform;
+// Repair fixes the chosen ones, Repair All the whole list, Mark adds regions,
+// and for silence Delete removes it.
+class DiagnosticsPanel final : public QWidget
+{
+    Q_OBJECT
+
+public:
+    explicit DiagnosticsPanel (QWidget* parent);
+
+    using Kind = repair::Problem::Kind;
+    Kind kind() const;
+    double clickSensitivity() const;   // threshold for repair::findClicks
+    double clipLevel() const;          // percent of the peak
+    double silenceDb() const;
+    double silenceSeconds() const;
+
+    void setProblems (std::vector<repair::Problem>, double sampleRate, int channels, const QString& where);
+    void clearProblems (const QString& why = {});
+    const std::vector<repair::Problem>& problems() const { return list; }
+    std::vector<int> chosen() const;   // the selected rows, or the current one
+    void remove (const std::vector<int>& rows);
+    QWidget* listWidget() const;
+
+Q_SIGNALS:
+    void scanRequested();
+    void showRequested (Frame start, Frame end);
+    void repairRequested (std::vector<int> rows);
+    void markRequested (std::vector<int> rows);
+    void deleteRequested (std::vector<int> rows);
+
+private:
+    void updateButtons();
+    std::vector<int> allRows() const;
+
+    QComboBox* kindBox;
+    QStackedWidget* settings;
+    QComboBox* sensitivityBox;
+    QDoubleSpinBox* clipBox;
+    QDoubleSpinBox* silenceDbBox;
+    QDoubleSpinBox* silenceSecondsBox;
+    QPushButton* scanButton;
+    QTreeWidget* tree;
+    QLabel* summary;
+    QPushButton* repairButton;
+    QPushButton* repairAllButton;
+    QPushButton* markButton;
+    QPushButton* deleteButton;
+    std::vector<repair::Problem> list;
+    double rate = 48000.0;
+    int numChannels = 1;
 };

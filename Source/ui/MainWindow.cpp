@@ -249,6 +249,8 @@ void MainWindow::registerCommands()
          [this] { waveform->setBrushSize ((int) std::lround (waveform->brushSize() * 1.25) + 1); });
     add ("repair.addHarmonics", Category::repair, tr ("Add Har&monics"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_H) },
          [this] { addHarmonics(); });
+    add ("view.diagnostics", Category::repair, tr ("&Diagnostics Panel"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_D) },
+         [this] { diagnosticsPanel->toggle(); lastPanel = diagnosticsPanel; });
     add ("repair.findSimilar", Category::repair, tr ("F&ind Similar Sounds..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_F) },
          [this] { findSimilar(); });
     add ("process.dcOffset", Category::process, tr ("Remove &DC Offset"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_D) },
@@ -417,7 +419,7 @@ void MainWindow::buildMenus()
         { tr ("&Process"),   { "process.gain", "process.normalize", "-", "process.fadeIn", "process.fadeOut", "-",
                                "process.fadeShape.linear", "process.fadeShape.equalPower", "process.fadeShape.exponential",
                                "process.fadeShape.sCurve", "-", "process.reverse", "process.invert", "process.dcOffset", "-", "process.stereoize" } },
-        { tr ("&Repair"),    { "repair.autoHeal", "repair.spectralGain", "repair.findSimilar", "-", "repair.learnNoise", "repair.noiseReduction", "-",
+        { tr ("&Repair"),    { "view.diagnostics", "-", "repair.autoHeal", "repair.spectralGain", "repair.findSimilar", "-", "repair.learnNoise", "repair.noiseReduction", "-",
                                "repair.declick", "repair.declip", "repair.dehum", "repair.deess", "-",
                                "repair.toolBox", "repair.toolLasso", "repair.toolBrush", "repair.toolSpotHeal",
                                "repair.brushSmaller", "repair.brushLarger", "repair.addHarmonics", "-",
@@ -428,7 +430,7 @@ void MainWindow::buildMenus()
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
-                               "view.spectral", "-", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.popOut", "view.resetLayout", "-",
+                               "view.spectral", "-", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.popOut", "view.resetLayout", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "-", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
@@ -509,6 +511,14 @@ void MainWindow::buildPanels()
     connect (markerList, &MarkerList::renameRequested, this, &MainWindow::renameMarker);
     connect (markerList, &MarkerList::deleteRequested, this, &MainWindow::deleteMarker);
 
+    diagnostics = new DiagnosticsPanel (this);
+    diagnostics->listWidget()->installEventFilter (new NavigationKeyGuard (waveform, {}, diagnostics->listWidget()));
+    connect (diagnostics, &DiagnosticsPanel::scanRequested, this, &MainWindow::scanDiagnostics);
+    connect (diagnostics, &DiagnosticsPanel::showRequested, this, &MainWindow::showProblem);
+    connect (diagnostics, &DiagnosticsPanel::repairRequested, this, &MainWindow::repairProblems);
+    connect (diagnostics, &DiagnosticsPanel::markRequested, this, &MainWindow::markProblems);
+    connect (diagnostics, &DiagnosticsPanel::deleteRequested, this, &MainWindow::deleteSilence);
+
     meterPanel = new MeterPanel (this);
 
     masterWidget = new MasterPanel (engine, waveform, this);
@@ -522,6 +532,7 @@ void MainWindow::buildPanels()
     metersPanel = new DockablePanel (*this, QStringLiteral ("metersPanel"), tr ("Meters"), meterPanel, Qt::RightDockWidgetArea);
     markerPanel = new DockablePanel (*this, QStringLiteral ("markersPanel"), tr ("Markers"), markerList, Qt::BottomDockWidgetArea);
     historyPanel = new DockablePanel (*this, QStringLiteral ("historyPanel"), tr ("History"), historyList, Qt::RightDockWidgetArea);
+    diagnosticsPanel = new DockablePanel (*this, QStringLiteral ("diagnosticsPanel"), tr ("Diagnostics"), diagnostics, Qt::RightDockWidgetArea);
     masterPanel = new DockablePanel (*this, QStringLiteral ("masterPanel"), tr ("Master Section"), masterWidget, Qt::RightDockWidgetArea);
     chainRow = new ChainRow (engine, waveform, this);
     chainRow->choosePlugin = [this] (int slot)
@@ -542,10 +553,10 @@ void MainWindow::buildPanels()
     chainPanel = new DockablePanel (*this, QStringLiteral ("chainPanel"), tr ("Device Chain"), chainRow, Qt::BottomDockWidgetArea);
     chainPanel->dock()->show();
 
-    panels = { masterPanel, chainPanel, metersPanel, markerPanel, historyPanel };
+    panels = { masterPanel, chainPanel, metersPanel, markerPanel, historyPanel, diagnosticsPanel };
 
     focusFollowsMouse = new FocusFollowsMouse (this);
-    focusFollowsMouse->setAreas ({ waveform, chainRow, masterWidget, markerList, historyList });
+    focusFollowsMouse->setAreas ({ waveform, chainRow, masterWidget, markerList, historyList, diagnostics });
     qApp->installEventFilter (focusFollowsMouse);
 }
 
@@ -882,6 +893,11 @@ void MainWindow::refreshFromDocument (bool keepView)
         engine.setPositionFrames (cursor);
 
     markerList->setMarkers (d ? doc.current().markers : std::vector<Marker>(), d ? d->sampleRate() : 48000.0);
+    if (diagnosed != nullptr && d.get() != diagnosed)
+    {
+        diagnosed = nullptr;
+        diagnostics->clearProblems (tr ("The audio changed. Scan again."));
+    }
 
     historyList->clear();
     if (doc.isOpen())
@@ -1533,7 +1549,7 @@ void MainWindow::findSimilar()
     }
 
     QMessageBox ask (QMessageBox::Question, tr ("Find Similar Sounds"),
-                     tr ("Found %n more like the selected sound.", nullptr, (int) found->size()), QMessageBox::Cancel, this);
+                     tr ("Found %1 more like the selected sound.").arg (found->size()), QMessageBox::Cancel, this);
     auto* healAll = ask.addButton (tr ("&Heal All %1").arg (found->size() + 1), QMessageBox::AcceptRole);
     auto* mark = ask.addButton (tr ("&Mark Them"), QMessageBox::ActionRole);
     ask.setDefaultButton (healAll);
@@ -1581,12 +1597,150 @@ void MainWindow::findSimilar()
     });
     if (result == nullptr)
         return;
-    commit (tr ("Heal %n Similar Sounds", nullptr, (int) all.size()), std::move (result), 0, 0, 0);
+    commit (tr ("Heal Similar Sounds"), std::move (result), 0, 0, 0);
     if (*skipped > 0)
         statusBar()->showMessage (tr ("Healed %1; %2 could not be healed (no clean audio around them).")
                                       .arg ((int) all.size() - *skipped).arg (*skipped), 6000);
     else
-        statusBar()->showMessage (tr ("Healed %n sounds.", nullptr, (int) all.size()), 4000);
+        statusBar()->showMessage (tr ("Healed %1 sounds.").arg (all.size()), 4000);
+}
+
+void MainWindow::scanDiagnostics()
+{
+    const auto d = data();
+    if (d == nullptr)
+        return;
+
+    const auto [s, e] = processRange();
+    const auto where = hasSelection() ? tr ("in the selection") : tr ("in the whole file");
+    const auto kind = diagnostics->kind();
+    const auto sensitivity = diagnostics->clickSensitivity(), clip = diagnostics->clipLevel();
+    const auto silenceDb = diagnostics->silenceDb(), silenceSeconds = diagnostics->silenceSeconds();
+    auto found = std::make_shared<std::vector<repair::Problem>>();
+    auto finished = std::make_shared<bool> (false);
+    runRepair (tr ("Scan"), [=] (repair::Progress p)
+    {
+        using Kind = repair::Problem::Kind;
+        *found = kind == Kind::click    ? repair::findClicks (*d, s, e, sensitivity, p)
+               : kind == Kind::clipping ? repair::findClipping (*d, s, e, clip, p)
+               : kind == Kind::dropout  ? repair::findDropouts (*d, s, e, p)
+                                        : repair::findSilence (*d, s, e, silenceDb, silenceSeconds, p);
+        *finished = ! p.cancelled();
+        return AudioDataPtr();
+    });
+    if (! *finished)
+        return;
+
+    diagnosed = d.get();
+    diagnostics->setProblems (std::move (*found), d->sampleRate(), d->numChannels(), where);
+    diagnostics->listWidget()->setFocus();
+}
+
+void MainWindow::showProblem (Frame start, Frame end)
+{
+    const auto d = data();
+    if (d == nullptr || d.get() != diagnosed)
+        return;
+
+    // Select it and zoom so it is easy to see and hear: a short one with some sound around it.
+    const auto length = std::max ((double) (end - start) * 1.5, 0.1 * d->sampleRate());
+    waveform->setView ((double) (start + end) / 2.0 - length / 2.0, length);
+    selectRange (start, end);
+    cursor = start;
+    if (! engine.isPlaying())
+        engine.setPositionFrames (start);
+    waveform->setCursorFrame (start);
+}
+
+void MainWindow::repairProblems (std::vector<int> rows)
+{
+    const auto d = data();
+    if (d == nullptr || d.get() != diagnosed || rows.empty())
+        return;
+
+    std::vector<repair::Problem> chosen;
+    for (auto r : rows)
+        chosen.push_back (diagnostics->problems()[(size_t) r]);
+    auto report = std::make_shared<repair::Report>();
+    auto result = runRepair (tr ("Repair"), [d, chosen, report] (repair::Progress p) { return repair::repairProblems (*d, chosen, *report, p); });
+    if (result == nullptr)
+    {
+        if (report->skipped > 0)
+            statusBar()->showMessage (tr ("These could not be repaired from the audio around them."), 6000);
+        return;
+    }
+
+    commit (tr ("Repair from Diagnostics"), std::move (result), 0, 0, 0);
+    diagnosed = data().get();
+    diagnostics->remove (rows);
+    diagnostics->listWidget()->setFocus();
+    statusBar()->showMessage (report->skipped > 0 ? tr ("Repaired %1; %2 could not be repaired.").arg (report->fixed).arg (report->skipped)
+                                                  : tr ("Repaired %1.").arg (report->fixed), 6000);
+}
+
+void MainWindow::markProblems (std::vector<int> rows)
+{
+    const auto d = data();
+    if (d == nullptr || d.get() != diagnosed || rows.empty())
+        return;
+
+    const QString names[] { tr ("Click %1"), tr ("Clipping %1"), tr ("Dropout %1"), tr ("Silence %1") };
+    auto markers = doc.current().markers;
+    int count = 0;
+    for (auto r : rows)
+    {
+        const auto& p = diagnostics->problems()[(size_t) r];
+        Marker m;
+        m.id = doc.nextMarkerId();
+        m.type = Marker::Type::region;
+        m.start = p.start;
+        m.end = p.end;
+        m.name = names[(int) p.kind].arg (++count).toStdString();
+        markers.push_back (m);
+    }
+    commitMarkers (tr ("Mark Problems"), std::move (markers));
+    statusBar()->showMessage (tr ("Added %1; the Markers panel (Ctrl+Shift+M) lists them.")
+                                  .arg (count == 1 ? tr ("1 region") : tr ("%1 regions").arg (count)), 6000);
+}
+
+void MainWindow::deleteSilence (std::vector<int> rows)
+{
+    const auto d = data();
+    if (d == nullptr || d.get() != diagnosed || rows.empty())
+        return;
+
+    // Delete from the end backwards, so earlier positions stay valid.
+    const auto list = diagnostics->problems();
+    DocumentState state { d, doc.current().markers };
+    for (auto it = rows.rbegin(); it != rows.rend(); ++it)
+    {
+        const auto& p = list[(size_t) *it];
+        state.data = state.data->replaced (p.start, p.end, nullptr);
+        adjustMarkersForEdit (state.markers, p.start, p.end, 0);
+    }
+    doc.apply (tr ("Delete Silence").toStdString(), std::move (state));
+    cursor = selStart = selEnd = selAnchor = std::min (cursor, data()->length());
+    refreshFromDocument (true);
+
+    // The rest of the list moves back by what was deleted before each.
+    std::vector<repair::Problem> rest;
+    for (size_t i = 0; i < list.size(); ++i)
+    {
+        if (std::binary_search (rows.begin(), rows.end(), (int) i))
+            continue;
+        auto p = list[i];
+        Frame removed = 0;
+        for (auto r : rows)
+            if (list[(size_t) r].end <= p.start)
+                removed += list[(size_t) r].end - list[(size_t) r].start;
+        p.start -= removed;
+        p.end -= removed;
+        rest.push_back (p);
+    }
+    diagnosed = data().get();
+    diagnostics->setProblems (std::move (rest), data()->sampleRate(), data()->numChannels(), tr ("left"));
+    diagnostics->listWidget()->setFocus();
+    statusBar()->showMessage (rows.size() == 1 ? tr ("Deleted 1 silent stretch.") : tr ("Deleted %1 silent stretches.").arg (rows.size()), 6000);
 }
 
 void MainWindow::autoHeal()
@@ -2267,6 +2421,11 @@ void MainWindow::selectRange (Frame anchor, Frame head)
 
     anchor = std::clamp<Frame> (anchor, 0, d->length());
     head = std::clamp<Frame> (head, 0, d->length());
+    if (shape != nullptr)
+    {
+        shape.reset();   // a new time selection replaces a drawn one
+        waveform->setShape (nullptr);
+    }
     selAnchor = anchor;
     selStart = std::min (anchor, head);
     selEnd = std::max (anchor, head);

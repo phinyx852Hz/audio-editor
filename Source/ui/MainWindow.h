@@ -109,6 +109,13 @@ private:
     void chooseTool (WaveformView::Tool);
     void addHarmonics();
     void findSimilar();
+
+    // Diagnostics panel
+    void scanDiagnostics();
+    void showProblem (Frame start, Frame end);
+    void repairProblems (std::vector<int> rows);
+    void markProblems (std::vector<int> rows);
+    void deleteSilence (std::vector<int> rows);
     void fade (bool in);
     void simpleProcess (const QString& description, AudioDataPtr (*fn) (const AudioData&, Frame, Frame));
 
@@ -152,6 +159,8 @@ private:
     QLabel* statusLabel;
     QListWidget* historyList = nullptr;
     MarkerList* markerList = nullptr;
+    class DiagnosticsPanel* diagnostics = nullptr;
+    const AudioData* diagnosed = nullptr;   // the audio the diagnostics list belongs to
     MeterPanel* meterPanel = nullptr;
     MasterPanel* masterWidget = nullptr;
     DockablePanel* masterPanel = nullptr;
@@ -159,6 +168,7 @@ private:
     DockablePanel* chainPanel = nullptr;
     DockablePanel* historyPanel = nullptr;
     DockablePanel* markerPanel = nullptr;
+    DockablePanel* diagnosticsPanel = nullptr;
     DockablePanel* metersPanel = nullptr;
     QList<DockablePanel*> panels;
     QList<QSlider*> opacitySliders;

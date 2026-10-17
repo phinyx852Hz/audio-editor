@@ -6,6 +6,15 @@
 #include "Theme.h"
 
 #include <QApplication>
+#include <QComboBox>
+#include <QDoubleSpinBox>
+#include <QFormLayout>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QPushButton>
+#include <QSettings>
+#include <QStackedWidget>
+#include <QStandardPaths>
 #include <QDockWidget>
 #include <QHeaderView>
 #include <QKeyEvent>
@@ -493,4 +502,256 @@ void MeterPanel::paintEvent (QPaintEvent*)
         g.drawText (QRectF (left, y + lineHeight * 0.45, width() - left - 8, lineHeight * 0.55), Qt::AlignLeft | Qt::AlignVCenter, value);
         y += lineHeight * 1.15;
     }
+}
+
+//==============================================================================
+namespace
+{
+    QSettings& diagnosticsSettings()
+    {
+        static QSettings settings (QStandardPaths::writableLocation (QStandardPaths::GenericConfigLocation)
+                                       + QStringLiteral ("/" APP_ID "/settings.ini"),
+                                   QSettings::IniFormat);
+        return settings;
+    }
+
+    QString channelList (uint64_t channels, int count)
+    {
+        if (channels == 0 || count <= 1)
+            return DiagnosticsPanel::tr ("All");
+        QStringList names;
+        for (int ch = 0; ch < std::min (count, 64); ++ch)
+            if (channels & ((uint64_t) 1 << ch))
+                names << QString::fromStdString (dsp::channelName (ch, count));
+        return names.size() == count ? DiagnosticsPanel::tr ("All") : names.join (QStringLiteral (", "));
+    }
+}
+
+DiagnosticsPanel::DiagnosticsPanel (QWidget* parent) : QWidget (parent)
+{
+    setAccessibleName (tr ("Diagnostics"));
+    auto& stored = diagnosticsSettings();
+
+    kindBox = new QComboBox (this);
+    kindBox->addItems ({ tr ("Clicks and crackle"), tr ("Clipping"), tr ("Dropouts (lost samples)"), tr ("Silence") });
+    kindBox->setCurrentIndex (stored.value (QStringLiteral ("diagnostics/kind"), 0).toInt());
+
+    settings = new QStackedWidget (this);
+    auto page = [this] (QWidget* field, const QString& label)
+    {
+        auto* w = new QWidget (settings);
+        auto* form = new QFormLayout (w);
+        form->setContentsMargins (0, 0, 0, 0);
+        if (field != nullptr)
+            form->addRow (label, field);
+        else
+            form->addRow (new QLabel (label, w));
+        settings->addWidget (w);
+        return form;
+    };
+
+    sensitivityBox = new QComboBox;
+    sensitivityBox->addItems ({ tr ("Low (loud clicks only)"), tr ("Medium"), tr ("High (vinyl crackle)") });
+    sensitivityBox->setCurrentIndex (stored.value (QStringLiteral ("diagnostics/sensitivity"), 1).toInt());
+    page (sensitivityBox, tr ("&Sensitivity:"));
+
+    clipBox = new QDoubleSpinBox;
+    clipBox->setRange (80.0, 100.0);
+    clipBox->setDecimals (1);
+    clipBox->setSingleStep (0.5);
+    clipBox->setSuffix (tr (" % of the peak"));
+    clipBox->setValue (stored.value (QStringLiteral ("diagnostics/clipLevel"), 99.0).toDouble());
+    page (clipBox, tr ("&Clipped at or above:"));
+
+    page (nullptr, tr ("Finds stretches of digital silence with sound on both sides."));
+
+    silenceDbBox = new QDoubleSpinBox;
+    silenceDbBox->setRange (-90.0, -20.0);
+    silenceDbBox->setDecimals (0);
+    silenceDbBox->setSuffix (tr (" dB"));
+    silenceDbBox->setValue (stored.value (QStringLiteral ("diagnostics/silenceDb"), -50.0).toDouble());
+    silenceSecondsBox = new QDoubleSpinBox;
+    silenceSecondsBox->setRange (0.1, 60.0);
+    silenceSecondsBox->setDecimals (1);
+    silenceSecondsBox->setSingleStep (0.5);
+    silenceSecondsBox->setSuffix (tr (" s"));
+    silenceSecondsBox->setValue (stored.value (QStringLiteral ("diagnostics/silenceSeconds"), 2.0).toDouble());
+    auto* silenceForm = page (silenceDbBox, tr ("&Quieter than:"));
+    silenceForm->addRow (tr ("For at &least:"), silenceSecondsBox);
+
+    scanButton = new QPushButton (tr ("Sca&n"), this);
+    scanButton->setToolTip (tr ("Scan the selection, or the whole file when nothing is selected"));
+
+    tree = new QTreeWidget (this);
+    tree->setAccessibleName (tr ("Problems found"));
+    tree->setColumnCount (4);
+    tree->setHeaderLabels ({ tr ("Start"), tr ("Length"), tr ("Channels"), tr ("Detail") });
+    tree->setRootIsDecorated (false);
+    tree->setUniformRowHeights (true);
+    tree->setSelectionMode (QAbstractItemView::ExtendedSelection);
+    tree->header()->setStretchLastSection (true);
+
+    summary = new QLabel (tr ("Choose what to look for, then Scan."), this);
+    summary->setWordWrap (true);
+
+    repairButton = new QPushButton (tr ("&Repair"), this);
+    repairAllButton = new QPushButton (tr ("Repair &All"), this);
+    markButton = new QPushButton (tr ("&Mark"), this);
+    markButton->setToolTip (tr ("Add a region marker for each chosen problem (or all of them)"));
+    deleteButton = new QPushButton (tr ("&Delete"), this);
+    deleteButton->setToolTip (tr ("Delete the chosen silent stretches"));
+
+    auto* top = new QHBoxLayout;
+    auto* findLabel = new QLabel (tr ("&Find:"), this);
+    findLabel->setBuddy (kindBox);
+    top->addWidget (findLabel);
+    top->addWidget (kindBox, 1);
+    top->addWidget (scanButton);
+    auto* buttons = new QHBoxLayout;
+    buttons->addWidget (repairButton);
+    buttons->addWidget (repairAllButton);
+    buttons->addWidget (markButton);
+    buttons->addWidget (deleteButton);
+    buttons->addStretch (1);
+    auto* layout = new QVBoxLayout (this);
+    layout->setContentsMargins (6, 6, 6, 6);
+    layout->addLayout (top);
+    layout->addWidget (settings);
+    layout->addWidget (tree, 1);
+    layout->addWidget (summary);
+    layout->addLayout (buttons);
+
+    settings->setCurrentIndex (kindBox->currentIndex());
+    connect (kindBox, &QComboBox::currentIndexChanged, this, [this] (int i)
+    {
+        settings->setCurrentIndex (i);
+        diagnosticsSettings().setValue (QStringLiteral ("diagnostics/kind"), i);
+        clearProblems (tr ("Choose what to look for, then Scan."));
+    });
+    connect (sensitivityBox, &QComboBox::currentIndexChanged, this, [] (int i) { diagnosticsSettings().setValue (QStringLiteral ("diagnostics/sensitivity"), i); });
+    connect (clipBox, &QDoubleSpinBox::valueChanged, this, [] (double v) { diagnosticsSettings().setValue (QStringLiteral ("diagnostics/clipLevel"), v); });
+    connect (silenceDbBox, &QDoubleSpinBox::valueChanged, this, [] (double v) { diagnosticsSettings().setValue (QStringLiteral ("diagnostics/silenceDb"), v); });
+    connect (silenceSecondsBox, &QDoubleSpinBox::valueChanged, this, [] (double v) { diagnosticsSettings().setValue (QStringLiteral ("diagnostics/silenceSeconds"), v); });
+
+    connect (scanButton, &QPushButton::clicked, this, &DiagnosticsPanel::scanRequested);
+    connect (repairButton, &QPushButton::clicked, this, [this] { Q_EMIT repairRequested (chosen()); });
+    connect (repairAllButton, &QPushButton::clicked, this, [this] { Q_EMIT repairRequested (allRows()); });
+    connect (markButton, &QPushButton::clicked, this, [this]
+    {
+        // With nothing picked out, mark the whole list.
+        Q_EMIT markRequested (tree->selectedItems().size() > 1 ? chosen() : allRows());
+    });
+    connect (deleteButton, &QPushButton::clicked, this, [this] { Q_EMIT deleteRequested (chosen()); });
+    connect (tree, &QTreeWidget::currentItemChanged, this, [this] (QTreeWidgetItem* item)
+    {
+        if (item == nullptr)
+            return;
+        const auto& p = list[(size_t) item->data (0, Qt::UserRole).toInt()];
+        Q_EMIT showRequested (p.start, p.end);
+    });
+    connect (tree, &QTreeWidget::itemSelectionChanged, this, &DiagnosticsPanel::updateButtons);
+    updateButtons();
+}
+
+DiagnosticsPanel::Kind DiagnosticsPanel::kind() const { return (Kind) kindBox->currentIndex(); }
+
+double DiagnosticsPanel::clickSensitivity() const
+{
+    const double thresholds[] { 9.0, 6.5, 4.5 };   // the same steps as DeClick
+    return thresholds[std::clamp (sensitivityBox->currentIndex(), 0, 2)];
+}
+
+double DiagnosticsPanel::clipLevel() const       { return clipBox->value(); }
+double DiagnosticsPanel::silenceDb() const       { return silenceDbBox->value(); }
+double DiagnosticsPanel::silenceSeconds() const  { return silenceSecondsBox->value(); }
+QWidget* DiagnosticsPanel::listWidget() const    { return tree; }
+
+void DiagnosticsPanel::setProblems (std::vector<repair::Problem> found, double sampleRate, int channels, const QString& where)
+{
+    list = std::move (found);
+    rate = sampleRate;
+    numChannels = channels;
+    tree->clear();
+    for (size_t i = 0; i < list.size(); ++i)
+    {
+        const auto& p = list[i];
+        auto* item = new QTreeWidgetItem (tree);
+        item->setData (0, Qt::UserRole, (int) i);
+        item->setText (0, formatTime ((double) p.start / rate));
+        const auto ms = (double) (p.end - p.start) / rate * 1000.0;
+        item->setText (1, ms < 1000.0 ? tr ("%1 ms").arg (ms, 0, 'f', ms < 10.0 ? 2 : 0) : formatTime (ms / 1000.0));
+        item->setText (2, channelList (p.channels, channels));
+        switch (p.kind)
+        {
+            case Kind::click:    item->setText (3, tr ("%1 times the sound around it").arg (p.size, 0, 'f', 0)); break;
+            case Kind::clipping: item->setText (3, tr ("%1 samples at the limit").arg (p.end - p.start)); break;
+            case Kind::dropout:  item->setText (3, tr ("digital silence")); break;
+            case Kind::silence:  item->setText (3, tr ("quiet")); break;
+        }
+    }
+    for (int c = 0; c < 3; ++c)
+        tree->resizeColumnToContents (c);
+
+    const QString one[] { tr ("click"), tr ("clipped stretch"), tr ("dropout"), tr ("silent stretch") };
+    const QString many[] { tr ("clicks"), tr ("clipped stretches"), tr ("dropouts"), tr ("silent stretches") };
+    const auto k = (int) kind();
+    const auto action = kind() == Kind::silence ? tr ("Delete removes the chosen ones.") : tr ("Repair fixes the chosen ones.");
+    summary->setText (list.empty() ? tr ("Found no %1 %2.").arg (many[k], where)
+                                   : tr ("Found %1 %2 %3. Moving through the list shows each one; %4")
+                                         .arg (list.size()).arg (list.size() == 1 ? one[k] : many[k], where, action));
+    if (! list.empty())
+        tree->setCurrentItem (tree->topLevelItem (0), 0, QItemSelectionModel::NoUpdate);
+    updateButtons();
+}
+
+void DiagnosticsPanel::clearProblems (const QString& why)
+{
+    list.clear();
+    tree->clear();
+    if (! why.isEmpty())
+        summary->setText (why);
+    updateButtons();
+}
+
+std::vector<int> DiagnosticsPanel::allRows() const
+{
+    std::vector<int> rows ((size_t) list.size());
+    for (size_t i = 0; i < rows.size(); ++i)
+        rows[i] = (int) i;
+    return rows;
+}
+
+std::vector<int> DiagnosticsPanel::chosen() const
+{
+    std::vector<int> rows;
+    for (auto* item : tree->selectedItems())
+        rows.push_back (item->data (0, Qt::UserRole).toInt());
+    if (rows.empty() && tree->currentItem() != nullptr)
+        rows.push_back (tree->currentItem()->data (0, Qt::UserRole).toInt());
+    std::sort (rows.begin(), rows.end());
+    return rows;
+}
+
+void DiagnosticsPanel::remove (const std::vector<int>& rows)
+{
+    auto kept = list;
+    kept.clear();
+    for (size_t i = 0; i < list.size(); ++i)
+        if (! std::binary_search (rows.begin(), rows.end(), (int) i))
+            kept.push_back (list[i]);
+    const auto current = tree->currentItem() != nullptr ? tree->indexOfTopLevelItem (tree->currentItem()) : 0;
+    setProblems (std::move (kept), rate, numChannels, {});
+    summary->setText (list.empty() ? tr ("All done.") : tr ("%1 left in the list.").arg (list.size()));
+    if (! list.empty())
+        tree->setCurrentItem (tree->topLevelItem (std::min (current, tree->topLevelItemCount() - 1)));
+}
+
+void DiagnosticsPanel::updateButtons()
+{
+    const auto silence = kind() == Kind::silence;
+    repairButton->setVisible (! silence);
+    repairAllButton->setVisible (! silence);
+    deleteButton->setVisible (silence);
+    for (auto* b : { repairButton, repairAllButton, markButton, deleteButton })
+        b->setEnabled (! list.empty());
 }
