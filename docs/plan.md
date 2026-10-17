@@ -347,7 +347,40 @@ The app is optimized first for **Arch Linux**, including **Omarchy** (DHH's Arch
 
 ---
 
-## 4. Architecture sketch
+## 3b. Reusing Audacity 4 code
+
+Checked against Audacity's `master` branch (Audacity 4) on 2026-10-17.
+
+**License: allowed.** Audacity is GPLv3, and many files are "GPLv2 or later". Both can be combined with this app's AGPLv3 license. Conditions: keep Audacity's copyright headers, note our changes, and keep reused code under GPL terms. We can't use the Audacity name or logo.
+
+**How Audacity 4 is built.** It's a Qt 6 / QML app on MuseScore's "Muse" framework (`src/`, `muse/`), wrapping about 80 libraries carried over from Audacity 3 (`au3/libraries/au3-*`) plus older effect code in `au3/src/effects`. Nearly every `au3-*` library still links **wxBase**, the non-GUI part of wxWidgets (strings, files), and many depend on Audacity's track and project model.
+
+**Approach: port algorithms and lift self-contained libraries. Don't fork the app.** The app shell, track model and UI are built around multitrack editing, which this app doesn't need.
+
+| Our feature | Audacity source | Reuse how |
+|---|---|---|
+| FFT, spectral analysis | `au3-fft` (pffft based), `au3-wave-track-fft` | Lift `au3-fft`; small, only needs wxBase for strings |
+| Spectrogram display (2.2) | `src/spectrogram` (`SpectrumCache`, spectrogram painter and settings) | Port the cache and painter logic into our spectral view; the QML views are a reference if we pick Qt |
+| Noise reduction, click removal (2.2) | `au3/src/effects/NoiseReduction.cpp`, `ClickRemoval.cpp` | Port the DSP onto our buffers; strip track and UI code |
+| Loudness / normalize (2.4, 2.5) | `au3/src/effects/Loudness.cpp`, `Normalize.cpp`, `Amplify.cpp` | Port; check results against libebur128 |
+| Compressor, limiter (2.4) | `au3-dynamic-range-processor` (`CompressorProcessor`, `SimpleCompressor`), `Limiter.cpp` | Lift `au3-dynamic-range-processor`; it depends only on components, strings and utility, and has tests |
+| EQ (2.4) | `au3-builtin-effects/Equalization*`, `ScienFilterBase`, `BassTrebleBase` | Port filter design and curves |
+| Time stretch, pitch shift (2.1) | `au3-time-and-pitch`, `au3-stretching-sequence` | Lift `au3-time-and-pitch` (pffft + wxBase); a GPL alternative to Rubber Band |
+| Resampling, reverb, math | `au3-math` (soxr, libSoX reverb) | Use soxr directly; port the pieces we need |
+| Silence/clipping detection (2.3b auto markers, 2.4b) | `TruncSilenceBase`, `FindClippingBase`, `PlotSpectrumBase` | Port detection loops for auto markers and Global Analysis |
+| Plugin hosting (2.7) | `au3-lv2`, `au3-ladspa`, `au3-vst3`, `au3-vst` | Reference only; JUCE already hosts LV2, VST3 and LADSPA. Useful for LV2 edge cases and the VST2 fallback |
+| Import/export, metadata (2.5, 2.6b) | `au3-file-formats` (libsndfile facade), `au3-import-export`, `au3-tags` | Reference only; we use libsndfile, FFmpeg and TagLib directly |
+| Nyquist effects | `au3-nyquist-effects`, `share/nyquist-plug-ins` | P2: optional Nyquist plugin support for Audacity's large user plugin library |
+
+**Not reused:** the app shell (`src/app`, `src/appshell`), project and track model (`au3-project*`, `au3-track`, `au3-wave-track`), UI and theme code (`au3-shuttlegui`, `au3-theme`, `au3-wx-*`), cloud and crash reporting.
+
+**Practical rules**
+- Put copied code under `third_party/audacity/` with its original headers, plus a `NOTICE` listing source paths and the Audacity commit used.
+- For lifted libraries, accept wxBase as a build dependency (on Arch it's in the `wxwidgets-common` package; no wx GUI needed), or replace its few string/file calls with std/JUCE equivalents when porting.
+- Every ported DSP algorithm gets a golden-file test comparing our output with Audacity's on the same input.
+- If the UI decision is Qt 6, Audacity 4's QML components (spectrogram view, effect dialogs) are also usable as GPL reference designs.
+
+
 
 ```
 +-------------------------- UI (JUCE components, OpenGL/Vulkan-accelerated) -------------------------+
@@ -458,3 +491,4 @@ Key design choices:
 - Decide the interface toolkit (Qt 6 + JUCE engine recommended, or all-JUCE)
 - Connect GitHub and push the scaffold to a repository
 - Prototype the paged audio document and waveform view, since they decide how the whole app feels
+- First Audacity reuse candidates: `au3-fft`, `au3-dynamic-range-processor`, NoiseReduction (see 3b)
