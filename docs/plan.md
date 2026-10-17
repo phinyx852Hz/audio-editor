@@ -37,6 +37,7 @@ License: AGPLv3 open source
 - **Phase 1.5 Part A (done):** recording and capture like OBS (2.1b P1): `Ctrl+R` records desktop audio, any input or one application through native PipeWire, with live meters and clip light, pre-record buffer, disk-space estimate, a new tab or insert at the cursor, and a crash-safe copy recovered on the next start. Tested against a real PipeWire server (desktop monitor, an app stream, the app ending mid-take, a killed process). Still open from 2.1b P1: several sources at once, bit depth choice (takes are 32-bit float until saved), plain-ALSA input without PipeWire.
 - **Phase 1.5 Part B (done):** any channel count (up to 16 played and metered). Speaker layouts by channel count in WAV order (mono to 7.1.4), labelled lanes and meters, BS.1770 surround weights, stereo fold-down monitoring by default with an opt-in to separate outputs (reordered for ALSA devices), Master Section and render at the file's channel count (stereo-only plugins process L/R, the rest pass through), WAV channel mask on save, sensible channel mapping on paste, record in quad, 5.1 or 7.1. Tested: mono, 5.1 and 7.1 tones through a real PipeWire server, fold-down and separate outputs measured per speaker, 5.1 render to a new file. Still open from 2.11: changing a file's layout (upmix, downmix to a new file, reorder), per-channel solo/mute while listening, layouts read from the WAV channel mask instead of assumed.
 - **Phase 1.5 Part C (done):** built-in Stereoize (`Ctrl+Alt+W`): complementary delay on the high-passed mid signal, so left + right equals the original exactly (mono-compatible), with width, delay and keep-bass-centred settings remembered; on a mono file the whole file becomes stereo, the effect applies to the selection; undoable. Phase 1.5 is complete.
+- **Stereoize as a live effect (done, owner request 2026-10-17):** Stereoize also loads into the Device Chain / Master Section as a built-in effect (format "Built-in") with Width, Delay and Bass knobs that work while playing, type-in values, save/restore with the chain, and a click-free delay change. A mono file is now heard on both sides, so widening is audible, and Master Section renders of a mono file come out stereo when the chain makes the sides differ (otherwise they stay mono). Apply to Audio now splices a selection's render back into the file instead of replacing the file with it.
 - **Next:** Phase 2 (spectral editing and repair, plan section 5).
 
 ---
@@ -492,7 +493,7 @@ Key design choices:
 ### Phase 1.5: Multi-channel foundation
 - Recording and capture like OBS: desktop audio, any input, one app (2.1b P1). Done, except several sources at once.
 - Make playback, meters, Master Section and render work for any channel count, with speaker layouts and downmix monitoring (2.11 P0). Done.
-- Built-in Stereoize (mono to stereo). Done.
+- Built-in Stereoize (mono to stereo), as a menu command and a live Device Chain effect. Done.
 - Done early because every later feature (repair, Montage, export) depends on how channels are handled
 
 ### Phase 2: Repair lab (Audition-level restoration)

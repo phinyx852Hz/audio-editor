@@ -87,6 +87,7 @@ private:
     QToolButton* power = nullptr;
     QToolButton* solo = nullptr;
     LevelBar* level = nullptr;
+    QToolButton* windowButton = nullptr;
     std::vector<Knob> knobs;
     bool selected = false, focused = false, syncing = false;
     int selectedKnob = -1;

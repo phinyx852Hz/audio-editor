@@ -175,7 +175,7 @@ DeviceCard::DeviceCard (AudioEngine& e, Kind k, int slot, QWidget* parent)
 
         auto* footer = new QHBoxLayout;
         auto* edit = smallButton (tr ("Edit..."), tr ("All parameters (Enter)"), this);
-        auto* window = smallButton (tr ("Window"), tr ("The plugin's own window (E)"), this);
+        auto* window = windowButton = smallButton (tr ("Window"), tr ("The plugin's own window (E)"), this);
         footer->addWidget (edit);
         footer->addWidget (window);
         footer->addStretch (1);
@@ -306,6 +306,7 @@ void DeviceCard::sync()
         power->setChecked (! info.bypassed);
         power->setText (info.bypassed ? tr ("Off") : tr ("On"));
         solo->setChecked (engine.masterSoloSlot() == slotIndex);
+        windowButton->setVisible (info.hasEditor);   // built-in effects have only their knobs
 
         auto text = QString::fromStdString (info.format);
         if (info.latencySamples > 0)

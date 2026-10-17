@@ -235,8 +235,14 @@ namespace
                 const auto at = info.startSample + done;
                 if (n == 1)
                 {
+                    // Both sides, which differ once an effect such as Stereoize widens them.
                     for (int ch = 0; ch < outs; ++ch)
-                        info.buffer->copyFrom (ch, at, file, 0, 0, count);
+                        info.buffer->copyFrom (ch, at, file, ch % 2, 0, count);
+                    if (outs == 1)
+                    {
+                        info.buffer->applyGain (0, at, count, 0.5f);
+                        info.buffer->addFrom (0, at, file, 1, 0, count, 0.5f);
+                    }
                 }
                 else if (! fold)
                 {

@@ -1603,7 +1603,10 @@ void MainWindow::renderMaster()
             return;
         }
 
-        commit (tr ("Master Section"), std::move (result), s, e, e - s);
+        // The render covers [s, e) only; put it back into the file. A mono file that
+        // the chain widened (Stereoize, a stereo reverb...) becomes stereo throughout.
+        auto base = result->numChannels() == d->numChannels() ? d : dsp::toStereo (d);
+        commit (tr ("Master Section"), base->replaced (s, e, result.get()), s, e, e - s);
         engine.setMasterBypassed (true);
         masterWidget->refresh();
         commands.action (QStringLiteral ("master.bypass"))->setChecked (true);

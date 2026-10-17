@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MasterChain.h"
+#include "BuiltinEffects.h"
 #include "../core/Dsp.h"
 
 #include <algorithm>
@@ -61,7 +62,11 @@ void MasterChain::setConfigFolder (const juce::File& folder)
 std::vector<PluginInfo> MasterChain::knownPlugins() const
 {
     std::vector<PluginInfo> result;
+    auto all = builtin::descriptions();
     for (const auto& d : pluginList.getTypes())
+        all.push_back (d);
+
+    for (const auto& d : all)
         if (! d.isInstrument)
             result.push_back ({ d.createIdentifierString().toStdString(), d.name.toStdString(),
                                 d.manufacturerName.toStdString(), d.pluginFormatName.toStdString(), d.category.toStdString() });
@@ -99,7 +104,7 @@ int MasterChain::startScan()
             scanQueue.add ({ format, file });
 
     scanIndex = 0;
-    pluginsBefore = (int) knownPlugins().size();
+    pluginsBefore = pluginList.getNumTypes();
     return scanQueue.size();
 }
 
@@ -128,8 +133,10 @@ std::string MasterChain::finishScan()
         xml->writeTo (pluginListFile());
 
     scanQueue.clear();
-    const auto total = (int) knownPlugins().size();
-    const auto added = std::max (0, total - pluginsBefore);
+    int total = 0;
+    for (const auto& d : pluginList.getTypes())
+        total += d.isInstrument ? 0 : 1;
+    const auto added = std::max (0, pluginList.getNumTypes() - pluginsBefore);
     auto summary = juce::String (total) + (total == 1 ? " effect plugin" : " effect plugins") + " available";
     if (added > 0)
         summary << " (" << added << " new)";
@@ -142,9 +149,13 @@ std::string MasterChain::finishScan()
 //==============================================================================
 std::unique_ptr<juce::AudioPluginInstance> MasterChain::createInstance (const juce::PluginDescription& d, juce::String& error) const
 {
-    auto instance = formats.createPluginInstance (d, rate, blockSize, error);
+    auto instance = builtin::isBuiltin (d) ? builtin::create (d) : formats.createPluginInstance (d, rate, blockSize, error);
     if (instance == nullptr)
+    {
+        if (error.isEmpty())
+            error = "this effect is not part of this version";
         return nullptr;
+    }
 
     applyLayout (*instance, channelCount);
     return instance;
@@ -221,7 +232,12 @@ std::string MasterChain::load (int index, const std::string& pluginId)
     if (index < 0 || index >= (int) slots.size())
         return "No such slot";
 
-    auto description = pluginList.getTypeForIdentifierString (pluginId);
+    std::unique_ptr<juce::PluginDescription> description;
+    for (const auto& d : builtin::descriptions())
+        if (d.createIdentifierString().toStdString() == pluginId)
+            description = std::make_unique<juce::PluginDescription> (d);
+    if (description == nullptr)
+        description = pluginList.getTypeForIdentifierString (pluginId);
     if (description == nullptr)
         return "This plugin is not in the plugin list. Scan for plugins again.";
 
@@ -694,7 +710,11 @@ AudioDataPtr MasterChain::render (const AudioData& data, Frame start, Frame end,
     }
 
     const auto latency = (Frame) totalLatency();
-    AudioData::Builder out (fileChannels, data.sampleRate());
+    // A mono file comes out as stereo when the chain makes its sides differ
+    // (Stereoize, a stereo reverb...), as it is heard while listening.
+    const auto outChannels = fileChannels == 1 && ! allBypassed ? 2 : fileChannels;
+    float sideDifference = 0.0f;
+    AudioData::Builder out (outChannels, data.sampleRate());
     Frame consumed = 0, produced = 0, toSkip = latency;
     bool cancelled = false;
 
@@ -725,8 +745,11 @@ AudioDataPtr MasterChain::render (const AudioData& data, Frame start, Frame end,
         if (count > 0)
         {
             std::array<const float*, maxChannels> ptrs {};
-            for (int ch = 0; ch < fileChannels; ++ch)
+            for (int ch = 0; ch < outChannels; ++ch)
                 ptrs[(size_t) ch] = io.getReadPointer (ch) + skip;
+            if (outChannels != fileChannels)
+                for (int i = 0; i < count; ++i)
+                    sideDifference = std::max (sideDifference, std::abs (ptrs[0][i] - ptrs[1][i]));
             out.append (ptrs.data(), count);
             produced += count;
         }
@@ -744,5 +767,20 @@ AudioDataPtr MasterChain::render (const AudioData& data, Frame start, Frame end,
         return nullptr;
     }
 
-    return out.finish();
+    auto result = out.finish();
+    if (outChannels != fileChannels && sideDifference <= 1.0e-4f)   // both sides the same (below dither level): stay mono
+    {
+        AudioData::Builder mono (1, result->sampleRate());
+        std::vector<float> block (renderBlock), unused (renderBlock);
+        std::array<float*, 2> dest { block.data(), unused.data() };
+        for (Frame pos = 0; pos < result->length(); pos += renderBlock)
+        {
+            const auto n = (int) std::min<Frame> (renderBlock, result->length() - pos);
+            result->read (pos, n, dest.data());
+            const float* src = block.data();
+            mono.append (&src, n);
+        }
+        result = mono.finish();
+    }
+    return result;
 }

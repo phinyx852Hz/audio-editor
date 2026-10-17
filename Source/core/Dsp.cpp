@@ -55,18 +55,27 @@ namespace dsp
         });
     }
 
-    AudioDataPtr stereoize (const AudioData& d, Frame start, Frame end, const StereoizeSettings& settings)
+    void Stereoizer::prepare (double sampleRate)
     {
-        const auto rate = d.sampleRate();
-        const auto inChannels = d.numChannels();
-        start = std::clamp<Frame> (start, 0, d.length());
-        end = std::clamp<Frame> (end, start, d.length());
+        rate = sampleRate;
+        ring.assign ((size_t) std::ceil (maxDelayMs * rate / 1000.0) + 1, 0.0f);
+        bassHz = -1.0;
+        reset();
+    }
+
+    void Stereoizer::set (const StereoizeSettings& settings)
+    {
+        delay = std::clamp<size_t> ((size_t) std::lround (std::clamp (settings.delayMs, 1.0, maxDelayMs) * rate / 1000.0), 1, ring.size() - 1);
+
+        if (std::abs (settings.bassHz - bassHz) < 1.0e-9)
+            return;
+        bassHz = settings.bassHz;
 
         // Second-order Butterworth high pass, so the bass is left out of the side signal.
-        double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0;
-        if (settings.bassHz > 0.0)
+        b0 = 1; b1 = b2 = a1 = a2 = 0;
+        if (bassHz > 0.0)
         {
-            const auto w0 = 2.0 * M_PI * std::min (settings.bassHz, rate * 0.45) / rate;
+            const auto w0 = 2.0 * M_PI * std::min (bassHz, rate * 0.45) / rate;
             const auto alpha = std::sin (w0) / (2.0 * M_SQRT1_2);
             const auto c = std::cos (w0), a0 = 1.0 + alpha;
             b0 = (1.0 + c) / 2.0 / a0;
@@ -75,11 +84,36 @@ namespace dsp
             a1 = -2.0 * c / a0;
             a2 = (1.0 - alpha) / a0;
         }
-        double x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+    }
 
-        const auto delay = std::max<size_t> (1, (size_t) std::lround (std::clamp (settings.delayMs, 1.0, 40.0) * rate / 1000.0));
-        std::vector<float> ring (delay, 0.0f);
-        size_t ringPos = 0;
+    float Stereoizer::process (float mid)
+    {
+        const auto high = b0 * mid + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+        x2 = x1; x1 = mid; y2 = y1; y1 = high;
+
+        ring[ringPos] = (float) high;
+        const auto delayed = ring[(ringPos + ring.size() - delay) % ring.size()];
+        ringPos = (ringPos + 1) % ring.size();
+        return delayed;
+    }
+
+    void Stereoizer::reset()
+    {
+        std::fill (ring.begin(), ring.end(), 0.0f);
+        ringPos = 0;
+        x1 = x2 = y1 = y2 = 0;
+    }
+
+    AudioDataPtr stereoize (const AudioData& d, Frame start, Frame end, const StereoizeSettings& settings)
+    {
+        const auto rate = d.sampleRate();
+        const auto inChannels = d.numChannels();
+        start = std::clamp<Frame> (start, 0, d.length());
+        end = std::clamp<Frame> (end, start, d.length());
+
+        Stereoizer core;
+        core.prepare (rate);
+        core.set (settings);
         const auto width = (float) std::clamp (settings.width, 0.0, 1.0);
         const auto edge = std::max<Frame> (1, (Frame) (rate * 0.01));   // 10 ms fade in and out of the effect
 
@@ -113,16 +147,9 @@ namespace dsp
                     mid += in[(size_t) ch][(size_t) i];
                 mid /= (float) inChannels;
 
-                const auto high = b0 * mid + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
-                x2 = x1; x1 = mid; y2 = y1; y1 = high;
-
-                const auto delayed = ring[ringPos];
-                ring[ringPos] = (float) high;
-                ringPos = (ringPos + 1) % delay;
-
                 const auto at = pos + i;
                 const auto ramp = (float) std::min ({ 1.0, (double) (at - start + 1) / (double) edge, (double) (end - at) / (double) edge });
-                const auto side = width * ramp * delayed;
+                const auto side = width * ramp * core.process (mid);
                 left[(size_t) i] = mid + side;
                 right[(size_t) i] = mid - side;
             }
@@ -131,6 +158,24 @@ namespace dsp
             pos += n;
         }
 
+        return out.finish();
+    }
+
+    AudioDataPtr toStereo (const AudioDataPtr& d)
+    {
+        if (d == nullptr || d->numChannels() != 1)
+            return d;
+
+        AudioData::Builder out (2, d->sampleRate());
+        std::vector<float> mono (AudioChunk::maxFrames);
+        float* inPtr = mono.data();
+        const float* outPtrs[2] { mono.data(), mono.data() };
+        for (Frame pos = 0; pos < d->length(); pos += AudioChunk::maxFrames)
+        {
+            const auto n = (int) std::min<Frame> (AudioChunk::maxFrames, d->length() - pos);
+            d->read (pos, n, &inPtr);
+            out.append (outPtrs, n);
+        }
         return out.finish();
     }
 

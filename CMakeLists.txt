@@ -44,6 +44,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/Fft.cpp
     Source/engine/AudioCapture.cpp
     Source/engine/AudioEngine.cpp
+    Source/engine/BuiltinEffects.cpp
     Source/engine/MasterChain.cpp
     Source/ui/CommandRegistry.cpp
     Source/ui/Dialogs.cpp

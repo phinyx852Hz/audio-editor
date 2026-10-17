@@ -41,6 +41,30 @@ namespace dsp
 
     AudioDataPtr stereoize (const AudioData&, Frame start, Frame end, const StereoizeSettings&);
 
+    // The streaming core of Stereoize, shared by the offline command and the live
+    // effect: feed it the mid signal, add the result to the left and subtract it
+    // from the right. No allocation after prepare().
+    class Stereoizer
+    {
+    public:
+        static constexpr double maxDelayMs = 40.0;
+
+        void prepare (double sampleRate);      // allocates the delay line
+        void set (const StereoizeSettings&);   // safe between samples
+        float process (float mid);             // returns the side signal (before the width)
+        void reset();
+
+    private:
+        double rate = 48000.0;
+        double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+        std::vector<float> ring;
+        size_t ringPos = 0, delay = 1;
+        double bassHz = -1.0;
+    };
+
+    // A mono file as two equal channels (other files are returned as they are).
+    AudioDataPtr toStereo (const AudioDataPtr&);
+
     // ITU-R BS.1770 K-weighting: high shelf followed by high pass.
     class KWeighting
     {
