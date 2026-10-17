@@ -551,6 +551,13 @@ Key design choices:
 - Control surface mapping, compliance reports
 - DSSI and optional VST2 hosting
 
+### Extra (after the main work): Visualizer
+Requested 2026-10-17 as an extra once PHINYX's main phases are done. A Visualizer window (its own tile, title "Visualizer - PHINYX", class phinyx) fed by whatever PHINYX plays, after the Master Section, so it shows the processed sound. Effort estimates for one developer:
+- Bars and spectrum in the style of **cava** (github.com/karlstav/cava, MIT as far as checked): its `cavacore` library is made for embedding. Feed it PHINYX's playback blocks and draw with Qt, in theme colours. About 2 to 3 days.
+- MilkDrop presets like **butterchurn** (github.com/jberg/butterchurn, MIT): butterchurn is JavaScript/WebGL, so using it directly means bundling a web engine (Qt WebEngine, a large dependency). The native route is **projectM** (the C++ MilkDrop engine butterchurn follows, LGPL-2.1, packaged on Arch as `projectm`): an OpenGL view in the window plus a preset browser and keyboard control. About 1 to 2 weeks. Preferred over butterchurn.
+- Shader visuals like **GLava** (github.com/jarcode-foss/glava, GPLv3, no longer maintained): reuse its GLSL modules (bars, radial, graph, wave) in the same OpenGL view as projectM rather than its X11 window code. About 3 to 5 days on top of the projectM view.
+Order: cava-style first (small, useful), then projectM, then GLava's shaders if still wanted. Total about 3 to 4 weeks for all three.
+
 ---
 
 ## 6. Risks and open questions
