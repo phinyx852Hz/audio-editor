@@ -132,7 +132,8 @@ Decided: **no mixer** (no buses, sends or mixing console). The app stays an edit
   - Keyboard: a key focuses the row, `Left`/`Right` move between cards, `Up`/`Down` between knobs, `+`/`-` adjust, `Insert` adds after the focused card, `Ctrl+Left`/`Right` reorders, `Del` removes; drag to reorder with the mouse
   - Drop a plugin from the browser (2.9c) between cards to insert it there; dockable and pop-out like every panel
 - P1 Spectrum analyzer, phase correlation meter, goniometer/vectorscope
-- P1 Built-in mastering processors: parametric EQ (linear and minimum phase), multiband compressor, limiter (true-peak aware), stereo width, de-esser
+- P1 Built-in mastering processors, kept to what delivery and renders depend on: parametric EQ (linear and minimum phase), true-peak limiter, loudness targeting, dither and noise shaping. Repair tools (2.2, including the de-esser) are built in too.
+- **Decision (owner, 2026-10-17):** everything else (saturators, creative or multiband compressors, stereo width, reverbs, other colour effects) comes from third-party plugins such as LSP rather than being built in. Reason: built-in effects add little size but a lot of work; PHINYX stays focused on editing, repair, metering and delivery.
 - P1 Loudness targeting presets (Spotify -14 LUFS, Apple -16, broadcast -23 / -24) with Match Loudness
 - P1 **A/B Reference section** (modeled on WaveLab's Montage Reference Tracks), a dockable panel available in the editor, Montage and Master Section:
   - Load several reference tracks (commercial masters or earlier versions) into a list; each keeps its own cue points and loop range
@@ -504,7 +505,7 @@ Key design choices:
 
 ### Phase 3: Mastering desk (WaveLab-level)
 - Ambisonics (encode, rotate, binaural and speaker decode) and stereo upmix to surround or Ambisonics (2.11 P1)
-- Built-in mastering processors (EQ, multiband comp, true-peak limiter, width)
+- Built-in mastering processors: EQ, true-peak limiter, dither (other effects via plugins, see 2.4 decision)
 - Spectrum, phase correlation, vectorscope
 - Analyze menu: Audio File Comparator, 3D Frequency, Global, Loudness and Visual Analysis
 - Loudness target presets, Match Loudness
