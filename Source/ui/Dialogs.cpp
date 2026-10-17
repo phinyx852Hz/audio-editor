@@ -7,6 +7,10 @@
 #include "../engine/AudioEngine.h"
 
 #include <QCheckBox>
+#include <QDateTime>
+#include <QPlainTextEdit>
+#include <QRegularExpressionValidator>
+#include <QTabWidget>
 #include <QStandardPaths>
 #include <QSettings>
 #include <QColorDialog>
@@ -810,4 +814,131 @@ void ThemeDialog::done (int result)
                 Theme::apply (t);
 
     QDialog::done (result);
+}
+
+//==============================================================================
+MetadataDialog::MetadataDialog (const Tags& current, const QString& extension, double sampleRate, QWidget* parent)
+    : QDialog (parent), original (current)
+{
+    setWindowTitle (tr ("Metadata"));
+    resize (560, 480);
+
+    auto add = [this, &current] (QFormLayout* form, const char* key, const QString& label, bool multiLine, int maxLength)
+    {
+        const auto value = current.count (key) ? QString::fromStdString (current.at (key)) : QString();
+        QWidget* field;
+        if (multiLine)
+        {
+            auto* edit = new QPlainTextEdit (value);
+            edit->setTabChangesFocus (true);
+            edit->setFixedHeight (edit->fontMetrics().lineSpacing() * 4 + 12);
+            field = edit;
+        }
+        else
+        {
+            auto* edit = new QLineEdit (value);
+            if (maxLength > 0)
+                edit->setMaxLength (maxLength);
+            field = edit;
+        }
+        form->addRow (label, field);
+        fields.push_back ({ key, field });
+        return field;
+    };
+
+    auto* tabs = new QTabWidget (this);
+    auto* common = new QWidget;
+    auto* commonForm = new QFormLayout (common);
+    add (commonForm, tag::title, tr ("&Title:"), false, 0);
+    add (commonForm, tag::artist, tr ("&Artist:"), false, 0);
+    add (commonForm, tag::album, tr ("Al&bum:"), false, 0);
+    add (commonForm, tag::track, tr ("Trac&k:"), false, 0);
+    add (commonForm, tag::genre, tr ("&Genre:"), false, 0);
+    add (commonForm, tag::date, tr ("&Date:"), false, 0);
+    add (commonForm, tag::copyright, tr ("&Copyright:"), false, 0);
+    add (commonForm, tag::isrc, tr ("&ISRC:"), false, 12);
+    add (commonForm, tag::comment, tr ("Co&mment:"), true, 0);
+    tabs->addTab (common, tr ("Tags"));
+
+    auto* bwf = new QWidget;
+    auto* bwfForm = new QFormLayout (bwf);
+    add (bwfForm, tag::bwfDescription, tr ("&Description:"), false, 256);
+    auto* originator = static_cast<QLineEdit*> (add (bwfForm, tag::bwfOriginator, tr ("&Originator:"), false, 32));
+    auto* reference = static_cast<QLineEdit*> (add (bwfForm, tag::bwfOriginatorRef, tr ("Originator &reference:"), false, 32));
+    auto* date = static_cast<QLineEdit*> (add (bwfForm, tag::bwfDate, tr ("Origination d&ate:"), false, 10));
+    date->setPlaceholderText (tr ("YYYY-MM-DD"));
+    auto* time = static_cast<QLineEdit*> (add (bwfForm, tag::bwfTime, tr ("Origination &time:"), false, 8));
+    time->setPlaceholderText (tr ("HH:MM:SS"));
+    auto* timeReference = static_cast<QLineEdit*> (add (bwfForm, tag::bwfTimeReference, tr ("Time r&eference:"), false, 20));
+    timeReference->setValidator (new QRegularExpressionValidator (QRegularExpression (QStringLiteral ("[0-9]*")), timeReference));
+    timeReference->setToolTip (tr ("Where the file starts on the session timeline, in samples since midnight"));
+    auto* seconds = new QLabel;
+    bwfForm->addRow (QString(), seconds);
+    auto showSeconds = [seconds, timeReference, sampleRate]
+    {
+        const auto samples = timeReference->text().toLongLong();
+        const auto total = sampleRate > 0.0 ? (double) samples / sampleRate : 0.0;
+        seconds->setText (tr ("= %1:%2:%3")
+                              .arg ((int) (total / 3600.0), 2, 10, QLatin1Char ('0'))
+                              .arg ((int) std::fmod (total / 60.0, 60.0), 2, 10, QLatin1Char ('0'))
+                              .arg (std::fmod (total, 60.0), 6, 'f', 3, QLatin1Char ('0')));
+    };
+    connect (timeReference, &QLineEdit::textChanged, this, showSeconds);
+    showSeconds();
+    add (bwfForm, tag::bwfCodingHistory, tr ("Coding &history:"), true, 0);
+    auto* fill = new QPushButton (tr ("&Fill In Now"));
+    fill->setToolTip (tr ("Originator, a unique reference, and today's date and time"));
+    connect (fill, &QPushButton::clicked, this, [originator, reference, date, time]
+    {
+        const auto now = QDateTime::currentDateTime();
+        if (originator->text().isEmpty())
+            originator->setText (QStringLiteral (APP_DISPLAY_NAME));
+        if (reference->text().isEmpty())
+            reference->setText (QStringLiteral ("PHX") + now.toString (QStringLiteral ("yyyyMMddHHmmss")));
+        date->setText (now.toString (QStringLiteral ("yyyy-MM-dd")));
+        time->setText (now.toString (QStringLiteral ("HH:mm:ss")));
+    });
+    bwfForm->addRow (QString(), fill);
+    tabs->addTab (bwf, tr ("Broadcast Wave"));
+
+    const auto ext = extension.toLower();
+    QString kept;
+    if (ext == QStringLiteral ("wav"))
+        kept = tr ("Saved as WAV, every field is kept (tags in the LIST/INFO chunk, Broadcast Wave in bext).");
+    else if (ext == QStringLiteral ("flac"))
+        kept = tr ("Saved as FLAC, the tags are kept as Vorbis comments; Broadcast Wave fields are kept only in WAV.");
+    else if (ext == QStringLiteral ("ogg"))
+        kept = tr ("Saved as Ogg, title, artist, album, track, genre, date and comment are kept; the rest only in WAV or FLAC.");
+    else
+        kept = tr ("This file type does not keep metadata. Save as WAV or FLAC to keep it.");
+    auto* about = new QLabel (kept, this);
+    about->setWordWrap (true);
+
+    auto* buttons = new QDialogButtonBox (QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    auto* layout = new QVBoxLayout (this);
+    layout->addWidget (tabs);
+    layout->addWidget (about);
+    layout->addWidget (buttons);
+    connect (buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect (buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    fields.front().second->setFocus();
+}
+
+Tags MetadataDialog::tags() const
+{
+    auto result = original;   // keys this dialog does not show are kept
+    for (const auto& [key, field] : fields)
+    {
+        QString value;
+        if (auto* line = qobject_cast<QLineEdit*> (field))
+            value = line->text();
+        else if (auto* text = qobject_cast<QPlainTextEdit*> (field))
+            value = text->toPlainText();
+        value = value.trimmed();
+        if (value.isEmpty())
+            result.erase (key);
+        else
+            result[key] = value.toStdString();
+    }
+    return result;
 }

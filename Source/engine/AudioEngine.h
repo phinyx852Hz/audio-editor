@@ -157,11 +157,14 @@ public:
     static std::vector<std::string> readableExtensions();
     static std::vector<std::string> writableExtensions();
 
-    // File I/O, safe to call from worker threads.
-    static AudioDataPtr loadFile (const std::string& path, std::vector<Marker>& markersOut, std::string& error,
+    // File I/O, safe to call from worker threads. Markers and tags are read and
+    // written where the format holds them (see Tags).
+    static AudioDataPtr loadFile (const std::string& path, std::vector<Marker>& markersOut, Tags& tagsOut, std::string& error,
                                   std::atomic<float>* progress = nullptr);
-    static bool saveFile (const std::string& path, const AudioData&, const std::vector<Marker>&,
+    static bool saveFile (const std::string& path, const AudioData&, const std::vector<Marker>&, const Tags&,
                           const SaveOptions&, std::string& error);
+    // Which tags a file type keeps ("wav", "flac"...): the rest are not saved there.
+    static bool keepsTag (const std::string& extension, const std::string& key);
 
 private:
     void useOutputsFor (int channels);

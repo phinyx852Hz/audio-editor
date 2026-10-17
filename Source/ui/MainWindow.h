@@ -42,6 +42,7 @@ private:
         QString path;
         AudioDataPtr data;
         std::vector<Marker> markers;
+        Tags tags;
         std::string error;
     };
 
@@ -88,6 +89,7 @@ private:
     void normalize();
     void stereoize();
     void convertSampleType();
+    void editMetadata();
     void autoHeal();
     void learnNoise();
     void noiseReduction();

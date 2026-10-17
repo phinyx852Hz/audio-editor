@@ -170,6 +170,7 @@ void MainWindow::registerCommands()
     add ("file.record", Category::file, tr ("&Record..."), { KS (Qt::CTRL | Qt::Key_R) }, [this] { record(); });
     add ("file.save", Category::file, tr ("&Save"), { KS (Qt::CTRL | Qt::Key_S) }, [this] { save(); });
     add ("file.saveAs", Category::file, tr ("Save &As..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_S) }, [this] { saveAs(); });
+    add ("file.metadata", Category::file, tr ("&Metadata..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_M) }, [this] { editMetadata(); });
     add ("file.close", Category::file, tr ("&Close"), { KS (Qt::CTRL | Qt::Key_W) }, [this] { closeFile(); });
     add ("file.nextTab", Category::file, tr ("Ne&xt Tab"), { KS (Qt::CTRL | Qt::Key_Tab), KS (Qt::CTRL | Qt::Key_PageDown) },
          [this] { if (tabs.size() > 1) tabBar->setCurrentIndex ((activeTab + 1) % (int) tabs.size()); });
@@ -413,7 +414,7 @@ void MainWindow::buildMenus()
 {
     // Menu titles carry & mnemonics, so Alt+F, Alt+E, Alt+P, Alt+M, Alt+A... open them.
     const QList<QPair<QString, QStringList>> layout {
-        { tr ("&File"),      { "file.open", "file.record", "-", "file.save", "file.saveAs", "-", "file.close", "file.nextTab", "file.previousTab", "-", "file.quit" } },
+        { tr ("&File"),      { "file.open", "file.record", "-", "file.save", "file.saveAs", "-", "file.metadata", "-", "file.close", "file.nextTab", "file.previousTab", "-", "file.quit" } },
         { tr ("&Edit"),      { "edit.undo", "edit.redo", "-", "edit.cut", "edit.copy", "edit.copyToNew", "edit.paste", "edit.delete", "-",
                                "edit.trim", "edit.insertSilence", "-", "select.all", "select.none", "-",
                                "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
@@ -657,7 +658,7 @@ void MainWindow::updateCommandStates()
     const bool open = doc.isOpen() && ! loading;
     const bool sel = open && hasSelection();
 
-    for (const auto* id : { "file.save", "file.saveAs", "file.close", "edit.insertSilence", "edit.copyToNew", "select.all", "select.none",
+    for (const auto* id : { "file.save", "file.saveAs", "file.metadata", "file.close", "edit.insertSilence", "edit.copyToNew", "select.all", "select.none",
                             "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
                             "select.toStart", "select.toEnd", "process.gain", "process.normalize",
                             "process.reverse", "process.invert", "process.dcOffset", "process.stereoize", "process.convert",
@@ -948,7 +949,7 @@ void MainWindow::openFile (const QString& path)
     {
         LoadResult r;
         r.path = path;
-        r.data = AudioEngine::loadFile (path.toStdString(), r.markers, r.error, progress.get());
+        r.data = AudioEngine::loadFile (path.toStdString(), r.markers, r.tags, r.error, progress.get());
         return r;
     }));
 }
@@ -970,7 +971,7 @@ void MainWindow::loadFinished()
         return;
     }
 
-    doc.reset (r.data, std::move (r.markers), r.path.toStdString());
+    doc.reset (r.data, std::move (r.markers), r.path.toStdString(), std::move (r.tags));
     cursor = selStart = selEnd = selAnchor = 0;
     optionsConfirmedFor.clear();
     refreshFromDocument (false);
@@ -1057,7 +1058,7 @@ bool MainWindow::saveTo (const QString& path, bool askOptions)
 
     QApplication::setOverrideCursor (Qt::WaitCursor);
     std::string error;
-    const bool ok = AudioEngine::saveFile (path.toStdString(), *data(), doc.current().markers, saveOptions, error);
+    const bool ok = AudioEngine::saveFile (path.toStdString(), *data(), doc.current().markers, doc.current().tags, saveOptions, error);
     QApplication::restoreOverrideCursor();
 
     if (! ok)
@@ -1080,7 +1081,8 @@ void MainWindow::commit (const QString& description, AudioDataPtr newData, Frame
     if (newData == nullptr)
         return;
 
-    DocumentState state { std::move (newData), doc.current().markers };
+    auto state = doc.current();
+    state.data = std::move (newData);
     adjustMarkersForEdit (state.markers, start, end, inserted);
     doc.apply (description.toStdString(), std::move (state));
     refreshFromDocument (true);
@@ -1304,7 +1306,8 @@ void MainWindow::trimToSelection()
     const auto d = data();
     const auto start = selStart, end = selEnd;
 
-    DocumentState state { d->slice (start, end), doc.current().markers };
+    auto state = doc.current();
+    state.data = d->slice (start, end);
     adjustMarkersForEdit (state.markers, end, d->length(), 0);
     adjustMarkersForEdit (state.markers, 0, start, 0);
 
@@ -1395,9 +1398,31 @@ void MainWindow::stereoize()
     QApplication::restoreOverrideCursor();
 
     // The whole file is replaced (a mono file gains a channel); its length and markers stay the same.
-    doc.apply (tr ("Stereoize").toStdString(), { std::move (result), doc.current().markers });
+    auto state = doc.current();
+    state.data = std::move (result);
+    doc.apply (tr ("Stereoize").toStdString(), std::move (state));
     refreshFromDocument (true);
     waveform->setFocus();
+}
+
+void MainWindow::editMetadata()
+{
+    const auto d = data();
+    if (d == nullptr)
+        return;
+
+    const auto extension = QFileInfo (QString::fromStdString (doc.path())).suffix();
+    MetadataDialog dialog (doc.current().tags, extension.isEmpty() ? QStringLiteral ("wav") : extension, d->sampleRate(), this);
+    const auto accepted = dialog.exec() == QDialog::Accepted;
+    waveform->setFocus();
+    if (! accepted || dialog.tags() == doc.current().tags)
+        return;
+
+    auto state = doc.current();
+    state.tags = dialog.tags();
+    doc.apply (tr ("Edit Metadata").toStdString(), std::move (state));
+    refreshFromDocument (true);
+    statusBar()->showMessage (tr ("Metadata changed; it is written when you save."), 5000);
 }
 
 void MainWindow::convertSampleType()
@@ -1479,7 +1504,10 @@ void MainWindow::convertSampleType()
         what << tr ("%1-bit").arg (bits);
         saveOptions.bitDepth = std::max (16, bits);   // saved at that depth (8-bit is kept in 16-bit files)
     }
-    doc.apply (tr ("Convert to %1").arg (what.join (QStringLiteral (", "))).toStdString(), { std::move (result), std::move (markers) });
+    auto state = doc.current();
+    state.data = std::move (result);
+    state.markers = std::move (markers);
+    doc.apply (tr ("Convert to %1").arg (what.join (QStringLiteral (", "))).toStdString(), std::move (state));
     refreshFromDocument (false);
     statusBar()->showMessage (tr ("Converted to %1.").arg (what.join (QStringLiteral (", "))), 5000);
 }
@@ -1798,7 +1826,7 @@ void MainWindow::deleteSilence (std::vector<int> rows)
 
     // Delete from the end backwards, so earlier positions stay valid.
     const auto list = diagnostics->problems();
-    DocumentState state { d, doc.current().markers };
+    auto state = doc.current();
     for (auto it = rows.rbegin(); it != rows.rend(); ++it)
     {
         const auto& p = list[(size_t) *it];
@@ -2188,7 +2216,9 @@ void MainWindow::simpleProcess (const QString& description, AudioDataPtr (*fn) (
 //==============================================================================
 void MainWindow::commitMarkers (const QString& description, std::vector<Marker> markers)
 {
-    doc.apply (description.toStdString(), { doc.current().data, std::move (markers) });
+    auto state = doc.current();
+    state.markers = std::move (markers);
+    doc.apply (description.toStdString(), std::move (state));
     refreshFromDocument (true);
 }
 
@@ -2458,7 +2488,7 @@ void MainWindow::renderMaster()
     }
 
     QApplication::setOverrideCursor (Qt::WaitCursor);
-    const bool ok = AudioEngine::saveFile (path.toStdString(), *rendered, doc.current().markers, options, error);
+    const bool ok = AudioEngine::saveFile (path.toStdString(), *rendered, doc.current().markers, doc.current().tags, options, error);
     QApplication::restoreOverrideCursor();
 
     if (! ok)

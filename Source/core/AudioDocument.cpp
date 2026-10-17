@@ -30,10 +30,10 @@ void adjustMarkersForEdit (std::vector<Marker>& markers, Frame start, Frame end,
                    markers.end());
 }
 
-void AudioDocument::reset (AudioDataPtr data, std::vector<Marker> markers, const std::string& path)
+void AudioDocument::reset (AudioDataPtr data, std::vector<Marker> markers, const std::string& path, Tags tags)
 {
     history.clear();
-    history.push_back ({ "Open", { std::move (data), std::move (markers) } });
+    history.push_back ({ "Open", { std::move (data), std::move (markers), std::move (tags) } });
     position = savedPosition = 0;
     filePath = path;
 

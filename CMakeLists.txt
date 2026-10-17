@@ -41,6 +41,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/AudioData.cpp
     Source/core/AudioDocument.cpp
     Source/core/Dsp.cpp
+    Source/core/FlacTags.cpp
     Source/core/Repair.cpp
     Source/core/Restoration.cpp
     Source/core/Fft.cpp
@@ -125,6 +126,7 @@ if(PHINYX_BUILD_TESTS)
         Source/core/AudioData.cpp
         Source/core/AudioDocument.cpp
         Source/core/Dsp.cpp
+        Source/core/FlacTags.cpp
         Source/core/Repair.cpp
         Source/core/Restoration.cpp
         Source/core/Fft.cpp)

@@ -3,13 +3,16 @@
 #include "../Source/core/AudioData.h"
 #include "../Source/core/AudioDocument.h"
 #include "../Source/core/Dsp.h"
+#include "../Source/core/FlacTags.h"
 #include "../Source/core/Fft.h"
 #include "../Source/core/Repair.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <fstream>
 #include <functional>
+#include <iterator>
 #include <random>
 #include <string>
 
@@ -477,7 +480,7 @@ namespace
         doc.reset (d, { { 1, Marker::Type::generic, 800, 800, "A" }, { 2, Marker::Type::region, 100, 200, "R" } }, "x.wav");
         check (! doc.isModified() && ! doc.canUndo(), "fresh document");
 
-        DocumentState next { d->replaced (50, 250, nullptr), doc.current().markers };
+        DocumentState next { d->replaced (50, 250, nullptr), doc.current().markers, {} };
         adjustMarkersForEdit (next.markers, 50, 250, 0);
         doc.apply ("Delete", next);
         check (doc.isModified() && doc.canUndo(), "modified after edit");
@@ -489,7 +492,7 @@ namespace
         check (doc.current().data->length() == 800, "redo");
         doc.markSaved();
         doc.undo();
-        doc.apply ("Other", { d, {} });
+        doc.apply ("Other", { d, {}, {} });
         check (doc.isModified() && ! doc.canRedo(), "branching drops redo");
         check (doc.historyDescriptions().size() == 2, "history list");
     }
@@ -693,6 +696,39 @@ namespace
         auto mono = dsp::toMono (*stereo);
         check (mono->numChannels() == 1 && rmsDifference (*mono, *sine, 0, 96000) < 1.0e-7, "stereo of equal sides mixes back to the mono");
     }
+
+    void testFlacTags()
+    {
+        // A FLAC file needs only "fLaC", a stream info block and frames for the tag code.
+        const std::string path = "/tmp/phinyx-core-test.flac";
+        {
+            std::ofstream out (path, std::ios::binary | std::ios::trunc);
+            out.write ("fLaC", 4);
+            const unsigned char info[4] { 0x00, 0, 0, 34 };   // stream info, not the last block
+            out.write ((const char*) info, 4);
+            out.write (std::string (34, '\x11').data(), 34);
+            const unsigned char pad[4] { 0x81, 0, 0, 8 };     // padding, the last block
+            out.write ((const char*) pad, 4);
+            out.write (std::string (8, '\0').data(), 8);
+            out.write ("AUDIOFRAMES", 11);
+        }
+        check (flactags::read (path).empty(), "a FLAC file without comments has no tags");
+
+        std::string error;
+        check (flactags::write (path, { { "TITLE", "Night Drive" }, { "ARTIST", "Ünïcode Bänd" } }, "PHINYX", error), "write FLAC tags: " + error);
+        auto fields = flactags::read (path);
+        check (fields.size() == 2 && fields["TITLE"] == "Night Drive" && fields["ARTIST"] == "Ünïcode Bänd", "read FLAC tags back");
+
+        check (flactags::write (path, { { "TITLE", "Second Take" } }, "PHINYX", error), "rewrite FLAC tags: " + error);
+        fields = flactags::read (path);
+        check (fields.size() == 1 && fields["TITLE"] == "Second Take", "rewriting replaces the old tags");
+
+        std::ifstream in (path, std::ios::binary);
+        const std::string bytes ((std::istreambuf_iterator<char> (in)), std::istreambuf_iterator<char>());
+        check (bytes.substr (8, 34) == std::string (34, '\x11') && bytes.size() > 11 && bytes.substr (bytes.size() - 11) == "AUDIOFRAMES",
+               "the stream info and the audio are kept");
+        std::remove (path.c_str());
+    }
 }
 
 int main()
@@ -707,6 +743,7 @@ int main()
     testRestoration();
     testShapes();
     testConvert();
+    testFlacTags();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "AudioEngine.h"
 #include "../core/Dsp.h"
+#include "../core/FlacTags.h"
 #include "MasterChain.h"
 
 #include <juce_audio_devices/juce_audio_devices.h>
@@ -574,7 +575,59 @@ std::vector<std::string> AudioEngine::writableExtensions()
 }
 
 //==============================================================================
-AudioDataPtr AudioEngine::loadFile (const std::string& path, std::vector<Marker>& markersOut,
+namespace
+{
+    // How each tag is called in WAV LIST/INFO and bext (as JUCE names them), and in Vorbis comments.
+    struct TagName
+    {
+        const char* key;
+        const char* wav;      // null: not kept in WAV
+        const char* vorbis;   // null: not kept in FLAC or Ogg
+    };
+
+    const TagName tagNames[] {
+        { tag::title,            "INAM", "TITLE" },
+        { tag::artist,           "IART", "ARTIST" },
+        { tag::album,            "IPRD", "ALBUM" },
+        { tag::genre,            "GENR", "GENRE" },
+        { tag::date,             "ICRD", "DATE" },
+        { tag::track,            "TRCK", "TRACKNUMBER" },
+        { tag::comment,          "ICMT", "COMMENT" },
+        { tag::copyright,        "ICOP", "COPYRIGHT" },
+        { tag::isrc,             "ISRC", "ISRC" },
+        { tag::bwfDescription,   "bwav description", nullptr },
+        { tag::bwfOriginator,    "bwav originator", nullptr },
+        { tag::bwfOriginatorRef, "bwav originator ref", nullptr },
+        { tag::bwfDate,          "bwav origination date", nullptr },
+        { tag::bwfTime,          "bwav origination time", nullptr },
+        { tag::bwfTimeReference, "bwav time reference", nullptr },
+        { tag::bwfCodingHistory, "bwav coding history", nullptr },
+    };
+
+    // JUCE's Ogg Vorbis reader and writer know only these comments.
+    const std::map<std::string, const char*> oggKeys {
+        { "TITLE", "id3title" }, { "ARTIST", "id3artist" }, { "ALBUM", "id3album" }, { "COMMENT", "id3comment" },
+        { "DATE", "id3date" }, { "GENRE", "id3genre" }, { "TRACKNUMBER", "id3trackNumber" },
+    };
+}
+
+bool AudioEngine::keepsTag (const std::string& extension, const std::string& key)
+{
+    for (const auto& t : tagNames)
+        if (key == t.key)
+        {
+            if (extension == "wav")
+                return t.wav != nullptr;
+            if (extension == "flac")
+                return t.vorbis != nullptr;
+            if (extension == "ogg")
+                return t.vorbis != nullptr && oggKeys.count (t.vorbis) > 0;
+            return false;
+        }
+    return false;
+}
+
+AudioDataPtr AudioEngine::loadFile (const std::string& path, std::vector<Marker>& markersOut, Tags& tagsOut,
                                     std::string& error, std::atomic<float>* progress)
 {
     std::unique_ptr<juce::AudioFormatReader> reader;
@@ -636,10 +689,27 @@ AudioDataPtr AudioEngine::loadFile (const std::string& path, std::vector<Marker>
         markersOut.push_back (m);
     }
 
+    // Tags: WAV and Ogg through JUCE's metadata, FLAC from its Vorbis comments.
+    const auto ext = juce::File (juce::String::fromUTF8 (path.c_str())).getFileExtension().toLowerCase();
+    const auto flacFields = ext == ".flac" ? flactags::read (path) : flactags::Fields();
+    for (const auto& t : tagNames)
+    {
+        juce::String value;
+        if (ext == ".wav" && t.wav != nullptr)
+            value = meta.getValue (t.wav, {});
+        else if (ext == ".ogg" && t.vorbis != nullptr && oggKeys.count (t.vorbis) > 0)
+            value = meta.getValue (oggKeys.at (t.vorbis), {});
+        else if (ext == ".flac" && t.vorbis != nullptr && flacFields.count (t.vorbis) > 0)
+            value = juce::String::fromUTF8 (flacFields.at (t.vorbis).c_str());
+        value = value.trim();
+        if (value.isNotEmpty() && ! (t.key == std::string (tag::bwfTimeReference) && value == "0"))
+            tagsOut[t.key] = value.toStdString();
+    }
+
     return builder.finish();
 }
 
-bool AudioEngine::saveFile (const std::string& path, const AudioData& data, const std::vector<Marker>& markers,
+bool AudioEngine::saveFile (const std::string& path, const AudioData& data, const std::vector<Marker>& markers, const Tags& tags,
                             const SaveOptions& options, std::string& error)
 {
     const juce::File file (juce::String::fromUTF8 (path.c_str()));
@@ -676,9 +746,23 @@ bool AudioEngine::saveFile (const std::string& path, const AudioData& data, cons
     if (isLossy)
         writerOptions = writerOptions.withQualityOptionIndex (std::clamp (options.oggQuality, 0, format->getQualityOptions().size() - 1));
 
+    std::unordered_map<juce::String, juce::String> meta;
+    for (const auto& t : tagNames)
+    {
+        const auto it = tags.find (t.key);
+        if (it == tags.end() || it->second.empty())
+            continue;
+        const auto value = juce::String::fromUTF8 (it->second.c_str());
+        if (ext == ".wav" && t.wav != nullptr)
+            meta[t.wav] = value;
+        else if (ext == ".ogg" && t.vorbis != nullptr && oggKeys.count (t.vorbis) > 0)
+            meta[oggKeys.at (t.vorbis)] = value;
+    }
+    if (ext == ".wav" && ! meta.empty())
+        meta["ISFT"] = APP_DISPLAY_NAME;
+
     if (ext == ".wav" && ! markers.empty())
     {
-        std::unordered_map<juce::String, juce::String> meta;
         int labelIndex = 0, regionIndex = 0;
 
         for (size_t i = 0; i < markers.size(); ++i)
@@ -708,9 +792,9 @@ bool AudioEngine::saveFile (const std::string& path, const AudioData& data, cons
         meta["NumCueLabels"] = juce::String (labelIndex);
         if (regionIndex > 0)
             meta["NumCueRegions"] = juce::String (regionIndex);
-
-        writerOptions = writerOptions.withMetadataValues (meta);
     }
+    if (! meta.empty())
+        writerOptions = writerOptions.withMetadataValues (meta);
 
     // Write to a temporary file first so a failed save never destroys the original.
     const auto temp = file.getSiblingFile ("." + file.getFileName() + ".phinyx-tmp");
@@ -755,6 +839,19 @@ bool AudioEngine::saveFile (const std::string& path, const AudioData& data, cons
         {
             error = "Writing failed (disk full?)";
             writer.reset();
+            temp.deleteFile();
+            return false;
+        }
+    }
+
+    if (isFlac)
+    {
+        flactags::Fields fields;
+        for (const auto& t : tagNames)
+            if (const auto it = tags.find (t.key); t.vorbis != nullptr && it != tags.end() && ! it->second.empty())
+                fields[t.vorbis] = it->second;
+        if (! fields.empty() && ! flactags::write (temp.getFullPathName().toStdString(), fields, APP_DISPLAY_NAME, error))
+        {
             temp.deleteFile();
             return false;
         }

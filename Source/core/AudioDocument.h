@@ -3,6 +3,7 @@
 
 #include "AudioData.h"
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -22,10 +23,36 @@ struct Marker
 // Moves markers to follow an edit that replaced [start, end) with insertedLength frames.
 void adjustMarkersForEdit (std::vector<Marker>&, Frame start, Frame end, Frame insertedLength);
 
+// Descriptive metadata, by schema-neutral key (see `tag`). Each file format
+// stores the keys it can: WAV as LIST/INFO and BWF bext, FLAC and Ogg as Vorbis comments.
+using Tags = std::map<std::string, std::string>;
+
+namespace tag
+{
+    inline constexpr const char* title = "title";
+    inline constexpr const char* artist = "artist";
+    inline constexpr const char* album = "album";
+    inline constexpr const char* genre = "genre";
+    inline constexpr const char* date = "date";
+    inline constexpr const char* track = "track";
+    inline constexpr const char* comment = "comment";
+    inline constexpr const char* copyright = "copyright";
+    inline constexpr const char* isrc = "isrc";
+    // Broadcast Wave (bext), WAV only
+    inline constexpr const char* bwfDescription = "bwf.description";
+    inline constexpr const char* bwfOriginator = "bwf.originator";
+    inline constexpr const char* bwfOriginatorRef = "bwf.originatorRef";
+    inline constexpr const char* bwfDate = "bwf.originationDate";
+    inline constexpr const char* bwfTime = "bwf.originationTime";
+    inline constexpr const char* bwfTimeReference = "bwf.timeReference";
+    inline constexpr const char* bwfCodingHistory = "bwf.codingHistory";
+}
+
 struct DocumentState
 {
     AudioDataPtr data;
     std::vector<Marker> markers;
+    Tags tags;
 };
 
 // Holds the current audio and markers plus a linear undo history of snapshots.
@@ -33,7 +60,7 @@ struct DocumentState
 class AudioDocument
 {
 public:
-    void reset (AudioDataPtr, std::vector<Marker> markers, const std::string& path);
+    void reset (AudioDataPtr, std::vector<Marker> markers, const std::string& path, Tags tags = {});
     bool isOpen() const { return ! history.empty() && current().data != nullptr; }
 
     const DocumentState& current() const { return history[(size_t) position].state; }
