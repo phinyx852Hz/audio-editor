@@ -20,7 +20,7 @@ struct AudioOutputChoice
 // Level data for one ~100 ms slice of what was played, for the meters.
 struct MeterBlock
 {
-    static constexpr int maxChannels = 8;
+    static constexpr int maxChannels = 16;  // files with more channels play and meter the first 16
     int numChannels = 0;
     float samplePeak[maxChannels] {};
     float truePeak[maxChannels] {};
@@ -47,6 +47,7 @@ struct MasterSlotInfo
     bool bypassed = false;
     int latencySamples = 0;
     bool hasEditor = false;
+    int channels = 0;         // how many of the file's channels the plugin processes; the rest pass through
 };
 
 struct PluginParameterInfo
@@ -84,6 +85,16 @@ public:
     AudioOutputChoice currentOutput() const;
     std::string selectOutput (const AudioOutputChoice&);
 
+    // How a file with more than two channels is heard. By default it is folded
+    // down to stereo (right for headphones and most desktops); separateOutputs
+    // plays each channel on its own output when the device has enough (ALSA
+    // devices get ALSA's speaker order). Files are never changed.
+    enum class MonitorMode { stereoDownmix, separateOutputs };
+    void setMonitorMode (MonitorMode);
+    MonitorMode monitorMode() const;
+    int outputChannels() const;   // of the open device
+    bool isDownmixing() const;    // what is playing now is being folded down
+
     // Meter data produced since the last call.
     std::vector<MeterBlock> takeMeterBlocks();
 
@@ -113,6 +124,7 @@ public:
     void moveMasterSlot (int from, int to);
     void setMasterSlotBypassed (int slot, bool);
     MasterSlotInfo masterSlot (int slot) const;
+    int masterChannels() const;  // channels the Master Section runs at (the file's, at least 2)
     void setMasterGainDb (double);
     double masterGainDb() const;
     void setMasterBypassed (bool);
@@ -152,6 +164,8 @@ public:
                           const SaveOptions&, std::string& error);
 
 private:
+    void useOutputsFor (int channels);
+
     struct Impl;
     std::unique_ptr<Impl> impl;
 };

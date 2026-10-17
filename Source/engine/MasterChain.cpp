@@ -146,16 +146,67 @@ std::unique_ptr<juce::AudioPluginInstance> MasterChain::createInstance (const ju
     if (instance == nullptr)
         return nullptr;
 
-    // Main stereo in and out; side chains and extra buses stay off.
-    instance->disableNonMainBuses();
-    auto layout = instance->getBusesLayout();
-    if (! layout.inputBuses.isEmpty())
-        layout.inputBuses.getReference (0) = juce::AudioChannelSet::stereo();
-    if (! layout.outputBuses.isEmpty())
-        layout.outputBuses.getReference (0) = juce::AudioChannelSet::stereo();
-    instance->setBusesLayout (layout);  // plugins that refuse keep their own layout
-
+    applyLayout (*instance, channelCount);
     return instance;
+}
+
+juce::AudioChannelSet MasterChain::channelSetFor (int n)
+{
+    switch (n)
+    {
+        case 1:  return juce::AudioChannelSet::mono();
+        case 2:  return juce::AudioChannelSet::stereo();
+        case 3:  return juce::AudioChannelSet::createLCR();
+        case 4:  return juce::AudioChannelSet::quadraphonic();
+        case 5:  return juce::AudioChannelSet::create5point0();
+        case 6:  return juce::AudioChannelSet::create5point1();
+        case 7:  return juce::AudioChannelSet::create6point1();
+        case 8:  return juce::AudioChannelSet::create7point1();
+        case 10: return juce::AudioChannelSet::create7point1point2();
+        case 12: return juce::AudioChannelSet::create7point1point4();
+        default: return juce::AudioChannelSet::discreteChannels (n);
+    }
+}
+
+namespace
+{
+    bool trySetLayout (juce::AudioPluginInstance& p, const juce::AudioChannelSet& set)
+    {
+        auto layout = p.getBusesLayout();
+        if (! layout.inputBuses.isEmpty())
+            layout.inputBuses.getReference (0) = set;
+        if (! layout.outputBuses.isEmpty())
+            layout.outputBuses.getReference (0) = set;
+        return p.setBusesLayout (layout);
+    }
+}
+
+void MasterChain::applyLayout (juce::AudioPluginInstance& p, int n) const
+{
+    // Main bus only; side chains and extra buses stay off. A plugin that cannot
+    // take every channel gets stereo (or keeps its own layout) and the rest pass through.
+    p.disableNonMainBuses();
+    if (n > 2 && (trySetLayout (p, channelSetFor (n)) || trySetLayout (p, juce::AudioChannelSet::discreteChannels (n))))
+        return;
+    trySetLayout (p, juce::AudioChannelSet::stereo());
+}
+
+void MasterChain::setChannels (int n)
+{
+    n = std::clamp (n, 2, maxChannels);
+    const juce::ScopedLock sl (lock);
+    if (n == channelCount)
+        return;
+
+    channelCount = n;
+    for (auto& s : slots)
+    {
+        if (s.plugin == nullptr)
+            continue;
+        s.plugin->releaseResources();
+        applyLayout (*s.plugin, n);
+        preparePlugin (*s.plugin, rate, blockSize);
+    }
 }
 
 void MasterChain::preparePlugin (juce::AudioPluginInstance& p, double sampleRate, int maxBlock) const
@@ -250,6 +301,7 @@ MasterSlotInfo MasterChain::info (int index) const
     i.bypassed = s.bypassed;
     i.latencySamples = s.plugin->getLatencySamples();
     i.hasEditor = s.plugin->hasEditor();
+    i.channels = std::min (channelCount, std::max (s.plugin->getTotalNumInputChannels(), s.plugin->getTotalNumOutputChannels()));
     return i;
 }
 
@@ -580,7 +632,7 @@ void MasterChain::processChain (juce::AudioBuffer<float>& io, int startSample, i
             if (listening)
             {
                 float peak = 0.0f;
-                for (int ch = 0; ch < std::min (ioChannels, 2); ++ch)
+                for (int ch = 0; ch < ioChannels; ++ch)
                     peak = std::max (peak, scratch.getMagnitude (ch, 0, n));
                 if (peak > peaks[index].load (std::memory_order_relaxed))
                     peaks[index].store (peak, std::memory_order_relaxed);
@@ -602,11 +654,12 @@ AudioDataPtr MasterChain::render (const AudioData& data, Frame start, Frame end,
                                   std::atomic<float>* progress, const std::atomic<bool>* cancel)
 {
     const auto fileChannels = data.numChannels();
-    if (fileChannels < 1 || fileChannels > 2)
+    if (fileChannels < 1 || fileChannels > maxChannels)
     {
-        error = "The Master Section renders mono and stereo files for now.";
+        error = "The Master Section renders files with up to " + std::to_string (maxChannels) + " channels.";
         return nullptr;
     }
+    const auto ioChannels = std::max (fileChannels, 2);   // a mono file runs as two equal sides
 
     start = std::clamp<Frame> (start, 0, data.length());
     end = std::clamp<Frame> (end, start, data.length());
@@ -615,14 +668,16 @@ AudioDataPtr MasterChain::render (const AudioData& data, Frame start, Frame end,
     const juce::ScopedLock sl (lock);
     const auto deviceRate = rate;
     const auto deviceBlock = blockSize;
+    const auto deviceChannels = channelCount;
     constexpr int renderBlock = 4096;
+    setChannels (ioChannels);
     prepare (data.sampleRate(), renderBlock);
 
     // Some plugins (look-ahead limiters, for example) only report their latency
     // once they have processed audio, and VST3 hosts learn about the change on
     // the message thread. Run a little silence through, give the message thread
     // a moment, then read the latency. (Called from a worker thread.)
-    juce::AudioBuffer<float> io (2, renderBlock);
+    juce::AudioBuffer<float> io (ioChannels, renderBlock);
     if (! allBypassed)
     {
         for (int pass = 0; pass < 2; ++pass)
@@ -655,8 +710,7 @@ AudioDataPtr MasterChain::render (const AudioData& data, Frame start, Frame end,
         const auto valid = (int) std::clamp<Frame> (end - (start + consumed), 0, renderBlock);
         if (valid > 0)
         {
-            float* ptrs[2] = { io.getWritePointer (0), io.getWritePointer (1) };
-            data.read (start + consumed, valid, ptrs);
+            data.read (start + consumed, valid, io.getArrayOfWritePointers());
             if (fileChannels == 1)
                 io.copyFrom (1, 0, io, 0, 0, valid);
         }
@@ -670,8 +724,10 @@ AudioDataPtr MasterChain::render (const AudioData& data, Frame start, Frame end,
         const auto count = (int) std::min<Frame> (renderBlock - skip, length - produced);
         if (count > 0)
         {
-            const float* ptrs[2] = { io.getReadPointer (0) + skip, io.getReadPointer (1) + skip };
-            out.append (ptrs, count);
+            std::array<const float*, maxChannels> ptrs {};
+            for (int ch = 0; ch < fileChannels; ++ch)
+                ptrs[(size_t) ch] = io.getReadPointer (ch) + skip;
+            out.append (ptrs.data(), count);
             produced += count;
         }
 
@@ -679,6 +735,7 @@ AudioDataPtr MasterChain::render (const AudioData& data, Frame start, Frame end,
             progress->store (length > 0 ? (float) produced / (float) length : 1.0f);
     }
 
+    setChannels (deviceChannels);
     prepare (deviceRate, deviceBlock);
 
     if (cancelled)

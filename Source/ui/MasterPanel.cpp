@@ -114,6 +114,8 @@ void MasterPanel::refresh()
         else
         {
             text = tr ("%1   %2   %3").arg (i + 1).arg (QString::fromStdString (info.name), QString::fromStdString (info.format));
+            if (info.channels > 0 && info.channels < engine.masterChannels())
+                text += info.channels <= 2 ? tr ("   [front L/R only]") : tr ("   [first %1 channels]").arg (info.channels);
             if (info.bypassed)
                 text += tr ("   [bypassed]");
             else

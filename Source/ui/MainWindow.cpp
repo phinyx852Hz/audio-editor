@@ -327,6 +327,15 @@ void MainWindow::registerCommands()
         waveform->setFocus();
     });
 
+    add ("options.separateOutputs", Category::options, tr ("Play Surround on &Separate Outputs"), {}, [this]
+    {
+        const bool on = commands.action (QStringLiteral ("options.separateOutputs"))->isChecked();
+        engine.setMonitorMode (on ? AudioEngine::MonitorMode::separateOutputs : AudioEngine::MonitorMode::stereoDownmix);
+        statusBar()->showMessage (on ? tr ("Files with more than two channels play each channel on its own output when the device has enough")
+                                     : tr ("Files with more than two channels are heard folded down to stereo (the file is not changed)"), 6000);
+    });
+    commands.action (QStringLiteral ("options.separateOutputs"))->setCheckable (true);
+
     add ("options.audio", Category::options, tr ("&Audio Settings..."), { KS (Qt::CTRL | Qt::Key_Comma) },
          [this] { AudioSettingsDialog (engine, this).exec(); });
     add ("options.keymap", Category::options, tr ("&Keyboard Shortcuts..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_K) },
@@ -368,7 +377,7 @@ void MainWindow::buildMenus()
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
                                "view.spectral", "-", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.popOut", "view.resetLayout", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
-        { tr ("&Options"),   { "options.audio", "options.keymap", "options.theme", "options.waveformColors" } },
+        { tr ("&Options"),   { "options.audio", "options.separateOutputs", "-", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
     };
 
@@ -514,6 +523,10 @@ void MainWindow::restoreLayout()
     focusFollowsMouse->setEnabled (followMouse);
     commands.action (QStringLiteral ("view.focusFollowsMouse"))->setChecked (followMouse);
 
+    const bool separate = settings.value (QStringLiteral ("audio/separateOutputs"), false).toBool();
+    engine.setMonitorMode (separate ? AudioEngine::MonitorMode::separateOutputs : AudioEngine::MonitorMode::stereoDownmix);
+    commands.action (QStringLiteral ("options.separateOutputs"))->setChecked (separate);
+
     const bool spectral = settings.value (QStringLiteral ("view/spectral"), false).toBool();
     waveform->setSpectral (spectral);
     commands.action (QStringLiteral ("view.spectral"))->setChecked (spectral);
@@ -559,6 +572,7 @@ void MainWindow::saveLayout()
     settings.setValue (QStringLiteral ("window/state"), saveState (layoutVersion));
     settings.setValue (QStringLiteral ("view/spectral"), waveform->isSpectral());
     settings.setValue (QStringLiteral ("view/focusFollowsMouse"), focusFollowsMouse->isEnabled());
+    settings.setValue (QStringLiteral ("audio/separateOutputs"), engine.monitorMode() == AudioEngine::MonitorMode::separateOutputs);
     engine.saveMasterSection();
 }
 
@@ -771,8 +785,11 @@ void MainWindow::updateStatus()
                         .arg (formatTime ((double) selStart / rate), formatTime ((double) selEnd / rate),
                               formatTime ((double) (selEnd - selStart) / rate));
 
-        text += QStringLiteral ("   %1 Hz, %2 ch   %3").arg ((int) rate).arg (d->numChannels())
-                    .arg (engine.isPlaying() ? tr ("Playing") : tr ("Stopped"));
+        const auto layout = QString::fromStdString (dsp::speakerLayout (d->numChannels()).name);
+        text += QStringLiteral ("   %1 Hz, %2").arg ((int) rate).arg (layout);
+        if (d->numChannels() > 2 && engine.isPlaying() && engine.isDownmixing())
+            text += tr (" (heard folded to stereo)");
+        text += QStringLiteral ("   ") + (engine.isPlaying() ? tr ("Playing") : tr ("Stopped"));
     }
     else
         text = tr ("No file");
@@ -1160,6 +1177,13 @@ void MainWindow::paste()
     if (std::abs (clipboard->sampleRate() - d->sampleRate()) > 0.5)
         statusBar()->showMessage (tr ("Pasted audio was recorded at %1 Hz and plays at %2 Hz")
                                       .arg ((int) clipboard->sampleRate()).arg ((int) d->sampleRate()), 6000);
+
+    if (clipboard->numChannels() != d->numChannels() && clipboard->numChannels() > 1)
+        statusBar()->showMessage (d->numChannels() == 1
+                                      ? tr ("Pasted %1 audio into a mono file: left and right were mixed").arg (QString::fromStdString (dsp::speakerLayout (clipboard->numChannels()).name))
+                                      : tr ("Pasted %1 audio into a %2 file: channels went to the same positions, the rest are silent")
+                                            .arg (QString::fromStdString (dsp::speakerLayout (clipboard->numChannels()).name),
+                                                  QString::fromStdString (dsp::speakerLayout (d->numChannels()).name)), 8000);
 
     // Select what was pasted so it can be processed or undone at a glance.
     selStart = selAnchor = start;

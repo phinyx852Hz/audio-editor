@@ -415,7 +415,7 @@ void MeterPanel::paintEvent (QPaintEvent*)
     g.fillRect (rect(), theme.color (QStringLiteral ("window")));
 
     constexpr float floorDb = -60.0f;
-    const QRectF area (8, 8, std::min (width() * 0.45, 40.0 + numChannels * 26.0), height() - 16);
+    const QRectF area (8, 8, std::min (width() * (numChannels > 2 ? 0.6 : 0.45), 40.0 + numChannels * 26.0), height() - 30);
     const auto barsWidth = area.width() - 28.0;
     const auto barWidth = barsWidth / numChannels;
     const auto yFor = [&] (float db) { return area.top() + area.height() * (double) (std::clamp (db, floorDb, 0.0f) / floorDb); };
@@ -450,6 +450,17 @@ void MeterPanel::paintEvent (QPaintEvent*)
     small.setPointSizeF (small.pointSizeF() * 0.8);
     g.setFont (small);
     g.setPen (theme.color (QStringLiteral ("placeholderText")));
+
+    // Speaker names under the bars, smaller when the bars are narrow
+    auto labelFont = small;
+    if (barWidth < 22.0)
+        labelFont.setPointSizeF (small.pointSizeF() * 0.8);
+    g.setFont (labelFont);
+    for (int ch = 0; ch < numChannels; ++ch)
+        g.drawText (QRectF (area.left() + ch * barWidth, area.bottom() + 2, barWidth, 14), Qt::AlignCenter,
+                    QString::fromStdString (dsp::channelName (ch, numChannels)));
+    g.setFont (small);
+
     for (float db : { 0.0f, -6.0f, -12.0f, -18.0f, -24.0f, -36.0f, -48.0f, -60.0f })
         g.drawText (QRectF (area.left() + barsWidth + 2, yFor (db) - 8, 26, 16), Qt::AlignLeft | Qt::AlignVCenter,
                     QString::number ((int) db));

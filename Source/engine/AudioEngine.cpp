@@ -36,15 +36,16 @@ namespace
                 return;
 
             const auto pos = position.load();
-            const auto numChannels = std::min (d->numChannels(), (int) scratchPtrs.size());
-            ensureScratch (d->numChannels(), info.numSamples);
+            const auto numChannels = d->numChannels();
+            ensureScratch (numChannels, info.numSamples);
             d->read (pos, info.numSamples, scratchPtrs.data());
 
+            // The buffer has the file's channels (see MonitorSource); a mono file also fills a second one.
             for (int ch = 0; ch < info.buffer->getNumChannels(); ++ch)
             {
-                // Mono files play on every output channel.
-                const auto src = numChannels > 0 ? ch % d->numChannels() : 0;
-                info.buffer->copyFrom (ch, info.startSample, scratch[(size_t) src].data(), info.numSamples);
+                const auto src = ch < numChannels ? ch : (numChannels == 1 ? 0 : -1);
+                if (src >= 0)
+                    info.buffer->copyFrom (ch, info.startSample, scratch[(size_t) src].data(), info.numSamples);
             }
 
             position = pos + info.numSamples;
@@ -127,7 +128,7 @@ namespace
         {
             input.getNextAudioBlock (info);
 
-            const auto numChannels = std::min (info.buffer->getNumChannels(), MeterBlock::maxChannels);
+            const auto numChannels = std::min ({ info.buffer->getNumChannels(), channels.load(), MeterBlock::maxChannels });
             current.numChannels = numChannels;
 
             for (int i = 0; i < info.numSamples; ++i)
@@ -151,6 +152,8 @@ namespace
                 }
             }
         }
+
+        std::atomic<int> channels { 2 };   // the file's channels; a mono file's buffer has a copy in the second
 
         void takeBlocks (std::vector<MeterBlock>& out)
         {
@@ -187,6 +190,97 @@ namespace
         std::array<MeterBlock, fifoSize> blocks;
     };
 
+    // The last stage before the device. Everything before it (transport, Master
+    // Section, meters) works on the file's own channels; this sends them to the
+    // outputs, one each when there are enough, or folded down to stereo.
+    class MonitorSource final : public juce::AudioSource
+    {
+    public:
+        static constexpr int maxChannels = MeterBlock::maxChannels;
+
+        explicit MonitorSource (juce::AudioSource& in) : input (in)
+        {
+            for (int n = 1; n <= maxChannels; ++n)
+            {
+                const auto m = dsp::stereoDownmix (n);
+                for (int side = 0; side < 2; ++side)
+                    std::copy (m[(size_t) side].begin(), m[(size_t) side].end(), downmix[(size_t) n][(size_t) side].begin());
+            }
+        }
+
+        void prepareToPlay (int blockSize, double sampleRate) override
+        {
+            input.prepareToPlay (blockSize, sampleRate);
+            work.setSize (maxChannels, std::max (blockSize, 512));
+        }
+
+        void releaseResources() override { input.releaseResources(); }
+
+        void getNextAudioBlock (const juce::AudioSourceChannelInfo& info) override
+        {
+            const auto n = std::clamp (channels.load(), 1, maxChannels);
+            const auto outs = info.buffer->getNumChannels();
+            const bool fold = n > 2 ? (! separate.load() || outs < n) : (n == 2 && outs < 2);
+            const auto* order = alsaOrder.load() ? alsaPositions (n) : nullptr;
+            downmixing = fold && outs > 0;
+
+            for (int done = 0; done < info.numSamples;)
+            {
+                const auto count = std::min (work.getNumSamples(), info.numSamples - done);
+                // A mono file gets a second channel so stereo plugins see both sides.
+                juce::AudioBuffer<float> file (work.getArrayOfWritePointers(), std::max (n, 2), count);
+                file.clear();
+                input.getNextAudioBlock ({ &file, 0, count });
+
+                const auto at = info.startSample + done;
+                if (n == 1)
+                {
+                    for (int ch = 0; ch < outs; ++ch)
+                        info.buffer->copyFrom (ch, at, file, 0, 0, count);
+                }
+                else if (! fold)
+                {
+                    for (int ch = 0; ch < outs; ++ch)
+                        info.buffer->clear (ch, at, count);
+                    for (int ch = 0; ch < n; ++ch)
+                        info.buffer->copyFrom (order != nullptr ? order[ch] : ch, at, file, ch, 0, count);
+                }
+                else
+                {
+                    for (int ch = 0; ch < outs; ++ch)
+                        info.buffer->clear (ch, at, count);
+
+                    for (int side = 0; side < std::min (outs, 2); ++side)
+                        for (int src = 0; src < n; ++src)
+                            if (const auto gain = downmix[(size_t) n][(size_t) side][(size_t) src]; gain > 0.0f)
+                                info.buffer->addFrom (side, at, file, src, 0, count, outs == 1 ? gain * 0.5f : gain);
+
+                    if (outs == 1)
+                        for (int src = 0; src < n; ++src)
+                            if (const auto gain = downmix[(size_t) n][1][(size_t) src]; gain > 0.0f)
+                                info.buffer->addFrom (0, at, file, src, 0, count, gain * 0.5f);
+                }
+
+                done += count;
+            }
+        }
+
+        std::atomic<int> channels { 2 };
+        std::atomic<bool> separate { false }, alsaOrder { false }, downmixing { false };
+
+    private:
+        // Where each WAV-ordered channel goes on an ALSA device (FL FR RL RR FC LFE SL SR).
+        static const int* alsaPositions (int n)
+        {
+            static constexpr int five[] { 0, 1, 4, 2, 3 }, six[] { 0, 1, 4, 5, 2, 3 }, eight[] { 0, 1, 4, 5, 2, 3, 6, 7 };
+            return n == 5 ? five : n == 6 ? six : n == 8 ? eight : nullptr;
+        }
+
+        juce::AudioSource& input;
+        juce::AudioBuffer<float> work { maxChannels, 2048 };
+        std::array<std::array<std::array<float, maxChannels>, 2>, maxChannels + 1> downmix {};
+    };
+
     juce::AudioFormatManager& formats()
     {
         static juce::AudioFormatManager fm;
@@ -205,7 +299,7 @@ struct AudioEngine::Impl
     {
         // The thread that creates the MessageManager becomes JUCE's message thread.
         juce::MessageManager::getInstance();
-        player.setSource (&meter);
+        player.setSource (&monitor);
     }
 
     ~Impl()
@@ -222,8 +316,10 @@ struct AudioEngine::Impl
     juce::AudioTransportSource transport;
     MasterSource masterSource { transport, master };
     MeterSource meter { masterSource };
+    MonitorSource monitor { meter };
     juce::AudioSourcePlayer player;
     double sourceRate = 0.0;
+    int sourceChannels = 0;
 };
 
 AudioEngine::AudioEngine() : impl (std::make_unique<Impl>()) {}
@@ -239,24 +335,37 @@ std::string AudioEngine::openDefaultDevice()
 {
     auto error = impl->deviceManager.initialiseWithDefaultDevices (0, 2);
     impl->deviceManager.addAudioCallback (&impl->player);
+    useOutputsFor (impl->sourceChannels);
     return error.toStdString();
 }
 
 void AudioEngine::setData (AudioDataPtr data)
 {
     const auto rate = data != nullptr ? data->sampleRate() : 0.0;
+    const auto channels = data != nullptr ? std::clamp (data->numChannels(), 1, MeterBlock::maxChannels) : 0;
     const auto pos = impl->document.getNextReadPosition();
+
+    if (channels > 0 && channels != impl->sourceChannels)
+    {
+        // The transport, Master Section and meters all follow the file's channel count.
+        impl->master.setChannels (std::max (channels, 2));
+        impl->monitor.channels = channels;
+        impl->meter.channels = channels;
+        useOutputsFor (channels);
+    }
+
     impl->document.setData (std::move (data));
 
-    if (std::abs (rate - impl->sourceRate) > 1.0e-6)
+    if (std::abs (rate - impl->sourceRate) > 1.0e-6 || (channels > 0 && channels != impl->sourceChannels))
     {
-        // A new sample rate needs the transport's resampler rebuilt.
+        // A new sample rate or channel count needs the transport's resampler rebuilt.
         const bool wasPlaying = isPlaying();
         impl->transport.setSource (nullptr);
         if (rate > 0.0)
-            impl->transport.setSource (&impl->document, 0, nullptr, rate);
+            impl->transport.setSource (&impl->document, 0, nullptr, rate, std::max (channels, 2));
 
         impl->sourceRate = rate;
+        impl->sourceChannels = channels > 0 ? channels : impl->sourceChannels;
         impl->document.setNextReadPosition (std::min<Frame> (pos, impl->document.getTotalLength()));
         if (wasPlaying)
             impl->transport.start();
@@ -337,7 +446,59 @@ std::string AudioEngine::selectOutput (const AudioOutputChoice& choice)
     auto setup = dm.getAudioDeviceSetup();
     setup.outputDeviceName = juce::String (choice.name);
     setup.inputDeviceName = {};
-    return dm.setAudioDeviceSetup (setup, true).toStdString();
+    setup.useDefaultOutputChannels = true;   // the previous device's channel choice may not exist here
+    auto error = dm.setAudioDeviceSetup (setup, true).toStdString();
+    if (error.empty())
+        useOutputsFor (impl->sourceChannels);
+    return error;
+}
+
+void AudioEngine::useOutputsFor (int channels)
+{
+    // Opens as many of the device's outputs as the file has channels (never fewer
+    // than two), so 5.1 plays on six speakers when the device has them.
+    auto* device = impl->deviceManager.getCurrentAudioDevice();
+    if (device == nullptr)
+        return;
+
+    impl->monitor.alsaOrder = device->getTypeName().containsIgnoreCase ("ALSA");
+    if (! impl->monitor.separate.load())
+        return;
+
+    const auto available = device->getOutputChannelNames().size();
+    const auto wanted = std::clamp (channels, 2, std::max (2, available));
+    if (device->getActiveOutputChannels().countNumberOfSetBits() >= wanted)
+        return;
+
+    auto setup = impl->deviceManager.getAudioDeviceSetup();
+    setup.useDefaultOutputChannels = false;
+    setup.outputChannels.clear();
+    setup.outputChannels.setRange (0, wanted, true);
+    impl->deviceManager.setAudioDeviceSetup (setup, true);
+}
+
+void AudioEngine::setMonitorMode (MonitorMode m)
+{
+    impl->monitor.separate = m == MonitorMode::separateOutputs;
+    if (m == MonitorMode::separateOutputs && impl->sourceChannels > 2)
+        useOutputsFor (impl->sourceChannels);
+}
+
+AudioEngine::MonitorMode AudioEngine::monitorMode() const
+{
+    return impl->monitor.separate.load() ? MonitorMode::separateOutputs : MonitorMode::stereoDownmix;
+}
+
+int AudioEngine::outputChannels() const
+{
+    if (auto* device = impl->deviceManager.getCurrentAudioDevice())
+        return device->getActiveOutputChannels().countNumberOfSetBits();
+    return 0;
+}
+
+bool AudioEngine::isDownmixing() const
+{
+    return impl->monitor.downmixing.load();
 }
 
 std::vector<MeterBlock> AudioEngine::takeMeterBlocks()
@@ -365,6 +526,7 @@ std::string AudioEngine::loadMasterPlugin (int slot, const std::string& id) { re
 void AudioEngine::clearMasterSlot (int slot)                         { impl->master.clear (slot); }
 void AudioEngine::moveMasterSlot (int from, int to)                  { impl->master.move (from, to); }
 void AudioEngine::setMasterSlotBypassed (int slot, bool b)           { impl->master.setBypassed (slot, b); }
+int AudioEngine::masterChannels() const                              { return impl->master.channels(); }
 MasterSlotInfo AudioEngine::masterSlot (int slot) const              { return impl->master.info (slot); }
 void AudioEngine::setMasterGainDb (double db)                        { impl->master.setGainDb (db); }
 double AudioEngine::masterGainDb() const                             { return impl->master.gainDb(); }
@@ -500,6 +662,10 @@ bool AudioEngine::saveFile (const std::string& path, const AudioData& data, cons
                              .withBitsPerSample (bits)
                              .withSampleFormat (isFloat ? juce::AudioFormatWriterOptions::SampleFormat::floatingPoint
                                                         : juce::AudioFormatWriterOptions::SampleFormat::automatic);
+
+    // Surround files carry their speaker layout (the WAV channel mask).
+    if (data.numChannels() > 2)
+        writerOptions = writerOptions.withChannelLayout (MasterChain::channelSetFor (data.numChannels()));
 
     if (isLossy)
         writerOptions = writerOptions.withQualityOptionIndex (std::clamp (options.oggQuality, 0, format->getQualityOptions().size() - 1));

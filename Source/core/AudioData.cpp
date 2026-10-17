@@ -136,17 +136,31 @@ AudioDataPtr AudioData::replaced (Frame start, Frame end, const AudioData* inser
         }
         else
         {
-            std::vector<std::vector<float>> src ((size_t) insert->numChannels(), std::vector<float> (AudioChunk::maxFrames));
+            // Mono fills every channel; into mono, left and right are averaged;
+            // otherwise channels match by position (L to L, R to R) and the rest are silent.
+            const auto inChannels = insert->numChannels();
+            std::vector<std::vector<float>> src ((size_t) inChannels, std::vector<float> (AudioChunk::maxFrames));
+            std::vector<float> silent (AudioChunk::maxFrames, 0.0f), mixed (AudioChunk::maxFrames);
             std::vector<float*> srcPtrs, dstPtrs;
             for (auto& v : src)
                 srcPtrs.push_back (v.data());
             for (int ch = 0; ch < channels; ++ch)
-                dstPtrs.push_back (src[(size_t) (ch % insert->numChannels())].data());
+            {
+                if (inChannels == 1)
+                    dstPtrs.push_back (src[0].data());
+                else if (channels == 1)
+                    dstPtrs.push_back (mixed.data());
+                else
+                    dstPtrs.push_back (ch < inChannels ? src[(size_t) ch].data() : silent.data());
+            }
 
             for (Frame pos = 0; pos < insert->length(); pos += AudioChunk::maxFrames)
             {
                 const auto n = (int) std::min<Frame> (AudioChunk::maxFrames, insert->length() - pos);
                 insert->read (pos, n, srcPtrs.data());
+                if (channels == 1)
+                    for (int i = 0; i < n; ++i)
+                        mixed[(size_t) i] = 0.5f * (src[0][(size_t) i] + src[1][(size_t) i]);
                 b.append (dstPtrs.data(), n);
             }
         }

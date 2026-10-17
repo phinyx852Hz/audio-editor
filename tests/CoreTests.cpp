@@ -109,6 +109,32 @@ namespace
         auto mono = makeRamp (1, 10);
         auto pasted = d->replaced (0, 0, mono.get());
         check (sampleAt (*pasted, 1, 5) == rampValue (5), "mono maps to all channels");
+
+        // Stereo pasted into 5.1 lands on L and R only; into mono, L and R are averaged.
+        auto surround = makeRamp (6, 100);
+        auto stereoClip = makeRamp (2, 10);
+        auto mixedIn = surround->replaced (0, 0, stereoClip.get());
+        check (sampleAt (*mixedIn, 0, 5) == rampValue (5) && sampleAt (*mixedIn, 1, 5) == -rampValue (5) && sampleAt (*mixedIn, 2, 5) == 0.0f
+               && sampleAt (*mixedIn, 3, 5) == 0.0f, "stereo into 5.1 fills L/R only");
+        auto monoDoc = makeRamp (1, 100);
+        auto folded = monoDoc->replaced (0, 0, stereoClip.get());
+        check (near (sampleAt (*folded, 0, 5), 0.0, 1.0e-6), "stereo into mono averages (the ramp's sides are opposite)");
+    }
+
+    void testLayouts()
+    {
+        check (dsp::speakerLayout (6).name == "5.1" && dsp::channelName (3, 6) == "LFE" && dsp::channelName (4, 6) == "Ls",
+               "5.1 layout in WAV order");
+        check (dsp::channelName (8, 12) == "Ltf" && dsp::channelName (2, 9) == "Ch 3", "7.1.4 and unknown layouts");
+        check (dsp::loudnessChannelWeight (3, 6) == 0.0 && dsp::loudnessChannelWeight (5, 6) == 1.41
+               && dsp::loudnessChannelWeight (1, 2) == 1.0, "BS.1770 channel weights");
+
+        const auto m = dsp::stereoDownmix (6);
+        check (m[0][0] == 1.0f && m[1][0] == 0.0f && near (m[0][2], 0.7071, 1.0e-3) && near (m[1][2], 0.7071, 1.0e-3)
+               && m[0][3] == 0.0f && m[1][3] == 0.0f && near (m[0][4], 0.7071, 1.0e-3) && m[1][4] == 0.0f,
+               "5.1 fold-down: centre and surrounds at -3 dB, LFE dropped");
+        const auto mono = dsp::stereoDownmix (1);
+        check (mono[0][0] == 1.0f && mono[1][0] == 1.0f, "mono plays on both sides");
     }
 
     void testDocument()
@@ -188,6 +214,7 @@ int main()
     testStorage();
     testDocument();
     testDsp();
+    testLayouts();
     testSpectrum();
 
     if (failures == 0)

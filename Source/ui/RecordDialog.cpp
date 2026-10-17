@@ -357,6 +357,9 @@ RecordDialog::RecordDialog (AudioCapture& c, AudioDataPtr into, const QString& t
     channelBox = new QComboBox (this);
     channelBox->addItem (tr ("Mono"), 1);
     channelBox->addItem (tr ("Stereo"), 2);
+    channelBox->addItem (tr ("Quad (4 channels)"), 4);
+    channelBox->addItem (tr ("5.1 (6 channels)"), 6);
+    channelBox->addItem (tr ("7.1 (8 channels)"), 8);
     channelBox->setCurrentIndex (1);
 
     preRecord = new QSpinBox (this);

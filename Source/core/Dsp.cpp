@@ -204,15 +204,130 @@ namespace dsp
     }
 
     //==============================================================================
-    double loudnessChannelWeight (int channel, int numChannels)
+    Speaker speakerAt (int channel, int n)
     {
-        if (numChannels == 6)
+        using S = Speaker;
+        static constexpr S lcr[] { S::left, S::right, S::centre };
+        static constexpr S quad[] { S::left, S::right, S::rearLeft, S::rearRight };
+        static constexpr S five[] { S::left, S::right, S::centre, S::sideLeft, S::sideRight };
+        static constexpr S fiveOne[] { S::left, S::right, S::centre, S::lfe, S::sideLeft, S::sideRight };
+        static constexpr S sixOne[] { S::left, S::right, S::centre, S::lfe, S::rearCentre, S::sideLeft, S::sideRight };
+        static constexpr S sevenOneFour[] { S::left, S::right, S::centre, S::lfe, S::rearLeft, S::rearRight, S::sideLeft, S::sideRight,
+                                            S::topFrontLeft, S::topFrontRight, S::topRearLeft, S::topRearRight };
+        if (channel < 0 || channel >= n)
+            return S::other;
+
+        switch (n)
         {
-            if (channel == 3) return 0.0;              // LFE
-            if (channel >= 4) return 1.41;             // Ls, Rs
+            case 1:  return S::mono;
+            case 2:  return channel == 0 ? S::left : S::right;
+            case 3:  return lcr[channel];
+            case 4:  return quad[channel];
+            case 5:  return five[channel];
+            case 6:  return fiveOne[channel];
+            case 7:  return sixOne[channel];
+            case 8:                              // 7.1, 7.1.2 and 7.1.4 share their first channels
+            case 10:
+            case 12: return sevenOneFour[channel];
+            default: return S::other;
+        }
+    }
+
+    SpeakerLayout speakerLayout (int n)
+    {
+        SpeakerLayout layout;
+        switch (n)
+        {
+            case 1:  layout.name = "Mono"; break;
+            case 2:  layout.name = "Stereo"; break;
+            case 3:  layout.name = "LCR"; break;
+            case 4:  layout.name = "Quad"; break;
+            case 5:  layout.name = "5.0"; break;
+            case 6:  layout.name = "5.1"; break;
+            case 7:  layout.name = "6.1"; break;
+            case 8:  layout.name = "7.1"; break;
+            case 10: layout.name = "7.1.2"; break;
+            case 12: layout.name = "7.1.4"; break;
+            default: layout.name = std::to_string (std::max (0, n)) + " channels"; break;
         }
 
-        return 1.0;
+        for (int ch = 0; ch < n; ++ch)
+            layout.speakers.push_back (speakerAt (ch, n));
+        return layout;
+    }
+
+    std::string channelName (int channel, int numChannels)
+    {
+        const auto layout = speakerLayout (numChannels);
+        if (channel < 0 || channel >= (int) layout.speakers.size())
+            return {};
+
+        switch (layout.speakers[(size_t) channel])
+        {
+            case Speaker::mono:          return "M";
+            case Speaker::left:          return "L";
+            case Speaker::right:         return "R";
+            case Speaker::centre:        return "C";
+            case Speaker::lfe:           return "LFE";
+            case Speaker::sideLeft:      return "Ls";
+            case Speaker::sideRight:     return "Rs";
+            case Speaker::rearLeft:      return numChannels == 4 ? "Ls" : "Lb";
+            case Speaker::rearRight:     return numChannels == 4 ? "Rs" : "Rb";
+            case Speaker::rearCentre:    return "Cs";
+            case Speaker::topFrontLeft:  return "Ltf";
+            case Speaker::topFrontRight: return "Rtf";
+            case Speaker::topRearLeft:   return "Ltb";
+            case Speaker::topRearRight:  return "Rtb";
+            case Speaker::other:         break;
+        }
+        return "Ch " + std::to_string (channel + 1);
+    }
+
+    std::array<std::vector<float>, 2> stereoDownmix (int numChannels)
+    {
+        constexpr float minus3 = 0.70710678f;
+        const auto layout = speakerLayout (numChannels);
+        std::array<std::vector<float>, 2> m { std::vector<float> ((size_t) numChannels), std::vector<float> ((size_t) numChannels) };
+
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            auto& l = m[0][(size_t) ch];
+            auto& r = m[1][(size_t) ch];
+            switch (layout.speakers[(size_t) ch])
+            {
+                case Speaker::mono:          l = r = 1.0f; break;
+                case Speaker::left:          l = 1.0f; break;
+                case Speaker::right:         r = 1.0f; break;
+                case Speaker::centre:        l = r = minus3; break;
+                case Speaker::lfe:           break;
+                case Speaker::rearCentre:    l = r = 0.5f; break;
+                case Speaker::sideLeft:
+                case Speaker::rearLeft:
+                case Speaker::topFrontLeft:
+                case Speaker::topRearLeft:   l = minus3; break;
+                case Speaker::sideRight:
+                case Speaker::rearRight:
+                case Speaker::topFrontRight:
+                case Speaker::topRearRight:  r = minus3; break;
+                case Speaker::other:
+                    // Unknown layout: odd channels left, even right, a last odd one in the middle.
+                    if (ch == numChannels - 1 && numChannels % 2 == 1) l = r = minus3;
+                    else (ch % 2 == 0 ? l : r) = 1.0f;
+                    break;
+            }
+        }
+        return m;
+    }
+
+    double loudnessChannelWeight (int channel, int numChannels)
+    {
+        // No allocation: the live meters call this on the audio thread.
+        const auto speaker = speakerAt (channel, numChannels);
+        if (speaker == Speaker::lfe)
+            return 0.0;
+        const bool surround = speaker == Speaker::sideLeft || speaker == Speaker::sideRight || speaker == Speaker::rearLeft
+                           || speaker == Speaker::rearRight || speaker == Speaker::rearCentre;
+        return surround ? 1.41 : 1.0;
     }
 
     double integratedLoudness (const std::vector<double>& blockPowers)

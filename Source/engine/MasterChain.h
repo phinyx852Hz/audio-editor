@@ -54,6 +54,12 @@ public:
     void save() const;
     std::string restore();
 
+    // The channel count everything is processed at (the open file's, at least 2).
+    // Plugins that cannot take that many are given stereo and process the first two.
+    void setChannels (int);
+    static juce::AudioChannelSet channelSetFor (int numChannels);  // 6 = 5.1, 8 = 7.1... in WAV order
+    int channels() const { return channelCount; }
+
     // Real-time use (audio thread).
     void prepare (double sampleRate, int maxBlockSize);
     void processRealtime (juce::AudioBuffer<float>&, int startSample, int numSamples);
@@ -73,6 +79,7 @@ private:
 
     std::unique_ptr<juce::AudioPluginInstance> createInstance (const juce::PluginDescription&, juce::String& error) const;
     void preparePlugin (juce::AudioPluginInstance&, double rate, int blockSize) const;
+    void applyLayout (juce::AudioPluginInstance&, int numChannels) const;
     void processChain (juce::AudioBuffer<float>& io, int startSample, int numSamples, bool listening);  // lock must be held
     int totalLatency() const;
     juce::File pluginListFile() const   { return configFolder.getChildFile ("plugins.xml"); }
@@ -93,6 +100,7 @@ private:
     juce::CriticalSection lock;  // held by the audio thread while processing, and by edits and renders
     double rate = 48000.0;
     int blockSize = 512;
+    int channelCount = 2;
     juce::AudioBuffer<float> scratch;
     juce::MidiBuffer midi;
     std::atomic<float> gain { 1.0f };

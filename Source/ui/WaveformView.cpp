@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "WaveformView.h"
+#include "../core/Dsp.h"
 #include "Spectrogram.h"
 #include "Theme.h"
 
@@ -272,6 +273,19 @@ void WaveformView::paintEvent (QPaintEvent*)
                     g.drawLine (QPointF (x, mid - hi * half), QPointF (x, mid - lo * half));
                 }
             }
+        }
+
+        // Speaker names (L, R, C, LFE...) at the top left of each lane.
+        if (numChannels > 1)
+        {
+            auto small = font();
+            small.setPointSizeF (small.pointSizeF() * 0.8);
+            g.setFont (small);
+            g.setPen (pal.color (QPalette::PlaceholderText));
+            for (int ch = 0; ch < numChannels; ++ch)
+                g.drawText (QRectF (6, laneHeight * ch + 2, 80, 16), Qt::AlignLeft | Qt::AlignTop,
+                            QString::fromStdString (dsp::channelName (ch, numChannels)));
+            g.setFont (font());
         }
 
         if (selEnd > selStart)

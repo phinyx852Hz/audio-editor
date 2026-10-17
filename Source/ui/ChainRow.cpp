@@ -310,6 +310,8 @@ void DeviceCard::sync()
         auto text = QString::fromStdString (info.format);
         if (info.latencySamples > 0)
             text += tr ("  %1 smp latency").arg (info.latencySamples);
+        if (info.channels > 0 && info.channels < engine.masterChannels())
+            text += info.channels <= 2 ? tr ("  L/R only") : tr ("  first %1 ch").arg (info.channels);
         if (engine.masterSoloSlot() == slotIndex)
             text += tr ("  SOLO");
         detail->setText (text);

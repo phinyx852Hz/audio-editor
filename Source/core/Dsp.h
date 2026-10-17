@@ -6,6 +6,7 @@
 #include <array>
 #include <cmath>
 #include <random>
+#include <string>
 #include <vector>
 
 // Offline processing and measurement on AudioData. Plain C++.
@@ -58,7 +59,26 @@ namespace dsp
         int writeIndex = 0;
     };
 
-    // Channel weight for loudness summing (surround channels of 5.1 count more, LFE not at all).
+    // Speakers, and the layout PHINYX assumes for each channel count, in WAV
+    // (WAVEFORMATEXTENSIBLE / SMPTE) order: 5.1 is L R C LFE Ls Rs.
+    enum class Speaker { mono, left, right, centre, lfe, sideLeft, sideRight, rearLeft, rearRight, rearCentre,
+                         topFrontLeft, topFrontRight, topRearLeft, topRearRight, other };
+
+    struct SpeakerLayout
+    {
+        std::string name;               // "Stereo", "5.1", "7.1.4", "10 channels"...
+        std::vector<Speaker> speakers;  // one per channel
+    };
+
+    SpeakerLayout speakerLayout (int numChannels);
+    Speaker speakerAt (int channel, int numChannels);
+    std::string channelName (int channel, int numChannels);  // "L", "LFE", "Ls", or "Ch 9"
+
+    // Stereo fold-down for monitoring: gains from each channel into left and right
+    // (ITU-R BS.775: centre and surrounds at -3 dB, LFE left out).
+    std::array<std::vector<float>, 2> stereoDownmix (int numChannels);
+
+    // Channel weight for loudness summing (BS.1770: surrounds count 1.41, LFE not at all).
     double loudnessChannelWeight (int channel, int numChannels);
 
     struct LoudnessReport
