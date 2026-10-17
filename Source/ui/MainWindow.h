@@ -7,6 +7,7 @@
 #include "../engine/AudioCapture.h"
 #include "../engine/AudioEngine.h"
 #include "CommandRegistry.h"
+#include "WaveformView.h"
 
 #include <QFutureWatcher>
 #include <QMainWindow>
@@ -21,7 +22,6 @@ class MeterPanel;
 class QLabel;
 class QListWidget;
 class QSlider;
-class WaveformView;
 
 class MainWindow final : public QMainWindow
 {
@@ -100,7 +100,15 @@ private:
     void spectralGain();
     void chooseFrequencyRange();
     void setBand (double lowHz, double highHz);
-    bool hasBand() const { return bandHigh > bandLow; }
+    bool hasBand() const { return bandHigh > bandLow || shape != nullptr; }
+    // The selection as a spectral region: [s, e), limited to the band or the drawn shape.
+    repair::SpectralRegion region (Frame s, Frame e) const { return { s, e, bandLow, bandHigh, shape }; }
+    QString bandText() const;   // "200 Hz to 4 kHz", or the drawn shape
+    // A shape drawn with the lasso or a brush becomes the selection; the Spot Healing Brush also heals it.
+    void setShape (std::shared_ptr<const repair::SpectralMask>, bool heal);
+    void chooseTool (WaveformView::Tool);
+    void addHarmonics();
+    void findSimilar();
     void fade (bool in);
     void simpleProcess (const QString& description, AudioDataPtr (*fn) (const AudioData&, Frame, Frame));
 
@@ -161,6 +169,7 @@ private:
 
     Frame cursor = 0, selStart = 0, selEnd = 0, selAnchor = 0;
     double bandLow = 0.0, bandHigh = 0.0;   // the selection's frequency band in Hz, none when high <= low
+    std::shared_ptr<const repair::SpectralMask> shape;   // a drawn selection, in place of the band
     double spectralGainDb = -12.0;
     repair::NoiseProfile noiseProfile;   // learned with Learn Noise Profile, for this session
     AudioDataPtr clipboard;
@@ -180,6 +189,7 @@ private:
         AudioDocument doc;
         Frame cursor = 0, selStart = 0, selEnd = 0, selAnchor = 0;
         double bandLow = 0.0, bandHigh = 0.0;
+        std::shared_ptr<const repair::SpectralMask> shape;
         SaveOptions saveOptions;
         QString optionsConfirmedFor;
         std::pair<double, double> view { 0.0, 0.0 };

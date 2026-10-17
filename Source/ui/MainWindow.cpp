@@ -117,6 +117,7 @@ MainWindow::MainWindow (AudioEngine& e)
     connect (waveform, &WaveformView::cursorRequested, this, &MainWindow::setCursor);
     connect (waveform, &WaveformView::selectionRequested, this, &MainWindow::selectRange);
     connect (waveform, &WaveformView::bandRequested, this, &MainWindow::setBand);
+    connect (waveform, &WaveformView::shapeDrawn, this, &MainWindow::setShape);
     connect (&loadWatcher, &QFutureWatcher<LoadResult>::finished, this, &MainWindow::loadFinished);
 
     auto* uiTimer = new QTimer (this);
@@ -230,6 +231,26 @@ void MainWindow::registerCommands()
          [this] { chooseFrequencyRange(); });
     add ("repair.allFrequencies", Category::repair, tr ("A&ll Frequencies"), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_F) },
          [this] { setBand (0.0, 0.0); });
+    add ("repair.toolBox", Category::repair, tr ("&Box Selection Tool"), { KS (Qt::Key_V) },
+         [this] { chooseTool (WaveformView::Tool::box); })->setCheckable (true);
+    add ("repair.toolLasso", Category::repair, tr ("Lass&o Tool"), { KS (Qt::Key_O) },
+         [this] { chooseTool (WaveformView::Tool::lasso); })->setCheckable (true);
+    add ("repair.toolBrush", Category::repair, tr ("B&rush Tool"), { KS (Qt::Key_B) },
+         [this] { chooseTool (WaveformView::Tool::brush); })->setCheckable (true);
+    add ("repair.toolSpotHeal", Category::repair, tr ("Spot &Healing Brush"), { KS (Qt::Key_H) },
+         [this] { chooseTool (WaveformView::Tool::spotHeal); })->setCheckable (true);
+    auto* tools = new QActionGroup (this);
+    for (auto id : { "repair.toolBox", "repair.toolLasso", "repair.toolBrush", "repair.toolSpotHeal" })
+        tools->addAction (commands.action (QString::fromLatin1 (id)));
+    commands.action (QStringLiteral ("repair.toolBox"))->setChecked (true);
+    add ("repair.brushSmaller", Category::repair, tr ("Smaller Brush"), { KS (Qt::Key_BracketLeft) },
+         [this] { waveform->setBrushSize ((int) std::lround (waveform->brushSize() / 1.25)); });
+    add ("repair.brushLarger", Category::repair, tr ("Larger Brush"), { KS (Qt::Key_BracketRight) },
+         [this] { waveform->setBrushSize ((int) std::lround (waveform->brushSize() * 1.25) + 1); });
+    add ("repair.addHarmonics", Category::repair, tr ("Add Har&monics"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_H) },
+         [this] { addHarmonics(); });
+    add ("repair.findSimilar", Category::repair, tr ("F&ind Similar Sounds..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_F) },
+         [this] { findSimilar(); });
     add ("process.dcOffset", Category::process, tr ("Remove &DC Offset"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_D) },
          [this] { simpleProcess (tr ("Remove DC Offset"), &dsp::removeDcOffset); });
 
@@ -243,10 +264,10 @@ void MainWindow::registerCommands()
 
     for (const auto& [id, info] : shapeList)
     {
-        const auto shape = info.second;
-        auto* a = add (id, Category::process, info.first, {}, [this, shape] { fadeShape = shape; });
+        const auto kind = info.second;
+        auto* a = add (id, Category::process, info.first, {}, [this, kind] { fadeShape = kind; });
         a->setCheckable (true);
-        a->setChecked (shape == fadeShape);
+        a->setChecked (kind == fadeShape);
         shapes->addAction (a);
     }
 
@@ -396,8 +417,10 @@ void MainWindow::buildMenus()
         { tr ("&Process"),   { "process.gain", "process.normalize", "-", "process.fadeIn", "process.fadeOut", "-",
                                "process.fadeShape.linear", "process.fadeShape.equalPower", "process.fadeShape.exponential",
                                "process.fadeShape.sCurve", "-", "process.reverse", "process.invert", "process.dcOffset", "-", "process.stereoize" } },
-        { tr ("&Repair"),    { "repair.autoHeal", "repair.spectralGain", "-", "repair.learnNoise", "repair.noiseReduction", "-",
+        { tr ("&Repair"),    { "repair.autoHeal", "repair.spectralGain", "repair.findSimilar", "-", "repair.learnNoise", "repair.noiseReduction", "-",
                                "repair.declick", "repair.declip", "repair.dehum", "repair.deess", "-",
+                               "repair.toolBox", "repair.toolLasso", "repair.toolBrush", "repair.toolSpotHeal",
+                               "repair.brushSmaller", "repair.brushLarger", "repair.addHarmonics", "-",
                                "repair.frequencyRange", "repair.allFrequencies", "-", "view.spectral" } },
         { tr ("&Markers"),   { "marker.add", "marker.addRegion", "-", "marker.next", "marker.previous", "-", "view.markers" } },
         { tr ("&Analyze"),   { "analyze.loudness", "-", "view.meters", "analyze.resetMeters", "-", "view.spectral" } },
@@ -703,6 +726,7 @@ void MainWindow::parkActiveTab()
     t.selAnchor = selAnchor;
     t.bandLow = bandLow;
     t.bandHigh = bandHigh;
+    t.shape = shape;
     t.saveOptions = saveOptions;
     t.optionsConfirmedFor = optionsConfirmedFor;
     t.view = waveform->view();
@@ -722,6 +746,8 @@ void MainWindow::unparkTab (int index)
     bandLow = t.bandLow;
     bandHigh = t.bandHigh;
     waveform->setBand (bandLow, bandHigh);
+    shape = t.shape;
+    waveform->setShape (shape);
     saveOptions = t.saveOptions;
     optionsConfirmedFor = t.optionsConfirmedFor;
 }
@@ -822,7 +848,7 @@ void MainWindow::updateStatus()
                         .arg (formatTime ((double) selStart / rate), formatTime ((double) selEnd / rate),
                               formatTime ((double) (selEnd - selStart) / rate));
         if (hasSelection() && hasBand())
-            text += tr (", %1 to %2").arg (formatHz (bandLow), formatHz (bandHigh));
+            text += QStringLiteral (", ") + bandText();
 
         const auto layout = QString::fromStdString (dsp::speakerLayout (d->numChannels()).name);
         text += QStringLiteral ("   %1 Hz, %2").arg ((int) rate).arg (layout);
@@ -1239,9 +1265,9 @@ void MainWindow::deleteSelection()
     {
         // Delete in a frequency box removes those frequencies; the length stays.
         QApplication::setOverrideCursor (Qt::WaitCursor);
-        auto result = repair::spectralGain (*data(), { selStart, selEnd, bandLow, bandHigh }, repair::removeDb);
+        auto result = repair::spectralGain (*data(), region (selStart, selEnd), repair::removeDb);
         QApplication::restoreOverrideCursor();
-        commit (tr ("Delete %1 to %2").arg (formatHz (bandLow), formatHz (bandHigh)), std::move (result), selStart, selEnd, selEnd - selStart);
+        commit (tr ("Delete %1").arg (bandText()), std::move (result), selStart, selEnd, selEnd - selStart);
         return;
     }
 
@@ -1357,6 +1383,12 @@ void MainWindow::stereoize()
 
 void MainWindow::setBand (double lowHz, double highHz)
 {
+    if (shape != nullptr)
+    {
+        shape.reset();
+        waveform->setShape (nullptr);
+        updateStatus();
+    }
     if (highHz <= lowHz)
         lowHz = highHz = 0.0;
     if (std::abs (lowHz - bandLow) < 1.0e-9 && std::abs (highHz - bandHigh) < 1.0e-9)
@@ -1387,6 +1419,176 @@ void MainWindow::chooseFrequencyRange()
                                       .arg (formatHz (bandLow), formatHz (bandHigh)), 6000);
 }
 
+QString MainWindow::bandText() const
+{
+    if (shape != nullptr)
+        return tr ("drawn shape, %1 to %2").arg (formatHz (shape->lowestHzSelected()), formatHz (shape->highestHzSelected()));
+    return tr ("%1 to %2").arg (formatHz (bandLow), formatHz (bandHigh));
+}
+
+void MainWindow::setShape (std::shared_ptr<const repair::SpectralMask> drawn, bool heal)
+{
+    const auto d = data();
+    if (d == nullptr || drawn == nullptr || drawn->empty())
+        return;
+
+    setBand (0.0, 0.0);
+    shape = std::move (drawn);
+    waveform->setShape (shape);
+    selAnchor = selStart = cursor = std::clamp<Frame> (shape->start(), 0, d->length());
+    selEnd = std::clamp<Frame> (shape->end(), selStart, d->length());
+    if (! engine.isPlaying())
+        engine.setPositionFrames (cursor);
+    waveform->setCursorFrame (cursor);
+    waveform->setSelection (selStart, selEnd);
+    updateStatus();
+    updateCommandStates();
+
+    if (heal)
+    {
+        // The Spot Healing Brush heals as soon as the stroke ends, then lets go of it.
+        autoHeal();
+        setCursor (selStart);
+    }
+}
+
+void MainWindow::chooseTool (WaveformView::Tool tool)
+{
+    if (tool != WaveformView::Tool::box && ! waveform->isSpectral())
+        commands.action (QStringLiteral ("view.spectral"))->trigger();   // the tools draw on the spectral view
+    waveform->setTool (tool);
+    const char* ids[] { "repair.toolBox", "repair.toolLasso", "repair.toolBrush", "repair.toolSpotHeal" };
+    commands.action (QString::fromLatin1 (ids[(int) tool]))->setChecked (true);
+
+    const QString hints[] {
+        tr ("Box: drag to select a time range; drag less than the full height to pick frequencies too."),
+        tr ("Lasso: draw around a sound to select it. Hold Shift to add to the shape."),
+        tr ("Brush: paint over a sound to select it. [ and ] change the size; Shift adds to the shape."),
+        tr ("Spot Healing Brush: paint over a sound and it is healed when you let go. [ and ] change the size."),
+    };
+    statusBar()->showMessage (hints[(int) tool], 6000);
+}
+
+void MainWindow::addHarmonics()
+{
+    const auto d = data();
+    if (d == nullptr || ! hasSelection() || ! hasBand())
+    {
+        statusBar()->showMessage (tr ("First select a sound's lowest frequency: a box, lasso or brush selection in the spectral view."), 6000);
+        return;
+    }
+
+    std::shared_ptr<repair::SpectralMask> withOvertones;
+    if (shape != nullptr)
+        withOvertones = std::make_shared<repair::SpectralMask> (*shape);
+    else
+    {
+        withOvertones = std::make_shared<repair::SpectralMask> (d->sampleRate());
+        withOvertones->fillPolygon ({ { selStart, bandLow }, { selEnd, bandLow }, { selEnd, bandHigh }, { selStart, bandHigh } });
+    }
+    constexpr int overtones = 8;
+    withOvertones->addHarmonics (overtones);
+    setShape (std::move (withOvertones), false);
+    statusBar()->showMessage (tr ("Added the overtones, up to %1 times the frequency.").arg (overtones), 4000);
+}
+
+void MainWindow::findSimilar()
+{
+    const auto d = data();
+    if (d == nullptr || ! requireSelection())
+        return;
+    if ((double) (selEnd - selStart) > repair::maxHealSeconds * d->sampleRate())
+    {
+        QMessageBox::information (this, tr ("Find Similar Sounds"), tr ("Select one short sound (up to 4 seconds) as the example."));
+        return;
+    }
+
+    ValuesDialog dialog (tr ("Find Similar Sounds"),
+                         tr ("Looks through the whole file for sounds like the selected one, such as the other clicks, "
+                             "breaths or coughs, so you can heal them all at once or mark them to check first."),
+                         { { QStringLiteral ("repair/similar/strictness"), tr ("&Strictness:"), 80.0, 50.0, 99.0, 1.0, 0, tr (" %"),
+                             tr ("Higher finds only very close matches; lower finds more, with some that may not belong"), {} } },
+                         this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    const auto example = region (selStart, selEnd);
+    const auto strictness = dialog.value (0) / 100.0;
+    auto found = std::make_shared<std::vector<repair::SpectralRegion>>();
+    auto finished = std::make_shared<bool> (false);
+    runRepair (tr ("Find Similar Sounds"), [d, example, strictness, found, finished] (repair::Progress p)
+    {
+        *found = repair::findSimilar (*d, example, 0, d->length(), strictness, p);
+        *finished = ! p.cancelled();
+        return AudioDataPtr();
+    });
+    waveform->setFocus();
+    if (! *finished)
+        return;
+    if (found->empty())
+    {
+        QMessageBox::information (this, tr ("Find Similar Sounds"),
+                                  tr ("Found no other sounds like this one. Try a lower strictness, or select just the sound itself."));
+        return;
+    }
+
+    QMessageBox ask (QMessageBox::Question, tr ("Find Similar Sounds"),
+                     tr ("Found %n more like the selected sound.", nullptr, (int) found->size()), QMessageBox::Cancel, this);
+    auto* healAll = ask.addButton (tr ("&Heal All %1").arg (found->size() + 1), QMessageBox::AcceptRole);
+    auto* mark = ask.addButton (tr ("&Mark Them"), QMessageBox::ActionRole);
+    ask.setDefaultButton (healAll);
+    ask.exec();
+    waveform->setFocus();
+
+    if (ask.clickedButton() == mark)
+    {
+        auto markers = doc.current().markers;
+        for (size_t i = 0; i < found->size(); ++i)
+        {
+            Marker m;
+            m.id = doc.nextMarkerId();
+            m.type = Marker::Type::region;
+            m.start = (*found)[i].start;
+            m.end = (*found)[i].end;
+            m.name = tr ("Similar %1").arg (i + 1).toStdString();
+            markers.push_back (m);
+        }
+        commitMarkers (tr ("Mark Similar Sounds"), std::move (markers));
+        return;
+    }
+    if (ask.clickedButton() != healAll)
+        return;
+
+    // Heal the example and every match, as one step to undo.
+    auto all = *found;
+    all.push_back (example);
+    auto skipped = std::make_shared<int> (0);
+    auto result = runRepair (tr ("Heal All"), [d, all, skipped] (repair::Progress p)
+    {
+        auto current = d;
+        for (size_t i = 0; i < all.size(); ++i)
+        {
+            if (p.cancelled())
+                return AudioDataPtr();
+            p.report ((float) i / (float) all.size());
+            std::string error;
+            if (auto healed = repair::autoHeal (*current, all[i], error))
+                current = std::move (healed);
+            else
+                ++*skipped;
+        }
+        return current;
+    });
+    if (result == nullptr)
+        return;
+    commit (tr ("Heal %n Similar Sounds", nullptr, (int) all.size()), std::move (result), 0, 0, 0);
+    if (*skipped > 0)
+        statusBar()->showMessage (tr ("Healed %1; %2 could not be healed (no clean audio around them).")
+                                      .arg ((int) all.size() - *skipped).arg (*skipped), 6000);
+    else
+        statusBar()->showMessage (tr ("Healed %n sounds.", nullptr, (int) all.size()), 4000);
+}
+
 void MainWindow::autoHeal()
 {
     const auto d = data();
@@ -1395,7 +1597,7 @@ void MainWindow::autoHeal()
 
     std::string error;
     QApplication::setOverrideCursor (Qt::WaitCursor);
-    auto result = repair::autoHeal (*d, { selStart, selEnd, bandLow, bandHigh }, error);
+    auto result = repair::autoHeal (*d, region (selStart, selEnd), error);
     QApplication::restoreOverrideCursor();
     if (result == nullptr)
     {
@@ -1652,7 +1854,8 @@ void MainWindow::spectralGain()
         return;
 
     const auto [s, e] = processRange();
-    const auto what = hasBand() ? tr ("%1 to %2 in the selection").arg (formatHz (bandLow), formatHz (bandHigh))
+    const auto what = shape != nullptr ? tr ("the drawn shape")
+                    : hasBand() ? tr ("%1 to %2 in the selection").arg (formatHz (bandLow), formatHz (bandHigh))
                                 : hasSelection() ? tr ("the selection") : tr ("the whole file");
     SpectralGainDialog dialog (spectralGainDb, what, this);
     if (dialog.exec() != QDialog::Accepted)
@@ -1660,7 +1863,7 @@ void MainWindow::spectralGain()
 
     spectralGainDb = std::max (-60.0, dialog.gainDb());
     QApplication::setOverrideCursor (Qt::WaitCursor);
-    auto result = repair::spectralGain (*d, { s, e, bandLow, bandHigh }, dialog.gainDb());
+    auto result = repair::spectralGain (*d, region (s, e), dialog.gainDb());
     QApplication::restoreOverrideCursor();
     const auto name = dialog.gainDb() <= repair::removeDb ? tr ("Spectral Remove") : tr ("Spectral Gain %1 dB").arg (dialog.gainDb(), 0, 'f', 1);
     commit (name, std::move (result), s, e, e - s);

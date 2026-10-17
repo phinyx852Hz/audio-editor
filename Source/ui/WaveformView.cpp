@@ -42,6 +42,88 @@ void WaveformView::setBand (double lowHz, double highHz)
     update();
 }
 
+void WaveformView::setTool (Tool t)
+{
+    currentTool = t;
+    setMouseTracking (t == Tool::brush || t == Tool::spotHeal);   // to show the brush outline
+    QWidget::setCursor (t == Tool::box ? Qt::ArrowCursor : Qt::CrossCursor);
+    update();
+}
+
+void WaveformView::setBrushSize (int pixels)
+{
+    brushRadius = std::clamp (pixels, 2, 200);
+    update();
+}
+
+void WaveformView::setShape (std::shared_ptr<const repair::SpectralMask> s)
+{
+    shape = std::move (s);
+    ++shapeVersion;
+    update();
+}
+
+void WaveformView::brushAt (QPointF p)
+{
+    if (! stroke || ! data)
+        return;
+    const auto y = std::clamp (p.y() - dragLane * laneHeight(), 0.0, laneHeight());
+    const auto radiusFrames = brushRadius * viewLength / std::max (1, width());
+    const auto radiusRows = brushRadius * stroke->rows() / std::max (1.0, laneHeight());
+    stroke->paint (xToFrame (p.x()), yToHz (y), radiusFrames, radiusRows);
+    ++shapeVersion;
+}
+
+void WaveformView::drawShape (QPainter& g, double lane)
+{
+    const repair::SpectralMask* mask = stroke ? stroke.get() : shape.get();
+    if (mask != nullptr && ! mask->empty())
+    {
+        const QSize size (width(), std::max (1, (int) lane));
+        if (shapeImageVersion != shapeVersion || shapeImageView != view() || shapeImageSize != size)
+        {
+            shapeImage = QImage (size, QImage::Format_ARGB32_Premultiplied);
+            shapeImage.fill (Qt::transparent);
+            auto colour = Theme::current().color (QStringLiteral ("selection"));
+            std::vector<double> rowHz ((size_t) size.height());
+            for (int y = 0; y < size.height(); ++y)
+                rowHz[(size_t) y] = yToHz (y + 0.5);
+            for (int x = 0; x < size.width(); ++x)
+            {
+                const auto frame = (Frame) (viewStart + (x + 0.5) * viewLength / std::max (1, size.width()));
+                if (frame < mask->start() || frame >= mask->end())
+                    continue;
+                for (int y = 0; y < size.height(); ++y)
+                    if (const auto v = mask->at (frame, rowHz[(size_t) y]); v > 0.0f)
+                    {
+                        colour.setAlpha ((int) (v * 150.0f));
+                        shapeImage.setPixelColor (x, y, colour);
+                    }
+            }
+            shapeImageVersion = shapeVersion;
+            shapeImageView = view();
+            shapeImageSize = size;
+        }
+        for (int ch = 0; ch < data->numChannels(); ++ch)
+            g.drawImage (QPointF (0.0, lane * ch), shapeImage);
+    }
+
+    auto edge = Theme::current().color (QStringLiteral ("selection"));
+    edge.setAlpha (255);
+    if (lassoPoints.size() > 1)
+    {
+        g.setPen (QPen (edge, 1.5));
+        for (int ch = 0; ch < data->numChannels(); ++ch)
+            g.drawPolyline (lassoPoints.translated (0.0, lane * ch));
+    }
+    if ((currentTool == Tool::brush || currentTool == Tool::spotHeal) && hover.x() >= 0.0)
+    {
+        g.setPen (QPen (edge, 1.0));
+        g.setBrush (Qt::NoBrush);
+        g.drawEllipse (hover, brushRadius, brushRadius);
+    }
+}
+
 double WaveformView::laneHeight() const
 {
     return (double) height() / std::max (1, data ? data->numChannels() : 1);
@@ -318,7 +400,10 @@ void WaveformView::paintEvent (QPaintEvent*)
             g.setFont (font());
         }
 
-        if (selEnd > selStart)
+        if (spectral)
+            drawShape (g, laneHeight);
+
+        if (selEnd > selStart && ! (spectral && shape))
         {
             const auto x1 = frameToX (selStart), x2 = frameToX (selEnd);
             const auto colour = theme.color (QStringLiteral ("selection"));
@@ -380,6 +465,24 @@ void WaveformView::mousePressEvent (QMouseEvent* e)
         return;
 
     const auto f = xToFrame (e->position().x());
+    dragLane = std::clamp ((int) (e->position().y() / laneHeight()), 0, std::max (0, data->numChannels() - 1));
+
+    if (drawing())
+    {
+        dragAnchor = f;
+        adding = (e->modifiers() & Qt::ShiftModifier) && shape;
+        const auto inLane = e->position() - QPointF (0.0, dragLane * laneHeight());
+        if (currentTool == Tool::lasso)
+            lassoPoints = QPolygonF ({ inLane });
+        else
+        {
+            stroke = adding ? std::make_shared<repair::SpectralMask> (*shape) : std::make_shared<repair::SpectralMask> (data->sampleRate());
+            lastBrush = e->position();
+            brushAt (lastBrush);
+        }
+        update();
+        return;
+    }
 
     if (e->modifiers() & Qt::ShiftModifier)
     {
@@ -394,13 +497,37 @@ void WaveformView::mousePressEvent (QMouseEvent* e)
     }
 
     dragAnchor = f;
-    dragLane = std::clamp ((int) (e->position().y() / laneHeight()), 0, std::max (0, data->numChannels() - 1));
     dragAnchorY = e->position().y() - dragLane * laneHeight();
     Q_EMIT cursorRequested (f);
 }
 
 void WaveformView::mouseMoveEvent (QMouseEvent* e)
 {
+    if (drawing())
+    {
+        hover = e->position();
+        if (dragAnchor >= 0 && (e->buttons() & Qt::LeftButton))
+        {
+            if (currentTool == Tool::lasso)
+            {
+                const auto y = std::clamp (e->position().y() - dragLane * laneHeight(), 0.0, laneHeight());
+                lassoPoints << QPointF (std::clamp (e->position().x(), 0.0, (double) width()), y);
+            }
+            else
+            {
+                // Dabs close enough together to make a smooth stroke.
+                const auto to = e->position();
+                const auto distance = std::hypot (to.x() - lastBrush.x(), to.y() - lastBrush.y());
+                const auto dabs = std::max (1, (int) std::ceil (distance / std::max (1.0, brushRadius / 3.0)));
+                for (int i = 1; i <= dabs; ++i)
+                    brushAt (lastBrush + (to - lastBrush) * ((double) i / dabs));
+                lastBrush = to;
+            }
+        }
+        update();
+        return;
+    }
+
     if (dragAnchor < 0 || ! (e->buttons() & Qt::LeftButton))
         return;
 
@@ -419,6 +546,32 @@ void WaveformView::mouseMoveEvent (QMouseEvent* e)
 
 void WaveformView::mouseReleaseEvent (QMouseEvent*)
 {
+    if (drawing() && dragAnchor >= 0 && data)
+    {
+        if (currentTool == Tool::lasso)
+        {
+            if (lassoPoints.size() >= 3)
+            {
+                auto mask = adding ? std::make_shared<repair::SpectralMask> (*shape) : std::make_shared<repair::SpectralMask> (data->sampleRate());
+                std::vector<std::pair<Frame, double>> points;
+                for (const auto& p : lassoPoints)
+                    points.push_back ({ xToFrame (p.x()), yToHz (p.y()) });
+                mask->fillPolygon (points);
+                if (! mask->empty())
+                    Q_EMIT shapeDrawn (std::move (mask), false);
+            }
+            lassoPoints.clear();
+        }
+        else if (stroke)
+        {
+            auto painted = std::move (stroke);
+            stroke.reset();
+            ++shapeVersion;
+            if (! painted->empty())
+                Q_EMIT shapeDrawn (std::move (painted), currentTool == Tool::spotHeal);
+        }
+        update();
+    }
     dragAnchor = -1;
 }
 

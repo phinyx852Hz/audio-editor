@@ -4,6 +4,8 @@
 #include "AudioData.h"
 
 #include <atomic>
+#include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -13,15 +15,71 @@
 // Plain C++.
 namespace repair
 {
+    // Progress from 0 to 1 and a way to stop early; either may be null.
+    struct Progress
+    {
+        std::atomic<float>* done = nullptr;
+        const std::atomic<bool>* cancel = nullptr;
+        bool cancelled() const { return cancel != nullptr && cancel->load(); }
+        void report (float f) const { if (done != nullptr) done->store (f); }
+    };
+
+    // A drawn or painted selection of time and frequency (lasso, brush), stored
+    // as cells: columns of framesPerColumn frames by rows of 1/24 octave from 20 Hz.
+    class SpectralMask
+    {
+    public:
+        static constexpr int framesPerColumn = 256;
+        static constexpr int rowsPerOctave = 24;
+        static constexpr double lowestHz = 20.0;
+
+        explicit SpectralMask (double sampleRate);
+
+        double sampleRate() const { return rate; }
+        int rows() const          { return rowCount; }
+        double rowToHz (double row) const;
+        double hzToRow (double hz) const;
+
+        // Paints an ellipse around (frame, hz), radii in frames and rows, with a soft edge.
+        void paint (Frame frame, double hz, double radiusFrames, double radiusRows);
+        // Selects everything inside a polygon of (frame, hz) points.
+        void fillPolygon (const std::vector<std::pair<Frame, double>>& points);
+        // Adds the overtones (2, 3... `count` times the frequency) of what is selected.
+        void addHarmonics (int count);
+
+        float at (Frame, double hz) const;   // 0 to 1
+        bool empty() const { return cells.empty(); }
+        Frame start() const;
+        Frame end() const;
+        double lowestHzSelected() const;
+        double highestHzSelected() const;
+
+    private:
+        void set (int64_t column, int row, float value);
+
+        double rate;
+        int rowCount;
+        std::map<int64_t, std::vector<float>> cells;   // column -> a value per row
+    };
+
     // A time range, optionally limited to a frequency band. Without a band
-    // (highHz <= lowHz) the edit covers every frequency.
+    // (highHz <= lowHz) the edit covers every frequency. A mask, when set,
+    // replaces both: the edit covers what it selects.
     struct SpectralRegion
     {
         Frame start = 0, end = 0;
         double lowHz = 0.0, highHz = 0.0;
+        std::shared_ptr<const SpectralMask> mask;
 
-        bool hasBand() const { return highHz > lowHz; }
+        bool hasBand() const { return highHz > lowHz || mask != nullptr; }
     };
+
+    // Sounds like the example elsewhere in [start, end): stretches whose spectrum
+    // stands out from its surroundings the same way. Each comes back as a region
+    // of the example's length and band, with a little room either side. Higher
+    // strictness (0 to 1) finds fewer. Empty when cancelled.
+    std::vector<SpectralRegion> findSimilar (const AudioData&, const SpectralRegion& example, Frame start, Frame end,
+                                             double strictness, Progress = {});
 
     // Turns the region down (or up) by gainDb. At or below removeDb it is removed.
     inline constexpr double removeDb = -120.0;
@@ -35,15 +93,7 @@ namespace repair
 
     //==========================================================================
     // Restoration over a time range (the selection, or the whole file). Each
-    // reports progress from 0 to 1 and stops early, returning null, when `cancel`
-    // becomes true. Both may be null.
-    struct Progress
-    {
-        std::atomic<float>* done = nullptr;
-        const std::atomic<bool>* cancel = nullptr;
-        bool cancelled() const { return cancel != nullptr && cancel->load(); }
-        void report (float f) const { if (done != nullptr) done->store (f); }
-    };
+    // reports Progress and stops early, returning null, when cancelled.
 
     // What a detect-and-fix tool found.
     struct Report

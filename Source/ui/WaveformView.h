@@ -2,10 +2,13 @@
 #pragma once
 
 #include "../core/AudioDocument.h"
+#include "../core/Repair.h"
 
 #include <QFutureWatcher>
 #include <QImage>
+#include <QPolygonF>
 #include <QWidget>
+#include <memory>
 #include <vector>
 
 // Waveform display with cursor, selection and markers. Keyboard focusable;
@@ -44,10 +47,23 @@ public:
     // The selection's frequency band in Hz (none when high <= low), drawn as a box in the spectral view.
     void setBand (double lowHz, double highHz);
 
+    // How a drag in the spectral view selects: a time and frequency box, a
+    // lasso, a brush, or the Spot Healing Brush (heals what it paints). Shift
+    // with the lasso or a brush adds to the shape already drawn.
+    enum class Tool { box, lasso, brush, spotHeal };
+    void setTool (Tool);
+    Tool tool() const { return currentTool; }
+    void setBrushSize (int pixels);
+    int brushSize() const { return brushRadius; }
+
+    // A drawn shape selection, shown as a tint over the spectral view.
+    void setShape (std::shared_ptr<const repair::SpectralMask>);
+
 Q_SIGNALS:
     void cursorRequested (Frame);
     void selectionRequested (Frame anchor, Frame end);
     void bandRequested (double lowHz, double highHz);   // high <= low: every frequency
+    void shapeDrawn (std::shared_ptr<const repair::SpectralMask>, bool heal);   // heal: drawn with the Spot Healing Brush
 
 protected:
     void paintEvent (QPaintEvent*) override;
@@ -55,6 +71,7 @@ protected:
     void mouseMoveEvent (QMouseEvent*) override;
     void mouseReleaseEvent (QMouseEvent*) override;
     void wheelEvent (QWheelEvent*) override;
+    void leaveEvent (QEvent*) override { hover = QPointF (-1.0, -1.0); update(); }
     void focusInEvent (QFocusEvent*) override  { update(); }
     void focusOutEvent (QFocusEvent*) override { update(); }
 
@@ -68,6 +85,9 @@ private:
     double laneHeight() const;
     double yToHz (double yInLane) const;
     double hzToY (double hz) const;   // within a lane
+    bool drawing() const { return spectral && currentTool != Tool::box; }
+    void brushAt (QPointF);           // paints the stroke at a point in the drag's lane
+    void drawShape (QPainter&, double laneHeight);
 
     struct SpectrogramKey
     {
@@ -88,6 +108,20 @@ private:
     double dragAnchorY = 0.0;
     int dragLane = 0;
     double bandLow = 0.0, bandHigh = 0.0;
+
+    Tool currentTool = Tool::box;
+    int brushRadius = 12;
+    std::shared_ptr<const repair::SpectralMask> shape;   // the selection
+    std::shared_ptr<repair::SpectralMask> stroke;        // being painted
+    QPolygonF lassoPoints;                               // being drawn, in the drag's lane
+    QPointF lastBrush, hover { -1.0, -1.0 };
+    bool adding = false;                                 // Shift held: add to the shape
+    int shapeVersion = 0;                                // bumped whenever the shape or stroke changes
+    QImage shapeImage;                                   // the tint for one lane, made when the shape or view changes
+    int shapeImageVersion = -1;
+    std::pair<double, double> shapeImageView;
+    QSize shapeImageSize;
+
     bool loading = false;
     float loadProgress = 0.0f;
 

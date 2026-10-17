@@ -490,6 +490,89 @@ namespace
         check (near (out[64], 0.0, 0.1), "sine bin level " + std::to_string (out[64]));
         check (out[200] < -100.0f, "far bins are quiet");
     }
+
+    void testShapes()
+    {
+        const double rate = 48000.0;
+
+        // Painting, lasso and harmonics.
+        repair::SpectralMask brush (rate);
+        brush.paint (10000, 1000.0, 2000.0, 3.0);
+        check (brush.at (10000, 1000.0) > 0.99f && brush.at (10000, 4000.0) == 0.0f && brush.at (30000, 1000.0) == 0.0f,
+               "the brush selects around where it paints");
+        brush.addHarmonics (3);
+        check (brush.at (10000, 2000.0) > 0.9f && brush.at (10000, 3000.0) > 0.9f && brush.at (10000, 1500.0) < 0.1f,
+               "add harmonics selects the overtones");
+        check (brush.start() <= 8000 && brush.end() >= 12000 && brush.end() < 13000, "the mask knows where it starts and ends");
+
+        repair::SpectralMask lasso (rate);
+        lasso.fillPolygon ({ { 30000, 2000.0 }, { 60000, 2000.0 }, { 60000, 4500.0 }, { 30000, 4500.0 } });
+        check (lasso.at (45000, 3000.0) == 1.0f && lasso.at (45000, 500.0) == 0.0f && lasso.at (20000, 3000.0) == 0.0f,
+               "the lasso selects what it surrounds");
+
+        // Removing what the lasso surrounds takes out the 3 kHz tone and nothing else.
+        auto twoTones = makeSignal (96000, [] (Frame f) { return (float) (0.3 * std::sin (2.0 * M_PI * 500.0 * f / 48000.0)
+                                                                         + 0.3 * std::sin (2.0 * M_PI * 3000.0 * f / 48000.0)); });
+        repair::SpectralRegion drawn;
+        drawn.mask = std::make_shared<repair::SpectralMask> (lasso);
+        auto cut = repair::spectralGain (*twoTones, drawn, repair::removeDb);
+        check (cut != nullptr, "spectral gain on a drawn shape");
+        if (cut != nullptr)
+        {
+            check (toneLevel (*cut, 40000, 50000, 3000.0) < 0.005, "the shape's removal takes out the 3 kHz tone ("
+                   + std::to_string (toneLevel (*cut, 40000, 50000, 3000.0)) + ")");
+            check (near (toneLevel (*cut, 40000, 50000, 500.0), 0.3, 0.01), "the shape's removal keeps the 500 Hz tone");
+            check (sameOutside (*cut, *twoTones, 30000 - 4096, 60000 + 4096), "the shape's removal leaves the rest untouched");
+        }
+
+        // Spot healing: brushing over a ring removes it and keeps the tone below.
+        std::mt19937 random (11);
+        std::normal_distribution<float> noise (0.0f, 0.01f);
+        std::vector<float> hiss (480000);
+        for (auto& h : hiss)
+            h = noise (random);
+        auto ringing = makeSignal (96000, [&] (Frame f)
+        {
+            const auto ring = f >= 30000 && f < 54000 ? 0.3 * std::sin (2.0 * M_PI * 5000.0 * f / rate) : 0.0;
+            return (float) (0.4 * std::sin (2.0 * M_PI * 300.0 * f / rate) + ring) + hiss[(size_t) f];
+        });
+        auto stroke = std::make_shared<repair::SpectralMask> (rate);
+        for (Frame f = 29000; f <= 55000; f += 500)
+            stroke->paint (f, 5000.0, 1500.0, 4.0);
+        repair::SpectralRegion spot;
+        spot.mask = stroke;
+        std::string error;
+        auto quiet = repair::autoHeal (*ringing, spot, error);
+        check (quiet != nullptr, "spot heal: " + error);
+        if (quiet != nullptr)
+        {
+            check (toneLevel (*quiet, 34000, 50000, 5000.0) < 0.01, "spot heal removes the ring ("
+                   + std::to_string (toneLevel (*quiet, 34000, 50000, 5000.0)) + ")");
+            check (near (toneLevel (*quiet, 34000, 50000, 300.0), 0.4, 0.01), "spot heal keeps the tone below");
+        }
+
+        // Find similar: six short chirps among hiss, a tone and a low thump.
+        const std::vector<Frame> chirps { 48000, 110400, 177600, 244800, 316800, 393600 };
+        auto busy = makeSignal (480000, [&] (Frame f)
+        {
+            double x = 0.2 * std::sin (2.0 * M_PI * 300.0 * f / rate) + hiss[(size_t) f];
+            for (auto c : chirps)
+                if (f >= c && f < c + 400)
+                    x += 0.3 * std::sin (M_PI * (double) (f - c) / 400.0) * std::sin (2.0 * M_PI * 4000.0 * f / rate);
+            if (f >= 216000 && f < 217440)
+                x += 0.5 * std::sin (M_PI * (double) (f - 216000) / 1440.0) * std::sin (2.0 * M_PI * 90.0 * f / rate);
+            return (float) x;
+        });
+        const auto found = repair::findSimilar (*busy, { 47900, 48500 }, 0, busy->length(), 0.8);
+        bool allFound = found.size() == 5;
+        for (size_t i = 0; allFound && i < found.size(); ++i)
+            allFound = found[i].start <= chirps[i + 1] && found[i].end >= chirps[i + 1] + 400;
+        check (allFound, "find similar finds the other five chirps (" + std::to_string (found.size()) + " found)");
+
+        auto plain = makeSignal (480000, [&] (Frame f) { return (float) (0.2 * std::sin (2.0 * M_PI * 300.0 * f / rate)) + hiss[(size_t) f]; });
+        check (repair::findSimilar (*plain, { 47900, 48500 }, 0, plain->length(), 0.8).empty(),
+               "find similar finds nothing when the example does not stand out");
+    }
 }
 
 int main()
@@ -502,6 +585,7 @@ int main()
     testSpectrum();
     testRepair();
     testRestoration();
+    testShapes();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");
