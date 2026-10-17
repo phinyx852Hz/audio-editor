@@ -3,16 +3,24 @@
 #include "Dialogs.h"
 #include "WaveformView.h"
 
+#include <QActionGroup>
 #include <QApplication>
 #include <QCloseEvent>
+#include <QDockWidget>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QInputDialog>
+#include <QKeyEvent>
 #include <QLabel>
+#include <QListWidget>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QStatusBar>
 #include <QTimer>
 #include <QtConcurrent/QtConcurrentRun>
+
+#include <algorithm>
+#include <cmath>
 
 namespace
 {
@@ -28,11 +36,60 @@ namespace
     namespace Category
     {
         const QString file      = QObject::tr ("File");
+        const QString edit      = QObject::tr ("Edit");
+        const QString select    = QObject::tr ("Selection");
+        const QString process   = QObject::tr ("Process");
         const QString transport = QObject::tr ("Transport");
         const QString view      = QObject::tr ("View");
         const QString options   = QObject::tr ("Options");
         const QString help      = QObject::tr ("Help");
     }
+
+    // Window shortcuts such as Space, arrows and Delete would otherwise steal
+    // keys from list panels. This lets a panel keep its navigation keys, and
+    // Escape hands focus back to the waveform.
+    class NavigationKeyGuard final : public QObject
+    {
+    public:
+        NavigationKeyGuard (QWidget* home, QObject* parent) : QObject (parent), homeWidget (home) {}
+
+    protected:
+        bool eventFilter (QObject*, QEvent* e) override
+        {
+            if (e->type() != QEvent::ShortcutOverride && e->type() != QEvent::KeyPress)
+                return false;
+
+            auto* k = static_cast<QKeyEvent*> (e);
+
+            if (k->key() == Qt::Key_Escape && k->modifiers() == Qt::NoModifier)
+            {
+                if (e->type() == QEvent::ShortcutOverride)
+                    e->accept();
+                else
+                    homeWidget->setFocus (Qt::ShortcutFocusReason);
+                return e->type() == QEvent::KeyPress;
+            }
+
+            if (e->type() == QEvent::ShortcutOverride && (k->modifiers() & ~Qt::KeypadModifier) == Qt::NoModifier)
+            {
+                switch (k->key())
+                {
+                    case Qt::Key_Up: case Qt::Key_Down: case Qt::Key_Left: case Qt::Key_Right:
+                    case Qt::Key_Home: case Qt::Key_End: case Qt::Key_PageUp: case Qt::Key_PageDown:
+                    case Qt::Key_Return: case Qt::Key_Enter: case Qt::Key_Space:
+                        e->accept();
+                        break;
+                    default:
+                        break;
+                }
+            }
+
+            return false;
+        }
+
+    private:
+        QWidget* homeWidget;
+    };
 }
 
 MainWindow::MainWindow (AudioEngine& e)
@@ -44,25 +101,29 @@ MainWindow::MainWindow (AudioEngine& e)
     statusBar()->addWidget (statusLabel, 1);
     statusLabel->setAccessibleName (tr ("Status"));
 
+    buildHistoryPanel();
     registerCommands();
     commands.load();
     buildMenus();
 
     connect (waveform, &WaveformView::cursorRequested, this, &MainWindow::setCursor);
-
-    connect (&peakWatcher, &QFutureWatcher<std::shared_ptr<WaveformPeaks>>::finished, this, [this]
-    {
-        if (auto peaks = peakWatcher.result())
-            waveform->setPeaks (peaks);
-        else
-            waveform->setLoading (false);
-    });
+    connect (waveform, &WaveformView::selectionRequested, this, &MainWindow::selectRange);
+    connect (&loadWatcher, &QFutureWatcher<LoadResult>::finished, this, &MainWindow::loadFinished);
 
     auto* uiTimer = new QTimer (this);
     connect (uiTimer, &QTimer::timeout, this, [this]
     {
         engine.dispatchMessages();
-        waveform->setCursorSeconds (engine.position());
+
+        if (engine.isPlaying())
+        {
+            cursor = engine.positionFrames();
+            waveform->setCursorFrame (cursor);
+        }
+
+        if (loading && loadProgress)
+            waveform->setLoading (true, loadProgress->load());
+
         updateStatus();
     });
     uiTimer->start (30);
@@ -73,28 +134,88 @@ MainWindow::MainWindow (AudioEngine& e)
 
 MainWindow::~MainWindow()
 {
-    if (cancelPeaks)
-        cancelPeaks->store (true);
-
-    peakWatcher.waitForFinished();
+    loadWatcher.waitForFinished();
 }
 
+//==============================================================================
 void MainWindow::registerCommands()
 {
     using KS = QKeySequence;
     auto add = [this] (const char* id, const QString& cat, const QString& text,
                        QList<QKeySequence> keys, std::function<void()> fn)
     {
-        addAction (commands.add (QString::fromLatin1 (id), cat, text, keys, std::move (fn)));
+        auto* a = commands.add (QString::fromLatin1 (id), cat, text, keys, std::move (fn));
+        addAction (a);
+        return a;
     };
 
     add ("file.open", Category::file, tr ("&Open..."), { KS::Open }, [this] { showOpenDialog(); });
+    add ("file.save", Category::file, tr ("&Save"), { KS (Qt::CTRL | Qt::Key_S) }, [this] { save(); });
+    add ("file.saveAs", Category::file, tr ("Save &As..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_S) }, [this] { saveAs(); });
+    add ("file.close", Category::file, tr ("&Close"), { KS (Qt::CTRL | Qt::Key_W) }, [this] { closeFile(); });
     add ("file.quit", Category::file, tr ("&Quit"), { KS (Qt::CTRL | Qt::Key_Q) }, [this] { close(); });
+
+    add ("edit.undo", Category::edit, tr ("&Undo"), { KS (Qt::CTRL | Qt::Key_Z) }, [this] { undo(); });
+    add ("edit.redo", Category::edit, tr ("&Redo"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_Z), KS (Qt::CTRL | Qt::Key_Y) },
+         [this] { redo(); });
+    add ("edit.cut", Category::edit, tr ("Cu&t"), { KS (Qt::CTRL | Qt::Key_X) }, [this] { cut(); });
+    add ("edit.copy", Category::edit, tr ("&Copy"), { KS (Qt::CTRL | Qt::Key_C) }, [this] { copy(); });
+    add ("edit.paste", Category::edit, tr ("&Paste"), { KS (Qt::CTRL | Qt::Key_V) }, [this] { paste(); });
+    add ("edit.delete", Category::edit, tr ("&Delete"), { KS (Qt::Key_Delete) }, [this] { deleteSelection(); });
+    add ("edit.trim", Category::edit, tr ("T&rim to Selection"), { KS (Qt::CTRL | Qt::Key_T) }, [this] { trimToSelection(); });
+    add ("edit.insertSilence", Category::edit, tr ("Insert &Silence..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_S) },
+         [this] { insertSilence(); });
+
+    add ("select.all", Category::select, tr ("Select &All"), { KS (Qt::CTRL | Qt::Key_A) },
+         [this] { if (auto d = data()) selectRange (0, d->length()); });
+    add ("select.none", Category::select, tr ("Select &None"), { KS (Qt::Key_Escape) }, [this] { setCursor (cursor); });
+    add ("select.back", Category::select, tr ("Extend Selection &Back"), { KS (Qt::SHIFT | Qt::Key_Left) },
+         [this] { extendSelectionBy (-smallStepSeconds); });
+    add ("select.forward", Category::select, tr ("Extend Selection &Forward"), { KS (Qt::SHIFT | Qt::Key_Right) },
+         [this] { extendSelectionBy (smallStepSeconds); });
+    add ("select.backLarge", Category::select, tr ("Extend Selection Back 1 s"),
+         { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_Left), KS (Qt::SHIFT | Qt::Key_J) }, [this] { extendSelectionBy (-largeStepSeconds); });
+    add ("select.forwardLarge", Category::select, tr ("Extend Selection Forward 1 s"),
+         { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_Right), KS (Qt::SHIFT | Qt::Key_L) }, [this] { extendSelectionBy (largeStepSeconds); });
+    add ("select.toStart", Category::select, tr ("Extend Selection to S&tart"), { KS (Qt::SHIFT | Qt::Key_Home) },
+         [this] { extendSelectionTo (0); });
+    add ("select.toEnd", Category::select, tr ("Extend Selection to &End"), { KS (Qt::SHIFT | Qt::Key_End) },
+         [this] { if (auto d = data()) extendSelectionTo (d->length()); });
+
+    add ("process.gain", Category::process, tr ("&Gain..."), { KS (Qt::CTRL | Qt::Key_G) }, [this] { gain(); });
+    add ("process.normalize", Category::process, tr ("&Normalize..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_N) },
+         [this] { normalize(); });
+    add ("process.fadeIn", Category::process, tr ("Fade &In"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_I) }, [this] { fade (true); });
+    add ("process.fadeOut", Category::process, tr ("Fade &Out"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_O) }, [this] { fade (false); });
+    add ("process.reverse", Category::process, tr ("&Reverse"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_R) },
+         [this] { simpleProcess (tr ("Reverse"), &dsp::reverse); });
+    add ("process.invert", Category::process, tr ("In&vert Polarity"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_I) },
+         [this] { simpleProcess (tr ("Invert"), &dsp::invert); });
+    add ("process.dcOffset", Category::process, tr ("Remove &DC Offset"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_D) },
+         [this] { simpleProcess (tr ("Remove DC Offset"), &dsp::removeDcOffset); });
+
+    auto* shapes = new QActionGroup (this);
+    const std::pair<const char*, std::pair<QString, dsp::FadeShape>> shapeList[] {
+        { "process.fadeShape.linear",      { tr ("Fade Shape: &Linear"), dsp::FadeShape::linear } },
+        { "process.fadeShape.equalPower",  { tr ("Fade Shape: &Equal Power"), dsp::FadeShape::equalPower } },
+        { "process.fadeShape.exponential", { tr ("Fade Shape: E&xponential"), dsp::FadeShape::exponential } },
+        { "process.fadeShape.sCurve",      { tr ("Fade Shape: &S-Curve"), dsp::FadeShape::sCurve } },
+    };
+
+    for (const auto& [id, info] : shapeList)
+    {
+        const auto shape = info.second;
+        auto* a = add (id, Category::process, info.first, {}, [this, shape] { fadeShape = shape; });
+        a->setCheckable (true);
+        a->setChecked (shape == fadeShape);
+        shapes->addAction (a);
+    }
 
     add ("transport.playStop", Category::transport, tr ("&Play / Stop"), { KS (Qt::Key_Space) }, [this] { togglePlayback(); });
     add ("transport.stop", Category::transport, tr ("&Stop"), { KS (Qt::Key_K) }, [this] { engine.stop(); });
-    add ("transport.start", Category::transport, tr ("Go to S&tart"), { KS (Qt::Key_Home) }, [this] { setCursor (0.0); });
-    add ("transport.end", Category::transport, tr ("Go to &End"), { KS (Qt::Key_End) }, [this] { setCursor (engine.length()); });
+    add ("transport.start", Category::transport, tr ("Go to S&tart"), { KS (Qt::Key_Home) }, [this] { setCursor (0); });
+    add ("transport.end", Category::transport, tr ("Go to &End"), { KS (Qt::Key_End) },
+         [this] { if (auto d = data()) setCursor (d->length()); });
     add ("cursor.back", Category::transport, tr ("Cursor &Back"), { KS (Qt::Key_Left) }, [this] { moveCursorBy (-smallStepSeconds); });
     add ("cursor.forward", Category::transport, tr ("Cursor &Forward"), { KS (Qt::Key_Right) }, [this] { moveCursorBy (smallStepSeconds); });
     add ("cursor.backLarge", Category::transport, tr ("Cursor Back 1 s"),
@@ -107,6 +228,24 @@ void MainWindow::registerCommands()
     add ("view.zoomOut", Category::view, tr ("Zoom &Out"), { KS (Qt::CTRL | Qt::Key_Minus), KS (Qt::Key_Minus) },
          [this] { waveform->zoomBy (2.0); });
     add ("view.zoomFit", Category::view, tr ("Zoom to &Fit"), { KS (Qt::CTRL | Qt::Key_0) }, [this] { waveform->zoomToFit(); });
+    add ("view.zoomSelection", Category::view, tr ("Zoom to &Selection"), { KS (Qt::CTRL | Qt::Key_E) },
+         [this] { waveform->zoomToSelection(); });
+    add ("view.history", Category::view, tr ("&History Panel"), { KS (Qt::CTRL | Qt::Key_H) }, [this]
+    {
+        // First press shows and focuses the panel; pressing again from inside it hides it.
+        if (historyDock->isVisible() && historyList->hasFocus())
+        {
+            historyDock->hide();
+            waveform->setFocus();
+        }
+        else
+        {
+            historyDock->show();
+            historyDock->raise();
+            historyList->setFocus (Qt::ShortcutFocusReason);
+        }
+    });
+    add ("view.focusWaveform", Category::view, tr ("Focus &Waveform"), { KS (Qt::Key_F6) }, [this] { waveform->setFocus(); });
 
     add ("options.audio", Category::options, tr ("&Audio Settings..."), { KS (Qt::CTRL | Qt::Key_Comma) },
          [this] { AudioSettingsDialog (engine, this).exec(); });
@@ -127,12 +266,20 @@ void MainWindow::registerCommands()
 
 void MainWindow::buildMenus()
 {
-    // Menu titles carry & mnemonics, so Alt+F, Alt+T, Alt+V, Alt+O, Alt+H open them.
+    // Menu titles carry & mnemonics, so Alt+F, Alt+E, Alt+P... open them.
     const QList<QPair<QString, QStringList>> layout {
-        { tr ("&File"),      { "file.open", "-", "file.quit" } },
+        { tr ("&File"),      { "file.open", "file.save", "file.saveAs", "-", "file.close", "-", "file.quit" } },
+        { tr ("&Edit"),      { "edit.undo", "edit.redo", "-", "edit.cut", "edit.copy", "edit.paste", "edit.delete", "-",
+                               "edit.trim", "edit.insertSilence", "-", "select.all", "select.none", "-",
+                               "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
+                               "select.toStart", "select.toEnd" } },
+        { tr ("&Process"),   { "process.gain", "process.normalize", "-", "process.fadeIn", "process.fadeOut", "-",
+                               "process.fadeShape.linear", "process.fadeShape.equalPower", "process.fadeShape.exponential",
+                               "process.fadeShape.sCurve", "-", "process.reverse", "process.invert", "process.dcOffset" } },
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
-        { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit" } },
+        { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
+                               "view.history", "view.focusWaveform" } },
         { tr ("&Options"),   { "options.audio", "options.keymap" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
     };
@@ -150,6 +297,23 @@ void MainWindow::buildMenus()
     }
 }
 
+void MainWindow::buildHistoryPanel()
+{
+    historyDock = new QDockWidget (tr ("History"), this);
+    historyDock->setObjectName (QStringLiteral ("historyPanel"));
+    historyList = new QListWidget (historyDock);
+    historyList->setAccessibleName (tr ("Undo history"));
+    historyList->installEventFilter (new NavigationKeyGuard (waveform, historyList));
+    historyDock->setWidget (historyList);
+    addDockWidget (Qt::RightDockWidgetArea, historyDock);
+    historyDock->hide();
+
+    connect (historyList, &QListWidget::itemActivated, this, [this] (QListWidgetItem* item)
+    {
+        jumpToHistory (historyList->row (item));
+    });
+}
+
 void MainWindow::openMenuBar()
 {
     if (auto first = menuBar()->actions(); ! first.isEmpty())
@@ -159,26 +323,68 @@ void MainWindow::openMenuBar()
     }
 }
 
+//==============================================================================
 void MainWindow::updateCommandStates()
 {
-    const bool hasAudio = engine.hasAudio();
+    const bool open = doc.isOpen() && ! loading;
+    const bool sel = open && hasSelection();
 
-    for (const auto* id : { "transport.playStop", "transport.stop", "transport.start", "transport.end",
+    for (const auto* id : { "file.save", "file.saveAs", "file.close", "edit.insertSilence", "select.all", "select.none",
+                            "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
+                            "select.toStart", "select.toEnd", "process.gain", "process.normalize",
+                            "process.reverse", "process.invert", "process.dcOffset",
+                            "transport.playStop", "transport.stop", "transport.start", "transport.end",
                             "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge",
                             "view.zoomIn", "view.zoomOut", "view.zoomFit" })
-        commands.action (QString::fromLatin1 (id))->setEnabled (hasAudio);
+        commands.action (QString::fromLatin1 (id))->setEnabled (open);
+
+    for (const auto* id : { "edit.cut", "edit.copy", "edit.delete", "edit.trim", "process.fadeIn", "process.fadeOut",
+                            "view.zoomSelection" })
+        commands.action (QString::fromLatin1 (id))->setEnabled (sel);
+
+    commands.action (QStringLiteral ("edit.paste"))->setEnabled (open && clipboard != nullptr);
+
+    auto* undoAction = commands.action (QStringLiteral ("edit.undo"));
+    auto* redoAction = commands.action (QStringLiteral ("edit.redo"));
+    undoAction->setEnabled (open && doc.canUndo());
+    redoAction->setEnabled (open && doc.canRedo());
+    undoAction->setText (open && doc.canUndo() ? tr ("&Undo %1").arg (QString::fromStdString (doc.undoDescription())) : tr ("&Undo"));
+    redoAction->setText (open && doc.canRedo() ? tr ("&Redo %1").arg (QString::fromStdString (doc.redoDescription())) : tr ("&Redo"));
+}
+
+void MainWindow::updateTitle()
+{
+    if (! doc.isOpen())
+    {
+        setWindowTitle (QStringLiteral (APP_DISPLAY_NAME));
+        return;
+    }
+
+    const auto name = doc.path().empty() ? tr ("Untitled") : QFileInfo (QString::fromStdString (doc.path())).fileName();
+    setWindowTitle ((doc.isModified() ? QStringLiteral ("*") : QString()) + name + QStringLiteral (" - " APP_DISPLAY_NAME));
 }
 
 void MainWindow::updateStatus()
 {
     QString text;
 
-    if (currentFile.isEmpty())
-        text = tr ("No file");
+    if (loading)
+        text = tr ("Loading...");
+    else if (auto d = data())
+    {
+        const auto rate = d->sampleRate();
+        text = QStringLiteral ("%1 / %2").arg (formatTime ((double) cursor / rate), formatTime (d->lengthSeconds()));
+
+        if (hasSelection())
+            text += tr ("   Selection %1 to %2 (%3)")
+                        .arg (formatTime ((double) selStart / rate), formatTime ((double) selEnd / rate),
+                              formatTime ((double) (selEnd - selStart) / rate));
+
+        text += QStringLiteral ("   %1 Hz, %2 ch   %3").arg ((int) rate).arg (d->numChannels())
+                    .arg (engine.isPlaying() ? tr ("Playing") : tr ("Stopped"));
+    }
     else
-        text = QStringLiteral ("%1   %2 / %3   %4")
-                   .arg (QFileInfo (currentFile).fileName(), formatTime (engine.position()),
-                         formatTime (engine.length()), engine.isPlaying() ? tr ("Playing") : tr ("Stopped"));
+        text = tr ("No file");
 
     text += QStringLiteral ("   |   ") + QString::fromStdString (engine.deviceDescription());
 
@@ -186,14 +392,44 @@ void MainWindow::updateStatus()
         statusLabel->setText (text);
 }
 
+void MainWindow::refreshFromDocument (bool keepView)
+{
+    const auto d = data();
+    engine.setData (d);
+    waveform->setData (d, keepView);
+    waveform->setMarkers (d ? doc.current().markers : std::vector<Marker>());
+
+    const auto len = d ? d->length() : 0;
+    cursor = std::clamp<Frame> (cursor, 0, len);
+    selStart = std::clamp<Frame> (selStart, 0, len);
+    selEnd = std::clamp<Frame> (selEnd, 0, len);
+    waveform->setCursorFrame (cursor);
+    waveform->setSelection (selStart, selEnd);
+    if (! engine.isPlaying())
+        engine.setPositionFrames (cursor);
+
+    historyList->clear();
+    if (doc.isOpen())
+    {
+        for (const auto& desc : doc.historyDescriptions())
+            historyList->addItem (QString::fromStdString (desc));
+
+        historyList->setCurrentRow (doc.historyPosition());
+    }
+
+    updateTitle();
+    updateCommandStates();
+}
+
+//==============================================================================
 void MainWindow::showOpenDialog()
 {
     QStringList patterns;
-    for (const auto& ext : AudioEngine::supportedExtensions())
-        patterns << QString::fromStdString (ext);
+    for (const auto& ext : AudioEngine::readableExtensions())
+        patterns << QStringLiteral ("*.") + QString::fromStdString (ext);
 
-    const auto path = QFileDialog::getOpenFileName (this, tr ("Open Audio File"),
-                                                    currentFile.isEmpty() ? QString() : QFileInfo (currentFile).absolutePath(),
+    const auto start = doc.path().empty() ? QString() : QFileInfo (QString::fromStdString (doc.path())).absolutePath();
+    const auto path = QFileDialog::getOpenFileName (this, tr ("Open Audio File"), start,
                                                     tr ("Audio files (%1);;All files (*)").arg (patterns.join (QLatin1Char (' '))));
     if (! path.isEmpty())
         openFile (path);
@@ -201,54 +437,450 @@ void MainWindow::showOpenDialog()
 
 void MainWindow::openFile (const QString& path)
 {
-    std::string error;
-    if (! engine.load (path.toStdString(), error))
+    if (loading || ! confirmDiscard())
+        return;
+
+    engine.stop();
+    loading = true;
+    loadProgress = std::make_shared<std::atomic<float>> (0.0f);
+    waveform->clear();
+    waveform->setLoading (true);
+    updateCommandStates();
+
+    loadWatcher.setFuture (QtConcurrent::run ([path, progress = loadProgress]
     {
-        QMessageBox::warning (this, tr ("Open failed"), QString::fromStdString (error));
+        LoadResult r;
+        r.path = path;
+        r.data = AudioEngine::loadFile (path.toStdString(), r.markers, r.error, progress.get());
+        return r;
+    }));
+}
+
+void MainWindow::loadFinished()
+{
+    loading = false;
+    auto r = loadWatcher.result();
+
+    if (r.data == nullptr)
+    {
+        waveform->setLoading (false);
+        refreshFromDocument (false);
+        QMessageBox::warning (this, tr ("Open failed"),
+                              tr ("Could not open %1:\n%2").arg (r.path, QString::fromStdString (r.error)));
         return;
     }
 
-    currentFile = path;
-    setWindowTitle (QFileInfo (path).fileName() + QStringLiteral (" - " APP_DISPLAY_NAME));
-    updateCommandStates();
-
-    if (cancelPeaks)
-        cancelPeaks->store (true);
-
-    cancelPeaks = std::make_shared<std::atomic<bool>> (false);
-    waveform->clear();
-    waveform->setLoading (true);
-
-    peakWatcher.setFuture (QtConcurrent::run ([p = path.toStdString(), cancel = cancelPeaks]
-    {
-        auto peaks = std::make_shared<WaveformPeaks>();
-        return AudioEngine::computePeaks (p, *peaks, *cancel) ? peaks : nullptr;
-    }));
-
+    doc.reset (r.data, std::move (r.markers), r.path.toStdString());
+    cursor = selStart = selEnd = selAnchor = 0;
+    optionsConfirmedFor.clear();
+    refreshFromDocument (false);
     waveform->setFocus();
+}
+
+bool MainWindow::confirmDiscard()
+{
+    if (! doc.isOpen() || ! doc.isModified())
+        return true;
+
+    const auto name = doc.path().empty() ? tr ("Untitled") : QFileInfo (QString::fromStdString (doc.path())).fileName();
+    const auto answer = QMessageBox::question (this, tr ("Unsaved changes"),
+                                               tr ("Save changes to %1?").arg (name),
+                                               QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+                                               QMessageBox::Save);
+    if (answer == QMessageBox::Save)
+        return save();
+
+    return answer == QMessageBox::Discard;
+}
+
+void MainWindow::closeFile()
+{
+    if (loading || ! confirmDiscard())
+        return;
+
+    engine.stop();
+    doc = AudioDocument();
+    cursor = selStart = selEnd = selAnchor = 0;
+    waveform->clear();
+    refreshFromDocument (false);
+}
+
+bool MainWindow::save()
+{
+    if (! doc.isOpen())
+        return false;
+
+    const auto path = QString::fromStdString (doc.path());
+    const auto ext = QFileInfo (path).suffix().toLower().toStdString();
+    const auto writable = AudioEngine::writableExtensions();
+
+    if (path.isEmpty() || std::find (writable.begin(), writable.end(), ext) == writable.end())
+        return saveAs();
+
+    return saveTo (path, optionsConfirmedFor != path);
+}
+
+bool MainWindow::saveAs()
+{
+    if (! doc.isOpen())
+        return false;
+
+    QStringList filters;
+    for (const auto& ext : AudioEngine::writableExtensions())
+    {
+        const auto e = QString::fromStdString (ext);
+        filters << tr ("%1 (*.%2)").arg (e.toUpper(), e);
+    }
+
+    QFileInfo current (QString::fromStdString (doc.path()));
+    auto suggested = current.absolutePath() + QLatin1Char ('/') + current.completeBaseName() + QStringLiteral (".wav");
+    QString selectedFilter = filters.first();
+
+    auto path = QFileDialog::getSaveFileName (this, tr ("Save Audio File As"), suggested, filters.join (QStringLiteral (";;")),
+                                              &selectedFilter);
+    if (path.isEmpty())
+        return false;
+
+    // Add the extension from the chosen filter when the name has none we can write.
+    const auto writable = AudioEngine::writableExtensions();
+    const auto ext = QFileInfo (path).suffix().toLower().toStdString();
+    if (std::find (writable.begin(), writable.end(), ext) == writable.end())
+    {
+        const auto start = selectedFilter.indexOf (QStringLiteral ("*.")) + 2;
+        path += QLatin1Char ('.') + selectedFilter.mid (start, selectedFilter.indexOf (QLatin1Char (')')) - start);
+    }
+
+    return saveTo (path, true);
+}
+
+bool MainWindow::saveTo (const QString& path, bool askOptions)
+{
+    if (askOptions)
+    {
+        SaveOptionsDialog dialog (QFileInfo (path).suffix(), saveOptions, this);
+        if (dialog.exec() != QDialog::Accepted)
+            return false;
+    }
+
+    QApplication::setOverrideCursor (Qt::WaitCursor);
+    std::string error;
+    const bool ok = AudioEngine::saveFile (path.toStdString(), *data(), doc.current().markers, saveOptions, error);
+    QApplication::restoreOverrideCursor();
+
+    if (! ok)
+    {
+        QMessageBox::warning (this, tr ("Save failed"), tr ("Could not save %1:\n%2").arg (path, QString::fromStdString (error)));
+        return false;
+    }
+
+    doc.setPath (path.toStdString());
+    doc.markSaved();
+    optionsConfirmedFor = path;
+    updateTitle();
+    statusBar()->showMessage (tr ("Saved %1").arg (QFileInfo (path).fileName()), 4000);
+    return true;
+}
+
+//==============================================================================
+void MainWindow::commit (const QString& description, AudioDataPtr newData, Frame start, Frame end, Frame inserted)
+{
+    if (newData == nullptr)
+        return;
+
+    DocumentState state { std::move (newData), doc.current().markers };
+    adjustMarkersForEdit (state.markers, start, end, inserted);
+    doc.apply (description.toStdString(), std::move (state));
+    refreshFromDocument (true);
+}
+
+void MainWindow::undo()
+{
+    if (! doc.canUndo())
+        return;
+
+    doc.undo();
+    refreshFromDocument (true);
+}
+
+void MainWindow::redo()
+{
+    if (! doc.canRedo())
+        return;
+
+    doc.redo();
+    refreshFromDocument (true);
+}
+
+void MainWindow::jumpToHistory (int index)
+{
+    if (! doc.isOpen() || index == doc.historyPosition())
+        return;
+
+    doc.jumpTo (index);
+    refreshFromDocument (true);
+    historyList->setFocus();
+}
+
+void MainWindow::copy()
+{
+    if (! hasSelection())
+        return;
+
+    clipboard = data()->slice (selStart, selEnd);
+    updateCommandStates();
+}
+
+void MainWindow::cut()
+{
+    copy();
+    deleteSelection();
+}
+
+void MainWindow::paste()
+{
+    const auto d = data();
+    if (d == nullptr || clipboard == nullptr)
+        return;
+
+    const auto start = hasSelection() ? selStart : cursor;
+    const auto end = hasSelection() ? selEnd : cursor;
+    auto result = d->replaced (start, end, clipboard.get());
+
+    if (std::abs (clipboard->sampleRate() - d->sampleRate()) > 0.5)
+        statusBar()->showMessage (tr ("Pasted audio was recorded at %1 Hz and plays at %2 Hz")
+                                      .arg ((int) clipboard->sampleRate()).arg ((int) d->sampleRate()), 6000);
+
+    // Select what was pasted so it can be processed or undone at a glance.
+    selStart = selAnchor = start;
+    selEnd = cursor = start + clipboard->length();
+    commit (tr ("Paste"), std::move (result), start, end, clipboard->length());
+}
+
+void MainWindow::deleteSelection()
+{
+    if (! hasSelection())
+        return;
+
+    const auto start = selStart, end = selEnd;
+    auto result = data()->replaced (start, end, nullptr);
+    cursor = selStart = selEnd = selAnchor = start;
+    commit (tr ("Delete"), std::move (result), start, end, 0);
+}
+
+void MainWindow::trimToSelection()
+{
+    if (! hasSelection())
+        return;
+
+    const auto d = data();
+    const auto start = selStart, end = selEnd;
+
+    DocumentState state { d->slice (start, end), doc.current().markers };
+    adjustMarkersForEdit (state.markers, end, d->length(), 0);
+    adjustMarkersForEdit (state.markers, 0, start, 0);
+
+    cursor = selStart = selAnchor = 0;
+    selEnd = end - start;
+    doc.apply (tr ("Trim").toStdString(), std::move (state));
+    refreshFromDocument (false);
+}
+
+void MainWindow::insertSilence()
+{
+    const auto d = data();
+    if (d == nullptr)
+        return;
+
+    bool ok = false;
+    const auto seconds = QInputDialog::getDouble (this, tr ("Insert Silence"), tr ("&Duration in seconds:"),
+                                                  1.0, 0.001, 3600.0, 3, &ok);
+    if (! ok)
+        return;
+
+    const auto frames = (Frame) std::llround (seconds * d->sampleRate());
+    const auto silence = dsp::silence (d->numChannels(), d->sampleRate(), frames);
+    const auto at = cursor;
+    auto result = d->replaced (at, at, silence.get());
+
+    selStart = selAnchor = at;
+    selEnd = cursor = at + frames;
+    commit (tr ("Insert Silence"), std::move (result), at, at, frames);
+}
+
+//==============================================================================
+std::pair<Frame, Frame> MainWindow::processRange() const
+{
+    if (hasSelection())
+        return { selStart, selEnd };
+
+    return { 0, data() ? data()->length() : 0 };
+}
+
+void MainWindow::gain()
+{
+    if (data() == nullptr)
+        return;
+
+    bool ok = false;
+    const auto db = QInputDialog::getDouble (this, tr ("Gain"), tr ("&Gain in dB:"), 0.0, -96.0, 48.0, 2, &ok);
+    if (! ok || std::abs (db) < 1.0e-9)
+        return;
+
+    const auto [s, e] = processRange();
+    QApplication::setOverrideCursor (Qt::WaitCursor);
+    auto result = dsp::applyGain (*data(), s, e, db);
+    QApplication::restoreOverrideCursor();
+    commit (tr ("Gain %1 dB").arg (db, 0, 'f', 1), std::move (result), s, e, e - s);
+}
+
+void MainWindow::normalize()
+{
+    const auto d = data();
+    if (d == nullptr)
+        return;
+
+    NormalizeDialog dialog (this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    const auto [s, e] = processRange();
+    QApplication::setOverrideCursor (Qt::WaitCursor);
+
+    double changeDb = 0.0;
+    QString problem;
+
+    if (dialog.mode() == NormalizeDialog::Mode::peak)
+    {
+        const auto peak = d->peakAbs (s, e);
+        if (peak <= 0.0f)
+            problem = tr ("The audio is silent.");
+        else
+            changeDb = dialog.target() - dsp::gainToDb (peak);
+    }
+    else
+    {
+        const auto report = dsp::measureLoudness (*d, s, e);
+        if (report.integratedLufs <= -70.0)
+            problem = tr ("The audio is too quiet or too short to measure its loudness.");
+        else
+        {
+            changeDb = dialog.target() - report.integratedLufs;
+            const auto newTruePeak = report.truePeakDb + changeDb;
+            if (newTruePeak > 0.0)
+                statusBar()->showMessage (tr ("Warning: true peak will be %1 dBTP and may clip").arg (newTruePeak, 0, 'f', 1), 8000);
+        }
+    }
+
+    if (! problem.isEmpty())
+    {
+        QApplication::restoreOverrideCursor();
+        QMessageBox::information (this, tr ("Normalize"), problem);
+        return;
+    }
+
+    auto result = dsp::applyGain (*d, s, e, changeDb);
+    QApplication::restoreOverrideCursor();
+
+    const auto unit = dialog.mode() == NormalizeDialog::Mode::peak ? QStringLiteral ("dBFS") : QStringLiteral ("LUFS");
+    commit (tr ("Normalize to %1 %2").arg (dialog.target(), 0, 'f', 1).arg (unit), std::move (result), s, e, e - s);
+}
+
+void MainWindow::fade (bool in)
+{
+    if (! hasSelection())
+        return;
+
+    const auto s = selStart, e = selEnd;
+    auto result = in ? dsp::fadeIn (*data(), s, e, fadeShape) : dsp::fadeOut (*data(), s, e, fadeShape);
+    commit (in ? tr ("Fade In") : tr ("Fade Out"), std::move (result), s, e, e - s);
+}
+
+void MainWindow::simpleProcess (const QString& description, AudioDataPtr (*fn) (const AudioData&, Frame, Frame))
+{
+    if (data() == nullptr)
+        return;
+
+    const auto [s, e] = processRange();
+    QApplication::setOverrideCursor (Qt::WaitCursor);
+    auto result = fn (*data(), s, e);
+    QApplication::restoreOverrideCursor();
+    commit (description, std::move (result), s, e, e - s);
+}
+
+//==============================================================================
+void MainWindow::setCursor (Frame f)
+{
+    const auto d = data();
+    if (d == nullptr)
+        return;
+
+    cursor = selAnchor = std::clamp<Frame> (f, 0, d->length());
+    selStart = selEnd = cursor;
+    engine.setPositionFrames (cursor);
+    waveform->setCursorFrame (cursor);
+    waveform->setSelection (selStart, selEnd);
+    updateCommandStates();
+}
+
+void MainWindow::moveCursorBy (double seconds)
+{
+    if (auto d = data())
+        setCursor (cursor + (Frame) std::llround (seconds * d->sampleRate()));
+}
+
+void MainWindow::selectRange (Frame anchor, Frame head)
+{
+    const auto d = data();
+    if (d == nullptr)
+        return;
+
+    anchor = std::clamp<Frame> (anchor, 0, d->length());
+    head = std::clamp<Frame> (head, 0, d->length());
+    selAnchor = anchor;
+    selStart = std::min (anchor, head);
+    selEnd = std::max (anchor, head);
+    cursor = head;
+
+    if (! engine.isPlaying())
+        engine.setPositionFrames (cursor);
+
+    waveform->setCursorFrame (cursor);
+    waveform->setSelection (selStart, selEnd);
+    updateCommandStates();
+}
+
+void MainWindow::extendSelectionBy (double seconds)
+{
+    if (auto d = data())
+        extendSelectionTo (cursor + (Frame) std::llround (seconds * d->sampleRate()));
+}
+
+void MainWindow::extendSelectionTo (Frame head)
+{
+    // With no selection the anchor is the cursor, so Shift+arrows grow from there.
+    selectRange (hasSelection() ? selAnchor : cursor, head);
 }
 
 void MainWindow::togglePlayback()
 {
     if (engine.isPlaying())
+    {
         engine.stop();
-    else
-        engine.play();
-}
+        return;
+    }
 
-void MainWindow::setCursor (double seconds)
-{
-    engine.setPosition (seconds);
-    waveform->setCursorSeconds (engine.position());
-}
-
-void MainWindow::moveCursorBy (double seconds)
-{
-    setCursor (engine.position() + seconds);
+    engine.setPositionFrames (hasSelection() ? selStart : cursor);
+    engine.play();
 }
 
 void MainWindow::closeEvent (QCloseEvent* e)
 {
+    if (loading || ! confirmDiscard())
+    {
+        e->ignore();
+        return;
+    }
+
     engine.stop();
     commands.save();
     e->accept();

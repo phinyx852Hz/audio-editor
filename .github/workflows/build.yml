@@ -19,6 +19,8 @@ jobs:
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
       - name: Build
         run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
       - uses: actions/upload-artifact@v4
         with:
           name: phinyx-arch
@@ -38,3 +40,5 @@ jobs:
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
       - name: Build
         run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure

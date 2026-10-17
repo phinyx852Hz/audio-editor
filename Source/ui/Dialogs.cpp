@@ -3,9 +3,12 @@
 #include "CommandRegistry.h"
 #include "../engine/AudioEngine.h"
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QDialogButtonBox>
+#include <QDoubleSpinBox>
+#include <QFormLayout>
 #include <QHeaderView>
 #include <QKeyEvent>
 #include <QKeySequenceEdit>
@@ -13,9 +16,12 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSpinBox>
 #include <QTimer>
 #include <QTreeWidget>
 #include <QVBoxLayout>
+
+#include <algorithm>
 
 //==============================================================================
 CommandPalette::CommandPalette (CommandRegistry& cm, QWidget* parent)
@@ -279,3 +285,97 @@ void AudioSettingsDialog::apply()
     status->setText (error.empty() ? QString::fromStdString (engine.deviceDescription())
                                    : tr ("Could not open device: %1").arg (QString::fromStdString (error)));
 }
+
+//==============================================================================
+SaveOptionsDialog::SaveOptionsDialog (const QString& extension, SaveOptions& o, QWidget* parent)
+    : QDialog (parent), options (o)
+{
+    setWindowTitle (tr ("Save Options"));
+    const auto ext = extension.toLower();
+    auto* form = new QFormLayout;
+
+    if (ext == QLatin1String ("ogg"))
+    {
+        quality = new QSpinBox (this);
+        quality->setRange (0, 10);
+        quality->setValue (options.oggQuality);
+        form->addRow (tr ("&Quality (0-10):"), quality);
+    }
+    else
+    {
+        bitDepth = new QComboBox (this);
+        bitDepth->addItem (tr ("16-bit"), 16);
+        bitDepth->addItem (tr ("24-bit"), 24);
+        if (ext != QLatin1String ("flac"))
+            bitDepth->addItem (tr ("32-bit float"), 32);
+
+        bitDepth->setCurrentIndex (std::max (0, bitDepth->findData (options.bitDepth)));
+        form->addRow (tr ("&Bit depth:"), bitDepth);
+
+        dither = new QCheckBox (tr ("Add &dither when reducing bit depth"), this);
+        dither->setChecked (options.dither);
+        form->addRow (dither);
+    }
+
+    auto* buttons = new QDialogButtonBox (QDialogButtonBox::Save | QDialogButtonBox::Cancel, this);
+    auto* layout = new QVBoxLayout (this);
+    layout->addLayout (form);
+    layout->addWidget (buttons);
+
+    connect (buttons, &QDialogButtonBox::accepted, this, [this] { store(); accept(); });
+    connect (buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+}
+
+void SaveOptionsDialog::store()
+{
+    if (bitDepth != nullptr)
+        options.bitDepth = bitDepth->currentData().toInt();
+    if (dither != nullptr)
+        options.dither = dither->isChecked();
+    if (quality != nullptr)
+        options.oggQuality = quality->value();
+}
+
+//==============================================================================
+NormalizeDialog::NormalizeDialog (QWidget* parent)
+    : QDialog (parent), modeBox (new QComboBox (this)), targetBox (new QDoubleSpinBox (this))
+{
+    setWindowTitle (tr ("Normalize"));
+    modeBox->addItem (tr ("Peak level (dBFS)"));
+    modeBox->addItem (tr ("Integrated loudness (LUFS)"));
+    targetBox->setDecimals (1);
+    targetBox->setSingleStep (0.5);
+
+    auto applyMode = [this] (int index)
+    {
+        if (index == 0)
+        {
+            targetBox->setRange (-60.0, 0.0);
+            targetBox->setValue (-1.0);
+        }
+        else
+        {
+            targetBox->setRange (-60.0, 0.0);
+            targetBox->setValue (-14.0);
+        }
+    };
+
+    applyMode (0);
+    connect (modeBox, &QComboBox::currentIndexChanged, this, applyMode);
+
+    auto* form = new QFormLayout;
+    form->addRow (tr ("&Normalize to:"), modeBox);
+    form->addRow (tr ("&Target:"), targetBox);
+
+    auto* buttons = new QDialogButtonBox (QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    auto* layout = new QVBoxLayout (this);
+    layout->addLayout (form);
+    layout->addWidget (buttons);
+
+    connect (buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect (buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    modeBox->setFocus();
+}
+
+NormalizeDialog::Mode NormalizeDialog::mode() const { return modeBox->currentIndex() == 0 ? Mode::peak : Mode::loudness; }
+double NormalizeDialog::target() const              { return targetBox->value(); }

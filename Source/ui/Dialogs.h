@@ -62,3 +62,40 @@ private:
     QComboBox* outputs;
     QLabel* status;
 };
+
+struct SaveOptions;
+
+// Bit depth, dither and quality for Save As; the fields shown depend on the format.
+class SaveOptionsDialog final : public QDialog
+{
+    Q_OBJECT
+
+public:
+    SaveOptionsDialog (const QString& extension, SaveOptions&, QWidget* parent);
+
+private:
+    void store();
+
+    SaveOptions& options;
+    QComboBox* bitDepth = nullptr;
+    class QCheckBox* dither = nullptr;
+    class QSpinBox* quality = nullptr;
+};
+
+// Normalize to a peak level or an integrated loudness target.
+class NormalizeDialog final : public QDialog
+{
+    Q_OBJECT
+
+public:
+    enum class Mode { peak, loudness };
+
+    explicit NormalizeDialog (QWidget* parent);
+
+    Mode mode() const;
+    double target() const;
+
+private:
+    QComboBox* modeBox;
+    class QDoubleSpinBox* targetBox;
+};

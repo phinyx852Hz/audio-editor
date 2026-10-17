@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 cmake_minimum_required(VERSION 3.22)
 
-project(Phinyx VERSION 0.2.0 LANGUAGES C CXX)
+project(Phinyx VERSION 0.3.0 LANGUAGES C CXX)
 
 # The app's names live here so a rename touches one place.
 set(APP_ID "phinyx" CACHE STRING "Lowercase id: binary, config folder, Wayland app-id")
@@ -38,6 +38,9 @@ juce_add_console_app(${APP_ID}
 
 target_sources(${APP_ID} PRIVATE
     Source/main.cpp
+    Source/core/AudioData.cpp
+    Source/core/AudioDocument.cpp
+    Source/core/Dsp.cpp
     Source/engine/AudioEngine.cpp
     Source/ui/CommandRegistry.cpp
     Source/ui/Dialogs.cpp
@@ -68,3 +71,15 @@ target_link_libraries(${APP_ID}
 include(GNUInstallDirs)
 install(TARGETS ${APP_ID} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES packaging/phinyx.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+
+# Core tests: plain C++, no JUCE or Qt. Run with ctest.
+option(PHINYX_BUILD_TESTS "Build the core tests" ON)
+if(PHINYX_BUILD_TESTS)
+    enable_testing()
+    add_executable(phinyx-core-tests
+        tests/CoreTests.cpp
+        Source/core/AudioData.cpp
+        Source/core/AudioDocument.cpp
+        Source/core/Dsp.cpp)
+    add_test(NAME core COMMAND phinyx-core-tests)
+endif()
