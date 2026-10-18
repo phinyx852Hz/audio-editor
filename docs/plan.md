@@ -179,6 +179,17 @@ Decided: **no mixer** (no buses, sends or mixing console). The app stays an edit
 - P1 **Visual Analysis**: graphs of level, loudness, spectral centroid and stereo width over time to spot problems at a glance
 - P1 All analyses run in the background, work on files, selections or batch jobs, and export as CSV/HTML/PDF
 
+### 2.4c Analysis from Sonic Visualiser (requested 2026-10-18)
+The owner asked which Sonic Visualiser (sonicvisualiser.org, GPL) features would help. Recommended order:
+- P1 **Vamp plugin hosting** (Vamp SDK host, BSD-style licence): scan `VAMP_PATH` (`~/vamp`, `/usr/lib/vamp`), list plugins in the Analyze menu and the Find panel, run one on the selection or file on a worker thread; results become markers (instants), regions (durations) or a curve drawn over the waveform or spectrogram, and can be exported as CSV or label files
+- P1 **Beat and onset markers** (QM Vamp plugins): markers at every beat or hit, then "slice to files" for sampling; covers the auto-marker item in 2.3b
+- P1 **Tempo and key** detection written to tags (BPM, initial key)
+- P2 **Align two versions** (MATCH) so the A/B reference section (2.4) switches at the same musical moment even when timing differs (as Sonic Lineup does)
+- P2 **Pitch and notes** (pYIN; Chordino for chords) drawn over the spectrogram
+- P2 Spectrogram extras: melodic-range view, peak-frequency view, a measure readout of the time and frequency under the mouse
+- P2 Slower playback without changing pitch, for close listening and transcription
+- Skipped on purpose: Sonic Visualiser's stacked panes and layers, which do not fit the single keyboard-first editor
+
 ### 2.5 Rendering and transcoding (WaveLab-grade)
 - P1 One render engine shared by Save As, Master Section render, Montage export and batch, so every path has the same options
 - P1 Multi-format render in a single pass: one source to e.g. 24/96 WAV, 16/44.1 FLAC, MP3 320, AAC 256 and Opus at once, each with its own settings and naming
