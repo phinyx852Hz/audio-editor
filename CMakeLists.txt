@@ -69,6 +69,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/InfoStrip.cpp
     Source/ui/TimeRuler.cpp
     Source/ui/Overview.cpp
+    Source/ui/FindPanel.cpp
     Source/ui/NyquistUi.cpp
     Source/ui/WaveformView.cpp)
 

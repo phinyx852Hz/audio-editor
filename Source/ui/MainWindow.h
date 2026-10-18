@@ -20,6 +20,8 @@
 #include <memory>
 
 class ChainRow;
+class FindPanel;
+struct FindItem;
 class DockablePanel;
 class MarkerList;
 class MasterPanel;
@@ -59,6 +61,7 @@ private:
     void restoreLayout();
     void saveLayout();
     DockablePanel* focusedOrLastPanel() const;
+    QList<FindItem> findItems();   // processes, effects and plugins for the Find panel
     void updateStatus();
     void updateCommandStates();
     void updateTitle();
@@ -190,6 +193,8 @@ private:
     DockablePanel* markerPanel = nullptr;
     DockablePanel* diagnosticsPanel = nullptr;
     DockablePanel* metersPanel = nullptr;
+    FindPanel* findWidget = nullptr;
+    DockablePanel* findPanel = nullptr;
     QList<DockablePanel*> panels;
     QList<QSlider*> opacitySliders;
     class FocusFollowsMouse* focusFollowsMouse = nullptr;

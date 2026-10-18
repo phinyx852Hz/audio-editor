@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MainWindow.h"
+#include "FindPanel.h"
 #include "InfoStrip.h"
 #include "Overview.h"
 #include "TimeRuler.h"
@@ -8,6 +9,7 @@
 #include "DesktopShortcuts.h"
 #include "Dialogs.h"
 #include "../core/Repair.h"
+#include "../engine/BuiltinEffects.h"
 #include "MasterPanel.h"
 #include "Panels.h"
 #include "RecordDialog.h"
@@ -398,6 +400,20 @@ void MainWindow::registerCommands()
          [this] { if (requireSelection()) waveform->zoomToSelection(); });
     add ("view.chain", Category::master, tr ("Device &Chain"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_C) },
          [this] { chainPanel->toggle(); });
+    add ("view.find", Category::view, tr ("&Find..."), { KS (Qt::CTRL | Qt::Key_F) }, [this]
+    {
+        if (findWidget->searchHasFocus())
+        {
+            findPanel->hide();
+            waveform->setFocus (Qt::ShortcutFocusReason);
+            return;
+        }
+        findPanel->show (true);
+        findWidget->focusSearch();
+        // A dock that was hidden takes the keyboard only once it is laid out.
+        QTimer::singleShot (0, findWidget, [this] { findWidget->focusSearch(); });
+        lastPanel = findPanel;
+    });
     add ("view.history", Category::view, tr ("&History Panel"), { KS (Qt::CTRL | Qt::Key_H) },
          [this] { historyPanel->toggle(); lastPanel = historyPanel; });
     add ("view.markers", Category::view, tr ("&Markers Panel"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_M) },
@@ -505,7 +521,7 @@ void MainWindow::buildMenus()
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
-                               "view.overview", "view.spectral", "-", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.popOut", "view.resetLayout", "-",
+                               "view.overview", "view.spectral", "-", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.popOut", "view.resetLayout", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "-", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
@@ -637,11 +653,84 @@ void MainWindow::buildPanels()
     chainPanel = new DockablePanel (*this, QStringLiteral ("chainPanel"), tr ("Device Chain"), chainRow, Qt::BottomDockWidgetArea);
     chainPanel->dock()->show();
 
-    panels = { masterPanel, chainPanel, metersPanel, markerPanel, historyPanel, diagnosticsPanel };
+    findWidget = new FindPanel (waveform, this);
+    findWidget->collect = [this] { return findItems(); };
+    connect (findWidget, &FindPanel::openRequested, this, &MainWindow::openFile);
+    findPanel = new DockablePanel (*this, QStringLiteral ("findPanel"), tr ("Find"), findWidget, Qt::LeftDockWidgetArea);
+
+    panels = { masterPanel, chainPanel, metersPanel, markerPanel, historyPanel, diagnosticsPanel, findPanel };
 
     focusFollowsMouse = new FocusFollowsMouse (this);
-    focusFollowsMouse->setAreas ({ waveform, chainRow, masterWidget, markerList, historyList, diagnostics });
+    focusFollowsMouse->setAreas ({ waveform, chainRow, masterWidget, markerList, historyList, diagnostics, findWidget });
     qApp->installEventFilter (focusFollowsMouse);
+}
+
+QList<FindItem> MainWindow::findItems()
+{
+    QList<FindItem> list;
+
+    // Every command, with its menu and shortcut; Nyquist ones are the Effects.
+    for (const auto& c : commands.all())
+    {
+        if (c.id == QStringLiteral ("view.find") || c.action == nullptr)
+            continue;
+        FindItem item;
+        item.kind = c.id.startsWith (QStringLiteral ("nyquist.")) ? FindItem::Kind::effect : FindItem::Kind::process;
+        item.key = QStringLiteral ("command:") + c.id;
+        item.name = c.name();
+        item.detail = c.shortcutText();
+        item.group = c.category;
+        item.searchText = c.action->statusTip();
+        item.enabled = c.action->isEnabled();
+        item.activate = [this, id = c.id]
+        {
+            auto* a = commands.action (id);
+            if (a != nullptr && a->isEnabled())
+                a->trigger();
+            else
+                statusBar()->showMessage (tr ("Not available right now (open a file or make a selection first)"), 5000);
+        };
+        list.push_back (item);
+    }
+
+    // Plugins load into the first empty Master Section slot.
+    for (const auto& p : engine.knownPlugins())
+    {
+        FindItem item;
+        item.kind = FindItem::Kind::plugin;
+        item.key = QStringLiteral ("plugin:") + QString::fromStdString (p.id);
+        item.name = QString::fromStdString (p.name);
+        const auto builtIn = p.format == builtin::formatName;
+        const auto maker = QString::fromStdString (p.manufacturer);
+        item.group = builtIn ? QStringLiteral ("Built-in") : maker.isEmpty() ? tr ("Unknown maker") : maker;
+        item.detail = QString::fromStdString (p.format);
+        item.searchText = maker + QLatin1Char (' ') + QString::fromStdString (p.category);
+        item.activate = [this, id = p.id, name = item.name]
+        {
+            int slot = -1;
+            for (int i = 0; i < AudioEngine::numMasterSlots && slot < 0; ++i)
+                if (engine.masterSlot (i).empty)
+                    slot = i;
+            if (slot < 0)
+            {
+                statusBar()->showMessage (tr ("All %1 Master Section slots are in use: remove a plugin first").arg (AudioEngine::numMasterSlots), 6000);
+                return;
+            }
+
+            QApplication::setOverrideCursor (Qt::WaitCursor);
+            const auto error = engine.loadMasterPlugin (slot, id);
+            QApplication::restoreOverrideCursor();
+            masterWidget->refresh();
+            chainRow->rebuild();
+            if (! error.empty())
+                QMessageBox::warning (this, tr ("Plugin"), QString::fromStdString (error));
+            else
+                statusBar()->showMessage (tr ("Loaded %1 in slot %2").arg (name).arg (slot + 1), 6000);
+        };
+        list.push_back (item);
+    }
+
+    return list;
 }
 
 DockablePanel* MainWindow::focusedOrLastPanel() const
