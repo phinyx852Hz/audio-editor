@@ -52,7 +52,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/Restoration.cpp
     Source/core/Fft.cpp
     Source/core/Nyquist.cpp
-    Source/core/Montage.cpp
+    Source/core/Album.cpp
     Source/engine/AudioCapture.cpp
     Source/engine/AudioEngine.cpp
     Source/engine/BuiltinEffects.cpp
@@ -68,9 +68,9 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/GainHud.cpp
     Source/ui/LiveEdits.cpp
     Source/ui/Analysis.cpp
-    Source/ui/MontageEditor.cpp
-    Source/ui/MontageFile.cpp
-    Source/ui/MontageView.cpp
+    Source/ui/AlbumEditor.cpp
+    Source/ui/AlbumFile.cpp
+    Source/ui/AlbumView.cpp
     Source/ui/ChainRow.cpp
     Source/ui/DesktopShortcuts.cpp
     Source/ui/MasterPanel.cpp
@@ -206,7 +206,7 @@ if(PHINYX_BUILD_TESTS)
         Source/core/Restoration.cpp
         Source/core/Fft.cpp
         Source/core/Nyquist.cpp
-        Source/core/Montage.cpp)
+        Source/core/Album.cpp)
     target_link_libraries(phinyx-core-tests PRIVATE phinyx_nyquist)
     target_compile_definitions(phinyx-core-tests PRIVATE PHINYX_SHARE_SOURCE_DIR="${CMAKE_SOURCE_DIR}/share")
     add_test(NAME core COMMAND phinyx-core-tests)

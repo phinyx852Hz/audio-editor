@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The Montage (album assembly) part of MainWindow: commands, dialogs, saving
-// and exporting. The model and its mixdown are in core/Montage.h.
+// The Album (album assembly) part of MainWindow: commands, dialogs, saving
+// and exporting. The model and its mixdown are in core/Album.h.
 #include "MainWindow.h"
-#include "MontageFile.h"
-#include "MontageView.h"
+#include "AlbumFile.h"
+#include "AlbumView.h"
 
 #include "../core/Dsp.h"
-#include "../core/Montage.h"
+#include "../core/Album.h"
 
 #include <QApplication>
 #include <QCheckBox>
@@ -66,51 +66,51 @@ namespace
 }
 
 //==============================================================================
-void MainWindow::registerMontageCommands()
+void MainWindow::registerAlbumCommands()
 {
     using KS = QKeySequence;
-    const auto category = tr ("Montage");
+    const auto category = tr ("Album");
     auto add = [this, &category] (const char* id, const QString& text, QList<QKeySequence> keys, std::function<void()> fn)
     {
         addAction (commands.add (QString::fromLatin1 (id), category, text, keys, std::move (fn)));
     };
 
-    add ("montage.new", tr ("&New Montage"), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_M) }, [this] { newMontage(); });
-    add ("montage.addSongs", tr ("&Add Songs..."), { KS (Qt::ALT | Qt::Key_Insert) }, [this] { addSongs(); });
-    add ("montage.previousSong", tr ("&Previous Song"), { KS (Qt::ALT | Qt::Key_Left) }, [this] { jumpToSong (-1); });
-    add ("montage.nextSong", tr ("Ne&xt Song"), { KS (Qt::ALT | Qt::Key_Right) }, [this] { jumpToSong (1); });
-    add ("montage.moveEarlier", tr ("Move Song &Earlier"), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_Left) }, [this] { moveSong (-1); });
-    add ("montage.moveLater", tr ("Move Song &Later"), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_Right) }, [this] { moveSong (1); });
-    add ("montage.longerPause", tr ("Longer Pa&use Before Song"), { KS (Qt::ALT | Qt::Key_Up) }, [this] { changePause (0.5); });
-    add ("montage.shorterPause", tr ("Shorter Pause or &Crossfade"), { KS (Qt::ALT | Qt::Key_Down) }, [this] { changePause (-0.5); });
-    add ("montage.songProperties", tr ("&Song Properties..."), { KS (Qt::ALT | Qt::Key_Return) }, [this] { songProperties(); });
-    add ("montage.removeSong", tr ("&Remove Song"), { KS (Qt::ALT | Qt::Key_Delete) }, [this] { removeSong(); });
-    add ("montage.openSong", tr ("&Open Song in Editor"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_Return) }, [this] { openSong(); });
-    add ("montage.album", tr ("Al&bum Properties..."), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_Return) }, [this] { albumProperties(); });
-    add ("montage.export", tr ("E&xport Album..."), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_X) }, [this] { exportAlbum(); });
+    add ("album.new", tr ("&New Album"), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_M) }, [this] { newAlbum(); });
+    add ("album.addSongs", tr ("&Add Songs..."), { KS (Qt::ALT | Qt::Key_Insert) }, [this] { addSongs(); });
+    add ("album.previousSong", tr ("&Previous Song"), { KS (Qt::ALT | Qt::Key_Left) }, [this] { jumpToSong (-1); });
+    add ("album.nextSong", tr ("Ne&xt Song"), { KS (Qt::ALT | Qt::Key_Right) }, [this] { jumpToSong (1); });
+    add ("album.moveEarlier", tr ("Move Song &Earlier"), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_Left) }, [this] { moveSong (-1); });
+    add ("album.moveLater", tr ("Move Song &Later"), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_Right) }, [this] { moveSong (1); });
+    add ("album.longerPause", tr ("Longer Pa&use Before Song"), { KS (Qt::ALT | Qt::Key_Up) }, [this] { changePause (0.5); });
+    add ("album.shorterPause", tr ("Shorter Pause or &Crossfade"), { KS (Qt::ALT | Qt::Key_Down) }, [this] { changePause (-0.5); });
+    add ("album.songProperties", tr ("&Song Properties..."), { KS (Qt::ALT | Qt::Key_Return) }, [this] { songProperties(); });
+    add ("album.removeSong", tr ("&Remove Song"), { KS (Qt::ALT | Qt::Key_Delete) }, [this] { removeSong(); });
+    add ("album.openSong", tr ("&Open Song in Editor"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_Return) }, [this] { openSong(); });
+    add ("album.properties", tr ("Al&bum Properties..."), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_Return) }, [this] { albumProperties(); });
+    add ("album.export", tr ("E&xport Album..."), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_X) }, [this] { exportAlbum(); });
 }
 
-void MainWindow::updateMontageCommandStates()
+void MainWindow::updateAlbumCommandStates()
 {
-    const auto* m = montage();
+    const auto* m = album();
     const bool any = m != nullptr && ! m->clips.empty() && ! loading;
-    commands.action (QStringLiteral ("montage.new"))->setEnabled (! loading);
-    commands.action (QStringLiteral ("montage.addSongs"))->setEnabled (m != nullptr && ! loading);
-    for (const auto* id : { "montage.previousSong", "montage.nextSong", "montage.moveEarlier", "montage.moveLater",
-                            "montage.longerPause", "montage.shorterPause", "montage.songProperties", "montage.removeSong",
-                            "montage.openSong", "montage.export" })
+    commands.action (QStringLiteral ("album.new"))->setEnabled (! loading);
+    commands.action (QStringLiteral ("album.addSongs"))->setEnabled (m != nullptr && ! loading);
+    for (const auto* id : { "album.previousSong", "album.nextSong", "album.moveEarlier", "album.moveLater",
+                            "album.longerPause", "album.shorterPause", "album.songProperties", "album.removeSong",
+                            "album.openSong", "album.export" })
         commands.action (QString::fromLatin1 (id))->setEnabled (any);
-    commands.action (QStringLiteral ("montage.album"))->setEnabled (m != nullptr && ! loading);
+    commands.action (QStringLiteral ("album.properties"))->setEnabled (m != nullptr && ! loading);
 }
 
-const Montage* MainWindow::montage() const
+const Album* MainWindow::album() const
 {
-    return doc.isMontage() ? doc.current().montage.get() : nullptr;
+    return doc.isAlbum() ? doc.current().album.get() : nullptr;
 }
 
 int MainWindow::currentSong() const
 {
-    const auto* m = montage();
+    const auto* m = album();
     if (m == nullptr || m->clips.empty())
         return -1;
     if (const auto i = m->clipAt (cursor); i >= 0)
@@ -121,13 +121,13 @@ int MainWindow::currentSong() const
     return (int) m->clips.size() - 1;
 }
 
-bool MainWindow::refuseMontageEdit()
+bool MainWindow::refuseAlbumEdit()
 {
-    if (! doc.isMontage())
+    if (! doc.isAlbum())
         return false;
 
-    statusBar()->showMessage (tr ("A montage is put together from its songs, so its audio is not edited here. "
-                                  "Open a song in its own tab with Ctrl+Alt+Enter: your edits show up in the montage."), 10000);
+    statusBar()->showMessage (tr ("An album is put together from its songs, so its audio is not edited here. "
+                                  "Open a song in its own tab with Ctrl+Alt+Enter: your edits show up in the album."), 10000);
     return true;
 }
 
@@ -158,32 +158,32 @@ bool MainWindow::runWithProgress (const QString& title, const std::function<void
 }
 
 //==============================================================================
-void MainWindow::newMontage()
+void MainWindow::newAlbum()
 {
     if (loading)
         return;
     if (doc.isOpen())
         newTab();
 
-    auto m = std::make_shared<Montage>();
+    auto m = std::make_shared<Album>();
     doc.reset (m->mixdown(), {}, std::string(), {}, m);
     cursor = selStart = selEnd = selAnchor = 0;
     optionsConfirmedFor.clear();
     refreshFromDocument (false);
-    statusBar()->showMessage (tr ("New montage. Add songs with Alt+Insert, or open files from the Find panel (Ctrl+F) to add them."), 10000);
+    statusBar()->showMessage (tr ("New album. Add songs with Alt+Insert, or open files from the Find panel (Ctrl+F) to add them."), 10000);
 }
 
-void MainWindow::openMontage (const QString& path)
+void MainWindow::openAlbum (const QString& path)
 {
     if (loading)
         return;
 
-    std::shared_ptr<Montage> m;
+    std::shared_ptr<Album> m;
     QStringList problems;
     QString error;
-    const auto finished = runWithProgress (tr ("Opening the montage"), [&] (std::atomic<float>& progress, const std::atomic<bool>& cancel)
+    const auto finished = runWithProgress (tr ("Opening the album"), [&] (std::atomic<float>& progress, const std::atomic<bool>& cancel)
     {
-        m = montagefile::load (path, problems, error, &progress, &cancel);
+        m = albumfile::load (path, problems, error, &progress, &cancel);
     });
     if (! finished)
         return;
@@ -195,25 +195,25 @@ void MainWindow::openMontage (const QString& path)
 
     if (doc.isOpen())
         newTab();
-    std::shared_ptr<const Montage> shared = m;
+    std::shared_ptr<const Album> shared = m;
     doc.reset (shared->mixdown(), shared->trackMarkers(), path.toStdString(), {}, shared);
     cursor = selStart = selEnd = selAnchor = 0;
     refreshFromDocument (false);
-    refreshMontageSources();
+    refreshAlbumSources();
     if (! problems.isEmpty())
         QMessageBox::warning (this, tr ("Missing songs"),
                               tr ("These songs could not be read and stay silent until they are found:\n\n%1").arg (problems.join (QLatin1Char ('\n'))));
     waveform->setFocus();
 }
 
-bool MainWindow::saveMontage (const QString& path)
+bool MainWindow::saveAlbum (const QString& path)
 {
-    const auto* m = montage();
+    const auto* m = album();
     if (m == nullptr)
         return false;
 
     QString error;
-    if (! montagefile::save (*m, path, error))
+    if (! albumfile::save (*m, path, error))
     {
         QMessageBox::warning (this, tr ("Save failed"), tr ("Could not save %1:\n%2").arg (path, error));
         return false;
@@ -221,42 +221,51 @@ bool MainWindow::saveMontage (const QString& path)
     doc.setPath (path.toStdString());
     doc.markSaved();
     updateTitle();
-    statusBar()->showMessage (tr ("Saved the montage %1. It refers to the song files, so keep them.").arg (QFileInfo (path).fileName()), 6000);
+    statusBar()->showMessage (tr ("Saved the album %1. It refers to the song files, so keep them.").arg (QFileInfo (path).fileName()), 6000);
     return true;
 }
 
-bool MainWindow::saveMontageAs()
+bool MainWindow::saveAlbumAs()
 {
-    const auto* m = montage();
+    const auto* m = album();
     if (m == nullptr)
         return false;
 
     auto suggested = QString::fromStdString (doc.path());
     if (suggested.isEmpty())
     {
-        const auto album = tagText (m->tags, tag::album);
+        const auto title = tagText (m->tags, tag::album);
         const auto folder = m->clips.empty() ? QStandardPaths::writableLocation (QStandardPaths::MusicLocation)
                                              : QFileInfo (QString::fromStdString (m->clips.front().path)).absolutePath();
-        suggested = folder + QLatin1Char ('/') + fileNameFor (album.isEmpty() ? tr ("Album") : album) + QStringLiteral (".") + montagefile::extension;
+        suggested = folder + QLatin1Char ('/') + fileNameFor (title.isEmpty() ? tr ("Album") : title) + QStringLiteral (".") + albumfile::extension;
     }
-    auto path = QFileDialog::getSaveFileName (this, tr ("Save Montage As"), suggested, tr ("PHINYX montage (*.montage)"));
+    // An album opened from an old .montage file is saved as .phalbum beside it.
+    auto withExtension = [] (QString p)
+    {
+        const QFileInfo info (p);
+        if (info.suffix().toLower() == albumfile::oldExtension)
+            p = info.path() + QLatin1Char ('/') + info.completeBaseName();
+        if (QFileInfo (p).suffix().toLower() != albumfile::extension)
+            p += QStringLiteral (".") + albumfile::extension;
+        return p;
+    };
+    auto path = QFileDialog::getSaveFileName (this, tr ("Save Album As"), withExtension (suggested), tr ("PHINYX album (*.phalbum)"));
     if (path.isEmpty())
         return false;
-    if (QFileInfo (path).suffix().toLower() != montagefile::extension)
-        path += QStringLiteral (".") + montagefile::extension;
-    return saveMontage (path);
+    path = withExtension (path);
+    return saveAlbum (path);
 }
 
 //==============================================================================
-void MainWindow::commitMontage (const QString& description, Montage m, Frame newCursor)
+void MainWindow::commitAlbum (const QString& description, Album m, Frame newCursor)
 {
     m.clampPauses();
-    auto shared = std::make_shared<const Montage> (std::move (m));
+    auto shared = std::make_shared<const Album> (std::move (m));
     auto state = doc.current();
     const bool wasEmpty = state.data == nullptr || state.data->length() == 0;
     state.data = shared->mixdown();
     state.markers = shared->trackMarkers();
-    state.montage = shared;
+    state.album = shared;
     doc.apply (description.toStdString(), std::move (state));
     if (newCursor >= 0)
         cursor = newCursor;
@@ -268,13 +277,13 @@ void MainWindow::commitMontage (const QString& description, Montage m, Frame new
 
 void MainWindow::addSongs()
 {
-    if (montage() == nullptr)
+    if (album() == nullptr)
         return;
 
     QStringList patterns;
     for (const auto& ext : AudioEngine::readableExtensions())
         patterns << QStringLiteral ("*.") + QString::fromStdString (ext);
-    const auto* m = montage();
+    const auto* m = album();
     const auto start = m->clips.empty() ? QStandardPaths::writableLocation (QStandardPaths::MusicLocation)
                                         : QFileInfo (QString::fromStdString (m->clips.back().path)).absolutePath();
     const auto paths = QFileDialog::getOpenFileNames (this, tr ("Add Songs"), start,
@@ -285,10 +294,10 @@ void MainWindow::addSongs()
 
 void MainWindow::addSongFiles (const QStringList& paths)
 {
-    if (montage() == nullptr || paths.isEmpty())
+    if (album() == nullptr || paths.isEmpty())
         return;
 
-    auto m = *montage();
+    auto m = *album();
     const bool wasEmpty = m.clips.empty();
     struct Song { QString path; AudioDataPtr data, original; Tags tags; QString error; };
     std::vector<Song> songs ((size_t) paths.size());
@@ -306,7 +315,7 @@ void MainWindow::addSongFiles (const QStringList& paths)
             s.error = QString::fromStdString (error);
             if (s.original != nullptr)
             {
-                // The first song of a new montage sets its sample rate; the others follow it.
+                // The first song of a new album sets its sample rate; the others follow it.
                 if (rate <= 0.0)
                     rate = s.original->sampleRate();
                 s.data = std::abs (s.original->sampleRate() - rate) > 1.0e-6 ? dsp::resample (*s.original, rate) : s.original;
@@ -334,17 +343,17 @@ void MainWindow::addSongFiles (const QStringList& paths)
         }
         m.channels = std::clamp (std::max (m.channels, s.data->numChannels()), 1, MeterBlock::maxChannels);
 
-        MontageClip c;
+        AlbumClip c;
         c.path = s.path.toStdString();
         c.source = s.data;
         c.original = s.original;
         c.sourceEnd = s.data->length();
-        c.pauseBefore = insertAt == 0 ? 0 : (Frame) std::llround (Montage::defaultPauseSeconds * m.sampleRate);
+        c.pauseBefore = insertAt == 0 ? 0 : (Frame) std::llround (Album::defaultPauseSeconds * m.sampleRate);
         for (const auto* key : { tag::title, tag::artist, tag::isrc })
             if (const auto t = s.tags.find (key); t != s.tags.end() && ! t->second.empty())
                 c.tags[key] = t->second;
         if (insertAt == 0 && ! m.clips.empty())
-            m.clips.front().pauseBefore = (Frame) std::llround (Montage::defaultPauseSeconds * m.sampleRate);
+            m.clips.front().pauseBefore = (Frame) std::llround (Album::defaultPauseSeconds * m.sampleRate);
         m.clips.insert (m.clips.begin() + insertAt, std::move (c));
         ++insertAt;
     }
@@ -352,9 +361,9 @@ void MainWindow::addSongFiles (const QStringList& paths)
     if (insertAt > firstInserted)
     {
         const auto count = insertAt - firstInserted;
-        Montage probe = m;
+        Album probe = m;
         probe.clampPauses();
-        commitMontage (count == 1 ? tr ("Add Song") : tr ("Add %1 Songs").arg (count), std::move (m), probe.clipStart (firstInserted));
+        commitAlbum (count == 1 ? tr ("Add Song") : tr ("Add %1 Songs").arg (count), std::move (m), probe.clipStart (firstInserted));
         statusBar()->showMessage (tr ("Added %n song(s). Alt+Left and Alt+Right move between songs, Alt+Up and Alt+Down change the pause.",
                                       nullptr, count), 8000);
     }
@@ -365,7 +374,7 @@ void MainWindow::addSongFiles (const QStringList& paths)
 
 void MainWindow::jumpToSong (int direction)
 {
-    const auto* m = montage();
+    const auto* m = album();
     if (m == nullptr || m->clips.empty())
         return;
 
@@ -397,7 +406,7 @@ void MainWindow::jumpToSong (int direction)
 void MainWindow::moveSong (int direction)
 {
     const auto i = currentSong();
-    const auto* current = montage();
+    const auto* current = album();
     const auto j = i + direction;
     if (current == nullptr || i < 0 || j < 0 || j >= (int) current->clips.size())
         return;
@@ -408,15 +417,15 @@ void MainWindow::moveSong (int direction)
     auto& b = m.clips[(size_t) j];
     std::swap (a.pauseBefore, b.pauseBefore);
     std::swap (a, b);
-    Montage probe = m;
+    Album probe = m;
     probe.clampPauses();
-    commitMontage (tr ("Move Song"), std::move (m), probe.clipStart (j));
+    commitAlbum (tr ("Move Song"), std::move (m), probe.clipStart (j));
 }
 
 void MainWindow::changePause (double secondsChange)
 {
     const auto i = currentSong();
-    const auto* current = montage();
+    const auto* current = album();
     if (current == nullptr || i < 0)
         return;
 
@@ -429,19 +438,19 @@ void MainWindow::changePause (double secondsChange)
     m.clampPauses();
     const auto pause = m.clips[(size_t) i].pauseBefore;
     const auto start = m.clipStart (i);
-    commitMontage (pause < 0 ? tr ("Crossfade") : tr ("Change Pause"), std::move (m), start);
+    commitAlbum (pause < 0 ? tr ("Crossfade") : tr ("Change Pause"), std::move (m), start);
 
     if (pause < 0)
-        statusBar()->showMessage (tr ("Song %1 crossfades with song %2 over %3 s").arg (i + 1).arg (i).arg (seconds (-pause, montage()->sampleRate)), 5000);
+        statusBar()->showMessage (tr ("Song %1 crossfades with song %2 over %3 s").arg (i + 1).arg (i).arg (seconds (-pause, album()->sampleRate)), 5000);
     else
-        statusBar()->showMessage (i == 0 ? tr ("%1 s of silence before the first song").arg (seconds (pause, montage()->sampleRate))
-                                         : tr ("Pause before song %1: %2 s").arg (i + 1).arg (seconds (pause, montage()->sampleRate)), 5000);
+        statusBar()->showMessage (i == 0 ? tr ("%1 s of silence before the first song").arg (seconds (pause, album()->sampleRate))
+                                         : tr ("Pause before song %1: %2 s").arg (i + 1).arg (seconds (pause, album()->sampleRate)), 5000);
 }
 
 void MainWindow::songProperties()
 {
     const auto i = currentSong();
-    const auto* current = montage();
+    const auto* current = album();
     if (current == nullptr || i < 0)
         return;
 
@@ -519,14 +528,14 @@ void MainWindow::songProperties()
     c.sourceEnd = std::max (frames (from), frames (to));
     if (c.source != nullptr)
         c.sourceEnd = std::min (c.sourceEnd, c.source->length());
-    Montage probe = m;
+    Album probe = m;
     probe.clampPauses();
-    commitMontage (tr ("Song Properties"), std::move (m), probe.clipStart (i));
+    commitAlbum (tr ("Song Properties"), std::move (m), probe.clipStart (i));
 }
 
 void MainWindow::albumProperties()
 {
-    const auto* current = montage();
+    const auto* current = album();
     if (current == nullptr)
         return;
 
@@ -555,13 +564,13 @@ void MainWindow::albumProperties()
     setTag (m.tags, tag::album, album->text());
     setTag (m.tags, tag::artist, artist->text());
     setTag (m.tags, tag::catalog, catalog->text());
-    commitMontage (tr ("Album Properties"), std::move (m));
+    commitAlbum (tr ("Album Properties"), std::move (m));
 }
 
 void MainWindow::removeSong()
 {
     const auto i = currentSong();
-    const auto* current = montage();
+    const auto* current = album();
     if (current == nullptr || i < 0)
         return;
 
@@ -571,35 +580,35 @@ void MainWindow::removeSong()
     m.clips.erase (m.clips.begin() + i);
     if (i == 0 && ! m.clips.empty())
         m.clips.front().pauseBefore = std::max<Frame> (0, removedPause);
-    Montage probe = m;
+    Album probe = m;
     probe.clampPauses();
     const auto next = std::min (i, (int) probe.clips.size() - 1);
-    commitMontage (tr ("Remove Song"), std::move (m), next >= 0 ? probe.clipStart (next) : 0);
+    commitAlbum (tr ("Remove Song"), std::move (m), next >= 0 ? probe.clipStart (next) : 0);
     statusBar()->showMessage (tr ("Removed %1. Ctrl+Z brings it back.").arg (name), 5000);
 }
 
 void MainWindow::openSong()
 {
     const auto i = currentSong();
-    const auto* m = montage();
+    const auto* m = album();
     if (m == nullptr || i < 0)
         return;
 
     const auto path = QString::fromStdString (m->clips[(size_t) i].path);
     for (int t = 0; t < (int) tabs.size(); ++t)
-        if (t != activeTab && QString::fromStdString (tabs[(size_t) t].doc.path()) == path && ! tabs[(size_t) t].doc.isMontage())
+        if (t != activeTab && QString::fromStdString (tabs[(size_t) t].doc.path()) == path && ! tabs[(size_t) t].doc.isAlbum())
         {
             tabBar->setCurrentIndex (t);
             return;
         }
 
     openFile (path);
-    statusBar()->showMessage (tr ("Edits you make here show up in the montage when you go back to its tab, even before you save."), 8000);
+    statusBar()->showMessage (tr ("Edits you make here show up in the album when you go back to its tab, even before you save."), 8000);
 }
 
-void MainWindow::refreshMontageSources()
+void MainWindow::refreshAlbumSources()
 {
-    const auto* current = montage();
+    const auto* current = album();
     if (current == nullptr)
         return;
 
@@ -611,8 +620,8 @@ void MainWindow::refreshMontageSources()
         for (int t = 0; t < (int) tabs.size(); ++t)
         {
             const auto& other = tabs[(size_t) t].doc;
-            // A tab with no edits since it was opened holds what the montage read from the file too.
-            if (t == activeTab || ! other.isOpen() || other.isMontage() || other.path() != c.path || ! other.canUndo())
+            // A tab with no edits since it was opened holds what the album read from the file too.
+            if (t == activeTab || ! other.isOpen() || other.isAlbum() || other.path() != c.path || ! other.canUndo())
                 continue;
             if (const auto d = other.current().data; d != c.original)
                 changed.emplace_back (i, d);
@@ -623,7 +632,7 @@ void MainWindow::refreshMontageSources()
 
     auto m = *current;
     std::vector<AudioDataPtr> sources (changed.size());
-    runWithProgress (tr ("Updating the montage"), [&] (std::atomic<float>& progress, const std::atomic<bool>&)
+    runWithProgress (tr ("Updating the album"), [&] (std::atomic<float>& progress, const std::atomic<bool>&)
     {
         for (size_t k = 0; k < changed.size(); ++k)
         {
@@ -645,14 +654,14 @@ void MainWindow::refreshMontageSources()
         c.sourceEnd = whole ? c.source->length() : std::min (c.sourceEnd, c.source->length());
         c.sourceStart = std::min (c.sourceStart, c.sourceEnd);
     }
-    commitMontage (tr ("Use Edited Songs"), std::move (m), cursor);
-    statusBar()->showMessage (tr ("The montage now uses your edits to %n song(s).", nullptr, (int) changed.size()), 6000);
+    commitAlbum (tr ("Use Edited Songs"), std::move (m), cursor);
+    statusBar()->showMessage (tr ("The album now uses your edits to %n song(s).", nullptr, (int) changed.size()), 6000);
 }
 
 //==============================================================================
 void MainWindow::exportAlbum()
 {
-    const auto* m = montage();
+    const auto* m = album();
     const auto album = data();
     if (m == nullptr || album == nullptr || m->clips.empty())
         return;
@@ -665,7 +674,7 @@ void MainWindow::exportAlbum()
     const auto albumTitle = tagText (m->tags, tag::album);
     auto defaultFolder = doc.path().empty() ? QFileInfo (QString::fromStdString (m->clips.front().path)).absolutePath()
                                             : QFileInfo (QString::fromStdString (doc.path())).absolutePath();
-    auto* folder = new QLineEdit (settings.value (QStringLiteral ("montage/exportFolder"), defaultFolder).toString(), &dialog);
+    auto* folder = new QLineEdit (settings.value (QStringLiteral ("album/exportFolder"), defaultFolder).toString(), &dialog);
     auto* browse = new QPushButton (tr ("&Browse..."), &dialog);
     auto* folderRow = new QHBoxLayout();
     folderRow->addWidget (folder, 1);
@@ -688,23 +697,23 @@ void MainWindow::exportAlbum()
     auto* format = new QComboBox (&dialog);
     for (const auto& ext : AudioEngine::writableExtensions())
         format->addItem (QString::fromStdString (ext).toUpper(), QString::fromStdString (ext));
-    format->setCurrentIndex (std::max (0, format->findData (settings.value (QStringLiteral ("montage/exportFormat"), QStringLiteral ("wav")))));
+    format->setCurrentIndex (std::max (0, format->findData (settings.value (QStringLiteral ("album/exportFormat"), QStringLiteral ("wav")))));
     form->addRow (tr ("F&ormat:"), format);
 
     auto* depth = new QComboBox (&dialog);
     depth->addItem (tr ("16-bit (CD)"), 16);
     depth->addItem (tr ("24-bit"), 24);
     depth->addItem (tr ("32-bit float"), 32);
-    depth->setCurrentIndex (std::max (0, depth->findData (settings.value (QStringLiteral ("montage/exportBits"), 16))));
+    depth->setCurrentIndex (std::max (0, depth->findData (settings.value (QStringLiteral ("album/exportBits"), 16))));
     form->addRow (tr ("&Bit depth:"), depth);
     auto* dither = new QCheckBox (tr ("&Dither when reducing the bit depth"), &dialog);
-    dither->setChecked (settings.value (QStringLiteral ("montage/exportDither"), true).toBool());
+    dither->setChecked (settings.value (QStringLiteral ("album/exportDither"), true).toBool());
     form->addRow (dither);
 
     auto* whole = new QCheckBox (tr ("One file for the &whole album, with a CUE sheet"), &dialog);
-    whole->setChecked (settings.value (QStringLiteral ("montage/exportWhole"), true).toBool());
+    whole->setChecked (settings.value (QStringLiteral ("album/exportWhole"), true).toBool());
     auto* tracks = new QCheckBox (tr ("A file for each &song (gapless: each pause goes with the song before it)"), &dialog);
-    tracks->setChecked (settings.value (QStringLiteral ("montage/exportTracks"), true).toBool());
+    tracks->setChecked (settings.value (QStringLiteral ("album/exportTracks"), true).toBool());
     auto* master = new QCheckBox (tr ("Through the &Master Section"), &dialog);
     master->setChecked (engine.masterIsActive());
     master->setEnabled (engine.masterIsActive());
@@ -722,12 +731,12 @@ void MainWindow::exportAlbum()
     if (dialog.exec() != QDialog::Accepted || (! whole->isChecked() && ! tracks->isChecked()))
         return;
 
-    settings.setValue (QStringLiteral ("montage/exportFolder"), folder->text());
-    settings.setValue (QStringLiteral ("montage/exportFormat"), format->currentData());
-    settings.setValue (QStringLiteral ("montage/exportBits"), depth->currentData());
-    settings.setValue (QStringLiteral ("montage/exportDither"), dither->isChecked());
-    settings.setValue (QStringLiteral ("montage/exportWhole"), whole->isChecked());
-    settings.setValue (QStringLiteral ("montage/exportTracks"), tracks->isChecked());
+    settings.setValue (QStringLiteral ("album/exportFolder"), folder->text());
+    settings.setValue (QStringLiteral ("album/exportFormat"), format->currentData());
+    settings.setValue (QStringLiteral ("album/exportBits"), depth->currentData());
+    settings.setValue (QStringLiteral ("album/exportDither"), dither->isChecked());
+    settings.setValue (QStringLiteral ("album/exportWhole"), whole->isChecked());
+    settings.setValue (QStringLiteral ("album/exportTracks"), tracks->isChecked());
 
     const QDir dir (folder->text());
     if (! dir.exists() && ! QDir().mkpath (dir.absolutePath()))

@@ -1,24 +1,24 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #pragma once
 
-#include "../core/Montage.h"
+#include "../core/Album.h"
 
 #include <QWidget>
 #include <memory>
 
-// The songs of a montage as blocks over the waveform, on the same time scale:
+// The songs of an album as blocks over the waveform, on the same time scale:
 // two lanes, so crossfades show as overlapping blocks, with each song's number
 // and name, its fades as slopes, its gain, and the pause before it. The song
 // under the cursor is outlined. Clicking a song puts the cursor at its start;
 // double-clicking opens its properties.
-class MontageView final : public QWidget
+class AlbumView final : public QWidget
 {
     Q_OBJECT
 
 public:
-    explicit MontageView (QWidget* parent);
+    explicit AlbumView (QWidget* parent);
 
-    void setMontage (std::shared_ptr<const Montage>);
+    void setAlbum (std::shared_ptr<const Album>);
     // Called on every UI tick with the waveform's view, in frames; repaints only on a change.
     void setView (double startFrame, double lengthFrames, Frame cursor);
 
@@ -38,7 +38,7 @@ private:
     double frameToX (double frame) const;
     int clipAtX (double x, double y) const;
 
-    std::shared_ptr<const Montage> montage;
+    std::shared_ptr<const Album> album;
     double start = 0.0, length = 0.0;
     Frame cursor = 0;
 };

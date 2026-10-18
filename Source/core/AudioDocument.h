@@ -42,7 +42,7 @@ namespace tag
     inline constexpr const char* isrc = "isrc";
     inline constexpr const char* bpm = "bpm";           // tempo in beats per minute (WAV: acid chunk; FLAC: BPM)
     inline constexpr const char* key = "key";           // musical key, such as "A minor" (FLAC: INITIALKEY)
-    inline constexpr const char* catalog = "catalog";   // UPC/EAN of an album (Montage, CUE sheet)
+    inline constexpr const char* catalog = "catalog";   // UPC/EAN of an album (Album, CUE sheet)
     // Broadcast Wave (bext), WAV only
     inline constexpr const char* bwfDescription = "bwf.description";
     inline constexpr const char* bwfOriginator = "bwf.originator";
@@ -53,15 +53,15 @@ namespace tag
     inline constexpr const char* bwfCodingHistory = "bwf.codingHistory";
 }
 
-class Montage;
+class Album;
 
 struct DocumentState
 {
     AudioDataPtr data;
     std::vector<Marker> markers;
     Tags tags;
-    // Set when the document is a montage: `data` is then its mixdown and `markers` its tracks.
-    std::shared_ptr<const Montage> montage;
+    // Set when the document is an album: `data` is then its mixdown and `markers` its tracks.
+    std::shared_ptr<const Album> album;
 };
 
 // Holds the current audio and markers plus a linear undo history of snapshots.
@@ -70,8 +70,8 @@ class AudioDocument
 {
 public:
     void reset (AudioDataPtr, std::vector<Marker> markers, const std::string& path, Tags tags = {},
-                std::shared_ptr<const Montage> montage = nullptr);
-    bool isMontage() const { return isOpen() && current().montage != nullptr; }
+                std::shared_ptr<const Album> album = nullptr);
+    bool isAlbum() const { return isOpen() && current().album != nullptr; }
     bool isOpen() const { return ! history.empty() && current().data != nullptr; }
 
     const DocumentState& current() const { return history[(size_t) position].state; }

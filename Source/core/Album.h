@@ -7,19 +7,19 @@
 #include <string>
 #include <vector>
 
-// Album assembly (WaveLab's Montage, kept small): songs in order on one
+// Album assembly (WaveLab's Album, kept small): songs in order on one
 // timeline, each with the pause before it, its own gain and fades, and its
 // CD-Text and ISRC. A negative pause makes the song start before the previous
 // one ends: the overlap becomes an equal-power crossfade.
 //
-// The montage is never edited sample by sample. `mixdown` assembles the album
+// The album is never edited sample by sample. `mixdown` assembles the album
 // as ordinary AudioData that plays, meters and renders like any file; untouched
 // stretches share the source files' audio, so rebuilding it after each change
 // is quick and costs little memory. Plain C++: no JUCE or Qt.
-struct MontageClip
+struct AlbumClip
 {
     std::string path;           // the source file
-    AudioDataPtr source;        // its audio (at the montage's sample rate); not saved in the montage file
+    AudioDataPtr source;        // its audio (at the album's sample rate); not saved in the album file
     AudioDataPtr original;      // what `source` was made from (before resampling), to notice edits made in an editor tab
     Frame sourceStart = 0;      // the part of the source that is used: [sourceStart, sourceEnd)
     Frame sourceEnd = 0;
@@ -31,14 +31,14 @@ struct MontageClip
     Frame length() const { return sourceEnd - sourceStart; }
 };
 
-class Montage
+class Album
 {
 public:
     static constexpr double defaultPauseSeconds = 2.0;
 
     double sampleRate = 44100.0;
     int channels = 2;
-    std::vector<MontageClip> clips;
+    std::vector<AlbumClip> clips;
     Tags tags;                  // the album's title, artist and catalogue number (tag::catalog, UPC/EAN)
 
     // Where each song starts on the album timeline, and the album's length.
@@ -56,7 +56,7 @@ public:
     // Gain of song `index` at frame `t` of its own length: fades, crossfades and gain together.
     float envelope (int index, Frame t) const;
 
-    // The assembled album. An empty montage gives empty data at the montage's rate.
+    // The assembled album. An empty album gives empty data at the album's rate.
     AudioDataPtr mixdown() const;
 
     // One region per song, named "1. Title", for the editor's marker list.

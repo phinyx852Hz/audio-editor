@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-#include "MontageFile.h"
+#include "AlbumFile.h"
 
 #include "../core/Dsp.h"
 #include "../engine/AudioEngine.h"
@@ -14,7 +14,7 @@
 
 #include <cmath>
 
-namespace montagefile
+namespace albumfile
 {
     namespace
     {
@@ -40,7 +40,7 @@ namespace montagefile
         Frame frames (const QJsonValue& v) { return (Frame) std::llround (v.toDouble()); }
     }
 
-    bool save (const Montage& m, const QString& path, QString& error)
+    bool save (const Album& m, const QString& path, QString& error)
     {
         const auto folder = QFileInfo (path).absoluteDir();
         QJsonArray songs;
@@ -63,7 +63,7 @@ namespace montagefile
         }
 
         const QJsonObject root {
-            { QStringLiteral ("phinyxMontage"), formatVersion },
+            { QStringLiteral ("phinyxAlbum"), formatVersion },
             { QStringLiteral ("sampleRate"), m.sampleRate },
             { QStringLiteral ("channels"), m.channels },
             { QStringLiteral ("tags"), tagsToJson (m.tags) },
@@ -103,7 +103,7 @@ namespace montagefile
         return data;
     }
 
-    std::shared_ptr<Montage> load (const QString& path, QStringList& problems, QString& error,
+    std::shared_ptr<Album> load (const QString& path, QStringList& problems, QString& error,
                                    std::atomic<float>* progress, const std::atomic<bool>* cancel)
     {
         QFile file (path);
@@ -115,13 +115,13 @@ namespace montagefile
         QJsonParseError parseError;
         const auto json = QJsonDocument::fromJson (file.readAll(), &parseError);
         const auto root = json.object();
-        if (json.isNull() || ! root.contains (QStringLiteral ("phinyxMontage")))
+        if (json.isNull() || ! (root.contains (QStringLiteral ("phinyxAlbum")) || root.contains (QStringLiteral ("phinyxMontage"))))
         {
-            error = json.isNull() ? parseError.errorString() : QObject::tr ("This is not a PHINYX montage.");
+            error = json.isNull() ? parseError.errorString() : QObject::tr ("This is not a PHINYX album.");
             return nullptr;
         }
 
-        auto m = std::make_shared<Montage>();
+        auto m = std::make_shared<Album>();
         m->sampleRate = root.value (QStringLiteral ("sampleRate")).toDouble (44100.0);
         m->channels = std::clamp (root.value (QStringLiteral ("channels")).toInt (2), 1, MeterBlock::maxChannels);
         m->tags = tagsFromJson (root.value (QStringLiteral ("tags")).toObject());
@@ -134,7 +134,7 @@ namespace montagefile
                 return nullptr;
 
             const auto o = songs[i].toObject();
-            MontageClip c;
+            AlbumClip c;
             const auto songPath = QDir::cleanPath (folder.absoluteFilePath (o.value (QStringLiteral ("file")).toString()));
             c.path = songPath.toStdString();
             c.sourceStart = frames (o.value (QStringLiteral ("start")));

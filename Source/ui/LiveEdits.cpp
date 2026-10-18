@@ -85,7 +85,7 @@ void MainWindow::buildLiveEdits()
 void MainWindow::placeGainHud()
 {
     const bool show = QSettings().value (QStringLiteral ("view/gainKnob"), true).toBool()
-                   && data() != nullptr && ! doc.isMontage() && ! waveform->isSpectral();
+                   && data() != nullptr && ! doc.isAlbum() && ! waveform->isSpectral();
     if (gainHud->isVisible() != show)
         gainHud->setVisible (show);
     const QPoint at ((waveform->width() - gainHud->width()) / 2, 6);
@@ -97,7 +97,7 @@ void MainWindow::previewLive (const QString& description, Frame start, Frame end
 {
     if (liveBase == nullptr)
     {
-        if (data() == nullptr || refuseMontageEdit())
+        if (data() == nullptr || refuseAlbumEdit())
             return;
         liveBase = data();
     }
@@ -143,7 +143,7 @@ void MainWindow::cancelLive()
 
 void MainWindow::nudgeGain (double db)
 {
-    if (data() == nullptr || refuseMontageEdit())
+    if (data() == nullptr || refuseAlbumEdit())
         return;
     nudgeDb = std::clamp (nudgeDb + db, GainHud::minDb, GainHud::maxDb);
     gainHud->setValue (nudgeDb);

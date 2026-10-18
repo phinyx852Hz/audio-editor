@@ -5,7 +5,7 @@
 #include "../Source/core/Dsp.h"
 #include "../Source/core/FlacTags.h"
 #include "../Source/core/Fft.h"
-#include "../Source/core/Montage.h"
+#include "../Source/core/Album.h"
 #include "../Source/core/Nyquist.h"
 #include "../Source/core/Repair.h"
 
@@ -840,18 +840,18 @@ namespace
         check (l[0] == 1.0f && l[999] == 0.0f, "curved fade out");
     }
 
-    void testMontage()
+    void testAlbum()
     {
         const double rate = 44100.0;
-        Montage m;
+        Album m;
         m.sampleRate = rate;
         m.channels = 2;
 
-        MontageClip a;
+        AlbumClip a;
         a.path = "/music/one.wav";
         a.source = makeRamp (2, 200000, rate);
         a.sourceEnd = 200000;
-        MontageClip b;
+        AlbumClip b;
         b.path = "/music/Two Song.flac";
         b.source = makeConstant (1, 100000, 0.5f, rate);
         b.sourceStart = 10000;
@@ -860,51 +860,51 @@ namespace
         b.tags[tag::isrc] = "USRC17607839";
         m.clips = { a, b };
 
-        check (m.clipStart (0) == 0 && m.clipStart (1) == 244100, "montage: a pause moves the next song");
-        check (m.length() == 244100 + 90000, "montage: length is songs plus pauses");
-        check (m.clipAt (100) == 0 && m.clipAt (220000) == -1 && m.clipAt (250000) == 1, "montage: song at a position");
+        check (m.clipStart (0) == 0 && m.clipStart (1) == 244100, "album: a pause moves the next song");
+        check (m.length() == 244100 + 90000, "album: length is songs plus pauses");
+        check (m.clipAt (100) == 0 && m.clipAt (220000) == -1 && m.clipAt (250000) == 1, "album: song at a position");
 
         // Untouched audio is shared, so the album plays the source exactly.
         auto mix = m.mixdown();
-        check (mix->length() == m.length() && mix->numChannels() == 2, "montage: mixdown length and channels");
+        check (mix->length() == m.length() && mix->numChannels() == 2, "album: mixdown length and channels");
         std::vector<float> l (100), r (100);
         float* lr[] { l.data(), r.data() };
         mix->read (123456, 100, lr);
         std::vector<float> sl (100), sr (100);
         float* slr[] { sl.data(), sr.data() };
         a.source->read (123456, 100, slr);
-        check (l == sl && r == sr, "montage: first song unchanged");
+        check (l == sl && r == sr, "album: first song unchanged");
         mix->read (220000, 100, lr);
-        check (l[0] == 0.0f && r[99] == 0.0f, "montage: the pause is silent");
+        check (l[0] == 0.0f && r[99] == 0.0f, "album: the pause is silent");
         mix->read (260000, 100, lr);
-        check (l[0] == 0.5f && r[0] == 0.5f, "montage: a mono song fills both sides");
+        check (l[0] == 0.5f && r[0] == 0.5f, "album: a mono song fills both sides");
 
         // Gain and fades.
         m.clips[1].gainDb = -6.0;
         m.clips[1].fadeIn = 1000;
         mix = m.mixdown();
         mix->read (m.clipStart (1), 100, lr);
-        check (l[0] < 0.01f, "montage: fade in starts near silence");
+        check (l[0] < 0.01f, "album: fade in starts near silence");
         mix->read (260000, 1, lr);
-        check (near (l[0], 0.5 * dsp::dbToGain (-6.0), 1.0e-4), "montage: song gain");
+        check (near (l[0], 0.5 * dsp::dbToGain (-6.0), 1.0e-4), "album: song gain");
 
         // A negative pause is a crossfade: equal power keeps a steady level for unrelated material.
-        Montage x;
+        Album x;
         x.sampleRate = rate;
         x.clips = { a, b };
         x.clips[0].source = makeConstant (2, 200000, 0.5f, rate);
         x.clips[1].pauseBefore = -20000;
         x.clampPauses();
-        check (x.overlapBefore (1) == 20000 && x.clipStart (1) == 180000, "montage: overlap");
+        check (x.overlapBefore (1) == 20000 && x.clipStart (1) == 180000, "album: overlap");
         check (near (x.envelope (0, 190000) * x.envelope (0, 190000) + x.envelope (1, 10000) * x.envelope (1, 10000), 1.0, 1.0e-3),
-               "montage: crossfade is equal power");
+               "album: crossfade is equal power");
         x.clips[1].pauseBefore = -500000;
         x.clampPauses();
-        check (x.overlapBefore (1) == 90000, "montage: an overlap is never longer than a song");
+        check (x.overlapBefore (1) == 90000, "album: an overlap is never longer than a song");
 
         // Markers and CUE sheet.
         const auto markers = m.trackMarkers();
-        check (markers.size() == 2 && markers[1].name == "2. Two Song" && markers[1].start == 244100, "montage: track markers");
+        check (markers.size() == 2 && markers[1].name == "2. Two Song" && markers[1].start == 244100, "album: track markers");
         m.tags[tag::album] = "First \"Album\"";
         const auto cue = m.cueSheet ("album.wav");
         check (cue.find ("TITLE \"First 'Album'\"") != std::string::npos, "cue: album title");
@@ -913,8 +913,8 @@ namespace
                "cue: second track with pregap (" + cue + ")");
         check (cueTime (44100 * 61 + 44100 / 75 * 3, rate) == "01:01:03", "cue: time format");
 
-        Montage empty;
-        check (empty.mixdown() != nullptr && empty.mixdown()->length() == 0, "montage: empty mixdown");
+        Album empty;
+        check (empty.mixdown() != nullptr && empty.mixdown()->length() == 0, "album: empty mixdown");
     }
 }
 
@@ -932,7 +932,7 @@ int main()
     testConvert();
     testFlacTags();
     testNyquist();
-    testMontage();
+    testAlbum();
     testCurvedFade();
 
     if (failures == 0)

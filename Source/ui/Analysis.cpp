@@ -3,7 +3,7 @@
 // markers, regions and tags, and slicing a file at its markers.
 #include "MainWindow.h"
 
-#include "../core/Montage.h"
+#include "../core/Album.h"
 #include "../engine/VampHost.h"
 
 #include <QApplication>
@@ -107,8 +107,8 @@ void MainWindow::updateAnalysisCommandStates()
 {
     const bool open = doc.isOpen() && ! loading;
     for (const auto* a : { "analyze.beats", "analyze.onsets", "analyze.vamp", "marker.exportSlices" })
-        commands.action (QString::fromLatin1 (a))->setEnabled (open && ! doc.isMontage());
-    commands.action (QStringLiteral ("analyze.tempoKey"))->setEnabled (open && (! doc.isMontage() || currentSong() >= 0));
+        commands.action (QString::fromLatin1 (a))->setEnabled (open && ! doc.isAlbum());
+    commands.action (QStringLiteral ("analyze.tempoKey"))->setEnabled (open && (! doc.isAlbum() || currentSong() >= 0));
     commands.action (QStringLiteral ("marker.exportLabels"))->setEnabled (open && ! doc.current().markers.empty());
 }
 
@@ -138,7 +138,7 @@ bool MainWindow::runAnalysis (const QString& title, const AudioData& audio, Fram
 void MainWindow::markFeatures (const QString& outputId, const QString& title)
 {
     const auto d = data();
-    if (d == nullptr || refuseMontageEdit())
+    if (d == nullptr || refuseAlbumEdit())
         return;
     const auto* output = vamphost::find (outputId.toStdString());
     const auto [s, e] = processRange();
@@ -197,8 +197,8 @@ void MainWindow::markFeatures (const QString& outputId, const QString& title)
 //==============================================================================
 void MainWindow::detectTempoAndKey()
 {
-    // In a montage this is about the song under the cursor, and writes to that song.
-    const auto* m = montage();
+    // In an album this is about the song under the cursor, and writes to that song.
+    const auto* m = album();
     const int song = m != nullptr ? currentSong() : -1;
     AudioDataPtr audio;
     Frame s = 0, e = 0;
@@ -321,7 +321,7 @@ void MainWindow::detectTempoAndKey()
     {
         auto changed = *m;
         apply (changed.clips[(size_t) song].tags);
-        commitMontage (tr ("Write Tempo and Key"), std::move (changed));
+        commitAlbum (tr ("Write Tempo and Key"), std::move (changed));
         statusBar()->showMessage (tr ("Tempo and key are written to song %1 when you export the album.").arg (song + 1), 6000);
     }
     else
@@ -440,7 +440,7 @@ namespace
 
 void MainWindow::chooseVampPlugin()
 {
-    if (data() == nullptr || refuseMontageEdit())
+    if (data() == nullptr || refuseAlbumEdit())
         return;
     QApplication::setOverrideCursor (Qt::WaitCursor);
     const auto none = vamphost::outputs().empty();
@@ -470,7 +470,7 @@ void MainWindow::runVampOutput (const QString& outputId)
 void MainWindow::exportSlices()
 {
     const auto d = data();
-    if (d == nullptr || refuseMontageEdit())
+    if (d == nullptr || refuseAlbumEdit())
         return;
 
     // Every marker start and region edge in the range cuts it.

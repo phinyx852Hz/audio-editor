@@ -57,9 +57,10 @@ License: AGPLv3 open source
 - **Phase 3 step 3 (done, 2026-10-18): ZL Audio stock plugins.** Picked over album assembly (offered as a choice; built the recommended option). `cmake/StockPlugins.cmake` builds ZL Equalizer 2, ZL Spectrum Equalizer, ZL Compressor, ZL Limiter and ZL Splitter from pinned commits with their own JUCE fork as VST3s (ExternalProject, Ninja, Clang 17+ found by `find_program`, else left out with a warning; Highway SIMD level `PHINYX_ZL_SIMD`, SSE4 by default, AVX2 or NEON possible), each LICENSE.md and licenses folder copied. Stock plugins may now be VST3s (`stock::Info::format`), scanned and relocated the same way as the CLAPs. Footer knobs: EQs Gain Scale and Output Gain; Compressor Threshold, Ratio, Attack, Release, Makeup Gain, Wet; Limiter Input Gain, Output Ceiling, Release, Lookahead; Splitter Split Type, Mix. `stock::unit` drops a unit label that only repeats the parameter's name (ZL does that); VST3 categories show without "Fx". Build cost: about 133 CPU-minutes for all five (8 minutes wall for one on 8 cores); 55 MB stripped. Verified in the app: all five scanned and listed under Built-in, loaded together in the chain with their footer knobs, ZL Equalizer 2 and ZL Compressor open in the PHINYX frame, playback with all five runs. CI installs clang and libxi; PKGBUILD adds clang (make) and libxi. Found while checking: plugin delay is compensated when rendering but not yet during playback (the cursor runs ahead of the sound by the chain's latency); fix next.
 - **Plugin windows as tiles (done, requested 2026-10-18):** "the gui for the plugin launches in full screen mode... it would be great if it tiled and that window would close with ctrl + w when I hover over it... multiple plugin windows/tiles open and tab between them... their gui should fit the full size of the tile." Likely cause on Hyprland: plugin windows whose editor could not resize were created with fixed size hints. Now every `PluginWindow` is resizable (limits 160x120 up); a bare editor that cannot resize sits centred in a holder; `StockFrame` puts the plugin view in a clipping `View`, filling it when the plugin can resize (ZL ones can) and otherwise centring it, so header and knobs stay visible at small sizes. `PluginWindow::keyPressed`: Ctrl+W closes, Ctrl+Tab / Ctrl+Shift+Tab bring the next / previous open plugin window (slot order) to the front. Verified on X11 (openbox): two ZL windows resized to tiles fill them, Ctrl+Tab moved focus, Ctrl+W closed the focused one. Not checked on Hyprland itself; keys typed into a plugin's own non-JUCE view (CLAP/DPF) may not reach PHINYX.
 - **Phase 3 step 4 (done, 2026-10-18): playback latency compensation.** The cursor shows what is heard, not what is read: `DocumentSource` keeps a history of what it read at which device sample (counted by `MasterSource`), and `AudioEngine::heardPositionFrames` looks back by the chain's latency plus the device's output latency, through loops, jumps and restarts. A plugin that is bypassed, soloed out or master-bypassed is replaced by a delay line of its latency (per slot, up to 32768 samples) while listening, so switching never shifts the sound in time; renders are unchanged (they leave bypassed plugins out). At the end of the file the cursor finishes at the end. Verified: with ZL Limiter and ZL Spectrum Equalizer in the chain (5621 samples), the cursor trails the read position by the chain plus about 33 ms of device latency, and switching ZL Limiter off keeps 5621.
-- **Phase 4 step 1 (done, 2026-10-18): Montage, album assembly.** Asked for as "the next major work that will require a lot of time". Model in `Source/core/Montage.h` (plain C++, tested): songs in order on one timeline, each with the part of its file used, the pause before it (negative = overlap, crossfaded equal power over the whole overlap; plain fades use an S-curve), gain, fades and tags (title, artist, ISRC); album tags with `tag::catalog` (UPC/EAN). `Montage::mixdown` builds ordinary AudioData that shares the songs' chunks wherever one song plays untouched, so it is rebuilt after every change and plays, meters, renders and exports like a file; `trackMarkers` gives one region per song; `cueSheet` writes TRACK/TITLE/PERFORMER/ISRC/CATALOG with INDEX 00 for pauses (pregaps) and INDEX 01 at song starts. A montage is a tab whose `DocumentState` carries the montage, so undo, history and unsaved-changes work as for files; audio edits are disabled there (with a hint to open the song). UI: `MontageView` strip under the ruler (two lanes so crossfades overlap, fades as slopes, pause lengths, the song under the cursor outlined, click to go to a song, double-click for its properties), Montage menu with keyboard commands, Song and Album Properties dialogs, Open Song in Editor (edits made in that tab, saved or not, replace the song when you return), Find panel files go into the montage while it is in front, `.montage` JSON files (`MontageFile.cpp`) with song paths relative to the montage when beside or below it, missing songs kept silent and listed. Export Album: one file with track regions plus a CUE sheet, and/or a file per song split at the song starts (each pause goes with the song before, so playback is gapless), named "01 Title.wav" with title, artist, album, track and ISRC tags, 16/24/32-bit with dither, optionally through the Master Section (rendered once for the whole album). Verified in the app: three songs (one at 48 kHz, one mono) assembled, crossfade and pause set by keys, properties and album tags, saved, reopened from the command line, played through five ZL plugins, an edit in the song's tab picked up, and the export's CUE times (00:15:37 for a 15.5 s start), lengths and tags checked with ffprobe.
+- **Phase 4 step 1 (done, 2026-10-18): Album (album assembly; called Montage until 2026-10-18, renamed to Album with `.phalbum` files to stay clear of Steinberg's and Yamaha's use of the name; `.montage` files still open).** Asked for as "the next major work that will require a lot of time". Model in `Source/core/Album.h` (plain C++, tested): songs in order on one timeline, each with the part of its file used, the pause before it (negative = overlap, crossfaded equal power over the whole overlap; plain fades use an S-curve), gain, fades and tags (title, artist, ISRC); album tags with `tag::catalog` (UPC/EAN). `Album::mixdown` builds ordinary AudioData that shares the songs' chunks wherever one song plays untouched, so it is rebuilt after every change and plays, meters, renders and exports like a file; `trackMarkers` gives one region per song; `cueSheet` writes TRACK/TITLE/PERFORMER/ISRC/CATALOG with INDEX 00 for pauses (pregaps) and INDEX 01 at song starts. A album is a tab whose `DocumentState` carries the album, so undo, history and unsaved-changes work as for files; audio edits are disabled there (with a hint to open the song). UI: `AlbumView` strip under the ruler (two lanes so crossfades overlap, fades as slopes, pause lengths, the song under the cursor outlined, click to go to a song, double-click for its properties), Album menu with keyboard commands, Song and Album Properties dialogs, Open Song in Editor (edits made in that tab, saved or not, replace the song when you return), Find panel files go into the album while it is in front, `.album` JSON files (`AlbumFile.cpp`) with song paths relative to the album when beside or below it, missing songs kept silent and listed. Export Album: one file with track regions plus a CUE sheet, and/or a file per song split at the song starts (each pause goes with the song before, so playback is gapless), named "01 Title.wav" with title, artist, album, track and ISRC tags, 16/24/32-bit with dither, optionally through the Master Section (rendered once for the whole album). Verified in the app: three songs (one at 48 kHz, one mono) assembled, crossfade and pause set by keys, properties and album tags, saved, reopened from the command line, played through five ZL plugins, an edit in the song's tab picked up, and the export's CUE times (00:15:37 for a 15.5 s start), lengths and tags checked with ffprobe.
 - **Done (2026-10-18): Audition-style gain knob and fade handles** (owner's request: "a small, floating gain/attenuation wheel in the main editing area" and "fade in and fade out built into each side of the waveform... parabolic in function depending on the movement of the mouse"). `GainHud` floats over the waveform; `LiveEdits.cpp` previews edits live (the engine and waveform get the changed audio, the document does not) and commits one undo step when the drag ends, a wheel pause, or a pause after `Ctrl+Shift+Up/Down`; anything else changing the audio meanwhile cancels the preview. Fade handles in `WaveformView` drag a length and a bend; `dsp::curvedFade` (power curve, exponent 1 to 4 either way) does the work. Verified in the app: +7.2 dB live then committed, a 5.6 s fade in bent +72 %, a fade out bent -84 %, three key presses merged into one +1.5 dB step.
-- **Next for the Montage:** DDP image export and CD checks (2 s first pregap, track count and length limits, ISRC/UPC validation), per-song plugin chains feeding the Master Section, per-song loudness (measure each song and match them to a target), dragging songs and fades with the mouse, a song list panel, the A/B reference tracks (2.4), and the Find panel listing `.montage` files.
+- **Decided (2026-10-18): no files next to the user's audio.** Asked whether PHINYX needs a `.phi` information file like other editors make (Sound Forge `.sfk`, Audition `.pkf`, WaveLab `.gpk` peak files). Not now: waveforms are computed on open, markers and tags live inside the audio file, and recovery copies go to `~/.cache/phinyx`. If big files open slowly, a waveform peak cache goes in `~/.cache/phinyx/peaks` (keyed by path, size and date), never beside the audio. A future session file that keeps undo history, chain and view (the multitrack session in Phase 6) would be the one PHINYX document type besides `.phalbum`.
+- **Next for the Album:** DDP image export and CD checks (2 s first pregap, track count and length limits, ISRC/UPC validation), per-song plugin chains feeding the Master Section, per-song loudness (measure each song and match them to a target), dragging songs and fades with the mouse, a song list panel, the A/B reference tracks (2.4), and the Find panel listing `.album` files.
 
 ---
 
@@ -121,7 +122,7 @@ Modeled on Audition's Spectral Frequency Display, working on the same audio as t
 - P1 Diagnostics panel that scans a file and lists problems (clicks, clips, dropouts) for one-click fix
 - P2 ML-based dialogue isolation / denoise (ONNX Runtime, optional)
 
-### 2.3 Montage (lightweight, no mixer)
+### 2.3 Album (lightweight, no mixer)
 Decided: **no mixer** (no buses, sends or mixing console). The app stays an editor and mastering tool. What it keeps from WaveLab's Montage:
 - P1 **At least two tracks for A/B referencing**: track 1 is your audio, track 2 (and optionally more) holds reference material, aligned on the same timeline so A/B switching keeps position (see the A/B Reference section in 2.4)
 - P1 Album assembly on a single timeline: clip order, gaps, crossfades, per-clip gain and fades, CD-Text/ISRC, per-track markers
@@ -153,14 +154,14 @@ Decided: **no mixer** (no buses, sends or mixing console). The app stays an edit
   - **Pops out to its own window** with one command or button, so on Hyprland it lands in its own tile (see 2.10)
 - P1 **Device chain row like Ableton and Bitwig** (requested 2026-10-17; first version done the same day: cards with on/off, solo, first four knobs, level bar, Edit and Window, full keyboard control, drag to reorder; typing exact values by double-click, F2 or digits; still to do: pinning chosen knobs, collapse, gain-reduction display, dropping from the browser): a strip along the bottom of the main window showing the chain left to right as device cards, signal flowing left to right into the master gain and meters
   - Each card: plugin name, on/off, solo, a few main knobs (the plugin's first or user-pinned parameters), a small level/gain-reduction indicator, collapse to a narrow bar, and a button for the full parameter editor or plugin window
-  - Same chain as the Master Section list (one model, two views); later reused for per-clip chains in the Montage and batch chains
+  - Same chain as the Master Section list (one model, two views); later reused for per-clip chains in the Album and batch chains
   - Keyboard: a key focuses the row, `Left`/`Right` move between cards, `Up`/`Down` between knobs, `+`/`-` adjust, `Insert` adds after the focused card, `Ctrl+Left`/`Right` reorders, `Del` removes; drag to reorder with the mouse
   - Drop a plugin from the browser (2.9c) between cards to insert it there; dockable and pop-out like every panel
 - P1 Spectrum analyzer, phase correlation meter, goniometer/vectorscope (goniometer, Polar Sample, Polar Level and Lissajous views, one at a time, click or Ctrl+Alt+V to switch, and the correlation meter done 2026-10-18; owner: "four imaging views would be great in that space, viewed one at a time with the option to switch them with a key binding or by clicking on it"; above the level meters, as the owner asked: "It would appear above the level meter in the upper right corner. a beautiful one would be great")
 - P1 Built-in mastering processors, kept to what delivery and renders depend on: parametric EQ (linear and minimum phase), true-peak limiter, loudness targeting, dither and noise shaping. Done (Phase 3 step 2): true-peak limiter, dither and noise shaping, loudness targets; the EQ is ToneShiftEQ for now. Later: a linear-phase EQ. Repair tools (2.2, including the de-esser) are built in too.
 - **Decision (owner, 2026-10-17):** everything else (saturators, creative or multiband compressors, stereo width, reverbs, other colour effects) comes from third-party plugins such as LSP rather than being built in. Reason: built-in effects add little size but a lot of work; PHINYX stays focused on editing, repair, metering and delivery.
 - P1 Loudness targeting presets (Spotify -14 LUFS, Apple -16, broadcast -23 / -24) with Match Loudness
-- P1 **A/B Reference section** (modeled on WaveLab's Montage Reference Tracks), a dockable panel available in the editor, Montage and Master Section:
+- P1 **A/B Reference section** (modeled on WaveLab's Montage Reference Tracks), a dockable panel available in the editor, Album and Master Section:
   - Load several reference tracks (commercial masters or earlier versions) into a list; each keeps its own cue points and loop range
   - Instant, gapless A/B switch between your mix and the selected reference (one key), staying in sync by position or jumping to the reference's matching cue
   - Automatic loudness matching (integrated or short-term LUFS) so the comparison is fair; manual offset available
@@ -192,14 +193,14 @@ The owner asked which Sonic Visualiser (sonicvisualiser.org, GPL) features would
 - Skipped on purpose: Sonic Visualiser's stacked panes and layers, which do not fit the single keyboard-first editor
 
 ### 2.5 Rendering and transcoding (WaveLab-grade)
-- P1 One render engine shared by Save As, Master Section render, Montage export and batch, so every path has the same options
+- P1 One render engine shared by Save As, Master Section render, Album export and batch, so every path has the same options
 - P1 Multi-format render in a single pass: one source to e.g. 24/96 WAV, 16/44.1 FLAC, MP3 320, AAC 256 and Opus at once, each with its own settings and naming
 - P1 Per-output chain: high-quality sample rate conversion, bit-depth reduction with selectable dither and noise shaping, optional loudness normalization or true-peak limiting per target (streaming vs CD vs broadcast)
 - P1 Codec preview: hear the encoded result in real time (with a "difference" mode to hear only what the codec removes) before rendering
 - P1 Inter-sample/true-peak check after encoding, with a warning if the lossy file clips
 - P1 Metadata templates (ID3v2, Vorbis comments, MP4 tags, BWF/iXML, cover art) applied per output, with variables such as track number and title
 - P1 Naming schemes with variables (`{title}_{rate}_{bits}.{ext}`), output folder rules, overwrite policy
-- P2 Render regions/markers as separate files, render Montage tracks individually, background render queue while you keep editing
+- P2 Render regions/markers as separate files, render Album tracks individually, background render queue while you keep editing
 
 | Format | Encoder / library | Notes |
 |---|---|---|
@@ -219,7 +220,7 @@ The owner asked which Sonic Visualiser (sonicvisualiser.org, GPL) features would
 
 ### 2.6 Batch and automation
 Modeled on WaveLab's Batch Processor: a saved batch is a reusable document (file list + chain + outputs) you can rerun anytime.
-- P1 Input: add files, folders (recursive, with filters), or a whole Montage; drag in or add by keyboard
+- P1 Input: add files, folders (recursive, with filters), or a whole Album; drag in or add by keyboard
 - P1 Processing chain: any built-in processors and plugins (all formats) in order, plus offline-only processes (normalize to peak/LUFS, DC removal, trim silence, fade in/out, auto heal / declick, resample, channel conversion, time/pitch)
 - P1 Outputs: one or many per job, using the shared render engine (formats, SRC, dither, naming, metadata templates from 2.5)
 - P1 Analysis jobs that write no audio: loudness, true peak, clipping and silence scans, exported as CSV/HTML/PDF reports
@@ -246,7 +247,7 @@ Modeled on Audition's Metadata panel: one editor shows every schema in the file 
 | Vorbis comments + FLAC pictures | FLAC, Ogg, Opus | TagLib |
 | MP4 / iTunes atoms | M4A, AAC, ALAC | TagLib |
 | APEv2 | WavPack, APE | TagLib |
-| CD-Text, ISRC, UPC/EAN | Montage / DDP | own |
+| CD-Text, ISRC, UPC/EAN | Album / DDP | own |
 | Markers and regions (cue, labl, Audition XMP markers) | WAV, XMP | own |
 
 - P1 Field mapping between schemas (e.g. title to `INAM`, `TIT2`, `TITLE` and `dc:title` at once) with a "sync all schemas" option and visible conflicts when they disagree
@@ -336,14 +337,14 @@ One browser panel (dockable, pops out to its own tile) with a single search fiel
 - P1 Results grouped by category with filters (`type:plugin`, `format:lv2`, `rate:96k`, `lufs:<-14` style tokens, also as clickable chips)
 - P1 Fully keyboard driven: `Ctrl+F` jumps to search, arrows move, `Enter` loads (opens a file, inserts a plugin or stock effect into the selected Master Section slot, applies a preset), `Right` expands, `Ctrl+D` favorites
 - P1 **Audio preview**: arrow through files and hear them instantly, synced to tempo-free playback, loudness-matched optionally, through a separate preview output
-- P1 Drag (or a key) from the browser into the Master Section, the A/B Reference panel, a batch job or the Montage
+- P1 Drag (or a key) from the browser into the Master Section, the A/B Reference panel, a batch job or the Album
 - P1 Background indexer: SQLite + FTS5 full-text index of files, plugins and presets, updated live with inotify when folders change; fast on large sample libraries
 - P1 Collections: user colors/tags (like Ableton's colored collections) for any item, saved per user
 - P2 Similar-sound search (find files that sound like this one) using audio feature vectors
 
 ### 2.10 Workflow and UI
 - P0 HiDPI, resizable dockable panels
-- P1 Workspaces (Edit, Restore, Master, Montage) like Audition's workspaces
+- P1 Workspaces (Edit, Restore, Master, Album) like Audition's workspaces
 - P0 Any panel pops out to its own window (one command per panel, plus a generic "pop out focused panel"), designed for tiling window managers like Hyprland
 - P1 Waveform/spectral thumbnails in the browser (see 2.9c)
 - P0 Autosave and crash recovery (requested 2026-10-18 after a crash lost unsaved edits). Done: see "Where things stand". Later: keep the undo history too
@@ -379,7 +380,7 @@ The UI is **Qt 6** (decided; see "UI toolkit decision for Wayland" above). JUCE 
 Why this is the pick:
 - **Audio-first framework.** JUCE gives audio device I/O (ALSA, JACK, and PipeWire through its JACK/ALSA layers), sample-accurate buffers, file codecs, DSP modules, and plugin **hosting for VST3, LV2 and (via extensions) CLAP** out of the box. Building those from scratch in other stacks is months of work.
 - **Proven for exactly this kind of app.** Waveform editors, DAWs and mastering tools are routinely built on JUCE; real-time thread rules, lock-free FIFOs and plugin sandboxing patterns are well documented.
-- **Native performance** for spectral rendering, FFT-heavy restoration and Montage playback, without a GC or browser in the audio path.
+- **Native performance** for spectral rendering, FFT-heavy restoration and Album playback, without a GC or browser in the audio path.
 - **Licensing:** JUCE 8 is dual-licensed (AGPLv3 or commercial). If the app is open source under AGPLv3, it is free; if closed source, a JUCE commercial license is needed. Decide this early.
 
 ### Supporting libraries
@@ -475,7 +476,7 @@ Checked against Audacity's `master` branch (Audacity 4) on 2026-10-17.
 
 ```
 +-------------------------- UI (JUCE components, OpenGL/Vulkan-accelerated) -------------------------+
-|  Waveform / Spectral view  |  Montage (A/B)       |  Meters  |  Master Section  |  Batch  |  Browser |
+|  Waveform / Spectral view  |  Album (A/B)       |  Meters  |  Master Section  |  Batch  |  Browser |
 +--------------------------------------------------------------------------------------------------- +
                  |  commands (undoable)                       ^ lock-free meter/peak data
                  v                                            |
@@ -533,7 +534,7 @@ Key design choices:
 - Recording and capture like OBS: desktop audio, any input, one app (2.1b P1). Done, except several sources at once.
 - Make playback, meters, Master Section and render work for any channel count, with speaker layouts and downmix monitoring (2.11 P0). Done.
 - Built-in Stereoize (mono to stereo), as a menu command and a live Device Chain effect. Done.
-- Done early because every later feature (repair, Montage, export) depends on how channels are handled
+- Done early because every later feature (repair, Album, export) depends on how channels are handled
 
 ### Phase 2: Repair lab (Audition-level restoration)
 - Spectral selection tools (marquee, lasso, brush, harmonics) and spectral edits (done, Parts A and C)
@@ -568,8 +569,8 @@ Key design choices:
 
 **Exit:** v1.0. Master a single and an EP, batch-convert a library.
 
-### Phase 4: Montage, themes and control
-- Lightweight Montage (no mixer): two or more tracks for A/B referencing, album assembly with gaps, ISRC, CD-Text
+### Phase 4: Album, themes and control
+- Lightweight Album (no mixer): two or more tracks for A/B referencing, album assembly with gaps, ISRC, CD-Text
 - Theme package format, theme manager, tweaker and published spec for third-party themes
 - MIDI mapping mode (Ctrl+M), mapping browser, device profiles, MIDI feedback
 - Scarlett / Clarett / Vocaster interface panel
@@ -600,7 +601,7 @@ Licence stays AGPLv3 (JUCE is AGPLv3 or commercial; the ZL plugins are AGPLv3), 
 
 ### Extra (much later): Mix console (requested 2026-10-18)
 "Eventually a mix console like Audition's Project Session (.sesx) could be incorporated (much later on)... a traditional channel strip approach like Harrison Mixbus or the SSL 4000 E would be great, but with our own builtin plugins. The console would have a trim/gain knob built in and could feature some of the Cubase mixer's strengths."
-- Multitrack session (own file format; Audition .sesx import is a maybe) with tracks of clips from the editor's files; builds on the Montage work in Phase 4.
+- Multitrack session (own file format; Audition .sesx import is a maybe) with tracks of clips from the editor's files; builds on the Album work in Phase 4.
 - Every channel is a fixed strip, Mixbus/SSL style: trim/gain knob at the top, then our own EQ, compressor/gate and saturation, inserts (third-party plugins), sends, pan, fader, meter. Buses and a master strip that feeds the Master Section.
 - From Cubase's mixer (details to come from the owner): to be listed.
 - Keyboard-first like the rest: every strip control is a command and MIDI-mappable (2.9).
@@ -620,7 +621,7 @@ Order: cava-style first (small, useful), then projectM, then GLava's shaders if 
 2. **Restoration quality.** Noise reduction and spectral healing are the hardest DSP to make competitive; budget research time or plan ML models in Phase 5.
 3. **Plugin stability.** Third-party plugins crash. Out-of-process scanning is in scope; full per-instance sandboxing is a later decision.
 4. **Distro fragmentation.** Flatpak sandbox vs PipeWire/JACK access and real-time priority needs testing on Ubuntu, Fedora and Arch early.
-5. **Scope.** Three flagship apps is a lot. Phase 1 must stay a tight single-file editor. No mixer is planned, which keeps the Montage small.
+5. **Scope.** Three flagship apps is a lot. Phase 1 must stay a tight single-file editor. No mixer is planned, which keeps the Album small.
 
 ## 7. Immediate next steps
 - ~~Decide license model~~ Done: AGPLv3 open source

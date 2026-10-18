@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-#include "Montage.h"
+#include "Album.h"
 #include "Dsp.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 
-Frame Montage::clipStart (int index) const
+Frame Album::clipStart (int index) const
 {
     Frame position = 0;
     for (int i = 0; i <= index && i < (int) clips.size(); ++i)
@@ -18,7 +18,7 @@ Frame Montage::clipStart (int index) const
     return std::max<Frame> (position, 0);
 }
 
-Frame Montage::length() const
+Frame Album::length() const
 {
     Frame end = 0;
     for (int i = 0; i < (int) clips.size(); ++i)
@@ -26,7 +26,7 @@ Frame Montage::length() const
     return end;
 }
 
-int Montage::clipAt (Frame position) const
+int Album::clipAt (Frame position) const
 {
     for (int i = (int) clips.size() - 1; i >= 0; --i)
         if (position >= clipStart (i) && position < clipEnd (i))
@@ -34,14 +34,14 @@ int Montage::clipAt (Frame position) const
     return -1;
 }
 
-Frame Montage::overlapBefore (int index) const
+Frame Album::overlapBefore (int index) const
 {
     if (index <= 0 || index >= (int) clips.size())
         return 0;
     return std::max<Frame> (0, clipEnd (index - 1) - clipStart (index));
 }
 
-void Montage::clampPauses()
+void Album::clampPauses()
 {
     for (size_t i = 0; i < clips.size(); ++i)
     {
@@ -65,7 +65,7 @@ namespace
         bool crossIn = false, crossOut = false;
     };
 
-    Edges edgesOf (const Montage& m, int index)
+    Edges edgesOf (const Album& m, int index)
     {
         const auto& c = m.clips[(size_t) index];
         const auto before = m.overlapBefore (index);
@@ -81,7 +81,7 @@ namespace
 
 namespace
 {
-    float envelopeWith (const MontageClip& c, const Edges& e, Frame t)
+    float envelopeWith (const AlbumClip& c, const Edges& e, Frame t)
     {
         const auto len = c.length();
         if (t < 0 || t >= len)
@@ -96,12 +96,12 @@ namespace
     }
 }
 
-float Montage::envelope (int index, Frame t) const
+float Album::envelope (int index, Frame t) const
 {
     return envelopeWith (clips[(size_t) index], edgesOf (*this, index), t);
 }
 
-AudioDataPtr Montage::mixdown() const
+AudioDataPtr Album::mixdown() const
 {
     const auto total = length();
     AudioData::Builder out (channels, sampleRate);
@@ -194,7 +194,7 @@ AudioDataPtr Montage::mixdown() const
     return out.finish();
 }
 
-std::string Montage::clipName (int index) const
+std::string Album::clipName (int index) const
 {
     const auto& c = clips[(size_t) index];
     if (const auto t = c.tags.find (tag::title); t != c.tags.end() && ! t->second.empty())
@@ -206,7 +206,7 @@ std::string Montage::clipName (int index) const
     return name;
 }
 
-std::vector<Marker> Montage::trackMarkers() const
+std::vector<Marker> Album::trackMarkers() const
 {
     std::vector<Marker> markers;
     for (int i = 0; i < (int) clips.size(); ++i)
@@ -247,7 +247,7 @@ namespace
     }
 }
 
-std::string Montage::cueSheet (const std::string& audioFileName) const
+std::string Album::cueSheet (const std::string& audioFileName) const
 {
     std::string type = "WAVE";
     const auto dot = audioFileName.find_last_of ('.');

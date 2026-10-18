@@ -26,8 +26,8 @@ class DockablePanel;
 class MarkerList;
 class MasterPanel;
 class MeterPanel;
-class Montage;
-class MontageView;
+class Album;
+class AlbumView;
 class QLabel;
 class QListWidget;
 class QSlider;
@@ -174,20 +174,20 @@ private:
 
     void showLoudnessStatistics();
 
-    // Montage (album assembly, see Montage.h and MontageEditor.cpp). A montage
-    // is a tab whose document holds the montage; its audio is the mixdown.
-    void registerMontageCommands();
-    void updateMontageCommandStates();
-    const Montage* montage() const;
+    // Album (album assembly, see Album.h and AlbumEditor.cpp). An album
+    // is a tab whose document holds the album; its audio is the mixdown.
+    void registerAlbumCommands();
+    void updateAlbumCommandStates();
+    const Album* album() const;
     int currentSong() const;                 // under the cursor, else the next one, else the last; -1 when empty
-    bool refuseMontageEdit();                // true, with a hint, when the active tab is a montage
-    void newMontage();
-    void openMontage (const QString& path);
-    bool saveMontage (const QString& path);
-    bool saveMontageAs();
+    bool refuseAlbumEdit();                // true, with a hint, when the active tab is an album
+    void newAlbum();
+    void openAlbum (const QString& path);
+    bool saveAlbum (const QString& path);
+    bool saveAlbumAs();
     void addSongs();
     void addSongFiles (const QStringList& paths);
-    void commitMontage (const QString& description, Montage, Frame newCursor = -1);
+    void commitAlbum (const QString& description, Album, Frame newCursor = -1);
     void jumpToSong (int direction);
     void moveSong (int direction);
     void changePause (double seconds);
@@ -196,7 +196,7 @@ private:
     void removeSong();
     void openSong();
     void exportAlbum();
-    void refreshMontageSources();            // picks up edits made to its songs in other tabs
+    void refreshAlbumSources();            // picks up edits made to its songs in other tabs
     // Runs `work` on a worker thread behind a progress dialog; false when cancelled.
     bool runWithProgress (const QString& title, const std::function<void (std::atomic<float>&, const std::atomic<bool>&)>& work);
 
@@ -269,7 +269,7 @@ private:
     bool looping = false;
     class TransportBar* transportBar = nullptr;
     class TimeRuler* timeRuler = nullptr;
-    MontageView* montageView = nullptr;
+    AlbumView* albumView = nullptr;
     class Overview* overview = nullptr;
     std::vector<nyquistui::Entry> nyquistEntries;
     QMap<QString, QAction*> nyquistAnchors;       // where each menu's Nyquist items go
