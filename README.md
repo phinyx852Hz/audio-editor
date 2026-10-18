@@ -52,7 +52,7 @@ Built with a Qt 6 interface (native Wayland) on top of a JUCE 8 audio engine.
 ## Build and run (Arch Linux)
 ```sh
 sudo pacman -S --needed base-devel git cmake ninja qt6-base qt6-wayland alsa-lib libpipewire ladspa clap \
-  freetype2 fontconfig libx11 libxrandr libxinerama libxcursor libxcomposite libxext mesa cairo libsndfile
+  freetype2 fontconfig libx11 libxrandr libxinerama libxcursor libxcomposite libxext libxi mesa cairo libsndfile clang
 git clone https://github.com/phinyx852Hz/audio-editor
 cd audio-editor
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
