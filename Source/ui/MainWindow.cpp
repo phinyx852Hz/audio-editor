@@ -567,7 +567,7 @@ void MainWindow::buildMenus()
         { tr ("Al&bum"),   { "album.new", "album.addSongs", "-", "album.previousSong", "album.nextSong", "-",
                                "album.moveEarlier", "album.moveLater", "album.longerPause", "album.shorterPause", "-",
                                "album.songProperties", "album.openSong", "album.removeSong", "-",
-                               "album.properties", "album.export" } },
+                               "album.properties", "album.twoTracks", "album.export" } },
         { tr ("&Analyze"),   { "analyze.loudness", "-", "analyze.beats", "analyze.onsets", "analyze.tempoKey", "analyze.vamp", "-", "view.meters", "analyze.imagingView", "analyze.resetMeters", "-", "view.spectral", "-", "@nyquist.analyze" } },
         { tr ("Too&ls"),     { "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan" } },
         { tr ("Ma&ster"),    { "view.master", "view.chain", "master.addPlugin", "master.bypass", "-", "master.render", "-", "master.scan" } },

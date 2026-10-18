@@ -10,7 +10,9 @@
 // Album assembly (WaveLab's Album, kept small): songs in order on one
 // timeline, each with the pause before it, its own gain and fades, and its
 // CD-Text and ISRC. A negative pause makes the song start before the previous
-// one ends: the overlap becomes an equal-power crossfade.
+// one ends. On one track the overlap becomes an equal-power crossfade; with two
+// tracks (songs alternate between them, as in WaveLab) the songs simply play
+// over each other, each shaped only by its own fades.
 //
 // The album is never edited sample by sample. `mixdown` assembles the album
 // as ordinary AudioData that plays, meters and renders like any file; untouched
@@ -40,6 +42,9 @@ public:
     int channels = 2;
     std::vector<AlbumClip> clips;
     Tags tags;                  // the album's title, artist and catalogue number (tag::catalog, UPC/EAN)
+    bool twoTracks = false;     // songs alternate between two tracks; overlaps are not crossfaded for you
+
+    int trackOf (int index) const { return twoTracks ? index % 2 : 0; }
 
     // Where each song starts on the album timeline, and the album's length.
     Frame clipStart (int index) const;

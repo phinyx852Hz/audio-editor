@@ -66,6 +66,7 @@ namespace albumfile
             { QStringLiteral ("phinyxAlbum"), formatVersion },
             { QStringLiteral ("sampleRate"), m.sampleRate },
             { QStringLiteral ("channels"), m.channels },
+            { QStringLiteral ("tracks"), m.twoTracks ? 2 : 1 },
             { QStringLiteral ("tags"), tagsToJson (m.tags) },
             { QStringLiteral ("songs"), songs },
         };
@@ -125,6 +126,7 @@ namespace albumfile
         m->sampleRate = root.value (QStringLiteral ("sampleRate")).toDouble (44100.0);
         m->channels = std::clamp (root.value (QStringLiteral ("channels")).toInt (2), 1, MeterBlock::maxChannels);
         m->tags = tagsFromJson (root.value (QStringLiteral ("tags")).toObject());
+        m->twoTracks = root.value (QStringLiteral ("tracks")).toInt (1) == 2;
 
         const auto folder = QFileInfo (path).absoluteDir();
         const auto songs = root.value (QStringLiteral ("songs")).toArray();

@@ -80,6 +80,8 @@ void AlbumView::paintEvent (QPaintEvent*)
         return;
 
     g.setRenderHint (QPainter::Antialiasing);
+    // Songs are drawn on alternate rows either way, so their names never hide each other;
+    // with one track an overlap shows as a crossfade, with two tracks as each song's own fades.
     const auto laneHeight = (height() - 3.0 * laneGap) / 2.0;
     const auto current = album->clipAt (cursor);
     const auto rate = album->sampleRate;
@@ -103,8 +105,10 @@ void AlbumView::paintEvent (QPaintEvent*)
         g.drawRoundedRect (box, 3, 3);
 
         // Fades and crossfades as slopes from the bottom corners.
-        const auto fadeIn = std::max (album->overlapBefore (i), c.fadeIn);
-        const auto fadeOut = std::max (i + 1 < (int) album->clips.size() ? album->overlapBefore (i + 1) : 0, c.fadeOut);
+        const auto crossIn = album->twoTracks ? 0 : album->overlapBefore (i);
+        const auto crossOut = album->twoTracks || i + 1 >= (int) album->clips.size() ? 0 : album->overlapBefore (i + 1);
+        const auto fadeIn = std::max (crossIn, c.fadeIn);
+        const auto fadeOut = std::max (crossOut, c.fadeOut);
         g.setPen (QPen (ink, 1.2));
         if (fadeIn > 0)
             g.drawLine (QPointF (x0, box.bottom()), QPointF (frameToX ((double) (s + fadeIn)), box.top() + 1));

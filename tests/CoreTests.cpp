@@ -898,6 +898,18 @@ namespace
         check (x.overlapBefore (1) == 20000 && x.clipStart (1) == 180000, "album: overlap");
         check (near (x.envelope (0, 190000) * x.envelope (0, 190000) + x.envelope (1, 10000) * x.envelope (1, 10000), 1.0, 1.0e-3),
                "album: crossfade is equal power");
+        // Two tracks: the overlap is not crossfaded, each song keeps its own level and fades.
+        x.twoTracks = true;
+        check (x.trackOf (0) == 0 && x.trackOf (1) == 1, "album: songs alternate tracks");
+        check (near (x.envelope (0, 190000), 1.0, 1.0e-6) && near (x.envelope (1, 10000), 1.0, 1.0e-6),
+               "album: two tracks play over each other");
+        x.clips[0].fadeOut = 20000;
+        check (x.envelope (0, 199990) < 0.01f && near (x.envelope (1, 0), 1.0, 1.0e-6), "album: own fades shape a two-track overlap");
+        auto both = x.mixdown();
+        both->read (185000, 1, lr);
+        check (l[0] > 0.5f, "album: two tracks sum in the overlap");
+        x.twoTracks = false;
+        x.clips[0].fadeOut = 0;
         x.clips[1].pauseBefore = -500000;
         x.clampPauses();
         check (x.overlapBefore (1) == 90000, "album: an overlap is never longer than a song");

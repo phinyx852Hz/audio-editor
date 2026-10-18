@@ -88,6 +88,20 @@ void MainWindow::registerAlbumCommands()
     add ("album.openSong", tr ("&Open Song in Editor"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_Return) }, [this] { openSong(); });
     add ("album.properties", tr ("Al&bum Properties..."), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_Return) }, [this] { albumProperties(); });
     add ("album.export", tr ("E&xport Album..."), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_X) }, [this] { exportAlbum(); });
+    add ("album.twoTracks", tr ("&Two Tracks (Songs Alternate)"), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_T) }, [this]
+    {
+        const auto* current = album();
+        if (current == nullptr)
+            return;
+        auto m = *current;
+        m.twoTracks = ! m.twoTracks;
+        const auto two = m.twoTracks;
+        commitAlbum (two ? tr ("Two Tracks") : tr ("One Track"), std::move (m), cursor);
+        statusBar()->showMessage (two ? tr ("Two tracks: songs alternate, and overlapping songs play over each other, shaped by their own fades "
+                                           "(Song Properties, Alt+Enter). Alt+Down makes them overlap.")
+                                      : tr ("One track: overlapping songs crossfade."), 10000);
+    });
+    commands.action (QStringLiteral ("album.twoTracks"))->setCheckable (true);
 }
 
 void MainWindow::updateAlbumCommandStates()
@@ -101,6 +115,9 @@ void MainWindow::updateAlbumCommandStates()
                             "album.openSong", "album.export" })
         commands.action (QString::fromLatin1 (id))->setEnabled (any);
     commands.action (QStringLiteral ("album.properties"))->setEnabled (m != nullptr && ! loading);
+    auto* twoTracks = commands.action (QStringLiteral ("album.twoTracks"));
+    twoTracks->setEnabled (m != nullptr && ! loading);
+    twoTracks->setChecked (m != nullptr && m->twoTracks);
 }
 
 const Album* MainWindow::album() const
@@ -551,6 +568,10 @@ void MainWindow::albumProperties()
     form->addRow (tr ("&Album title:"), album);
     form->addRow (tr ("A&rtist:"), artist);
     form->addRow (tr ("&Catalogue number:"), catalog);
+    auto* tracks = new QComboBox (&dialog);
+    tracks->addItems ({ tr ("One track: overlapping songs crossfade"), tr ("Two tracks: songs alternate and overlap freely") });
+    tracks->setCurrentIndex (m.twoTracks ? 1 : 0);
+    form->addRow (tr ("&Tracks:"), tracks);
     auto* note = new QLabel (tr ("Used in the CUE sheet and in the tags of exported files. Songs without an artist of their own get this one."), &dialog);
     note->setWordWrap (true);
     form->addRow (note);
@@ -564,6 +585,7 @@ void MainWindow::albumProperties()
     setTag (m.tags, tag::album, album->text());
     setTag (m.tags, tag::artist, artist->text());
     setTag (m.tags, tag::catalog, catalog->text());
+    m.twoTracks = tracks->currentIndex() == 1;
     commitAlbum (tr ("Album Properties"), std::move (m));
 }
 

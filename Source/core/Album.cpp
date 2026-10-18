@@ -68,8 +68,9 @@ namespace
     Edges edgesOf (const Album& m, int index)
     {
         const auto& c = m.clips[(size_t) index];
-        const auto before = m.overlapBefore (index);
-        const auto after = m.overlapBefore (index + 1);
+        // With two tracks an overlap is not a crossfade: the song's own fades shape it.
+        const auto before = m.twoTracks ? 0 : m.overlapBefore (index);
+        const auto after = m.twoTracks ? 0 : m.overlapBefore (index + 1);
         Edges e;
         e.in = std::min (std::max (before, c.fadeIn), c.length());
         e.out = std::min (std::max (after, c.fadeOut), c.length());
