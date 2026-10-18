@@ -10,6 +10,9 @@
 #include <QSettings>
 #include <QStatusBar>
 
+#include <algorithm>
+#include <cmath>
+
 void MainWindow::buildLiveEdits()
 {
     gainHud = new GainHud (waveform);
@@ -50,7 +53,19 @@ void MainWindow::buildLiveEdits()
         previewLive (tr ("Gain %1%2 dB").arg (db > 0 ? QStringLiteral ("+") : QString()).arg (db, 0, 'f', 1), s, e,
                      [s, e, db] (const AudioData& d) { return std::abs (db) < 0.005 ? nullptr : dsp::applyGain (d, s, e, db); });
     };
-    connect (gainHud, &GainHud::changed, this, previewGain);
+    connect (gainHud, &GainHud::changed, this, [this, previewGain] (double db)
+    {
+        previewGain (db);
+        statusBar()->showMessage (tr ("Gain %1%2 dB").arg (db > 0 ? QStringLiteral ("+") : QString()).arg (db, 0, 'f', 1), 2000);
+    });
+    connect (gainHud, &GainHud::placed, this, [this] (QPoint at)
+    {
+        // Kept as where its centre sits across and down the waveform, so it stays put when the window changes size.
+        const auto room = waveform->size() - gainHud->size();
+        QSettings().setValue (QStringLiteral ("view/gainKnobAt"),
+                              QPointF (room.width() > 0 ? (double) at.x() / room.width() : 0.5,
+                                       room.height() > 0 ? (double) at.y() / room.height() : 0.0));
+    });
     connect (gainHud, &GainHud::finished, this, [this] (double db)
     {
         if (std::abs (db) < 0.005)
@@ -88,7 +103,13 @@ void MainWindow::placeGainHud()
                    && data() != nullptr && ! doc.isAlbum() && ! waveform->isSpectral();
     if (gainHud->isVisible() != show)
         gainHud->setVisible (show);
-    const QPoint at ((waveform->width() - gainHud->width()) / 2, 6);
+    if (gainHud->isMoving())
+        return;
+    const auto room = waveform->size() - gainHud->size();
+    const auto place = QSettings().value (QStringLiteral ("view/gainKnobAt")).toPointF();
+    const auto stored = QSettings().contains (QStringLiteral ("view/gainKnobAt"));
+    const QPoint at (stored ? (int) std::lround (std::clamp (place.x(), 0.0, 1.0) * std::max (0, room.width())) : std::max (0, room.width()) / 2,
+                     stored ? (int) std::lround (std::clamp (place.y(), 0.0, 1.0) * std::max (0, room.height())) : 6);
     if (gainHud->pos() != at)
         gainHud->move (at);
 }

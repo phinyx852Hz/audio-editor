@@ -9,7 +9,10 @@
 // or turn the mouse wheel over it, and the selection, or the whole file when
 // nothing is selected, gets louder or quieter while you listen. Letting go
 // (or a moment after the last wheel step) makes it one undoable edit and the
-// knob returns to 0 dB. Double-click to type a value.
+// knob returns to 0 dB. Double-click to type a value. It is just the knob, with
+// no panel or number (the status bar shows the value while you adjust), and it
+// floats: drag it with the right mouse button, or Ctrl and the left, to put it
+// anywhere over the waveform.
 class GainHud final : public QWidget
 {
     Q_OBJECT
@@ -19,6 +22,7 @@ public:
 
     void setValue (double db);   // shown, without signals (keyboard nudges)
     double value() const { return db; }
+    bool isMoving() const { return moving; }
 
     static constexpr double minDb = -48.0, maxDb = 24.0;
 
@@ -26,6 +30,7 @@ Q_SIGNALS:
     void changed (double db);    // while adjusting
     void finished (double db);   // adjusting is over: apply it
     void typeRequested();
+    void placed (QPoint topLeft);   // moved by the user, in the parent's coordinates
 
 protected:
     void paintEvent (QPaintEvent*) override;
@@ -42,6 +47,7 @@ private:
 
     double db = 0.0, pressDb = 0.0;
     QPointF pressAt;
-    bool dragging = false, hovered = false;
+    bool dragging = false, moving = false, hovered = false;
+    QPoint grabOffset;
     QTimer wheelIdle;
 };
