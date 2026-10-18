@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -39,6 +40,7 @@ namespace tag
     inline constexpr const char* comment = "comment";
     inline constexpr const char* copyright = "copyright";
     inline constexpr const char* isrc = "isrc";
+    inline constexpr const char* catalog = "catalog";   // UPC/EAN of an album (Montage, CUE sheet)
     // Broadcast Wave (bext), WAV only
     inline constexpr const char* bwfDescription = "bwf.description";
     inline constexpr const char* bwfOriginator = "bwf.originator";
@@ -49,11 +51,15 @@ namespace tag
     inline constexpr const char* bwfCodingHistory = "bwf.codingHistory";
 }
 
+class Montage;
+
 struct DocumentState
 {
     AudioDataPtr data;
     std::vector<Marker> markers;
     Tags tags;
+    // Set when the document is a montage: `data` is then its mixdown and `markers` its tracks.
+    std::shared_ptr<const Montage> montage;
 };
 
 // Holds the current audio and markers plus a linear undo history of snapshots.
@@ -61,7 +67,9 @@ struct DocumentState
 class AudioDocument
 {
 public:
-    void reset (AudioDataPtr, std::vector<Marker> markers, const std::string& path, Tags tags = {});
+    void reset (AudioDataPtr, std::vector<Marker> markers, const std::string& path, Tags tags = {},
+                std::shared_ptr<const Montage> montage = nullptr);
+    bool isMontage() const { return isOpen() && current().montage != nullptr; }
     bool isOpen() const { return ! history.empty() && current().data != nullptr; }
 
     const DocumentState& current() const { return history[(size_t) position].state; }

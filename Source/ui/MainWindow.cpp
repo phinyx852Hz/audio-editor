@@ -2,6 +2,9 @@
 #include "MainWindow.h"
 #include "FindPanel.h"
 #include "Goniometer.h"
+#include "MontageFile.h"
+#include "MontageView.h"
+#include "../core/Montage.h"
 #include "InfoStrip.h"
 #include "Overview.h"
 #include "TimeRuler.h"
@@ -119,6 +122,9 @@ MainWindow::MainWindow (AudioEngine& e)
     editorLayout->addWidget (overview);
     timeRuler = new TimeRuler (editor);
     editorLayout->addWidget (timeRuler);
+    montageView = new MontageView (editor);
+    montageView->hide();
+    editorLayout->addWidget (montageView);
     editorLayout->addWidget (waveform, 1);
     editorLayout->addWidget (infoStrip);
     setCentralWidget (editor);
@@ -137,6 +143,8 @@ MainWindow::MainWindow (AudioEngine& e)
 
     connect (waveform, &WaveformView::cursorRequested, this, &MainWindow::setCursor);
     connect (timeRuler, &TimeRuler::cursorRequested, this, &MainWindow::setCursor);
+    connect (montageView, &MontageView::cursorRequested, this, &MainWindow::setCursor);
+    connect (montageView, &MontageView::propertiesRequested, this, &MainWindow::songProperties);
     connect (overview, &Overview::cursorRequested, this, &MainWindow::setCursor);
     connect (overview, &Overview::viewRequested, this, [this] (double start, double length) { waveform->setView (start, length); });
     connect (waveform, &WaveformView::selectionRequested, this, &MainWindow::selectRange);
@@ -188,6 +196,8 @@ MainWindow::MainWindow (AudioEngine& e)
                             d != nullptr ? d->length() : 0, cursor, selStart, selEnd);
         if (overview->isVisible())
             overview->setState (d, viewStart, viewLength, cursor, selStart, selEnd);
+        if (montageView->isVisible())
+            montageView->setView (viewStart, d != nullptr ? viewLength : 0.0, cursor);
 
         for (auto* p : panels)
             if (p->containsFocus())
@@ -382,6 +392,7 @@ void MainWindow::registerCommands()
     });
     add ("tools.nyquistRescan", Category::tools, tr ("&Rescan Nyquist Plug-ins"), {}, [this] { rescanNyquist(); });
     registerNyquistCommands();
+    registerMontageCommands();
 
     add ("transport.playStop", Category::transport, tr ("&Play / Stop"), { KS (Qt::Key_Space) }, [this] { togglePlayback(); });
     add ("transport.stop", Category::transport, tr ("&Stop"), { KS (Qt::Key_K) }, [this]
@@ -525,7 +536,7 @@ void MainWindow::buildMenus()
 {
     // Menu titles carry & mnemonics, so Alt+F, Alt+E, Alt+P, Alt+M, Alt+A... open them.
     const QList<QPair<QString, QStringList>> layout {
-        { tr ("&File"),      { "file.open", "file.record", "-", "file.save", "file.saveAs", "-", "file.metadata", "-", "file.close", "file.nextTab", "file.previousTab", "-", "file.quit" } },
+        { tr ("&File"),      { "file.open", "montage.new", "file.record", "-", "file.save", "file.saveAs", "-", "file.metadata", "-", "file.close", "file.nextTab", "file.previousTab", "-", "file.quit" } },
         { tr ("&Edit"),      { "edit.undo", "edit.redo", "-", "edit.cut", "edit.copy", "edit.copyToNew", "edit.paste", "edit.delete", "-",
                                "edit.trim", "edit.insertSilence", "-", "select.all", "select.none", "-",
                                "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
@@ -540,6 +551,10 @@ void MainWindow::buildMenus()
                                "repair.frequencyRange", "repair.allFrequencies", "-", "view.spectral" } },
         { tr ("Effe&ct"),    { "effect.repeat", "-", "@nyquist.generate", "-", "@nyquist.effect" } },
         { tr ("&Markers"),   { "marker.add", "marker.addRegion", "-", "marker.next", "marker.previous", "-", "view.markers" } },
+        { tr ("Mo&ntage"),   { "montage.new", "montage.addSongs", "-", "montage.previousSong", "montage.nextSong", "-",
+                               "montage.moveEarlier", "montage.moveLater", "montage.longerPause", "montage.shorterPause", "-",
+                               "montage.songProperties", "montage.openSong", "montage.removeSong", "-",
+                               "montage.album", "montage.export" } },
         { tr ("&Analyze"),   { "analyze.loudness", "-", "view.meters", "analyze.imagingView", "analyze.resetMeters", "-", "view.spectral", "-", "@nyquist.analyze" } },
         { tr ("Too&ls"),     { "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan" } },
         { tr ("Ma&ster"),    { "view.master", "view.chain", "master.addPlugin", "master.bypass", "-", "master.render", "-", "master.scan" } },
@@ -688,7 +703,14 @@ void MainWindow::buildPanels()
 
     findWidget = new FindPanel (waveform, this);
     findWidget->collect = [this] { return findItems(); };
-    connect (findWidget, &FindPanel::openRequested, this, &MainWindow::openFile);
+    connect (findWidget, &FindPanel::openRequested, this, [this] (const QString& path)
+    {
+        // With a montage in front, a file chosen in the Find panel joins it as a song.
+        if (montage() != nullptr && QFileInfo (path).suffix().toLower() != montagefile::extension)
+            addSongFiles ({ path });
+        else
+            openFile (path);
+    });
     findPanel = new DockablePanel (*this, QStringLiteral ("findPanel"), tr ("Find"), findWidget, Qt::LeftDockWidgetArea);
 
     panels = { masterPanel, chainPanel, metersPanel, markerPanel, historyPanel, diagnosticsPanel, findPanel };
@@ -889,6 +911,7 @@ void MainWindow::updateCommandStates()
     Q_UNUSED (sel);
 
     commands.action (QStringLiteral ("edit.paste"))->setEnabled (open && clipboard != nullptr);
+    updateMontageCommandStates();
     commands.action (QStringLiteral ("marker.addRegion"))->setEnabled (open);
     commands.action (QStringLiteral ("master.render"))->setEnabled (open);
 
@@ -901,6 +924,16 @@ void MainWindow::updateCommandStates()
     redoAction->setEnabled (open && doc.canRedo());
     undoAction->setText (open && doc.canUndo() ? tr ("&Undo %1").arg (QString::fromStdString (doc.undoDescription())) : tr ("&Undo"));
     redoAction->setText (open && doc.canRedo() ? tr ("&Redo %1").arg (QString::fromStdString (doc.redoDescription())) : tr ("&Redo"));
+
+    // A montage's audio is its mixdown: it is changed through its songs, not edited.
+    if (doc.isMontage())
+        for (const auto* id : { "edit.cut", "edit.paste", "edit.delete", "edit.trim", "edit.insertSilence", "file.metadata",
+                                "process.gain", "process.normalize", "process.fadeIn", "process.fadeOut", "process.reverse",
+                                "process.invert", "process.dcOffset", "process.stereoize", "process.convert",
+                                "repair.autoHeal", "repair.spectralGain", "repair.noiseReduction", "repair.declick",
+                                "repair.declip", "repair.dehum", "repair.deess", "repair.addHarmonics",
+                                "marker.add", "marker.addRegion" })
+            commands.action (QString::fromLatin1 (id))->setEnabled (false);
 }
 
 void MainWindow::updateTitle()
@@ -913,7 +946,8 @@ void MainWindow::updateTitle()
         return;
     }
 
-    const auto name = doc.path().empty() ? tr ("Untitled") : QFileInfo (QString::fromStdString (doc.path())).fileName();
+    const auto name = doc.path().empty() ? (doc.isMontage() ? tr ("Untitled Montage") : tr ("Untitled"))
+                                         : QFileInfo (QString::fromStdString (doc.path())).fileName();
     setWindowTitle ((doc.isModified() ? QStringLiteral ("*") : QString()) + name + QStringLiteral (" - " APP_DISPLAY_NAME));
 }
 
@@ -923,7 +957,8 @@ QString MainWindow::tabName (const AudioDocument& d) const
     if (! d.isOpen())
         return tr ("(empty)");
 
-    const auto name = d.path().empty() ? tr ("Untitled") : QFileInfo (QString::fromStdString (d.path())).fileName();
+    const auto name = d.path().empty() ? (d.isMontage() ? tr ("Untitled Montage") : tr ("Untitled"))
+                                       : QFileInfo (QString::fromStdString (d.path())).fileName();
     return d.isModified() ? name + QStringLiteral (" *") : name;
 }
 
@@ -1002,6 +1037,7 @@ void MainWindow::switchToTab (int index)
         const QSignalBlocker block (tabBar);
         tabBar->setCurrentIndex (index);
     }
+    refreshMontageSources();
     waveform->setFocus();
 }
 
@@ -1094,6 +1130,8 @@ void MainWindow::refreshFromDocument (bool keepView)
     engine.setData (d);
     waveform->setData (d, keepView);
     waveform->setMarkers (d ? doc.current().markers : std::vector<Marker>());
+    montageView->setMontage (doc.isMontage() ? doc.current().montage : nullptr);
+    montageView->setVisible (doc.isMontage());
 
     const auto len = d ? d->length() : 0;
     cursor = std::clamp<Frame> (cursor, 0, len);
@@ -1132,8 +1170,9 @@ void MainWindow::showOpenDialog()
         patterns << QStringLiteral ("*.") + QString::fromStdString (ext);
 
     const auto start = doc.path().empty() ? QString() : QFileInfo (QString::fromStdString (doc.path())).absolutePath();
+    patterns << QStringLiteral ("*.") + montagefile::extension;
     const auto path = QFileDialog::getOpenFileName (this, tr ("Open Audio File"), start,
-                                                    tr ("Audio files (%1);;All files (*)").arg (patterns.join (QLatin1Char (' '))));
+                                                    tr ("Audio files and montages (%1);;All files (*)").arg (patterns.join (QLatin1Char (' '))));
     if (! path.isEmpty())
         openFile (path);
 }
@@ -1142,6 +1181,12 @@ void MainWindow::openFile (const QString& path)
 {
     if (loading)
         return;
+
+    if (QFileInfo (path).suffix().toLower() == montagefile::extension)
+    {
+        openMontage (path);
+        return;
+    }
 
     if (doc.isOpen())
         newTab();
@@ -1219,6 +1264,12 @@ bool MainWindow::save()
     if (! doc.isOpen())
         return false;
 
+    if (doc.isMontage())
+    {
+        const auto path = QString::fromStdString (doc.path());
+        return QFileInfo (path).suffix().toLower() == montagefile::extension ? saveMontage (path) : saveMontageAs();
+    }
+
     const auto path = QString::fromStdString (doc.path());
     const auto ext = QFileInfo (path).suffix().toLower().toStdString();
     const auto writable = AudioEngine::writableExtensions();
@@ -1233,6 +1284,8 @@ bool MainWindow::saveAs()
 {
     if (! doc.isOpen())
         return false;
+    if (doc.isMontage())
+        return saveMontageAs();
 
     QStringList filters;
     for (const auto& ext : AudioEngine::writableExtensions())
@@ -1293,6 +1346,9 @@ bool MainWindow::saveTo (const QString& path, bool askOptions)
 //==============================================================================
 void MainWindow::commit (const QString& description, AudioDataPtr newData, Frame start, Frame end, Frame inserted)
 {
+    if (refuseMontageEdit())
+        return;
+
     if (newData == nullptr)
         return;
 
@@ -1502,7 +1558,7 @@ void MainWindow::autosave()
     for (int i = 0; i < (int) tabs.size(); ++i)
     {
         const auto& d = i == activeTab ? doc : tabs[(size_t) i].doc;
-        if (d.isOpen() && d.isModified())
+        if (d.isOpen() && d.isModified() && ! d.isMontage())   // a montage's mixdown is not worth keeping: its songs are on disk
             items.push_back ({ d.id(), d.current(), QString::fromStdString (d.path()), tabName (d).remove (QStringLiteral (" *")) });
     }
     recovery.update (items);
@@ -1580,6 +1636,9 @@ void MainWindow::deleteSelection()
 
 void MainWindow::trimToSelection()
 {
+    if (refuseMontageEdit())
+        return;
+
     if (! requireSelection())
         return;
 
@@ -1647,6 +1706,9 @@ void MainWindow::gain()
 
 void MainWindow::stereoize()
 {
+    if (refuseMontageEdit())
+        return;
+
     const auto d = data();
     if (d == nullptr)
         return;
@@ -1687,6 +1749,9 @@ void MainWindow::stereoize()
 
 void MainWindow::editMetadata()
 {
+    if (refuseMontageEdit())
+        return;
+
     const auto d = data();
     if (d == nullptr)
         return;
@@ -1707,6 +1772,9 @@ void MainWindow::editMetadata()
 
 void MainWindow::convertSampleType()
 {
+    if (refuseMontageEdit())
+        return;
+
     const auto d = data();
     if (d == nullptr)
         return;
@@ -2100,6 +2168,9 @@ void MainWindow::markProblems (std::vector<int> rows)
 
 void MainWindow::deleteSilence (std::vector<int> rows)
 {
+    if (refuseMontageEdit())
+        return;
+
     const auto d = data();
     if (d == nullptr || d.get() != diagnosed || rows.empty())
         return;
@@ -2160,6 +2231,9 @@ void MainWindow::autoHeal()
 
 AudioDataPtr MainWindow::runRepair (const QString& title, std::function<AudioDataPtr (repair::Progress)> work)
 {
+    if (refuseMontageEdit())
+        return nullptr;
+
     auto progress = std::make_shared<std::atomic<float>> (0.0f);
     auto cancel = std::make_shared<std::atomic<bool>> (false);
     engine.stop();
@@ -2515,6 +2589,9 @@ void MainWindow::simpleProcess (const QString& description, AudioDataPtr (*fn) (
 //==============================================================================
 void MainWindow::commitMarkers (const QString& description, std::vector<Marker> markers)
 {
+    if (refuseMontageEdit())
+        return;
+
     auto state = doc.current();
     state.markers = std::move (markers);
     doc.apply (description.toStdString(), std::move (state));
