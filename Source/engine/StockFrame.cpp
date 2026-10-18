@@ -71,7 +71,7 @@ public:
         g.setColour (col (colours.dimText));
         g.drawFittedText (param.getName (32), text.removeFromTop (15), juce::Justification::centred, 1);
         g.setColour (col (colours.text));
-        const auto value = (param.getText (shown, 32) + " " + param.getLabel()).trim();
+        const auto value = (param.getText (shown, 32) + " " + stock::unit (param)).trim();
         g.drawFittedText (value, text.removeFromTop (15), juce::Justification::centred, 1);
     }
 

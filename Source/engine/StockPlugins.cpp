@@ -20,6 +20,17 @@ namespace stock
             { "lsp-plugins-oscilloscope.clap", "LSP Oscilloscope by Vladimir Sadovnikov", "LGPL-3.0-or-later", "https://lsp-plug.in",
               { "Time Division Global|Time Division 1", "Vertical Division Global|Vertical Division 1",
                 "Trigger Level Global|Trigger Level 1", "Global Freeze Switch" }, "LSP ", "LSP" },
+            // ZL Audio's plugins are JUCE VST3s, built with their own JUCE.
+            { "ZL Equalizer 2.vst3", "ZL Equalizer 2 by ZL Audio (zsliu98)", "AGPL-3.0", "https://github.com/ZL-Audio/ZLEqualizer",
+              { "Gain Scale", "Output Gain" }, "", "ZL Audio", "VST3" },
+            { "ZL Spectrum Equalizer.vst3", "ZL Spectrum Equalizer by ZL Audio (zsliu98)", "AGPL-3.0", "https://github.com/ZL-Audio/ZLSpectrumEqualizer",
+              { "Gain Scale", "Output Gain" }, "", "ZL Audio", "VST3" },
+            { "ZL Compressor.vst3", "ZL Compressor by ZL Audio (zsliu98)", "AGPL-3.0", "https://github.com/ZL-Audio/ZLCompressor",
+              { "Threshold (dB)", "Ratio", "Attack", "Release", "Makeup Gain", "Wet" }, "", "ZL Audio", "VST3" },
+            { "ZL Limiter.vst3", "ZL Limiter by ZL Audio (zsliu98)", "AGPL-3.0", "https://github.com/ZL-Audio/ZLLimiter",
+              { "Input Gain", "Output Ceiling", "Release", "Lookahead" }, "", "ZL Audio", "VST3" },
+            { "ZL Splitter.vst3", "ZL Splitter by ZL Audio (zsliu98)", "AGPL-3.0", "https://github.com/ZL-Audio/ZLSplitter",
+              { "Split Type", "Mix" }, "", "ZL Audio", "VST3" },
         };
         return list;
     }
@@ -58,14 +69,17 @@ namespace stock
         return result;
     }
 
+    juce::String unit (const juce::AudioProcessorParameter& p)
+    {
+        const auto label = p.getLabel();
+        return label == p.getName (128) ? juce::String() : label;
+    }
+
     const Info* find (const juce::PluginDescription& d)
     {
-        if (d.pluginFormatName != "CLAP")
-            return nullptr;
-
         const auto file = juce::File::createFileWithoutCheckingPath (d.fileOrIdentifier);
         for (const auto& i : all())
-            if (file.getFileName() == i.file && file.getParentDirectory() == folder())
+            if (d.pluginFormatName == i.format && file.getFileName() == i.file && file.getParentDirectory() == folder())
                 return &i;
 
         return nullptr;

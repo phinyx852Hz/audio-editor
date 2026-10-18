@@ -8,15 +8,16 @@ url="https://github.com/phinyx852Hz/audio-editor"
 license=('AGPL-3.0-only' 'GPL-3.0-only' 'GPL-2.0-or-later' 'LGPL-3.0-or-later' 'BSD-3-Clause' 'LicenseRef-Nyquist')
 # libsndfile is for Nyquist and the stock plugins; cairo, libglvnd and the X libraries for the stock plugins
 depends=('qt6-base' 'qt6-wayland' 'alsa-lib' 'libpipewire' 'freetype2' 'fontconfig'
-         'cairo' 'libsndfile' 'libglvnd' 'libx11' 'libxrandr' 'libxcursor' 'libxext')
+         'cairo' 'libsndfile' 'libglvnd' 'libx11' 'libxrandr' 'libxcursor' 'libxext' 'libxi')
 optdepends=('pipewire-jack: JACK output through PipeWire (recommended; jack2 also works)'
             'realtime-privileges: realtime scheduling for audio threads'
             "xorg-xwayland: show plugins' own windows on Wayland"
             'lsp-plugins: a large free set of mastering plugins (LV2/VST3/CLAP)'
             'yabridge: Windows VST3 and CLAP plugins through Wine')
-# X11 headers are for JUCE (juceaide and plugin windows); ladspa.h and clap for plugin hosting
+# X11 headers are for JUCE (juceaide and plugin windows); ladspa.h and clap for plugin hosting;
+# clang builds the ZL Audio stock plugins
 makedepends=('git' 'cmake' 'ninja' 'ladspa' 'clap' 'libx11' 'libxrandr'
-             'libxinerama' 'libxcursor' 'libxcomposite' 'libxext' 'mesa')
+             'libxinerama' 'libxcursor' 'libxcomposite' 'libxext' 'mesa' 'clang')
 provides=('phinyx')
 conflicts=('phinyx')
 source=("git+${url}.git")

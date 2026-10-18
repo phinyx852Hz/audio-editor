@@ -79,22 +79,24 @@ void MasterChain::loadStockPlugins()
         stockList.recreateFromXml (*xml);
 
     const auto folder = stock::folder();
-    juce::AudioPluginFormat* clap = nullptr;
-    for (auto* f : formats.getFormats())
-        if (f->getName() == ClapPluginFormat::formatName)
-            clap = f;
-    if (clap == nullptr)
-        return;
+    auto formatNamed = [this] (const juce::String& name) -> juce::AudioPluginFormat*
+    {
+        for (auto* f : formats.getFormats())
+            if (f->getName() == name)
+                return f;
+        return nullptr;
+    };
 
     for (const auto& d : stockList.getTypes())
-        if (stock::find (d) == nullptr || ! clap->doesPluginStillExist (d))
+        if (auto* format = formatNamed (d.pluginFormatName); stock::find (d) == nullptr || format == nullptr || ! format->doesPluginStillExist (d))
             stockList.removeType (d);
 
     bool changed = false;
     for (const auto& info : stock::all())
     {
-        const auto file = folder.getChildFile (info.file);
-        if (folder == juce::File() || ! file.existsAsFile() || stockList.isListingUpToDate (file.getFullPathName(), *clap))
+        auto* format = formatNamed (info.format);
+        const auto file = folder.getChildFile (info.file);   // a VST3 is a folder
+        if (format == nullptr || folder == juce::File() || ! file.exists() || stockList.isListingUpToDate (file.getFullPathName(), *format))
             continue;
 
         for (const auto& d : stockList.getTypes())
@@ -102,7 +104,7 @@ void MasterChain::loadStockPlugins()
                 stockList.removeType (d);
 
         juce::OwnedArray<juce::PluginDescription> found;
-        if (scanOutOfProcess (*clap, file.getFullPathName(), 60000, found))
+        if (scanOutOfProcess (*format, file.getFullPathName(), 60000, found))
             for (auto* d : found)
             {
                 d->name = info.namePrefix + d->name;
@@ -138,11 +140,20 @@ std::vector<PluginInfo> MasterChain::knownPlugins() const
         for (const auto& d : list->getTypes())
             all.push_back (d);
 
+    // VST3 categories come as "Fx|EQ": every effect is Fx, so show just "EQ".
+    auto category = [] (const juce::PluginDescription& d)
+    {
+        auto parts = juce::StringArray::fromTokens (d.category, "|", {});
+        if (parts.size() > 1)
+            parts.removeString ("Fx");
+        return parts.joinIntoString (", ").toStdString();
+    };
+
     for (const auto& d : all)
         if (! d.isInstrument)
             result.push_back ({ d.createIdentifierString().toStdString(), d.name.toStdString(), d.manufacturerName.toStdString(),
                                 stock::find (d) != nullptr ? builtin::formatName : d.pluginFormatName.toStdString(),
-                                d.category.toStdString() });
+                                category (d) });
 
     std::sort (result.begin(), result.end(), [] (const PluginInfo& a, const PluginInfo& b)
     {
@@ -493,7 +504,7 @@ std::vector<PluginParameterInfo> MasterChain::parameters (int index) const
         PluginParameterInfo info;
         info.name = p->getName (64).toStdString();
         info.value = p->getValue();
-        info.valueText = (p->getCurrentValueAsText() + " " + p->getLabel()).trim().toStdString();
+        info.valueText = (p->getCurrentValueAsText() + " " + stock::unit (*p)).trim().toStdString();
         info.isBoolean = p->isBoolean();
         const auto steps = p->getNumSteps();
         info.numSteps = steps > 1 && steps <= 1000 ? steps : 0;
@@ -516,7 +527,7 @@ PluginParameterInfo MasterChain::parameter (int index, int parameter) const
     auto* p = params[parameter];
     info.name = p->getName (64).toStdString();
     info.value = p->getValue();
-    info.valueText = (p->getCurrentValueAsText() + " " + p->getLabel()).trim().toStdString();
+    info.valueText = (p->getCurrentValueAsText() + " " + stock::unit (*p)).trim().toStdString();
     info.isBoolean = p->isBoolean();
     const auto steps = p->getNumSteps();
     info.numSteps = steps > 1 && steps <= 1000 ? steps : 0;
@@ -762,8 +773,7 @@ std::string MasterChain::restore()
         // install) loads from where the stock plugins are now.
         const auto saved = juce::File::createFileWithoutCheckingPath (d.fileOrIdentifier);
         const auto savedFile = saved.getFileName();
-        if (d.pluginFormatName == ClapPluginFormat::formatName && stock::find (d) == nullptr
-            && saved.getParentDirectory().getFileName() == "stock")
+        if (stock::find (d) == nullptr && saved.getParentDirectory().getFileName() == "stock")
             for (const auto& candidate : stockList.getTypes())
                 if (candidate.uniqueId == d.uniqueId
                     && juce::File::createFileWithoutCheckingPath (candidate.fileOrIdentifier).getFileName() == savedFile)
