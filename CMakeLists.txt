@@ -20,14 +20,20 @@ find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Concurrent)
 # JUCE provides the audio engine only (devices, codecs, DSP, plugin hosting); no JUCE UI.
 # Use a local checkout (needed for offline package builds) or fetch the pinned tag.
 set(JUCE_DIR "" CACHE PATH "Path to a local JUCE checkout")
+# Patched: a VST3's inactive buses get silent buffers instead of null pointers,
+# which crashed yabridge-bridged plugins that have a side chain.
+set(juce_patch ${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/juce-vst3-inactive-buses.patch)
 if(JUCE_DIR)
+    execute_process(COMMAND ${CMAKE_COMMAND} -DPATCH=${juce_patch} -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/ApplyPatch.cmake
+                    WORKING_DIRECTORY ${JUCE_DIR})
     add_subdirectory(${JUCE_DIR} juce EXCLUDE_FROM_ALL)
 else()
     include(FetchContent)
     FetchContent_Declare(juce
         GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
         GIT_TAG 8.0.15
-        GIT_SHALLOW TRUE)
+        GIT_SHALLOW TRUE
+        PATCH_COMMAND ${CMAKE_COMMAND} -DPATCH=${juce_patch} -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/ApplyPatch.cmake)
     FetchContent_MakeAvailable(juce)
 endif()
 

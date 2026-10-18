@@ -82,6 +82,7 @@ private:
         bool bypassed = false;
         int compareSide = 0;              // A/B compare in the stock plugin frame: 0 = A, 1 = B
         juce::MemoryBlock otherSide;      // the settings of the side not being heard; empty until B is first used
+        bool hasEditor = false;           // asked once at load: a VST3 builds its whole editor to answer
     };
 
     class PluginWindow;

@@ -436,13 +436,14 @@ std::string MasterChain::load (int index, const std::string& pluginId)
         return ("Could not load " + description->name + ": " + error).toStdString();
 
     preparePlugin (*instance, rate, blockSize);
+    const auto editor = instance->hasEditor();
     windows[(size_t) index].reset();
 
     std::unique_ptr<juce::AudioPluginInstance> old;
     {
         const juce::ScopedLock sl (lock);
         old = std::move (slots[(size_t) index].plugin);
-        slots[(size_t) index] = { std::move (instance), *description, false, 0, {} };
+        slots[(size_t) index] = { std::move (instance), *description, false, 0, {}, editor };
     }
 
     return {};  // `old` is released here, outside the lock
@@ -508,7 +509,7 @@ MasterSlotInfo MasterChain::info (int index) const
     i.pluginId = s.description.createIdentifierString().toStdString();
     i.bypassed = s.bypassed;
     i.latencySamples = s.plugin->getLatencySamples();
-    i.hasEditor = s.plugin->hasEditor();
+    i.hasEditor = s.hasEditor;
     i.channels = std::min (channelCount, std::max (s.plugin->getTotalNumInputChannels(), s.plugin->getTotalNumOutputChannels()));
     return i;
 }
@@ -676,7 +677,7 @@ bool MasterChain::canShowWindow (int index) const
 {
     const auto* display = std::getenv ("DISPLAY");
     return index >= 0 && index < (int) slots.size() && slots[(size_t) index].plugin != nullptr
-        && slots[(size_t) index].plugin->hasEditor() && display != nullptr && *display != 0 && ! x11::connectionLost();
+        && slots[(size_t) index].hasEditor && display != nullptr && *display != 0 && ! x11::connectionLost();
 }
 
 void MasterChain::showWindow (int index)
@@ -854,8 +855,9 @@ std::string MasterChain::restore()
             instance->setStateInformation (state.getData(), (int) state.getSize());
 
         preparePlugin (*instance, rate, blockSize);
+        const auto editor = instance->hasEditor();
         const juce::ScopedLock sl (lock);
-        slots[(size_t) index] = { std::move (instance), d, slot->getBoolAttribute ("bypassed", false), 0, {} };
+        slots[(size_t) index] = { std::move (instance), d, slot->getBoolAttribute ("bypassed", false), 0, {}, editor };
     }
 
     return problems.joinIntoString ("\n").toStdString();

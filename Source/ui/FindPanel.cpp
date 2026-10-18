@@ -179,9 +179,9 @@ void FindPanel::focusSearch()
     search->selectAll();
 }
 
-bool FindPanel::searchHasFocus() const
+bool FindPanel::searchIsReady() const
 {
-    return search->hasFocus();
+    return search->hasFocus() && (search->text().isEmpty() || search->selectedText() == search->text());
 }
 
 void FindPanel::reload()

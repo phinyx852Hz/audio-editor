@@ -45,7 +45,7 @@ public:
     std::function<QList<FindItem>()> collect;
 
     void focusSearch();          // selects the search text, ready to type over
-    bool searchHasFocus() const;
+    bool searchIsReady() const;  // the search has the keyboard with nothing to keep: empty or all selected
     void reload();               // collects the items again and refilters
 
     static constexpr int numColours = 7;

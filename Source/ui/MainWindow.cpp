@@ -402,7 +402,8 @@ void MainWindow::registerCommands()
          [this] { chainPanel->toggle(); });
     add ("view.find", Category::view, tr ("&Find..."), { KS (Qt::CTRL | Qt::Key_F) }, [this]
     {
-        if (findWidget->searchHasFocus())
+        // Ctrl+F gets the search ready to type over; pressed again it hides the panel.
+        if (findWidget->searchIsReady())
         {
             findPanel->hide();
             waveform->setFocus (Qt::ShortcutFocusReason);

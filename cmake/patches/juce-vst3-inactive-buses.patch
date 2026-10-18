@@ -1,0 +1,30 @@
+diff --git a/modules/juce_audio_processors_headless/format_types/juce_VST3Common.h b/modules/juce_audio_processors_headless/format_types/juce_VST3Common.h
+index f6d23b6ed..d0dd8e2b9 100644
+--- a/modules/juce_audio_processors_headless/format_types/juce_VST3Common.h
++++ b/modules/juce_audio_processors_headless/format_types/juce_VST3Common.h
+@@ -1057,7 +1057,7 @@ private:
+         for (size_t i = 0; i < busMap.size(); ++i)
+         {
+             bus.push_back (busMap.isActive() ? buffer.getWritePointer (channelStartOffset + busMap.getJuceChannelForVst3Channel ((int) i))
+-                                             : nullptr);
++                                             : inactiveChannel<FloatType> (buffer.getNumSamples()));
+         }
+ 
+         assignRawPointer (vstBuffers, bus.data());
+@@ -1065,6 +1065,16 @@ private:
+         vstBuffers.silenceFlags     = busMap.isActive() ? 0 : std::numeric_limits<Steinberg::uint64>::max();
+     }
+ 
++    // PHINYX: an inactive bus (a side chain the host left off) gets a silent
++    // buffer rather than null channel pointers, because some plugins and bridges
++    // such as yabridge copy every channel of every bus, active or not.
++    template <typename FloatType>
++    static FloatType* inactiveChannel (int numSamples)
++    {
++        alignas (64) static FloatType silence[8192] {};
++        return numSamples <= (int) std::size (silence) ? silence : nullptr;
++    }
++
+     auto& get (detail::Tag<float>)    { return floatBusMap; }
+     auto& get (detail::Tag<double>)   { return doubleBusMap; }
+ 
