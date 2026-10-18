@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "ClapFormat.h"
+#include "X11Windows.h"
 
 #include <clap/clap.h>
 #include <juce_gui_extra/juce_gui_extra.h>
@@ -62,6 +63,7 @@ namespace
             }
 
             m->entry = entry;
+            keepLoaded().add (m);
             m->factory = static_cast<const clap_plugin_factory_t*> (entry->get_factory (CLAP_PLUGIN_FACTORY_ID));
             if (m->factory == nullptr)
             {
@@ -86,6 +88,16 @@ namespace
 
     private:
         explicit ClapModule (const juce::File& f) : file (f) { loaded().add (this); }
+
+        // Plugin libraries stay loaded until PHINYX quits: unloading one is unsafe,
+        // since it can leave behind an X error handler, exit hooks or threads
+        // that point into code that is gone. Never freed, so nothing unloads at
+        // exit either.
+        static juce::ReferenceCountedArray<ClapModule>& keepLoaded()
+        {
+            static auto* modules = new juce::ReferenceCountedArray<ClapModule>();
+            return *modules;
+        }
 
         static juce::Array<ClapModule*>& loaded()
         {
@@ -700,6 +712,7 @@ namespace
         explicit ClapEditor (ClapInstance& p) : AudioProcessorEditor (p), owner (p)
         {
             created = owner.gui->create (owner.plugin, CLAP_WINDOW_API_X11, false);
+            x11::useHostErrorHandler();
             uint32_t w = 400, h = 300;
             if (created)
                 owner.gui->get_size (owner.plugin, &w, &h);
@@ -719,8 +732,11 @@ namespace
             {
                 if (attached)
                     owner.gui->hide (owner.plugin);
+                // The CLAP spec wants the plugin's window destroyed before the
+                // window it sits in, so this comes before removeClient().
                 owner.gui->destroy (owner.plugin);
             }
+            x11::useHostErrorHandler();
             embedded.removeClient();
         }
 
@@ -760,6 +776,7 @@ namespace
             attached = owner.gui->set_parent (owner.plugin, &w);
             if (attached)
                 owner.gui->show (owner.plugin);
+            x11::useHostErrorHandler();
         }
 
         ClapInstance& owner;

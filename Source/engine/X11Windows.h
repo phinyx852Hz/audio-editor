@@ -16,4 +16,9 @@ namespace x11
     // windows stop working; the editor keeps running.
     void surviveLostConnection (std::function<void()> whenLost);
     bool connectionLost();
+
+    // Puts PHINYX's own X error handler back. Plugins may install theirs while
+    // creating or showing their windows; Xlib keeps one handler for the whole
+    // process, so call this after handing control to plugin GUI code.
+    void useHostErrorHandler();
 }

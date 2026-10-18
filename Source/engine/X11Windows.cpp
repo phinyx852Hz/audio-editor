@@ -72,4 +72,11 @@ namespace x11
     }
 
     bool connectionLost() { return lost; }
+
+    void useHostErrorHandler()
+    {
+        // Errors such as BadWindow while a plugin's window is torn down are
+        // expected and ignored, as JUCE's own handler does.
+        juce::X11Symbols::getInstance()->xSetErrorHandler ([] (::Display*, XErrorEvent*) { return 0; });
+    }
 }
