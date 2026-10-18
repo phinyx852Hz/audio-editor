@@ -47,7 +47,12 @@ target_sources(${APP_ID} PRIVATE
     Source/core/AudioData.cpp
     Source/core/AudioDocument.cpp
     Source/core/Dsp.cpp
-    Source/core/FlacTags.cpp
+    Source/core/Ixml.cpp
+    Source/core/Metadata.cpp
+    Source/core/MiniXml.cpp
+    Source/core/Mp4Xmp.cpp
+    Source/core/RiffChunks.cpp
+    Source/core/Xmp.cpp
     Source/core/Repair.cpp
     Source/core/Restoration.cpp
     Source/core/Fft.cpp
@@ -57,6 +62,9 @@ target_sources(${APP_ID} PRIVATE
     Source/engine/AudioEngine.cpp
     Source/engine/BuiltinEffects.cpp
     Source/engine/ClapFormat.cpp
+    Source/engine/Codec.cpp
+    Source/engine/Export.cpp
+    Source/engine/TagIO.cpp
     Source/engine/MasterChain.cpp
     Source/engine/StockFrame.cpp
     Source/engine/StockPlugins.cpp
@@ -64,12 +72,15 @@ target_sources(${APP_ID} PRIVATE
     Source/engine/X11Windows.cpp
     Source/ui/CommandRegistry.cpp
     Source/ui/Dialogs.cpp
+    Source/ui/ExportDialog.cpp
+    Source/ui/MetadataEditor.cpp
     Source/ui/MainWindow.cpp
     Source/ui/GainHud.cpp
     Source/ui/LiveEdits.cpp
     Source/ui/Analysis.cpp
     Source/ui/ReferencePanel.cpp
     Source/ui/ReferenceSection.cpp
+    Source/ui/ExportSection.cpp
     Source/ui/AlbumEditor.cpp
     Source/ui/AlbumFile.cpp
     Source/ui/AlbumView.cpp
@@ -138,6 +149,12 @@ else()
     message(STATUS "libpipewire-0.3 not found: building without recording")
 endif()
 
+# Export and import of compressed formats (FFmpeg) and their tags (TagLib).
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavcodec libavformat libavutil libswresample)
+pkg_check_modules(TAGLIB REQUIRED IMPORTED_TARGET taglib>=1.12)
+target_link_libraries(${APP_ID} PRIVATE PkgConfig::FFMPEG PkgConfig::TAGLIB)
+
 target_compile_definitions(${APP_ID} PRIVATE
     PHINYX_PIPEWIRE=${PHINYX_PIPEWIRE}
     APP_ID="${APP_ID}"
@@ -203,7 +220,11 @@ if(PHINYX_BUILD_TESTS)
         Source/core/AudioData.cpp
         Source/core/AudioDocument.cpp
         Source/core/Dsp.cpp
-        Source/core/FlacTags.cpp
+        Source/core/Ixml.cpp
+        Source/core/Metadata.cpp
+        Source/core/MiniXml.cpp
+        Source/core/RiffChunks.cpp
+        Source/core/Xmp.cpp
         Source/core/Repair.cpp
         Source/core/Restoration.cpp
         Source/core/Fft.cpp

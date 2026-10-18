@@ -314,10 +314,11 @@ void MainWindow::syncReference()
 
 void MainWindow::placeReferenceBadge()
 {
-    const bool show = engine.isHearingReference() && currentReference >= 0 && data() != nullptr;
+    const bool preview = ! previewName.isEmpty();
+    const bool show = engine.isHearingReference() && (preview || currentReference >= 0) && data() != nullptr;
     if (show)
     {
-        const auto text = tr ("B  %1").arg (QFileInfo (references[(size_t) currentReference].path).completeBaseName());
+        const auto text = preview ? previewName : tr ("B  %1").arg (QFileInfo (references[(size_t) currentReference].path).completeBaseName());
         if (referenceBadge->text() != text)
         {
             referenceBadge->setText (text);

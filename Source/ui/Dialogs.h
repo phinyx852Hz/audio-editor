@@ -83,6 +83,7 @@ private:
     QComboBox* bitDepth = nullptr;
     class QCheckBox* dither = nullptr;
     class QSpinBox* quality = nullptr;
+    std::map<std::string, std::string> codecValues;   // MP3, M4A, Opus, WavPack...: the encoder's settings
 };
 
 // Normalize to a peak level or an integrated loudness target. Loudness has
@@ -224,20 +225,4 @@ private:
     class QListWidget* list;
     QLabel* info;
     QString originalName;
-};
-
-// File metadata, like Audition's Metadata panel: common tags (title, artist...)
-// on one tab and Broadcast Wave (bext) on another. Says which fields the
-// current file type keeps.
-class MetadataDialog final : public QDialog
-{
-    Q_OBJECT
-
-public:
-    MetadataDialog (const Tags&, const QString& extension, double sampleRate, QWidget* parent);
-    Tags tags() const;
-
-private:
-    std::vector<std::pair<std::string, QWidget*>> fields;   // tag key -> QLineEdit or QPlainTextEdit
-    Tags original;
 };

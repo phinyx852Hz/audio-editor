@@ -10,6 +10,7 @@
 #include "../engine/AudioEngine.h"
 #include "CommandRegistry.h"
 #include "Recovery.h"
+#include "../engine/Export.h"
 #include "WaveformView.h"
 
 #include <QFutureWatcher>
@@ -251,6 +252,13 @@ private:
 
     // Master Section
     void renderMaster();
+
+    // Export (ExportSection.cpp): every output of the Export dialog, and its codec preview.
+    void exportAudio();
+    void previewExport (const exporter::Output&, bool difference, bool throughMaster);
+    void stopExportPreview();
+    QString previewName;                       // shown on the badge while a preview is heard
+    std::pair<Frame, Frame> previewRange { 0, 0 };
     AudioDataPtr renderWithProgress (Frame start, Frame end, std::string& error);
 
     // Cursor and selection

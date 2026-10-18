@@ -3,7 +3,10 @@
 #include "../Source/core/AudioData.h"
 #include "../Source/core/AudioDocument.h"
 #include "../Source/core/Dsp.h"
-#include "../Source/core/FlacTags.h"
+#include "../Source/core/Ixml.h"
+#include "../Source/core/Metadata.h"
+#include "../Source/core/RiffChunks.h"
+#include "../Source/core/Xmp.h"
 #include "../Source/core/Fft.h"
 #include "../Source/core/Album.h"
 #include "../Source/core/Nyquist.h"
@@ -724,37 +727,212 @@ namespace
         check (mono->numChannels() == 1 && rmsDifference (*mono, *sine, 0, 96000) < 1.0e-7, "stereo of equal sides mixes back to the mono");
     }
 
-    void testFlacTags()
+    void testMetadata()
     {
-        // A FLAC file needs only "fLaC", a stream info block and frames for the tag code.
-        const std::string path = "/tmp/phinyx-core-test.flac";
-        {
-            std::ofstream out (path, std::ios::binary | std::ios::trunc);
-            out.write ("fLaC", 4);
-            const unsigned char info[4] { 0x00, 0, 0, 34 };   // stream info, not the last block
-            out.write ((const char*) info, 4);
-            out.write (std::string (34, '\x11').data(), 34);
-            const unsigned char pad[4] { 0x81, 0, 0, 8 };     // padding, the last block
-            out.write ((const char*) pad, 4);
-            out.write (std::string (8, '\0').data(), 8);
-            out.write ("AUDIOFRAMES", 11);
-        }
-        check (flactags::read (path).empty(), "a FLAC file without comments has no tags");
+        // One title for every schema; a differing ID3 title is kept as a conflict.
+        Tags t;
+        meta::absorb (t, meta::Schema::riff, { { "INAM", "Night Drive" }, { "IART", "Band" }, { "ISRC", "Studio A" } });
+        meta::absorb (t, meta::Schema::id3, { { "TIT2", "Night Drive (Edit)" }, { "TPE1", "Band" }, { "TSRC", "USAB12600001" } });
+        check (t[tag::title] == "Night Drive" && t[tag::artist] == "Band" && t[tag::isrc] == "USAB12600001", "metadata: common keys filled");
+        check (t.count ("id3:TPE1") == 0 && t["id3:TIT2"] == "Night Drive (Edit)" && t["riff:ISRC"] == "Studio A", "metadata: only differences kept");
+        check (meta::conflicts (t).size() == 1 && meta::conflicts (t)[0].key == "id3:TIT2", "metadata: one conflict");
+        const auto* tit2 = meta::findId (meta::Schema::id3, "TIT2");
+        const auto* dcTitle = meta::findId (meta::Schema::xmp, "dc:title");
+        check (tit2 != nullptr && dcTitle != nullptr && meta::get (t, *dcTitle) == "Night Drive", "metadata: XMP follows the common title");
+        meta::set (t, *tit2, "Night Drive");
+        check (t.count ("id3:TIT2") == 0, "metadata: setting the common value removes the schema key");
+        meta::set (t, *tit2, "Other");
+        meta::sync (t);
+        check (t.count ("id3:TIT2") == 0 && meta::conflicts (t).empty(), "metadata: sync removes conflicts");
 
+        // Vorbis number and total make "3/12"; they come back out the same.
+        Tags v;
+        meta::absorb (v, meta::Schema::vorbis, { { "TRACKTOTAL", "12" }, { "TRACKNUMBER", "3" }, { "DISCNUMBER", "1" } });
+        check (v[tag::track] == "3/12" && v[tag::disc] == "1" && v.count ("vorbis:TRACKTOTAL") == 0, "metadata: track number and total joined");
+        const auto vorbis = meta::valuesFor (v, meta::Schema::vorbis);
+        bool number = false, total = false;
+        for (const auto& [id, value] : vorbis)
+            number = number || (id == "TRACKNUMBER" && value == "3"), total = total || (id == "TRACKTOTAL" && value == "12");
+        check (number && total, "metadata: track number and total written apart");
+        meta::absorb (v, meta::Schema::mp4, { { "trkn", "3/12" } });
+        check (v.count ("mp4:trkn") == 0, "metadata: the same track in MP4 is no conflict");
+
+        // Unknown fields are kept and written back.
+        meta::absorb (v, meta::Schema::id3, { { "TXXX:MOOD2", "calm" } });
+        bool kept = false;
+        for (const auto& [id, value] : meta::valuesFor (v, meta::Schema::id3))
+            kept = kept || (id == "TXXX:MOOD2" && value == "calm");
+        check (kept, "metadata: unknown frames kept");
+
+        // Pictures
+        meta::Picture pic;
+        pic.data = std::string ("\xff\xd8\xff\xe0JFIF\0\x01", 10) + std::string (300, '\x7f');
+        pic.description = "Front";
+        meta::setPictures (v, { pic });
+        const auto back = meta::pictures (v);
+        check (back.size() == 1 && back[0].data == pic.data && back[0].mime == "image/jpeg" && back[0].type == 3 && back[0].description == "Front",
+               "metadata: picture round trip");
+        check (meta::base64Decode (meta::base64Encode ("ab")) == "ab" && meta::base64Encode ("abc") == "YWJj", "metadata: base64");
+
+        // Templates
+        check (meta::expand ("{track} {artist} - {title}{unknown}.{ext}", t, { { "ext", "flac" } }) == " Band - Night Drive{unknown}.flac",
+               "metadata: template expansion");
+
+        // CSV and JSON
+        std::vector<meta::Row> rows { { "a.wav", { { tag::title, "Comma, \"Quote\"" }, { "id3:TIT2", "Line\nTwo" } } }, { "b.flac", { { tag::artist, "Ünï" } } } };
         std::string error;
-        check (flactags::write (path, { { "TITLE", "Night Drive" }, { "ARTIST", "Ünïcode Bänd" } }, "PHINYX", error), "write FLAC tags: " + error);
-        auto fields = flactags::read (path);
-        check (fields.size() == 2 && fields["TITLE"] == "Night Drive" && fields["ARTIST"] == "Ünïcode Bänd", "read FLAC tags back");
+        const auto csv = meta::fromCsv (meta::toCsv (rows), error);
+        check (csv.size() == 2 && csv[0].file == "a.wav" && csv[0].tags == rows[0].tags && csv[1].tags == rows[1].tags, "metadata: CSV round trip " + error);
+        const auto json = meta::fromJson (meta::toJson (rows), error);
+        check (json.size() == 2 && json[0].tags == rows[0].tags && json[1].file == "b.flac" && json[1].tags == rows[1].tags, "metadata: JSON round trip " + error);
+        meta::fromJson ("[{\"file\": \"x\", \"tags\": {\"title\": \"A\\u00e9\"}}]", error);
+        check (meta::fromJson ("[{\"file\": \"x\", \"tags\": {\"title\": \"A\\u00e9\"}}]", error)[0].tags[tag::title] == "A\xc3\xa9", "metadata: JSON escapes");
+    }
 
-        check (flactags::write (path, { { "TITLE", "Second Take" } }, "PHINYX", error), "rewrite FLAC tags: " + error);
-        fields = flactags::read (path);
-        check (fields.size() == 1 && fields["TITLE"] == "Second Take", "rewriting replaces the old tags");
+    void testXmp()
+    {
+        const std::string packet = R"(<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:xmpDM="http://ns.adobe.com/xmp/1.0/DynamicMedia/"
+      xmlns:my="http://example.com/my/" xmlns:stEvt="http://ns.adobe.com/xap/1.0/sType/ResourceEvent#"
+      xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/" xmpDM:album="Album &amp; Co" my:flag="yes">
+   <dc:title><rdf:Alt><rdf:li xml:lang="x-default">Night Drive</rdf:li></rdf:Alt></dc:title>
+   <dc:creator><rdf:Seq><rdf:li>One</rdf:li><rdf:li>Two</rdf:li></rdf:Seq></dc:creator>
+   <xmpDM:tempo>120</xmpDM:tempo>
+   <xmpMM:History><rdf:Seq><rdf:li rdf:parseType="Resource"><stEvt:action>saved</stEvt:action></rdf:li></rdf:Seq></xmpMM:History>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>)";
+        Tags t;
+        std::string error;
+        check (xmp::read (packet, t, error), "xmp: parse " + error);
+        check (t[tag::title] == "Night Drive" && t[tag::album] == "Album & Co" && t[tag::artist] == "One\nTwo" && t[tag::bpm] == "120",
+               "xmp: values read");
+        check (t["xmp:my:flag"] == "yes" && t["xmpns:my"] == "http://example.com/my/" && t.count ("xmpraw:xmpMM:History") == 1,
+               "xmp: unknown namespace and a structure kept");
 
+        t[tag::title] = "New Title";
+        const auto written = xmp::write (t, "PHINYX");
+        Tags again;
+        check (xmp::read (written, again, error), "xmp: read what was written " + error);
+        check (again[tag::title] == "New Title" && again[tag::artist] == "One\nTwo" && again["xmp:my:flag"] == "yes"
+                   && again[tag::album] == "Album & Co" && again["xmpraw:xmpMM:History"].find ("saved") != std::string::npos,
+               "xmp: round trip");
+        check (written.find ("<rdf:Seq>") != std::string::npos && written.find ("xmlns:stEvt") != std::string::npos, "xmp: lists and structure namespaces written");
+        Tags none;
+        check (xmp::write (none, "PHINYX").empty() && ! xmp::read ("<a/>", none, error), "xmp: nothing to write, not XMP");
+    }
+
+    void testIxml()
+    {
+        const std::string doc = R"(<?xml version="1.0" encoding="UTF-8"?>
+<BWFXML><IXML_VERSION>2.10</IXML_VERSION><PROJECT>Film</PROJECT><SCENE>12A</SCENE><TAKE>3</TAKE>
+<SPEED><TIMECODE_RATE>25/1</TIMECODE_RATE></SPEED>
+<TRACK_LIST><TRACK_COUNT>2</TRACK_COUNT><TRACK><CHANNEL_INDEX>1</CHANNEL_INDEX><NAME>Boom</NAME></TRACK>
+<TRACK><CHANNEL_INDEX>2</CHANNEL_INDEX><NAME>Lav &lt;1&gt;</NAME></TRACK></TRACK_LIST><CUSTOM><THING>x</THING></CUSTOM></BWFXML>)";
+        Tags t;
+        std::string error;
+        check (ixml::read (doc, t, error), "ixml: parse " + error);
+        check (t["ixml:SCENE"] == "12A" && t["ixml:SPEED/TIMECODE_RATE"] == "25/1" && t["ixml:TRACK_LIST/TRACK[2]/NAME"] == "Lav <1>"
+                   && t["ixml:TRACK_LIST/TRACK[1]/CHANNEL_INDEX"] == "1" && t["ixml:CUSTOM/THING"] == "x",
+               "ixml: paths read");
+        Tags again;
+        check (ixml::read (ixml::write (t), again, error) && again == t, "ixml: round trip " + error);
+    }
+
+    uint32_t le32 (const unsigned char* p) { return (uint32_t) p[0] | ((uint32_t) p[1] << 8) | ((uint32_t) p[2] << 16) | ((uint32_t) p[3] << 24); }
+    uint32_t be32 (const unsigned char* p) { return (uint32_t) p[3] | ((uint32_t) p[2] << 8) | ((uint32_t) p[1] << 16) | ((uint32_t) p[0] << 24); }
+
+    std::string bytesOf (const std::string& path)
+    {
         std::ifstream in (path, std::ios::binary);
-        const std::string bytes ((std::istreambuf_iterator<char> (in)), std::istreambuf_iterator<char>());
-        check (bytes.substr (8, 34) == std::string (34, '\x11') && bytes.size() > 11 && bytes.substr (bytes.size() - 11) == "AUDIOFRAMES",
-               "the stream info and the audio are kept");
+        return std::string ((std::istreambuf_iterator<char> (in)), std::istreambuf_iterator<char>());
+    }
+
+    void testRiffChunks()
+    {
+        // A small WAV: fmt, an unknown chunk, data, an odd-sized chunk after it.
+        const std::string path = "/tmp/phinyx-core-test.wav";
+        const auto le32s = [] (uint32_t v) { std::string s; for (int i = 0; i < 4; ++i) s += (char) ((v >> (8 * i)) & 0xff); return s; };
+        {
+            std::string fmt = std::string ("\x01\x00\x01\x00", 4) + le32s (48000) + le32s (96000) + std::string ("\x02\x00\x10\x00", 4);
+            std::string body = "WAVE";
+            body += "fmt " + le32s (16) + fmt;
+            body += "umid" + le32s (5) + "ABCDE" + '\0';
+            body += "LIST" + le32s (16) + "INFO" + "INAM" + le32s (4) + "Old" + '\0';
+            body += "data" + le32s (8) + std::string ("\x01\x02\x03\x04\x05\x06\x07\x08", 8);
+            std::ofstream out (path, std::ios::binary | std::ios::trunc);
+            out << "RIFF" << le32s ((uint32_t) body.size()) << body;
+        }
+        Tags read;
+        riff::readMetadata (path, read);
+        check (read[tag::title] == "Old" && read.count ("raw:wav:umid") == 1, "riff: INFO and an unknown chunk read");
+
+        Tags t = read;
+        t[tag::title] = "Night Drive";
+        t[tag::comment] = "Line one\nLine two";
+        t[tag::bwfOriginator] = "PHINYX";
+        t[tag::bwfTimeReference] = "5000000000";
+        t[tag::bwfLoudness] = "-14.00";
+        t[tag::bwfTruePeak] = "-1.00";
+        t[tag::bwfUmid] = "060a2b34";
+        t[tag::bwfCodingHistory] = "A=PCM,F=48000,W=16,M=mono";
+        t["cart:CutID"] = "C1234";
+        t["cart:Timer.SEG1"] = "48000";
+        t["cart:Timers"] = "MRK =96000";
+        t["ixml:SCENE"] = "4";
+        t["xmp:xmpDM:scene"] = "Scene 4";
+        riff::Write w;
+        w.software = "PHINYX";
+        w.id3 = std::string ("ID3\x04\x00\x00\x00\x00\x00\x00", 10);
+        std::string error;
+        check (riff::writeMetadata (path, t, w, error), "riff: write " + error);
+
+        const auto layout = riff::scan (path);
+        std::vector<std::string> ids;
+        for (const auto& c : layout.chunks)
+            ids.push_back (c.id);
+        const auto at = [&] (const char* id) { return std::find (ids.begin(), ids.end(), id) - ids.begin(); };
+        check (layout.valid && at ("bext") < at ("data") && at ("cart") < at ("data") && at ("iXML") < at ("data") && at ("_PMX") < at ("data")
+                   && at ("id3 ") < at ("data") && at ("umid") < (long) ids.size() && std::count (ids.begin(), ids.end(), "LIST") == 1,
+               "riff: metadata chunks before the audio, the unknown chunk kept, one INFO list");
+        const auto bytes = bytesOf (path);
+        check (bytes.size() == le32 ((const unsigned char*) bytes.data() + 4) + 8, "riff: RIFF size updated");
+        check (bytes.find (std::string ("\x01\x02\x03\x04\x05\x06\x07\x08", 8)) != std::string::npos, "riff: audio kept");
+
+        Tags back;
+        const auto id3 = riff::readMetadata (path, back);
+        check (id3 == w.id3, "riff: ID3 chunk bytes returned");
+        check (back[tag::title] == "Night Drive" && back[tag::comment] == "Line one\nLine two", "riff: INFO round trip");
+        check (back[tag::bwfOriginator] == "PHINYX" && back[tag::bwfTimeReference] == "5000000000" && back[tag::bwfLoudness] == "-14.00"
+                   && back[tag::bwfTruePeak] == "-1.00" && back.count (tag::bwfLoudnessRange) == 0 && back[tag::bwfCodingHistory] == "A=PCM,F=48000,W=16,M=mono"
+                   && back[tag::bwfUmid].compare (0, 8, "060a2b34") == 0 && back.count (tag::bwfDescription) == 0,
+               "riff: bext round trip (the description follows the comment)");
+        check (back["cart:CutID"] == "C1234" && back["cart:Timer.SEG1"] == "48000" && back["cart:Timers"] == "MRK =96000" && back.count ("cart:Title") == 0,
+               "riff: cart round trip");
+        check (back["ixml:SCENE"] == "4" && back["xmp:xmpDM:scene"] == "Scene 4" && back["raw:wav:umid"] == read["raw:wav:umid"], "riff: iXML, XMP and raw chunk round trip");
+
+        // AIFF: text chunks and XMP.
+        const std::string aiff = "/tmp/phinyx-core-test.aiff";
+        const auto be32s = [] (uint32_t v) { std::string s; for (int i = 3; i >= 0; --i) s += (char) ((v >> (8 * i)) & 0xff); return s; };
+        {
+            std::string body = "AIFF";
+            body += "COMM" + be32s (18) + std::string (18, '\x01');
+            body += "SSND" + be32s (12) + std::string (12, '\x02');
+            std::ofstream out (aiff, std::ios::binary | std::ios::trunc);
+            out << "FORM" << be32s ((uint32_t) body.size()) << body;
+        }
+        check (riff::writeMetadata (aiff, t, w, error), "aiff: write " + error);
+        Tags fromAiff;
+        riff::readMetadata (aiff, fromAiff);
+        const auto aiffBytes = bytesOf (aiff);
+        check (fromAiff[tag::title] == "Night Drive" && fromAiff["xmp:xmpDM:scene"] == "Scene 4" && fromAiff[tag::comment] == "Line one\nLine two"
+                   && be32 ((const unsigned char*) aiffBytes.data() + 4) + 8 == aiffBytes.size() && aiffBytes.find (std::string (12, '\x02')) != std::string::npos,
+               "aiff: metadata round trip");
         std::remove (path.c_str());
+        std::remove (aiff.c_str());
     }
 
     void testNyquist()
@@ -949,7 +1127,10 @@ int main()
     testRestoration();
     testShapes();
     testConvert();
-    testFlacTags();
+    testMetadata();
+    testXmp();
+    testIxml();
+    testRiffChunks();
     testNyquist();
     testAlbum();
     testCurvedFade();

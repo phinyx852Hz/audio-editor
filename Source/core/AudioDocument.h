@@ -25,8 +25,8 @@ struct Marker
 // Moves markers to follow an edit that replaced [start, end) with insertedLength frames.
 void adjustMarkersForEdit (std::vector<Marker>&, Frame start, Frame end, Frame insertedLength);
 
-// Descriptive metadata, by schema-neutral key (see `tag`). Each file format
-// stores the keys it can: WAV as LIST/INFO and BWF bext, FLAC and Ogg as Vorbis comments.
+// Descriptive metadata, by schema-neutral key (see `tag`) plus schema keys
+// where a schema differs or has its own fields (see Metadata.h).
 using Tags = std::map<std::string, std::string>;
 
 namespace tag
@@ -43,6 +43,22 @@ namespace tag
     inline constexpr const char* bpm = "bpm";           // tempo in beats per minute (WAV: acid chunk; FLAC: BPM)
     inline constexpr const char* key = "key";           // musical key, such as "A minor" (FLAC: INITIALKEY)
     inline constexpr const char* catalog = "catalog";   // UPC/EAN of an album (Album, CUE sheet)
+    inline constexpr const char* albumArtist = "albumArtist";
+    inline constexpr const char* composer = "composer";
+    inline constexpr const char* lyricist = "lyricist";
+    inline constexpr const char* conductor = "conductor";
+    inline constexpr const char* publisher = "publisher";  // record label
+    inline constexpr const char* disc = "disc";            // "1/2"
+    inline constexpr const char* subtitle = "subtitle";
+    inline constexpr const char* grouping = "grouping";
+    inline constexpr const char* language = "language";
+    inline constexpr const char* lyrics = "lyrics";
+    inline constexpr const char* url = "url";
+    inline constexpr const char* encodedBy = "encodedBy";
+    inline constexpr const char* software = "software";
+    inline constexpr const char* engineer = "engineer";
+    inline constexpr const char* keywords = "keywords";
+    inline constexpr const char* originalDate = "originalDate";
     // Broadcast Wave (bext), WAV only
     inline constexpr const char* bwfDescription = "bwf.description";
     inline constexpr const char* bwfOriginator = "bwf.originator";
@@ -51,6 +67,12 @@ namespace tag
     inline constexpr const char* bwfTime = "bwf.originationTime";
     inline constexpr const char* bwfTimeReference = "bwf.timeReference";
     inline constexpr const char* bwfCodingHistory = "bwf.codingHistory";
+    inline constexpr const char* bwfUmid = "bwf.umid";                       // hex
+    inline constexpr const char* bwfLoudness = "bwf.loudnessValue";          // LUFS
+    inline constexpr const char* bwfLoudnessRange = "bwf.loudnessRange";     // LU
+    inline constexpr const char* bwfTruePeak = "bwf.maxTruePeakLevel";       // dBTP
+    inline constexpr const char* bwfMomentary = "bwf.maxMomentaryLoudness";  // LUFS
+    inline constexpr const char* bwfShortTerm = "bwf.maxShortTermLoudness";  // LUFS
 }
 
 class Album;
@@ -92,8 +114,10 @@ public:
     void jumpTo (int index);
 
     bool isModified() const { return position != savedPosition; }
-    void markSaved()        { savedPosition = position; }
-    void markUnsaved()      { savedPosition = -1; }  // e.g. a new untitled copy that has never been saved
+    void markSaved()        { savedPosition = position; savedAudio = current().data; }
+    void markUnsaved()      { savedPosition = -1; savedAudio.reset(); }  // e.g. a new untitled copy that has never been saved
+    // The audio is what the file on disk holds (only tags or markers changed since).
+    bool audioIsSaved() const { return savedAudio != nullptr && isOpen() && savedAudio == current().data; }
 
     int nextMarkerId();
 
@@ -112,4 +136,5 @@ private:
     int position = 0, savedPosition = 0, markerCounter = 0;
     std::string filePath;
     std::uint64_t documentId = 0;
+    AudioDataPtr savedAudio;
 };

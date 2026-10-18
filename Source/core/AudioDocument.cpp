@@ -38,6 +38,7 @@ void AudioDocument::reset (AudioDataPtr data, std::vector<Marker> markers, const
     history.push_back ({ "Open", { std::move (data), std::move (markers), std::move (tags), std::move (album) } });
     position = savedPosition = 0;
     filePath = path;
+    savedAudio = path.empty() ? nullptr : current().data;
     static std::atomic<std::uint64_t> lastId { 0 };
     documentId = ++lastId;
 

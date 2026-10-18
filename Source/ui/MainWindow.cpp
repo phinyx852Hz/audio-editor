@@ -12,6 +12,7 @@
 #include "ChainRow.h"
 #include "DesktopShortcuts.h"
 #include "Dialogs.h"
+#include "MetadataEditor.h"
 #include "../core/Repair.h"
 #include "../engine/BuiltinEffects.h"
 #include "../engine/VampHost.h"
@@ -198,7 +199,9 @@ MainWindow::MainWindow (AudioEngine& e)
 
         // Looping plays the selection, or the whole file when nothing is selected.
         const auto d = data();
-        if (looping && d != nullptr)
+        if (! previewName.isEmpty())
+            engine.setLoop (previewRange.first, previewRange.second);
+        else if (looping && d != nullptr)
             engine.setLoop (hasSelection() ? selStart : 0, hasSelection() ? selEnd : d->length());
         else
             engine.setLoop (0, 0);
@@ -247,6 +250,7 @@ void MainWindow::registerCommands()
     add ("file.record", Category::file, tr ("&Record..."), { KS (Qt::CTRL | Qt::Key_R) }, [this] { record(); });
     add ("file.save", Category::file, tr ("&Save"), { KS (Qt::CTRL | Qt::Key_S) }, [this] { save(); });
     add ("file.saveAs", Category::file, tr ("Save &As..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_S) }, [this] { saveAs(); });
+    add ("file.export", Category::file, tr ("&Export..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_X) }, [this] { exportAudio(); });
     add ("file.metadata", Category::file, tr ("&Metadata..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_M) }, [this] { editMetadata(); });
     add ("file.close", Category::file, tr ("&Close"), { KS (Qt::CTRL | Qt::Key_W) }, [this] { closeFile(); });
     add ("file.nextTab", Category::file, tr ("Ne&xt Tab"), { KS (Qt::CTRL | Qt::Key_Tab), KS (Qt::CTRL | Qt::Key_PageDown) },
@@ -582,7 +586,7 @@ void MainWindow::buildMenus()
 {
     // Menu titles carry & mnemonics, so Alt+F, Alt+E, Alt+P, Alt+M, Alt+A... open them.
     const QList<QPair<QString, QStringList>> layout {
-        { tr ("&File"),      { "file.open", "album.new", "file.record", "-", "file.save", "file.saveAs", "-", "file.metadata", "-", "file.close", "file.nextTab", "file.previousTab", "-", "file.quit" } },
+        { tr ("&File"),      { "file.open", "album.new", "file.record", "-", "file.save", "file.saveAs", "file.export", "-", "file.metadata", "-", "file.close", "file.nextTab", "file.previousTab", "-", "file.quit" } },
         { tr ("&Edit"),      { "edit.undo", "edit.redo", "-", "edit.cut", "edit.copy", "edit.copyToNew", "edit.paste", "edit.delete", "-",
                                "edit.trim", "edit.insertSilence", "-", "edit.snapZero", "-", "select.all", "select.none", "-",
                                "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
@@ -959,7 +963,7 @@ void MainWindow::updateCommandStates()
     const bool open = doc.isOpen() && ! loading;
     const bool sel = open && hasSelection();
 
-    for (const auto* id : { "file.save", "file.saveAs", "file.metadata", "file.close", "edit.insertSilence", "edit.copyToNew", "select.all", "select.none",
+    for (const auto* id : { "file.save", "file.saveAs", "file.export", "file.metadata", "file.close", "edit.insertSilence", "edit.copyToNew", "select.all", "select.none",
                             "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
                             "select.toStart", "select.toEnd", "process.gain", "process.normalize",
                             "process.reverse", "process.invert", "process.dcOffset", "process.stereoize", "process.convert",
@@ -1388,7 +1392,17 @@ bool MainWindow::saveAs()
 
 bool MainWindow::saveTo (const QString& path, bool askOptions)
 {
-    if (askOptions)
+    const auto extension = QFileInfo (path).suffix().toLower();
+    saveOptions.metadata = MetadataEditor::writeOptionsFor (extension);
+
+    // A lossy file whose audio is unchanged gets only its tags rewritten, so it
+    // is not encoded again (each encoding loses a little more).
+    const auto* codecFormat = AudioEngine::codecFormatFor (extension.toStdString());
+    const bool lossy = (codecFormat != nullptr && ! codecFormat->lossless) || extension == QLatin1String ("ogg");
+    const bool tagsOnly = lossy && doc.audioIsSaved() && QFileInfo (path) == QFileInfo (QString::fromStdString (doc.path()))
+                          && QFileInfo::exists (path);
+
+    if (askOptions && ! tagsOnly)
     {
         SaveOptionsDialog dialog (QFileInfo (path).suffix(), saveOptions, this);
         if (dialog.exec() != QDialog::Accepted)
@@ -1397,7 +1411,11 @@ bool MainWindow::saveTo (const QString& path, bool askOptions)
 
     QApplication::setOverrideCursor (Qt::WaitCursor);
     std::string error;
-    const bool ok = AudioEngine::saveFile (path.toStdString(), *data(), doc.current().markers, doc.current().tags, saveOptions, error);
+    auto metadata = saveOptions.metadata;
+    if (metadata.software.empty())
+        metadata.software = APP_DISPLAY_NAME;
+    const bool ok = tagsOnly ? AudioEngine::writeTags (path.toStdString(), doc.current().markers, data()->sampleRate(), doc.current().tags, metadata, error)
+                             : AudioEngine::saveFile (path.toStdString(), *data(), doc.current().markers, doc.current().tags, saveOptions, error);
     QApplication::restoreOverrideCursor();
 
     if (! ok)
@@ -1410,7 +1428,7 @@ bool MainWindow::saveTo (const QString& path, bool askOptions)
     doc.markSaved();
     optionsConfirmedFor = path;
     updateTitle();
-    statusBar()->showMessage (tr ("Saved %1").arg (QFileInfo (path).fileName()), 4000);
+    statusBar()->showMessage ((tagsOnly ? tr ("Saved the tags of %1 (the audio was not encoded again)") : tr ("Saved %1")).arg (QFileInfo (path).fileName()), 4000);
     return true;
 }
 
@@ -1828,7 +1846,7 @@ void MainWindow::editMetadata()
         return;
 
     const auto extension = QFileInfo (QString::fromStdString (doc.path())).suffix();
-    MetadataDialog dialog (doc.current().tags, extension.isEmpty() ? QStringLiteral ("wav") : extension, d->sampleRate(), this);
+    MetadataEditor dialog (doc.current().tags, QString::fromStdString (doc.path()), d->sampleRate(), this);
     const auto accepted = dialog.exec() == QDialog::Accepted;
     waveform->setFocus();
     if (! accepted || dialog.tags() == doc.current().tags)

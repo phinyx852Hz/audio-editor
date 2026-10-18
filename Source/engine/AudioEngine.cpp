@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "AudioEngine.h"
 #include "../core/Dsp.h"
-#include "../core/FlacTags.h"
+#include "../core/Metadata.h"
+#include "../core/RiffChunks.h"
+#include "Codec.h"
 #include "MasterChain.h"
 #include "StockFrame.h"
 #include "X11Windows.h"
@@ -841,87 +843,110 @@ AudioDataPtr AudioEngine::renderThroughMaster (const AudioData& data, Frame star
 
 std::vector<std::string> AudioEngine::readableExtensions()
 {
-    std::lock_guard lock (formatsMutex);
     std::vector<std::string> result;
-    for (auto& ext : juce::StringArray::fromTokens (formats().getWildcardForAllFormats(), ";", {}))
-        result.push_back (ext.trim().fromFirstOccurrenceOf ("*.", false, false).toLowerCase().toStdString());
-
+    {
+        std::lock_guard lock (formatsMutex);
+        for (auto& ext : juce::StringArray::fromTokens (formats().getWildcardForAllFormats(), ";", {}))
+            result.push_back (ext.trim().fromFirstOccurrenceOf ("*.", false, false).toLowerCase().toStdString());
+    }
+    for (const auto& ext : codec::readableExtensions())
+        if (std::find (result.begin(), result.end(), ext) == result.end())
+            result.push_back (ext);
     return result;
 }
 
 std::vector<std::string> AudioEngine::writableExtensions()
 {
-    return { "wav", "flac", "aiff", "ogg" };
+    std::vector<std::string> result { "wav", "flac", "aiff", "ogg" };
+    // Save As also offers the common compressed formats; Export has every one.
+    for (const auto* id : { "mp3", "aac-m4a", "opus", "wavpack" })
+        if (const auto* f = codec::find (id))
+            result.push_back (f->extension);
+    return result;
+}
+
+const codec::Format* AudioEngine::codecFormatFor (const std::string& extension)
+{
+    // Lossless WAV, AIFF, FLAC and Ogg Vorbis are written by JUCE here.
+    if (extension == "wav" || extension == "aiff" || extension == "aif" || extension == "flac" || extension == "ogg")
+        return nullptr;
+    for (const auto* id : { "mp3", "aac-m4a", "opus", "wavpack", "alac", "tta", "mp2", "wma", "ac3", "eac3" })
+        if (const auto* f = codec::find (id); f != nullptr && f->extension == extension)
+            return f;
+    for (const auto& f : codec::formats())
+        if (f.extension == extension && ! f.native)
+            return &f;
+    return nullptr;
 }
 
 //==============================================================================
 namespace
 {
-    // How each tag is called in WAV LIST/INFO and bext (as JUCE names them), and in Vorbis comments.
-    struct TagName
+    std::string extensionOf (const std::string& path)
     {
-        const char* key;
-        const char* wav;      // null: not kept in WAV
-        const char* vorbis;   // null: not kept in FLAC or Ogg
-    };
+        return juce::File (juce::String::fromUTF8 (path.c_str())).getFileExtension().toLowerCase().fromFirstOccurrenceOf (".", false, false).toStdString();
+    }
 
-    const TagName tagNames[] {
-        { tag::title,            "INAM", "TITLE" },
-        { tag::artist,           "IART", "ARTIST" },
-        { tag::album,            "IPRD", "ALBUM" },
-        { tag::genre,            "GENR", "GENRE" },
-        { tag::date,             "ICRD", "DATE" },
-        { tag::track,            "TRCK", "TRACKNUMBER" },
-        { tag::comment,          "ICMT", "COMMENT" },
-        { tag::copyright,        "ICOP", "COPYRIGHT" },
-        { tag::isrc,             "ISRC", "ISRC" },
-        { tag::bpm,              "acid tempo", "BPM" },
-        { tag::key,              nullptr, "INITIALKEY" },
-        { tag::bwfDescription,   "bwav description", nullptr },
-        { tag::bwfOriginator,    "bwav originator", nullptr },
-        { tag::bwfOriginatorRef, "bwav originator ref", nullptr },
-        { tag::bwfDate,          "bwav origination date", nullptr },
-        { tag::bwfTime,          "bwav origination time", nullptr },
-        { tag::bwfTimeReference, "bwav time reference", nullptr },
-        { tag::bwfCodingHistory, "bwav coding history", nullptr },
-    };
+    bool isRiffOrAiff (const std::string& ext) { return ext == "wav" || ext == "aiff" || ext == "aif" || ext == "aifc" || ext == "bwf"; }
 
-    // JUCE's Ogg Vorbis reader and writer know only these comments.
-    const std::map<std::string, const char*> oggKeys {
-        { "TITLE", "id3title" }, { "ARTIST", "id3artist" }, { "ALBUM", "id3album" }, { "COMMENT", "id3comment" },
-        { "DATE", "id3date" }, { "GENRE", "id3genre" }, { "TRACKNUMBER", "id3trackNumber" },
-    };
+    // The schemas each file type can hold.
+    std::vector<meta::Schema> schemasFor (const std::string& ext)
+    {
+        using S = meta::Schema;
+        if (ext == "wav" || ext == "bwf")
+            return { S::riff, S::bext, S::cart, S::ixml, S::xmp, S::id3 };
+        if (ext == "aiff" || ext == "aif" || ext == "aifc")
+            return { S::id3, S::xmp };
+        if (ext == "mp3" || ext == "mp2" || ext == "tta")
+            return { S::id3, S::xmp };
+        if (ext == "flac" || ext == "ogg" || ext == "opus" || ext == "spx" || ext == "oga")
+            return { S::vorbis, S::xmp };
+        if (ext == "m4a" || ext == "mp4" || ext == "m4b" || ext == "alac")
+            return { S::mp4, S::xmp };
+        if (ext == "wv" || ext == "ape" || ext == "mpc")
+            return { S::ape, S::xmp };
+        return { S::vorbis };   // TagLib's common properties
+    }
 }
 
 bool AudioEngine::keepsTag (const std::string& extension, const std::string& key)
 {
-    for (const auto& t : tagNames)
-        if (key == t.key)
-        {
-            if (extension == "wav")
-                return t.wav != nullptr;
-            if (extension == "flac")
-                return t.vorbis != nullptr;
-            if (extension == "ogg")
-                return t.vorbis != nullptr && oggKeys.count (t.vorbis) > 0;
-            return false;
-        }
+    const auto schemas = schemasFor (extension);
+    const auto schema = meta::schemaOfKey (key);
+    if (key.compare (0, 8, "picture.") == 0)
+        return true;   // ID3, Vorbis, MP4 or APE pictures
+    if (schema != meta::Schema::common)
+        return std::find (schemas.begin(), schemas.end(), schema) != schemas.end();
+    for (const auto& f : meta::fields())
+        if (f.common == key && std::find (schemas.begin(), schemas.end(), f.schema) != schemas.end())
+            return true;
     return false;
 }
+
+std::vector<meta::Schema> AudioEngine::schemasOf (const std::string& extension) { return schemasFor (extension); }
 
 AudioDataPtr AudioEngine::loadFile (const std::string& path, std::vector<Marker>& markersOut, Tags& tagsOut,
                                     std::string& error, std::atomic<float>* progress)
 {
+    const auto ext = extensionOf (path);
     std::unique_ptr<juce::AudioFormatReader> reader;
     {
         std::lock_guard lock (formatsMutex);
         reader.reset (formats().createReaderFor (juce::File (juce::String::fromUTF8 (path.c_str()))));
     }
 
+    // Everything JUCE does not read goes through FFmpeg, with TagLib for the tags.
     if (reader == nullptr)
     {
-        error = "Unsupported or unreadable file: " + path;
-        return nullptr;
+        auto data = codec::decode (path, error, progress, nullptr, &markersOut);
+        if (data == nullptr)
+        {
+            if (error.empty())
+                error = "Unsupported or unreadable file: " + path;
+            return nullptr;
+        }
+        tagio::read (path, tagsOut);
+        return data;
     }
 
     const auto numChannels = (int) reader->numChannels;
@@ -971,24 +996,43 @@ AudioDataPtr AudioEngine::loadFile (const std::string& path, std::vector<Marker>
         markersOut.push_back (m);
     }
 
-    // Tags: WAV and Ogg through JUCE's metadata, FLAC from its Vorbis comments.
-    const auto ext = juce::File (juce::String::fromUTF8 (path.c_str())).getFileExtension().toLowerCase();
-    const auto flacFields = ext == ".flac" ? flactags::read (path) : flactags::Fields();
-    for (const auto& t : tagNames)
+    // Tags: WAV and AIFF chunks read here (ID3 chunk through TagLib), the rest through TagLib.
+    if (isRiffOrAiff (ext))
     {
-        juce::String value;
-        if (ext == ".wav" && t.wav != nullptr)
-            value = meta.getValue (t.wav, {});
-        else if (ext == ".ogg" && t.vorbis != nullptr && oggKeys.count (t.vorbis) > 0)
-            value = meta.getValue (oggKeys.at (t.vorbis), {});
-        else if (ext == ".flac" && t.vorbis != nullptr && flacFields.count (t.vorbis) > 0)
-            value = juce::String::fromUTF8 (flacFields.at (t.vorbis).c_str());
-        value = value.trim();
-        if (value.isNotEmpty() && ! ((t.key == std::string (tag::bwfTimeReference) || t.key == std::string (tag::bpm)) && value.getDoubleValue() <= 0.0))
-            tagsOut[t.key] = value.toStdString();
+        const auto id3 = riff::readMetadata (path, tagsOut);
+        if (! id3.empty())
+            tagio::readId3 (id3, tagsOut);
+        // WAV keeps a tempo in its acid chunk.
+        if (const auto tempo = meta.getValue (juce::WavAudioFormat::acidTempo, {}).getDoubleValue(); tempo > 0.0 && tagsOut[tag::bpm].empty())
+            tagsOut[tag::bpm] = juce::String (tempo, 2).trimCharactersAtEnd ("0").trimCharactersAtEnd (".").toStdString();
+        if (tagsOut[tag::bpm].empty())
+            tagsOut.erase (tag::bpm);
     }
+    else
+        tagio::read (path, tagsOut);
 
     return builder.finish();
+}
+
+bool AudioEngine::writeTags (const std::string& path, const std::vector<Marker>& markers, double sampleRate, const Tags& tags,
+                             const tagio::Options& options, std::string& error)
+{
+    const auto ext = extensionOf (path);
+    if (isRiffOrAiff (ext))
+    {
+        riff::Write w;
+        w.riff = options.riff;
+        w.bext = options.bext;
+        w.cart = options.cart;
+        w.ixml = options.ixml;
+        w.xmp = options.xmp;
+        w.software = options.software;
+        if (options.id3)
+            w.id3 = tagio::renderId3 (tags, options);
+        // AIFF's own text chunks follow the RIFF switch.
+        return riff::writeMetadata (path, tags, w, error);
+    }
+    return tagio::write (path, tags, markers, sampleRate, options, error);
 }
 
 bool AudioEngine::saveFile (const std::string& path, const AudioData& data, const std::vector<Marker>& markers, const Tags& tags,
@@ -996,6 +1040,52 @@ bool AudioEngine::saveFile (const std::string& path, const AudioData& data, cons
 {
     const juce::File file (juce::String::fromUTF8 (path.c_str()));
     const auto ext = file.getFileExtension().toLowerCase();
+    auto metadata = options.metadata;
+    if (metadata.software.empty())
+        metadata.software = APP_DISPLAY_NAME;
+
+    // Write to a temporary file first so a failed save never destroys the original.
+    // It keeps the extension, so the tag writers know the type.
+    const auto temp = file.getSiblingFile ("." + file.getFileNameWithoutExtension() + ".phinyx-tmp" + ext);
+    temp.deleteFile();
+    const auto tempPath = temp.getFullPathName().toStdString();
+
+    // Compressed formats through FFmpeg.
+    if (const auto* f = codecFormatFor (ext.substring (1).toStdString()))
+    {
+        const auto rate = codec::rateFor (*f, data.sampleRate());
+        auto audio = std::lround (data.sampleRate()) != rate ? dsp::resample (data, rate) : data.slice (0, data.length());
+        if (audio->numChannels() > f->maxChannels && f->maxChannels == 1)
+            audio = dsp::toMono (*audio);
+        codec::Job job;
+        job.format = f;
+        job.settings = options.codecSettings.empty() ? codec::defaults (*f) : options.codecSettings;
+        job.bits = 16;
+        for (const auto d : f->bitDepths)
+            if (d <= options.bitDepth)
+                job.bits = d;
+        if (! f->bitDepths.empty() && job.bits <= 24)
+            audio = dsp::quantize (*audio, job.bits, options.dither ? dsp::Dither::tpdf : dsp::Dither::none);
+        job.chapters = metadata.chapters ? markers : std::vector<Marker>();
+        job.tags = tags;
+        if (! codec::encode (*audio, 0, audio->length(), tempPath, job, error))
+        {
+            temp.deleteFile();
+            return false;
+        }
+        if (f->taggedByTagLib && ! tagio::write (tempPath, tags, job.chapters, rate, metadata, error))
+        {
+            temp.deleteFile();
+            return false;
+        }
+        if (! temp.moveFileTo (file))
+        {
+            error = "Could not replace " + path;
+            temp.deleteFile();
+            return false;
+        }
+        return true;
+    }
 
     juce::AudioFormat* format = nullptr;
     {
@@ -1003,9 +1093,9 @@ bool AudioEngine::saveFile (const std::string& path, const AudioData& data, cons
         format = formats().findFormatForFileExtension (ext);
     }
 
-    if (format == nullptr || ext == ".mp3")
+    if (format == nullptr)
     {
-        error = "Saving as " + ext.toStdString() + " is not supported yet. Use .wav, .flac, .aiff or .ogg.";
+        error = "Saving as " + ext.toStdString() + " is not supported. Use Export for other formats.";
         return false;
     }
 
@@ -1028,23 +1118,13 @@ bool AudioEngine::saveFile (const std::string& path, const AudioData& data, cons
     if (isLossy)
         writerOptions = writerOptions.withQualityOptionIndex (std::clamp (options.oggQuality, 0, format->getQualityOptions().size() - 1));
 
+    // JUCE writes the audio, markers and tempo; the tags are written afterwards (writeTags).
     std::unordered_map<juce::String, juce::String> meta;
-    for (const auto& t : tagNames)
+    const auto bpm = tags.find (tag::bpm);
+    if (ext == ".wav" && bpm != tags.end() && std::atof (bpm->second.c_str()) > 0.0)
     {
-        const auto it = tags.find (t.key);
-        if (it == tags.end() || it->second.empty())
-            continue;
-        const auto value = juce::String::fromUTF8 (it->second.c_str());
-        if (ext == ".wav" && t.wav != nullptr)
-            meta[t.wav] = value;
-        else if (ext == ".ogg" && t.vorbis != nullptr && oggKeys.count (t.vorbis) > 0)
-            meta[oggKeys.at (t.vorbis)] = value;
-    }
-    if (ext == ".wav" && ! meta.empty())
-        meta["ISFT"] = APP_DISPLAY_NAME;
-    // JUCE writes the acid chunk (where WAV keeps a tempo) only with a time signature in it.
-    if (ext == ".wav" && meta.count (juce::WavAudioFormat::acidTempo) > 0)
-    {
+        // JUCE writes the acid chunk (where WAV keeps a tempo) only with a time signature in it.
+        meta[juce::WavAudioFormat::acidTempo] = juce::String::fromUTF8 (bpm->second.c_str());
         meta.emplace (juce::WavAudioFormat::acidNumerator, "4");
         meta.emplace (juce::WavAudioFormat::acidDenominator, "4");
     }
@@ -1083,10 +1163,6 @@ bool AudioEngine::saveFile (const std::string& path, const AudioData& data, cons
     }
     if (! meta.empty())
         writerOptions = writerOptions.withMetadataValues (meta);
-
-    // Write to a temporary file first so a failed save never destroys the original.
-    const auto temp = file.getSiblingFile ("." + file.getFileName() + ".phinyx-tmp");
-    temp.deleteFile();
 
     {
         std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (temp);
@@ -1132,17 +1208,10 @@ bool AudioEngine::saveFile (const std::string& path, const AudioData& data, cons
         }
     }
 
-    if (isFlac)
+    if (! writeTags (tempPath, markers, data.sampleRate(), tags, metadata, error))
     {
-        flactags::Fields fields;
-        for (const auto& t : tagNames)
-            if (const auto it = tags.find (t.key); t.vorbis != nullptr && it != tags.end() && ! it->second.empty())
-                fields[t.vorbis] = it->second;
-        if (! fields.empty() && ! flactags::write (temp.getFullPathName().toStdString(), fields, APP_DISPLAY_NAME, error))
-        {
-            temp.deleteFile();
-            return false;
-        }
+        temp.deleteFile();
+        return false;
     }
 
     if (! temp.moveFileTo (file))

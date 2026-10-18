@@ -3,9 +3,12 @@
 
 #include "../core/AudioData.h"
 #include "../core/AudioDocument.h"
+#include "../core/Metadata.h"
+#include "TagIO.h"
 
 #include <atomic>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -28,11 +31,15 @@ struct MeterBlock
     double loudnessPower = 0.0;  // channel-weighted K-weighted mean square (BS.1770)
 };
 
+namespace codec { struct Format; }
+
 struct SaveOptions
 {
     int bitDepth = 24;      // 16, 24 or 32 (32 = float for WAV/AIFF)
     bool dither = true;     // TPDF dither when reducing below 32-bit float
     int oggQuality = 6;     // 0..10 for Ogg Vorbis
+    tagio::Options metadata;   // which schemas are written
+    std::map<std::string, std::string> codecSettings;   // compressed formats (see codec::Format); empty: defaults
 };
 
 struct PluginInfo
@@ -191,6 +198,12 @@ public:
                           const SaveOptions&, std::string& error);
     // Which tags a file type keeps ("wav", "flac"...): the rest are not saved there.
     static bool keepsTag (const std::string& extension, const std::string& key);
+    static std::vector<meta::Schema> schemasOf (const std::string& extension);
+    // The FFmpeg format Save writes for an extension, or null for WAV, AIFF, FLAC and Ogg Vorbis.
+    static const codec::Format* codecFormatFor (const std::string& extension);
+    // Rewrites only the tags of a saved file (the audio stays as it is, not encoded again).
+    static bool writeTags (const std::string& path, const std::vector<Marker>& markers, double sampleRate, const Tags&,
+                           const tagio::Options&, std::string& error);
 
 private:
     void useOutputsFor (int channels);
