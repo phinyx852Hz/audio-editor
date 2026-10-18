@@ -35,6 +35,8 @@ public:
         int channels = 2;
         QString sourcePath;
         Tags tags;
+        bool forBatch = false;                      // the Batch Processor's outputs: no range or preview
+        std::vector<exporter::Output> outputs;      // to start from (empty: the remembered ones)
     };
 
     ExportDialog (const Context&, QWidget* parent);

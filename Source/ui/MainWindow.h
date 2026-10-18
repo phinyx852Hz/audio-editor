@@ -10,6 +10,8 @@
 #include "../engine/AudioEngine.h"
 #include "CommandRegistry.h"
 #include "Recovery.h"
+
+#include <mutex>
 #include "../engine/Export.h"
 #include "WaveformView.h"
 
@@ -358,6 +360,11 @@ private:
     class QTabBar* tabBar = nullptr;
     std::vector<TabState> tabs { TabState() };
     int activeTab = 0;
+
+    // The Batch Processor (BatchWindow.h), made when first opened.
+    void showBatch();
+    class BatchWindow* batchWindow = nullptr;
+    std::mutex masterRenderLock;   // batch workers render through the Master Section one at a time
 
     Recovery recovery;
     QTimer autosaveTimer;

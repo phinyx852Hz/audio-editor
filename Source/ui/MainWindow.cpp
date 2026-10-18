@@ -11,6 +11,7 @@
 #include "TransportBar.h"
 #include "ChainRow.h"
 #include "DesktopShortcuts.h"
+#include "BatchWindow.h"
 #include "Dialogs.h"
 #include "MetadataEditor.h"
 #include "../core/Repair.h"
@@ -232,6 +233,7 @@ MainWindow::MainWindow (AudioEngine& e)
 MainWindow::~MainWindow()
 {
     loadWatcher.waitForFinished();
+    delete batchWindow;   // stops its workers while the engine they render through still exists
 }
 
 //==============================================================================
@@ -405,6 +407,7 @@ void MainWindow::registerCommands()
         else
             runNyquistCommand (lastEffectId, true);
     });
+    add ("tools.batch", Category::tools, tr ("&Batch Processor..."), { KS (Qt::CTRL | Qt::Key_B) }, [this] { showBatch(); });
     add ("tools.nyquistPrompt", Category::tools, tr ("&Nyquist Prompt..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_Y) }, [this] { nyquistPrompt(); });
     add ("tools.nyquistFolder", Category::tools, tr ("Open Nyquist Plug-ins &Folder"), {}, [this]
     {
@@ -607,7 +610,7 @@ void MainWindow::buildMenus()
                                "album.songProperties", "album.openSong", "album.removeSong", "-",
                                "album.properties", "album.twoTracks", "album.export" } },
         { tr ("&Analyze"),   { "analyze.loudness", "-", "analyze.beats", "analyze.onsets", "analyze.tempoKey", "analyze.vamp", "-", "view.meters", "analyze.imagingView", "analyze.resetMeters", "-", "view.spectral", "-", "@nyquist.analyze" } },
-        { tr ("Too&ls"),     { "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan" } },
+        { tr ("Too&ls"),     { "tools.batch", "-", "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan" } },
         { tr ("Ma&ster"),    { "view.master", "view.chain", "master.addPlugin", "master.bypass", "-", "master.render", "master.renderNew", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
@@ -3071,6 +3074,13 @@ void MainWindow::closeEvent (QCloseEvent* e)
         return;
     }
 
+    if (batchWindow != nullptr && batchWindow->isRunning()
+        && QMessageBox::question (this, tr ("Quit"), tr ("A batch is still running. Stop it and quit?")) != QMessageBox::Yes)
+    {
+        e->ignore();
+        return;
+    }
+
     // Ask about each tab with unsaved changes, showing it while asking.
     for (int i = 0; i < (int) tabs.size(); ++i)
     {
@@ -3347,4 +3357,33 @@ void MainWindow::runNyquist (nyquist::Script script, const QString& title, bool 
     if ((debug || script.trace) && result.type != R::error)
         nyquistui::showOutput (this, title, output);
     waveform->setFocus();
+}
+
+//==============================================================================
+void MainWindow::showBatch()
+{
+    if (batchWindow == nullptr)
+    {
+        batchWindow = new BatchWindow (this);
+        batchWindow->masterRender = [this] (const AudioData& audio, std::string& error, const std::atomic<bool>* cancel)
+        {
+            const std::lock_guard<std::mutex> lock (masterRenderLock);
+            return engine.renderThroughMaster (audio, 0, audio.length(), error, nullptr, cancel);
+        };
+        batchWindow->openFiles = [this]
+        {
+            QStringList paths;
+            for (int i = 0; i < (int) tabs.size(); ++i)
+            {
+                const auto& path = i == activeTab ? doc.path() : tabs[(size_t) i].doc.path();
+                if (! path.empty())
+                    paths << QString::fromStdString (path);
+            }
+            return paths;
+        };
+        connect (batchWindow, &BatchWindow::openRequested, this, [this] (const QString& path) { openFile (path); });
+    }
+    batchWindow->show();
+    batchWindow->raise();
+    batchWindow->activateWindow();
 }

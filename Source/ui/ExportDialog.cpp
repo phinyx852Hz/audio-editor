@@ -91,9 +91,9 @@ void ExportDialog::remember (const std::vector<exporter::Output>& outputs)
 }
 
 ExportDialog::ExportDialog (const Context& c, QWidget* parent)
-    : QDialog (parent), context (c), list (remembered())
+    : QDialog (parent), context (c), list (c.outputs.empty() ? remembered() : c.outputs)
 {
-    setWindowTitle (tr ("Export"));
+    setWindowTitle (c.forBatch ? tr ("Batch Outputs") : tr ("Export"));
     resize (900, 700);
 
     // Left: the outputs.
@@ -276,7 +276,7 @@ ExportDialog::ExportDialog (const Context& c, QWidget* parent)
     static_cast<QLabel*> (bottom->itemAt (0)->widget())->setBuddy (rangeBox);
 
     auto* buttons = new QDialogButtonBox (QDialogButtonBox::Cancel, this);
-    auto* go = buttons->addButton (tr ("Export"), QDialogButtonBox::AcceptRole);
+    auto* go = buttons->addButton (context.forBatch ? tr ("OK") : tr ("Export"), QDialogButtonBox::AcceptRole);
     go->setDefault (true);
     auto* version = new QLabel (tr ("FFmpeg %1, %2 formats").arg (qs (codec::ffmpegVersion())).arg ((int) codec::formats().size()), this);
     version->setEnabled (false);
@@ -386,6 +386,11 @@ ExportDialog::ExportDialog (const Context& c, QWidget* parent)
     connect (buttons, &QDialogButtonBox::accepted, this, [this]
     {
         readForm();
+        if (context.forBatch)
+        {
+            accept();
+            return;
+        }
         remember (list);
         QSettings().setValue (QStringLiteral ("export/range"), rangeBox->currentData());
         if (masterBox->isEnabled())
@@ -394,6 +399,11 @@ ExportDialog::ExportDialog (const Context& c, QWidget* parent)
     });
     connect (buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     connect (this, &QDialog::finished, this, [this] { if (previewButton->isChecked()) Q_EMIT previewStopped(); });
+
+    if (context.forBatch)
+        for (int i = 0; i < bottom->count(); ++i)
+            if (auto* w = bottom->itemAt (i)->widget())
+                w->hide();
 
     refreshList();
     showOutput (0);

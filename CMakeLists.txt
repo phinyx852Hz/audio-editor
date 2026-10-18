@@ -64,6 +64,7 @@ target_sources(${APP_ID} PRIVATE
     Source/engine/ClapFormat.cpp
     Source/engine/Codec.cpp
     Source/engine/Export.cpp
+    Source/engine/Batch.cpp
     Source/engine/TagIO.cpp
     Source/engine/MasterChain.cpp
     Source/engine/StockFrame.cpp
@@ -81,6 +82,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/ReferencePanel.cpp
     Source/ui/ReferenceSection.cpp
     Source/ui/ExportSection.cpp
+    Source/ui/BatchWindow.cpp
     Source/ui/AlbumEditor.cpp
     Source/ui/AlbumFile.cpp
     Source/ui/AlbumView.cpp
