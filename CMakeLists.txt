@@ -60,12 +60,14 @@ target_sources(${APP_ID} PRIVATE
     Source/engine/MasterChain.cpp
     Source/engine/StockFrame.cpp
     Source/engine/StockPlugins.cpp
+    Source/engine/VampHost.cpp
     Source/engine/X11Windows.cpp
     Source/ui/CommandRegistry.cpp
     Source/ui/Dialogs.cpp
     Source/ui/MainWindow.cpp
     Source/ui/GainHud.cpp
     Source/ui/LiveEdits.cpp
+    Source/ui/Analysis.cpp
     Source/ui/MontageEditor.cpp
     Source/ui/MontageFile.cpp
     Source/ui/MontageView.cpp
@@ -161,6 +163,10 @@ target_link_libraries(${APP_ID}
         juce::juce_recommended_warning_flags)
 
 include(GNUInstallDirs)
+
+# Vamp analysis plugins (cmake/Vamp.cmake)
+include(cmake/Vamp.cmake)
+target_link_libraries(${APP_ID} PRIVATE phinyx_vamp_host)
 
 # Nyquist effects (cmake/Nyquist.cmake): libnyquist, its runtime and the bundled plug-ins.
 include(cmake/Nyquist.cmake)

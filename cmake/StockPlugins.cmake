@@ -97,6 +97,37 @@ endforeach()
 
 set(stock_targets stock_toneshifteq stock_wolfshaper stock_lsp_clipper stock_lsp_mb-clipper stock_lsp_oscilloscope)
 
+# QM Vamp Plugins by the Centre for Digital Music, Queen Mary, University of
+# London (GPL-2.0-or-later): beat, bar, onset, tempo and key detection and more,
+# for the Analyze menu. Built with the qm-dsp library and Vamp SDK at the
+# commits its repoint-lock.json names; installed into the stock vamp folder.
+# Their makefiles use x86 SSE flags, so other CPUs go without them for now.
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64")
+    set(qm_makefile build/linux/Makefile.linux64)
+    phinyx_stock_licence(qm-vamp-plugins COPYING)
+    ExternalProject_Add(stock_qm_vamp
+        GIT_REPOSITORY https://github.com/c4dm/qm-vamp-plugins.git
+        GIT_TAG c918afc070f79489758bb2dab6895972bd82066b
+        BUILD_IN_SOURCE TRUE
+        UPDATE_COMMAND ""
+        ${stock_one_at_a_time}
+        CONFIGURE_COMMAND ${CMAKE_COMMAND} -E rm -rf lib
+            COMMAND git clone -q https://github.com/c4dm/qm-dsp.git lib/qm-dsp
+            COMMAND git -C lib/qm-dsp checkout -q e34a3cc188332ed7c33cd9257ef164de5b587191
+            COMMAND git clone -q https://github.com/c4dm/vamp-plugin-sdk.git lib/vamp-plugin-sdk
+            COMMAND git -C lib/vamp-plugin-sdk checkout -q c3ef877327f1b081b95a1d05349c297f8c4454f0
+        # qm-dsp first: the plugin's makefile builds it as a phony prerequisite, which races under -j.
+        BUILD_COMMAND ${stock_make} -C lib/qm-dsp -f ${qm_makefile}
+            COMMAND ${stock_make} -f ${qm_makefile}
+        INSTALL_COMMAND ${CMAKE_COMMAND} -E make_directory ${PHINYX_STOCK_DIR}/vamp
+            COMMAND ${CMAKE_COMMAND} -E copy <SOURCE_DIR>/qm-vamp-plugins.so <SOURCE_DIR>/qm-vamp-plugins.cat
+                <SOURCE_DIR>/qm-vamp-plugins.n3 ${PHINYX_STOCK_DIR}/vamp/
+            ${stock_licence_commands})
+    list(APPEND stock_targets stock_qm_vamp)
+else()
+    message(STATUS "QM Vamp Plugins are built on x86-64 only: left out")
+endif()
+
 # The ZL Audio plugins by zsliu98 (AGPL-3.0, like PHINYX), built with their own
 # JUCE fork as VST3s. Their logos are excluded from the licence and are not
 # shown by PHINYX. They use Highway with one fixed SIMD level: SSE4 runs on any

@@ -989,6 +989,8 @@ MetadataDialog::MetadataDialog (const Tags& current, const QString& extension, d
     add (commonForm, tag::date, tr ("&Date:"), false, 0);
     add (commonForm, tag::copyright, tr ("&Copyright:"), false, 0);
     add (commonForm, tag::isrc, tr ("&ISRC:"), false, 12);
+    add (commonForm, tag::bpm, tr ("B&PM:"), false, 8);
+    add (commonForm, tag::key, tr ("K&ey:"), false, 8);
     add (commonForm, tag::comment, tr ("Co&mment:"), true, 0);
     tabs->addTab (common, tr ("Tags"));
 
@@ -1036,7 +1038,7 @@ MetadataDialog::MetadataDialog (const Tags& current, const QString& extension, d
     const auto ext = extension.toLower();
     QString kept;
     if (ext == QStringLiteral ("wav"))
-        kept = tr ("Saved as WAV, every field is kept (tags in the LIST/INFO chunk, Broadcast Wave in bext).");
+        kept = tr ("Saved as WAV, every field but Key is kept (tags in the LIST/INFO chunk, BPM in the acid chunk, Broadcast Wave in bext); FLAC keeps Key.");
     else if (ext == QStringLiteral ("flac"))
         kept = tr ("Saved as FLAC, the tags are kept as Vorbis comments; Broadcast Wave fields are kept only in WAV.");
     else if (ext == QStringLiteral ("ogg"))

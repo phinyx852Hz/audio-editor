@@ -31,6 +31,7 @@ class MontageView;
 class QLabel;
 class QListWidget;
 class QSlider;
+namespace vamphost { struct Result; }
 
 class MainWindow final : public QMainWindow
 {
@@ -198,6 +199,18 @@ private:
     void refreshMontageSources();            // picks up edits made to its songs in other tabs
     // Runs `work` on a worker thread behind a progress dialog; false when cancelled.
     bool runWithProgress (const QString& title, const std::function<void (std::atomic<float>&, const std::atomic<bool>&)>& work);
+
+    // Analysis with Vamp plugins (Analysis.cpp): markers from beats, onsets or
+    // any plugin, tempo and key into tags, and slices cut at the markers.
+    void registerAnalysisCommands();
+    void updateAnalysisCommandStates();
+    bool runAnalysis (const QString& title, const AudioData&, Frame start, Frame end, const QString& outputId, vamphost::Result&);
+    void markFeatures (const QString& outputId, const QString& title);
+    void detectTempoAndKey();
+    void chooseVampPlugin();
+    void runVampOutput (const QString& outputId);
+    void exportSlices();
+    void exportLabels();
 
     // Window opacity (see Theme::setOpacity)
     void changeOpacity (double value, bool announce);

@@ -40,6 +40,8 @@ namespace tag
     inline constexpr const char* comment = "comment";
     inline constexpr const char* copyright = "copyright";
     inline constexpr const char* isrc = "isrc";
+    inline constexpr const char* bpm = "bpm";           // tempo in beats per minute (WAV: acid chunk; FLAC: BPM)
+    inline constexpr const char* key = "key";           // musical key, such as "A minor" (FLAC: INITIALKEY)
     inline constexpr const char* catalog = "catalog";   // UPC/EAN of an album (Montage, CUE sheet)
     // Broadcast Wave (bext), WAV only
     inline constexpr const char* bwfDescription = "bwf.description";

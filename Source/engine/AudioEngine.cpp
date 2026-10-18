@@ -735,6 +735,8 @@ namespace
         { tag::comment,          "ICMT", "COMMENT" },
         { tag::copyright,        "ICOP", "COPYRIGHT" },
         { tag::isrc,             "ISRC", "ISRC" },
+        { tag::bpm,              "acid tempo", "BPM" },
+        { tag::key,              nullptr, "INITIALKEY" },
         { tag::bwfDescription,   "bwav description", nullptr },
         { tag::bwfOriginator,    "bwav originator", nullptr },
         { tag::bwfOriginatorRef, "bwav originator ref", nullptr },
@@ -842,7 +844,7 @@ AudioDataPtr AudioEngine::loadFile (const std::string& path, std::vector<Marker>
         else if (ext == ".flac" && t.vorbis != nullptr && flacFields.count (t.vorbis) > 0)
             value = juce::String::fromUTF8 (flacFields.at (t.vorbis).c_str());
         value = value.trim();
-        if (value.isNotEmpty() && ! (t.key == std::string (tag::bwfTimeReference) && value == "0"))
+        if (value.isNotEmpty() && ! ((t.key == std::string (tag::bwfTimeReference) || t.key == std::string (tag::bpm)) && value.getDoubleValue() <= 0.0))
             tagsOut[t.key] = value.toStdString();
     }
 
@@ -900,6 +902,12 @@ bool AudioEngine::saveFile (const std::string& path, const AudioData& data, cons
     }
     if (ext == ".wav" && ! meta.empty())
         meta["ISFT"] = APP_DISPLAY_NAME;
+    // JUCE writes the acid chunk (where WAV keeps a tempo) only with a time signature in it.
+    if (ext == ".wav" && meta.count (juce::WavAudioFormat::acidTempo) > 0)
+    {
+        meta.emplace (juce::WavAudioFormat::acidNumerator, "4");
+        meta.emplace (juce::WavAudioFormat::acidDenominator, "4");
+    }
 
     if (ext == ".wav" && ! markers.empty())
     {

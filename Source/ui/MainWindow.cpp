@@ -14,6 +14,7 @@
 #include "Dialogs.h"
 #include "../core/Repair.h"
 #include "../engine/BuiltinEffects.h"
+#include "../engine/VampHost.h"
 #include "MasterPanel.h"
 #include "Panels.h"
 #include "RecordDialog.h"
@@ -397,6 +398,7 @@ void MainWindow::registerCommands()
     add ("tools.nyquistRescan", Category::tools, tr ("&Rescan Nyquist Plug-ins"), {}, [this] { rescanNyquist(); });
     registerNyquistCommands();
     registerMontageCommands();
+    registerAnalysisCommands();
 
     add ("transport.playStop", Category::transport, tr ("&Play / Stop"), { KS (Qt::Key_Space) }, [this] { togglePlayback(); });
     add ("transport.stop", Category::transport, tr ("&Stop"), { KS (Qt::Key_K) }, [this]
@@ -561,12 +563,12 @@ void MainWindow::buildMenus()
                                "repair.brushSmaller", "repair.brushLarger", "repair.addHarmonics", "-",
                                "repair.frequencyRange", "repair.allFrequencies", "-", "view.spectral" } },
         { tr ("Effe&ct"),    { "effect.repeat", "-", "@nyquist.generate", "-", "@nyquist.effect" } },
-        { tr ("&Markers"),   { "marker.add", "marker.addRegion", "-", "marker.next", "marker.previous", "-", "view.markers" } },
+        { tr ("&Markers"),   { "marker.add", "marker.addRegion", "-", "marker.next", "marker.previous", "-", "marker.exportSlices", "marker.exportLabels", "-", "view.markers" } },
         { tr ("Mo&ntage"),   { "montage.new", "montage.addSongs", "-", "montage.previousSong", "montage.nextSong", "-",
                                "montage.moveEarlier", "montage.moveLater", "montage.longerPause", "montage.shorterPause", "-",
                                "montage.songProperties", "montage.openSong", "montage.removeSong", "-",
                                "montage.album", "montage.export" } },
-        { tr ("&Analyze"),   { "analyze.loudness", "-", "view.meters", "analyze.imagingView", "analyze.resetMeters", "-", "view.spectral", "-", "@nyquist.analyze" } },
+        { tr ("&Analyze"),   { "analyze.loudness", "-", "analyze.beats", "analyze.onsets", "analyze.tempoKey", "analyze.vamp", "-", "view.meters", "analyze.imagingView", "analyze.resetMeters", "-", "view.spectral", "-", "@nyquist.analyze" } },
         { tr ("Too&ls"),     { "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan" } },
         { tr ("Ma&ster"),    { "view.master", "view.chain", "master.addPlugin", "master.bypass", "-", "master.render", "-", "master.scan" } },
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
@@ -796,6 +798,27 @@ QList<FindItem> MainWindow::findItems()
         list.push_back (item);
     }
 
+    // Vamp analysis plugins: running one adds markers or regions (Analysis.cpp).
+    for (const auto& o : vamphost::outputs())
+    {
+        FindItem item;
+        item.kind = FindItem::Kind::effect;
+        item.key = QStringLiteral ("vamp:") + QString::fromStdString (o.id());
+        item.name = QStringLiteral ("%1: %2").arg (QString::fromStdString (o.pluginName), QString::fromStdString (o.outputName));
+        item.group = tr ("Vamp analysis");
+        item.detail = QString::fromStdString (o.maker);
+        item.searchText = QString::fromStdString (o.category + " " + o.description) + tr (" analyze analysis vamp");
+        item.enabled = doc.isOpen() && ! doc.isMontage() && ! loading;
+        item.activate = [this, id = QString::fromStdString (o.id())]
+        {
+            if (data() == nullptr || doc.isMontage())
+                statusBar()->showMessage (tr ("Open a file first: analysis runs on the selection or the whole file"), 5000);
+            else
+                runVampOutput (id);
+        };
+        list.push_back (item);
+    }
+
     return list;
 }
 
@@ -923,6 +946,7 @@ void MainWindow::updateCommandStates()
 
     commands.action (QStringLiteral ("edit.paste"))->setEnabled (open && clipboard != nullptr);
     updateMontageCommandStates();
+    updateAnalysisCommandStates();
     commands.action (QStringLiteral ("marker.addRegion"))->setEnabled (open);
     commands.action (QStringLiteral ("master.render"))->setEnabled (open);
 
