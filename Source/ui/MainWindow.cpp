@@ -327,6 +327,13 @@ void MainWindow::registerCommands()
 
     add ("analyze.loudness", Category::analyze, tr ("&Loudness Statistics..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_A) },
          [this] { showLoudnessStatistics(); });
+    add ("analyze.imagingView", Category::analyze, tr ("Next &Imaging View"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_V) }, [this]
+    {
+        if (! metersPanel->isShown())
+            metersPanel->show (false);
+        goniometer->nextView();
+        statusBar()->showMessage (tr ("Imaging: %1").arg (Goniometer::viewName (goniometer->view())), 3000);
+    });
     add ("analyze.resetMeters", Category::analyze, tr ("&Reset Meters"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_R) },
          [this] { meterPanel->reset(); goniometer->reset(); });
 
@@ -522,7 +529,7 @@ void MainWindow::buildMenus()
                                "repair.frequencyRange", "repair.allFrequencies", "-", "view.spectral" } },
         { tr ("Effe&ct"),    { "effect.repeat", "-", "@nyquist.generate", "-", "@nyquist.effect" } },
         { tr ("&Markers"),   { "marker.add", "marker.addRegion", "-", "marker.next", "marker.previous", "-", "view.markers" } },
-        { tr ("&Analyze"),   { "analyze.loudness", "-", "view.meters", "analyze.resetMeters", "-", "view.spectral", "-", "@nyquist.analyze" } },
+        { tr ("&Analyze"),   { "analyze.loudness", "-", "view.meters", "analyze.imagingView", "analyze.resetMeters", "-", "view.spectral", "-", "@nyquist.analyze" } },
         { tr ("Too&ls"),     { "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan" } },
         { tr ("Ma&ster"),    { "view.master", "view.chain", "master.addPlugin", "master.bypass", "-", "master.render", "-", "master.scan" } },
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
