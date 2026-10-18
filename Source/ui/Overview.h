@@ -10,9 +10,9 @@ class TimeRuler;
 
 // The whole file at a glance, above the editor (as in WaveLab): its own time
 // ruler, the waveform from start to end, and a box showing the part the
-// editor is zoomed in on. Click or drag to move the editor there, drag an
-// edge of the box to zoom, or turn the mouse wheel to zoom in and out around
-// the point under the mouse.
+// editor is zoomed in on. Drag across it to zoom the editor to that stretch,
+// drag the box to move it, drag an edge of the box to zoom, or turn the mouse
+// wheel to zoom in and out around the point under the mouse.
 class Overview final : public QWidget
 {
     Q_OBJECT

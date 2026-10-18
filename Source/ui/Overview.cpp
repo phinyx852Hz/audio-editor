@@ -20,8 +20,8 @@ public:
         setFixedHeight (64);
         setCursor (Qt::PointingHandCursor);
         setMouseTracking (true);
-        setToolTip (tr ("The whole file. Click or drag to move the editor there, drag an edge of the box to zoom, "
-                        "or turn the mouse wheel to zoom around the mouse."));
+        setToolTip (tr ("The whole file. Drag across it to zoom the editor to that stretch, drag the box to move it, "
+                        "drag an edge of the box to zoom, or turn the mouse wheel to zoom around the mouse."));
     }
 
     bool setState (AudioDataPtr d, double start, double length, Frame c, Frame a, Frame b)
@@ -70,6 +70,13 @@ protected:
         g.setBrush (Qt::NoBrush);
         g.drawRect (QRectF (std::round (x1) + 0.5, 0.5, std::max (1.0, std::round (x2 - x1) - 1.0), height() - 1.0));
 
+        if (drag == Drag::range)
+        {
+            auto band = theme.color (QStringLiteral ("highlight"));
+            band.setAlphaF (0.3f);
+            g.fillRect (QRectF (QPointF (std::min (rangeFrom, rangeTo), 0), QPointF (std::max (rangeFrom, rangeTo), height())), band);
+        }
+
         const auto cx = std::round (frameToX ((double) cursor)) + 0.5;
         g.setPen (theme.color (QStringLiteral ("cursor")));
         g.drawLine (QPointF (cx, 0), QPointF (cx, height()));
@@ -82,10 +89,32 @@ protected:
         drag = edgeAt (e->position().x());
         if (drag != Drag::move)
             return;
-        // Grab the box where it was clicked, or centre it on the click.
+        // Inside a box that can move, grab it. Anywhere else (or when the box
+        // already covers the whole file) a drag marks the stretch to zoom to,
+        // and a plain click centres the box there on release.
         const auto f = xToFrame (e->position().x());
-        grabOffset = (f >= viewStart && f <= viewStart + viewLength) ? f - viewStart : viewLength / 2.0;
-        Q_EMIT owner.viewRequested (f - grabOffset, viewLength);
+        const auto inside = f >= viewStart && f <= viewStart + viewLength;
+        const auto movable = viewLength < (double) data->length() * 0.98;
+        if (inside && movable)
+        {
+            grabOffset = f - viewStart;
+            return;
+        }
+        drag = Drag::range;
+        rangeFrom = rangeTo = e->position().x();
+    }
+
+    void mouseReleaseEvent (QMouseEvent* e) override
+    {
+        if (! data || e->button() != Qt::LeftButton || drag != Drag::range)
+            return;
+        drag = Drag::move;
+        const auto a = std::min (rangeFrom, rangeTo), b = std::max (rangeFrom, rangeTo);
+        if (b - a >= 4.0)
+            Q_EMIT owner.viewRequested (xToFrame (a), std::max (16.0, xToFrame (b) - xToFrame (a)));
+        else
+            Q_EMIT owner.viewRequested (xToFrame (rangeFrom) - viewLength / 2.0, viewLength);
+        update();
     }
 
     void mouseMoveEvent (QMouseEvent* e) override
@@ -99,7 +128,12 @@ protected:
         }
         const auto f = xToFrame (e->position().x());
         const auto end = viewStart + viewLength;
-        if (drag == Drag::left)
+        if (drag == Drag::range)
+        {
+            rangeTo = std::clamp (e->position().x(), 0.0, (double) width());
+            update();
+        }
+        else if (drag == Drag::left)
             Q_EMIT owner.viewRequested (std::min (f, end - 16.0), end - std::min (f, end - 16.0));
         else if (drag == Drag::right)
             Q_EMIT owner.viewRequested (viewStart, std::max (16.0, f - viewStart));
@@ -131,7 +165,7 @@ protected:
     }
 
 private:
-    enum class Drag { move, left, right };
+    enum class Drag { move, left, right, range };
 
     // Within a few pixels of an edge of the box, a drag resizes it.
     Drag edgeAt (double x) const
@@ -190,6 +224,7 @@ private:
     AudioDataPtr data;
     double viewStart = 0.0, viewLength = 0.0, grabOffset = 0.0;
     Drag drag = Drag::move;
+    double rangeFrom = 0.0, rangeTo = 0.0;   // the stretch being marked, in pixels
     Frame cursor = 0, selStart = 0, selEnd = 0;
     QImage image;
     const AudioData* imageData = nullptr;
