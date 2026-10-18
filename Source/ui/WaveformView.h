@@ -59,11 +59,18 @@ public:
     // A drawn shape selection, shown as a tint over the spectral view.
     void setShape (std::shared_ptr<const repair::SpectralMask>);
 
+    // Fade handles at the top corners of the file, like Audition's: drag one
+    // inwards for the fade's length, up or down to bend its curve.
+    void setFadeHandles (bool shown);
+
 Q_SIGNALS:
     void cursorRequested (Frame);
     void selectionRequested (Frame anchor, Frame end);
     void bandRequested (double lowHz, double highHz);   // high <= low: every frequency
     void shapeDrawn (std::shared_ptr<const repair::SpectralMask>, bool heal);   // heal: drawn with the Spot Healing Brush
+    // While a fade handle is dragged, and when it is let go. Curve: -1 to +1 (see dsp::curvedFadeGain).
+    void fadeDragged (bool fadeIn, Frame length, double curve);
+    void fadeReleased (bool fadeIn, Frame length, double curve);
 
 protected:
     void paintEvent (QPaintEvent*) override;
@@ -88,6 +95,14 @@ private:
     bool drawing() const { return spectral && currentTool != Tool::box; }
     void brushAt (QPointF);           // paints the stroke at a point in the drag's lane
     void drawShape (QPainter&, double laneHeight);
+    QRectF fadeHandle (bool fadeIn) const;   // where a handle is drawn (empty when its end is out of view)
+    void drawFades (QPainter&);
+
+    bool fadeHandles = true;
+    int fadeDrag = 0;                // 1: the fade-in handle is being dragged, 2: the fade-out one
+    Frame fadeLength = 0;
+    double fadeCurve = 0.0;
+    QPointF fadePress;
 
     struct SpectrogramKey
     {

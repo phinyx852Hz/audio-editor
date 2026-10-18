@@ -64,6 +64,8 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/CommandRegistry.cpp
     Source/ui/Dialogs.cpp
     Source/ui/MainWindow.cpp
+    Source/ui/GainHud.cpp
+    Source/ui/LiveEdits.cpp
     Source/ui/MontageEditor.cpp
     Source/ui/MontageFile.cpp
     Source/ui/MontageView.cpp

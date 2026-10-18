@@ -15,6 +15,7 @@ WaveformView::WaveformView (QWidget* parent) : QWidget (parent)
 {
     setFocusPolicy (Qt::StrongFocus);
     setAccessibleName (tr ("Waveform"));
+    setMouseTracking (true);
     setAccessibleDescription (tr ("Audio waveform. Arrow keys move the cursor, Shift+arrows select, Space plays."));
     setMinimumSize (320, 160);
 
@@ -45,7 +46,7 @@ void WaveformView::setBand (double lowHz, double highHz)
 void WaveformView::setTool (Tool t)
 {
     currentTool = t;
-    setMouseTracking (t == Tool::brush || t == Tool::spotHeal);   // to show the brush outline
+    setMouseTracking (true);   // to show the brush outline and the fade handles' cursor
     QWidget::setCursor (t == Tool::box ? Qt::ArrowCursor : Qt::CrossCursor);
     update();
 }
@@ -449,6 +450,8 @@ void WaveformView::paintEvent (QPaintEvent*)
         g.setPen (QPen (theme.color (QStringLiteral ("cursor")), 1.0));
         const auto cx = frameToX (cursor);
         g.drawLine (QPointF (cx, 0), QPointF (cx, height()));
+
+        drawFades (g);
     }
 
     if (hasFocus())
@@ -458,11 +461,97 @@ void WaveformView::paintEvent (QPaintEvent*)
     }
 }
 
+void WaveformView::setFadeHandles (bool shown)
+{
+    fadeHandles = shown;
+    fadeDrag = 0;
+    update();
+}
+
+QRectF WaveformView::fadeHandle (bool fadeIn) const
+{
+    constexpr double size = 10.0;
+    if (! fadeHandles || ! data || length() == 0 || drawing())
+        return {};
+    // While dragging, the handle travels with the fade's inner end.
+    const auto dragged = fadeDrag == (fadeIn ? 1 : 2);
+    const auto x = fadeIn ? frameToX (dragged ? fadeLength : 0) : frameToX (length() - (dragged ? fadeLength : 0));
+    if (x < -1.0 || x > width() + 1.0)
+        return {};
+    const auto left = fadeIn ? std::clamp (x + 3.0, 3.0, width() - size - 3.0) : std::clamp (x - size - 3.0, 3.0, width() - size - 3.0);
+    return { left, 20.0, size, size };
+}
+
+void WaveformView::drawFades (QPainter& g)
+{
+    const auto& theme = Theme::current();
+    g.setRenderHint (QPainter::Antialiasing);
+    for (const bool in : { true, false })
+    {
+        const auto box = fadeHandle (in);
+        if (box.isEmpty())
+            continue;
+        // Stands out on the waveform: the window colour with an accent edge, filled with the accent while dragged.
+        g.setPen (QPen (theme.color (QStringLiteral ("accent")), 1.5));
+        g.setBrush (fadeDrag == (in ? 1 : 2) ? theme.color (QStringLiteral ("accent")) : theme.color (QStringLiteral ("window")));
+        g.drawRect (box);
+    }
+
+    g.setBrush (Qt::NoBrush);
+    if (fadeDrag == 0 || fadeLength <= 0)
+    {
+        g.setRenderHint (QPainter::Antialiasing, false);
+        return;
+    }
+
+    // The fade's shape over the whole height, and what it is.
+    const bool in = fadeDrag == 1;
+    const auto from = in ? Frame (0) : length() - fadeLength;
+    QPolygonF curve;
+    for (int i = 0; i <= 64; ++i)
+    {
+        const auto t = i / 64.0;
+        const auto gain = dsp::curvedFadeGain (in ? t : 1.0 - t, fadeCurve);
+        curve << QPointF (frameToX (from + (Frame) std::llround (t * (double) fadeLength)), (1.0 - gain) * (height() - 2.0) + 1.0);
+    }
+    g.setPen (QPen (theme.color (QStringLiteral ("accent")), 2.0));
+    g.setBrush (Qt::NoBrush);
+    g.drawPolyline (curve);
+
+    const auto seconds = (double) fadeLength / data->sampleRate();
+    const auto text = (in ? tr ("Fade in %1 s") : tr ("Fade out %1 s")).arg (seconds, 0, 'f', 2)
+                    + (std::abs (fadeCurve) < 0.02 ? tr (", straight") : tr (", curve %1%2%").arg (fadeCurve > 0 ? QStringLiteral ("+") : QString())
+                                                                                 .arg (std::lround (fadeCurve * 100.0)));
+    const QFontMetricsF fm (font());
+    const auto w = fm.horizontalAdvance (text) + 12.0;
+    const auto x = in ? std::clamp (frameToX (fadeLength) + 18.0, 4.0, width() - w - 4.0) : std::clamp (frameToX (length() - fadeLength) - w - 18.0, 4.0, width() - w - 4.0);
+    auto panel = theme.color (QStringLiteral ("window"));
+    panel.setAlphaF (0.85f);
+    g.setPen (Qt::NoPen);
+    g.setBrush (panel);
+    g.drawRoundedRect (QRectF (x, 34, w, fm.height() + 6), 4, 4);
+    g.setPen (theme.color (QStringLiteral ("windowText")));
+    g.drawText (QRectF (x, 34, w, fm.height() + 6), Qt::AlignCenter, text);
+    g.setBrush (Qt::NoBrush);
+    g.setRenderHint (QPainter::Antialiasing, false);
+}
+
 void WaveformView::mousePressEvent (QMouseEvent* e)
 {
     setFocus (Qt::MouseFocusReason);
     if (! data || e->button() != Qt::LeftButton)
         return;
+
+    for (const bool in : { true, false })
+        if (const auto box = fadeHandle (in); ! box.isEmpty() && box.adjusted (-5, -5, 5, 5).contains (e->position()))
+        {
+            fadeDrag = in ? 1 : 2;
+            fadeLength = 0;
+            fadeCurve = 0.0;
+            fadePress = e->position();
+            update();
+            return;
+        }
 
     const auto f = xToFrame (e->position().x());
     dragLane = std::clamp ((int) (e->position().y() / laneHeight()), 0, std::max (0, data->numChannels() - 1));
@@ -503,6 +592,29 @@ void WaveformView::mousePressEvent (QMouseEvent* e)
 
 void WaveformView::mouseMoveEvent (QMouseEvent* e)
 {
+    if (fadeDrag != 0)
+    {
+        const bool in = fadeDrag == 1;
+        const auto at = xToFrame (e->position().x());
+        fadeLength = std::clamp<Frame> (in ? at : length() - at, 0, length());
+        // Up bends it towards a fast (logarithmic) fade, down towards a slow (exponential) one.
+        fadeCurve = std::clamp ((fadePress.y() - e->position().y()) / std::max (40.0, height() * 0.4), -1.0, 1.0);
+        if (std::abs (fadeCurve) < 0.04)
+            fadeCurve = 0.0;
+        update();
+        Q_EMIT fadeDragged (in, fadeLength, fadeCurve);
+        return;
+    }
+
+    if (! (e->buttons() & Qt::LeftButton))
+    {
+        const auto over = [&] (bool in) { const auto b = fadeHandle (in); return ! b.isEmpty() && b.adjusted (-5, -5, 5, 5).contains (e->position()); };
+        if (over (true) || over (false))
+            QWidget::setCursor (Qt::SizeHorCursor);
+        else
+            QWidget::setCursor (currentTool == Tool::box ? Qt::ArrowCursor : Qt::CrossCursor);
+    }
+
     if (drawing())
     {
         hover = e->position();
@@ -546,6 +658,15 @@ void WaveformView::mouseMoveEvent (QMouseEvent* e)
 
 void WaveformView::mouseReleaseEvent (QMouseEvent*)
 {
+    if (fadeDrag != 0)
+    {
+        const bool in = fadeDrag == 1;
+        fadeDrag = 0;
+        update();
+        Q_EMIT fadeReleased (in, fadeLength, fadeCurve);
+        return;
+    }
+
     if (drawing() && dragAnchor >= 0 && data)
     {
         if (currentTool == Tool::lasso)

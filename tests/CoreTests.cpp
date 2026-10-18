@@ -824,6 +824,22 @@ namespace
         return b.finish();
     }
 
+    void testCurvedFade()
+    {
+        check (dsp::curvedFadeGain (0.0, 0.5) == 0.0f && dsp::curvedFadeGain (1.0, -0.5) == 1.0f, "curved fade: ends");
+        check (near (dsp::curvedFadeGain (0.3, 0.0), 0.3, 1.0e-6), "curved fade: 0 is linear");
+        check (dsp::curvedFadeGain (0.3, 0.8) > 0.6f && dsp::curvedFadeGain (0.3, -0.8) < 0.05f, "curved fade: bends both ways");
+        const auto ramp = makeConstant (2, 1000, 1.0f);
+        const auto in = dsp::curvedFade (*ramp, 0, 1000, 0.0, true);
+        std::vector<float> l (1000), r (1000);
+        float* lr[] { l.data(), r.data() };
+        in->read (0, 1000, lr);
+        check (l[0] == 0.0f && l[999] == 1.0f && near (l[500], 500.0 / 999.0, 1.0e-5), "curved fade in");
+        const auto out = dsp::curvedFade (*ramp, 0, 1000, 0.5, false);
+        out->read (0, 1000, lr);
+        check (l[0] == 1.0f && l[999] == 0.0f, "curved fade out");
+    }
+
     void testMontage()
     {
         const double rate = 44100.0;
@@ -917,6 +933,7 @@ int main()
     testFlacTags();
     testNyquist();
     testMontage();
+    testCurvedFade();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");

@@ -19,6 +19,12 @@ namespace dsp
     enum class FadeShape { linear, equalPower, exponential, sCurve };
     float fadeGain (double t, FadeShape);  // t in [0, 1], rising
 
+    // A fade whose bend is set by `curve` from -1 to +1, like Audition's fade
+    // handles: 0 is a straight line, above 0 rises fast and levels off
+    // (logarithmic feel), below 0 starts slow and rises late (exponential feel).
+    float curvedFadeGain (double t, double curve);   // t in [0, 1], rising
+    AudioDataPtr curvedFade (const AudioData&, Frame start, Frame end, double curve, bool rising);
+
     AudioDataPtr applyGain (const AudioData&, Frame start, Frame end, double gainDb);
     AudioDataPtr fadeIn (const AudioData&, Frame start, Frame end, FadeShape);
     AudioDataPtr fadeOut (const AudioData&, Frame start, Frame end, FadeShape);

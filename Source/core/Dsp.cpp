@@ -55,6 +55,29 @@ namespace dsp
         });
     }
 
+    float curvedFadeGain (double t, double curve)
+    {
+        t = std::clamp (t, 0.0, 1.0);
+        const auto power = 1.0 + 3.0 * std::min (1.0, std::abs (curve));
+        if (curve > 0.0)
+            return (float) (1.0 - std::pow (1.0 - t, power));
+        return (float) std::pow (t, power);
+    }
+
+    AudioDataPtr curvedFade (const AudioData& d, Frame start, Frame end, double curve, bool rising)
+    {
+        const auto length = (double) std::max<Frame> (1, end - start - 1);
+        return d.processed (start, end, [=] (auto& block, Frame blockStart)
+        {
+            for (auto& ch : block)
+                for (size_t i = 0; i < ch.size(); ++i)
+                {
+                    const auto t = (double) (blockStart + (Frame) i - start) / length;
+                    ch[i] *= curvedFadeGain (rising ? t : 1.0 - t, curve);
+                }
+        });
+    }
+
     void Stereoizer::prepare (double sampleRate)
     {
         rate = sampleRate;

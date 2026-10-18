@@ -145,6 +145,7 @@ MainWindow::MainWindow (AudioEngine& e)
     connect (timeRuler, &TimeRuler::cursorRequested, this, &MainWindow::setCursor);
     connect (montageView, &MontageView::cursorRequested, this, &MainWindow::setCursor);
     connect (montageView, &MontageView::propertiesRequested, this, &MainWindow::songProperties);
+    buildLiveEdits();
     connect (overview, &Overview::cursorRequested, this, &MainWindow::setCursor);
     connect (overview, &Overview::viewRequested, this, [this] (double start, double length) { waveform->setView (start, length); });
     connect (waveform, &WaveformView::selectionRequested, this, &MainWindow::selectRange);
@@ -196,6 +197,7 @@ MainWindow::MainWindow (AudioEngine& e)
                             d != nullptr ? d->length() : 0, cursor, selStart, selEnd);
         if (overview->isVisible())
             overview->setState (d, viewStart, viewLength, cursor, selStart, selEnd);
+        placeGainHud();
         if (montageView->isVisible())
             montageView->setView (viewStart, d != nullptr ? viewLength : 0.0, cursor);
 
@@ -271,6 +273,8 @@ void MainWindow::registerCommands()
          [this] { if (auto d = data()) extendSelectionTo (d->length()); });
 
     add ("process.gain", Category::process, tr ("&Gain..."), { KS (Qt::CTRL | Qt::Key_G) }, [this] { gain(); });
+    add ("process.gainUp", Category::process, tr ("Gain &Up 0.5 dB"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_Up) }, [this] { nudgeGain (0.5); });
+    add ("process.gainDown", Category::process, tr ("Gain D&own 0.5 dB"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_Down) }, [this] { nudgeGain (-0.5); });
     add ("process.normalize", Category::process, tr ("&Normalize..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_N) },
          [this] { normalize(); });
     add ("process.fadeIn", Category::process, tr ("Fade &In"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_I) }, [this] { fade (true); });
@@ -430,6 +434,13 @@ void MainWindow::registerCommands()
     });
     commands.action (QStringLiteral ("view.overview"))->setCheckable (true);
     commands.action (QStringLiteral ("view.overview"))->setChecked (! overview->isHidden());
+    add ("view.gainKnob", Category::view, tr ("&Gain Knob"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_K) }, [this]
+    {
+        QSettings().setValue (QStringLiteral ("view/gainKnob"), commands.action (QStringLiteral ("view.gainKnob"))->isChecked());
+        placeGainHud();
+    });
+    commands.action (QStringLiteral ("view.gainKnob"))->setCheckable (true);
+    commands.action (QStringLiteral ("view.gainKnob"))->setChecked (QSettings().value (QStringLiteral ("view/gainKnob"), true).toBool());
     add ("view.zoomFit", Category::view, tr ("Zoom to &Fit"), { KS (Qt::CTRL | Qt::Key_0) }, [this] { waveform->zoomToFit(); });
     add ("view.zoomSelection", Category::view, tr ("Zoom to &Selection"), { KS (Qt::CTRL | Qt::Key_E) },
          [this] { if (requireSelection()) waveform->zoomToSelection(); });
@@ -541,7 +552,7 @@ void MainWindow::buildMenus()
                                "edit.trim", "edit.insertSilence", "-", "select.all", "select.none", "-",
                                "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
                                "select.toStart", "select.toEnd" } },
-        { tr ("&Process"),   { "process.gain", "process.normalize", "-", "process.fadeIn", "process.fadeOut", "-",
+        { tr ("&Process"),   { "process.gain", "process.gainUp", "process.gainDown", "process.normalize", "-", "process.fadeIn", "process.fadeOut", "-",
                                "process.fadeShape.linear", "process.fadeShape.equalPower", "process.fadeShape.exponential",
                                "process.fadeShape.sCurve", "-", "process.reverse", "process.invert", "process.dcOffset", "-", "process.stereoize", "process.convert" } },
         { tr ("&Repair"),    { "view.diagnostics", "-", "repair.autoHeal", "repair.spectralGain", "repair.findSimilar", "-", "repair.learnNoise", "repair.noiseReduction", "-",
@@ -561,7 +572,7 @@ void MainWindow::buildMenus()
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
-                               "view.overview", "view.spectral", "-", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.popOut", "view.resetLayout", "-",
+                               "view.overview", "view.spectral", "view.gainKnob", "-", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.popOut", "view.resetLayout", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "-", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
@@ -1132,6 +1143,7 @@ void MainWindow::refreshFromDocument (bool keepView)
     waveform->setMarkers (d ? doc.current().markers : std::vector<Marker>());
     montageView->setMontage (doc.isMontage() ? doc.current().montage : nullptr);
     montageView->setVisible (doc.isMontage());
+    waveform->setFadeHandles (! doc.isMontage());
 
     const auto len = d ? d->length() : 0;
     cursor = std::clamp<Frame> (cursor, 0, len);

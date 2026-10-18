@@ -102,6 +102,24 @@ private:
     void gain();
     void normalize();
 
+    // Live edits: the gain knob, its keys and the fade handles change the audio
+    // you hear and see while you adjust, and become one undo step when done.
+    void buildLiveEdits();
+    void placeGainHud();          // shows, hides and centres the knob over the waveform
+    void previewLive (const QString& description, Frame start, Frame end, std::function<AudioDataPtr (const AudioData&)> make);
+    void finishLive();
+    void cancelLive();
+    void nudgeGain (double db);   // keyboard: Ctrl+Shift+Up/Down, merged into one step after a pause
+    AudioDataPtr liveBase;        // the audio before the live edit; null when none is going on
+    AudioDataPtr livePreview;
+    QString liveDescription;
+    Frame liveStart = 0, liveEnd = 0;
+    std::function<AudioDataPtr (const AudioData&)> liveMake;
+    QTimer liveTimer;             // limits how often a preview is computed
+    QTimer nudgeTimer;            // a pause after keyboard nudges finishes them
+    double nudgeDb = 0.0;
+    class GainHud* gainHud = nullptr;
+
     // Nyquist effects (Effect, Tools and Analyze menus): see NyquistUi.h.
     void registerNyquistCommands();
     void fillNyquistMenus();
