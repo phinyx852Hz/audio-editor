@@ -176,7 +176,7 @@ private:
     AudioCapture capture;
     AudioDocument doc;
     WaveformView* waveform;
-    QLabel* statusLabel;
+    class InfoStrip* infoStrip;
     QListWidget* historyList = nullptr;
     MarkerList* markerList = nullptr;
     class DiagnosticsPanel* diagnostics = nullptr;
@@ -201,6 +201,8 @@ private:
     Frame playStart = 0;        // where the last Play began; Stop returns here
     bool looping = false;
     class TransportBar* transportBar = nullptr;
+    class TimeRuler* timeRuler = nullptr;
+    class Overview* overview = nullptr;
     std::vector<nyquistui::Entry> nyquistEntries;
     QMap<QString, QAction*> nyquistAnchors;       // where each menu's Nyquist items go
     QMenu* generateMenu = nullptr;

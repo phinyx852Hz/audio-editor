@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "TransportBar.h"
 #include "CommandRegistry.h"
+#include "InfoStrip.h"
 #include "Theme.h"
 
 #include <QAction>
 #include <QHBoxLayout>
 #include <QHelpEvent>
-#include <QKeyEvent>
-#include <QMenu>
 #include <QPainter>
 #include <QPainterPath>
-#include <QSettings>
 #include <QToolTip>
 
 #include <cmath>
@@ -32,7 +30,7 @@ TransportButton::TransportButton (Symbol s, const QString& id, CommandRegistry& 
 {
     setFocusPolicy (Qt::NoFocus);   // the keyboard already has every one of these
     setAutoRaise (true);
-    setFixedSize (s == Symbol::play ? 44 : 36, s == Symbol::play ? 44 : 36);
+    setFixedSize (s == Symbol::play ? 38 : 32, s == Symbol::play ? 38 : 32);
     if (const auto* c = findCommand (commands, commandId))
     {
         setAccessibleName (c->name());
@@ -79,20 +77,15 @@ void TransportButton::paintEvent (QPaintEvent*)
     QPainter g (this);
     g.setRenderHint (QPainter::Antialiasing);
 
+    // Flat: just the symbol. Hover and Loop on light it in the accent colour.
     const auto r = QRectF (rect()).adjusted (1.5, 1.5, -1.5, -1.5);
-    const bool hot = underMouse() || isDown();
-    auto face = theme.color (QStringLiteral ("button"));
-    if (isChecked())
-        face = theme.color (QStringLiteral ("highlight"));
-    else if (hot)
-        face = face.lighter (theme.dark ? 135 : 110);
-    g.setPen (QPen (theme.color (hot ? QStringLiteral ("highlight") : QStringLiteral ("mid")), 1.2));
-    g.setBrush (face);
-    g.drawEllipse (r);
-
-    auto ink = isChecked() ? theme.color (QStringLiteral ("highlightedText")) : theme.color (QStringLiteral ("buttonText"));
+    auto ink = theme.color (QStringLiteral ("windowText"));
     if (! isEnabled())
         ink = theme.color (QStringLiteral ("disabledText"));
+    else if (isDown())
+        ink = theme.color (QStringLiteral ("highlight")).darker (120);
+    else if (isChecked() || underMouse())
+        ink = theme.color (QStringLiteral ("highlight"));
     g.setPen (Qt::NoPen);
     g.setBrush (ink);
 
@@ -130,26 +123,34 @@ void TransportButton::paintEvent (QPaintEvent*)
             break;
         case Symbol::loop:
         {
-            // Two arrows chasing round a rounded rectangle.
-            g.setBrush (Qt::NoBrush);
-            g.setPen (QPen (ink, 0.45 * u, Qt::SolidLine, Qt::FlatCap));
-            const QRectF box (c.x() - 1.7 * u, c.y() - 1.1 * u, 3.4 * u, 2.2 * u);
-            g.drawArc (box, 30 * 16, 150 * 16);
-            g.drawArc (box, 210 * 16, 150 * 16);
-            g.setPen (Qt::NoPen);
-            g.setBrush (ink);
-            QPainterPath a;
-            a.moveTo (box.right() - 0.15 * u, c.y() - 0.9 * u);
-            a.lineTo (box.right() + 0.65 * u, c.y() + 0.25 * u);
-            a.lineTo (box.right() - 0.75 * u, c.y() + 0.35 * u);
-            a.closeSubpath();
-            g.drawPath (a);
-            QPainterPath b;
-            b.moveTo (box.left() + 0.15 * u, c.y() + 0.9 * u);
-            b.lineTo (box.left() - 0.65 * u, c.y() - 0.25 * u);
-            b.lineTo (box.left() + 0.75 * u, c.y() - 0.35 * u);
-            b.closeSubpath();
-            g.drawPath (b);
+            // Three arrows chasing each other round a circle.
+            const auto radius = 1.75 * u, stroke = 0.42 * u, head = 0.62 * u;
+            const QRectF ring (c.x() - radius, c.y() - radius, 2.0 * radius, 2.0 * radius);
+            for (int k = 0; k < 3; ++k)
+            {
+                const auto from = 100.0 - 120.0 * k;   // degrees, anticlockwise from 3 o'clock
+                const auto sweep = -78.0;              // clockwise
+                QPainterPath arc;
+                arc.arcMoveTo (ring, from);
+                arc.arcTo (ring, from, sweep);
+                g.setBrush (Qt::NoBrush);
+                g.setPen (QPen (ink, stroke, Qt::SolidLine, Qt::FlatCap));
+                g.drawPath (arc);
+
+                // The head, pointing on round the circle from the arc's end.
+                const auto end = (from + sweep) * M_PI / 180.0;
+                const QPointF p (c.x() + radius * std::cos (end), c.y() - radius * std::sin (end));
+                const QPointF along (std::sin (end), std::cos (end));    // clockwise on screen
+                const QPointF out (std::cos (end), -std::sin (end));
+                QPainterPath tip;
+                tip.moveTo (p + along * (1.3 * head));
+                tip.lineTo (p + out * head);
+                tip.lineTo (p - out * head);
+                tip.closeSubpath();
+                g.setPen (Qt::NoPen);
+                g.setBrush (ink);
+                g.drawPath (tip);
+            }
             break;
         }
     }
@@ -159,10 +160,8 @@ void TransportButton::paintEvent (QPaintEvent*)
 TimeDisplay::TimeDisplay (QWidget* parent) : QWidget (parent)
 {
     setFocusPolicy (Qt::NoFocus);
-    setCursor (Qt::PointingHandCursor);
     setAccessibleName (tr ("Playback position"));
-    format = (Format) std::clamp (QSettings().value (QStringLiteral ("transport/timeFormat"), 0).toInt(), 0, 3);
-    setToolTip (tr ("Playback position. Click to change how it is shown."));
+    setToolTip (tr ("Playback position: hours, minutes, seconds and milliseconds"));
 }
 
 void TimeDisplay::setPosition (Frame p, double sampleRate)
@@ -171,88 +170,39 @@ void TimeDisplay::setPosition (Frame p, double sampleRate)
     {
         position = p;
         rate = sampleRate > 0.0 ? sampleRate : 48000.0;
+        setAccessibleDescription (text());
         update();
     }
 }
 
 QString TimeDisplay::text() const
 {
-    const auto seconds = (double) position / rate;
-    const auto whole = (long long) std::floor (seconds);
-    const auto h = whole / 3600, m = (whole / 60) % 60, s = whole % 60;
-    auto two = [] (long long v) { return QStringLiteral ("%1").arg (v, 2, 10, QLatin1Char ('0')); };
-    switch (format)
-    {
-        case Format::seconds:  return QStringLiteral ("%1 s").arg (seconds, 0, 'f', 3);
-        case Format::samples:  return QStringLiteral ("%1").arg (position);
-        case Format::cdFrames:
-            return QStringLiteral ("%1 h %2 m %3 s %4 f").arg (two (h), two (m), two (s), two ((long long) ((seconds - (double) whole) * 75.0)));
-        case Format::hms:
-        default:
-            return QStringLiteral ("%1 h %2 m %3.%4 s").arg (two (h), two (m), two (s))
-                .arg ((long long) ((seconds - (double) whole) * 1000.0), 3, 10, QLatin1Char ('0'));
-    }
+    const auto ms = (long long) ((double) position / rate * 1000.0 + 0.5);
+    return QString::asprintf ("%02lld:%02lld:%02lld.%03lld", ms / 3600000, (ms / 60000) % 60, (ms / 1000) % 60, ms % 1000);
+}
+
+QFont TimeDisplay::displayFont() const
+{
+    QFont f = font();
+    f.setPointSizeF (f.pointSizeF() * 1.5);
+    return f;
 }
 
 QSize TimeDisplay::sizeHint() const
 {
-    QFont f = font();
-    f.setPointSizeF (f.pointSizeF() * 1.6);
-    f.setFamily (QStringLiteral ("monospace"));
-    return { QFontMetrics (f).horizontalAdvance (QStringLiteral ("00 h 00 m 00 s 00 f")) + 28, 44 };
+    const QFontMetricsF fm (displayFont());
+    return { (int) std::ceil (steady::width (fm, QStringLiteral ("000:00:00.000"))) + 8, 38 };
 }
 
 void TimeDisplay::paintEvent (QPaintEvent*)
 {
-    const auto& theme = Theme::current();
     QPainter g (this);
-    g.setRenderHint (QPainter::Antialiasing);
-    g.setPen (QPen (theme.color (QStringLiteral ("mid")), 1.0));
-    g.setBrush (theme.color (QStringLiteral ("waveformBackground")));
-    g.drawRoundedRect (QRectF (rect()).adjusted (0.5, 2.5, -0.5, -2.5), 6, 6);
-
-    QFont f = font();
-    f.setPointSizeF (f.pointSizeF() * 1.6);
-    f.setFamily (QStringLiteral ("monospace"));
-    f.setStyleHint (QFont::Monospace);
-    g.setFont (f);
-    g.setPen (theme.color (QStringLiteral ("waveform")));
-    g.drawText (rect(), Qt::AlignCenter, text());
-}
-
-void TimeDisplay::mousePressEvent (QMouseEvent*) { chooseFormat(); }
-
-void TimeDisplay::keyPressEvent (QKeyEvent* e)
-{
-    if (e->key() == Qt::Key_Return || e->key() == Qt::Key_Space)
-        chooseFormat();
-    else
-        QWidget::keyPressEvent (e);
-}
-
-void TimeDisplay::chooseFormat()
-{
-    QMenu menu (this);
-    const std::pair<Format, QString> choices[] {
-        { Format::hms, tr ("Hours, minutes, seconds and milliseconds") },
-        { Format::seconds, tr ("Seconds") },
-        { Format::samples, tr ("Samples") },
-        { Format::cdFrames, tr ("Hours, minutes, seconds and CD frames (75 a second)") },
-    };
-    for (const auto& [f, label] : choices)
-    {
-        auto* a = menu.addAction (label);
-        a->setCheckable (true);
-        a->setChecked (f == format);
-        connect (a, &QAction::triggered, this, [this, f = f]
-        {
-            format = f;
-            QSettings().setValue (QStringLiteral ("transport/timeFormat"), (int) f);
-            updateGeometry();
-            update();
-        });
-    }
-    menu.exec (mapToGlobal (QPoint (0, height())));
+    g.setRenderHint (QPainter::TextAntialiasing);
+    g.setFont (displayFont());
+    g.setPen (Theme::current().color (QStringLiteral ("windowText")));
+    const QFontMetricsF fm (g.font());
+    const auto t = text();
+    steady::draw (g, (width() - steady::width (fm, t)) / 2.0, (height() - fm.height()) / 2.0 + fm.ascent(), t);
 }
 
 //==============================================================================
@@ -263,7 +213,7 @@ TransportBar::TransportBar (CommandRegistry& registry, QWidget* parent)
     using S = TransportButton::Symbol;
     auto* row = new QHBoxLayout (this);
     row->setContentsMargins (8, 4, 8, 4);
-    row->setSpacing (6);
+    row->setSpacing (4);
     row->addStretch (1);
     row->addWidget (new TransportButton (S::start, QStringLiteral ("transport.start"), commands, this));
     row->addWidget (playButton = new TransportButton (S::play, QStringLiteral ("transport.playStop"), commands, this));
@@ -271,7 +221,7 @@ TransportBar::TransportBar (CommandRegistry& registry, QWidget* parent)
     row->addWidget (new TransportButton (S::end, QStringLiteral ("transport.end"), commands, this));
     row->addWidget (new TransportButton (S::record, QStringLiteral ("file.record"), commands, this));
     row->addWidget (loopButton = new TransportButton (S::loop, QStringLiteral ("transport.loop"), commands, this));
-    row->addSpacing (14);
+    row->addSpacing (16);
     row->addWidget (time = new TimeDisplay (this));
     row->addStretch (1);
 }

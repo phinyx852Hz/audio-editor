@@ -8,10 +8,10 @@
 
 class CommandRegistry;
 
-// The bar across the top of the window, after Audacity's transport toolbar:
-// Go to Start, Play/Pause, Stop, Go to End, Record and Loop, then a large time
-// display. Each button runs the same command as its menu item and keyboard
-// shortcut, and hovering it names that shortcut. Drawn in the theme's colours.
+// The bar across the top of the editor: Go to Start, Play/Pause, Stop, Go to
+// End, Record and Loop, then the playback time. Each button runs the same
+// command as its menu item and keyboard shortcut, and hovering it names that
+// shortcut. Flat symbols in the theme's text colour, with no background.
 class TransportBar final : public QWidget
 {
     Q_OBJECT
@@ -29,7 +29,7 @@ private:
     class TimeDisplay* time = nullptr;
 };
 
-// One round button drawing its own symbol.
+// One flat button drawing its own symbol.
 class TransportButton final : public QToolButton
 {
     Q_OBJECT
@@ -50,14 +50,13 @@ private:
     CommandRegistry& commands;
 };
 
-// Large read-out of the playback position. Click it to choose the format.
+// The playback position as 00:00:00.000 (hours, minutes, seconds,
+// milliseconds), in the interface font with steady digits.
 class TimeDisplay final : public QWidget
 {
     Q_OBJECT
 
 public:
-    enum class Format { hms, seconds, samples, cdFrames };
-
     explicit TimeDisplay (QWidget* parent);
     void setPosition (Frame, double sampleRate);
     QString text() const;
@@ -66,13 +65,10 @@ public:
 
 protected:
     void paintEvent (QPaintEvent*) override;
-    void mousePressEvent (QMouseEvent*) override;
-    void keyPressEvent (QKeyEvent*) override;
 
 private:
-    void chooseFormat();
+    QFont displayFont() const;
 
-    Format format = Format::hms;
     Frame position = 0;
     double rate = 48000.0;
 };

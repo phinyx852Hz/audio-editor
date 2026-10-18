@@ -66,6 +66,9 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/Spectrogram.cpp
     Source/ui/Theme.cpp
     Source/ui/TransportBar.cpp
+    Source/ui/InfoStrip.cpp
+    Source/ui/TimeRuler.cpp
+    Source/ui/Overview.cpp
     Source/ui/NyquistUi.cpp
     Source/ui/WaveformView.cpp)
 

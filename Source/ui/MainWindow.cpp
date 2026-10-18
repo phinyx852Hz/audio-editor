@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MainWindow.h"
+#include "InfoStrip.h"
+#include "Overview.h"
+#include "TimeRuler.h"
 #include "TransportBar.h"
 #include "ChainRow.h"
 #include "DesktopShortcuts.h"
@@ -53,7 +56,7 @@ namespace
     QString formatTime (double seconds)
     {
         const auto ms = (long long) (seconds * 1000.0 + 0.5);
-        return QString::asprintf ("%02lld:%02lld.%03lld", ms / 60000, (ms / 1000) % 60, ms % 1000);
+        return QString::asprintf ("%02lld:%02lld:%02lld.%03lld", ms / 3600000, (ms / 60000) % 60, (ms / 1000) % 60, ms % 1000);
     }
 
     QString formatHz (double hz)
@@ -83,7 +86,7 @@ namespace
 }
 
 MainWindow::MainWindow (AudioEngine& e)
-    : engine (e), waveform (new WaveformView (this)), statusLabel (new QLabel (this))
+    : engine (e), waveform (new WaveformView (this)), infoStrip (new InfoStrip (this))
 {
     setWindowTitle (QStringLiteral (APP_DISPLAY_NAME));
     resize (1100, 620);
@@ -108,10 +111,15 @@ MainWindow::MainWindow (AudioEngine& e)
     editorLayout->setContentsMargins (0, 0, 0, 0);
     editorLayout->setSpacing (0);
     editorLayout->addWidget (tabBar);
+    overview = new Overview (editor);
+    overview->setVisible (QSettings().value (QStringLiteral ("view/overview"), true).toBool());
+    editorLayout->addWidget (overview);
+    timeRuler = new TimeRuler (editor);
+    editorLayout->addWidget (timeRuler);
     editorLayout->addWidget (waveform, 1);
+    editorLayout->addWidget (infoStrip);
     setCentralWidget (editor);
-    statusBar()->addWidget (statusLabel, 1);
-    statusLabel->setAccessibleName (tr ("Status"));
+    statusBar()->addWidget (new QWidget (this), 1);   // messages show on the left; the details are under the editor
     statusBar()->addPermanentWidget (new QLabel (tr ("Opacity"), this));
     statusBar()->addPermanentWidget (makeOpacitySlider (this));
 
@@ -125,6 +133,9 @@ MainWindow::MainWindow (AudioEngine& e)
     restoreLayout();
 
     connect (waveform, &WaveformView::cursorRequested, this, &MainWindow::setCursor);
+    connect (timeRuler, &TimeRuler::cursorRequested, this, &MainWindow::setCursor);
+    connect (overview, &Overview::cursorRequested, this, &MainWindow::setCursor);
+    connect (overview, &Overview::viewRequested, this, [this] (double start, double length) { waveform->setView (start, length); });
     connect (waveform, &WaveformView::selectionRequested, this, &MainWindow::selectRange);
     connect (waveform, &WaveformView::bandRequested, this, &MainWindow::setBand);
     connect (waveform, &WaveformView::shapeDrawn, this, &MainWindow::setShape);
@@ -153,6 +164,11 @@ MainWindow::MainWindow (AudioEngine& e)
         else
             engine.setLoop (0, 0);
         transportBar->setState (cursor, d != nullptr ? d->sampleRate() : 48000.0, engine.isPlaying(), looping);
+        const auto [viewStart, viewLength] = waveform->view();
+        timeRuler->setView (viewStart, d != nullptr ? viewLength : 0.0, d != nullptr ? d->sampleRate() : 48000.0,
+                            d != nullptr ? d->length() : 0, cursor, selStart, selEnd);
+        if (overview->isVisible())
+            overview->setState (d, viewStart, viewLength, cursor, selStart, selEnd);
 
         for (auto* p : panels)
             if (p->containsFocus())
@@ -369,6 +385,14 @@ void MainWindow::registerCommands()
          [this] { waveform->zoomBy (0.5); });
     add ("view.zoomOut", Category::view, tr ("Zoom &Out"), { KS (Qt::CTRL | Qt::Key_Minus), KS (Qt::Key_Minus) },
          [this] { waveform->zoomBy (2.0); });
+    add ("view.overview", Category::view, tr ("Whole-File &Overview"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_O) }, [this]
+    {
+        const bool on = commands.action (QStringLiteral ("view.overview"))->isChecked();
+        overview->setVisible (on);
+        QSettings().setValue (QStringLiteral ("view/overview"), on);
+    });
+    commands.action (QStringLiteral ("view.overview"))->setCheckable (true);
+    commands.action (QStringLiteral ("view.overview"))->setChecked (! overview->isHidden());
     add ("view.zoomFit", Category::view, tr ("Zoom to &Fit"), { KS (Qt::CTRL | Qt::Key_0) }, [this] { waveform->zoomToFit(); });
     add ("view.zoomSelection", Category::view, tr ("Zoom to &Selection"), { KS (Qt::CTRL | Qt::Key_E) },
          [this] { if (requireSelection()) waveform->zoomToSelection(); });
@@ -481,7 +505,7 @@ void MainWindow::buildMenus()
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
-                               "view.spectral", "-", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.popOut", "view.resetLayout", "-",
+                               "view.overview", "view.spectral", "-", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.popOut", "view.resetLayout", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "-", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
@@ -914,35 +938,32 @@ bool MainWindow::closeTab()
 
 void MainWindow::updateStatus()
 {
-    QString text;
+    // Fields stay in this order, an empty one keeping its space, so nothing moves.
+    QStringList fields;
 
     if (loading)
-        text = tr ("Loading...");
+        fields << tr ("Loading...");
     else if (auto d = data())
     {
         const auto rate = d->sampleRate();
-        text = QStringLiteral ("%1 / %2").arg (formatTime ((double) cursor / rate), formatTime (d->lengthSeconds()));
+        fields << QStringLiteral ("%1 / %2").arg (formatTime ((double) cursor / rate), formatTime (d->lengthSeconds()));
+        fields << (hasSelection() ? tr ("Selection %1 to %2 (%3)")
+                                        .arg (formatTime ((double) selStart / rate), formatTime ((double) selEnd / rate),
+                                              formatTime ((double) (selEnd - selStart) / rate))
+                                  : QString());
 
-        if (hasSelection())
-            text += tr ("   Selection %1 to %2 (%3)")
-                        .arg (formatTime ((double) selStart / rate), formatTime ((double) selEnd / rate),
-                              formatTime ((double) (selEnd - selStart) / rate));
-        if (hasSelection() && hasBand())
-            text += QStringLiteral (", ") + bandText();
-
-        const auto layout = QString::fromStdString (dsp::speakerLayout (d->numChannels()).name);
-        text += QStringLiteral ("   %1 Hz, %2").arg ((int) rate).arg (layout);
+        auto format = QStringLiteral ("%1 Hz, %2").arg ((int) rate).arg (QString::fromStdString (dsp::speakerLayout (d->numChannels()).name));
         if (d->numChannels() > 2 && engine.isPlaying() && engine.isDownmixing())
-            text += tr (" (heard folded to stereo)");
-        text += QStringLiteral ("   ") + (engine.isPlaying() ? tr ("Playing") : tr ("Stopped"));
+            format += tr (" (heard folded to stereo)");
+        fields << format;
+        fields << (engine.isPlaying() ? tr ("Playing") : tr ("Stopped"));
+        if (hasSelection() && hasBand())
+            fields << bandText();
     }
     else
-        text = tr ("No file");
+        fields << tr ("No file");
 
-    text += QStringLiteral ("   |   ") + QString::fromStdString (engine.deviceDescription());
-
-    if (statusLabel->text() != text)
-        statusLabel->setText (text);
+    infoStrip->setFields (fields, QString::fromStdString (engine.deviceDescription()));
 }
 
 void MainWindow::refreshFromDocument (bool keepView)
