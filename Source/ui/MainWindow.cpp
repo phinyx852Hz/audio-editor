@@ -393,7 +393,8 @@ void MainWindow::registerCommands()
         commands.action (QStringLiteral ("master.bypass"))->setChecked (engine.isMasterBypassed());
         statusBar()->showMessage (engine.isMasterBypassed() ? tr ("Master Section bypassed") : tr ("Master Section on"), 3000);
     })->setCheckable (true);
-    add ("master.render", Category::master, tr ("&Render..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_Return) }, [this] { renderMaster(); });
+    add ("master.render", Category::master, tr ("&Render in Place"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_Return) }, [this] { renderInPlace(); });
+    add ("master.renderNew", Category::master, tr ("Render to &New Tab"), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_Return) }, [this] { renderToNewTab(); });
     add ("master.scan", Category::master, tr ("&Scan Plugins"), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_S) },
          [this] { masterWidget->scanPlugins(); });
 
@@ -607,7 +608,7 @@ void MainWindow::buildMenus()
                                "album.properties", "album.twoTracks", "album.export" } },
         { tr ("&Analyze"),   { "analyze.loudness", "-", "analyze.beats", "analyze.onsets", "analyze.tempoKey", "analyze.vamp", "-", "view.meters", "analyze.imagingView", "analyze.resetMeters", "-", "view.spectral", "-", "@nyquist.analyze" } },
         { tr ("Too&ls"),     { "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan" } },
-        { tr ("Ma&ster"),    { "view.master", "view.chain", "master.addPlugin", "master.bypass", "-", "master.render", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
+        { tr ("Ma&ster"),    { "view.master", "view.chain", "master.addPlugin", "master.bypass", "-", "master.render", "master.renderNew", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
@@ -712,7 +713,7 @@ void MainWindow::buildPanels()
     meterPanel = new MeterPanel (this);
 
     masterWidget = new MasterPanel (engine, waveform, this);
-    connect (masterWidget, &MasterPanel::renderRequested, this, &MainWindow::renderMaster);
+    connect (masterWidget, &MasterPanel::renderRequested, this, &MainWindow::renderInPlace);
     connect (masterWidget, &MasterPanel::message, this, [this] (const QString& text)
     {
         if (! text.isEmpty())
@@ -987,6 +988,7 @@ void MainWindow::updateCommandStates()
     updateAnalysisCommandStates();
     commands.action (QStringLiteral ("marker.addRegion"))->setEnabled (open);
     commands.action (QStringLiteral ("master.render"))->setEnabled (open);
+    commands.action (QStringLiteral ("master.renderNew"))->setEnabled (open);
 
     for (const auto* id : { "marker.add", "marker.next", "marker.previous", "analyze.loudness" })
         commands.action (QString::fromLatin1 (id))->setEnabled (open);
@@ -2863,103 +2865,85 @@ AudioDataPtr MainWindow::renderWithProgress (Frame start, Frame end, std::string
     return result.data;
 }
 
-void MainWindow::renderMaster()
+bool MainWindow::masterWouldChange (const QString& title)
 {
+    if (data() == nullptr)
+        return false;
+    if (engine.masterIsActive())
+        return true;
+    QMessageBox::information (this, title,
+                              tr ("The Master Section is empty or bypassed, so rendering would not change anything.\n"
+                                  "Add a plugin with Ctrl+Alt+E or change the master gain first."));
+    return false;
+}
+
+void MainWindow::renderInPlace()
+{
+    // Bounce: the selection (or the whole file) through the Master Section, as an undoable edit.
+    if (refuseAlbumEdit() || ! masterWouldChange (tr ("Render in Place")))
+        return;
+
     const auto d = data();
-    if (d == nullptr)
-        return;
-
-    if (! engine.masterIsActive())
-    {
-        QMessageBox::information (this, tr ("Render"),
-                                  tr ("The Master Section is empty or bypassed, so rendering would not change anything.\n"
-                                      "Add a plugin with Ctrl+Alt+E or change the master gain first."));
-        return;
-    }
-
-    QMessageBox ask (QMessageBox::Question, tr ("Render"),
-                     tr ("Render the audio through the Master Section.\n\n"
-                         "Apply to Audio processes the selection (or the whole file) as an undoable edit, then bypasses "
-                         "the Master Section so the effect is not heard twice.\n"
-                         "Save to New File writes the whole file through the Master Section to a new file and leaves "
-                         "this one unchanged."),
-                     QMessageBox::Cancel, this);
-    auto* apply = ask.addButton (tr ("&Apply to Audio"), QMessageBox::AcceptRole);
-    auto* toFile = ask.addButton (tr ("Save to &New File..."), QMessageBox::AcceptRole);
-    ask.setDefaultButton (apply);
-    ask.exec();
-
+    const auto [s, e] = processRange();
     std::string error;
-
-    if (ask.clickedButton() == apply)
-    {
-        const auto [s, e] = processRange();
-        auto result = renderWithProgress (s, e, error);
-        if (result == nullptr)
-        {
-            if (error != "Cancelled")
-                QMessageBox::warning (this, tr ("Render"), QString::fromStdString (error));
-            return;
-        }
-
-        // The render covers [s, e) only; put it back into the file. A mono file that
-        // the chain widened (Stereoize, a stereo reverb...) becomes stereo throughout.
-        auto base = result->numChannels() == d->numChannels() ? d : dsp::toStereo (d);
-        commit (tr ("Master Section"), base->replaced (s, e, result.get()), s, e, e - s);
-        engine.setMasterBypassed (true);
-        masterWidget->refresh();
-        commands.action (QStringLiteral ("master.bypass"))->setChecked (true);
-        statusBar()->showMessage (tr ("Rendered. The Master Section is now bypassed; Ctrl+Shift+B turns it back on."), 8000);
-        return;
-    }
-
-    if (ask.clickedButton() != toFile)
-        return;
-
-    QStringList filters;
-    for (const auto& ext : AudioEngine::writableExtensions())
-    {
-        const auto x = QString::fromStdString (ext);
-        filters << tr ("%1 (*.%2)").arg (x.toUpper(), x);
-    }
-
-    QFileInfo current (QString::fromStdString (doc.path()));
-    QString selectedFilter = filters.first();
-    auto path = QFileDialog::getSaveFileName (this, tr ("Render to New File"),
-                                              current.absolutePath() + QLatin1Char ('/') + current.completeBaseName()
-                                                  + tr (" (mastered)") + QStringLiteral (".wav"),
-                                              filters.join (QStringLiteral (";;")), &selectedFilter);
-    if (path.isEmpty())
-        return;
-
-    const auto writable = AudioEngine::writableExtensions();
-    if (std::find (writable.begin(), writable.end(), QFileInfo (path).suffix().toLower().toStdString()) == writable.end())
-    {
-        const auto from = selectedFilter.indexOf (QStringLiteral ("*.")) + 2;
-        path += QLatin1Char ('.') + selectedFilter.mid (from, selectedFilter.indexOf (QLatin1Char (')')) - from);
-    }
-
-    auto options = saveOptions;
-    SaveOptionsDialog optionsDialog (QFileInfo (path).suffix(), options, this);
-    if (optionsDialog.exec() != QDialog::Accepted)
-        return;
-
-    auto rendered = renderWithProgress (0, d->length(), error);
-    if (rendered == nullptr)
+    auto result = renderWithProgress (s, e, error);
+    if (result == nullptr)
     {
         if (error != "Cancelled")
-            QMessageBox::warning (this, tr ("Render"), QString::fromStdString (error));
+            QMessageBox::warning (this, tr ("Render in Place"), QString::fromStdString (error));
         return;
     }
 
-    QApplication::setOverrideCursor (Qt::WaitCursor);
-    const bool ok = AudioEngine::saveFile (path.toStdString(), *rendered, doc.current().markers, doc.current().tags, options, error);
-    QApplication::restoreOverrideCursor();
+    // The render covers [s, e) only; put it back into the file. A mono file that
+    // the chain widened (Stereoize, a stereo reverb...) becomes stereo throughout.
+    auto base = result->numChannels() == d->numChannels() ? d : dsp::toStereo (d);
+    commit (tr ("Render in Place"), base->replaced (s, e, result.get()), s, e, e - s);
 
-    if (! ok)
-        QMessageBox::warning (this, tr ("Render"), tr ("Could not save %1:\n%2").arg (path, QString::fromStdString (error)));
-    else
-        statusBar()->showMessage (tr ("Rendered to %1").arg (QFileInfo (path).fileName()), 6000);
+    // Bypassed so the effect is not heard twice.
+    engine.setMasterBypassed (true);
+    masterWidget->refresh();
+    commands.action (QStringLiteral ("master.bypass"))->setChecked (true);
+    statusBar()->showMessage (tr ("Rendered in place. The Master Section is now bypassed; Ctrl+Shift+B turns it back on."), 8000);
+}
+
+void MainWindow::renderToNewTab()
+{
+    // The selection (or the whole file) through the Master Section, into a new
+    // untitled tab; this file stays as it is and the Master Section stays on.
+    if (! masterWouldChange (tr ("Render to New Tab")))
+        return;
+
+    const bool whole = ! hasSelection();
+    const auto [s, e] = whole ? std::pair (Frame (0), data()->length()) : std::pair (selStart, selEnd);
+    std::string error;
+    auto result = renderWithProgress (s, e, error);
+    if (result == nullptr)
+    {
+        if (error != "Cancelled")
+            QMessageBox::warning (this, tr ("Render to New Tab"), QString::fromStdString (error));
+        return;
+    }
+
+    std::vector<Marker> markers;
+    for (auto mk : doc.current().markers)
+    {
+        if (mk.start < s || mk.start >= e)
+            continue;
+        mk.start -= s;
+        mk.end = std::min (mk.end, e) - s;
+        markers.push_back (mk);
+    }
+    auto tags = doc.current().album != nullptr ? Tags() : doc.current().tags;
+
+    const auto options = saveOptions;
+    newTab();
+    doc.reset (std::move (result), std::move (markers), {}, std::move (tags));
+    doc.markUnsaved();
+    saveOptions = options;
+    refreshFromDocument (false);
+    waveform->setFocus();
+    statusBar()->showMessage (whole ? tr ("Rendered the whole file through the Master Section into a new tab")
+                                    : tr ("Rendered the selection through the Master Section into a new tab"), 6000);
 }
 
 bool MainWindow::requireSelection()

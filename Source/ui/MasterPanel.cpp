@@ -49,7 +49,7 @@ MasterPanel::MasterPanel (AudioEngine& e, QWidget* home, QWidget* parent)
     summary->setForegroundRole (QPalette::PlaceholderText);
 
     auto* addButton = new QPushButton (tr ("&Add Plugin..."), this);
-    auto* renderButton = new QPushButton (tr ("&Render..."), this);
+    auto* renderButton = new QPushButton (tr ("&Render in Place"), this);
     auto* scanButton = new QPushButton (tr ("&Scan Plugins"), this);
     for (auto* b : { addButton, renderButton, scanButton })
         b->setAutoDefault (false);

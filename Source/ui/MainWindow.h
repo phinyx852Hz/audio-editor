@@ -251,7 +251,9 @@ private:
     QSlider* makeOpacitySlider (QWidget* parent);
 
     // Master Section
-    void renderMaster();
+    bool masterWouldChange (const QString& title);   // false (with a note) when rendering would change nothing
+    void renderInPlace();     // bounce the selection or file through the Master Section
+    void renderToNewTab();    // the same into a new untitled tab
 
     // Export (ExportSection.cpp): every output of the Export dialog, and its codec preview.
     void exportAudio();
