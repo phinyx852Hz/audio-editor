@@ -566,6 +566,9 @@ Key design choices:
 - Control surface mapping, compliance reports
 - DSSI and optional VST2 hosting
 
+### After Linux v1.0: Mac and Windows (asked 2026-10-18)
+Licence stays AGPLv3 (JUCE is AGPLv3 or commercial; the ZL plugins are AGPLv3), which for a desktop app works like GPLv3. Qt and JUCE already cover both. Work: CoreAudio and WASAPI/ASIO in place of PipeWire capture, ALSA and JACK; Mac and Windows versions of the X11 plugin-window code (`X11Windows`), plus AU hosting on Mac; check each stock plugin (ZL, Wolf Shaper, Nyquist build everywhere; ToneShiftEQ and some LSP are Linux-first); macOS and Windows CI runners; signing (Apple Developer Program, a Windows code-signing certificate) and installers (.dmg, .msi or Inno Setup). Rough effort: two to four weeks for first installable builds, then testing on real machines (the project's Mac mini covers Apple Silicon).
+
 ### Extra (after the main work): Sampler view (requested 2026-10-18)
 "A sampler function that would turn any audio file into a simple sampler like Ableton's Simpler. Not trying to create a full sampling engine... the main workspace of the editor could instantly invoke another view... with all those functions. That would entail MIDI integration." Look: an adaptation of Simpler's minimalist layout in the PHINYX theme, not a copy of Ableton's artwork.
 - One key binding sends the file in the editor (or its selection) to a new Sampler tab beside the file tabs (owner, 2026-10-18: "a key binding could take the audio file in the editor to another window (a tab) and the sampler window would appear"). The editor tab stays as it was; Ctrl+Tab switches between them, and the sampler can be popped out into its own window like the panels. The sampler keeps its own copy of the sound, with a command to refresh it from the editor after more edits.
