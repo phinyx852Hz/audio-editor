@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #pragma once
 
+#include "NyquistUi.h"
+
 #include "../core/AudioDocument.h"
 #include "../core/Repair.h"
 #include "../core/Dsp.h"
@@ -94,6 +96,14 @@ private:
     std::pair<Frame, Frame> processRange() const;
     void gain();
     void normalize();
+
+    // Nyquist effects (Effect, Tools and Analyze menus): see NyquistUi.h.
+    void registerNyquistCommands();
+    void fillNyquistMenus();
+    void rescanNyquist();
+    void runNyquistCommand (const QString& id, bool repeat = false);
+    void nyquistPrompt();
+    void runNyquist (nyquist::Script, const QString& title, bool debug);
     void stereoize();
     void convertSampleType();
     void editMetadata();
@@ -191,6 +201,11 @@ private:
     Frame playStart = 0;        // where the last Play began; Stop returns here
     bool looping = false;
     class TransportBar* transportBar = nullptr;
+    std::vector<nyquistui::Entry> nyquistEntries;
+    QMap<QString, QAction*> nyquistAnchors;       // where each menu's Nyquist items go
+    QMenu* generateMenu = nullptr;
+    QList<QAction*> nyquistMenuItems;
+    QString lastEffectId;                         // for Repeat Last Effect
     double bandLow = 0.0, bandHigh = 0.0;   // the selection's frequency band in Hz, none when high <= low
     std::shared_ptr<const repair::SpectralMask> shape;   // a drawn selection, in place of the band
     double spectralGainDb = -12.0;

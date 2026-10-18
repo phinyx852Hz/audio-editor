@@ -5,6 +5,7 @@
 #include "../Source/core/Dsp.h"
 #include "../Source/core/FlacTags.h"
 #include "../Source/core/Fft.h"
+#include "../Source/core/Nyquist.h"
 #include "../Source/core/Repair.h"
 
 #include <algorithm>
@@ -747,6 +748,67 @@ namespace
                "the stream info and the audio are kept");
         std::remove (path.c_str());
     }
+
+    void testNyquist()
+    {
+        const std::string share = PHINYX_SHARE_SOURCE_DIR;
+        nyquist::setFolders (share + "/nyquist", { share + "/nyquist-plug-ins" }, "/tmp");
+
+        // The header: name, type, controls.
+        auto header = nyquist::parse (";nyquist plug-in\n;version 4\n;type process\n;name \"Half...\"\n"
+                                      "$control amount (_ \"Amount\") real \"dB\" -6 -24 0\n"
+                                      ";control mode \"Mode\" choice \"Soft,Hard\" 1\n"
+                                      "$control label (_ \"Label\") string \"\" \"hello\"\n"
+                                      "$control shape (_ \"Shape\") choice ((\"Lin\" (_ \"Linear\")) (_ \"Curved\")) 0\n"
+                                      "(mult *track* (db-to-linear amount))\n");
+        check (header.ok && header.name == "Half" && header.kind == nyquist::Kind::process && header.version == 4
+               && header.controls.size() == 4, "Nyquist header parsed");
+        if (header.controls.size() == 4)
+            check (header.controls[0].value == -6.0 && header.controls[0].low == -24.0 && header.controls[0].label == "dB"
+                   && header.controls[1].choices.size() == 2 && header.controls[1].value == 1.0 && header.controls[2].text == "hello"
+                   && header.controls[3].choices == std::vector<std::string> { "Linear", "Curved" },
+                   "Nyquist controls parsed");
+
+        // Processing: the selection comes back 6 dB down; the rest is untouched by the caller.
+        auto sine = makeSine (2, 48000, 440.0, 0.5);
+        nyquist::Input in;
+        in.audio = sine.get();
+        in.start = 12000;
+        in.end = 36000;
+        auto half = nyquist::run (header, in);
+        check (half.type == nyquist::Result::Type::audio && half.audio != nullptr && half.audio->numChannels() == 2
+               && half.audio->length() == 24000, "Nyquist process returns the selection (" + half.text + half.output + ")");
+        if (half.audio != nullptr)
+            check (std::abs (sampleAt (*half.audio, 1, 1000) - dsp::dbToGain (-6.0) * sampleAt (*sine, 1, 13000)) < 1.0e-5,
+                   "Nyquist process scales the audio");
+
+        // Labels, messages, numbers.
+        auto labels = nyquist::run (nyquist::parse ("(list (list 0.25 \"a\") (list 0.5 0.75 \"b\"))", true), in);
+        check (labels.type == nyquist::Result::Type::labels && labels.labels.size() == 2
+               && std::abs (labels.labels[1].start - 0.75) < 1.0e-9 && labels.labels[1].text == "b", "Nyquist labels, in file time");
+        auto message = nyquist::run (nyquist::parse ("(format nil \"~a channels\" (arrayp *track*))", true), in);
+        check (message.type == nyquist::Result::Type::text && message.text == "T channels", "Nyquist message (" + message.text + ")");
+        auto peak = nyquist::run (nyquist::parse ("(get '*selection* 'peak-level)", true), in);
+        check (peak.type == nyquist::Result::Type::number && std::abs (std::stod (peak.text) - 0.5) < 0.01, "Nyquist sees the selection's peak");
+
+        // Generating: a second of tone, as many channels as the file.
+        auto gen = nyquist::parse (";nyquist plug-in\n;version 4\n;type generate\n;name \"Tone\"\n(osc 69 1.0)\n");
+        auto tone = nyquist::run (gen, in);
+        check (tone.type == nyquist::Result::Type::audio && tone.audio != nullptr && tone.audio->numChannels() == 2
+               && tone.audio->length() == 48000, "Nyquist generator");
+
+        // An error is reported, not crashed on.
+        auto broken = nyquist::run (nyquist::parse ("(this-is-not-defined 1)", true), in);
+        check (broken.type == nyquist::Result::Type::error && broken.output.find ("unbound") != std::string::npos,
+               "Nyquist error comes back with its message");
+
+        // A bundled Audacity plug-in.
+        auto tremolo = nyquist::load (share + "/nyquist-plug-ins/tremolo.ny");
+        check (tremolo.ok && tremolo.name == "Tremolo" && ! tremolo.controls.empty(), "load Audacity's Tremolo");
+        auto shaken = nyquist::run (tremolo, in);
+        check (shaken.type == nyquist::Result::Type::audio && shaken.audio != nullptr && shaken.audio->length() == 24000,
+               "run Audacity's Tremolo (" + shaken.text + shaken.output + ")");
+    }
 }
 
 int main()
@@ -762,6 +824,7 @@ int main()
     testShapes();
     testConvert();
     testFlacTags();
+    testNyquist();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");

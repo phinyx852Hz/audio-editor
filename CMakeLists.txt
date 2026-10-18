@@ -45,6 +45,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/Repair.cpp
     Source/core/Restoration.cpp
     Source/core/Fft.cpp
+    Source/core/Nyquist.cpp
     Source/engine/AudioCapture.cpp
     Source/engine/AudioEngine.cpp
     Source/engine/BuiltinEffects.cpp
@@ -65,6 +66,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/Spectrogram.cpp
     Source/ui/Theme.cpp
     Source/ui/TransportBar.cpp
+    Source/ui/NyquistUi.cpp
     Source/ui/WaveformView.cpp)
 
 # CLAP plugin hosting needs only the CLAP headers: a local checkout, the
@@ -143,6 +145,14 @@ target_link_libraries(${APP_ID}
 
 include(GNUInstallDirs)
 
+# Nyquist effects (cmake/Nyquist.cmake): libnyquist, its runtime and the bundled plug-ins.
+include(cmake/Nyquist.cmake)
+target_link_libraries(${APP_ID} PRIVATE phinyx_nyquist)
+file(RELATIVE_PATH nyquist_relative "/${CMAKE_INSTALL_BINDIR}" "/${CMAKE_INSTALL_DATADIR}/${APP_ID}")
+target_compile_definitions(${APP_ID} PRIVATE
+    PHINYX_SHARE_RELATIVE="${nyquist_relative}"
+    PHINYX_SHARE_SOURCE_DIR="${CMAKE_SOURCE_DIR}/share")
+
 # Stock plugins (cmake/StockPlugins.cmake). Off builds PHINYX without them.
 option(PHINYX_STOCK_PLUGINS "Build and bundle the stock plugins" ON)
 if(PHINYX_STOCK_PLUGINS)
@@ -171,6 +181,9 @@ if(PHINYX_BUILD_TESTS)
         Source/core/FlacTags.cpp
         Source/core/Repair.cpp
         Source/core/Restoration.cpp
-        Source/core/Fft.cpp)
+        Source/core/Fft.cpp
+        Source/core/Nyquist.cpp)
+    target_link_libraries(phinyx-core-tests PRIVATE phinyx_nyquist)
+    target_compile_definitions(phinyx-core-tests PRIVATE PHINYX_SHARE_SOURCE_DIR="${CMAKE_SOURCE_DIR}/share")
     add_test(NAME core COMMAND phinyx-core-tests)
 endif()

@@ -30,6 +30,8 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMenuBar>
+#include <QDesktopServices>
+#include <QUrl>
 #include <QMessageBox>
 #include <QProgressDialog>
 #include <QPushButton>
@@ -69,6 +71,9 @@ namespace
         const QString repair    = QObject::tr ("Repair");
         const QString markers   = QObject::tr ("Markers");
         const QString analyze   = QObject::tr ("Analyze");
+        const QString effect    = QObject::tr ("Effect");
+        const QString generate  = QObject::tr ("Generate");
+        const QString tools     = QObject::tr ("Tools");
         const QString master    = QObject::tr ("Master Section");
         const QString transport = QObject::tr ("Transport");
         const QString view      = QObject::tr ("View");
@@ -114,6 +119,7 @@ MainWindow::MainWindow (AudioEngine& e)
     registerCommands();
     commands.load();
     buildMenus();
+    fillNyquistMenus();
     transportBar = new TransportBar (commands, editor);
     editorLayout->insertWidget (0, transportBar);
     restoreLayout();
@@ -319,6 +325,22 @@ void MainWindow::registerCommands()
     add ("master.scan", Category::master, tr ("&Scan Plugins"), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_S) },
          [this] { masterWidget->scanPlugins(); });
 
+    add ("effect.repeat", Category::effect, tr ("&Repeat Last Effect"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_Y) }, [this]
+    {
+        if (lastEffectId.isEmpty())
+            statusBar()->showMessage (tr ("No Nyquist effect has run yet"), 4000);
+        else
+            runNyquistCommand (lastEffectId, true);
+    });
+    add ("tools.nyquistPrompt", Category::tools, tr ("&Nyquist Prompt..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_Y) }, [this] { nyquistPrompt(); });
+    add ("tools.nyquistFolder", Category::tools, tr ("Open Nyquist Plug-ins &Folder"), {}, [this]
+    {
+        QDesktopServices::openUrl (QUrl::fromLocalFile (nyquistui::userFolder()));
+        statusBar()->showMessage (tr ("Put .ny files here, then choose Rescan Nyquist Plug-ins"), 8000);
+    });
+    add ("tools.nyquistRescan", Category::tools, tr ("&Rescan Nyquist Plug-ins"), {}, [this] { rescanNyquist(); });
+    registerNyquistCommands();
+
     add ("transport.playStop", Category::transport, tr ("&Play / Stop"), { KS (Qt::Key_Space) }, [this] { togglePlayback(); });
     add ("transport.stop", Category::transport, tr ("&Stop"), { KS (Qt::Key_K) }, [this]
     {
@@ -451,8 +473,10 @@ void MainWindow::buildMenus()
                                "repair.toolBox", "repair.toolLasso", "repair.toolBrush", "repair.toolSpotHeal",
                                "repair.brushSmaller", "repair.brushLarger", "repair.addHarmonics", "-",
                                "repair.frequencyRange", "repair.allFrequencies", "-", "view.spectral" } },
+        { tr ("Effe&ct"),    { "effect.repeat", "-", "@nyquist.generate", "-", "@nyquist.effect" } },
         { tr ("&Markers"),   { "marker.add", "marker.addRegion", "-", "marker.next", "marker.previous", "-", "view.markers" } },
-        { tr ("&Analyze"),   { "analyze.loudness", "-", "view.meters", "analyze.resetMeters", "-", "view.spectral" } },
+        { tr ("&Analyze"),   { "analyze.loudness", "-", "view.meters", "analyze.resetMeters", "-", "view.spectral", "-", "@nyquist.analyze" } },
+        { tr ("Too&ls"),     { "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan" } },
         { tr ("Ma&ster"),    { "view.master", "view.chain", "master.addPlugin", "master.bypass", "-", "master.render", "-", "master.scan" } },
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
@@ -470,6 +494,15 @@ void MainWindow::buildMenus()
         {
             if (id == QLatin1String ("-"))
                 menu->addSeparator();
+            else if (id == QLatin1String ("@nyquist.generate"))
+                generateMenu = menu->addMenu (tr ("&Generate"));
+            else if (id.startsWith (QLatin1Char ('@')))
+            {
+                // Nyquist plug-ins are listed before this hidden marker (fillNyquistMenus).
+                auto* anchor = menu->addAction (QString());
+                anchor->setVisible (false);
+                nyquistAnchors[id] = anchor;
+            }
             else if (id == QLatin1String ("opacity"))
             {
                 auto* sub = menu->addMenu (tr ("Window Opaci&ty"));
@@ -2759,4 +2792,258 @@ void MainWindow::closeEvent (QCloseEvent* e)
     autosaveTimer.stop();
     recovery.finish();   // a clean quit: nothing to recover next time
     e->accept();
+}
+
+//==============================================================================
+void MainWindow::registerNyquistCommands()
+{
+    nyquistEntries = nyquistui::scan();
+    for (const auto& e : nyquistEntries)
+    {
+        if (commands.action (e.id) != nullptr)
+            continue;
+        const auto& h = e.header;
+        const auto category = h.inToolsMenu ? Category::tools
+                            : h.kind == nyquist::Kind::generate ? Category::generate
+                            : h.kind == nyquist::Kind::analyze ? Category::analyze : Category::effect;
+        bool hasControls = false;
+        for (const auto& c : h.controls)
+            hasControls = hasControls || c.type != nyquist::Control::Type::text;
+        auto name = QString::fromStdString (h.name).replace (QLatin1Char ('&'), QStringLiteral ("&&"));
+        if (hasControls)
+            name += QStringLiteral ("...");
+        auto* a = commands.add (e.id, category, name, {}, [this, id = e.id] { runNyquistCommand (id); });
+        if (! h.info.empty())
+            a->setStatusTip (QString::fromStdString (h.info));
+        addAction (a);
+    }
+}
+
+void MainWindow::fillNyquistMenus()
+{
+    for (const auto& [key, anchor] : nyquistAnchors.asKeyValueRange())
+        if (auto* menu = qobject_cast<QMenu*> (anchor->parent()))
+            for (auto* a : nyquistMenuItems)
+                menu->removeAction (a);
+    if (generateMenu != nullptr)
+        generateMenu->clear();
+    nyquistMenuItems.clear();
+
+    auto sorted = nyquistEntries;
+    std::sort (sorted.begin(), sorted.end(), [] (const auto& a, const auto& b)
+    {
+        return QString::fromStdString (a.header.name).localeAwareCompare (QString::fromStdString (b.header.name)) < 0;
+    });
+
+    for (const auto& e : sorted)
+    {
+        auto* action = commands.action (e.id);
+        if (action == nullptr)
+            continue;
+        const auto& h = e.header;
+        if (! h.inToolsMenu && h.kind == nyquist::Kind::generate && generateMenu != nullptr)
+        {
+            generateMenu->addAction (action);
+            continue;
+        }
+        const auto token = h.inToolsMenu ? QStringLiteral ("@nyquist.tools")
+                         : h.kind == nyquist::Kind::analyze ? QStringLiteral ("@nyquist.analyze") : QStringLiteral ("@nyquist.effect");
+        if (auto* anchor = nyquistAnchors.value (token))
+            if (auto* menu = qobject_cast<QMenu*> (anchor->parent()))
+            {
+                menu->insertAction (anchor, action);
+                nyquistMenuItems << action;
+            }
+    }
+    if (generateMenu != nullptr)
+        generateMenu->setEnabled (! generateMenu->isEmpty());
+}
+
+void MainWindow::rescanNyquist()
+{
+    const auto before = nyquistEntries.size();
+    registerNyquistCommands();
+    fillNyquistMenus();
+    statusBar()->showMessage (tr ("Found %n Nyquist plug-in(s)", nullptr, (int) nyquistEntries.size())
+                              + (nyquistEntries.size() > before ? tr (", %1 new").arg (nyquistEntries.size() - before) : QString()), 6000);
+}
+
+void MainWindow::runNyquistCommand (const QString& id, bool repeat)
+{
+    const auto entry = std::find_if (nyquistEntries.begin(), nyquistEntries.end(), [&] (const auto& e) { return e.id == id; });
+    if (entry == nyquistEntries.end())
+        return;
+
+    // Read again, so an edited plug-in runs as it is now.
+    auto script = nyquist::load (entry->path.toStdString());
+    const auto title = QString::fromStdString (script.name);
+    if (! script.ok)
+    {
+        QMessageBox::warning (this, title, QString::fromStdString (script.error));
+        return;
+    }
+
+    nyquistui::restoreValues (id, script);
+    bool debug = false;
+    const bool hasControls = std::any_of (script.controls.begin(), script.controls.end(),
+                                          [] (const auto& c) { return c.type != nyquist::Control::Type::text; });
+    if (hasControls && ! repeat)
+    {
+        NyquistDialog dialog (script, this);
+        if (dialog.exec() != QDialog::Accepted)
+            return;
+        debug = dialog.debugRequested();
+        nyquistui::storeValues (id, script);
+    }
+
+    if (script.kind != nyquist::Kind::tool && ! script.inToolsMenu)
+        lastEffectId = id;
+    const bool tool = script.inToolsMenu;
+    runNyquist (std::move (script), title, debug);
+    if (tool)
+        rescanNyquist();   // the Plugin Installer adds files
+}
+
+void MainWindow::nyquistPrompt()
+{
+    NyquistPromptDialog dialog (this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    auto script = nyquist::parse (dialog.code().toStdString(), true);
+    if (! script.ok)
+    {
+        QMessageBox::information (this, tr ("Nyquist Prompt"), QString::fromStdString (script.error));
+        return;
+    }
+    // Without a ;type line it works on the audio when a file is open, else it just runs.
+    if (! script.typeGiven)
+        script.kind = data() != nullptr ? nyquist::Kind::process : nyquist::Kind::tool;
+    script.name = tr ("Nyquist Prompt").toStdString();
+
+    bool debug = dialog.debugRequested();
+    if (std::any_of (script.controls.begin(), script.controls.end(), [] (const auto& c) { return c.type != nyquist::Control::Type::text; }))
+    {
+        NyquistDialog controls (script, this);
+        if (controls.exec() != QDialog::Accepted)
+            return;
+        debug = debug || controls.debugRequested();
+    }
+    runNyquist (std::move (script), tr ("Nyquist Prompt"), debug);
+}
+
+void MainWindow::runNyquist (nyquist::Script script, const QString& title, bool debug)
+{
+    const auto d = data();
+    const bool generate = script.kind == nyquist::Kind::generate;
+    const bool tool = script.kind == nyquist::Kind::tool;
+    if (! generate && ! tool && d == nullptr)
+    {
+        statusBar()->showMessage (tr ("Open a file first"), 4000);
+        return;
+    }
+
+    nyquist::Input in;
+    in.audio = d.get();
+    if (generate)
+    {
+        in.start = hasSelection() ? selStart : cursor;
+        in.end = hasSelection() ? selEnd : cursor;
+    }
+    else if (d != nullptr)
+        std::tie (in.start, in.end) = processRange();
+    in.sampleRate = d != nullptr ? d->sampleRate() : 48000.0;
+    if (bandHigh > bandLow)
+    {
+        in.lowHz = bandLow;
+        in.highHz = bandHigh;
+    }
+    in.trackName = tabName (doc).remove (QStringLiteral (" *")).toStdString();
+    in.projectName = in.trackName;
+    in.debug = debug;
+
+    // Runs in the background with a progress window, like the repair tools.
+    auto progress = std::make_shared<std::atomic<float>> (0.0f);
+    auto cancel = std::make_shared<std::atomic<bool>> (false);
+    engine.stop();
+    QProgressDialog dialog (title + QStringLiteral ("..."), tr ("Cancel"), 0, 1000, this);
+    dialog.setWindowTitle (title);
+    dialog.setWindowModality (Qt::WindowModal);
+    dialog.setMinimumDuration (400);
+    connect (&dialog, &QProgressDialog::canceled, this, [cancel] { cancel->store (true); });
+    QFutureWatcher<nyquist::Result> watcher;
+    QEventLoop loop;
+    connect (&watcher, &QFutureWatcher<nyquist::Result>::finished, &loop, &QEventLoop::quit);
+    QTimer poll;
+    connect (&poll, &QTimer::timeout, this, [&] { dialog.setValue ((int) (progress->load() * 1000.0f)); });
+    poll.start (50);
+    watcher.setFuture (QtConcurrent::run ([script, in, d, progress, cancel]
+    {
+        return nyquist::run (script, in, { progress.get(), cancel.get() });
+    }));
+    loop.exec();
+    poll.stop();
+    dialog.reset();
+    const auto result = watcher.result();
+    const auto output = QString::fromStdString (result.output).trimmed();
+
+    using R = nyquist::Result::Type;
+    switch (result.type)
+    {
+        case R::cancelled:
+            statusBar()->showMessage (tr ("%1 cancelled").arg (title), 4000);
+            break;
+        case R::error:
+            nyquistui::showOutput (this, title, QString::fromStdString (result.text) + (output.isEmpty() ? QString() : QStringLiteral ("\n\n") + output));
+            return;
+        case R::text:
+        case R::number:
+            QMessageBox::information (this, title, QString::fromStdString (result.text));
+            break;
+        case R::labels:
+        {
+            if (d == nullptr)
+                break;
+            auto markers = doc.current().markers;
+            const auto rate = d->sampleRate();
+            for (const auto& l : result.labels)
+            {
+                if (l.start * rate > (double) d->length())
+                    continue;   // past the end of the file
+                Marker m;
+                m.id = doc.nextMarkerId();
+                m.start = std::clamp<Frame> ((Frame) std::llround (l.start * rate), 0, d->length());
+                m.end = std::clamp<Frame> ((Frame) std::llround (l.end * rate), m.start, d->length());
+                m.type = m.end > m.start ? Marker::Type::region : Marker::Type::generic;
+                m.name = l.text;
+                markers.push_back (m);
+            }
+            commitMarkers (title, std::move (markers));
+            statusBar()->showMessage (tr ("%1 added %n marker(s)", nullptr, (int) result.labels.size()).arg (title), 6000);
+            break;
+        }
+        case R::audio:
+        {
+            const auto length = result.audio->length();
+            if (d == nullptr)
+            {
+                // Generated with nothing open: a new file.
+                newTab();
+                doc.reset (result.audio, {}, {});
+                doc.markUnsaved();
+                refreshFromDocument (false);
+                break;
+            }
+            commit (title, d->replaced (in.start, in.end, result.audio.get()), in.start, in.end, length);
+            selectRange (in.start, in.start + length);
+            break;
+        }
+        case R::nothing:
+            statusBar()->showMessage (tr ("%1 finished").arg (title), 4000);
+            break;
+    }
+
+    if ((debug || script.trace) && result.type != R::error)
+        nyquistui::showOutput (this, title, output);
+    waveform->setFocus();
 }

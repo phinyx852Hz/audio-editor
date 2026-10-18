@@ -5,8 +5,8 @@ pkgrel=1
 pkgdesc="PHINYX: keyboard-first audio editor and mastering suite for Linux"
 arch=('x86_64')
 url="https://github.com/phinyx852Hz/audio-editor"
-license=('AGPL-3.0-only' 'GPL-3.0-only' 'LGPL-3.0-or-later' 'BSD-3-Clause')
-# cairo, libsndfile, libglvnd and the X libraries are for the stock plugins
+license=('AGPL-3.0-only' 'GPL-3.0-only' 'GPL-2.0-or-later' 'LGPL-3.0-or-later' 'BSD-3-Clause' 'LicenseRef-Nyquist')
+# libsndfile is for Nyquist and the stock plugins; cairo, libglvnd and the X libraries for the stock plugins
 depends=('qt6-base' 'qt6-wayland' 'alsa-lib' 'libpipewire' 'freetype2' 'fontconfig'
          'cairo' 'libsndfile' 'libglvnd' 'libx11' 'libxrandr' 'libxcursor' 'libxext')
 optdepends=('pipewire-jack: JACK output through PipeWire (recommended; jack2 also works)'
