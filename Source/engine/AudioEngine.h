@@ -109,6 +109,8 @@ public:
 
     // Meter data produced since the last call.
     std::vector<MeterBlock> takeMeterBlocks();
+    // Left and right samples heard since the last call, for the goniometer (appended).
+    void takeScopeSamples (std::vector<float>& left, std::vector<float>& right);
 
     // Runs pending JUCE messages; call regularly from the UI thread.
     void dispatchMessages();

@@ -194,6 +194,8 @@ private:
     DockablePanel* diagnosticsPanel = nullptr;
     DockablePanel* metersPanel = nullptr;
     FindPanel* findWidget = nullptr;
+    class Goniometer* goniometer = nullptr;
+    std::vector<float> scopeLeft, scopeRight;   // goniometer samples, reused every frame
     DockablePanel* findPanel = nullptr;
     QList<DockablePanel*> panels;
     QList<QSlider*> opacitySliders;

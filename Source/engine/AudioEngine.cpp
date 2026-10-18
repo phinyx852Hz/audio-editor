@@ -157,6 +157,8 @@ namespace
             const auto numChannels = std::min ({ info.buffer->getNumChannels(), channels.load(), MeterBlock::maxChannels });
             current.numChannels = numChannels;
 
+            pushScope (*info.buffer, info.startSample, info.numSamples, numChannels);
+
             for (int i = 0; i < info.numSamples; ++i)
             {
                 for (int ch = 0; ch < numChannels; ++ch)
@@ -181,11 +183,37 @@ namespace
 
         std::atomic<int> channels { 2 };   // the file's channels; a mono file's buffer has a copy in the second
 
+        // Left and right (the first two channels; a mono file's are the same) for the goniometer.
+        void takeScope (std::vector<float>& left, std::vector<float>& right)
+        {
+            const auto scope = scopeFifo.read (scopeFifo.getNumReady());
+            for (const auto& [start, size] : { std::pair { scope.startIndex1, scope.blockSize1 }, std::pair { scope.startIndex2, scope.blockSize2 } })
+            {
+                left.insert (left.end(), scopeLeft.begin() + start, scopeLeft.begin() + start + size);
+                right.insert (right.end(), scopeRight.begin() + start, scopeRight.begin() + start + size);
+            }
+        }
+
         void takeBlocks (std::vector<MeterBlock>& out)
         {
             const auto scope = fifo.read (fifo.getNumReady());
             for (int i = 0; i < scope.blockSize1; ++i) out.push_back (blocks[(size_t) (scope.startIndex1 + i)]);
             for (int i = 0; i < scope.blockSize2; ++i) out.push_back (blocks[(size_t) (scope.startIndex2 + i)]);
+        }
+
+    private:
+        void pushScope (const juce::AudioBuffer<float>& buffer, int start, int numSamples, int numChannels)
+        {
+            if (numChannels <= 0)
+                return;
+            // When the UI falls behind, the newest samples are dropped; the picture is never late.
+            const auto scope = scopeFifo.write (std::min (numSamples, scopeFifo.getFreeSpace()));
+            const auto* l = buffer.getReadPointer (0, start);
+            const auto* r = buffer.getReadPointer (numChannels > 1 ? 1 : 0, start);
+            std::copy (l, l + scope.blockSize1, scopeLeft.begin() + scope.startIndex1);
+            std::copy (r, r + scope.blockSize1, scopeRight.begin() + scope.startIndex1);
+            std::copy (l + scope.blockSize1, l + scope.blockSize1 + scope.blockSize2, scopeLeft.begin() + scope.startIndex2);
+            std::copy (r + scope.blockSize1, r + scope.blockSize1 + scope.blockSize2, scopeRight.begin() + scope.startIndex2);
         }
 
     private:
@@ -210,6 +238,10 @@ namespace
         std::array<double, MeterBlock::maxChannels> sums {};
         std::array<dsp::KWeighting, MeterBlock::maxChannels> kWeighting;
         std::array<dsp::TruePeakDetector, MeterBlock::maxChannels> truePeaks;
+
+        static constexpr int scopeSize = 32768;
+        juce::AbstractFifo scopeFifo { scopeSize };
+        std::array<float, scopeSize> scopeLeft {}, scopeRight {};
 
         static constexpr int fifoSize = 256;
         juce::AbstractFifo fifo { fifoSize };
@@ -532,6 +564,11 @@ int AudioEngine::outputChannels() const
 bool AudioEngine::isDownmixing() const
 {
     return impl->monitor.downmixing.load();
+}
+
+void AudioEngine::takeScopeSamples (std::vector<float>& left, std::vector<float>& right)
+{
+    impl->meter.takeScope (left, right);
 }
 
 std::vector<MeterBlock> AudioEngine::takeMeterBlocks()

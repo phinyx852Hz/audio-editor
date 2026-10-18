@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MainWindow.h"
 #include "FindPanel.h"
+#include "Goniometer.h"
 #include "InfoStrip.h"
 #include "Overview.h"
 #include "TimeRuler.h"
@@ -158,6 +159,11 @@ MainWindow::MainWindow (AudioEngine& e)
             waveform->setLoading (true, loadProgress->load());
 
         meterPanel->addBlocks (engine.takeMeterBlocks());
+        scopeLeft.clear();
+        scopeRight.clear();
+        engine.takeScopeSamples (scopeLeft, scopeRight);
+        if (goniometer->isVisible())
+            goniometer->addSamples (scopeLeft, scopeRight);
 
         // Looping plays the selection, or the whole file when nothing is selected.
         const auto d = data();
@@ -322,7 +328,7 @@ void MainWindow::registerCommands()
     add ("analyze.loudness", Category::analyze, tr ("&Loudness Statistics..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_A) },
          [this] { showLoudnessStatistics(); });
     add ("analyze.resetMeters", Category::analyze, tr ("&Reset Meters"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_R) },
-         [this] { meterPanel->reset(); });
+         [this] { meterPanel->reset(); goniometer->reset(); });
 
     add ("view.master", Category::master, tr ("&Master Section"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_E) },
          [this] { masterPanel->toggle(); lastPanel = masterPanel; });
@@ -630,7 +636,15 @@ void MainWindow::buildPanels()
             statusBar()->showMessage (text, 6000);
     });
 
-    metersPanel = new DockablePanel (*this, QStringLiteral ("metersPanel"), tr ("Meters"), meterPanel, Qt::RightDockWidgetArea);
+    // The goniometer sits above the level meters.
+    goniometer = new Goniometer (this);
+    auto* meters = new QWidget (this);
+    auto* metersLayout = new QVBoxLayout (meters);
+    metersLayout->setContentsMargins (0, 0, 0, 0);
+    metersLayout->setSpacing (0);
+    metersLayout->addWidget (goniometer, 5);
+    metersLayout->addWidget (meterPanel, 6);
+    metersPanel = new DockablePanel (*this, QStringLiteral ("metersPanel"), tr ("Meters"), meters, Qt::RightDockWidgetArea);
     markerPanel = new DockablePanel (*this, QStringLiteral ("markersPanel"), tr ("Markers"), markerList, Qt::BottomDockWidgetArea);
     historyPanel = new DockablePanel (*this, QStringLiteral ("historyPanel"), tr ("History"), historyList, Qt::RightDockWidgetArea);
     diagnosticsPanel = new DockablePanel (*this, QStringLiteral ("diagnosticsPanel"), tr ("Diagnostics"), diagnostics, Qt::RightDockWidgetArea);
