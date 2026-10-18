@@ -32,7 +32,8 @@ struct FindItem
 // Keyboard: typing searches everything, Up/Down and Page Up/Down move through
 // the results, Enter runs or loads the selection, Tab moves between search,
 // sidebar and results, 1 to 7 toggle a colour on the selected result (0 clears
-// them), Escape clears the search or goes back to the editor.
+// them), F2 renames the selected collection, Escape clears the search or goes
+// back to the editor.
 class FindPanel final : public QWidget
 {
     Q_OBJECT
@@ -49,7 +50,8 @@ public:
     void reload();               // collects the items again and refilters
 
     static constexpr int numColours = 7;
-    static QString colourName (int index);
+    static QString colourName (int index);   // the default name
+    QString collectionName (int index) const; // the user's name for it (F2 renames), or the default
     static QColor colour (int index);
 
 Q_SIGNALS:
@@ -83,4 +85,5 @@ private:
     QFutureWatcher<QList<FindItem>> fileScan;
     bool filesStale = true;
     QHash<QString, int> collections;   // item key -> bit mask of colours
+    QStringList collectionNames;       // renamed collections; empty entries keep the default name
 };

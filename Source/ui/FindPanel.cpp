@@ -97,6 +97,12 @@ QColor FindPanel::colour (int index)
     return index >= 0 && index < numColours ? colours[index] : QColor();
 }
 
+QString FindPanel::collectionName (int index) const
+{
+    const auto name = collectionNames.value (index).trimmed();
+    return name.isEmpty() ? colourName (index) : name;
+}
+
 //==============================================================================
 FindPanel::FindPanel (QWidget* home, QWidget* parent)
     : QWidget (parent), homeWidget (home), search (new QLineEdit (this)), sidebar (new QTreeWidget (this)), results (new QTreeWidget (this))
@@ -161,6 +167,20 @@ FindPanel::FindPanel (QWidget* home, QWidget* parent)
             results->setFocus (Qt::OtherFocusReason);
     });
     connect (results, &QTreeWidget::itemActivated, this, &FindPanel::activate);
+    connect (sidebar, &QTreeWidget::itemChanged, this, [this] (QTreeWidgetItem* item)
+    {
+        if (static_cast<Section> (item->data (0, sectionRole).toInt()) != Section::colour)
+            return;
+
+        // An empty name goes back to the colour's own name.
+        const auto c = item->data (0, colourRole).toInt();
+        while (collectionNames.size() < numColours)
+            collectionNames.push_back ({});
+        collectionNames[c] = item->text (0).trimmed() == colourName (c) ? QString() : item->text (0).trimmed();
+        saveCollections();
+        const QSignalBlocker blocker (sidebar);
+        item->setText (0, collectionName (c));
+    });
     connect (&fileScan, &QFutureWatcher<QList<FindItem>>::finished, this, [this]
     {
         files = fileScan.result();
@@ -225,7 +245,9 @@ void FindPanel::buildSidebar()
     {
         QPixmap square (10, 10);
         square.fill (colour (c));
-        auto* e = entry (colourName (c), Section::colour);
+        auto* e = entry (collectionName (c), Section::colour);
+        e->setFlags (e->flags() | Qt::ItemIsEditable);
+        e->setToolTip (0, tr ("F2 renames this collection"));
         e->setIcon (0, QIcon (square));
         e->setData (0, colourRole, c);
     }
@@ -495,6 +517,8 @@ void FindPanel::loadCollections()
     const auto root = QJsonDocument::fromJson (file.readAll()).object();
     for (const auto& p : root.value (QStringLiteral ("places")).toArray())
         places.push_back (p.toString());
+    for (const auto& n : root.value (QStringLiteral ("collectionNames")).toArray())
+        collectionNames.push_back (n.toString());
     const auto colours = root.value (QStringLiteral ("colours")).toObject();
     for (auto it = colours.begin(); it != colours.end(); ++it)
         if (const auto mask = it.value().toInt(); mask != 0)
@@ -511,6 +535,7 @@ void FindPanel::saveCollections() const
     QFile file (storePath());
     if (file.open (QIODevice::WriteOnly | QIODevice::Truncate))
         file.write (QJsonDocument (QJsonObject { { QStringLiteral ("places"), QJsonArray::fromStringList (places) },
+                                                 { QStringLiteral ("collectionNames"), QJsonArray::fromStringList (collectionNames) },
                                                  { QStringLiteral ("colours"), colours } }).toJson());
 }
 
@@ -532,7 +557,7 @@ bool FindPanel::eventFilter (QObject* watched, QEvent* e)
         switch (k->key())
         {
             case Qt::Key_Up: case Qt::Key_Down: case Qt::Key_Left: case Qt::Key_Right: case Qt::Key_PageUp: case Qt::Key_PageDown:
-            case Qt::Key_Home: case Qt::Key_End: case Qt::Key_Return: case Qt::Key_Enter: case Qt::Key_Escape:
+            case Qt::Key_Home: case Qt::Key_End: case Qt::Key_Return: case Qt::Key_Enter: case Qt::Key_Escape: case Qt::Key_F2:
                 if (plain)
                     e->accept();
                 break;
@@ -590,6 +615,24 @@ bool FindPanel::eventFilter (QObject* watched, QEvent* e)
                 sidebar->setFocus (Qt::OtherFocusReason);
             return true;
         }
+    }
+
+    if (watched == sidebar && plain && k->key() == Qt::Key_F2)
+    {
+        if (auto* item = sidebar->currentItem(); item != nullptr && (item->flags() & Qt::ItemIsEditable))
+            sidebar->editItem (item);
+        return true;
+    }
+
+    // F2 in the results renames the collection being shown.
+    if (watched == results && plain && k->key() == Qt::Key_F2)
+    {
+        if (auto* item = sidebar->currentItem(); item != nullptr && (item->flags() & Qt::ItemIsEditable))
+        {
+            sidebar->setFocus (Qt::OtherFocusReason);
+            sidebar->editItem (item);
+        }
+        return true;
     }
 
     if (watched == sidebar && plain && k->key() == Qt::Key_Right)
