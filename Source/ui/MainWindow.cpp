@@ -18,6 +18,7 @@
 #include "MasterPanel.h"
 #include "Panels.h"
 #include "RecordDialog.h"
+#include "ReferencePanel.h"
 #include "Theme.h"
 #include "WaveformView.h"
 
@@ -199,6 +200,7 @@ MainWindow::MainWindow (AudioEngine& e)
         if (overview->isVisible())
             overview->setState (d, viewStart, viewLength, cursor, selStart, selEnd);
         placeGainHud();
+        placeReferenceBadge();
         if (albumView->isVisible())
             albumView->setView (viewStart, d != nullptr ? viewLength : 0.0, cursor);
 
@@ -399,6 +401,7 @@ void MainWindow::registerCommands()
     registerNyquistCommands();
     registerAlbumCommands();
     registerAnalysisCommands();
+    registerReferenceCommands();
 
     add ("transport.playStop", Category::transport, tr ("&Play / Stop"), { KS (Qt::Key_Space) }, [this] { togglePlayback(); });
     add ("transport.stop", Category::transport, tr ("&Stop"), { KS (Qt::Key_K) }, [this]
@@ -570,11 +573,11 @@ void MainWindow::buildMenus()
                                "album.properties", "album.twoTracks", "album.export" } },
         { tr ("&Analyze"),   { "analyze.loudness", "-", "analyze.beats", "analyze.onsets", "analyze.tempoKey", "analyze.vamp", "-", "view.meters", "analyze.imagingView", "analyze.resetMeters", "-", "view.spectral", "-", "@nyquist.analyze" } },
         { tr ("Too&ls"),     { "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan" } },
-        { tr ("Ma&ster"),    { "view.master", "view.chain", "master.addPlugin", "master.bypass", "-", "master.render", "-", "master.scan" } },
+        { tr ("Ma&ster"),    { "view.master", "view.chain", "master.addPlugin", "master.bypass", "-", "master.render", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
-                               "view.overview", "view.spectral", "view.gainKnob", "-", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.popOut", "view.resetLayout", "-",
+                               "view.overview", "view.spectral", "view.gainKnob", "-", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.references", "view.popOut", "view.resetLayout", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "-", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
@@ -726,10 +729,11 @@ void MainWindow::buildPanels()
     });
     findPanel = new DockablePanel (*this, QStringLiteral ("findPanel"), tr ("Find"), findWidget, Qt::LeftDockWidgetArea);
 
-    panels = { masterPanel, chainPanel, metersPanel, markerPanel, historyPanel, diagnosticsPanel, findPanel };
+    buildReferences();
+    panels = { masterPanel, chainPanel, metersPanel, markerPanel, historyPanel, diagnosticsPanel, findPanel, referencesPanel };
 
     focusFollowsMouse = new FocusFollowsMouse (this);
-    focusFollowsMouse->setAreas ({ waveform, chainRow, masterWidget, markerList, historyList, diagnostics, findWidget });
+    focusFollowsMouse->setAreas ({ waveform, chainRow, masterWidget, markerList, historyList, diagnostics, findWidget, referencePanel });
     qApp->installEventFilter (focusFollowsMouse);
 }
 
@@ -1196,6 +1200,7 @@ void MainWindow::refreshFromDocument (bool keepView)
 
     updateTitle();
     updateCommandStates();
+    syncReference();
 }
 
 //==============================================================================

@@ -212,6 +212,39 @@ private:
     void exportSlices();
     void exportLabels();
 
+    // A/B Reference section (ReferenceSection.cpp, ReferencePanel.h).
+    struct ReferenceTrack
+    {
+        QString path;
+        AudioDataPtr original;   // as loaded; null until first heard
+        AudioDataPtr atRate;     // converted to your audio's sample rate
+        double lufs = -200.0;    // integrated loudness of the whole reference
+        double offsetDb = 0.0;   // your own adjustment on top of the loudness match
+    };
+    void buildReferences();
+    void registerReferenceCommands();
+    void addReferences();
+    void removeReference (int row);
+    bool loadReference (int row);
+    bool matchLoudness();                    // measures your audio as heard, once per version of it
+    float referenceGain (int row) const;
+    void hearReference (int row);
+    void setHearingReference (bool);
+    void syncReference();
+    void placeReferenceBadge();
+    void updateReferencePanel();
+    void saveReferences();
+    std::vector<ReferenceTrack> references;
+    int currentReference = -1;
+    bool referenceClean = true;
+    const AudioData* matchedFor = nullptr;   // the audio yourLufs was measured on
+    AudioDataPtr matchedData;                // keeps it alive so the pointer stays unique
+    double yourLufs = -200.0;
+    bool yourThroughMaster = false;
+    class ReferencePanel* referencePanel = nullptr;
+    DockablePanel* referencesPanel = nullptr;
+    QLabel* referenceBadge = nullptr;
+
     // Window opacity (see Theme::setOpacity)
     void changeOpacity (double value, bool announce);
     QSlider* makeOpacitySlider (QWidget* parent);

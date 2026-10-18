@@ -41,6 +41,11 @@ namespace
             auto pos = position.load();
             const auto numChannels = d->numChannels();
             ensureScratch (numChannels, info.numSamples);
+            const auto ref = std::atomic_load (&reference);
+            const auto hearRef = ref != nullptr && hearReference.load();
+            const auto withRef = ref != nullptr && (hearRef || refWeight > 0.0f);
+            if (withRef)
+                ensureRefScratch (ref->numChannels(), info.numSamples);
 
             // Looping wraps from the loop's end back to its start, within the block.
             const auto from = loopStart.load(), to = loopEnd.load();
@@ -56,6 +61,12 @@ namespace
                 for (size_t ch = 0; ch < scratch.size(); ++ch)
                     scratchPtrs[ch] = scratch[ch].data() + done;
                 d->read (pos, n, scratchPtrs.data());
+                if (withRef)
+                {
+                    for (size_t ch = 0; ch < refScratch.size(); ++ch)
+                        refPtrs[ch] = refScratch[ch].data() + done;
+                    ref->read (pos, n, refPtrs.data());   // same place in the reference; silence past its end
+                }
                 pos += n;
                 done += n;
                 if (to > from && pos >= to)
@@ -65,12 +76,47 @@ namespace
                 scratchPtrs[ch] = scratch[ch].data();
 
             // The buffer has the file's channels (see MonitorSource); a mono file also fills a second one.
-            for (int ch = 0; ch < info.buffer->getNumChannels(); ++ch)
+            // With a reference in a wide buffer (see MasterSource), the reference goes in a second set of channels.
+            const auto wide = layout.load();
+            const auto outChannels = wide > 0 ? wide : info.buffer->getNumChannels();
+            for (int ch = 0; ch < outChannels; ++ch)
             {
                 const auto src = ch < numChannels ? ch : (numChannels == 1 ? 0 : -1);
                 if (src >= 0)
                     info.buffer->copyFrom (ch, info.startSample, scratch[(size_t) src].data(), info.numSamples);
             }
+
+            if (withRef)
+            {
+                // A short equal-power crossfade between your audio and the reference, so switching never clicks.
+                weights.resize ((size_t) info.numSamples);
+                const auto step = (float) (1.0 / std::max (1.0, d->sampleRate() * 0.02));
+                const auto target = hearRef ? 1.0f : 0.0f;
+                auto current = refWeight.load();
+                for (auto& w : weights)
+                {
+                    current = target > current ? std::min (target, current + step) : std::max (target, current - step);
+                    w = current;
+                }
+                refWeight = current;
+                const auto gain = referenceGain.load();
+                const auto refChannels = (int) ref->numChannels();
+                for (int ch = 0; ch < outChannels; ++ch)
+                {
+                    auto* main = info.buffer->getWritePointer (ch, info.startSample);
+                    auto* into = wide > 0 && wide + ch < info.buffer->getNumChannels() ? info.buffer->getWritePointer (wide + ch, info.startSample) : main;
+                    const auto src = refChannels == 1 ? 0 : (ch < refChannels ? ch : -1);
+                    for (int i = 0; i < info.numSamples; ++i)
+                    {
+                        const auto w = weights[(size_t) i];
+                        main[i] *= std::cos (w * juce::MathConstants<float>::halfPi);
+                        if (src >= 0)
+                            into[i] += gain * std::sin (w * juce::MathConstants<float>::halfPi) * refScratch[(size_t) src][(size_t) i];
+                    }
+                }
+            }
+            else
+                refWeight = 0.0f;
 
             position = pos;
         }
@@ -95,6 +141,15 @@ namespace
             }
             return position.load();
         }
+
+        // The A/B reference: another recording at the file's sample rate, heard in place
+        // of the file at the same position. Set from the message thread.
+        AudioDataPtr reference;
+        std::atomic<float> referenceGain { 1.0f };
+        std::atomic<bool> hearReference { false };
+        std::atomic<bool> referenceClean { true };   // heard without the Master Section
+        std::atomic<int> layout { 0 };               // set by MasterSource: > 0 puts the reference in channels [layout, 2 * layout)
+        bool referenceAudible() const { return std::atomic_load (&reference) != nullptr && (hearReference.load() || refWeight > 0.0f); }
 
         // Device samples played so far, counted by MasterSource, and how many one callback advances it.
         const std::atomic<juce::int64>* clock = nullptr;
@@ -131,6 +186,17 @@ namespace
             }
         }
 
+        void ensureRefScratch (int channels, int frames)
+        {
+            if ((int) refScratch.size() != channels || (refScratch.empty() ? 0 : (int) refScratch[0].size()) < frames)
+            {
+                refScratch.assign ((size_t) channels, std::vector<float> ((size_t) std::max (frames, 8192)));
+                refPtrs.clear();
+                for (auto& r : refScratch)
+                    refPtrs.push_back (r.data());
+            }
+        }
+
         void remember (double time, juce::int64 pos, bool restart)
         {
             const auto next = (head.load (std::memory_order_relaxed) + 1) % historySize;
@@ -154,6 +220,10 @@ namespace
 
         AudioDataPtr data;
         std::atomic<juce::int64> position { 0 }, loopStart { 0 }, loopEnd { 0 };
+        std::atomic<float> refWeight { 0.0f };   // 0 your audio, 1 the reference; moves smoothly toward hearReference
+        std::vector<float> weights;
+        std::vector<std::vector<float>> refScratch;
+        std::vector<float*> refPtrs;
         std::vector<std::vector<float>> scratch { 2, std::vector<float> (8192) };
         std::vector<float*> scratchPtrs { scratch[0].data(), scratch[1].data() };
     };
@@ -163,7 +233,7 @@ namespace
     class MasterSource final : public juce::AudioSource
     {
     public:
-        MasterSource (juce::AudioSource& in, MasterChain& c) : input (in), chain (c) {}
+        MasterSource (juce::AudioSource& in, MasterChain& c, DocumentSource& d) : input (in), chain (c), document (d) {}
 
         void prepareToPlay (int blockSize, double sampleRate) override
         {
@@ -175,16 +245,75 @@ namespace
 
         void getNextAudioBlock (const juce::AudioSourceChannelInfo& info) override
         {
-            input.getNextAudioBlock (info);
-            chain.processRealtime (*info.buffer, info.startSample, info.numSamples);
+            const auto channels = std::min (info.buffer->getNumChannels(), maxChannels);
+            if (document.referenceClean.load() && document.referenceAudible())
+                cleanFor = std::max (cleanFor, (juce::int64) chain.listeningLatency() + info.numSamples);
+
+            if (cleanFor <= 0)
+            {
+                document.layout = 0;
+                input.getNextAudioBlock (info);
+                chain.processRealtime (*info.buffer, info.startSample, info.numSamples);
+                wasClean = false;
+            }
+            else
+            {
+                // The reference is read into a second set of channels and goes around the
+                // Master Section, delayed by its latency so both stay in step.
+                if (! wasClean)
+                    for (auto& line : delay)
+                        std::fill (line.begin(), line.end(), 0.0f);
+                wasClean = true;
+                for (int done = 0; done < info.numSamples;)
+                {
+                    const auto n = std::min (info.numSamples - done, wideFrames);
+                    juce::AudioBuffer<float> wideBuffer (wide.getArrayOfWritePointers(), 2 * channels, n);
+                    wideBuffer.clear();
+                    document.layout = channels;
+                    input.getNextAudioBlock ({ &wideBuffer, 0, n });
+                    const auto at = info.startSample + done;
+                    for (int ch = 0; ch < channels; ++ch)
+                        info.buffer->copyFrom (ch, at, wideBuffer, ch, 0, n);
+                    chain.processRealtime (*info.buffer, at, n);
+
+                    const auto latency = std::clamp (chain.listeningLatency(), 0, delaySize - 1);
+                    for (int ch = 0; ch < channels; ++ch)
+                    {
+                        auto& line = delay[(size_t) ch];
+                        const auto* in = wideBuffer.getReadPointer (channels + ch);
+                        auto* out = info.buffer->getWritePointer (ch, at);
+                        auto w = write;
+                        for (int i = 0; i < n; ++i)
+                        {
+                            line[(size_t) w] = in[i];
+                            out[i] += line[(size_t) ((w - latency + delaySize) % delaySize)];
+                            w = (w + 1) % delaySize;
+                        }
+                    }
+                    write = (write + n) % delaySize;
+                    done += n;
+                }
+                document.layout = 0;
+                cleanFor -= info.numSamples;
+            }
             clock.fetch_add (info.numSamples);
         }
 
         std::atomic<juce::int64> clock { 0 };   // device samples processed so far
 
     private:
+        static constexpr int maxChannels = MeterBlock::maxChannels;
+        static constexpr int wideFrames = 4096;
+        static constexpr int delaySize = 1 << 16;
+
         juce::AudioSource& input;
         MasterChain& chain;
+        DocumentSource& document;
+        juce::AudioBuffer<float> wide { 2 * maxChannels, wideFrames };
+        std::vector<std::vector<float>> delay { (size_t) maxChannels, std::vector<float> ((size_t) delaySize) };
+        int write = 0;
+        juce::int64 cleanFor = 0;   // device samples the reference path stays on, so its delayed tail is heard
+        bool wasClean = false;
     };
 
     class MeterSource final : public juce::AudioSource
@@ -433,7 +562,7 @@ struct AudioEngine::Impl
     juce::AudioDeviceManager deviceManager;
     DocumentSource document;
     juce::AudioTransportSource transport;
-    MasterSource masterSource { transport, master };
+    MasterSource masterSource { transport, master, document };
     MeterSource meter { masterSource };
     MonitorSource monitor { meter };
     juce::AudioSourcePlayer player;
@@ -481,7 +610,7 @@ void AudioEngine::setData (AudioDataPtr data)
         const bool wasPlaying = isPlaying();
         impl->transport.setSource (nullptr);
         if (rate > 0.0)
-            impl->transport.setSource (&impl->document, 0, nullptr, rate, std::max (channels, 2));
+            impl->transport.setSource (&impl->document, 0, nullptr, rate, 2 * std::max (channels, 2));   // twice: room for an A/B reference
 
         impl->sourceRate = rate;
         impl->sourceChannels = channels > 0 ? channels : impl->sourceChannels;
@@ -505,6 +634,17 @@ void AudioEngine::play()
         impl->document.startPending = true;
     impl->transport.start();
 }
+
+void AudioEngine::setReference (AudioDataPtr reference, float gain)
+{
+    impl->document.referenceGain = gain;
+    std::atomic_store (&impl->document.reference, std::move (reference));
+}
+
+void AudioEngine::setReferenceGain (float gain)        { impl->document.referenceGain = gain; }
+void AudioEngine::setHearingReference (bool on)        { impl->document.hearReference = on; }
+bool AudioEngine::isHearingReference() const           { return impl->document.hearReference.load(); }
+void AudioEngine::setReferenceBypassesMaster (bool on) { impl->document.referenceClean = on; }
 
 void AudioEngine::stop()            { impl->transport.stop(); }
 void AudioEngine::setLoop (Frame start, Frame end) { impl->document.setLoop (start, end); }

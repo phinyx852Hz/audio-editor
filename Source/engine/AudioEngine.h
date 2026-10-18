@@ -90,6 +90,14 @@ public:
     Frame positionFrames() const;        // where reading is: ahead of the sound by the delays below
     Frame heardPositionFrames() const;   // what is coming out of the speakers now, for the cursor
     int listeningLatency() const;        // the Master Section's delay while listening, in device samples
+
+    // A/B reference: another recording, already at the file's sample rate, heard in
+    // place of the file at the same position, with a short crossfade on each switch.
+    void setReference (AudioDataPtr, float gain);
+    void setReferenceGain (float);
+    void setHearingReference (bool);
+    bool isHearingReference() const;
+    void setReferenceBypassesMaster (bool);   // heard without the Master Section (kept in time with it)
     void setPositionFrames (Frame);
     double position() const;  // seconds
     double length() const;    // seconds

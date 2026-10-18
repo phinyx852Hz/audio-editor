@@ -68,6 +68,8 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/GainHud.cpp
     Source/ui/LiveEdits.cpp
     Source/ui/Analysis.cpp
+    Source/ui/ReferencePanel.cpp
+    Source/ui/ReferenceSection.cpp
     Source/ui/AlbumEditor.cpp
     Source/ui/AlbumFile.cpp
     Source/ui/AlbumView.cpp
