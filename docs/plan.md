@@ -564,6 +564,16 @@ Key design choices:
 - Control surface mapping, compliance reports
 - DSSI and optional VST2 hosting
 
+### Extra (after the main work): Sampler view (requested 2026-10-18)
+"A sampler function that would turn any audio file into a simple sampler like Ableton's Simpler. Not trying to create a full sampling engine... the main workspace of the editor could instantly invoke another view... with all those functions. That would entail MIDI integration." Look: an adaptation of Simpler's minimalist layout in the PHINYX theme, not a copy of Ableton's artwork.
+- One command (and key) turns the open file, or its selection, into a playable instrument in a Sampler view that replaces the editor view; the same key goes back. The sample is the editor's own audio, so edits show up in the sampler at once.
+- Sample page: the waveform with start, end and loop markers; modes Classic (sustain loop), 1-Shot (plays through, with fade in/out) and Slice (slices by transient, beat division, regions/markers or manually, each slice on its own key, from C1 up); Gain, Start, Loop, Length, Fade, Loop on/off, Snap to zero crossings, Voices (1 to 32), Retrigger, Warp (time-stretch to tempo with the stretcher PHINYX already uses) with Complex/Beats/Tones.
+- Controls page: filter (low/high/band pass and notch, 12/24 dB, frequency, resonance, envelope and key/velocity amounts) with its curve drawn, LFO (shape, rate in Hz or synced, depth to volume, pitch, pan and filter), amplitude ADSR drawn as a curve with draggable points, pitch envelope, pan and spread, transpose, detune, glide, velocity to volume.
+- MIDI: any MIDI keyboard or controller through ALSA/JACK MIDI (JUCE's MIDI input), with note on/off, velocity, pitch bend and sustain; the computer keyboard plays it too (Ableton-style A to K row, Z/X for octaves) while the view is open; every control is a command, so the MIDI-mapping plan (2.9) covers it.
+- Save and export: the sampler's settings are kept with the file's session; export the slices as files or as a SFZ instrument (sample plus a text map), which other samplers and DAWs open.
+- Source to reuse: Ninjas2 by Clearly Broken Software (github.com/clearly-broken-software/ninjas2), a sample slicer on DPF with aubio onset detection. Licence check: GPL-3.0 (aubio is GPL-3.0 too), combinable with AGPLv3 with credit. Its last change was in 2023, so take its slicing and slice-to-key mapping code as a starting point rather than bundling the plugin; Classic and 1-Shot playback, the filter, LFO and envelopes are written for PHINYX (the filter and envelope maths are small).
+- Order: Classic and 1-Shot with ADSR and MIDI first, then Slice (from Ninjas2), then filter, LFO and Warp, then SFZ export.
+
 ### Extra (after the main work): Visualizer
 Requested 2026-10-17 as an extra once PHINYX's main phases are done. A Visualizer window (its own tile, title "Visualizer - PHINYX", class phinyx) fed by whatever PHINYX plays, after the Master Section, so it shows the processed sound. Effort estimates for one developer:
 - Bars and spectrum in the style of **cava** (github.com/karlstav/cava, MIT as far as checked): its `cavacore` library is made for embedding. Feed it PHINYX's playback blocks and draw with Qt, in theme colours. About 2 to 3 days.
