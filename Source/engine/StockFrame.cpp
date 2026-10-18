@@ -256,13 +256,8 @@ StockFrame::StockFrame (juce::AudioProcessorEditor* e, juce::AudioPluginInstance
     inMeter->setTitle ("Input level");
     outMeter->setTitle ("Output level");
 
-    for (const auto* wanted : info.footer)
-        for (auto* p : plugin.getParameters())
-            if (p->getName (64) == wanted)
-            {
-                addAndMakeVisible (knobs.add (std::make_unique<Knob> (*p)));
-                break;
-            }
+    for (const auto index : stock::footerParameters (info, plugin))
+        addAndMakeVisible (knobs.add (std::make_unique<Knob> (*plugin.getParameters()[index])));
 
     addAndMakeVisible (*editor);
     applyColours();

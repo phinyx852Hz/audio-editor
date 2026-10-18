@@ -56,14 +56,13 @@ ExternalProject_Add(stock_wolfshaper
     INSTALL_COMMAND ${CMAKE_COMMAND} -E copy <SOURCE_DIR>/bin/wolf-shaper.clap ${PHINYX_STOCK_DIR}/
         ${stock_licence_commands})
 
-# LSP Clipper and LSP Multiband Clipper by Vladimir Sadovnikov (LGPL-3.0-or-later).
+# LSP Clipper, LSP Multiband Clipper and LSP Oscilloscope by Vladimir Sadovnikov (LGPL-3.0-or-later).
 # `make fetch` checks out the LSP libraries at the versions each release names.
-foreach(lsp clipper mb-clipper)
-    if(lsp STREQUAL "clipper")
-        set(commit 5177474d5f2c7b90ccaa654a4a90746f0a83a9ef)
-    else()
-        set(commit 7579c7025d35b390c5240b9bf06c63b3901e262e)
-    endif()
+set(lsp_commit_clipper 5177474d5f2c7b90ccaa654a4a90746f0a83a9ef)
+set(lsp_commit_mb-clipper 7579c7025d35b390c5240b9bf06c63b3901e262e)
+set(lsp_commit_oscilloscope b6a130069b35f81bc3bcebc32af7d687d9580e5d)
+foreach(lsp clipper mb-clipper oscilloscope)
+    set(commit ${lsp_commit_${lsp}})
     phinyx_stock_licence(lsp-plugins-${lsp} COPYING COPYING.LESSER)
     ExternalProject_Add(stock_lsp_${lsp}
         GIT_REPOSITORY https://github.com/lsp-plugins/lsp-plugins-${lsp}.git
@@ -78,6 +77,6 @@ foreach(lsp clipper mb-clipper)
 endforeach()
 
 add_custom_target(stock_plugins ALL DEPENDS
-    stock_toneshifteq stock_wolfshaper stock_lsp_clipper stock_lsp_mb-clipper)
+    stock_toneshifteq stock_wolfshaper stock_lsp_clipper stock_lsp_mb-clipper stock_lsp_oscilloscope)
 
 install(DIRECTORY "${PHINYX_STOCK_DIR}/" DESTINATION "${PHINYX_STOCK_INSTALL_DIR}" USE_SOURCE_PERMISSIONS)

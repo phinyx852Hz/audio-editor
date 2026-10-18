@@ -16,7 +16,8 @@ namespace stock
         const char* credit;    // "ToneShiftEQ by brummer10"
         const char* licence;   // SPDX id
         const char* url;
-        std::vector<const char*> footer;   // parameters given knobs in the frame's footer, by name
+        // Parameters given knobs in the frame's footer, by name; "A|B" takes A, or B when there is no A.
+        std::vector<const char*> footer;
         const char* namePrefix = "";       // put before the plugin's own name in the plugin list
         const char* maker = nullptr;       // shown instead of the plugin's own vendor name
     };
@@ -29,4 +30,7 @@ namespace stock
     juce::File folder();
 
     const Info* find (const juce::PluginDescription&);   // nullptr when not a stock plugin
+
+    // The indices of `info.footer`'s parameters in `plugin`, in footer order.
+    std::vector<int> footerParameters (const Info&, const juce::AudioProcessor& plugin);
 }

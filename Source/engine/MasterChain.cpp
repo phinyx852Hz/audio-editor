@@ -445,16 +445,7 @@ MasterSlotInfo MasterChain::info (int index) const
     const auto* stockInfo = stock::find (s.description);
     i.format = stockInfo != nullptr ? builtin::formatName : s.description.pluginFormatName.toStdString();
     if (stockInfo != nullptr)
-    {
-        const auto& params = s.plugin->getParameters();
-        for (const auto* wanted : stockInfo->footer)
-            for (int p = 0; p < params.size(); ++p)
-                if (params[p]->getName (64) == wanted)
-                {
-                    i.mainParameters.push_back (p);
-                    break;
-                }
-    }
+        i.mainParameters = stock::footerParameters (*stockInfo, *s.plugin);
     i.pluginId = s.description.createIdentifierString().toStdString();
     i.bypassed = s.bypassed;
     i.latencySamples = s.plugin->getLatencySamples();
