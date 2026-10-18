@@ -123,16 +123,10 @@ void Goniometer::paintEvent (QPaintEvent*)
     const auto& theme = Theme::current();
     QPainter g (this);
     g.setRenderHint (QPainter::Antialiasing);
-    g.fillRect (rect(), theme.color (QStringLiteral ("window")));
 
     const auto plot = plotArea();
     const auto centre = plot.center();
     const auto radius = plot.width() / 2.0;
-
-    // Screen
-    g.setPen (Qt::NoPen);
-    g.setBrush (theme.color (QStringLiteral ("meterBackground")));
-    g.drawEllipse (centre, radius, radius);
 
     // Guides: half scale, the M and S axes, and the L and R diagonals.
     auto grid = theme.color (QStringLiteral ("mid"));

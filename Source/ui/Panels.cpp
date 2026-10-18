@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "Panels.h"
+#include "InfoStrip.h"
 #include <QAbstractSpinBox>
 #include <QLineEdit>
 #include "../core/Dsp.h"
@@ -421,7 +422,6 @@ void MeterPanel::paintEvent (QPaintEvent*)
 {
     const auto& theme = Theme::current();
     QPainter g (this);
-    g.fillRect (rect(), theme.color (QStringLiteral ("window")));
 
     constexpr float floorDb = -60.0f;
     const QRectF area (8, 8, std::min (width() * (numChannels > 2 ? 0.6 : 0.45), 40.0 + numChannels * 26.0), height() - 30);
@@ -493,13 +493,20 @@ void MeterPanel::paintEvent (QPaintEvent*)
     const auto left = area.right() + 12;
     const auto lineHeight = fontMetrics().height() * 1.6;
     auto y = area.top();
+    const QFontMetricsF metrics (font());
+    qreal column = 0.0;   // as wide as the widest value can be
+    for (const auto* widest : { "-188.8 LUFS", "-188.8 dBTP", "-188.8 dBFS" })
+        column = std::max (column, steady::width (metrics, QString::fromLatin1 (widest)));
     for (const auto& [label, value] : rows)
     {
         g.setPen (theme.color (QStringLiteral ("placeholderText")));
         g.drawText (QRectF (left, y, width() - left - 8, lineHeight * 0.5), Qt::AlignLeft | Qt::AlignVCenter, label);
         g.setPen (label == tr ("True peak") && maxTruePeak > -1.0f ? theme.color (QStringLiteral ("meterHigh"))
                                                                   : theme.color (QStringLiteral ("windowText")));
-        g.drawText (QRectF (left, y + lineHeight * 0.45, width() - left - 8, lineHeight * 0.55), Qt::AlignLeft | Qt::AlignVCenter, value);
+        // Right-aligned with digits of equal width, so the numbers never shift sideways.
+        const QRectF box (left, y + lineHeight * 0.45, width() - left - 8, lineHeight * 0.55);
+        const auto baseline = box.center().y() + (metrics.ascent() - metrics.descent()) / 2.0;
+        steady::draw (g, left + column - steady::width (metrics, value), baseline, value);
         y += lineHeight * 1.15;
     }
 }
