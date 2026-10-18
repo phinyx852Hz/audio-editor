@@ -81,6 +81,20 @@ namespace dsp
     enum class Dither { none, tpdf, shaped };
     AudioDataPtr quantize (const AudioData&, int bits, Dither, const ProgressCallback& = {});
 
+    // The same rounding a block at a time, for the live Dither effect.
+    class Quantizer
+    {
+    public:
+        void set (int bits, Dither, int numChannels);
+        void process (float* const* channels, int numChannels, int numFrames);
+
+    private:
+        int bits = 24;
+        Dither dither = Dither::tpdf;
+        std::vector<std::array<float, 2>> errors;   // last two rounding errors per channel, for noise shaping
+        std::mt19937 rng { 20261017 };
+    };
+
     // ITU-R BS.1770 K-weighting: high shelf followed by high pass.
     class KWeighting
     {
@@ -113,6 +127,37 @@ namespace dsp
         std::array<float, tapsPerPhase> history {};
         int writeIndex = 0;
     };
+
+    // Look-ahead brickwall limiter that keeps the true peak (4x oversampled, as
+    // BS.1770 measures it) at or below the ceiling. All channels share one gain,
+    // so the stereo image stays put. The audio comes out `latency()` samples late.
+    class TruePeakLimiter
+    {
+    public:
+        void prepare (double sampleRate, int numChannels, double lookaheadMs = 5.0);
+        void set (double ceilingDb, double releaseMs);
+        void reset();
+        int latency() const { return window + detectorDelay; }
+        void process (float* const* channels, int numChannels, int numFrames);
+        float lastGain() const { return currentGain; }   // 1 = no reduction
+
+    private:
+        float nextGain (float required);
+
+        static constexpr int detectorDelay = 6;   // TruePeakDetector's interpolation delay, in samples
+        std::vector<TruePeakDetector> detectors;
+        std::vector<std::vector<float>> delay;     // the audio, held back by latency()
+        std::vector<std::pair<long long, float>> minQueue;   // sliding minimum of the required gain
+        std::vector<float> box;                    // the smoothing filter's history
+        int window = 240, hold = 244, writePos = 0, queueHead = 0, queueTail = 0, boxPos = 0;
+        long long counter = 0;
+        double boxSum = 0.0;
+        float ceiling = 1.0f, releaseCoef = 0.0f, released = 1.0f, currentGain = 1.0f;
+        double rate = 48000.0, releaseMs = 100.0;
+    };
+
+    // Runs [start, end) through a TruePeakLimiter (latency removed); the rest is unchanged.
+    AudioDataPtr limitTruePeak (const AudioData&, Frame start, Frame end, double ceilingDb, double releaseMs = 100.0);
 
     // Speakers, and the layout PHINYX assumes for each channel count, in WAV
     // (WAVEFORMATEXTENSIBLE / SMPTE) order: 5.1 is L R C LFE Ls Rs.

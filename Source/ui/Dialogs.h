@@ -85,7 +85,10 @@ private:
     class QSpinBox* quality = nullptr;
 };
 
-// Normalize to a peak level or an integrated loudness target.
+// Normalize to a peak level or an integrated loudness target. Loudness has
+// presets for streaming services and broadcast, can be matched to a reference
+// file, and can limit the true peak so turning up does not clip. The choices
+// are kept between uses.
 class NormalizeDialog final : public QDialog
 {
     Q_OBJECT
@@ -97,10 +100,22 @@ public:
 
     Mode mode() const;
     double target() const;
+    bool limitPeaks() const;         // loudness only
+    double peakCeiling() const;      // dBTP
+    QString targetName() const;      // for the undo history, e.g. "-14.0 LUFS (Spotify...)"
 
 private:
+    void matchReference();
+    void store();
+
     QComboBox* modeBox;
+    QComboBox* presetBox;
     class QDoubleSpinBox* targetBox;
+    class QCheckBox* limitBox;
+    class QDoubleSpinBox* ceilingBox;
+    class QPushButton* referenceButton;
+    class QLabel* referenceLabel;
+    QString referenceName;
 };
 
 // Settings for Stereoize (mono to stereo). Values are kept between uses.

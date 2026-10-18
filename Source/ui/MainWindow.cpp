@@ -2231,6 +2231,7 @@ void MainWindow::normalize()
     QApplication::setOverrideCursor (Qt::WaitCursor);
 
     double changeDb = 0.0;
+    bool limit = false;
     QString problem;
 
     if (dialog.mode() == NormalizeDialog::Mode::peak)
@@ -2250,8 +2251,9 @@ void MainWindow::normalize()
         {
             changeDb = dialog.target() - report.integratedLufs;
             const auto newTruePeak = report.truePeakDb + changeDb;
-            if (newTruePeak > 0.0)
+            if (! dialog.limitPeaks() && newTruePeak > 0.0)
                 statusBar()->showMessage (tr ("Warning: true peak will be %1 dBTP and may clip").arg (newTruePeak, 0, 'f', 1), 8000);
+            limit = dialog.limitPeaks() && newTruePeak > dialog.peakCeiling();
         }
     }
 
@@ -2263,10 +2265,27 @@ void MainWindow::normalize()
     }
 
     auto result = dsp::applyGain (*d, s, e, changeDb);
+    if (limit)
+    {
+        // Limiting takes a little loudness away, so turn up by what is missing
+        // and limit again from the original, a few times at most.
+        for (int pass = 0; pass < 4; ++pass)
+        {
+            result = dsp::limitTruePeak (*result, s, e, dialog.peakCeiling());
+            const auto missing = dialog.target() - dsp::measureLoudness (*result, s, e).integratedLufs;
+            if (std::abs (missing) < 0.1 || pass == 3)
+                break;
+            changeDb += missing;
+            result = dsp::applyGain (*d, s, e, changeDb);
+        }
+        const auto reached = dsp::measureLoudness (*result, s, e).integratedLufs;
+        if (dialog.target() - reached > 0.5)
+            statusBar()->showMessage (tr ("Limited to %1 dBTP: reached %2 LUFS, as loud as it goes without more limiting")
+                                          .arg (dialog.peakCeiling(), 0, 'f', 1).arg (reached, 0, 'f', 1), 8000);
+    }
     QApplication::restoreOverrideCursor();
 
-    const auto unit = dialog.mode() == NormalizeDialog::Mode::peak ? QStringLiteral ("dBFS") : QStringLiteral ("LUFS");
-    commit (tr ("Normalize to %1 %2").arg (dialog.target(), 0, 'f', 1).arg (unit), std::move (result), s, e, e - s);
+    commit (tr ("Normalize to %1").arg (dialog.targetName()), std::move (result), s, e, e - s);
 }
 
 void MainWindow::fade (bool in)

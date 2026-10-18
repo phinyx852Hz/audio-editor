@@ -164,13 +164,210 @@ namespace
         juce::SmoothedValue<float> smoothedWidth;
         float fade = 1.0f, fadeStep = 0.002f;
     };
+
+    //==========================================================================
+    // What the mastering effects below share: one bus of 1 or 2 channels in and
+    // out, no window, and their parameters saved by ID.
+    class MasteringEffect : public juce::AudioPluginInstance
+    {
+    public:
+        MasteringEffect (const char* stateTag)
+            : AudioPluginInstance (BusesProperties().withInput ("Input", juce::AudioChannelSet::stereo())
+                                                    .withOutput ("Output", juce::AudioChannelSet::stereo())),
+              tag (stateTag)
+        {
+        }
+
+        static juce::PluginDescription describe (const char* name, const char* id, const char* category, int uid)
+        {
+            juce::PluginDescription p;
+            p.name = p.descriptiveName = name;
+            p.pluginFormatName = builtin::formatName;
+            p.category = category;
+            p.manufacturerName = APP_DISPLAY_NAME;
+            p.version = "1";
+            p.fileOrIdentifier = id;
+            p.uniqueId = p.deprecatedUid = uid;
+            p.isInstrument = false;
+            p.numInputChannels = p.numOutputChannels = 2;
+            return p;
+        }
+
+        bool isBusesLayoutSupported (const BusesLayout& l) const override
+        {
+            const auto in = l.getMainInputChannelSet();
+            return in == l.getMainOutputChannelSet()
+                && (in == juce::AudioChannelSet::mono() || in == juce::AudioChannelSet::stereo());
+        }
+
+        void releaseResources() override {}
+        bool acceptsMidi() const override  { return false; }
+        bool producesMidi() const override { return false; }
+        juce::AudioProcessorEditor* createEditor() override { return nullptr; }
+        bool hasEditor() const override { return false; }
+
+        int getNumPrograms() override { return 1; }
+        int getCurrentProgram() override { return 0; }
+        void setCurrentProgram (int) override {}
+        const juce::String getProgramName (int) override { return {}; }
+        void changeProgramName (int, const juce::String&) override {}
+
+        void getStateInformation (juce::MemoryBlock& data) override
+        {
+            juce::XmlElement xml (tag);
+            for (auto* p : getParameters())
+                if (auto* r = dynamic_cast<juce::RangedAudioParameter*> (p))
+                    xml.setAttribute (r->getParameterID(), (double) r->convertFrom0to1 (r->getValue()));
+            copyXmlToBinary (xml, data);
+        }
+
+        void setStateInformation (const void* data, int size) override
+        {
+            if (auto xml = getXmlFromBinary (data, size); xml != nullptr && xml->hasTagName (tag))
+                for (auto* p : getParameters())
+                    if (auto* r = dynamic_cast<juce::RangedAudioParameter*> (p); r != nullptr && xml->hasAttribute (r->getParameterID()))
+                        r->setValueNotifyingHost (r->convertTo0to1 ((float) xml->getDoubleAttribute (r->getParameterID())));
+        }
+
+    protected:
+        static juce::AudioParameterFloatAttributes number (int decimals, const char* unit)
+        {
+            return juce::AudioParameterFloatAttributes()
+                .withLabel (unit)
+                .withStringFromValueFunction ([decimals] (float v, int) { return juce::String (v, decimals); })
+                .withValueFromStringFunction ([] (const juce::String& t) { return t.retainCharacters ("+-.0123456789eE").getFloatValue(); });
+        }
+
+    private:
+        juce::String tag;
+    };
+
+    //==========================================================================
+    // True Peak Limiter: a look-ahead brickwall limiter that keeps the true peak
+    // (as loudness meters and streaming services measure it) under the ceiling.
+    class LimiterProcessor final : public MasteringEffect
+    {
+    public:
+        static constexpr const char* identifier = "phinyx:true-peak-limiter";
+
+        LimiterProcessor() : MasteringEffect ("PHINYX_LIMITER")
+        {
+            auto in = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "input", 1 }, "Input",
+                juce::NormalisableRange<float> (0.0f, 18.0f, 0.1f), 0.0f, number (1, "dB"));
+            auto c = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "ceiling", 1 }, "Ceiling",
+                juce::NormalisableRange<float> (-12.0f, 0.0f, 0.1f), -1.0f, number (1, "dBTP"));
+            auto r = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "release", 1 }, "Release",
+                juce::NormalisableRange<float> (1.0f, 1000.0f, 1.0f, 0.4f), 100.0f, number (0, "ms"));
+            input = in.get(); ceiling = c.get(); release = r.get();
+            addHostedParameter (std::move (in));
+            addHostedParameter (std::move (c));
+            addHostedParameter (std::move (r));
+
+            core.prepare (48000.0, 2);
+            setLatencySamples (core.latency());
+        }
+
+        static juce::PluginDescription description()
+        {
+            return describe ("True Peak Limiter", identifier, "Dynamics", 0x5048544c);   // "PHTL"
+        }
+        void fillInPluginDescription (juce::PluginDescription& d) const override { d = description(); }
+        const juce::String getName() const override { return "True Peak Limiter"; }
+
+        void prepareToPlay (double sampleRate, int) override
+        {
+            core.prepare (sampleRate, std::max (1, getTotalNumInputChannels()));
+            core.set (ceiling->get(), release->get());
+            setLatencySamples (core.latency());
+            inputGain.reset (sampleRate, 0.03);
+            inputGain.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (input->get()));
+        }
+
+        using AudioPluginInstance::processBlock;
+        void processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override
+        {
+            core.set (ceiling->get(), release->get());
+            inputGain.setTargetValue (juce::Decibels::decibelsToGain (input->get()));
+            const auto channels = buffer.getNumChannels();
+            for (int i = 0; i < buffer.getNumSamples(); ++i)
+            {
+                const auto g = inputGain.getNextValue();
+                for (int ch = 0; ch < channels; ++ch)
+                    buffer.getWritePointer (ch)[i] *= g;
+            }
+            core.process (buffer.getArrayOfWritePointers(), channels, buffer.getNumSamples());
+        }
+
+        double getTailLengthSeconds() const override { return 0.01; }
+
+    private:
+        juce::AudioParameterFloat* input = nullptr;
+        juce::AudioParameterFloat* ceiling = nullptr;
+        juce::AudioParameterFloat* release = nullptr;
+        dsp::TruePeakLimiter core;
+        juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> inputGain { 1.0f };
+    };
+
+    //==========================================================================
+    // Dither: rounds to the bit depth the file will be saved at, with dither noise
+    // that hides the rounding distortion. It belongs last in the chain.
+    class DitherProcessor final : public MasteringEffect
+    {
+    public:
+        static constexpr const char* identifier = "phinyx:dither";
+
+        DitherProcessor() : MasteringEffect ("PHINYX_DITHER")
+        {
+            auto b = std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "bits", 1 }, "Bits",
+                juce::StringArray { "16", "20", "24" }, 0);
+            auto t = std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "type", 1 }, "Type",
+                juce::StringArray { "None", "TPDF", "Shaped" }, 1);
+            bits = b.get(); type = t.get();
+            addHostedParameter (std::move (b));
+            addHostedParameter (std::move (t));
+        }
+
+        static juce::PluginDescription description()
+        {
+            return describe ("Dither", identifier, "Utility", 0x50484454);   // "PHDT"
+        }
+        void fillInPluginDescription (juce::PluginDescription& d) const override { d = description(); }
+        const juce::String getName() const override { return "Dither"; }
+
+        void prepareToPlay (double, int) override { apply(); }
+
+        using AudioPluginInstance::processBlock;
+        void processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override
+        {
+            if (bits->getIndex() != appliedBits || type->getIndex() != appliedType)
+                apply();
+            core.process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples());
+        }
+
+        double getTailLengthSeconds() const override { return 0.0; }
+
+    private:
+        void apply()
+        {
+            static constexpr int depths[] { 16, 20, 24 };
+            static constexpr dsp::Dither kinds[] { dsp::Dither::none, dsp::Dither::tpdf, dsp::Dither::shaped };
+            appliedBits = bits->getIndex();
+            appliedType = type->getIndex();
+            core.set (depths[std::clamp (appliedBits, 0, 2)], kinds[std::clamp (appliedType, 0, 2)], std::max (1, getTotalNumInputChannels()));
+        }
+
+        juce::AudioParameterChoice* bits = nullptr;
+        juce::AudioParameterChoice* type = nullptr;
+        int appliedBits = -1, appliedType = -1;
+        dsp::Quantizer core;
+    };
 }
 
 namespace builtin
 {
     std::vector<juce::PluginDescription> descriptions()
     {
-        return { StereoizeProcessor::description() };
+        return { StereoizeProcessor::description(), LimiterProcessor::description(), DitherProcessor::description() };
     }
 
     bool isBuiltin (const juce::PluginDescription& d)
@@ -182,6 +379,10 @@ namespace builtin
     {
         if (isBuiltin (d) && d.fileOrIdentifier == StereoizeProcessor::identifier)
             return std::make_unique<StereoizeProcessor>();
+        if (isBuiltin (d) && d.fileOrIdentifier == LimiterProcessor::identifier)
+            return std::make_unique<LimiterProcessor>();
+        if (isBuiltin (d) && d.fileOrIdentifier == DitherProcessor::identifier)
+            return std::make_unique<DitherProcessor>();
         return nullptr;
     }
 }

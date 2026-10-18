@@ -703,16 +703,48 @@ namespace dsp
         return out.finish();
     }
 
-    AudioDataPtr quantize (const AudioData& d, int bits, Dither dither, const ProgressCallback& progress)
+    void Quantizer::set (int newBits, Dither newDither, int numChannels)
     {
-        bits = std::clamp (bits, 8, 24);
+        bits = std::clamp (newBits, 8, 24);
+        dither = newDither;
+        errors.assign ((size_t) std::max (0, numChannels), { 0.0f, 0.0f });
+    }
+
+    void Quantizer::process (float* const* channels, int numChannels, int numFrames)
+    {
         const auto steps = (float) (1 << (bits - 1));
         const auto lsb = 1.0f / steps;
-        std::mt19937 rng (20261017);
         std::uniform_real_distribution<float> uniform (-0.5f, 0.5f);
+        if ((int) errors.size() < numChannels)
+            errors.resize ((size_t) numChannels, { 0.0f, 0.0f });
+
         // Noise shaping: the rounding error is fed back through (1 - z^-1)^2, which
         // moves its noise towards high frequencies.
-        std::vector<std::array<float, 2>> errors ((size_t) d.numChannels(), { 0.0f, 0.0f });
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            auto& e = errors[(size_t) ch];
+            auto* x = channels[ch];
+            for (int i = 0; i < numFrames; ++i)
+            {
+                auto v = x[i];
+                if (dither == Dither::shaped)
+                    v -= 2.0f * e[0] - e[1];
+                const auto noise = dither == Dither::none ? 0.0f : (uniform (rng) + uniform (rng)) * lsb;
+                const auto q = std::clamp (std::round ((v + noise) * steps), -steps, steps - 1.0f) / steps;
+                if (dither == Dither::shaped)
+                {
+                    e[1] = e[0];
+                    e[0] = std::clamp (q - v, -4.0f * lsb, 4.0f * lsb);   // bounded, so a clipped peak cannot run away
+                }
+                x[i] = q;
+            }
+        }
+    }
+
+    AudioDataPtr quantize (const AudioData& d, int bits, Dither dither, const ProgressCallback& progress)
+    {
+        Quantizer quantizer;
+        quantizer.set (bits, dither, d.numChannels());
 
         AudioData::Builder out (d.numChannels(), d.sampleRate());
         const auto channels = d.numChannels();
@@ -724,29 +756,140 @@ namespace dsp
         {
             const auto n = (int) std::min<Frame> (AudioChunk::maxFrames, d.length() - pos);
             d.read (pos, n, ptrs.data());
-            for (int ch = 0; ch < channels; ++ch)
-            {
-                auto& e = errors[(size_t) ch];
-                for (int i = 0; i < n; ++i)
-                {
-                    auto v = x[(size_t) ch][(size_t) i];
-                    if (dither == Dither::shaped)
-                        v -= 2.0f * e[0] - e[1];
-                    const auto noise = dither == Dither::none ? 0.0f : (uniform (rng) + uniform (rng)) * lsb;
-                    const auto q = std::clamp (std::round ((v + noise) * steps), -steps, steps - 1.0f) / steps;
-                    if (dither == Dither::shaped)
-                    {
-                        e[1] = e[0];
-                        e[0] = std::clamp (q - v, -4.0f * lsb, 4.0f * lsb);   // bounded, so a clipped peak cannot run away
-                    }
-                    x[(size_t) ch][(size_t) i] = q;
-                }
-            }
+            quantizer.process (ptrs.data(), channels, n);
             std::vector<const float*> rows (ptrs.begin(), ptrs.end());
             out.append (rows.data(), n);
             if (progress && ! progress ((float) (pos + n) / (float) d.length()))
                 return nullptr;
         }
+        return out.finish();
+    }
+
+    //==============================================================================
+    void TruePeakLimiter::prepare (double sampleRate, int numChannels, double lookaheadMs)
+    {
+        rate = sampleRate;
+        window = std::max (8, (int) std::lround (lookaheadMs * sampleRate / 1000.0));
+        // The hold reaches a few samples past the smoothing window on both sides,
+        // so every interpolated peak near a sample is covered by its gain.
+        hold = window + 4;
+        detectors.assign ((size_t) std::max (1, numChannels), TruePeakDetector());
+        delay.assign ((size_t) std::max (1, numChannels), std::vector<float> ((size_t) latency() + 1, 0.0f));
+        minQueue.assign ((size_t) hold + 1, { 0, 1.0f });
+        box.assign ((size_t) window, 1.0f);
+        set (gainToDb (ceiling), releaseMs);
+        reset();
+    }
+
+    void TruePeakLimiter::set (double ceilingDb, double newReleaseMs)
+    {
+        ceiling = (float) dbToGain (std::min (ceilingDb, 0.0));
+        releaseMs = std::max (1.0, newReleaseMs);
+        releaseCoef = (float) (1.0 - std::exp (-1000.0 / (releaseMs * rate)));
+    }
+
+    void TruePeakLimiter::reset()
+    {
+        for (auto& d : detectors)
+            d.reset();
+        for (auto& d : delay)
+            std::fill (d.begin(), d.end(), 0.0f);
+        std::fill (box.begin(), box.end(), 1.0f);
+        boxSum = (double) window;
+        writePos = queueHead = queueTail = boxPos = 0;
+        counter = 0;
+        released = currentGain = 1.0f;
+    }
+
+    float TruePeakLimiter::nextGain (float required)
+    {
+        // Sliding minimum of the required gain over the last `hold` samples.
+        const auto capacity = (int) minQueue.size();
+        while (queueTail != queueHead && minQueue[(size_t) ((queueTail + capacity - 1) % capacity)].second >= required)
+            queueTail = (queueTail + capacity - 1) % capacity;
+        minQueue[(size_t) queueTail] = { counter, required };
+        queueTail = (queueTail + 1) % capacity;
+        while (minQueue[(size_t) queueHead].first <= counter - hold)
+            queueHead = (queueHead + 1) % capacity;
+        const auto held = minQueue[(size_t) queueHead].second;
+        ++counter;
+
+        // Instant attack, smooth release; never above the held gain.
+        released = held < released ? held : released + (held - released) * releaseCoef;
+
+        // Averaging over the look-ahead window turns the steps into smooth ramps
+        // that finish just as the peak comes out of the delay.
+        boxSum += (double) released - (double) box[(size_t) boxPos];
+        box[(size_t) boxPos] = released;
+        boxPos = (boxPos + 1) % window;
+        return (float) std::min (1.0, boxSum / (double) window);
+    }
+
+    void TruePeakLimiter::process (float* const* channels, int numChannels, int numFrames)
+    {
+        numChannels = std::min (numChannels, (int) delay.size());
+        const auto length = (int) delay[0].size();
+
+        for (int i = 0; i < numFrames; ++i)
+        {
+            const auto aligned = (writePos + length - detectorDelay) % length;
+            float peak = 0.0f;
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                const auto x = channels[ch][i];
+                peak = std::max ({ peak, detectors[(size_t) ch].process (x), std::abs (delay[(size_t) ch][(size_t) aligned]) });
+                delay[(size_t) ch][(size_t) writePos] = x;
+            }
+
+            const auto gain = nextGain (peak > ceiling ? ceiling / peak : 1.0f);
+            const auto readPos = (writePos + 1) % length;   // latency() samples ago
+            for (int ch = 0; ch < numChannels; ++ch)
+                channels[ch][i] = std::clamp (delay[(size_t) ch][(size_t) readPos] * gain, -ceiling, ceiling);
+
+            writePos = readPos;
+            currentGain = gain;
+        }
+    }
+
+    AudioDataPtr limitTruePeak (const AudioData& d, Frame start, Frame end, double ceilingDb, double releaseMs)
+    {
+        start = std::clamp<Frame> (start, 0, d.length());
+        end = std::clamp<Frame> (end, start, d.length());
+        const auto channels = d.numChannels();
+
+        TruePeakLimiter limiter;
+        limiter.set (ceilingDb, releaseMs);
+        limiter.prepare (d.sampleRate(), channels);
+        const auto latency = (Frame) limiter.latency();
+
+        AudioData::Builder out (channels, d.sampleRate());
+        out.appendShared (d, 0, start);
+
+        std::vector<std::vector<float>> x ((size_t) channels, std::vector<float> (AudioChunk::maxFrames));
+        std::vector<float*> ptrs;
+        for (auto& c : x)
+            ptrs.push_back (c.data());
+
+        // The selection followed by `latency` frames of silence, so its end comes out too.
+        Frame skip = latency;
+        for (Frame pos = start; pos < end + latency; pos += AudioChunk::maxFrames)
+        {
+            const auto n = (int) std::min<Frame> (AudioChunk::maxFrames, end + latency - pos);
+            const auto fromAudio = (int) std::clamp<Frame> (end - pos, 0, n);
+            d.read (pos, fromAudio, ptrs.data());
+            for (auto& c : x)
+                std::fill (c.begin() + fromAudio, c.begin() + n, 0.0f);
+            limiter.process (ptrs.data(), channels, n);
+
+            const auto dropped = (int) std::min<Frame> (skip, n);
+            skip -= dropped;
+            std::vector<const float*> rows;
+            for (auto& c : x)
+                rows.push_back (c.data() + dropped);
+            out.append (rows.data(), n - dropped);
+        }
+
+        out.appendShared (d, end, d.length());
         return out.finish();
     }
 }

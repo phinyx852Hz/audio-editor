@@ -692,6 +692,24 @@ namespace
         };
         check (lowNoise (q) < lowNoise (p) * 0.1, "noise shaping moves the dither noise out of the low frequencies");
 
+        // The true-peak limiter keeps a loud tone under its ceiling, including the
+        // peaks between samples (fs/4 at 45 degrees peaks 3 dB above its samples).
+        auto loudTone = makeSignal (96000, [] (Frame f) { return (float) (1.6 * std::sin (2.0 * M_PI * 997.0 * f / 48000.0)); });
+        auto between = makeSignal (96000, [] (Frame f) { return (float) (0.99 * std::sin (M_PI * 0.5 * (double) f + M_PI * 0.25)); });
+        for (const auto& [loud, name] : { std::pair { loudTone, "a loud tone" }, std::pair { between, "peaks between samples" } })
+        {
+            auto limited = dsp::limitTruePeak (*loud, 0, loud->length(), -1.0);
+            const auto tp = dsp::measureLoudness (*limited, 0, limited->length()).truePeakDb;
+            check (limited->length() == loud->length() && tp < -0.8 && tp > -1.6, "true-peak limiter on " + std::string (name) + " ("
+                   + std::to_string (tp) + " dBTP)");
+        }
+        auto gentle = makeSignal (48000, [] (Frame f) { return (float) (0.3 * std::sin (2.0 * M_PI * 440.0 * f / 48000.0)); });
+        auto untouched = dsp::limitTruePeak (*gentle, 0, gentle->length(), -1.0);
+        check (rmsDifference (*untouched, *gentle, 0, 48000) < 1.0e-7, "true-peak limiter leaves quiet audio alone, in time");
+        auto part = dsp::limitTruePeak (*loudTone, 24000, 48000, -6.0);
+        check (part->length() == loudTone->length() && sampleAt (*part, 0, 1000) == sampleAt (*loudTone, 0, 1000)
+               && dsp::measureLoudness (*part, 24000, 48000).truePeakDb < -5.8, "true-peak limiter on part of a file");
+
         auto stereo = dsp::toStereo (sine);
         auto mono = dsp::toMono (*stereo);
         check (mono->numChannels() == 1 && rmsDifference (*mono, *sine, 0, 96000) < 1.0e-7, "stereo of equal sides mixes back to the mono");

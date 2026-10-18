@@ -32,6 +32,11 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QApplication>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QHBoxLayout>
+#include <QSignalBlocker>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QTimer>
@@ -373,44 +378,169 @@ void SaveOptionsDialog::store()
 }
 
 //==============================================================================
+namespace
+{
+    struct LoudnessPreset
+    {
+        const char* name;
+        double lufs;
+    };
+
+    // Integrated loudness each service or standard plays at (or asks for).
+    constexpr LoudnessPreset loudnessPresets[] {
+        { QT_TRANSLATE_NOOP ("NormalizeDialog", "Spotify, YouTube, Tidal, Amazon"), -14.0 },
+        { QT_TRANSLATE_NOOP ("NormalizeDialog", "Apple Music"), -16.0 },
+        { QT_TRANSLATE_NOOP ("NormalizeDialog", "Podcast"), -16.0 },
+        { QT_TRANSLATE_NOOP ("NormalizeDialog", "Broadcast, EBU R128"), -23.0 },
+        { QT_TRANSLATE_NOOP ("NormalizeDialog", "Broadcast, ATSC A/85 (US)"), -24.0 },
+    };
+}
+
 NormalizeDialog::NormalizeDialog (QWidget* parent)
-    : QDialog (parent), modeBox (new QComboBox (this)), targetBox (new QDoubleSpinBox (this))
+    : QDialog (parent), modeBox (new QComboBox (this)), presetBox (new QComboBox (this)), targetBox (new QDoubleSpinBox (this)),
+      limitBox (new QCheckBox (tr ("&Limit the true peak to:"), this)), ceilingBox (new QDoubleSpinBox (this)),
+      referenceButton (new QPushButton (tr ("&Match a File..."), this)), referenceLabel (new QLabel (this))
 {
     setWindowTitle (tr ("Normalize"));
     modeBox->addItem (tr ("Peak level (dBFS)"));
     modeBox->addItem (tr ("Integrated loudness (LUFS)"));
     targetBox->setDecimals (1);
     targetBox->setSingleStep (0.5);
+    targetBox->setRange (-60.0, 0.0);
 
-    auto applyMode = [this] (int index)
-    {
-        if (index == 0)
-        {
-            targetBox->setRange (-60.0, 0.0);
-            targetBox->setValue (-1.0);
-        }
-        else
-        {
-            targetBox->setRange (-60.0, 0.0);
-            targetBox->setValue (-14.0);
-        }
-    };
+    for (const auto& p : loudnessPresets)
+        presetBox->addItem (tr ("%1 (%2 LUFS)").arg (tr (p.name)).arg (p.lufs, 0, 'f', 0), p.lufs);
+    presetBox->addItem (tr ("Custom"));
 
-    applyMode (0);
-    connect (modeBox, &QComboBox::currentIndexChanged, this, applyMode);
+    ceilingBox->setRange (-12.0, 0.0);
+    ceilingBox->setDecimals (1);
+    ceilingBox->setSingleStep (0.5);
+    ceilingBox->setSuffix (tr (" dBTP"));
+    limitBox->setToolTip (tr ("Turning up can push peaks past 0 dB. This limits them, then turns up a touch more so the loudness still lands on target."));
+    referenceButton->setToolTip (tr ("Measure another file and use its loudness as the target"));
+    referenceLabel->setForegroundRole (QPalette::PlaceholderText);
+    referenceLabel->setWordWrap (true);
+
+    QSettings settings;
+    const auto savedLoudness = settings.value (QStringLiteral ("normalize/loudness"), -14.0).toDouble();
+    const auto savedPeak = settings.value (QStringLiteral ("normalize/peak"), -1.0).toDouble();
+    limitBox->setChecked (settings.value (QStringLiteral ("normalize/limit"), true).toBool());
+    ceilingBox->setValue (settings.value (QStringLiteral ("normalize/ceiling"), -1.0).toDouble());
 
     auto* form = new QFormLayout;
     form->addRow (tr ("&Normalize to:"), modeBox);
+    form->addRow (tr ("&Preset:"), presetBox);
     form->addRow (tr ("&Target:"), targetBox);
+    auto* reference = new QHBoxLayout;
+    reference->addWidget (referenceButton);
+    reference->addWidget (referenceLabel, 1);
+    form->addRow (QString(), reference);
+    form->addRow (limitBox, ceilingBox);
+
+    auto showPresetFor = [this] (double value)
+    {
+        int index = presetBox->count() - 1;
+        for (int i = 0; i < presetBox->count() - 1; ++i)
+            if (std::abs (presetBox->itemData (i).toDouble() - value) < 0.05)
+            {
+                index = i;
+                break;
+            }
+        const QSignalBlocker block (presetBox);
+        presetBox->setCurrentIndex (index);
+    };
+
+    auto applyMode = [=, this] (int index)
+    {
+        const bool loudness = index == 1;
+        for (QWidget* w : { (QWidget*) presetBox, (QWidget*) referenceButton, (QWidget*) referenceLabel, (QWidget*) limitBox, (QWidget*) ceilingBox })
+        {
+            w->setVisible (loudness);
+            if (auto* label = form->labelForField (w))
+                label->setVisible (loudness);
+        }
+        targetBox->setSuffix (loudness ? tr (" LUFS") : tr (" dBFS"));
+        targetBox->setValue (loudness ? savedLoudness : savedPeak);
+        if (loudness)
+            showPresetFor (targetBox->value());
+        adjustSize();
+    };
+
+    connect (presetBox, &QComboBox::currentIndexChanged, this, [this] (int index)
+    {
+        if (const auto v = presetBox->itemData (index); v.isValid())
+            targetBox->setValue (v.toDouble());
+    });
+    connect (targetBox, &QDoubleSpinBox::valueChanged, this, [=, this] (double v)
+    {
+        if (modeBox->currentIndex() == 1)
+            showPresetFor (v);
+        referenceName.clear();
+        referenceLabel->clear();
+    });
+    connect (limitBox, &QCheckBox::toggled, ceilingBox, &QWidget::setEnabled);
+    ceilingBox->setEnabled (limitBox->isChecked());
+    connect (referenceButton, &QPushButton::clicked, this, &NormalizeDialog::matchReference);
+
+    modeBox->setCurrentIndex (settings.value (QStringLiteral ("normalize/mode"), 0).toInt() == 1 ? 1 : 0);
+    applyMode (modeBox->currentIndex());
+    connect (modeBox, &QComboBox::currentIndexChanged, this, applyMode);
 
     auto* buttons = new QDialogButtonBox (QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     auto* layout = new QVBoxLayout (this);
     layout->addLayout (form);
     layout->addWidget (buttons);
 
-    connect (buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect (buttons, &QDialogButtonBox::accepted, this, [this] { store(); accept(); });
     connect (buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     modeBox->setFocus();
+}
+
+void NormalizeDialog::matchReference()
+{
+    QStringList patterns;
+    for (const auto& ext : AudioEngine::readableExtensions())
+        patterns << QStringLiteral ("*.") + QString::fromStdString (ext);
+    const auto path = QFileDialog::getOpenFileName (this, tr ("Match the Loudness of"), QString(),
+                                                    tr ("Audio files (%1);;All files (*)").arg (patterns.join (QLatin1Char (' '))));
+    if (path.isEmpty())
+        return;
+
+    QApplication::setOverrideCursor (Qt::WaitCursor);
+    std::vector<Marker> markers;
+    Tags tags;
+    std::string error;
+    const auto audio = AudioEngine::loadFile (path.toStdString(), markers, tags, error);
+    const auto report = audio != nullptr ? dsp::measureLoudness (*audio, 0, audio->length()) : dsp::LoudnessReport {};
+    QApplication::restoreOverrideCursor();
+
+    if (audio == nullptr || report.integratedLufs <= -70.0)
+    {
+        QMessageBox::information (this, tr ("Normalize"), audio == nullptr ? QString::fromStdString (error)
+                                                                           : tr ("That file is too quiet or too short to measure."));
+        return;
+    }
+    targetBox->setValue (std::clamp (report.integratedLufs, -60.0, 0.0));
+    referenceName = QFileInfo (path).fileName();
+    referenceLabel->setText (tr ("%1 is %2 LUFS").arg (referenceName).arg (report.integratedLufs, 0, 'f', 1));
+}
+
+void NormalizeDialog::store()
+{
+    QSettings settings;
+    settings.setValue (QStringLiteral ("normalize/mode"), modeBox->currentIndex());
+    settings.setValue (modeBox->currentIndex() == 1 ? QStringLiteral ("normalize/loudness") : QStringLiteral ("normalize/peak"), targetBox->value());
+    settings.setValue (QStringLiteral ("normalize/limit"), limitBox->isChecked());
+    settings.setValue (QStringLiteral ("normalize/ceiling"), ceilingBox->value());
+}
+
+QString NormalizeDialog::targetName() const
+{
+    if (mode() == Mode::peak)
+        return tr ("%1 dBFS").arg (target(), 0, 'f', 1);
+    if (! referenceName.isEmpty())
+        return tr ("%1 LUFS (like %2)").arg (target(), 0, 'f', 1).arg (referenceName);
+    return tr ("%1 LUFS").arg (target(), 0, 'f', 1);
 }
 
 StereoizeDialog::StereoizeDialog (const dsp::StereoizeSettings& initial, bool wholeFile, int fileChannels, QWidget* parent)
@@ -615,6 +745,8 @@ void ValuesDialog::accept()
 
 NormalizeDialog::Mode NormalizeDialog::mode() const { return modeBox->currentIndex() == 0 ? Mode::peak : Mode::loudness; }
 double NormalizeDialog::target() const              { return targetBox->value(); }
+bool NormalizeDialog::limitPeaks() const            { return mode() == Mode::loudness && limitBox->isChecked(); }
+double NormalizeDialog::peakCeiling() const         { return ceilingBox->value(); }
 
 //==============================================================================
 WaveformColorsDialog::WaveformColorsDialog (QWidget* parent)
