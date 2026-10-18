@@ -17,6 +17,7 @@
 #include <QPainter>
 #include <QSplitter>
 #include <QStandardPaths>
+#include <QToolTip>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 #include <QtConcurrent>
@@ -581,6 +582,21 @@ bool FindPanel::eventFilter (QObject* watched, QEvent* e)
         return true;
     }
 
+    // F2 anywhere in the panel renames the collection chosen in the sidebar.
+    if (plain && k->key() == Qt::Key_F2)
+    {
+        auto* item = sidebar->currentItem();
+        if (item != nullptr && (item->flags() & Qt::ItemIsEditable))
+        {
+            sidebar->setFocus (Qt::OtherFocusReason);
+            sidebar->editItem (item);
+        }
+        else
+            QToolTip::showText (sidebar->mapToGlobal (QPoint (8, 8)),
+                                tr ("Choose a colour collection, then press F2 to rename it"), sidebar);
+        return true;
+    }
+
     if (watched == search)
     {
         switch (k->key())
@@ -615,24 +631,6 @@ bool FindPanel::eventFilter (QObject* watched, QEvent* e)
                 sidebar->setFocus (Qt::OtherFocusReason);
             return true;
         }
-    }
-
-    if (watched == sidebar && plain && k->key() == Qt::Key_F2)
-    {
-        if (auto* item = sidebar->currentItem(); item != nullptr && (item->flags() & Qt::ItemIsEditable))
-            sidebar->editItem (item);
-        return true;
-    }
-
-    // F2 in the results renames the collection being shown.
-    if (watched == results && plain && k->key() == Qt::Key_F2)
-    {
-        if (auto* item = sidebar->currentItem(); item != nullptr && (item->flags() & Qt::ItemIsEditable))
-        {
-            sidebar->setFocus (Qt::OtherFocusReason);
-            sidebar->editItem (item);
-        }
-        return true;
     }
 
     if (watched == sidebar && plain && k->key() == Qt::Key_Right)
