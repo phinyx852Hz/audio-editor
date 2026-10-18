@@ -17,8 +17,22 @@ set(PHINYX_STOCK_DIR "${CMAKE_BINARY_DIR}/stock")
 set(PHINYX_STOCK_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/${APP_ID}/stock")
 file(MAKE_DIRECTORY "${PHINYX_STOCK_DIR}/licenses")
 
-# Build steps run make in each source folder.
-set(stock_make make -j8)
+# The stock plugins build after PHINYX itself, one at a time (Ninja's console
+# pool, via USES_TERMINAL_*), each with a job count that fits in memory: their
+# C++ can need up to about 3 GB per compiler process, so building them all at
+# once with a job per core ran a 30 GB machine out of memory.
+cmake_host_system_information(RESULT stock_cores QUERY NUMBER_OF_LOGICAL_CORES)
+cmake_host_system_information(RESULT stock_memory QUERY TOTAL_PHYSICAL_MEMORY)   # MiB
+math(EXPR stock_jobs_default "${stock_memory} / 3072")
+if(stock_jobs_default GREATER stock_cores)
+    set(stock_jobs_default ${stock_cores})
+endif()
+if(stock_jobs_default LESS 1)
+    set(stock_jobs_default 1)
+endif()
+set(PHINYX_STOCK_JOBS ${stock_jobs_default} CACHE STRING "Parallel jobs for building each stock plugin")
+set(stock_make make -j${PHINYX_STOCK_JOBS})
+set(stock_one_at_a_time USES_TERMINAL_CONFIGURE TRUE USES_TERMINAL_BUILD TRUE USES_TERMINAL_INSTALL TRUE)
 
 function(phinyx_stock_licence name)
     # Remaining arguments: licence files, relative to the source folder
@@ -40,6 +54,7 @@ ExternalProject_Add(stock_toneshifteq
     GIT_SUBMODULES_RECURSE TRUE
     BUILD_IN_SOURCE TRUE
     UPDATE_COMMAND ""
+    ${stock_one_at_a_time}
     CONFIGURE_COMMAND ""
     BUILD_COMMAND ${stock_make} clap
     INSTALL_COMMAND ${CMAKE_COMMAND} -E copy <SOURCE_DIR>/bin/toneshifteq.clap ${PHINYX_STOCK_DIR}/
@@ -53,6 +68,7 @@ ExternalProject_Add(stock_wolfshaper
     GIT_SUBMODULES_RECURSE TRUE
     BUILD_IN_SOURCE TRUE
     UPDATE_COMMAND ""
+    ${stock_one_at_a_time}
     CONFIGURE_COMMAND ""
     BUILD_COMMAND ${stock_make} libs COMMAND ${stock_make} -C src clap
     INSTALL_COMMAND ${CMAKE_COMMAND} -E copy <SOURCE_DIR>/bin/wolf-shaper.clap ${PHINYX_STOCK_DIR}/
@@ -71,6 +87,7 @@ foreach(lsp clipper mb-clipper oscilloscope)
         GIT_TAG ${commit}
         BUILD_IN_SOURCE TRUE
         UPDATE_COMMAND ""
+        ${stock_one_at_a_time}
         CONFIGURE_COMMAND make config "FEATURES=clap ui" PREFIX=/usr COMMAND make fetch
         BUILD_COMMAND ${stock_make}
         INSTALL_COMMAND make install DESTDIR=<BINARY_DIR>/staging
@@ -117,11 +134,12 @@ else()
             GIT_TAG ${zl_commit}
             GIT_SUBMODULES_RECURSE TRUE
             UPDATE_COMMAND ""
+            ${stock_one_at_a_time}
             CMAKE_GENERATOR Ninja
             CMAKE_ARGS -DCMAKE_BUILD_TYPE=Release
                 -DCMAKE_C_COMPILER=${zl_cc} -DCMAKE_CXX_COMPILER=${PHINYX_ZL_CLANG}
                 -DZL_JUCE_FORMATS=VST3 -DZL_JUCE_COPY_PLUGIN=FALSE -DZL_HWY_STATIC_TARGET=${PHINYX_ZL_SIMD}
-            BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release
+            BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --parallel ${PHINYX_STOCK_JOBS}
             INSTALL_COMMAND ${CMAKE_COMMAND} -E copy_directory
                 "<BINARY_DIR>/${zl_name}_artefacts/Release/VST3/${zl_product}.vst3" "${PHINYX_STOCK_DIR}/${zl_product}.vst3"
                 ${stock_licence_commands}
@@ -130,6 +148,9 @@ else()
     endforeach()
 endif()
 
+foreach(t IN LISTS stock_targets)
+    add_dependencies(${t} ${APP_ID})
+endforeach()
 add_custom_target(stock_plugins ALL DEPENDS ${stock_targets})
 
 install(DIRECTORY "${PHINYX_STOCK_DIR}/" DESTINATION "${PHINYX_STOCK_INSTALL_DIR}" USE_SOURCE_PERMISSIONS)

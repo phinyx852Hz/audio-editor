@@ -66,7 +66,7 @@ JUCE 8.0.15 is downloaded automatically during the first configure (the freetype
 
 The `clap` package provides the CLAP plugin headers; without it they are downloaded during configure (or pass `-DCLAP_DIR=/path/to/clap`).
 
-The stock plugins are downloaded and built from their own repositories (pinned versions) during the first build, which needs `cairo`, `libsndfile`, `libxi` and Clang 17 or later (`clang`; without it the ZL plugins are left out). The ZL plugins make that first build much longer, up to an hour or two on an older laptop; later builds are quick. Add `-DPHINYX_STOCK_PLUGINS=OFF` to build without them.
+The stock plugins are downloaded and built from their own repositories (pinned versions) during the first build, which needs `cairo`, `libsndfile`, `libxi` and Clang 17 or later (`clang`; without it the ZL plugins are left out). The ZL plugins make that first build much longer, up to an hour or two on an older laptop; later builds are quick. They build after PHINYX itself, one at a time, with one job per 3 GB of memory (set `-DPHINYX_STOCK_JOBS=N` to change that). Add `-DPHINYX_STOCK_PLUGINS=OFF` to build without them.
 
 For more plugins, `sudo pacman -S lsp-plugins` gives a large free mastering set (EQ, compressors, limiters). `sudo pacman -S dragonfly-reverb-clap` adds free CLAP reverbs; `sudo pacman -S clap-plugins` installs every CLAP plugin Arch packages.
 
