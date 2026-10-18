@@ -62,10 +62,14 @@ public:
     // Fade handles at the top corners of the file, like Audition's: drag one
     // inwards for the fade's length, up or down to bend its curve.
     void setFadeHandles (bool shown);
+    // Colours the waveform by level, cool when quiet to hot at full scale, from the
+    // theme's level colours (levelQuiet ... levelPeak), blended in between.
+    void setLevelColours (bool on) { levelColours = on; update(); }
 
 Q_SIGNALS:
     void cursorRequested (Frame);
     void selectionRequested (Frame anchor, Frame end);
+    void rangeRequested (Frame start, Frame end);   // exact edges (double-click between markers): not snapped
     void bandRequested (double lowHz, double highHz);   // high <= low: every frequency
     void shapeDrawn (std::shared_ptr<const repair::SpectralMask>, bool heal);   // heal: drawn with the Spot Healing Brush
     // While a fade handle is dragged, and when it is let go. Curve: -1 to +1 (see dsp::curvedFadeGain).
@@ -78,6 +82,7 @@ protected:
     void mouseMoveEvent (QMouseEvent*) override;
     void mouseReleaseEvent (QMouseEvent*) override;
     void wheelEvent (QWheelEvent*) override;
+    void mouseDoubleClickEvent (QMouseEvent*) override;
     void leaveEvent (QEvent*) override { hover = QPointF (-1.0, -1.0); update(); }
     void focusInEvent (QFocusEvent*) override  { update(); }
     void focusOutEvent (QFocusEvent*) override { update(); }
@@ -117,6 +122,7 @@ private:
 
     AudioDataPtr data;
     std::vector<Marker> markers;
+    bool levelColours = false;
     double viewStart = 0.0, viewLength = 0.0;  // in frames
     Frame cursor = 0, selStart = 0, selEnd = 0;
     Frame dragAnchor = -1;

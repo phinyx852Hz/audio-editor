@@ -197,6 +197,11 @@ namespace dsp
 
     LoudnessReport measureLoudness (const AudioData&, Frame start, Frame end);
 
+    // The zero crossing nearest `at` within `radius` frames: where the first
+    // channel changes sign (or is exactly zero), the quietest point across all
+    // channels breaking ties. Without one, the quietest point. Edits there do not click.
+    Frame nearestZeroCrossing (const AudioData&, Frame at, Frame radius);
+
     // Integrated loudness from 100 ms block powers (K-weighted, channel-weighted mean squares).
     double integratedLoudness (const std::vector<double>& blockPowers100ms);
 

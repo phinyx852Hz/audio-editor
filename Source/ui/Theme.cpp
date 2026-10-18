@@ -72,7 +72,9 @@ QStringList Theme::colorKeys()
              QStringLiteral ("waveform"), QStringLiteral ("waveformBackground"), QStringLiteral ("centerLine"),
              QStringLiteral ("selection"), QStringLiteral ("cursor"), QStringLiteral ("marker"), QStringLiteral ("region"),
              QStringLiteral ("meterBackground"), QStringLiteral ("meterLow"), QStringLiteral ("meterMid"), QStringLiteral ("meterHigh"),
-             QStringLiteral ("meterPeakHold") };
+             QStringLiteral ("meterPeakHold"),
+             QStringLiteral ("levelQuiet"), QStringLiteral ("levelSoft"), QStringLiteral ("levelMedium"),
+             QStringLiteral ("levelLoud"), QStringLiteral ("levelHot"), QStringLiteral ("levelPeak") };
 }
 
 QVector<Theme> Theme::builtIns()
@@ -86,7 +88,9 @@ QVector<Theme> Theme::builtIns()
             { "waveform", "#4fc3f7" }, { "waveformBackground", "#15171c" }, { "centerLine", "#3a3f4a" },
             { "selection", "#4fc3f740" }, { "cursor", "#ffffff" }, { "marker", "#ffb74d" }, { "region", "#ba68c8" },
             { "meterBackground", "#101216" }, { "meterLow", "#66bb6a" }, { "meterMid", "#ffca28" }, { "meterHigh", "#ef5350" },
-            { "meterPeakHold", "#ffffff" } },
+            { "meterPeakHold", "#ffffff" },
+            { "levelQuiet", "#3b82f6" }, { "levelSoft", "#06b6d4" }, { "levelMedium", "#22c55e" },
+            { "levelLoud", "#eab308" }, { "levelHot", "#f97316" }, { "levelPeak", "#ef4444" } },
             { "#000000", "#140a3c", "#3b0f70", "#8c2981", "#de4968", "#fe9f6d", "#fcfdbf" }),
 
         makeTheme (QStringLiteral ("PHINYX Light"), false, {
@@ -97,7 +101,9 @@ QVector<Theme> Theme::builtIns()
             { "waveform", "#1565c0" }, { "waveformBackground", "#ffffff" }, { "centerLine", "#c5cad3" },
             { "selection", "#1e88e533" }, { "cursor", "#000000" }, { "marker", "#e65100" }, { "region", "#8e24aa" },
             { "meterBackground", "#dfe3ea" }, { "meterLow", "#2e7d32" }, { "meterMid", "#f9a825" }, { "meterHigh", "#c62828" },
-            { "meterPeakHold", "#000000" } },
+            { "meterPeakHold", "#000000" },
+            { "levelQuiet", "#1d4ed8" }, { "levelSoft", "#0e7490" }, { "levelMedium", "#15803d" },
+            { "levelLoud", "#a16207" }, { "levelHot", "#c2410c" }, { "levelPeak", "#b91c1c" } },
             { "#ffffff", "#d6e4f0", "#7fa7d9", "#3a5bbf", "#5b1f9a", "#b0125b", "#3d0013" }),
     };
 }

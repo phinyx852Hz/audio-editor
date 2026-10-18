@@ -150,7 +150,16 @@ MainWindow::MainWindow (AudioEngine& e)
     buildLiveEdits();
     connect (overview, &Overview::cursorRequested, this, &MainWindow::setCursor);
     connect (overview, &Overview::viewRequested, this, [this] (double start, double length) { waveform->setView (start, length); });
-    connect (waveform, &WaveformView::selectionRequested, this, &MainWindow::selectRange);
+    connect (waveform, &WaveformView::selectionRequested, this, [this] (Frame anchor, Frame head)
+    {
+        selectRange (snapToZero (anchor), snapToZero (head));
+    });
+    connect (waveform, &WaveformView::rangeRequested, this, [this] (Frame from, Frame to)
+    {
+        selectRange (from, to);
+        if (const auto d = data(); d != nullptr && to > from)
+            statusBar()->showMessage (tr ("Selected %1 between the markers").arg (formatTime ((double) (to - from) / d->sampleRate())), 3000);
+    });
     connect (waveform, &WaveformView::bandRequested, this, &MainWindow::setBand);
     connect (waveform, &WaveformView::shapeDrawn, this, &MainWindow::setShape);
     connect (&loadWatcher, &QFutureWatcher<LoadResult>::finished, this, &MainWindow::loadFinished);
@@ -446,6 +455,27 @@ void MainWindow::registerCommands()
     });
     commands.action (QStringLiteral ("view.gainKnob"))->setCheckable (true);
     commands.action (QStringLiteral ("view.gainKnob"))->setChecked (QSettings().value (QStringLiteral ("view/gainKnob"), true).toBool());
+    add ("view.levelColors", Category::view, tr ("Colour Waveform by &Level"), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_W) }, [this]
+    {
+        const auto on = commands.action (QStringLiteral ("view.levelColors"))->isChecked();
+        QSettings().setValue (QStringLiteral ("view/levelColors"), on);
+        waveform->setLevelColours (on);
+        statusBar()->showMessage (on ? tr ("Waveform coloured by level: blue when quiet, through green and yellow, to red at 0 dB. "
+                                           "Change the colours in Options > Waveform Colors.")
+                                     : tr ("Waveform in one colour (Options > Waveform Colors)"), 6000);
+    });
+    commands.action (QStringLiteral ("view.levelColors"))->setCheckable (true);
+    commands.action (QStringLiteral ("view.levelColors"))->setChecked (QSettings().value (QStringLiteral ("view/levelColors"), false).toBool());
+    waveform->setLevelColours (commands.action (QStringLiteral ("view.levelColors"))->isChecked());
+    add ("edit.snapZero", Category::edit, tr ("Snap to &Zero Crossings"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_Z) }, [this]
+    {
+        const auto on = commands.action (QStringLiteral ("edit.snapZero"))->isChecked();
+        QSettings().setValue (QStringLiteral ("edit/snapZero"), on);
+        statusBar()->showMessage (on ? tr ("Selection edges snap to the nearest zero crossing, so cuts and pastes do not click")
+                                     : tr ("Selection edges go exactly where you put them"), 5000);
+    });
+    commands.action (QStringLiteral ("edit.snapZero"))->setCheckable (true);
+    commands.action (QStringLiteral ("edit.snapZero"))->setChecked (QSettings().value (QStringLiteral ("edit/snapZero"), false).toBool());
     add ("view.zoomFit", Category::view, tr ("Zoom to &Fit"), { KS (Qt::CTRL | Qt::Key_0) }, [this] { waveform->zoomToFit(); });
     add ("view.zoomSelection", Category::view, tr ("Zoom to &Selection"), { KS (Qt::CTRL | Qt::Key_E) },
          [this] { if (requireSelection()) waveform->zoomToSelection(); });
@@ -554,7 +584,7 @@ void MainWindow::buildMenus()
     const QList<QPair<QString, QStringList>> layout {
         { tr ("&File"),      { "file.open", "album.new", "file.record", "-", "file.save", "file.saveAs", "-", "file.metadata", "-", "file.close", "file.nextTab", "file.previousTab", "-", "file.quit" } },
         { tr ("&Edit"),      { "edit.undo", "edit.redo", "-", "edit.cut", "edit.copy", "edit.copyToNew", "edit.paste", "edit.delete", "-",
-                               "edit.trim", "edit.insertSilence", "-", "select.all", "select.none", "-",
+                               "edit.trim", "edit.insertSilence", "-", "edit.snapZero", "-", "select.all", "select.none", "-",
                                "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
                                "select.toStart", "select.toEnd" } },
         { tr ("&Process"),   { "process.gain", "process.gainUp", "process.gainDown", "process.normalize", "-", "process.fadeIn", "process.fadeOut", "-",
@@ -577,7 +607,7 @@ void MainWindow::buildMenus()
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
-                               "view.overview", "view.spectral", "view.gainKnob", "-", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.references", "view.popOut", "view.resetLayout", "-",
+                               "view.overview", "view.spectral", "view.levelColors", "view.gainKnob", "-", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.references", "view.popOut", "view.resetLayout", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "-", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
@@ -2982,7 +3012,15 @@ void MainWindow::extendSelectionBy (double seconds)
 void MainWindow::extendSelectionTo (Frame head)
 {
     // With no selection the anchor is the cursor, so Shift+arrows grow from there.
-    selectRange (hasSelection() ? selAnchor : cursor, head);
+    selectRange (hasSelection() ? selAnchor : snapToZero (cursor), snapToZero (head));
+}
+
+Frame MainWindow::snapToZero (Frame f) const
+{
+    const auto d = data();
+    if (d == nullptr || ! commands.action (QStringLiteral ("edit.snapZero"))->isChecked())
+        return f;
+    return dsp::nearestZeroCrossing (*d, f, (Frame) (d->sampleRate() * 0.015));   // within 15 ms
 }
 
 void MainWindow::togglePlayback()

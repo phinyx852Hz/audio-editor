@@ -261,6 +261,7 @@ private:
     void selectRange (Frame anchor, Frame head);
     void extendSelectionBy (double seconds);
     void extendSelectionTo (Frame);
+    Frame snapToZero (Frame) const;   // the nearest zero crossing when Snap to Zero Crossings is on
     void togglePlayback();
     void openMenuBar();
 

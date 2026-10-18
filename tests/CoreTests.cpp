@@ -509,6 +509,13 @@ namespace
         check (near (sampleAt (*faded, 0, 0), 0.0, 1e-6), "fade starts silent");
         check (near (sampleAt (*faded, 0, 60000), sampleAt (*d, 0, 60000), 1e-6), "fade leaves rest alone");
 
+        // 100 Hz at 48 kHz crosses zero every 240 frames.
+        const auto slow = makeSine (2, 48000, 100.0, 0.5);
+        check (dsp::nearestZeroCrossing (*slow, 250, 100) == 240, "zero crossing: nearest one");
+        check (std::abs (sampleAt (*slow, 0, dsp::nearestZeroCrossing (*slow, 1000, 200))) < 0.01f, "zero crossing: near silence");
+        check (dsp::nearestZeroCrossing (*slow, 120, 10) == 110 || dsp::nearestZeroCrossing (*slow, 120, 10) == 130,
+               "zero crossing: the quietest point when none is near");
+
         auto rev = dsp::reverse (*d, 0, 1000);
         check (sampleAt (*rev, 0, 0) == sampleAt (*d, 0, 999), "reverse");
 

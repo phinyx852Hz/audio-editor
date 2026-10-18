@@ -762,6 +762,12 @@ WaveformColorsDialog::WaveformColorsDialog (QWidget* parent)
         { QStringLiteral ("centerLine"),         tr ("Center &line") },
         { QStringLiteral ("marker"),             tr ("&Markers") },
         { QStringLiteral ("region"),             tr ("&Regions") },
+        { QStringLiteral ("levelQuiet"),         tr ("Level: quiet (-48 dB)") },
+        { QStringLiteral ("levelSoft"),          tr ("Level: soft (-24 dB)") },
+        { QStringLiteral ("levelMedium"),        tr ("Level: medium (-12 dB)") },
+        { QStringLiteral ("levelLoud"),          tr ("Level: loud (-6 dB)") },
+        { QStringLiteral ("levelHot"),           tr ("Level: hot (-3 dB)") },
+        { QStringLiteral ("levelPeak"),          tr ("Level: peak (0 dB)") },
     };
 
     auto* grid = new QGridLayout;
@@ -808,7 +814,8 @@ WaveformColorsDialog::WaveformColorsDialog (QWidget* parent)
         if (auto* push = qobject_cast<QPushButton*> (b))
             push->setAutoDefault (false);
 
-    auto* note = new QLabel (tr ("Press Enter or Space on a colour to change it. These colours apply on top of any theme."), this);
+    auto* note = new QLabel (tr ("Press Enter or Space on a colour to change it. These colours apply on top of any theme. "
+                                    "The level colours are used when View > Colour Waveform by Level (Ctrl+Alt+Shift+W) is on, blended in between."), this);
     note->setWordWrap (true);
 
     auto* layout = new QVBoxLayout (this);

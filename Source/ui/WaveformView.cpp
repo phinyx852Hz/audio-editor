@@ -9,6 +9,7 @@
 #include <QWheelEvent>
 #include <QtConcurrent/QtConcurrentRun>
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 WaveformView::WaveformView (QWidget* parent) : QWidget (parent)
@@ -349,7 +350,26 @@ void WaveformView::paintEvent (QPaintEvent*)
                 if (ch > 0)
                     g.drawLine (QPointF (0, laneHeight * ch), QPointF (width(), laneHeight * ch));
 
-                g.setPen (theme.color (QStringLiteral ("waveform")));
+                if (levelColours)
+                {
+                    // One gradient over the lane, mirrored around the centre line: a sample's
+                    // colour depends on how far it reaches, i.e. its level in dBFS.
+                    QLinearGradient levels (0.0, mid - half, 0.0, mid + half);
+                    static const std::array<std::pair<double, const char*>, 6> stops {{
+                        { -48.0, "levelQuiet" }, { -24.0, "levelSoft" }, { -12.0, "levelMedium" },
+                        { -6.0, "levelLoud" }, { -3.0, "levelHot" }, { 0.0, "levelPeak" } }};
+                    levels.setColorAt (0.5, theme.color (QString::fromLatin1 (stops.front().second)));
+                    for (const auto& [db, key] : stops)
+                    {
+                        const auto reach = 0.5 * std::pow (10.0, db / 20.0);
+                        const auto colour = theme.color (QString::fromLatin1 (key));
+                        levels.setColorAt (0.5 - reach, colour);
+                        levels.setColorAt (0.5 + reach, colour);
+                    }
+                    g.setPen (QPen (QBrush (levels), 1.0));
+                }
+                else
+                    g.setPen (theme.color (QStringLiteral ("waveform")));
                 const auto framesPerPixel = viewLength / std::max (1, width());
 
                 if (framesPerPixel < 1.0)
@@ -588,6 +608,24 @@ void WaveformView::mousePressEvent (QMouseEvent* e)
     dragAnchor = f;
     dragAnchorY = e->position().y() - dragLane * laneHeight();
     Q_EMIT cursorRequested (f);
+}
+
+void WaveformView::mouseDoubleClickEvent (QMouseEvent* e)
+{
+    // Double-click selects the stretch between the markers (or region edges) on either side.
+    if (! data || e->button() != Qt::LeftButton || drawing() || fadeDrag != 0)
+        return;
+    const auto f = xToFrame (e->position().x());
+    Frame from = 0, to = length();
+    for (const auto& m : markers)
+        for (const auto edge : { m.start, m.end })
+        {
+            if (edge <= f)
+                from = std::max (from, edge);
+            else
+                to = std::min (to, edge);
+        }
+    Q_EMIT rangeRequested (from, to);
 }
 
 void WaveformView::mouseMoveEvent (QMouseEvent* e)

@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <numeric>
 
 namespace dsp
@@ -914,5 +915,52 @@ namespace dsp
 
         out.appendShared (d, end, d.length());
         return out.finish();
+    }
+
+    Frame nearestZeroCrossing (const AudioData& data, Frame at, Frame radius)
+    {
+        const auto length = data.length();
+        at = std::clamp<Frame> (at, 0, length);
+        if (length == 0 || at == 0 || at == length)
+            return at;
+        const auto from = std::max<Frame> (0, at - radius), to = std::min (length, at + radius + 1);
+        const auto count = (int) (to - from);
+        std::vector<std::vector<float>> block ((size_t) data.numChannels(), std::vector<float> ((size_t) count));
+        std::vector<float*> ptrs;
+        for (auto& b : block)
+            ptrs.push_back (b.data());
+        data.read (from, count, ptrs.data());
+
+        auto loudness = [&] (int i)
+        {
+            float sum = 0.0f;
+            for (const auto& b : block)
+                sum += std::abs (b[(size_t) i]);
+            return sum;
+        };
+
+        // A crossing at i: the first channel is zero at i, or changes sign between i - 1 and i
+        // (the edit goes at whichever of the two is closer to zero).
+        Frame best = -1, quietest = at;
+        float quietestLevel = std::numeric_limits<float>::max();
+        const auto& first = block.front();
+        for (int i = 0; i < count; ++i)
+        {
+            if (const auto level = loudness (i); level < quietestLevel
+                || (level <= quietestLevel && std::llabs (from + i - at) < std::llabs (quietest - at)))
+            {
+                quietestLevel = level;
+                quietest = from + i;
+            }
+            if (i == 0)
+                continue;
+            const auto a = first[(size_t) i - 1], b = first[(size_t) i];
+            if ((a > 0.0f) == (b > 0.0f) && (a < 0.0f) == (b < 0.0f))   // both on the same side of zero
+                continue;
+            const auto here = from + (std::abs (a) < std::abs (b) ? i - 1 : i);
+            if (best < 0 || std::llabs (here - at) < std::llabs (best - at))
+                best = here;
+        }
+        return best >= 0 ? best : quietest;
     }
 }
