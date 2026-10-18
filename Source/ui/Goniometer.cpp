@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "Goniometer.h"
+#include "InfoStrip.h"
 #include "Theme.h"
 
 #include <QEvent>
@@ -381,9 +382,13 @@ void Goniometer::paintEvent (QPaintEvent*)
 
     // Correlation meter
     const auto bar = correlationArea();
+    // No fill behind the bar, so the window's opacity shows through; a faint outline keeps its size readable.
+    auto outline = theme.color (QStringLiteral ("mid"));
+    outline.setAlphaF (0.6f);
+    g.setPen (QPen (outline, 1.0));
+    g.setBrush (Qt::NoBrush);
+    g.drawRoundedRect (bar.adjusted (0.5, 0.5, -0.5, -0.5), 3, 3);
     g.setPen (Qt::NoPen);
-    g.setBrush (theme.color (QStringLiteral ("meterBackground")));
-    g.drawRoundedRect (bar, 3, 3);
 
     const auto value = std::clamp (correlation, -1.0, 1.0);
     const auto zero = bar.center().x();
@@ -403,5 +408,17 @@ void Goniometer::paintEvent (QPaintEvent*)
     g.drawText (labels, Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral ("-1"));
     g.drawText (labels, Qt::AlignRight | Qt::AlignVCenter, QStringLiteral ("+1"));
     g.setPen (theme.color (QStringLiteral ("windowText")));
-    g.drawText (labels, Qt::AlignCenter, hasSignal ? tr ("Correlation %1").arg (value, 0, 'f', 2) : tr ("Correlation"));
+    // The number sits right-aligned in a slot as wide as "-0.00", in even-width digits, so it never moves sideways.
+    const QFontMetricsF fm (g.font());
+    const auto name = tr ("Correlation");
+    const auto slot = steady::width (fm, QStringLiteral ("-0.00"));
+    const auto gap = fm.horizontalAdvance (QLatin1Char (' '));
+    const auto left = labels.center().x() - (fm.horizontalAdvance (name) + gap + slot) / 2.0;
+    const auto baseline = labels.center().y() + (fm.ascent() - fm.descent()) / 2.0;
+    g.drawText (QPointF (left, baseline), name);
+    if (hasSignal)
+    {
+        const auto number = QString::number (std::abs (value) < 0.005 ? 0.0 : value, 'f', 2);
+        steady::draw (g, left + fm.horizontalAdvance (name) + gap + slot - steady::width (fm, number), baseline, number);
+    }
 }

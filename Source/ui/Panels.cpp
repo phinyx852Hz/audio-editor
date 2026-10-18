@@ -429,7 +429,16 @@ void MeterPanel::paintEvent (QPaintEvent*)
     const auto barWidth = barsWidth / numChannels;
     const auto yFor = [&] (float db) { return area.top() + area.height() * (double) (std::clamp (db, floorDb, 0.0f) / floorDb); };
 
-    g.fillRect (QRectF (area.left(), area.top(), barsWidth, area.height()), theme.color (QStringLiteral ("meterBackground")));
+    // No fill behind the bars, so the window's opacity shows through; a faint outline per channel keeps the scale readable.
+    {
+        auto outline = theme.color (QStringLiteral ("mid"));
+        outline.setAlphaF (0.6f);
+        g.setPen (QPen (outline, 1.0));
+        g.setBrush (Qt::NoBrush);
+        for (int ch = 0; ch < numChannels; ++ch)
+            g.drawRect (QRectF (area.left() + ch * barsWidth / numChannels + 1.5, area.top() + 0.5,
+                                barsWidth / numChannels - 3.0, area.height() - 1.0));
+    }
 
     for (int ch = 0; ch < numChannels; ++ch)
     {
