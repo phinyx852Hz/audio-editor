@@ -206,6 +206,7 @@ private:
 
     Frame cursor = 0, selStart = 0, selEnd = 0, selAnchor = 0;
     Frame playStart = 0;        // where the last Play began; Stop returns here
+    bool followingPlayback = false;   // the cursor is following playback (see the UI timer)
     bool looping = false;
     class TransportBar* transportBar = nullptr;
     class TimeRuler* timeRuler = nullptr;

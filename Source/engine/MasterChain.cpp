@@ -404,6 +404,7 @@ void MasterChain::setChannels (int n)
         return;
 
     channelCount = n;
+    prepareDelays();
     for (auto& s : slots)
     {
         if (s.plugin == nullptr)
@@ -482,6 +483,8 @@ void MasterChain::move (int from, int to)
     };
     rotateOne (slots);
     rotateOne (windows);
+    rotateOne (delays);
+    rotateOne (delayWrite);
 }
 
 void MasterChain::setBypassed (int index, bool b)
@@ -870,17 +873,53 @@ void MasterChain::prepare (double sampleRate, int maxBlockSize)
     rate = sampleRate;
     blockSize = std::max (32, maxBlockSize);
     scratch.setSize (maxChannels, blockSize, false, false, true);
+    prepareDelays();
 
     for (auto& s : slots)
         if (s.plugin != nullptr)
             preparePlugin (*s.plugin, rate, blockSize);
 }
 
+void MasterChain::prepareDelays()
+{
+    for (size_t i = 0; i < delays.size(); ++i)
+    {
+        delays[i].setSize (channelCount, maxDelay, false, true, true);
+        delays[i].clear();
+        delayWrite[i] = 0;
+    }
+}
+
+void MasterChain::delaySlot (size_t index, int latency, int numChannels, int numSamples, bool replace)
+{
+    auto& ring = delays[index];
+    numChannels = std::min (numChannels, ring.getNumChannels());
+    auto& write = delayWrite[index];
+    auto copyRing = [&] (int ringStart, int count, int offset, bool toRing)
+    {
+        for (int ch = 0; ch < numChannels; ++ch)
+            if (toRing)
+                ring.copyFrom (ch, ringStart, scratch, ch, offset, count);
+            else
+                scratch.copyFrom (ch, offset, ring, ch, ringStart, count);
+    };
+    // Both copies go round the ring in at most two parts.
+    auto transfer = [&] (int ringPos, bool toRing)
+    {
+        const auto first = std::min (numSamples, maxDelay - ringPos);
+        copyRing (ringPos, first, 0, toRing);
+        if (first < numSamples)
+            copyRing (0, numSamples - first, first, toRing);
+    };
+
+    transfer (write, true);
+    if (replace)
+        transfer ((write - latency + maxDelay) % maxDelay, false);
+    write = (write + numSamples) % maxDelay;
+}
+
 void MasterChain::processRealtime (juce::AudioBuffer<float>& buffer, int startSample, int numSamples)
 {
-    if (allBypassed)
-        return;
-
     const juce::ScopedTryLock sl (lock);
     if (! sl.isLocked())
     {
@@ -895,8 +934,10 @@ void MasterChain::processRealtime (juce::AudioBuffer<float>& buffer, int startSa
 void MasterChain::processChain (juce::AudioBuffer<float>& io, int startSample, int numSamples, bool listening)
 {
     const auto solo = listening ? soloSlot.load() : -1;
+    const auto bypassAll = listening && allBypassed.load();
     const auto ioChannels = std::min (io.getNumChannels(), maxChannels);
-    const auto g = gain.load();
+    const auto g = bypassAll ? 1.0f : gain.load();
+    int heard = 0;
 
     for (int done = 0; done < numSamples;)
     {
@@ -913,11 +954,26 @@ void MasterChain::processChain (juce::AudioBuffer<float>& io, int startSample, i
         for (size_t index = 0; index < slots.size(); ++index)
         {
             auto& s = slots[index];
-            if (s.plugin == nullptr || s.bypassed || s.plugin->isSuspended() || (solo >= 0 && solo != (int) index))
+            if (s.plugin == nullptr || s.plugin->isSuspended())
                 continue;
 
             const auto channels = std::clamp (std::max (s.plugin->getTotalNumInputChannels(), s.plugin->getTotalNumOutputChannels()),
                                               1, maxChannels);
+            const auto runs = ! s.bypassed && ! bypassAll && (solo < 0 || solo == (int) index);
+            if (listening)
+            {
+                // Keeps time: a plugin that is switched off is heard as a delay of its latency.
+                const auto latency = s.plugin->getLatencySamples();
+                if (latency > 0 && latency + n <= maxDelay)
+                {
+                    const auto monoOut = s.plugin->getTotalNumOutputChannels() == 1;   // feeds every side, see below
+                    delaySlot (index, latency, monoOut ? ioChannels : std::min (channels, ioChannels), n, ! runs);
+                    heard += latency;
+                }
+            }
+            if (! runs)
+                continue;
+
             // For the meters at the sides of a stock plugin's frame.
             auto& levels = frameLevels[index];
             auto raise = [&] (size_t k, int ch)
@@ -965,6 +1021,9 @@ void MasterChain::processChain (juce::AudioBuffer<float>& io, int startSample, i
 
         done += n;
     }
+
+    if (listening)
+        heardLatency.store (heard, std::memory_order_relaxed);
 }
 
 AudioDataPtr MasterChain::render (const AudioData& data, Frame start, Frame end, std::string& error,

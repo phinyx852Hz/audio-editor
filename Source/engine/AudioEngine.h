@@ -87,7 +87,9 @@ public:
     // Plays [start, end) over and over; end <= start turns looping off.
     void setLoop (Frame start, Frame end);
 
-    Frame positionFrames() const;
+    Frame positionFrames() const;        // where reading is: ahead of the sound by the delays below
+    Frame heardPositionFrames() const;   // what is coming out of the speakers now, for the cursor
+    int listeningLatency() const;        // the Master Section's delay while listening, in device samples
     void setPositionFrames (Frame);
     double position() const;  // seconds
     double length() const;    // seconds

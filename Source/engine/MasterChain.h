@@ -70,6 +70,10 @@ public:
     // Real-time use (audio thread).
     void prepare (double sampleRate, int maxBlockSize);
     void processRealtime (juce::AudioBuffer<float>&, int startSample, int numSamples);
+    // The delay of what is heard now, in device samples. Bypassed, soloed-out and
+    // master-bypassed plugins are replaced by a delay of their latency while
+    // listening, so switching them never shifts the sound in time.
+    int listeningLatency() const { return heardLatency.load (std::memory_order_relaxed); }
 
     AudioDataPtr render (const AudioData&, Frame start, Frame end, std::string& error,
                          std::atomic<float>* progress, const std::atomic<bool>* cancel);
@@ -101,6 +105,9 @@ private:
     void preparePlugin (juce::AudioPluginInstance&, double rate, int blockSize) const;
     void applyLayout (juce::AudioPluginInstance&, int numChannels) const;
     void processChain (juce::AudioBuffer<float>& io, int startSample, int numSamples, bool listening);  // lock must be held
+    void prepareDelays();   // lock must be held
+    // Writes the slot's input into its delay line; with `replace` the block becomes the input from `latency` samples ago.
+    void delaySlot (size_t index, int latency, int numChannels, int numSamples, bool replace);
     int totalLatency() const;
     juce::File pluginListFile() const   { return configFolder.getChildFile ("plugins.xml"); }
     juce::File deadMansPedal() const    { return configFolder.getChildFile ("plugin-scan-in-progress.txt"); }
@@ -132,4 +139,8 @@ private:
     std::array<std::atomic<float>, AudioEngine::numMasterSlots> peaks {};
     std::array<std::array<std::atomic<float>, 4>, AudioEngine::numMasterSlots> frameLevels {};   // in L/R, out L/R peaks
     static constexpr int maxChannels = 16;
+    static constexpr int maxDelay = 1 << 15;   // longest plugin latency kept in time while bypassed (0.68 s at 48 kHz)
+    std::array<juce::AudioBuffer<float>, AudioEngine::numMasterSlots> delays;   // per slot, maxDelay long
+    std::array<int, AudioEngine::numMasterSlots> delayWrite {};
+    std::atomic<int> heardLatency { 0 };
 };

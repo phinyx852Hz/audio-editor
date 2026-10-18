@@ -44,11 +44,15 @@ namespace
 
             // Looping wraps from the loop's end back to its start, within the block.
             const auto from = loopStart.load(), to = loopEnd.load();
+            const auto now = clock != nullptr ? clock->load() : 0;
+            const auto ratio = deviceFramesPerFrame.load();
+            const auto restarted = startPending.exchange (false);
             for (int done = 0; done < info.numSamples;)
             {
                 auto n = info.numSamples - done;
                 if (to > from && pos < to)
                     n = (int) std::min<juce::int64> (n, to - pos);
+                remember (now + (double) done * ratio, pos, restarted && done == 0);
                 for (size_t ch = 0; ch < scratch.size(); ++ch)
                     scratchPtrs[ch] = scratch[ch].data() + done;
                 d->read (pos, n, scratchPtrs.data());
@@ -70,6 +74,32 @@ namespace
 
             position = pos;
         }
+
+        // Where the sound now leaving the speakers was read from: `delay` device
+        // samples ago, following loops, jumps and restarts. `frameRatio` converts
+        // device samples to file frames.
+        juce::int64 heardPosition (double delay, double frameRatio) const
+        {
+            if (clock == nullptr)
+                return position.load();
+            const auto target = (double) clock->load() - delay;
+            const auto newest = head.load (std::memory_order_acquire);
+            for (int back = 0; back < historySize; ++back)
+            {
+                const auto& e = history[(size_t) ((newest - back + historySize) % historySize)];
+                const auto time = e.time.load (std::memory_order_relaxed);
+                if (time <= target)
+                    return e.position.load (std::memory_order_relaxed) + (juce::int64) ((target - time) * frameRatio);
+                if (e.restart.load (std::memory_order_relaxed))
+                    return e.position.load (std::memory_order_relaxed);   // still hearing the start
+            }
+            return position.load();
+        }
+
+        // Device samples played so far, counted by MasterSource, and how many one callback advances it.
+        const std::atomic<juce::int64>* clock = nullptr;
+        std::atomic<bool> startPending { false };   // set by play(): the next read starts after a silence
+        std::atomic<double> deviceFramesPerFrame { 1.0 };   // device rate / file rate
 
         void setLoop (juce::int64 start, juce::int64 end)
         {
@@ -101,6 +131,27 @@ namespace
             }
         }
 
+        void remember (double time, juce::int64 pos, bool restart)
+        {
+            const auto next = (head.load (std::memory_order_relaxed) + 1) % historySize;
+            auto& e = history[(size_t) next];
+            e.time.store (time, std::memory_order_relaxed);
+            e.position.store (pos, std::memory_order_relaxed);
+            e.restart.store (restart, std::memory_order_relaxed);
+            head.store (next, std::memory_order_release);
+        }
+
+        // What was read when, for heardPosition: one entry per stretch read without a jump.
+        struct Read
+        {
+            std::atomic<double> time { -1.0e18 };
+            std::atomic<juce::int64> position { 0 };
+            std::atomic<bool> restart { false };
+        };
+        static constexpr int historySize = 512;
+        std::array<Read, historySize> history;
+        std::atomic<int> head { 0 };
+
         AudioDataPtr data;
         std::atomic<juce::int64> position { 0 }, loopStart { 0 }, loopEnd { 0 };
         std::vector<std::vector<float>> scratch { 2, std::vector<float> (8192) };
@@ -126,7 +177,10 @@ namespace
         {
             input.getNextAudioBlock (info);
             chain.processRealtime (*info.buffer, info.startSample, info.numSamples);
+            clock.fetch_add (info.numSamples);
         }
+
+        std::atomic<juce::int64> clock { 0 };   // device samples processed so far
 
     private:
         juce::AudioSource& input;
@@ -364,6 +418,7 @@ struct AudioEngine::Impl
         // The thread that creates the MessageManager becomes JUCE's message thread.
         juce::MessageManager::getInstance();
         player.setSource (&monitor);
+        document.clock = &masterSource.clock;
     }
 
     ~Impl()
@@ -446,6 +501,8 @@ void AudioEngine::play()
     if (positionFrames() >= impl->document.getTotalLength())
         setPositionFrames (0);
 
+    if (! isPlaying())
+        impl->document.startPending = true;
     impl->transport.start();
 }
 
@@ -458,6 +515,24 @@ Frame AudioEngine::positionFrames() const { return impl->document.getNextReadPos
 void AudioEngine::setPositionFrames (Frame f)
 {
     impl->document.setNextReadPosition (std::clamp<Frame> (f, 0, impl->document.getTotalLength()));
+}
+
+Frame AudioEngine::heardPositionFrames() const
+{
+    if (! isPlaying() || impl->sourceRate <= 0.0)
+        return positionFrames();
+
+    auto* device = impl->deviceManager.getCurrentAudioDevice();
+    const auto deviceRate = device != nullptr ? device->getCurrentSampleRate() : impl->sourceRate;
+    const auto delay = impl->master.listeningLatency() + (device != nullptr ? device->getOutputLatencyInSamples() : 0);
+    impl->document.deviceFramesPerFrame = deviceRate / impl->sourceRate;
+    const auto heard = impl->document.heardPosition ((double) delay, impl->sourceRate / deviceRate);
+    return std::clamp<Frame> (heard, 0, impl->document.getTotalLength());
+}
+
+int AudioEngine::listeningLatency() const
+{
+    return impl->master.listeningLatency();
 }
 
 double AudioEngine::position() const

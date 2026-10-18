@@ -151,8 +151,19 @@ MainWindow::MainWindow (AudioEngine& e)
 
         if (engine.isPlaying())
         {
-            cursor = engine.positionFrames();
+            cursor = engine.heardPositionFrames();
             waveform->setCursorFrame (cursor);
+            followingPlayback = true;
+        }
+        else if (followingPlayback)
+        {
+            // Playback ran to the end of the file: the cursor lagged by the delay, so finish the trip.
+            followingPlayback = false;
+            if (const auto d = data(); d != nullptr && engine.positionFrames() >= d->length())
+            {
+                cursor = d->length();
+                waveform->setCursorFrame (cursor);
+            }
         }
 
         if (loading && loadProgress)

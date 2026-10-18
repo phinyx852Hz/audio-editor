@@ -140,7 +140,7 @@ void MasterPanel::refresh()
     auto text = engine.isMasterBypassed() ? tr ("Bypassed: playback and renders skip the Master Section.")
                                           : tr ("%n active plugin(s)", nullptr, active);
     if (! engine.isMasterBypassed() && latency > 0)
-        text += tr (", %1 samples latency (compensated when rendering)").arg (latency);
+        text += tr (", %1 samples latency (compensated)").arg (latency);
     summary->setText (text);
 }
 
