@@ -64,6 +64,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/Recovery.cpp
     Source/ui/Spectrogram.cpp
     Source/ui/Theme.cpp
+    Source/ui/TransportBar.cpp
     Source/ui/WaveformView.cpp)
 
 # CLAP plugin hosting needs only the CLAP headers: a local checkout, the

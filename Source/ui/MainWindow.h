@@ -188,6 +188,9 @@ private:
     static constexpr int layoutVersion = 2;  // 2: device chain row at the bottom
 
     Frame cursor = 0, selStart = 0, selEnd = 0, selAnchor = 0;
+    Frame playStart = 0;        // where the last Play began; Stop returns here
+    bool looping = false;
+    class TransportBar* transportBar = nullptr;
     double bandLow = 0.0, bandHigh = 0.0;   // the selection's frequency band in Hz, none when high <= low
     std::shared_ptr<const repair::SpectralMask> shape;   // a drawn selection, in place of the band
     double spectralGainDb = -12.0;

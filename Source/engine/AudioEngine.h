@@ -84,6 +84,8 @@ public:
     void play();
     void stop();
     bool isPlaying() const;
+    // Plays [start, end) over and over; end <= start turns looping off.
+    void setLoop (Frame start, Frame end);
 
     Frame positionFrames() const;
     void setPositionFrames (Frame);

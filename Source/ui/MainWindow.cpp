@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MainWindow.h"
+#include "TransportBar.h"
 #include "ChainRow.h"
 #include "DesktopShortcuts.h"
 #include "Dialogs.h"
@@ -113,6 +114,8 @@ MainWindow::MainWindow (AudioEngine& e)
     registerCommands();
     commands.load();
     buildMenus();
+    transportBar = new TransportBar (commands, editor);
+    editorLayout->insertWidget (0, transportBar);
     restoreLayout();
 
     connect (waveform, &WaveformView::cursorRequested, this, &MainWindow::setCursor);
@@ -136,6 +139,14 @@ MainWindow::MainWindow (AudioEngine& e)
             waveform->setLoading (true, loadProgress->load());
 
         meterPanel->addBlocks (engine.takeMeterBlocks());
+
+        // Looping plays the selection, or the whole file when nothing is selected.
+        const auto d = data();
+        if (looping && d != nullptr)
+            engine.setLoop (hasSelection() ? selStart : 0, hasSelection() ? selEnd : d->length());
+        else
+            engine.setLoop (0, 0);
+        transportBar->setState (cursor, d != nullptr ? d->sampleRate() : 48000.0, engine.isPlaying(), looping);
 
         for (auto* p : panels)
             if (p->containsFocus())
@@ -309,7 +320,19 @@ void MainWindow::registerCommands()
          [this] { masterWidget->scanPlugins(); });
 
     add ("transport.playStop", Category::transport, tr ("&Play / Stop"), { KS (Qt::Key_Space) }, [this] { togglePlayback(); });
-    add ("transport.stop", Category::transport, tr ("&Stop"), { KS (Qt::Key_K) }, [this] { engine.stop(); });
+    add ("transport.stop", Category::transport, tr ("&Stop"), { KS (Qt::Key_K) }, [this]
+    {
+        // Space pauses where it is; Stop goes back to where playback started.
+        const bool wasPlaying = engine.isPlaying();
+        engine.stop();
+        if (wasPlaying)
+            setCursor (playStart);
+    });
+    add ("transport.loop", Category::transport, tr ("&Loop Playback"), { KS (Qt::CTRL | Qt::Key_L) }, [this]
+    {
+        looping = commands.action (QStringLiteral ("transport.loop"))->isChecked();
+        statusBar()->showMessage (looping ? tr ("Loop on: playing the selection (or the whole file) over and over") : tr ("Loop off"), 3000);
+    })->setCheckable (true);
     add ("transport.start", Category::transport, tr ("Go to S&tart"), { KS (Qt::Key_Home) }, [this] { setCursor (0); });
     add ("transport.end", Category::transport, tr ("Go to &End"), { KS (Qt::Key_End) },
          [this] { if (auto d = data()) setCursor (d->length()); });
@@ -431,7 +454,7 @@ void MainWindow::buildMenus()
         { tr ("&Markers"),   { "marker.add", "marker.addRegion", "-", "marker.next", "marker.previous", "-", "view.markers" } },
         { tr ("&Analyze"),   { "analyze.loudness", "-", "view.meters", "analyze.resetMeters", "-", "view.spectral" } },
         { tr ("Ma&ster"),    { "view.master", "view.chain", "master.addPlugin", "master.bypass", "-", "master.render", "-", "master.scan" } },
-        { tr ("&Transport"), { "transport.playStop", "transport.stop", "-", "transport.start", "transport.end",
+        { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
                                "view.spectral", "-", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.popOut", "view.resetLayout", "-",
@@ -1307,6 +1330,9 @@ void MainWindow::autosave()
             items.push_back ({ d.id(), d.current(), QString::fromStdString (d.path()), tabName (d).remove (QStringLiteral (" *")) });
     }
     recovery.update (items);
+
+    // The Device Chain too, so a crash does not lose the plugins and their settings.
+    engine.saveMasterSection();
 }
 
 void MainWindow::warnAboutDesktopShortcuts()
@@ -2673,7 +2699,8 @@ void MainWindow::togglePlayback()
         return;
     }
 
-    engine.setPositionFrames (hasSelection() ? selStart : cursor);
+    playStart = hasSelection() ? selStart : cursor;
+    engine.setPositionFrames (playStart);
     engine.play();
 }
 

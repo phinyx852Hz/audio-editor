@@ -38,10 +38,27 @@ namespace
             if (d == nullptr)
                 return;
 
-            const auto pos = position.load();
+            auto pos = position.load();
             const auto numChannels = d->numChannels();
             ensureScratch (numChannels, info.numSamples);
-            d->read (pos, info.numSamples, scratchPtrs.data());
+
+            // Looping wraps from the loop's end back to its start, within the block.
+            const auto from = loopStart.load(), to = loopEnd.load();
+            for (int done = 0; done < info.numSamples;)
+            {
+                auto n = info.numSamples - done;
+                if (to > from && pos < to)
+                    n = (int) std::min<juce::int64> (n, to - pos);
+                for (size_t ch = 0; ch < scratch.size(); ++ch)
+                    scratchPtrs[ch] = scratch[ch].data() + done;
+                d->read (pos, n, scratchPtrs.data());
+                pos += n;
+                done += n;
+                if (to > from && pos >= to)
+                    pos = from;
+            }
+            for (size_t ch = 0; ch < scratch.size(); ++ch)
+                scratchPtrs[ch] = scratch[ch].data();
 
             // The buffer has the file's channels (see MonitorSource); a mono file also fills a second one.
             for (int ch = 0; ch < info.buffer->getNumChannels(); ++ch)
@@ -51,7 +68,13 @@ namespace
                     info.buffer->copyFrom (ch, info.startSample, scratch[(size_t) src].data(), info.numSamples);
             }
 
-            position = pos + info.numSamples;
+            position = pos;
+        }
+
+        void setLoop (juce::int64 start, juce::int64 end)
+        {
+            loopStart = start;
+            loopEnd = end;
         }
 
         void setNextReadPosition (juce::int64 p) override { position = p; }
@@ -63,7 +86,7 @@ namespace
             return d != nullptr ? d->length() : 0;
         }
 
-        bool isLooping() const override { return false; }
+        bool isLooping() const override { return loopEnd.load() > loopStart.load(); }
 
     private:
         void ensureScratch (int channels, int frames)
@@ -79,7 +102,7 @@ namespace
         }
 
         AudioDataPtr data;
-        std::atomic<juce::int64> position { 0 };
+        std::atomic<juce::int64> position { 0 }, loopStart { 0 }, loopEnd { 0 };
         std::vector<std::vector<float>> scratch { 2, std::vector<float> (8192) };
         std::vector<float*> scratchPtrs { scratch[0].data(), scratch[1].data() };
     };
@@ -395,6 +418,7 @@ void AudioEngine::play()
 }
 
 void AudioEngine::stop()            { impl->transport.stop(); }
+void AudioEngine::setLoop (Frame start, Frame end) { impl->document.setLoop (start, end); }
 bool AudioEngine::isPlaying() const { return impl->transport.isPlaying(); }
 
 Frame AudioEngine::positionFrames() const { return impl->document.getNextReadPosition(); }
