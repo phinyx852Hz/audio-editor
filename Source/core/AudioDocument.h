@@ -3,6 +3,7 @@
 
 #include "AudioData.h"
 
+#include <cstdint>
 #include <map>
 #include <string>
 #include <vector>
@@ -86,6 +87,10 @@ public:
 
     int nextMarkerId();
 
+    // Unique for each opened or created document in this run (0 when none);
+    // it moves with the document between tabs. Autosave files are named by it.
+    std::uint64_t id() const { return documentId; }
+
 private:
     struct Entry
     {
@@ -96,4 +101,5 @@ private:
     std::vector<Entry> history;
     int position = 0, savedPosition = 0, markerCounter = 0;
     std::string filePath;
+    std::uint64_t documentId = 0;
 };

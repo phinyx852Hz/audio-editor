@@ -621,7 +621,15 @@ void MainWindow::restoreLayout()
         waveform->setFocus();
         QTimer::singleShot (1500, this, &MainWindow::warnAboutDesktopShortcuts);
         QTimer::singleShot (0, this, &MainWindow::recoverRecordings);
+        QTimer::singleShot (0, this, &MainWindow::recoverDocuments);
     });
+
+    // Unsaved files are copied to the recovery folder every minute
+    // (recovery/autosaveSeconds in settings.ini; 0 turns it off).
+    const auto seconds = settings.value (QStringLiteral ("recovery/autosaveSeconds"), 60).toInt();
+    connect (&autosaveTimer, &QTimer::timeout, this, &MainWindow::autosave);
+    if (seconds > 0)
+        autosaveTimer.start (std::max (5, seconds) * 1000);
 }
 
 void MainWindow::saveLayout()
@@ -975,6 +983,13 @@ void MainWindow::loadFinished()
     doc.reset (r.data, std::move (r.markers), r.path.toStdString(), std::move (r.tags));
     cursor = selStart = selEnd = selAnchor = 0;
     optionsConfirmedFor.clear();
+    if (recoveringFrom.contains (r.path))
+    {
+        // A recovered copy: it stands for the original file, with unsaved changes.
+        doc.setPath (recoveringFrom.take (r.path).toStdString());
+        doc.markUnsaved();
+        Recovery::remove ({ r.path, r.path.chopped (4) + QStringLiteral (".ini"), {}, {} });
+    }
     refreshFromDocument (false);
     waveform->setFocus();
 }
@@ -1230,6 +1245,68 @@ void MainWindow::recoverRecordings()
         openFile (queue.takeFirst());
     });
     opener->start (100);
+}
+
+void MainWindow::recoverDocuments()
+{
+    const auto found = Recovery::leftBehind();
+    if (found.empty())
+        return;
+
+    QStringList names;
+    for (const auto& f : found)
+        names << QStringLiteral ("  ") + (f.name.isEmpty() ? tr ("Untitled") : f.name);
+
+    QMessageBox box (QMessageBox::Question, tr ("Recover Unsaved Files"),
+                     tr ("%1 closed without saving these files:\n%2\n\nOpen the copies kept from just before? "
+                         "Each opens as unsaved, so you can check it and save.")
+                         .arg (QStringLiteral (APP_DISPLAY_NAME), names.join (QLatin1Char ('\n'))),
+                     QMessageBox::NoButton, this);
+    auto* recover = box.addButton (tr ("&Recover"), QMessageBox::AcceptRole);
+    auto* discard = box.addButton (tr ("&Discard"), QMessageBox::DestructiveRole);
+    box.addButton (tr ("&Not Now"), QMessageBox::RejectRole);
+    box.setDefaultButton (recover);
+    box.exec();
+
+    if (box.clickedButton() == discard)
+    {
+        for (const auto& f : found)
+            Recovery::remove (f);
+        return;
+    }
+    if (box.clickedButton() != recover)
+        return;
+
+    QStringList queue;
+    for (const auto& f : found)
+    {
+        recoveringFrom.insert (f.audioFile, f.originalPath);
+        queue << f.audioFile;
+    }
+
+    // Files load one at a time; open the next when the previous has finished.
+    auto* opener = new QTimer (this);
+    connect (opener, &QTimer::timeout, this, [this, opener, queue] () mutable
+    {
+        if (loading)
+            return;
+        if (queue.isEmpty())
+            return opener->deleteLater();
+        openFile (queue.takeFirst());
+    });
+    opener->start (100);
+}
+
+void MainWindow::autosave()
+{
+    std::vector<Recovery::Item> items;
+    for (int i = 0; i < (int) tabs.size(); ++i)
+    {
+        const auto& d = i == activeTab ? doc : tabs[(size_t) i].doc;
+        if (d.isOpen() && d.isModified())
+            items.push_back ({ d.id(), d.current(), QString::fromStdString (d.path()), tabName (d).remove (QStringLiteral (" *")) });
+    }
+    recovery.update (items);
 }
 
 void MainWindow::warnAboutDesktopShortcuts()
@@ -2633,5 +2710,7 @@ void MainWindow::closeEvent (QCloseEvent* e)
     engine.stop();
     commands.save();
     saveLayout();
+    autosaveTimer.stop();
+    recovery.finish();   // a clean quit: nothing to recover next time
     e->accept();
 }

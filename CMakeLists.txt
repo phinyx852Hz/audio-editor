@@ -61,6 +61,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/MasterPanel.cpp
     Source/ui/Panels.cpp
     Source/ui/RecordDialog.cpp
+    Source/ui/Recovery.cpp
     Source/ui/Spectrogram.cpp
     Source/ui/Theme.cpp
     Source/ui/WaveformView.cpp)

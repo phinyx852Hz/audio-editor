@@ -2,6 +2,7 @@
 #include "AudioDocument.h"
 
 #include <algorithm>
+#include <atomic>
 
 void adjustMarkersForEdit (std::vector<Marker>& markers, Frame start, Frame end, Frame insertedLength)
 {
@@ -36,6 +37,8 @@ void AudioDocument::reset (AudioDataPtr data, std::vector<Marker> markers, const
     history.push_back ({ "Open", { std::move (data), std::move (markers), std::move (tags) } });
     position = savedPosition = 0;
     filePath = path;
+    static std::atomic<std::uint64_t> lastId { 0 };
+    documentId = ++lastId;
 
     markerCounter = 0;
     for (const auto& m : current().markers)

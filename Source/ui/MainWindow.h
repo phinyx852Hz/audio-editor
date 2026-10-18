@@ -7,10 +7,13 @@
 #include "../engine/AudioCapture.h"
 #include "../engine/AudioEngine.h"
 #include "CommandRegistry.h"
+#include "Recovery.h"
 #include "WaveformView.h"
 
 #include <QFutureWatcher>
+#include <QHash>
 #include <QMainWindow>
+#include <QTimer>
 #include <atomic>
 #include <memory>
 
@@ -79,6 +82,8 @@ private:
     void warnAboutDesktopShortcuts();
     void record();              // Record dialog: desktop audio, an input or one app
     void recoverRecordings();   // offers takes left behind by a crash
+    void recoverDocuments();    // offers unsaved files left behind by a crash (see Recovery)
+    void autosave();
     void cut();
     void paste();
     void deleteSelection();
@@ -221,4 +226,8 @@ private:
     class QTabBar* tabBar = nullptr;
     std::vector<TabState> tabs { TabState() };
     int activeTab = 0;
+
+    Recovery recovery;
+    QTimer autosaveTimer;
+    QHash<QString, QString> recoveringFrom;   // recovery file being opened -> the file it was an unsaved copy of
 };
