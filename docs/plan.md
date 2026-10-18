@@ -566,7 +566,8 @@ Key design choices:
 - Control surface mapping, compliance reports
 - DSSI and optional VST2 hosting
 
-### After Linux v1.0: Mac and Windows (asked 2026-10-18)
+### After Linux v1.0: Mac and Windows (asked 2026-10-18; maybe never)
+Owner, 2026-10-18: "I just might skip Mac and Windows... Linux is only going to get better and I wouldn't have to pay an annual fee." PHINYX runs on any Linux distro and desktop (Wayland or X11; Hyprland runs X11 plugin windows through XWayland), not only Arch and Hyprland. Kept here for reference only.
 Licence stays AGPLv3 (JUCE is AGPLv3 or commercial; the ZL plugins are AGPLv3), which for a desktop app works like GPLv3. Qt and JUCE already cover both. Work: CoreAudio and WASAPI/ASIO in place of PipeWire capture, ALSA and JACK; Mac and Windows versions of the X11 plugin-window code (`X11Windows`), plus AU hosting on Mac; check each stock plugin (ZL, Wolf Shaper, Nyquist build everywhere; ToneShiftEQ and some LSP are Linux-first); macOS and Windows CI runners; signing (Apple Developer Program, a Windows code-signing certificate) and installers (.dmg, .msi or Inno Setup). Rough effort: two to four weeks for first installable builds, then testing on real machines (the project's Mac mini covers Apple Silicon).
 
 ### Extra (after the main work): Sampler view (requested 2026-10-18)
@@ -579,6 +580,13 @@ Licence stays AGPLv3 (JUCE is AGPLv3 or commercial; the ZL plugins are AGPLv3), 
 - Save and export: the sampler's settings are kept with the file's session; export the slices as files or as a SFZ instrument (sample plus a text map), which other samplers and DAWs open.
 - Source to reuse: Ninjas2 by Clearly Broken Software (github.com/clearly-broken-software/ninjas2), a sample slicer on DPF with aubio onset detection. Licence check: GPL-3.0 (aubio is GPL-3.0 too), combinable with AGPLv3 with credit. Its last change was in 2023, so take its slicing and slice-to-key mapping code as a starting point rather than bundling the plugin; Classic and 1-Shot playback, the filter, LFO and envelopes are written for PHINYX (the filter and envelope maths are small).
 - Order: Classic and 1-Shot with ADSR and MIDI first, then Slice (from Ninjas2), then filter, LFO and Warp, then SFZ export.
+
+### Extra (much later): Mix console (requested 2026-10-18)
+"Eventually a mix console like Audition's Project Session (.sesx) could be incorporated (much later on)... a traditional channel strip approach like Harrison Mixbus or the SSL 4000 E would be great, but with our own builtin plugins. The console would have a trim/gain knob built in and could feature some of the Cubase mixer's strengths."
+- Multitrack session (own file format; Audition .sesx import is a maybe) with tracks of clips from the editor's files; builds on the Montage work in Phase 4.
+- Every channel is a fixed strip, Mixbus/SSL style: trim/gain knob at the top, then our own EQ, compressor/gate and saturation, inserts (third-party plugins), sends, pan, fader, meter. Buses and a master strip that feeds the Master Section.
+- From Cubase's mixer (details to come from the owner): to be listed.
+- Keyboard-first like the rest: every strip control is a command and MIDI-mappable (2.9).
 
 ### Extra (after the main work): Visualizer
 Requested 2026-10-17 as an extra once PHINYX's main phases are done. A Visualizer window (its own tile, title "Visualizer - PHINYX", class phinyx) fed by whatever PHINYX plays, after the Master Section, so it shows the processed sound. Effort estimates for one developer:
