@@ -310,7 +310,7 @@ Built on Geoffrey Bennett's Linux work on GitHub: the kernel mixer drivers (Scar
 - Licensing: `alsa-scarlett-gui` is GPL-3.0 (to confirm when we start this work); GPLv3 code can be combined with this app's AGPLv3 license, but the plan is to talk to the ALSA controls directly and only reuse code where it saves real effort, with credit
 
 ### 2.9b2 Resident Audio T2 / T4 integration (requested 2026-10-18)
-Same shape as 2.9b, built on the Resident Audio T2 and T4 Linux drivers, which live in their own repository (to be finished and published separately from PHINYX). PHINYX auto-detects the unit, shows the Interface panel with its recording controls, routing presets and hardware meters where the driver exposes them, makes every control a command, and checks the driver is installed, linking to that project's setup steps if not. Waiting on the earlier driver work being brought into the project.
+Same shape as 2.9b, built on the Resident Audio T2 and T4 Linux drivers, which live in their own repository (to be finished and published separately from PHINYX). PHINYX auto-detects the unit, shows the Interface panel with its recording controls, routing presets and hardware meters where the driver exposes them, makes every control a command, and checks the driver is installed, linking to that project's setup steps if not. The T2 driver still needs testing on real hardware (owner, 2026-10-18). Waiting on the earlier driver work being brought into the project.
 
 ### 2.9c Library and browser (Ableton-style, searches everything)
 One browser panel (dockable, pops out to its own tile) with a single search field that finds **anything in the app**, like Ableton Live's browser.
