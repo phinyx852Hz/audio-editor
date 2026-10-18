@@ -259,7 +259,14 @@ StockFrame::StockFrame (juce::AudioProcessorEditor* e, juce::AudioPluginInstance
     for (const auto index : stock::footerParameters (info, plugin))
         addAndMakeVisible (knobs.add (std::make_unique<Knob> (*plugin.getParameters()[index])));
 
-    addAndMakeVisible (*editor);
+    addAndMakeVisible (view);
+    view.addAndMakeVisible (*editor);
+    view.childResized = [this]
+    {
+        // The plugin resized its own view.
+        if (! fitting)
+            fitToEditor();
+    };
     applyColours();
     refreshButtons();
     fitToEditor();
@@ -278,13 +285,6 @@ void StockFrame::fitToEditor()
     const auto minimumWidth = 120 + 84 * std::max (4, knobs.size());   // room for the header buttons and the knobs
     setSize (std::max (editor->getWidth(), minimumWidth) + 2 * sideWidth, editor->getHeight() + headerHeight + footerHeight);
     resized();
-}
-
-void StockFrame::childBoundsChanged (juce::Component* child)
-{
-    // The plugin resized its own view.
-    if (child == editor.get() && ! fitting)
-        fitToEditor();
 }
 
 void StockFrame::resized()
@@ -309,10 +309,15 @@ void StockFrame::resized()
     inMeter->setBounds (area.removeFromLeft (sideWidth).reduced (6, 6));
     outMeter->setBounds (area.removeFromRight (sideWidth).reduced (6, 6));
 
+    // The plugin's view fills the space (a tile, say) when it can resize;
+    // what it settles on (some keep their proportions) or a fixed size is centred.
+    view.setBounds (area);
+    const auto inside = view.getLocalBounds();
     if (editor->isResizable())
-        editor->setBounds (area);
-    else
-        editor->setBounds (area.withSizeKeepingCentre (editor->getWidth(), editor->getHeight()));
+        editor->setBounds (inside);
+    // Centred if it is smaller than its space, else from the top left.
+    editor->setTopLeftPosition (std::max (0, (inside.getWidth() - editor->getWidth()) / 2),
+                                std::max (0, (inside.getHeight() - editor->getHeight()) / 2));
 }
 
 void StockFrame::paint (juce::Graphics& g)

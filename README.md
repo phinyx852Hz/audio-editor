@@ -75,7 +75,7 @@ To install system wide instead, use the PKGBUILD: `cd packaging/arch && makepkg 
 ## Hyprland
 PHINYX runs natively on Wayland. Its window class is `phinyx`, so you can target it in `hyprland.conf`, e.g.
 `windowrulev2 = workspace 3, class:^(phinyx)$`. Popped-out panels share that class and have titles like
-`Meters - PHINYX`, so you can place them separately, e.g. `windowrulev2 = monitor 1, title:^(Meters - PHINYX)$`. Plugin windows have the same class and titles like `MVerb - PHINYX`; close one with its card's Window button, `E`, or your usual close key (Omarchy's `Super+W`). If the desktop force-closes a plugin window, PHINYX keeps running; plugin windows then come back after a restart.
+`Meters - PHINYX`, so you can place them separately, e.g. `windowrulev2 = monitor 1, title:^(Meters - PHINYX)$`. Plugin windows have the same class and titles like `MVerb - PHINYX`; they are always resizable, so Hyprland tiles them like any other window and the plugin's view fills its tile (a plugin with a fixed size sits centred). With a plugin window focused (under the mouse on Hyprland), `Ctrl+W` closes it and `Ctrl+Tab` / `Ctrl+Shift+Tab` go to the next or previous plugin window; plugins drawn with their own toolkit may keep those keys, and then the card's Window button, `E` or your usual close key (Omarchy's `Super+W`) still work. If the desktop force-closes a plugin window, PHINYX keeps running; plugin windows then come back after a restart.
 
 ## License
 GNU Affero General Public License v3.0 only. See `LICENSE`. JUCE is used under its AGPLv3 license; Qt under the LGPLv3.

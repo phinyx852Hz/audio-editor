@@ -12,17 +12,28 @@
 
 //==============================================================================
 // The plugin's own editor in a JUCE window (X11, so XWayland on Wayland).
+// Always resizable, so a tiling window manager (Hyprland) can tile it at any
+// size like any other window; an editor of fixed size sits centred in it.
+// With the window focused (on Hyprland, under the mouse): Ctrl+W closes it,
+// Ctrl+Tab and Ctrl+Shift+Tab go to the next and previous plugin window.
 class MasterChain::PluginWindow final : public juce::DocumentWindow
 {
 public:
     // `content` is the plugin's editor, or a StockFrame holding it.
-    PluginWindow (juce::Component* content, bool canResize, const juce::String& title, std::function<void()> onClose)
-        : DocumentWindow (title, juce::Colours::black, DocumentWindow::closeButton), closed (std::move (onClose))
+    PluginWindow (juce::Component* content, bool contentResizes, const juce::String& title,
+                  std::function<void()> onClose, std::function<void (int)> onCycle)
+        : DocumentWindow (title, juce::Colours::black, DocumentWindow::closeButton),
+          closed (std::move (onClose)), cycle (std::move (onCycle))
     {
         setUsingNativeTitleBar (true);
-        setContentOwned (content, true);
-        setResizable (canResize, false);
+        if (contentResizes)
+            setContentOwned (content, true);
+        else
+            setContentOwned (new Centred (content), true);
+        setResizable (true, false);
+        setResizeLimits (160, 120, 16384, 16384);
         centreWithSize (getWidth(), getHeight());
+        setWantsKeyboardFocus (true);
         setVisible (true);
         toFront (true);
     }
@@ -33,8 +44,45 @@ public:
             closed();
     }
 
+    // Keys the plugin's own view did not use.
+    bool keyPressed (const juce::KeyPress& key) override
+    {
+        const auto mods = key.getModifiers();
+        if (mods.isCtrlDown() && ! mods.isAltDown() && (key.getKeyCode() == 'W' || key.getKeyCode() == 'w'))
+        {
+            closeButtonPressed();
+            return true;
+        }
+        if (mods.isCtrlDown() && key.getKeyCode() == juce::KeyPress::tabKey)
+        {
+            if (cycle)
+                cycle (mods.isShiftDown() ? -1 : 1);
+            return true;
+        }
+        return DocumentWindow::keyPressed (key);
+    }
+
 private:
+    // Holds an editor that cannot resize, centred, so the window still can.
+    class Centred final : public juce::Component
+    {
+    public:
+        explicit Centred (juce::Component* e) : editor (e)
+        {
+            addAndMakeVisible (editor.get());
+            setSize (editor->getWidth(), editor->getHeight());
+        }
+
+        void paint (juce::Graphics& g) override { g.fillAll (juce::Colours::black); }
+        void resized() override { editor->setCentrePosition (getLocalBounds().getCentre()); }
+        void childBoundsChanged (juce::Component*) override { resized(); }
+
+    private:
+        std::unique_ptr<juce::Component> editor;
+    };
+
     std::function<void()> closed;
+    std::function<void (int)> cycle;
 };
 
 //==============================================================================
@@ -670,7 +718,9 @@ void MasterChain::showWindow (int index)
         content = new StockFrame (editor, *plugin, *info, description.name, std::move (hooks));
     }
 
-    windows[(size_t) index] = std::make_unique<PluginWindow> (content, editor->isResizable(), description.name + " - " APP_DISPLAY_NAME,
+    // A StockFrame lays itself out at any size; a bare editor that cannot resize gets centred.
+    const auto contentResizes = content != editor || editor->isResizable();
+    windows[(size_t) index] = std::make_unique<PluginWindow> (content, contentResizes, description.name + " - " APP_DISPLAY_NAME,
         [this, plugin]
         {
             // Close later: the window cannot delete itself from its own callback.
@@ -680,6 +730,18 @@ void MasterChain::showWindow (int index)
                     if (slots[i].plugin.get() == plugin)
                         windows[i].reset();
             });
+        },
+        [this, plugin] (int direction)
+        {
+            // The next open plugin window in slot order, wrapping round.
+            const auto from = slotOf (plugin);
+            const auto count = (int) windows.size();
+            for (int step = 1; from >= 0 && step < count; ++step)
+                if (auto& w = windows[(size_t) (((from + direction * step) % count + count) % count)])
+                {
+                    w->toFront (true);
+                    break;
+                }
         });
 
     if (auto* peer = windows[(size_t) index]->getPeer())

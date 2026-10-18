@@ -34,7 +34,6 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
-    void childBoundsChanged (juce::Component*) override;
 
 private:
     class Knob;
@@ -45,6 +44,15 @@ private:
     void refreshButtons();
     void applyColours();
 
+    // Holds the plugin's view and clips it, so a view bigger than its space
+    // (the window tiled small) never covers the header or the knobs.
+    struct View final : juce::Component
+    {
+        std::function<void()> childResized;
+        void childBoundsChanged (juce::Component*) override { if (childResized) childResized(); }
+    };
+
+    View view;
     std::unique_ptr<juce::AudioProcessorEditor> editor;
     const stock::Info& info;
     juce::String name;
