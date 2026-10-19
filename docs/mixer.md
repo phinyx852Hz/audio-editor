@@ -85,6 +85,39 @@ Cubase and Harrison Mixbus mixers. What the owner likes most:
   - When a track is a live input or an instrument, the mix is recorded in real time while
     you play. That is how a performance is captured.
 
+## Templates
+
+A template stores everything about the 8 strips: names, a one-line role under each name,
+colours, sources, Pre settings, inserts with their settings, thumbnail choices, pan, and
+the master's output format. File > New Mix from Template lists them. Any mix can be saved
+as a new template, and templates are plain files you can share.
+
+Built in:
+
+**Creative Organism** (electronic music; owner's template, after ill.Gates' idea of
+reusable systems and his Mudpies technique). The names describe intentions, not instrument
+types. The role line shows under the name on the strip:
+
+| # | Name | Role line | Colour |
+|---|---|---|---|
+| 1 | SNOWFLAKES | Micro-details · ear candy · happy accidents | ice white |
+| 2 | EARTHQUAKES | Drums · impacts · rhythmic power | red |
+| 3 | GRAVITY | Bass · sub · low-frequency weight | deep purple |
+| 4 | ATMOSPHERE | Pads · drones · harmonic environment | teal |
+| 5 | FIREFLIES | Leads · arpeggios · melodic fragments | amber |
+| 6 | MUDPIES | Resampling · mutation · sound experiments | brown |
+| 7 | WEATHER SYSTEM | Builds · sweeps · transitions · tension | blue-grey |
+| 8 | WILDCARD | Improvisation · live input · unexpected events | magenta |
+
+Starting settings for that template: Gravity is mono-summed below 120 Hz, with low cut
+off. Snowflakes and Atmosphere have low cut at 150 Hz. Wildcard's source is a live input,
+with Monitor set to Auto.
+
+**DAW Stems** (mixing bus stems): Drums, Bass, Music, Keys, Guitars, Vocals, FX,
+Ambience. Every source is a stem file, and each strip is set flat.
+
+**Empty**: Track 1 to Track 8.
+
 ## Keyboard (PHINYX is keyboard-first)
 
 | Keys | What they do |
