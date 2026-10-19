@@ -116,6 +116,8 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/ToolsSection.cpp
     Source/ui/AmbiDialogs.cpp
     Source/ui/AmbiScene.cpp
+    Source/ui/Visualizer.cpp
+    Source/ui/VisualizerSection.cpp
     Source/ui/BinauralDialog.cpp
     Source/ui/SpatialSection.cpp)
 

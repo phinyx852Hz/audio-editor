@@ -242,6 +242,16 @@ private:
     // Analysis with Vamp plugins (Analysis.cpp): markers from beats, onsets or
     // any plugin, tempo and key into tags, and slices cut at the markers.
     void registerAnalysisCommands();
+    // The Visualizer (VisualizerSection.cpp).
+    void registerVisualizerCommands();
+    class VisualizerWindow* visualizerWindow();
+    void setVisualMode (int index, bool openIfHidden);
+    void toggleVisualizerBehind();
+    void feedVisualizers();
+    class VisualizerWindow* visualizer = nullptr;
+    class VisualizerView* visualBackdrop = nullptr;
+    int visualMode = 0;
+    double opacityBeforeBackdrop = 0.0;
     void updateAnalysisCommandStates();
     bool runAnalysis (const QString& title, const AudioData&, Frame start, Frame end, const QString& outputId, vamphost::Result&);
     void markFeatures (const QString& outputId, const QString& title);

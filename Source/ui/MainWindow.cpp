@@ -207,6 +207,7 @@ MainWindow::MainWindow (AudioEngine& e)
             goniometer->addSamples (scopeLeft, scopeRight);
         }
         feedAmbiScene();
+        feedVisualizers();
 
         // Looping plays the selection, or the whole file when nothing is selected.
         const auto d = data();
@@ -449,6 +450,7 @@ void MainWindow::registerCommands()
     registerNyquistCommands();
     registerAlbumCommands();
     registerAnalysisCommands();
+    registerVisualizerCommands();
     registerReferenceCommands();
     registerMacroCommands();
     add ("tools.managePlugins", Category::tools, tr ("Manage &Plug-ins..."), {}, [this] { managePlugins(); });
@@ -705,7 +707,7 @@ void MainWindow::buildMenus()
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
-                               "view.overview", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "-",
+                               "view.overview", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "-", "view.visualizer", "view.visualizerFullScreen", "view.visualizerBehind", "view.visualizerNext", "view.visualizerPrevious", "view.visualizerChoose", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "-", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
