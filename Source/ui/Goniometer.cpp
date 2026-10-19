@@ -187,6 +187,21 @@ void Goniometer::addSamples (const std::vector<float>& left, const std::vector<f
     std::vector<QPointF> points;
     points.reserve (n - first);
 
+    // Lissajous zooms in on quiet or narrow material by itself (up to 8x), so the shape fills
+    // the plot; the peak it follows falls back slowly, so the zoom does not pump.
+    if (current == View::lissajous)
+    {
+        double peak = 0.0;
+        for (auto i = first; i < n; ++i)
+        {
+            const auto ms = midSide (left[i], right[i]);
+            peak = std::max ({ peak, std::abs (ms.mid), std::abs (ms.side) });
+        }
+        lissajousPeak = std::max (peak, lissajousPeak * 0.985);
+        const auto target = lissajousPeak > silence ? std::clamp (0.9 * M_SQRT2 / lissajousPeak, 1.0, 8.0) : lissajousZoom;
+        lissajousZoom += (target - lissajousZoom) * 0.15;
+    }
+
     for (auto i = first; i < n; ++i)
     {
         const auto ms = midSide (left[i], right[i]);
@@ -214,7 +229,7 @@ void Goniometer::addSamples (const std::vector<float>& left, const std::vector<f
             case View::lissajous:
             {
                 // Linear, with the diamond's corners (both channels at full scale) at the rim.
-                const auto scale = radius / M_SQRT2;
+                const auto scale = radius / M_SQRT2 * lissajousZoom;
                 points.emplace_back (centre.x() + ms.side * scale, centre.y() - ms.mid * scale);
                 break;
             }
@@ -379,6 +394,8 @@ void Goniometer::paintEvent (QPaintEvent*)
     g.setFont (small);
     g.setPen (theme.color (QStringLiteral ("placeholderText")));
     g.drawText (QRectF (4, 2, width() - 8, 16), Qt::AlignLeft | Qt::AlignVCenter, viewName (current));
+    if (current == View::lissajous && lissajousZoom > 1.05)
+        g.drawText (QRectF (4, 2, width() - 8, 16), Qt::AlignRight | Qt::AlignVCenter, tr ("zoom %1x").arg (lissajousZoom, 0, 'f', 1));
 
     // Correlation meter
     const auto bar = correlationArea();

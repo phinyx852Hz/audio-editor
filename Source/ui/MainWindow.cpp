@@ -786,8 +786,8 @@ void MainWindow::buildPanels()
     auto* metersLayout = new QVBoxLayout (meters);
     metersLayout->setContentsMargins (0, 0, 0, 0);
     metersLayout->setSpacing (0);
-    metersLayout->addWidget (goniometer, 5);
-    metersLayout->addWidget (meterPanel, 6);
+    metersLayout->addWidget (goniometer, 7);
+    metersLayout->addWidget (meterPanel, 5);
     metersPanel = new DockablePanel (*this, QStringLiteral ("metersPanel"), tr ("Meters"), meters, Qt::RightDockWidgetArea);
     markerPanel = new DockablePanel (*this, QStringLiteral ("markersPanel"), tr ("Markers"), markerList, Qt::BottomDockWidgetArea);
     historyPanel = new DockablePanel (*this, QStringLiteral ("historyPanel"), tr ("History"), historyList, Qt::RightDockWidgetArea);

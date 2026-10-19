@@ -32,7 +32,7 @@ public:
     View view() const { return current; }
     static QString viewName (View);
 
-    QSize sizeHint() const override        { return { 260, 290 }; }
+    QSize sizeHint() const override        { return { 320, 350 }; }
     QSize minimumSizeHint() const override { return { 140, 160 }; }
 
 protected:
@@ -58,5 +58,6 @@ private:
     std::array<float, numRays> rays {};   // Polar Level: current level per direction
     std::array<float, numRays> skin {};   // and the slowly contracting outline
     double correlation = 0.0;    // smoothed
+    double lissajousPeak = 0.0, lissajousZoom = 1.0;
     bool hasSignal = false;
 };
