@@ -78,6 +78,7 @@ private:
     QWidget* homeWidget;
     QLineEdit* search;
     QTreeWidget* sidebar;
+    int rowBeforeDown = -1;   // the sidebar entry chosen before Down went into it from the search
     QTreeWidget* results;
 
     QList<FindItem> items;          // from `collect`

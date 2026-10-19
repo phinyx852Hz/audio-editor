@@ -154,9 +154,9 @@ FindPanel::FindPanel (QWidget* home, QWidget* parent)
     layout->addWidget (search);
     layout->addWidget (split, 1);
 
-    // Tab goes from the search to the results, then the sidebar.
-    setTabOrder (search, results);
-    setTabOrder (results, sidebar);
+    // Tab goes from the search to the sidebar, then the results (as Down and Right do).
+    setTabOrder (search, sidebar);
+    setTabOrder (sidebar, results);
     results->setIndentation (12);
 
     loadCollections();
@@ -235,6 +235,7 @@ void FindPanel::buildSidebar()
     const auto oldSection = current != nullptr ? current->data (0, sectionRole).toInt() : (int) Section::all;
     const auto oldExtra = current != nullptr ? current->data (0, placeRole).toString() + current->data (0, colourRole).toString() : QString();
     sidebar->clear();
+    rowBeforeDown = -1;
 
     auto heading = [this] (const QString& text)
     {
@@ -605,11 +606,39 @@ bool FindPanel::eventFilter (QObject* watched, QEvent* e)
         return true;
     }
 
+    // The first item a list can select, from the top.
+    auto firstSelectable = [] (QTreeWidget* tree) -> QTreeWidgetItem*
+    {
+        for (int i = 0; i < tree->topLevelItemCount(); ++i)
+            if (auto* item = tree->topLevelItem (i); (item->flags() & Qt::ItemIsSelectable) && ! item->isHidden())
+                return item;
+        return nullptr;
+    };
+
     if (watched == search)
     {
         switch (k->key())
         {
-            case Qt::Key_Up: case Qt::Key_Down: case Qt::Key_PageUp: case Qt::Key_PageDown:
+            case Qt::Key_Down:
+                if (! plain)
+                    return false;
+                // Down from an empty search goes to the collections and sections;
+                // after typing it goes to what was found.
+                if (search->text().isEmpty())
+                {
+                    rowBeforeDown = sidebar->indexOfTopLevelItem (sidebar->currentItem());
+                    sidebar->setFocus (Qt::OtherFocusReason);
+                    if (auto* first = firstSelectable (sidebar))
+                        sidebar->setCurrentItem (first);
+                }
+                else
+                {
+                    results->setFocus (Qt::OtherFocusReason);
+                    if (results->currentItem() == nullptr)
+                        results->setCurrentItem (firstSelectable (results));
+                }
+                return true;
+            case Qt::Key_Up: case Qt::Key_PageUp: case Qt::Key_PageDown:
                 QApplication::sendEvent (results, e);
                 return true;
             case Qt::Key_Return: case Qt::Key_Enter:
@@ -637,6 +666,23 @@ bool FindPanel::eventFilter (QObject* watched, QEvent* e)
                 row->setExpanded (false);
             else
                 sidebar->setFocus (Qt::OtherFocusReason);
+            return true;
+        }
+    }
+
+    // Up from the top of either list goes back to the search.
+    if ((watched == sidebar || watched == results) && plain && k->key() == Qt::Key_Up)
+    {
+        auto* tree = static_cast<QTreeWidget*> (watched);
+        auto* current = tree->currentItem();
+        if (current == nullptr || current == firstSelectable (tree) || tree->itemAbove (current) == nullptr)
+        {
+            // Back up from the sidebar without choosing: the search goes back to
+            // where it was (usually All), not the collection passed through.
+            if (watched == sidebar && rowBeforeDown >= 0 && rowBeforeDown < sidebar->topLevelItemCount())
+                sidebar->setCurrentItem (sidebar->topLevelItem (rowBeforeDown));
+            rowBeforeDown = -1;
+            search->setFocus (Qt::OtherFocusReason);
             return true;
         }
     }
