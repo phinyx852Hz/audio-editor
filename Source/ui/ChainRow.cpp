@@ -392,7 +392,9 @@ void DeviceCard::sync()
         power->setChecked (! info.bypassed);
         power->setText (info.bypassed ? tr ("Off") : tr ("On"));
         solo->setChecked (engine.masterSoloSlot() == slotIndex);
-        windowButton->setVisible (info.hasEditor);   // built-in effects have only their knobs
+        windowButton->setVisible (info.hasEditor || info.failed);   // built-in effects have only their knobs
+        windowButton->setText (info.failed ? tr ("Reload") : tr ("Window"));
+        windowButton->setToolTip (info.failed ? tr ("Load the plugin again with its last settings (E)") : tr ("The plugin's own window (E)"));
 
         auto text = QString::fromStdString (info.format);
         if (info.latencySamples > 0)
@@ -401,8 +403,18 @@ void DeviceCard::sync()
             text += info.channels <= 2 ? tr ("  L/R only") : tr ("  first %1 ch").arg (info.channels);
         if (engine.masterSoloSlot() == slotIndex)
             text += tr ("  SOLO");
-        detail->setText (text);
-        title->setForegroundRole (info.bypassed || engine.isMasterBypassed() ? QPalette::PlaceholderText : QPalette::WindowText);
+        if (info.failed)
+        {
+            text = tr ("Stopped working: %1").arg (QString::fromStdString (info.failure));
+            detail->setToolTip (tr ("The plugin stopped answering (for a Windows plugin, its Wine side may have closed), "
+                                    "so it is switched off and the sound passes through. Reload loads it again with its last settings."));
+        }
+        else
+            detail->setToolTip ({});
+        detail->setText (elided (text, detail->font(), width() - 20));
+        detail->setStyleSheet (info.failed ? QStringLiteral ("color: %1").arg (Theme::current().color (QStringLiteral ("meterHigh")).name())
+                                           : QString());
+        title->setForegroundRole (info.bypassed || info.failed || engine.isMasterBypassed() ? QPalette::PlaceholderText : QPalette::WindowText);
         level->push (engine.takeMasterSlotPeak (slotIndex));
     }
     else
@@ -630,7 +642,20 @@ ChainRow::ChainRow (AudioEngine& e, QWidget* homeWidget, QWidget* parent)
     connect (&timer, &QTimer::timeout, this, [this]
     {
         if (signature() != lastSignature)
+        {
+            // Say once when a plugin stops working; its card keeps saying so.
+            for (int i = 0; i < AudioEngine::numMasterSlots; ++i)
+            {
+                const auto info = engine.masterSlot (i);
+                const auto bit = 1 << i;
+                if (info.failed && (failedSlots & bit) == 0)
+                    Q_EMIT message (tr ("%1 stopped working (%2). It is switched off and the sound passes through; "
+                                        "press Reload on its card (or E) to load it again.")
+                                        .arg (QString::fromStdString (info.name), QString::fromStdString (info.failure)));
+                failedSlots = info.failed ? failedSlots | bit : failedSlots & ~bit;
+            }
             rebuild();
+        }
         else
             for (auto* c : cards)
                 c->sync();
@@ -643,7 +668,10 @@ QString ChainRow::signature() const
 {
     QString s = engine.isMasterBypassed() ? QStringLiteral ("B") : QStringLiteral ("-");
     for (int i = 0; i < AudioEngine::numMasterSlots; ++i)
-        s += QLatin1Char ('|') + QString::fromStdString (engine.masterSlot (i).pluginId);
+    {
+        const auto info = engine.masterSlot (i);
+        s += QLatin1Char ('|') + QString::fromStdString (info.pluginId) + (info.failed ? QStringLiteral ("!") : QString());
+    }
     return s;
 }
 
@@ -1032,7 +1060,14 @@ void ChainRow::editParameters (int slot)
 void ChainRow::showWindow (int slot)
 {
     const auto info = engine.masterSlot (slot);
-    if (engine.canShowPluginWindow (slot))
+    if (info.failed)
+    {
+        const auto error = engine.reloadMasterSlot (slot);
+        Q_EMIT message (error.empty() ? tr ("%1 loaded again with its last settings").arg (QString::fromStdString (info.name))
+                                      : QString::fromStdString (error));
+        Q_EMIT chainChanged();
+    }
+    else if (engine.canShowPluginWindow (slot))
         engine.showPluginWindow (slot);
     else if (! info.empty)
         Q_EMIT message (engine.pluginWindowsLost()

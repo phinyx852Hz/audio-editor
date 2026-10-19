@@ -100,12 +100,64 @@ MasterChain::MasterChain()
 
 MasterChain::~MasterChain()
 {
-    for (auto& w : windows)
-        w.reset();
+    for (size_t i = 0; i < slots.size(); ++i)
+        discard (i);
+}
 
-    const juce::ScopedLock sl (lock);
-    for (auto& s : slots)
-        s.plugin.reset();
+void MasterChain::fail (const Slot& s, const std::string& why)
+{
+    {
+        const std::lock_guard<std::mutex> l (s.health->mutex);
+        if (s.health->why.empty())
+            s.health->why = why.empty() ? "an unknown error" : why;
+    }
+    s.health->failed.store (true, std::memory_order_release);
+}
+
+void MasterChain::discard (size_t index)
+{
+    auto& s = slots[index];
+    const auto failed = s.plugin != nullptr && ! s.usable();
+    std::unique_ptr<juce::AudioPluginInstance> old;
+    if (failed)
+    {
+        if (auto* w = windows[index].release())
+            guard (s, [w] { w->setVisible (false); });
+    }
+    else
+        windows[index].reset();
+
+    {
+        const juce::ScopedLock sl (lock);
+        old = std::move (s.plugin);
+        s = {};
+        if (soloSlot == (int) index)
+            soloSlot = -1;
+    }
+
+    if (failed)
+        (void) old.release();   // deleting it would call into it again
+}
+
+std::unique_ptr<juce::AudioPluginInstance> MasterChain::start (const juce::PluginDescription& d, const juce::MemoryBlock* state,
+                                                               bool& editor, juce::String& error) const
+{
+    std::unique_ptr<juce::AudioPluginInstance> instance;
+    try
+    {
+        instance = createInstance (d, error);
+        if (instance == nullptr)
+            return nullptr;
+        if (state != nullptr && state->getSize() > 0)
+            instance->setStateInformation (state->getData(), (int) state->getSize());
+        preparePlugin (*instance, rate, blockSize);
+        editor = instance->hasEditor();
+        return instance;
+    }
+    catch (const std::exception& e) { error = e.what(); }
+    catch (...)                      { error = "an unknown error"; }
+    (void) instance.release();
+    return nullptr;
 }
 
 void MasterChain::setConfigFolder (const juce::File& folder)
@@ -407,11 +459,13 @@ void MasterChain::setChannels (int n)
     prepareDelays();
     for (auto& s : slots)
     {
-        if (s.plugin == nullptr)
-            continue;
-        s.plugin->releaseResources();
-        applyLayout (*s.plugin, n);
-        preparePlugin (*s.plugin, rate, blockSize);
+        if (s.usable())
+            guard (s, [&]
+            {
+                s.plugin->releaseResources();
+                applyLayout (*s.plugin, n);
+                preparePlugin (*s.plugin, rate, blockSize);
+            });
     }
 }
 
@@ -432,38 +486,50 @@ std::string MasterChain::load (int index, const std::string& pluginId)
         return "This plugin is not in the plugin list. Scan for plugins again.";
 
     juce::String error;
-    auto instance = createInstance (*description, error);
+    bool editor = false;
+    auto instance = start (*description, nullptr, editor, error);
     if (instance == nullptr)
         return ("Could not load " + description->name + ": " + error).toStdString();
 
-    preparePlugin (*instance, rate, blockSize);
-    const auto editor = instance->hasEditor();
-    windows[(size_t) index].reset();
-
-    std::unique_ptr<juce::AudioPluginInstance> old;
-    {
-        const juce::ScopedLock sl (lock);
-        old = std::move (slots[(size_t) index].plugin);
-        slots[(size_t) index] = { std::move (instance), *description, false, 0, {}, editor };
-    }
-
-    return {};  // `old` is released here, outside the lock
+    discard ((size_t) index);
+    const juce::ScopedLock sl (lock);
+    slots[(size_t) index] = { std::move (instance), *description, false, 0, {}, editor };
+    return {};
 }
 
 void MasterChain::clear (int index)
 {
-    if (index < 0 || index >= (int) slots.size())
-        return;
+    if (index >= 0 && index < (int) slots.size())
+        discard ((size_t) index);
+}
 
-    windows[(size_t) index].reset();
-    std::unique_ptr<juce::AudioPluginInstance> old;
+std::string MasterChain::reload (int index)
+{
+    if (index < 0 || index >= (int) slots.size() || slots[(size_t) index].plugin == nullptr)
+        return "There is no plugin in this slot.";
+
+    auto& s = slots[(size_t) index];
+    const auto description = s.description;
+    const auto bypassed = s.bypassed;
+    juce::MemoryBlock state;
     {
-        const juce::ScopedLock sl (lock);
-        old = std::move (slots[(size_t) index].plugin);
-        slots[(size_t) index] = {};
-        if (soloSlot == index)
-            soloSlot = -1;
+        const std::lock_guard<std::mutex> l (s.health->mutex);
+        state = s.health->lastState;
     }
+    if (s.usable())
+        guard (s, [&] { s.plugin->getStateInformation (state); });
+
+    juce::String error;
+    bool editor = false;
+    auto instance = start (description, &state, editor, error);
+    if (instance == nullptr)
+        return ("Could not load " + description.name + " again: " + error).toStdString();
+
+    discard ((size_t) index);
+    const juce::ScopedLock sl (lock);
+    slots[(size_t) index] = { std::move (instance), description, bypassed, 0, {}, editor };
+    slots[(size_t) index].health->lastState = state;
+    return {};
 }
 
 void MasterChain::move (int from, int to)
@@ -507,13 +573,25 @@ MasterSlotInfo MasterChain::info (int index) const
     i.name = s.description.name.toStdString();
     const auto* stockInfo = stock::find (s.description);
     i.format = stockInfo != nullptr ? builtin::formatName : s.description.pluginFormatName.toStdString();
-    if (stockInfo != nullptr)
-        i.mainParameters = stock::footerParameters (*stockInfo, *s.plugin);
+    if (stockInfo != nullptr && s.usable())
+        guard (s, [&] { i.mainParameters = stock::footerParameters (*stockInfo, *s.plugin); });
     i.pluginId = s.description.createIdentifierString().toStdString();
     i.bypassed = s.bypassed;
-    i.latencySamples = s.plugin->getLatencySamples();
-    i.hasEditor = s.hasEditor;
-    i.channels = std::min (channelCount, std::max (s.plugin->getTotalNumInputChannels(), s.plugin->getTotalNumOutputChannels()));
+    if (s.usable())
+        guard (s, [&]
+        {
+            i.latencySamples = s.plugin->getLatencySamples();
+            i.hasEditor = s.hasEditor;
+            i.channels = std::min (channelCount, std::max (s.plugin->getTotalNumInputChannels(), s.plugin->getTotalNumOutputChannels()));
+        });
+    if (! s.usable())
+    {
+        i.failed = true;
+        i.hasEditor = false;
+        i.mainParameters.clear();
+        const std::lock_guard<std::mutex> l (s.health->mutex);
+        i.failure = s.health->why;
+    }
     return i;
 }
 
@@ -531,14 +609,14 @@ bool MasterChain::isActive() const
     if (std::abs (gainDecibels) > 1.0e-6)
         return true;
 
-    return std::any_of (slots.begin(), slots.end(), [] (const Slot& s) { return s.plugin != nullptr && ! s.bypassed; });
+    return std::any_of (slots.begin(), slots.end(), [] (const Slot& s) { return s.usable() && ! s.bypassed; });
 }
 
 int MasterChain::totalLatency() const
 {
     int total = 0;
     for (const auto& s : slots)
-        if (s.plugin != nullptr && ! s.bypassed)
+        if (s.usable() && ! s.bypassed)
             total += s.plugin->getLatencySamples();
 
     return total;
@@ -548,20 +626,25 @@ int MasterChain::totalLatency() const
 std::vector<PluginParameterInfo> MasterChain::parameters (int index) const
 {
     std::vector<PluginParameterInfo> result;
-    if (index < 0 || index >= (int) slots.size() || slots[(size_t) index].plugin == nullptr)
+    if (index < 0 || index >= (int) slots.size() || ! slots[(size_t) index].usable())
         return result;
 
-    for (auto* p : slots[(size_t) index].plugin->getParameters())
-    {
-        PluginParameterInfo info;
-        info.name = p->getName (64).toStdString();
-        info.value = p->getValue();
-        info.valueText = (p->getCurrentValueAsText() + " " + stock::unit (*p)).trim().toStdString();
-        info.isBoolean = p->isBoolean();
-        const auto steps = p->getNumSteps();
-        info.numSteps = steps > 1 && steps <= 1000 ? steps : 0;
-        result.push_back (info);
-    }
+    const auto& s = slots[(size_t) index];
+    if (! guard (s, [&]
+        {
+            for (auto* p : s.plugin->getParameters())
+            {
+                PluginParameterInfo info;
+                info.name = p->getName (64).toStdString();
+                info.value = p->getValue();
+                info.valueText = (p->getCurrentValueAsText() + " " + stock::unit (*p)).trim().toStdString();
+                info.isBoolean = p->isBoolean();
+                const auto steps = p->getNumSteps();
+                info.numSteps = steps > 1 && steps <= 1000 ? steps : 0;
+                result.push_back (info);
+            }
+        }))
+        result.clear();
 
     return result;
 }
@@ -569,28 +652,40 @@ std::vector<PluginParameterInfo> MasterChain::parameters (int index) const
 PluginParameterInfo MasterChain::parameter (int index, int parameter) const
 {
     PluginParameterInfo info;
-    if (index < 0 || index >= (int) slots.size() || slots[(size_t) index].plugin == nullptr)
+    if (index < 0 || index >= (int) slots.size() || ! slots[(size_t) index].usable())
         return info;
 
-    const auto& params = slots[(size_t) index].plugin->getParameters();
+    const auto& s = slots[(size_t) index];
+    const auto& params = s.plugin->getParameters();
     if (parameter < 0 || parameter >= params.size())
         return info;
 
     auto* p = params[parameter];
-    info.name = p->getName (64).toStdString();
-    info.value = p->getValue();
-    info.valueText = (p->getCurrentValueAsText() + " " + stock::unit (*p)).trim().toStdString();
-    info.isBoolean = p->isBoolean();
-    const auto steps = p->getNumSteps();
-    info.numSteps = steps > 1 && steps <= 1000 ? steps : 0;
+    if (! guard (s, [&]
+        {
+            info.name = p->getName (64).toStdString();
+            info.value = p->getValue();
+            info.valueText = (p->getCurrentValueAsText() + " " + stock::unit (*p)).trim().toStdString();
+            info.isBoolean = p->isBoolean();
+            const auto steps = p->getNumSteps();
+            info.numSteps = steps > 1 && steps <= 1000 ? steps : 0;
+        }))
+        info = {};
     return info;
 }
 
 bool MasterChain::setParameterFromText (int index, int parameter, const std::string& typed)
 {
-    if (index < 0 || index >= (int) slots.size() || slots[(size_t) index].plugin == nullptr)
+    if (index < 0 || index >= (int) slots.size() || ! slots[(size_t) index].usable())
         return false;
 
+    bool done = false;
+    guard (slots[(size_t) index], [&] { done = setParameterFromTextUnguarded (index, parameter, typed); });
+    return done;
+}
+
+bool MasterChain::setParameterFromTextUnguarded (int index, int parameter, const std::string& typed)
+{
     const auto& params = slots[(size_t) index].plugin->getParameters();
     if (parameter < 0 || parameter >= params.size())
         return false;
@@ -668,18 +763,19 @@ float MasterChain::takePeak (int index)
 
 void MasterChain::setParameter (int index, int parameter, float value)
 {
-    if (index < 0 || index >= (int) slots.size() || slots[(size_t) index].plugin == nullptr)
+    if (index < 0 || index >= (int) slots.size() || ! slots[(size_t) index].usable())
         return;
 
-    const auto& params = slots[(size_t) index].plugin->getParameters();
+    const auto& s = slots[(size_t) index];
+    const auto& params = s.plugin->getParameters();
     if (parameter >= 0 && parameter < params.size())
-        params[parameter]->setValueNotifyingHost (std::clamp (value, 0.0f, 1.0f));
+        guard (s, [&] { params[parameter]->setValueNotifyingHost (std::clamp (value, 0.0f, 1.0f)); });
 }
 
 bool MasterChain::canShowWindow (int index) const
 {
     const auto* display = std::getenv ("DISPLAY");
-    return index >= 0 && index < (int) slots.size() && slots[(size_t) index].plugin != nullptr
+    return index >= 0 && index < (int) slots.size() && slots[(size_t) index].usable()
         && slots[(size_t) index].hasEditor && display != nullptr && *display != 0 && ! x11::connectionLost();
 }
 
@@ -695,6 +791,11 @@ void MasterChain::showWindow (int index)
         return;
     }
 
+    guard (slots[(size_t) index], [&] { openWindow (index); });
+}
+
+void MasterChain::openWindow (int index)
+{
     auto* plugin = slots[(size_t) index].plugin.get();
     auto* editor = plugin->createEditorAndMakeActive();
     if (editor == nullptr)
@@ -767,7 +868,7 @@ int MasterChain::slotOf (const juce::AudioPluginInstance* plugin) const
 
 void MasterChain::setCompareSide (int index, int side)
 {
-    if (index < 0 || index >= (int) slots.size() || slots[(size_t) index].plugin == nullptr)
+    if (index < 0 || index >= (int) slots.size() || ! slots[(size_t) index].usable())
         return;
 
     auto& s = slots[(size_t) index];
@@ -775,18 +876,24 @@ void MasterChain::setCompareSide (int index, int side)
         return;
 
     // Swap the settings being heard with the other side's; B starts as a copy of A.
-    juce::MemoryBlock current;
-    s.plugin->getStateInformation (current);
-    if (s.otherSide.getSize() > 0)
-        s.plugin->setStateInformation (s.otherSide.getData(), (int) s.otherSide.getSize());
-    s.otherSide = std::move (current);
-    s.compareSide = side;
+    guard (s, [&]
+    {
+        juce::MemoryBlock current;
+        s.plugin->getStateInformation (current);
+        if (s.otherSide.getSize() > 0)
+            s.plugin->setStateInformation (s.otherSide.getData(), (int) s.otherSide.getSize());
+        s.otherSide = std::move (current);
+        s.compareSide = side;
+    });
 }
 
 void MasterChain::copyCompareSide (int index)
 {
-    if (index >= 0 && index < (int) slots.size() && slots[(size_t) index].plugin != nullptr)
-        slots[(size_t) index].plugin->getStateInformation (slots[(size_t) index].otherSide);
+    if (index >= 0 && index < (int) slots.size() && slots[(size_t) index].usable())
+    {
+        auto& s = slots[(size_t) index];
+        guard (s, [&] { s.plugin->getStateInformation (s.otherSide); });
+    }
 }
 
 //==============================================================================
@@ -808,8 +915,16 @@ void MasterChain::save() const
         auto* slot = root.createNewChildElement ("SLOT");
         slot->setAttribute ("index", (int) i);
         slot->setAttribute ("bypassed", s.bypassed);
+        // A failed plugin is saved with its settings from before it failed.
         juce::MemoryBlock state;
-        s.plugin->getStateInformation (state);
+        const auto fresh = s.usable() && guard (s, [&] { s.plugin->getStateInformation (state); });
+        {
+            const std::lock_guard<std::mutex> l (s.health->mutex);
+            if (fresh)
+                s.health->lastState = state;
+            else
+                state = s.health->lastState;
+        }
         slot->setAttribute ("state", state.toBase64Encoding());
         slot->addChildElement (s.description.createXml().release());
     }
@@ -845,22 +960,22 @@ std::string MasterChain::restore()
                     && juce::File::createFileWithoutCheckingPath (candidate.fileOrIdentifier).getFileName() == savedFile)
                     d = candidate;
 
+        juce::MemoryBlock state;
+        if (! state.fromBase64Encoding (slot->getStringAttribute ("state")))
+            state.reset();
+
         juce::String error;
-        auto instance = createInstance (d, error);
+        bool editor = false;
+        auto instance = start (d, &state, editor, error);
         if (instance == nullptr)
         {
             problems.add (d.name + ": " + error);
             continue;
         }
 
-        juce::MemoryBlock state;
-        if (state.fromBase64Encoding (slot->getStringAttribute ("state")) && state.getSize() > 0)
-            instance->setStateInformation (state.getData(), (int) state.getSize());
-
-        preparePlugin (*instance, rate, blockSize);
-        const auto editor = instance->hasEditor();
         const juce::ScopedLock sl (lock);
         slots[(size_t) index] = { std::move (instance), d, slot->getBoolAttribute ("bypassed", false), 0, {}, editor };
+        slots[(size_t) index].health->lastState = state;
     }
 
     return problems.joinIntoString ("\n").toStdString();
@@ -876,8 +991,8 @@ void MasterChain::prepare (double sampleRate, int maxBlockSize)
     prepareDelays();
 
     for (auto& s : slots)
-        if (s.plugin != nullptr)
-            preparePlugin (*s.plugin, rate, blockSize);
+        if (s.usable())
+            guard (s, [&] { preparePlugin (*s.plugin, rate, blockSize); });
 }
 
 void MasterChain::prepareDelays()
@@ -954,7 +1069,7 @@ void MasterChain::processChain (juce::AudioBuffer<float>& io, int startSample, i
         for (size_t index = 0; index < slots.size(); ++index)
         {
             auto& s = slots[index];
-            if (s.plugin == nullptr || s.plugin->isSuspended())
+            if (! s.usable() || s.plugin->isSuspended())
                 continue;
 
             const auto channels = std::clamp (std::max (s.plugin->getTotalNumInputChannels(), s.plugin->getTotalNumOutputChannels()),
@@ -989,8 +1104,10 @@ void MasterChain::processChain (juce::AudioBuffer<float>& io, int startSample, i
             }
 
             juce::AudioBuffer<float> proxy (scratch.getArrayOfWritePointers(), channels, n);
-            s.plugin->processBlock (proxy, midi);
+            const auto ok = guard (s, [&] { s.plugin->processBlock (proxy, midi); });
             midi.clear();
+            if (! ok)
+                continue;
 
             // A mono-out plugin feeds both sides.
             if (s.plugin->getTotalNumOutputChannels() == 1 && ioChannels > 1)
@@ -1042,6 +1159,9 @@ AudioDataPtr MasterChain::render (const AudioData& data, Frame start, Frame end,
     const auto length = end - start;
 
     const juce::ScopedLock sl (lock);
+    std::array<bool, AudioEngine::numMasterSlots> wasUsable {};
+    for (size_t i = 0; i < slots.size(); ++i)
+        wasUsable[i] = slots[i].usable();
     const auto deviceRate = rate;
     const auto deviceBlock = blockSize;
     const auto deviceChannels = channelCount;
@@ -1126,6 +1246,15 @@ AudioDataPtr MasterChain::render (const AudioData& data, Frame start, Frame end,
         error = "Cancelled";
         return nullptr;
     }
+
+    for (size_t i = 0; i < slots.size(); ++i)
+        if (wasUsable[i] && ! slots[i].usable())
+        {
+            const std::lock_guard<std::mutex> l (slots[i].health->mutex);
+            error = slots[i].description.name.toStdString() + " stopped working during the render (" + slots[i].health->why
+                  + "). It is switched off; press Reload on its card to load it again.";
+            return nullptr;
+        }
 
     auto result = out.finish();
     if (outChannels != fileChannels && sideDifference <= 1.0e-4f)   // both sides the same (below dither level): stay mono

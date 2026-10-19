@@ -57,6 +57,8 @@ struct MasterSlotInfo
     bool hasEditor = false;
     int channels = 0;         // how many of the file's channels the plugin processes; the rest pass through
     std::vector<int> mainParameters;   // a stock plugin's main controls (its frame's footer), by parameter index
+    bool failed = false;      // the plugin stopped working (it threw, or its bridge went away); it is skipped until reloaded
+    std::string failure;      // what it said, e.g. "write: Broken pipe"
 };
 
 // Theme colours for the frame stock plugins open in, as 0xAARRGGBB.
@@ -152,6 +154,7 @@ public:
     static constexpr int numMasterSlots = 8;
     std::string loadMasterPlugin (int slot, const std::string& pluginId);  // returns an error or empty
     void clearMasterSlot (int slot);
+    std::string reloadMasterSlot (int slot);   // a plugin that stopped working, with its last settings
     void moveMasterSlot (int from, int to);
     void setMasterSlotBypassed (int slot, bool);
     MasterSlotInfo masterSlot (int slot) const;

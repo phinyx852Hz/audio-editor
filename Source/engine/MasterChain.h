@@ -8,6 +8,7 @@
 #include <array>
 #include <atomic>
 #include <memory>
+#include <mutex>
 
 // Plugin hosting for the Master Section. Internal to the engine; the UI talks
 // to it through AudioEngine.
@@ -36,6 +37,7 @@ public:
     // Slots. All of these run on the message thread.
     std::string load (int slot, const std::string& pluginId);
     void clear (int slot);
+    std::string reload (int slot);   // a failed plugin, loaded again with its last saved settings
     void move (int from, int to);
     void setBypassed (int slot, bool);
     MasterSlotInfo info (int slot) const;
@@ -87,9 +89,45 @@ private:
         int compareSide = 0;              // A/B compare in the stock plugin frame: 0 = A, 1 = B
         juce::MemoryBlock otherSide;      // the settings of the side not being heard; empty until B is first used
         bool hasEditor = false;           // asked once at load: a VST3 builds its whole editor to answer
+
+        // A plugin that throws (yabridge throws "write: Broken pipe" when its Wine
+        // side has gone) is marked failed and never called again: not to process,
+        // not for its parameters, not even to be deleted, since its destructor
+        // would throw too and end PHINYX. Shared so the slot can move.
+        struct Health
+        {
+            std::atomic<bool> failed { false };
+            std::mutex mutex;
+            std::string why;
+            juce::MemoryBlock lastState;  // from the last save, to reload it with
+        };
+        std::shared_ptr<Health> health = std::make_shared<Health>();
+
+        bool usable() const { return plugin != nullptr && ! health->failed.load (std::memory_order_acquire); }
     };
 
     class PluginWindow;
+
+    // Runs a call into a slot's plugin; false (and the slot marked failed) if it threw.
+    template <typename Fn>
+    bool guard (const Slot& s, Fn&& fn) const
+    {
+        try
+        {
+            fn();
+            return true;
+        }
+        catch (const std::exception& e) { fail (s, e.what()); }
+        catch (...)                      { fail (s, "an unknown error"); }
+        return false;
+    }
+    static void fail (const Slot&, const std::string& why);
+    void discard (size_t index);
+    // Creates, restores and prepares a plugin; nullptr with `error` if that failed or threw.
+    std::unique_ptr<juce::AudioPluginInstance> start (const juce::PluginDescription&, const juce::MemoryBlock* state,
+                                                      bool& editor, juce::String& error) const;
+    bool setParameterFromTextUnguarded (int slot, int index, const std::string& text);
+    void openWindow (int slot);   // empties a slot; a failed plugin and its window are let go without being deleted
 
     static void addExtraFormats (juce::AudioPluginFormatManager&);   // formats JUCE does not have: CLAP
     // Runs `scanInThisProcess` in a copy of PHINYX; false if that crashed or hung.

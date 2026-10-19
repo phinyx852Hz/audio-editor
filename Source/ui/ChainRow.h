@@ -151,5 +151,6 @@ private:
     std::vector<DeviceCard*> cards;
     int current = 0, knob = -1;
     QString lastSignature;
+    int failedSlots = 0;   // slots whose plugin stopped working, as bits, so each failure is announced once
     QTimer timer;
 };

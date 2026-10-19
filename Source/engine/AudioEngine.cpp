@@ -811,6 +811,7 @@ std::string AudioEngine::finishPluginScan()                          { return im
 
 std::string AudioEngine::loadMasterPlugin (int slot, const std::string& id) { return impl->master.load (slot, id); }
 void AudioEngine::clearMasterSlot (int slot)                         { impl->master.clear (slot); }
+std::string AudioEngine::reloadMasterSlot (int slot)                 { return impl->master.reload (slot); }
 void AudioEngine::moveMasterSlot (int from, int to)                  { impl->master.move (from, to); }
 void AudioEngine::setMasterSlotBypassed (int slot, bool b)           { impl->master.setBypassed (slot, b); }
 int AudioEngine::masterChannels() const                              { return impl->master.channels(); }

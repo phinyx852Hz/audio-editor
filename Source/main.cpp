@@ -9,13 +9,46 @@
 #include <QDir>
 #include <QStandardPaths>
 
+#include <cstdio>
+#include <exception>
+
+namespace
+{
+    // A plugin or its bridge (yabridge, for example) can throw from any call
+    // PHINYX makes into it. The Master Section catches those itself; this is the
+    // last net for the rest, so a stray exception in an event is logged instead
+    // of ending the program with unsaved work.
+    class Application final : public QApplication
+    {
+    public:
+        using QApplication::QApplication;
+
+        bool notify (QObject* receiver, QEvent* event) override
+        {
+            try
+            {
+                return QApplication::notify (receiver, event);
+            }
+            catch (const std::exception& e)
+            {
+                std::fprintf (stderr, APP_DISPLAY_NAME ": an event threw and was stopped: %s\n", e.what());
+            }
+            catch (...)
+            {
+                std::fprintf (stderr, APP_DISPLAY_NAME ": an event threw and was stopped\n");
+            }
+            return false;
+        }
+    };
+}
+
 int main (int argc, char* argv[])
 {
     // A copy started to look inside one plugin file, away from the editor (see MasterChain).
     if (argc == 5 && std::string (argv[1]) == MasterChain::scanOption)
         return MasterChain::scanInThisProcess (argv[2], argv[3], juce::File (argv[4]));
 
-    QApplication app (argc, argv);
+    Application app (argc, argv);
     QApplication::setApplicationName (QStringLiteral (APP_ID));
     QApplication::setApplicationDisplayName (QStringLiteral (APP_DISPLAY_NAME));
     QApplication::setApplicationVersion (QStringLiteral (APP_VERSION));
