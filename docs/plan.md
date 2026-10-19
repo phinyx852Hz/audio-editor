@@ -678,6 +678,7 @@ Owner: "warping, time stretching audio, beat detection and how that will be inco
   - Quantize panel: Ableton's Amount and grid choices plus Cubase's Safe Range, Catch Range, Swing and Groove Quantize; groove templates extracted from hitpoints (Cubase) and from the A|B reference.
   - Loop export: smpl and acid chunks through our metadata layer (already reads and writes acid tempo).
   - Credits for every source go in README, About and third_party/README.md as each is ported.
+- **PHINYX names (owner, 2026-10-19: avoid legal issues).** Generic terms stay (warp marker, quantize, grid, strength, swing, groove, transient, slice, tempo, varispeed). Product-specific names are not used in the UI or docs except to credit sources: Cubase's "AudioWarp", "Hitpoints", "Musical Mode", "Free Warp", "Safe/Catch Range", and Ableton's warp mode names. Our names: Transients (the detected hits), Follow Tempo (a file tracking another tempo live), Stretch modes Drums, Melody, Full Mix, Full Mix + Voice (formants kept), Ambient (PaulXStretch) and Varispeed; Quantize panel fields Strength, Swing, Leave Within (events this close stay put), Reach (only events this close move) and Groove. Methods: Stretch and Slice. Credits naming the open-source projects we use are fine.
 - Later: the same warp engine feeds the sampler's Slice and Warp modes and the editor tracks (two tracks, A|B or album, never summed).
 
 ### Extra (after the main work): Visualizer
