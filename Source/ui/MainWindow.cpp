@@ -537,6 +537,13 @@ void MainWindow::registerCommands()
             setBand (0.0, 0.0);   // a frequency box only makes sense where it can be seen
         commands.action (QStringLiteral ("view.spectral"))->setChecked (waveform->isSpectral());
     })->setCheckable (true);
+    add ("view.pitchLine", Category::view, tr ("&Pitch Line"), { KS (Qt::SHIFT | Qt::Key_P) }, [this]
+    {
+        waveform->setPitchLine (! waveform->pitchLine());
+        if (waveform->pitchLine() && ! waveform->isSpectral())
+            commands.action (QStringLiteral ("view.spectral"))->trigger();   // the line is drawn over the spectrogram
+        commands.action (QStringLiteral ("view.pitchLine"))->setChecked (waveform->pitchLine());
+    })->setCheckable (true);
     add ("view.spectrogramSettings", Category::view, tr ("Spectrogram Se&ttings..."), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_D) }, [this]
     {
         if (! waveform->isSpectral())
@@ -642,7 +649,7 @@ void MainWindow::buildMenus()
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
-                               "view.overview", "view.spectral", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "-", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.references", "view.popOut", "view.resetLayout", "-",
+                               "view.overview", "view.spectral", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "-", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.references", "view.popOut", "view.resetLayout", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "-", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
@@ -926,6 +933,8 @@ void MainWindow::restoreLayout()
     waveform->setSpectral (spectral);
     waveform->setSpectrumSettings (spectrum::fromString (settings.value (QStringLiteral ("view/spectrum")).toString().toStdString()));
     commands.action (QStringLiteral ("view.spectral"))->setChecked (spectral);
+    waveform->setPitchLine (settings.value (QStringLiteral ("view/pitchLine"), false).toBool());
+    commands.action (QStringLiteral ("view.pitchLine"))->setChecked (waveform->pitchLine());
 
     // Load plugins and pop panels out again once the main window is on screen, so it opens first.
     QTimer::singleShot (0, this, [this]
@@ -975,6 +984,7 @@ void MainWindow::saveLayout()
     settings.setValue (QStringLiteral ("window/geometry"), saveGeometry());
     settings.setValue (QStringLiteral ("window/state"), saveState (layoutVersion));
     settings.setValue (QStringLiteral ("view/spectral"), waveform->isSpectral());
+    settings.setValue (QStringLiteral ("view/pitchLine"), waveform->pitchLine());
     settings.setValue (QStringLiteral ("view/focusFollowsMouse"), focusFollowsMouse->isEnabled());
     settings.setValue (QStringLiteral ("audio/separateOutputs"), engine.monitorMode() == AudioEngine::MonitorMode::separateOutputs);
     engine.saveMasterSection();

@@ -58,6 +58,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/Fft.cpp
     Source/core/SpectrumView.cpp
     Source/core/Generate.cpp
+    Source/core/Pitch.cpp
     Source/core/Nyquist.cpp
     Source/core/Album.cpp
     Source/engine/AudioCapture.cpp
@@ -236,6 +237,7 @@ if(PHINYX_BUILD_TESTS)
         Source/core/Fft.cpp
         Source/core/SpectrumView.cpp
         Source/core/Generate.cpp
+        Source/core/Pitch.cpp
         Source/core/Nyquist.cpp
         Source/core/Album.cpp)
     target_link_libraries(phinyx-core-tests PRIVATE phinyx_nyquist)

@@ -6,6 +6,7 @@
 
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPainterPath>
 #include <QWheelEvent>
 #include <QtConcurrent/QtConcurrentRun>
 #include <algorithm>
@@ -26,6 +27,42 @@ WaveformView::WaveformView (QWidget* parent) : QWidget (parent)
         spectrogramKey = pendingKey;
         update();  // paints, and asks again if the view changed meanwhile
     });
+    connect (&pitchWatcher, &QFutureWatcher<std::shared_ptr<pitch::Track>>::finished, this, [this]
+    {
+        const bool current = pitchData.get() == data.get() && ! pitchCancel->load();
+        if (current)
+            pitchTrack = pitchWatcher.result();
+        else
+            pitchFor = nullptr;   // the take changed meanwhile: work it out again
+        pitchData.reset();
+        update();
+    });
+}
+
+void WaveformView::setPitchLine (bool on)
+{
+    pitchShown = on;
+    update();
+}
+
+void WaveformView::requestPitch()
+{
+    if (! data || pitchFor == data.get())
+        return;
+    if (pitchWatcher.isRunning())
+    {
+        pitchCancel->store (true);   // finishes soon, then asks again
+        return;
+    }
+
+    pitchFor = data.get();
+    pitchData = data;
+    pitchTrack.reset();
+    pitchCancel = std::make_shared<std::atomic<bool>> (false);
+    pitchWatcher.setFuture (QtConcurrent::run ([d = data, cancel = pitchCancel]
+    {
+        return pitch::track (*d, {}, nullptr, cancel.get());
+    }));
 }
 
 void WaveformView::setSpectral (bool on)
@@ -270,6 +307,8 @@ void WaveformView::clear()
 {
     data.reset();
     markers.clear();
+    pitchTrack.reset();
+    pitchFor = nullptr;
     spectrogram = {};
     spectrogramKey = {};
     viewStart = viewLength = 0.0;
@@ -513,6 +552,9 @@ void WaveformView::paintEvent (QPaintEvent*)
             drawShape (g, laneHeight);
         }
 
+        if (spectral && pitchShown)
+            drawPitch (g, laneHeight);
+
         if (selEnd > selStart && ! (spectral && shape))
         {
             const auto x1 = frameToX (selStart), x2 = frameToX (selEnd);
@@ -688,6 +730,63 @@ void WaveformView::drawAmplitudeScale (QPainter& g, double lane)
     g.setFont (font());
 }
 
+void WaveformView::drawPitch (QPainter& g, double lane)
+{
+    requestPitch();
+    if (! pitchTrack)
+    {
+        if (pitchWatcher.isRunning())
+        {
+            g.setPen (QColor (235, 235, 235));
+            g.drawText (QRectF (0, 0, width() - 8.0, 20.0), Qt::AlignRight | Qt::AlignVCenter, tr ("Tracing pitch..."));
+        }
+        return;
+    }
+
+    // One path per voiced run, split where the pitch stops or the run jumps.
+    const auto& points = pitchTrack->points;
+    const auto first = (Frame) std::max (0.0, viewStart - pitchTrack->hop);
+    const auto last = (Frame) (viewStart + viewLength + pitchTrack->hop);
+    auto from = std::lower_bound (points.begin(), points.end(), first, [] (const pitch::Point& p, Frame f) { return p.at < f; });
+    const auto pixelsPerPoint = pitchTrack->hop * width() / std::max (1.0, viewLength);
+    const auto stride = std::max<std::ptrdiff_t> (1, (std::ptrdiff_t) (0.5 / std::max (1e-9, pixelsPerPoint)));
+
+    QPainterPath path;
+    bool open = false;
+    Frame previous = 0;
+    for (auto it = from; it < points.end() && it->at <= last; it += std::min (stride, points.end() - it))
+    {
+        if (it->hz <= 0.0f || (open && it->at - previous > pitchTrack->hop * stride * 2))
+        {
+            open = false;
+            if (it->hz <= 0.0f)
+                continue;
+        }
+        const QPointF p (frameToX (it->at), hzToY (it->hz));
+        if (open)
+            path.lineTo (p);
+        else
+            path.moveTo (p);
+        open = true;
+        previous = it->at;
+    }
+
+    g.save();
+    g.setRenderHint (QPainter::Antialiasing);
+    g.setBrush (Qt::NoBrush);
+    for (int ch = 0; ch < data->numChannels(); ++ch)
+    {
+        g.setClipRect (QRectF (0.0, lane * ch, width(), lane));
+        const auto lanePath = path.translated (0.0, lane * ch);
+        // White with a dark edge, so it reads on every colour map.
+        g.setPen (QPen (QColor (0, 0, 0, 200), 4.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        g.drawPath (lanePath);
+        g.setPen (QPen (QColor (255, 255, 255), 2.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        g.drawPath (lanePath);
+    }
+    g.restore();
+}
+
 void WaveformView::drawReadout (QPainter& g, double lane)
 {
     if (! data || hover.x() < 0.0 || ! underMouse() || lane < 1.0)
@@ -699,6 +798,10 @@ void WaveformView::drawReadout (QPainter& g, double lane)
     const auto seconds = (double) xToFrame (hover.x()) / data->sampleRate();
     auto text = tr ("%1 s   %2 Hz  %3").arg (seconds, 0, 'f', 3).arg (hz, 0, 'f', hz < 100.0 ? 1 : 0)
                     .arg (QString::fromStdString (spectrum::noteName (hz)));
+    if (pitchShown && pitchTrack)
+        if (const auto sung = pitchTrack->at (xToFrame (hover.x())); sung > 0.0f)
+            text += tr ("   pitch %1 Hz %2").arg ((double) sung, 0, 'f', sung < 100.0f ? 1 : 0)
+                        .arg (QString::fromStdString (spectrum::noteName (sung)));
     if (spectrogramKey == currentKey())
     {
         const auto px = (int) (hover.x() * spectrogram.columns / std::max (1, width()));

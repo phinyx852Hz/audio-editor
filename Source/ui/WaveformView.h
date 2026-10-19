@@ -2,6 +2,7 @@
 #pragma once
 
 #include "../core/AudioDocument.h"
+#include "../core/Pitch.h"
 #include "../core/Repair.h"
 #include "Spectrogram.h"
 
@@ -51,6 +52,11 @@ public:
     std::pair<double, double> frequencyRange() const;
     void zoomFrequency (double factor, double around = 0.5);   // factor > 1 zooms in; around: 0 bottom to 1 top
     bool showsAllFrequencies() const;
+
+    // The pitch line: the main voice's or instrument's pitch over time, traced
+    // over the spectrogram (worked out in the background, once per take).
+    void setPitchLine (bool);
+    bool pitchLine() const { return pitchShown; }
 
     // Vertical zoom of the waveform: 1 shows full scale, 4 makes it four times taller
     // (+12 dB), so quiet passages and fades can be seen. Alt+wheel over the waveform.
@@ -175,4 +181,13 @@ private:
     void drawAmplitudeScale (QPainter&, double laneHeight);
     void drawFrequencyAxis (QPainter&, double laneHeight);
     void drawReadout (QPainter&, double laneHeight);
+
+    bool pitchShown = false;
+    std::shared_ptr<const pitch::Track> pitchTrack;
+    const AudioData* pitchFor = nullptr;       // the take pitchTrack (or the one being worked out) belongs to
+    AudioDataPtr pitchData;                    // kept alive while it is worked out
+    std::shared_ptr<std::atomic<bool>> pitchCancel;
+    QFutureWatcher<std::shared_ptr<pitch::Track>> pitchWatcher;
+    void requestPitch();
+    void drawPitch (QPainter&, double laneHeight);
 };

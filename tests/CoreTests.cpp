@@ -13,6 +13,7 @@
 #include "../Source/core/Repair.h"
 #include "../Source/core/SpectrumView.h"
 #include "../Source/core/Generate.h"
+#include "../Source/core/Pitch.h"
 
 #include <algorithm>
 #include <cmath>
@@ -1251,6 +1252,56 @@ namespace
         }
         check (gen::noise (gen::Noise::white, -3.0, rate, 100, 7) == gen::noise (gen::Noise::white, -3.0, rate, 100, 7), "same seed, same noise");
     }
+    void testPitch()
+    {
+        const double rate = 48000.0;
+        auto toData = [&] (const std::vector<float>& x)
+        {
+            AudioData::Builder b (1, rate);
+            const float* p = x.data();
+            b.append (&p, (int) x.size());
+            return b.finish();
+        };
+        auto voicedNear = [] (const pitch::Track& t, double hz, double cents, Frame from, Frame to)
+        {
+            int good = 0, total = 0;
+            for (const auto& p : t.points)
+                if (p.at >= from && p.at < to)
+                {
+                    ++total;
+                    good += p.hz > 0.0f && std::abs (1200.0 * std::log2 (p.hz / hz)) <= cents;
+                }
+            return total > 0 ? (double) good / total : 0.0;
+        };
+
+        gen::Tone t;
+        t.startHz = t.endHz = 220.0;
+        const auto sine = pitch::track (*toData (gen::tone (t, rate, 48000)));
+        check (voicedNear (*sine, 220.0, 5.0, 4800, 43200) > 0.98, "sine 220 Hz tracked");
+        check (std::abs (sine->at (24000) - 220.0f) < 0.5f, "sine pitch " + std::to_string (sine->at (24000)));
+
+        t.wave = gen::Wave::sawtooth;
+        t.startHz = t.endHz = 110.0;
+        const auto saw = pitch::track (*toData (gen::tone (t, rate, 48000)));
+        check (voicedNear (*saw, 110.0, 5.0, 4800, 43200) > 0.98, "sawtooth 110 Hz tracked, not an overtone");
+
+        t.wave = gen::Wave::square;
+        t.startHz = 200.0;
+        t.endHz = 400.0;
+        const auto glide = pitch::track (*toData (gen::tone (t, rate, 96000)));
+        check (std::abs (glide->at (2400) - 200.0f) < 6.0f && std::abs (glide->at (93600) - 400.0f) < 10.0f,
+               "glide followed " + std::to_string (glide->at (2400)) + " to " + std::to_string (glide->at (93600)));
+        check (voicedNear (*glide, 282.8, 30.0, 47000, 49000) > 0.9, "glide passes the octave's middle");
+
+        const auto noise = pitch::track (*toData (gen::noise (gen::Noise::white, -6.0, rate, 48000, 3)));
+        int voiced = 0;
+        for (const auto& p : noise->points)
+            voiced += p.hz > 0.0f;
+        check (voiced < (int) noise->points.size() / 10, "white noise has (almost) no pitch: " + std::to_string (voiced));
+
+        const auto silence = pitch::track (*toData (std::vector<float> (48000, 0.0f)));
+        check (std::all_of (silence->points.begin(), silence->points.end(), [] (const pitch::Point& p) { return p.hz == 0.0f; }), "silence has no pitch");
+    }
 }
 
 int main()
@@ -1263,6 +1314,7 @@ int main()
     testSpectrum();
     testSpectrumView();
     testGenerate();
+    testPitch();
     testRepair();
     testRestoration();
     testShapes();
