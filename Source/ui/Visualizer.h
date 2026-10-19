@@ -7,9 +7,11 @@
 #include <QImage>
 #include <QWidget>
 #include <deque>
+#include <memory>
 #include <vector>
 
 class QComboBox;
+class MilkDrop;
 
 // The Visualizer: draws what PHINYX plays (after the Master Section), in one of
 // several views, artistic or scientific. MainWindow feeds it the scope samples
@@ -32,12 +34,20 @@ public:
 
     // `backdrop`: drawn behind the PHINYX window, so it takes no mouse or keys.
     VisualizerView (QWidget* parent, bool backdrop);
+    ~VisualizerView() override;
 
     void setMode (int index);
     int mode() const { return current; }
 
     void addSamples (const std::vector<float>& left, const std::vector<float>& right, double sampleRate);
     void tick();   // analyse what came in and repaint
+
+    // The MilkDrop view (projectM), made the first time it is shown.
+    bool isMilkDrop() const;
+    MilkDrop* milkDrop();
+    void milkDropStep (int direction);
+    void milkDropChoose (int index);
+    void reloadMilkDrop();
 
 Q_SIGNALS:
     void stepMode (int direction);
@@ -100,6 +110,9 @@ private:
     double cameraYaw = -32.0, cameraPitch = 28.0, cameraZoom = 1.0;   // the 3D views' camera (drag and wheel)
     QPointF dragFrom;
     QImage trail;   // the circle wave's afterglow
+
+    std::unique_ptr<MilkDrop> milk;
+    QImage milkFrame;
 
     struct Star { float x, y, z; };
     std::vector<Star> stars;

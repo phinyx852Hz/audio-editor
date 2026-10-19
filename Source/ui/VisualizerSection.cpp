@@ -6,8 +6,26 @@
 #include "Visualizer.h"
 #include "WaveformView.h"
 
+#if PHINYX_HAVE_PROJECTM
+ #include "MilkDrop.h"
+#endif
+
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QDir>
+#include <QFileInfo>
 #include <QInputDialog>
+#include <QKeyEvent>
+#include <QCoreApplication>
+#include <QLabel>
+#include <QLineEdit>
+#include <QListWidget>
+#include <QMessageBox>
+#include <QProcess>
+#include <QProgressDialog>
+#include <QStandardPaths>
 #include <QStatusBar>
+#include <QVBoxLayout>
 
 void MainWindow::registerVisualizerCommands()
 {
@@ -65,6 +83,27 @@ void MainWindow::registerVisualizerCommands()
         else
             waveform->setFocus();
     });
+
+#if PHINYX_HAVE_PROJECTM
+    // MilkDrop presets: these act on the visualizer showing (the window first), switching it to MilkDrop.
+    add ("view.milkdropNext", tr ("Next &MilkDrop Preset"), { KS (Qt::ALT | Qt::Key_F12) }, [this]
+    {
+        if (auto* view = showMilkDrop())
+        {
+            view->milkDropStep (1);
+            statusBar()->showMessage (tr ("MilkDrop: next preset"), 2000);
+        }
+    });
+    add ("view.milkdropPrevious", tr ("Previous MilkDrop Preset"), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_F12) }, [this]
+    {
+        if (auto* view = showMilkDrop())
+            view->milkDropStep (-1);
+    });
+    add ("view.milkdropChoose", tr ("Choose MilkDrop &Preset..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_F12) }, [this] { chooseMilkDropPreset(); })
+        ->setStatusTip (tr ("Pick a MilkDrop preset by name or category: fractal, particles, geometric, hypnotic, waveform"));
+    add ("view.milkdropDownload", tr ("&Download MilkDrop Presets..."), {}, [this] { downloadMilkDropPresets(); })
+        ->setStatusTip (tr ("Download the free Cream of the Crop collection of MilkDrop presets for the visualizer"));
+#endif
 
     // Each view on its own, so Find lists them all.
     const auto& list = VisualizerView::modes();
@@ -166,3 +205,186 @@ void MainWindow::feedVisualizers()
             view->tick();
         }
 }
+
+#if PHINYX_HAVE_PROJECTM
+namespace
+{
+    // Up, Down, Page Up and Page Down in a search box move through its list.
+    class ListKeys final : public QObject
+    {
+    public:
+        ListKeys (QListWidget* l, QObject* parent) : QObject (parent), list (l) {}
+
+        bool eventFilter (QObject*, QEvent* e) override
+        {
+            if (e->type() != QEvent::KeyPress)
+                return false;
+            const auto key = static_cast<QKeyEvent*> (e)->key();
+            if (key != Qt::Key_Up && key != Qt::Key_Down && key != Qt::Key_PageUp && key != Qt::Key_PageDown)
+                return false;
+            QKeyEvent copy (QEvent::KeyPress, key, Qt::NoModifier);
+            QCoreApplication::sendEvent (list, &copy);
+            return true;
+        }
+
+    private:
+        QListWidget* list;
+    };
+}
+
+// The visualizer that is showing (the window first, else the one behind PHINYX), switched to MilkDrop.
+// If none is showing, the window opens.
+VisualizerView* MainWindow::showMilkDrop()
+{
+    const int milkdrop = VisualizerView::modeIndex (QStringLiteral ("milkdrop"));
+    if (visualMode != milkdrop)
+        setVisualMode (milkdrop, true);
+    if (visualizer != nullptr && visualizer->isVisible())
+        return visualizer->view();
+    if (visualBackdrop != nullptr && visualBackdrop->isVisible())
+        return visualBackdrop;
+    setVisualMode (milkdrop, true);
+    return visualizer != nullptr ? visualizer->view() : nullptr;
+}
+
+void MainWindow::chooseMilkDropPreset()
+{
+    auto* view = showMilkDrop();
+    auto* milk = view != nullptr ? view->milkDrop() : nullptr;
+    if (milk == nullptr)
+        return;
+    const auto all = milk->presets();
+    if (all.isEmpty())
+    {
+        downloadMilkDropPresets();
+        return;
+    }
+
+    QDialog dialog (this);
+    dialog.setWindowTitle (tr ("MilkDrop Presets"));
+    auto* filter = new QLineEdit (&dialog);
+    filter->setPlaceholderText (tr ("Type to search by name or category (Fractal, Particles, Waveform...)"));
+    auto* list = new QListWidget (&dialog);
+    for (int i = 0; i < all.size(); ++i)
+    {
+        const QFileInfo info (all[i]);
+        const auto category = MilkDrop::categoryOf (all[i]);
+        auto* item = new QListWidgetItem (category.isEmpty() ? info.completeBaseName()
+                                                             : QStringLiteral ("%1  /  %2").arg (category, info.completeBaseName()), list);
+        item->setData (Qt::UserRole, i);
+    }
+    list->setCurrentRow (milk->position());
+    connect (filter, &QLineEdit::textChanged, &dialog, [list] (const QString& text)
+    {
+        const auto words = text.split (QLatin1Char (' '), Qt::SkipEmptyParts);
+        QListWidgetItem* first = nullptr;
+        for (int i = 0; i < list->count(); ++i)
+        {
+            auto* item = list->item (i);
+            const bool match = std::all_of (words.begin(), words.end(), [item] (const QString& w) { return item->text().contains (w, Qt::CaseInsensitive); });
+            item->setHidden (! match);
+            if (match && first == nullptr)
+                first = item;
+        }
+        if (first != nullptr)
+            list->setCurrentItem (first);
+    });
+    // Moving through the list tries each preset at once; Enter keeps it, Esc goes back.
+    const int before = milk->position();
+    connect (list, &QListWidget::currentItemChanged, &dialog, [view] (QListWidgetItem* item)
+    {
+        if (item != nullptr)
+            view->milkDropChoose (item->data (Qt::UserRole).toInt());
+    });
+    connect (list, &QListWidget::itemActivated, &dialog, &QDialog::accept);
+    filter->installEventFilter (new ListKeys (list, filter));
+    auto* buttons = new QDialogButtonBox (QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect (buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect (buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    auto* layout = new QVBoxLayout (&dialog);
+    layout->addWidget (new QLabel (tr ("%1 presets. Moving through the list shows each one; Enter keeps it.").arg (all.size()), &dialog));
+    layout->addWidget (filter);
+    layout->addWidget (list, 1);
+    layout->addWidget (buttons);
+    dialog.resize (560, 600);
+    // Up and Down in the search box move through the list.
+    connect (filter, &QLineEdit::returnPressed, &dialog, &QDialog::accept);
+    filter->setFocus();
+    if (dialog.exec() != QDialog::Accepted)
+        view->milkDropChoose (before);
+}
+
+void MainWindow::downloadMilkDropPresets()
+{
+    const auto folder = MilkDrop::userPresetFolder();
+    const auto presets = folder + QStringLiteral ("/cream-of-the-crop");
+    if (QFileInfo (presets).isDir())
+    {
+        QMessageBox::information (this, tr ("MilkDrop Presets"), tr ("The Cream of the Crop presets are already in %1.").arg (presets));
+        return;
+    }
+    if (QStandardPaths::findExecutable (QStringLiteral ("git")).isEmpty())
+    {
+        QMessageBox::warning (this, tr ("MilkDrop Presets"), tr ("Downloading needs git. Install it with:\n\n    sudo pacman -S git"));
+        return;
+    }
+    if (QMessageBox::question (this, tr ("MilkDrop Presets"),
+                               tr ("Download the free \"Cream of the Crop\" MilkDrop collection (9,795 presets curated by ISOSCELES, "
+                                   "about 70 MB) and the MilkDrop texture pack from the projectM project on GitHub into %1?").arg (folder))
+        != QMessageBox::Yes)
+        return;
+
+    QDir().mkpath (folder);
+    QProgressDialog progress (tr ("Downloading MilkDrop presets..."), tr ("Cancel"), 0, 0, this);
+    progress.setWindowModality (Qt::WindowModal);
+    progress.setMinimumDuration (0);
+    progress.show();
+
+    const auto clone = [&] (const QString& url, const QString& into)
+    {
+        QProcess git;
+        git.start (QStringLiteral ("git"), { QStringLiteral ("clone"), QStringLiteral ("--depth"), QStringLiteral ("1"), url, into });
+        while (! git.waitForFinished (100))
+        {
+            QCoreApplication::processEvents();
+            if (progress.wasCanceled())
+            {
+                git.kill();
+                git.waitForFinished();
+                QDir (into).removeRecursively();
+                return false;
+            }
+        }
+        if (git.exitStatus() != QProcess::NormalExit || git.exitCode() != 0)
+        {
+            QMessageBox::warning (this, tr ("MilkDrop Presets"), tr ("The download failed:\n%1").arg (QString::fromLocal8Bit (git.readAllStandardError()).trimmed()));
+            QDir (into).removeRecursively();
+            return false;
+        }
+        QDir (into + QStringLiteral ("/.git")).removeRecursively();   // only the files are needed
+        return true;
+    };
+    const auto partial = folder + QStringLiteral ("/.cream-of-the-crop-download");
+    QDir (partial).removeRecursively();
+    if (! clone (QStringLiteral ("https://github.com/projectM-visualizer/presets-cream-of-the-crop.git"), partial))
+        return;
+    QDir().rename (partial, presets);
+    if (! QFileInfo (folder + QStringLiteral ("/textures")).isDir())
+    {
+        const auto pack = folder + QStringLiteral ("/.texture-pack");
+        QDir (pack).removeRecursively();
+        if (clone (QStringLiteral ("https://github.com/projectM-visualizer/presets-milkdrop-texture-pack.git"), pack))
+        {
+            QDir().rename (pack + QStringLiteral ("/textures"), folder + QStringLiteral ("/textures"));
+            QDir (pack).removeRecursively();
+        }
+    }
+    progress.close();
+
+    for (auto* view : { visualizer != nullptr ? visualizer->view() : nullptr, visualBackdrop })
+        if (view != nullptr)
+            view->reloadMilkDrop();
+    statusBar()->showMessage (tr ("MilkDrop presets downloaded to %1").arg (folder), 6000);
+    showMilkDrop();
+}
+#endif

@@ -215,6 +215,13 @@ target_link_libraries(${APP_ID} PRIVATE phinyx_rubberband)
 include(cmake/Mysofa.cmake)
 target_link_libraries(${APP_ID} PRIVATE phinyx_mysofa)
 target_compile_definitions(${APP_ID} PRIVATE PHINYX_DEFAULT_HRTF="${PHINYX_DEFAULT_HRTF}")
+
+# projectM (cmake/ProjectM.cmake): MilkDrop presets in the Visualizer.
+include(cmake/ProjectM.cmake)
+if(PHINYX_HAVE_PROJECTM)
+    target_sources(${APP_ID} PRIVATE Source/ui/MilkDrop.cpp)
+    target_link_libraries(${APP_ID} PRIVATE phinyx_projectm)
+endif()
 install(FILES "${PHINYX_DEFAULT_HRTF}" DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/hrtf")
 
 # Nyquist effects (cmake/Nyquist.cmake): libnyquist, its runtime and the bundled plug-ins.

@@ -248,6 +248,9 @@ private:
     void setVisualMode (int index, bool openIfHidden);
     void toggleVisualizerBehind();
     void feedVisualizers();
+    class VisualizerView* showMilkDrop();
+    void chooseMilkDropPreset();
+    void downloadMilkDropPresets();
     class VisualizerWindow* visualizer = nullptr;
     class VisualizerView* visualBackdrop = nullptr;
     int visualMode = 0;

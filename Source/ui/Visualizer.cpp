@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "Visualizer.h"
 #include "Theme.h"
+#if PHINYX_HAVE_PROJECTM
+ #include "MilkDrop.h"
+#endif
 
 #include <QCloseEvent>
 #include <QComboBox>
@@ -101,6 +104,9 @@ const std::vector<VisualizerView::Mode>& VisualizerView::modes()
         { "spectrogram", QT_TRANSLATE_NOOP ("VisualizerView", "Spectrogram"),       true,  QT_TRANSLATE_NOOP ("VisualizerView", "Frequency over time, scrolling, log frequency, -100 to 0 dBFS") },
         { "waterfall",   QT_TRANSLATE_NOOP ("VisualizerView", "Waterfall"),         true,  QT_TRANSLATE_NOOP ("VisualizerView", "Recent spectra stacked in depth, newest in front") },
         { "surface",     QT_TRANSLATE_NOOP ("VisualizerView", "3D Spectrum"),       true,  QT_TRANSLATE_NOOP ("VisualizerView", "Frequency, time and level as a coloured surface, about 4 s deep; drag to turn, wheel to zoom") },
+#if PHINYX_HAVE_PROJECTM
+        { "milkdrop",    QT_TRANSLATE_NOOP ("VisualizerView", "MilkDrop"),          false, QT_TRANSLATE_NOOP ("VisualizerView", "MilkDrop presets through projectM; Up/Down change the preset, L keeps it") },
+#endif
     };
     return list;
 }
@@ -155,6 +161,52 @@ VisualizerView::VisualizerView (QWidget* parent, bool behind) : QWidget (parent)
     setMinimumSize (240, 140);
 }
 
+VisualizerView::~VisualizerView() = default;
+
+bool VisualizerView::isMilkDrop() const
+{
+    return QLatin1String (modes()[(size_t) current].id) == QLatin1String ("milkdrop");
+}
+
+MilkDrop* VisualizerView::milkDrop()
+{
+#if PHINYX_HAVE_PROJECTM
+    if (milk == nullptr)
+        milk = std::make_unique<MilkDrop>();
+    return milk.get();
+#else
+    return nullptr;
+#endif
+}
+
+void VisualizerView::milkDropStep (int direction)
+{
+#if PHINYX_HAVE_PROJECTM
+    if (auto* m = milkDrop())
+        direction > 0 ? m->next() : m->previous();
+#else
+    Q_UNUSED (direction);
+#endif
+}
+
+void VisualizerView::milkDropChoose (int index)
+{
+#if PHINYX_HAVE_PROJECTM
+    if (auto* m = milkDrop())
+        m->choose (index);
+#else
+    Q_UNUSED (index);
+#endif
+}
+
+void VisualizerView::reloadMilkDrop()
+{
+#if PHINYX_HAVE_PROJECTM
+    if (milk != nullptr)
+        milk->reloadPresets();
+#endif
+}
+
 void VisualizerView::setMode (int index)
 {
     current = std::clamp (index, 0, (int) modes().size() - 1);
@@ -176,11 +228,28 @@ void VisualizerView::addSamples (const std::vector<float>& left, const std::vect
     }
     if (n > 0)
         lastSamplesAt = clock.elapsed();
+#if PHINYX_HAVE_PROJECTM
+    if (milk != nullptr && isMilkDrop())
+        milk->addSamples (left.data(), right.data(), n);
+#endif
 }
 
 void VisualizerView::tick()
 {
     analyse();
+#if PHINYX_HAVE_PROJECTM
+    if (isMilkDrop() && isVisible())
+    {
+        auto* m = milkDrop();
+        // At most about 960 pixels across, scaled up: MilkDrop is soft anyway, and reading it back costs.
+        const double scale = std::min (1.0, 960.0 / std::max (1, width()));
+        milkFrame = m->render (QSize (std::max (16, (int) (width() * scale)), std::max (16, (int) (height() * scale))));
+        if (m->changed())
+            modeShownAt = clock.elapsed();
+    }
+    else
+        milkFrame = QImage();
+#endif
     update();
 }
 
@@ -368,7 +437,27 @@ void VisualizerView::paintEvent (QPaintEvent*)
     g.setRenderHint (QPainter::Antialiasing);
     const auto id = QLatin1String (modes()[(size_t) current].id);
 
-    if (id == QLatin1String ("circleWave"))
+    if (id == QLatin1String ("milkdrop"))
+    {
+        g.fillRect (rect(), Qt::black);
+        if (! milkFrame.isNull())
+        {
+            g.setRenderHint (QPainter::SmoothPixmapTransform);
+            g.drawImage (QRectF (rect()), milkFrame);
+        }
+#if PHINYX_HAVE_PROJECTM
+        else if (milk != nullptr && (! milk->ready() || milk->presetCount() == 0))
+        {
+            g.setPen (colour ("text"));
+            g.drawText (rect().adjusted (40, 40, -40, -40), Qt::AlignCenter | Qt::TextWordWrap,
+                        ! milk->ready() ? milk->error()
+                                        : tr ("No MilkDrop presets yet.\n\nGet the free \"Cream of the Crop\" collection (9,795 presets, sorted into Dancer, "
+                                              "Drawing, Fractal, Geometric, Hypnotic, Particles, Reaction, Sparkle, Supernova and Waveform) with "
+                                              "View > Download MilkDrop Presets, or put your own .milk files in %1.").arg (MilkDrop::userPresetFolder()));
+        }
+#endif
+    }
+    else if (id == QLatin1String ("circleWave"))
         drawCircleWave (g);
     else
     {
@@ -408,8 +497,15 @@ void VisualizerView::drawTitle (QPainter& g)
     font.setPointSizeF (font.pointSizeF() / 1.3);
     g.setFont (font);
     g.setPen (withAlpha (colour ("text"), fade * 0.7));
-    g.drawText (QRectF (16, 34, width() - 32, 20), Qt::AlignLeft | Qt::AlignVCenter,
-                tr (m.about) + tr ("   (Left/Right: other views, F11: full screen)"));
+    auto about = tr (m.about) + tr ("   (Left/Right: other views, F11: full screen)");
+#if PHINYX_HAVE_PROJECTM
+    if (isMilkDrop() && milk != nullptr && milk->presetCount() > 0)
+        about = tr ("%1%2   (%3 of %4%5; Up/Down: other presets, L: keep this one)")
+                    .arg (milk->presetCategory().isEmpty() ? QString() : milk->presetCategory() + QStringLiteral (" / "), milk->presetName())
+                    .arg (milk->position() + 1).arg (milk->presetCount())
+                    .arg (milk->locked() ? tr (", kept") : QString());
+#endif
+    g.drawText (QRectF (16, 34, width() - 32, 20), Qt::AlignLeft | Qt::AlignVCenter, about);
 }
 
 void VisualizerView::drawBars (QPainter& g, bool radial)
@@ -1070,6 +1166,22 @@ void VisualizerView::wheelEvent (QWheelEvent* e)
 //==============================================================================
 void VisualizerView::keyPressEvent (QKeyEvent* e)
 {
+#if PHINYX_HAVE_PROJECTM
+    if (isMilkDrop() && milk != nullptr)
+    {
+        if (e->key() == Qt::Key_Up || e->key() == Qt::Key_PageUp || e->key() == Qt::Key_Down || e->key() == Qt::Key_PageDown)
+        {
+            milkDropStep (e->key() == Qt::Key_Down || e->key() == Qt::Key_PageDown ? 1 : -1);
+            return;
+        }
+        if (e->key() == Qt::Key_L && e->modifiers() == Qt::NoModifier)
+        {
+            milk->setLocked (! milk->locked());
+            modeShownAt = clock.elapsed();
+            return;
+        }
+    }
+#endif
     switch (e->key())
     {
         case Qt::Key_Left:
