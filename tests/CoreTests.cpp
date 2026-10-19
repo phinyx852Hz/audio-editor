@@ -11,6 +11,7 @@
 #include "../Source/core/Album.h"
 #include "../Source/core/Nyquist.h"
 #include "../Source/core/Repair.h"
+#include "../Source/core/SpectrumView.h"
 
 #include <algorithm>
 #include <cmath>
@@ -1113,6 +1114,68 @@ namespace
         Album empty;
         check (empty.mixdown() != nullptr && empty.mixdown()->length() == 0, "album: empty mixdown");
     }
+    void testSpectrumView()
+    {
+        using namespace spectrum;
+        // Scales map back and forth.
+        for (auto scale : { Scale::linear, Scale::log, Scale::mel })
+            for (double hz : { 50.0, 440.0, 3000.0, 18000.0 })
+                check (near (frequency (scale, position (scale, hz, 20.0, 24000.0), 20.0, 24000.0), hz, hz * 1.0e-9), "scale round trip");
+        check (near (hzToMel (1000.0), 1000.0, 0.5), "1 kHz is about 1000 mel");
+        check (noteName (440.0) == "A4", "A4");
+        check (noteName (261.63) == "C4", "middle C");
+
+        // Settings survive storing; nonsense is clamped.
+        Settings s;
+        s.windowSize = 8192; s.overlap = 8; s.oversample = 2; s.scale = Scale::mel; s.bins = Bins::frequencies;
+        s.normalise = Normalise::view; s.gainDb = 6.5; s.rangeDb = 90.0; s.colourMap = 3; s.window = Window::blackmanHarris;
+        check (fromString (toString (s)) == s, "settings round trip");
+        check (fromString ("window=3000;overlap=99").windowSize == 4096 && fromString ("window=3000;overlap=99").overlap == 16, "settings clamped");
+
+        // A full-scale sine reads about 0 dB at its bin, and reassignment finds its frequency between bins.
+        const double rate = 48000.0, freq = 1003.7;
+        Settings plain;
+        Analyzer analyzer (plain, rate);
+        std::vector<float> input ((size_t) analyzer.windowSize()), db ((size_t) analyzer.numBins()), hz ((size_t) analyzer.numBins());
+        for (size_t i = 0; i < input.size(); ++i)
+            input[i] = (float) std::sin (2.0 * 3.14159265358979 * freq * (double) i / rate);
+        analyzer.analyse (input.data(), db.data(), hz.data());
+        const auto peak = (int) (std::max_element (db.begin(), db.end()) - db.begin());
+        check (near (db[(size_t) peak], 0.0, 1.5), "sine level " + std::to_string (db[(size_t) peak]));
+        check (near (hz[(size_t) peak], freq, 0.5), "reassigned " + std::to_string (hz[(size_t) peak]) + " Hz, bin " + std::to_string (peak * rate / 2048));
+        check (near (hz[(size_t) peak + 1], freq, 2.0), "neighbour bin reassigned too " + std::to_string (hz[(size_t) peak + 1]));
+
+        // Rendering: the sine's row is the loudest in each column, on every scale and bin mode.
+        auto sine = makeSine (1, 48000, freq, 0.5);
+        for (auto bins : { Bins::all, Bins::peaks, Bins::frequencies })
+            for (auto scale : { Scale::linear, Scale::log, Scale::mel })
+            {
+                Settings r;
+                r.bins = bins;
+                r.scale = scale;
+                const int columns = 40, rows = 200;
+                const auto lanes = render (*sine, r, 0.0, 48000.0, columns, rows, 0.0, 0.0);
+                const auto& lane = lanes[0];
+                const auto expected = (int) ((1.0 - position (scale, freq, 0.0, 24000.0)) * rows);
+                int good = 0;
+                for (int x = 2; x < columns - 2; ++x)
+                {
+                    int loudest = 0;
+                    for (int y = 1; y < rows; ++y)
+                        if (lane[(size_t) (y * columns + x)] > lane[(size_t) (loudest * columns + x)])
+                            loudest = y;
+                    good += std::abs (loudest - expected) <= 1;
+                }
+                check (good == columns - 4, "rendered sine row, mode " + std::to_string ((int) bins) + " scale " + std::to_string ((int) scale));
+            }
+
+        // Column normalising puts each column's top at 0 dB.
+        Settings n;
+        n.normalise = Normalise::column;
+        const auto quiet = makeSine (1, 48000, 500.0, 0.01);
+        const auto lane = render (*quiet, n, 0.0, 48000.0, 10, 100, 0.0, 0.0)[0];
+        check (near (*std::max_element (lane.begin(), lane.end()), 0.0, 0.01), "column normalised to 0 dB");
+    }
 }
 
 int main()
@@ -1123,6 +1186,7 @@ int main()
     testLayouts();
     testStereoize();
     testSpectrum();
+    testSpectrumView();
     testRepair();
     testRestoration();
     testShapes();

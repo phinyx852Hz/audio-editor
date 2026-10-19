@@ -364,6 +364,7 @@ private:
     // The Batch Processor (BatchWindow.h), made when first opened.
     void showBatch();
     class BatchWindow* batchWindow = nullptr;
+    class SpectrogramDialog* spectrogramDialog = nullptr;
     std::mutex masterRenderLock;   // batch workers render through the Master Section one at a time
 
     Recovery recovery;

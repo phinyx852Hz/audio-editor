@@ -56,6 +56,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/Repair.cpp
     Source/core/Restoration.cpp
     Source/core/Fft.cpp
+    Source/core/SpectrumView.cpp
     Source/core/Nyquist.cpp
     Source/core/Album.cpp
     Source/engine/AudioCapture.cpp
@@ -101,7 +102,8 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/FindPanel.cpp
     Source/ui/Goniometer.cpp
     Source/ui/NyquistUi.cpp
-    Source/ui/WaveformView.cpp)
+    Source/ui/WaveformView.cpp
+    Source/ui/SpectrogramDialog.cpp)
 
 # CLAP plugin hosting needs only the CLAP headers: a local checkout, the
 # system's (clap/clap.h, e.g. the clap package), or the pinned release.
@@ -230,6 +232,7 @@ if(PHINYX_BUILD_TESTS)
         Source/core/Repair.cpp
         Source/core/Restoration.cpp
         Source/core/Fft.cpp
+        Source/core/SpectrumView.cpp
         Source/core/Nyquist.cpp
         Source/core/Album.cpp)
     target_link_libraries(phinyx-core-tests PRIVATE phinyx_nyquist)

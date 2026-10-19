@@ -3,6 +3,7 @@
 
 #include "../core/AudioDocument.h"
 #include "../core/Repair.h"
+#include "Spectrogram.h"
 
 #include <QFutureWatcher>
 #include <QImage>
@@ -38,11 +39,18 @@ public:
     void zoomToFit();
     void zoomToSelection();
 
-    // Spectral display (log frequency) instead of the waveform. There a drag
-    // selects a box of time and frequency; a drag over nearly the whole height
-    // selects every frequency.
+    // Spectral display instead of the waveform. There a drag selects a box of
+    // time and frequency; a drag over nearly the whole height selects every
+    // frequency shown. Alt+wheel zooms the frequencies around the mouse.
     void setSpectral (bool);
     bool isSpectral() const { return spectral; }
+    void setSpectrumSettings (const spectrum::Settings&);
+    const spectrum::Settings& spectrumSettings() const { return spectrumSet; }
+    // The frequencies shown, low to high (high 0 = half the sample rate).
+    void setFrequencyRange (double low, double high);
+    std::pair<double, double> frequencyRange() const;
+    void zoomFrequency (double factor, double around = 0.5);   // factor > 1 zooms in; around: 0 bottom to 1 top
+    bool showsAllFrequencies() const;
 
     // The selection's frequency band in Hz (none when high <= low), drawn as a box in the spectral view.
     void setBand (double lowHz, double highHz);
@@ -75,6 +83,7 @@ Q_SIGNALS:
     // While a fade handle is dragged, and when it is let go. Curve: -1 to +1 (see dsp::curvedFadeGain).
     void fadeDragged (bool fadeIn, Frame length, double curve);
     void fadeReleased (bool fadeIn, Frame length, double curve);
+    void frequencyRangeChanged();
 
 protected:
     void paintEvent (QPaintEvent*) override;
@@ -115,6 +124,8 @@ private:
         double viewStart = 0.0, viewLength = 0.0;
         QSize size;
         QString theme;
+        spectrum::Settings settings;
+        double low = 0.0, high = 0.0;
         bool operator== (const SpectrogramKey&) const = default;
     };
 
@@ -147,7 +158,11 @@ private:
     float loadProgress = 0.0f;
 
     bool spectral = false;
-    QImage spectrogram;
+    SpectrogramPicture spectrogram;
     SpectrogramKey spectrogramKey, pendingKey;
-    QFutureWatcher<QImage> spectrogramWatcher;
+    QFutureWatcher<SpectrogramPicture> spectrogramWatcher;
+    spectrum::Settings spectrumSet;
+    double freqLow = 0.0, freqHigh = 0.0;   // as asked; high 0 = half the sample rate
+    void drawFrequencyAxis (QPainter&, double laneHeight);
+    void drawReadout (QPainter&, double laneHeight);
 };

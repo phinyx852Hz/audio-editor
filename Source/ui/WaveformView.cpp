@@ -20,7 +20,7 @@ WaveformView::WaveformView (QWidget* parent) : QWidget (parent)
     setAccessibleDescription (tr ("Audio waveform. Arrow keys move the cursor, Shift+arrows select, Space plays."));
     setMinimumSize (320, 160);
 
-    connect (&spectrogramWatcher, &QFutureWatcher<QImage>::finished, this, [this]
+    connect (&spectrogramWatcher, &QFutureWatcher<SpectrogramPicture>::finished, this, [this]
     {
         spectrogram = spectrogramWatcher.result();
         spectrogramKey = pendingKey;
@@ -32,6 +32,63 @@ void WaveformView::setSpectral (bool on)
 {
     spectral = on;
     update();
+}
+
+void WaveformView::setSpectrumSettings (const spectrum::Settings& s)
+{
+    if (s == spectrumSet)
+        return;
+    const auto rescaled = s.scale != spectrumSet.scale;
+    spectrumSet = s;
+    if (rescaled)
+    {
+        ++shapeVersion;   // the drawn shape's rows move
+        Q_EMIT frequencyRangeChanged();
+    }
+    update();
+}
+
+std::pair<double, double> WaveformView::frequencyRange() const
+{
+    const auto nyquist = data ? data->sampleRate() / 2.0 : 24000.0;
+    const auto high = freqHigh <= 0.0 ? nyquist : std::min (freqHigh, nyquist);
+    auto low = spectrum::lowestFor (spectrumSet.scale, freqLow);
+    if (spectrumSet.scale == spectrum::Scale::log && freqLow <= 0.0)
+        low = 20.0;   // the log scale starts at 20 Hz unless zoomed lower
+    return { std::min (low, high * 0.5), high };
+}
+
+bool WaveformView::showsAllFrequencies() const
+{
+    const auto [low, high] = frequencyRange();
+    const auto nyquist = data ? data->sampleRate() / 2.0 : 24000.0;
+    return high >= nyquist - 1.0 && low <= (spectrumSet.scale == spectrum::Scale::log ? 20.0 : 1.0);
+}
+
+void WaveformView::setFrequencyRange (double low, double high)
+{
+    freqLow = std::max (0.0, low);
+    freqHigh = std::max (0.0, high);
+    ++shapeVersion;
+    Q_EMIT frequencyRangeChanged();
+    update();
+}
+
+void WaveformView::zoomFrequency (double factor, double around)
+{
+    const auto [low, high] = frequencyRange();
+    const auto nyquist = data ? data->sampleRate() / 2.0 : 24000.0;
+    const auto scale = spectrumSet.scale;
+    around = std::clamp (around, 0.0, 1.0);
+    const auto fullLow = spectrum::lowestFor (scale, 0.0);
+    // Zoom in the scale's own spacing, keeping the frequency under `around` in place.
+    auto newLow = spectrum::frequency (scale, around - around / factor, low, high);
+    auto newHigh = spectrum::frequency (scale, around + (1.0 - around) / factor, low, high);
+    newLow = std::max (newLow, scale == spectrum::Scale::log ? fullLow : 0.0);
+    newHigh = std::min (newHigh, nyquist);
+    if (newHigh - newLow < 20.0 || newHigh / std::max (newLow, 1.0) < 1.02)
+        return;   // as close as it goes
+    setFrequencyRange (newLow, newHigh >= nyquist - 0.5 ? 0.0 : newHigh);
 }
 
 void WaveformView::setBand (double lowHz, double highHz)
@@ -131,24 +188,25 @@ double WaveformView::laneHeight() const
     return (double) height() / std::max (1, data ? data->numChannels() : 1);
 }
 
-// The same log scale as the spectrogram: 20 Hz at the bottom of a lane, half the sample rate at the top.
+// The spectrogram's scale: the low end of the range at the bottom of a lane, the high end at the top.
 double WaveformView::yToHz (double y) const
 {
-    const auto nyquist = data ? data->sampleRate() / 2.0 : 24000.0;
+    const auto [low, high] = frequencyRange();
     const auto t = std::clamp (y / std::max (1.0, laneHeight()), 0.0, 1.0);
-    return 20.0 * std::pow (nyquist / 20.0, 1.0 - t);
+    return spectrum::frequency (spectrumSet.scale, 1.0 - t, low, high);
 }
 
 double WaveformView::hzToY (double hz) const
 {
-    const auto nyquist = data ? data->sampleRate() / 2.0 : 24000.0;
-    hz = std::clamp (hz, 20.0, nyquist);
-    return (1.0 - std::log (hz / 20.0) / std::log (nyquist / 20.0)) * laneHeight();
+    const auto [low, high] = frequencyRange();
+    const auto p = spectrum::position (spectrumSet.scale, std::clamp (hz, low, high), low, high);
+    return (1.0 - p) * laneHeight();
 }
 
 WaveformView::SpectrogramKey WaveformView::currentKey() const
 {
-    return { data.get(), viewStart, viewLength, size(), Theme::current().name };
+    const auto [low, high] = frequencyRange();
+    return { data.get(), viewStart, viewLength, size(), Theme::current().name, spectrumSet, low, high };
 }
 
 void WaveformView::requestSpectrogram()
@@ -159,7 +217,7 @@ void WaveformView::requestSpectrogram()
     pendingKey = currentKey();
     spectrogramWatcher.setFuture (QtConcurrent::run ([d = data, key = pendingKey, gradient = Theme::current().spectrogram]
     {
-        return renderSpectrogram (*d, key.viewStart, key.viewLength, key.size, gradient);
+        return renderSpectrogram (*d, key.viewStart, key.viewLength, key.size, gradient, key.settings, key.low, key.high);
     }));
 }
 
@@ -190,7 +248,7 @@ void WaveformView::clear()
 {
     data.reset();
     markers.clear();
-    spectrogram = QImage();
+    spectrogram = {};
     spectrogramKey = {};
     viewStart = viewLength = 0.0;
     cursor = selStart = selEnd = 0;
@@ -326,10 +384,10 @@ void WaveformView::paintEvent (QPaintEvent*)
         if (spectral)
         {
             requestSpectrogram();
-            if (! spectrogram.isNull())
+            if (! spectrogram.image.isNull())
             {
                 g.setOpacity (Theme::opacity());
-                g.drawImage (rect(), spectrogram);  // stretched while a fresh one renders
+                g.drawImage (rect(), spectrogram.image);  // stretched while a fresh one renders
                 g.setOpacity (1.0);
             }
             else
@@ -422,7 +480,10 @@ void WaveformView::paintEvent (QPaintEvent*)
         }
 
         if (spectral)
+        {
+            drawFrequencyAxis (g, laneHeight);
             drawShape (g, laneHeight);
+        }
 
         if (selEnd > selStart && ! (spectral && shape))
         {
@@ -472,6 +533,8 @@ void WaveformView::paintEvent (QPaintEvent*)
         g.drawLine (QPointF (cx, 0), QPointF (cx, height()));
 
         drawFades (g);
+        if (spectral)
+            drawReadout (g, laneHeight);
     }
 
     if (hasFocus())
@@ -479,6 +542,111 @@ void WaveformView::paintEvent (QPaintEvent*)
         g.setPen (QPen (pal.color (QPalette::Link), 2.0));
         g.drawRect (rect().adjusted (1, 1, -1, -1));
     }
+}
+
+namespace
+{
+    QString hzText (double hz)
+    {
+        if (hz >= 1000.0)
+            return QString::number (hz / 1000.0, 'g', hz >= 10000.0 ? 3 : 2) + QStringLiteral (" k");
+        return QString::number (hz, 'g', 3);
+    }
+
+    // Text that reads over any spectrogram colour: a dark outline under light text.
+    void outlinedText (QPainter& g, const QRectF& box, int flags, const QString& text)
+    {
+        g.setPen (QColor (0, 0, 0, 200));
+        for (const auto& d : { QPointF (-1, 0), QPointF (1, 0), QPointF (0, -1), QPointF (0, 1) })
+            g.drawText (box.translated (d), flags, text);
+        g.setPen (QColor (235, 235, 235));
+        g.drawText (box, flags, text);
+    }
+}
+
+void WaveformView::drawFrequencyAxis (QPainter& g, double lane)
+{
+    const auto [low, high] = frequencyRange();
+    auto small = font();
+    small.setPointSizeF (small.pointSizeF() * 0.75);
+    g.setFont (small);
+    const auto textHeight = QFontMetricsF (small).height();
+
+    // Round frequencies, from the bottom up, at least two lines apart: on the log and
+    // mel scales 1, 2 and 5 times a power of ten; on the linear scale (or a narrow
+    // range) even steps of the smallest 1-2-5 size that leaves room for the labels.
+    std::vector<double> marks;
+    const auto span = high - low;
+    const auto even = spectrumSet.scale == spectrum::Scale::linear || high / std::max (low, 1.0) < 4.0;
+    if (even)
+    {
+        double step = 1.0;
+        for (double decade = 1.0; decade <= 100000.0 && step <= 1.0; decade *= 10.0)
+            for (double m : { 1.0, 2.0, 5.0 })
+                if (step <= 1.0 && std::abs (hzToY (low + m * decade) - hzToY (low)) >= textHeight * 2.2)
+                    step = m * decade;
+        if (step <= 1.0)
+            step = std::max (1.0, span / 4.0);
+        for (double hz = std::ceil (low / step) * step; hz < high; hz += step)
+            if (hz > low)
+                marks.push_back (hz);
+    }
+    else
+    {
+        for (double decade = 1.0; decade <= 100000.0; decade *= 10.0)
+            for (double m : { 1.0, 2.0, 5.0 })
+                if (const auto hz = m * decade; hz > low && hz < high)
+                    marks.push_back (hz);
+    }
+
+    for (int ch = 0; ch < (data ? data->numChannels() : 1); ++ch)
+    {
+        double lastY = 1.0e9;
+        for (const auto hz : marks)
+        {
+            const auto y = hzToY (hz);
+            if (y < textHeight * 2.2 || y > lane - 4.0 || lastY - y < textHeight * 2.0)
+                continue;
+            lastY = y;
+            const auto top = lane * ch + y;
+            g.setPen (QColor (255, 255, 255, 90));
+            g.drawLine (QPointF (0.0, top), QPointF (5.0, top));
+            outlinedText (g, QRectF (8.0, top - textHeight / 2.0, 60.0, textHeight), Qt::AlignLeft | Qt::AlignVCenter, hzText (hz));
+        }
+    }
+    g.setFont (font());
+}
+
+void WaveformView::drawReadout (QPainter& g, double lane)
+{
+    if (! data || hover.x() < 0.0 || ! underMouse() || lane < 1.0)
+        return;
+
+    const auto ch = std::clamp ((int) (hover.y() / lane), 0, data->numChannels() - 1);
+    const auto y = hover.y() - ch * lane;
+    const auto hz = yToHz (y);
+    const auto seconds = (double) xToFrame (hover.x()) / data->sampleRate();
+    auto text = tr ("%1 s   %2 Hz  %3").arg (seconds, 0, 'f', 3).arg (hz, 0, 'f', hz < 100.0 ? 1 : 0)
+                    .arg (QString::fromStdString (spectrum::noteName (hz)));
+    if (spectrogramKey == currentKey())
+    {
+        const auto px = (int) (hover.x() * spectrogram.columns / std::max (1, width()));
+        const auto py = (int) (y * spectrogram.rows / lane);
+        if (const auto level = spectrogram.levelAt (ch, px, py); level > spectrum::silent)
+            text += tr ("   %1 dB").arg (level, 0, 'f', 1);
+    }
+
+    auto small = font();
+    small.setPointSizeF (small.pointSizeF() * 0.85);
+    g.setFont (small);
+    const QFontMetricsF metrics (small);
+    const QRectF box (width() - metrics.horizontalAdvance (text) - 24.0, (ch + 1) * lane - metrics.height() - 12.0, metrics.horizontalAdvance (text) + 14.0, metrics.height() + 6.0);
+    g.setPen (Qt::NoPen);
+    g.setBrush (QColor (0, 0, 0, 160));
+    g.drawRoundedRect (box, 4.0, 4.0);
+    g.setPen (QColor (235, 235, 235));
+    g.drawText (box, Qt::AlignCenter, text);
+    g.setFont (font());
 }
 
 void WaveformView::setFadeHandles (bool shown)
@@ -653,6 +821,12 @@ void WaveformView::mouseMoveEvent (QMouseEvent* e)
             QWidget::setCursor (currentTool == Tool::box ? Qt::ArrowCursor : Qt::CrossCursor);
     }
 
+    if (spectral && ! drawing())
+    {
+        hover = e->position();
+        update();
+    }
+
     if (drawing())
     {
         hover = e->position();
@@ -687,7 +861,9 @@ void WaveformView::mouseMoveEvent (QMouseEvent* e)
     {
         const auto y = std::clamp (e->position().y() - dragLane * laneHeight(), 0.0, laneHeight());
         const auto tall = std::abs (y - dragAnchorY) >= laneHeight() * 0.9;
-        if (tall)
+        if (tall && ! showsAllFrequencies())
+            Q_EMIT bandRequested (frequencyRange().first, frequencyRange().second);
+        else if (tall)
             Q_EMIT bandRequested (0.0, 0.0);
         else
             Q_EMIT bandRequested (yToHz (std::max (y, dragAnchorY)), yToHz (std::min (y, dragAnchorY)));
@@ -739,9 +915,17 @@ void WaveformView::wheelEvent (QWheelEvent* e)
     if (! data)
         return;
 
-    const auto steps = e->angleDelta().y() / 120.0;
+    // Alt turns the wheel sideways on some systems: take whichever way it moved.
+    const auto delta = e->angleDelta().y() != 0 ? e->angleDelta().y() : e->angleDelta().x();
+    const auto steps = delta / 120.0;
 
-    if (e->modifiers() & Qt::ControlModifier)
+    if (spectral && (e->modifiers() & Qt::AltModifier))
+    {
+        const auto lane = laneHeight();
+        const auto y = std::fmod (e->position().y(), std::max (1.0, lane));
+        zoomFrequency (std::pow (1.25, steps), 1.0 - y / std::max (1.0, lane));
+    }
+    else if (e->modifiers() & Qt::ControlModifier)
     {
         viewLength *= std::pow (0.8, steps);
         clampView();

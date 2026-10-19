@@ -12,6 +12,7 @@
 #include "ChainRow.h"
 #include "DesktopShortcuts.h"
 #include "BatchWindow.h"
+#include "SpectrogramDialog.h"
 #include "Dialogs.h"
 #include "MetadataEditor.h"
 #include "../core/Repair.h"
@@ -534,6 +535,29 @@ void MainWindow::registerCommands()
             setBand (0.0, 0.0);   // a frequency box only makes sense where it can be seen
         commands.action (QStringLiteral ("view.spectral"))->setChecked (waveform->isSpectral());
     })->setCheckable (true);
+    add ("view.spectrogramSettings", Category::view, tr ("Spectrogram Se&ttings..."), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_D) }, [this]
+    {
+        if (! waveform->isSpectral())
+            commands.action (QStringLiteral ("view.spectral"))->trigger();
+        if (spectrogramDialog == nullptr)
+        {
+            spectrogramDialog = new SpectrogramDialog (*waveform, this);
+            connect (spectrogramDialog, &SpectrogramDialog::changed, this, [this]
+            {
+                QSettings().setValue (QStringLiteral ("view/spectrum"), QString::fromStdString (spectrum::toString (waveform->spectrumSettings())));
+            });
+        }
+        spectrogramDialog->refresh();
+        spectrogramDialog->show();
+        spectrogramDialog->raise();
+        spectrogramDialog->activateWindow();
+    });
+    add ("view.frequencyZoomIn", Category::view, tr ("Zoom Frequencies I&n"), { KS (Qt::ALT | Qt::Key_Equal), KS (Qt::ALT | Qt::Key_Plus) },
+         [this] { waveform->zoomFrequency (1.5); });
+    add ("view.frequencyZoomOut", Category::view, tr ("Zoom Frequencies O&ut"), { KS (Qt::ALT | Qt::Key_Minus) },
+         [this] { waveform->zoomFrequency (1.0 / 1.5); });
+    add ("view.frequencyFull", Category::view, tr ("&All Frequencies Shown"), { KS (Qt::ALT | Qt::Key_0) },
+         [this] { waveform->setFrequencyRange (0.0, 0.0); });
     add ("view.opacityUp", Category::view, tr ("More &Opaque"),
          { KS (Qt::CTRL | Qt::ALT | Qt::Key_Equal), KS (Qt::CTRL | Qt::ALT | Qt::Key_Plus) },
          [this] { changeOpacity (Theme::opacity() + 0.05, true); });
@@ -615,7 +639,7 @@ void MainWindow::buildMenus()
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
-                               "view.overview", "view.spectral", "view.levelColors", "view.gainKnob", "-", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.references", "view.popOut", "view.resetLayout", "-",
+                               "view.overview", "view.spectral", "view.spectrogramSettings", "view.frequencyZoomIn", "view.frequencyZoomOut", "view.frequencyFull", "view.levelColors", "view.gainKnob", "-", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.references", "view.popOut", "view.resetLayout", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "-", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
@@ -897,6 +921,7 @@ void MainWindow::restoreLayout()
 
     const bool spectral = settings.value (QStringLiteral ("view/spectral"), false).toBool();
     waveform->setSpectral (spectral);
+    waveform->setSpectrumSettings (spectrum::fromString (settings.value (QStringLiteral ("view/spectrum")).toString().toStdString()));
     commands.action (QStringLiteral ("view.spectral"))->setChecked (spectral);
 
     // Load plugins and pop panels out again once the main window is on screen, so it opens first.
