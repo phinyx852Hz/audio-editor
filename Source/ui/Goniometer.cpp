@@ -178,7 +178,7 @@ void Goniometer::addSamples (const std::vector<float>& left, const std::vector<f
 
     // New points add up, so dense areas glow brighter.
     g.setCompositionMode (QPainter::CompositionMode_Plus);
-    auto colour = Theme::current().color (QStringLiteral ("waveform"));
+    auto colour = Theme::current().color (QStringLiteral ("scope"));
     colour.setAlpha (current == View::lissajous ? 45 : 60);
     g.setPen (QPen (colour, current == View::lissajous ? 1.2 : 1.6, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
 
@@ -258,7 +258,8 @@ void Goniometer::drawGuides (QPainter& g, const QRectF& plot) const
     dotted.setAlpha (150);
 
     auto small = font();
-    small.setPointSizeF (small.pointSizeF() * 0.8);
+    small.setPointSizeF (small.pointSizeF() * 0.85);
+    small.setBold (true);
     g.setFont (small);
     const auto label = [&] (QPointF at, const QString& text)
     {
@@ -345,7 +346,7 @@ void Goniometer::drawRays (QPainter& g, const QRectF& plot) const
     const auto angleOf = [] (int ray, double part) { return ((ray + part) / numRays - 0.5) * M_PI; };
 
     // The rays: a wedge per direction, brighter towards the tip.
-    auto colour = theme.color (QStringLiteral ("waveform"));
+    auto colour = theme.color (QStringLiteral ("scope"));
     QRadialGradient glow (origin, r);
     auto inner = colour;
     inner.setAlpha (60);

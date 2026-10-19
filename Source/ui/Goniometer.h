@@ -32,7 +32,7 @@ public:
     View view() const { return current; }
     static QString viewName (View);
 
-    QSize sizeHint() const override        { return { 320, 350 }; }
+    QSize sizeHint() const override        { return { 290, 315 }; }
     QSize minimumSizeHint() const override { return { 140, 160 }; }
 
 protected:

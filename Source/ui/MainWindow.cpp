@@ -478,8 +478,8 @@ void MainWindow::registerCommands()
         appSettings().setValue (QStringLiteral ("view/levelColors"), on);
         waveform->setLevelColours (on);
         statusBar()->showMessage (on ? tr ("Waveform coloured by level: blue when quiet, through green and yellow, to red at 0 dB. "
-                                           "Change the colours in Options > Waveform Colors.")
-                                     : tr ("Waveform in one colour (Options > Waveform Colors)"), 6000);
+                                           "Change the colours in Options > Waveform and Meter Colors.")
+                                     : tr ("Waveform in one colour (Options > Waveform and Meter Colors)"), 6000);
     });
     commands.action (QStringLiteral ("view.levelColors"))->setCheckable (true);
     commands.action (QStringLiteral ("view.levelColors"))->setChecked (appSettings().value (QStringLiteral ("view/levelColors"), false).toBool());
@@ -629,7 +629,7 @@ void MainWindow::registerCommands()
          [this] { AudioSettingsDialog (engine, this).exec(); });
     add ("options.keymap", Category::options, tr ("&Keyboard Shortcuts..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_K) },
          [this] { KeymapDialog (commands, this).exec(); });
-    add ("options.waveformColors", Category::options, tr ("&Waveform Colors..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_W) },
+    add ("options.waveformColors", Category::options, tr ("&Waveform and Meter Colors..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_W) },
          [this] { WaveformColorsDialog (this).exec(); });
     add ("options.theme", Category::options, tr ("&Theme..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_T) },
          [this] { ThemeDialog (this).exec(); });
@@ -856,7 +856,7 @@ void MainWindow::buildPanels()
     auto* metersLayout = new QVBoxLayout (meters);
     metersLayout->setContentsMargins (0, 0, 0, 0);
     metersLayout->setSpacing (0);
-    metersLayout->addWidget (goniometer, 7);
+    metersLayout->addWidget (goniometer, 6);
     metersLayout->addWidget (meterPanel, 5);
     metersPanel = new DockablePanel (*this, QStringLiteral ("metersPanel"), tr ("Meters"), meters, Qt::RightDockWidgetArea);
     markerPanel = new DockablePanel (*this, QStringLiteral ("markersPanel"), tr ("Markers"), markerList, Qt::BottomDockWidgetArea);

@@ -820,7 +820,7 @@ double NormalizeDialog::peakCeiling() const         { return ceilingBox->value()
 WaveformColorsDialog::WaveformColorsDialog (QWidget* parent)
     : QDialog (parent), original (Theme::colorOverrides())
 {
-    setWindowTitle (tr ("Waveform Colors"));
+    setWindowTitle (tr ("Waveform and Meter Colors"));
 
     const QList<QPair<QString, QString>> rows {
         { QStringLiteral ("waveform"),           tr ("&Waveform") },
@@ -836,6 +836,11 @@ WaveformColorsDialog::WaveformColorsDialog (QWidget* parent)
         { QStringLiteral ("levelLoud"),          tr ("Level: loud (-6 dB)") },
         { QStringLiteral ("levelHot"),           tr ("Level: hot (-3 dB)") },
         { QStringLiteral ("levelPeak"),          tr ("Level: peak (0 dB)") },
+        { QStringLiteral ("scope"),              tr ("&Imaging (goniometer, Lissajous)") },
+        { QStringLiteral ("meterLow"),           tr ("Meter: low (below -18 dB)") },
+        { QStringLiteral ("meterMid"),           tr ("Meter: middle (-18 to -6 dB)") },
+        { QStringLiteral ("meterHigh"),          tr ("Meter: high (above -6 dB)") },
+        { QStringLiteral ("meterPeakHold"),      tr ("Meter: peak hold") },
     };
 
     auto* grid = new QGridLayout;
@@ -881,7 +886,8 @@ WaveformColorsDialog::WaveformColorsDialog (QWidget* parent)
 
     auto* note = new QLabel (tr ("Pick a colour on the left (Enter or Space), then set it on the right; it shows at once. "
                                     "These colours apply on top of any theme. The level colours are used when "
-                                    "View > Colour Waveform by Level (Ctrl+Alt+Shift+W) is on, blended in between."), this);
+                                    "View > Colour Waveform by Level (Ctrl+Alt+Shift+W) is on, blended in between. The meter colours "
+                                    "also colour the Device Chain meters and the correlation bar."), this);
     note->setWordWrap (true);
 
     picker = new QColorDialog (this);

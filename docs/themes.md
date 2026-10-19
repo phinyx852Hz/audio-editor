@@ -49,6 +49,7 @@ files with mistakes are listed with the reason they were skipped.
 | `cursor` | Edit and playback cursor |
 | `marker`, `region` | Marker and region lines and names |
 | `meterBackground`, `meterLow`, `meterMid`, `meterHigh`, `meterPeakHold` | Level meters (below -18 dB, -18 to -6 dB, above -6 dB) |
+| `scope` | Imaging display: goniometer, polar and Lissajous traces (defaults to the theme's `waveform` colour) |
 | `levelQuiet`, `levelSoft`, `levelMedium`, `levelLoud`, `levelHot`, `levelPeak` | Waveform coloured by level (View > Colour Waveform by Level): the colours at -48, -24, -12, -6, -3 and 0 dBFS, blended in between |
 
 Themes are colour-only for now. Fonts, icons and widget images are planned (plan section 2.8b).
