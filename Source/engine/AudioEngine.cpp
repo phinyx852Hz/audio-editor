@@ -436,6 +436,56 @@ namespace
     // The last stage before the device. Everything before it (transport, Master
     // Section, meters) works on the file's own channels; this sends them to the
     // outputs, one each when there are enough, or folded down to stereo.
+    // Something played live in place of the file, such as the Tracker: stereo at the
+    // device's rate, after the Master Section (it is mixed, not mastered, in PHINYX).
+    class LiveSource final : public juce::AudioSource
+    {
+    public:
+        explicit LiveSource (juce::AudioSource& in) : input (in) {}
+
+        void prepareToPlay (int blockSize, double sampleRate) override { input.prepareToPlay (blockSize, sampleRate); }
+        void releaseResources() override { input.releaseResources(); }
+
+        void getNextAudioBlock (const juce::AudioSourceChannelInfo& info) override
+        {
+            std::unique_lock lock (mutex, std::try_to_lock);
+            if (! lock.owns_lock() || ! render)
+            {
+                if (lock.owns_lock() || ! active.load())
+                    input.getNextAudioBlock (info);
+                else
+                    info.clearActiveBufferRegion();
+                return;
+            }
+            info.clearActiveBufferRegion();
+            auto* left = info.buffer->getWritePointer (0, info.startSample);
+            auto* right = info.buffer->getNumChannels() > 1 ? info.buffer->getWritePointer (1, info.startSample) : nullptr;
+            if (right != nullptr)
+                render (left, right, info.numSamples);
+            else
+            {
+                scratch.resize ((size_t) info.numSamples);
+                render (left, scratch.data(), info.numSamples);
+                for (int i = 0; i < info.numSamples; ++i)
+                    left[i] = 0.5f * (left[i] + scratch[(size_t) i]);
+            }
+        }
+
+        void set (AudioEngine::LiveRender r)
+        {
+            std::lock_guard lock (mutex);
+            render = std::move (r);
+            active = (bool) render;
+        }
+        std::atomic<bool> active { false };
+
+    private:
+        juce::AudioSource& input;
+        std::mutex mutex;
+        AudioEngine::LiveRender render;
+        std::vector<float> scratch;
+    };
+
     class MonitorSource final : public juce::AudioSource
     {
     public:
@@ -578,7 +628,8 @@ struct AudioEngine::Impl
     DocumentSource document;
     juce::AudioTransportSource transport;
     MasterSource masterSource { transport, master, document };
-    MeterSource meter { masterSource };
+    LiveSource live { masterSource };
+    MeterSource meter { live };
     MonitorSource monitor { meter };
     juce::AudioSourcePlayer player;
     double sourceRate = 0.0;
@@ -662,6 +713,20 @@ bool AudioEngine::isHearingReference() const           { return impl->document.h
 void AudioEngine::setReferenceBypassesMaster (bool on) { impl->document.referenceClean = on; }
 
 void AudioEngine::stop()            { impl->transport.stop(); }
+
+void AudioEngine::setLiveSource (LiveRender render)
+{
+    const bool on = (bool) render;
+    if (on)
+        impl->transport.stop();
+    impl->live.set (std::move (render));
+    // Stereo while live; the file's own channel count again afterwards.
+    const auto channels = on ? 2 : std::max (1, impl->sourceChannels);
+    impl->monitor.channels = channels;
+    impl->meter.channels = channels;
+}
+
+bool AudioEngine::hasLiveSource() const { return impl->live.active.load(); }
 void AudioEngine::setLoop (Frame start, Frame end) { impl->document.setLoop (start, end); }
 bool AudioEngine::isPlaying() const { return impl->transport.isPlaying(); }
 

@@ -118,6 +118,10 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/AmbiScene.cpp
     Source/ui/Visualizer.cpp
     Source/ui/VisualizerSection.cpp
+    Source/ui/TrackerSection.cpp
+    Source/ui/TrackerWindow.cpp
+    Source/tracker/PatternText.cpp
+    Source/tracker/TrackerEngine.cpp
     Source/ui/BinauralDialog.cpp
     Source/ui/SpatialSection.cpp)
 
@@ -223,6 +227,10 @@ if(PHINYX_HAVE_PROJECTM)
     target_link_libraries(${APP_ID} PRIVATE phinyx_projectm)
 endif()
 install(FILES "${PHINYX_DEFAULT_HRTF}" DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/hrtf")
+
+# MilkyPlay (cmake/MilkyPlay.cmake): MilkyTracker's module player, for the Tracker.
+include(cmake/MilkyPlay.cmake)
+target_link_libraries(${APP_ID} PRIVATE phinyx_milkyplay)
 
 # Nyquist effects (cmake/Nyquist.cmake): libnyquist, its runtime and the bundled plug-ins.
 include(cmake/Nyquist.cmake)

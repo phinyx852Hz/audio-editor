@@ -8,6 +8,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -94,6 +95,12 @@ public:
 
     void play();
     void stop();
+
+    // Plays something live in place of the file (the Tracker): `render` fills left and
+    // right at deviceSampleRate() on the audio thread. An empty function hands back to the file.
+    using LiveRender = std::function<void (float* left, float* right, int numFrames)>;
+    void setLiveSource (LiveRender render);
+    bool hasLiveSource() const;
     bool isPlaying() const;
     // Plays [start, end) over and over; end <= start turns looping off.
     void setLoop (Frame start, Frame end);

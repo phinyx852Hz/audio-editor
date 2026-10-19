@@ -25,3 +25,21 @@ same licence as Nyquist). `share/nyquist-plug-ins/` holds Audacity 3.7.9's
 Nyquist plug-ins that are licensed GPL v2 or later (each file names its
 author and licence); the GPL v2-only ones are left out. Plug-ins from an
 installed Audacity are also found at run time.
+
+## MilkyPlay (MilkyTracker)
+
+`milkyplay/` is MilkyTracker's player library, `src/milkyplay` from
+github.com/milkytracker/MilkyTracker at commit e3ceb05 (2026-09-10), by Peter
+"pailes" Barth and the MilkyTracker contributors. Licence: New BSD (see the
+header of each file); the rest of MilkyTracker is GPL-3.0-or-later.
+
+Changes for PHINYX:
+- Left out `AudioDriverManager.cpp` and the `drivers/` folder; PHINYX plays the
+  mix through its own audio engine. `AudioDriverManager_PHINYX.cpp` stands in,
+  offering only MilkyPlay's null driver.
+- Added `version.h`, which MilkyTracker generates at build time.
+- MilkyTracker's `CMakeLists.txt` is replaced by `cmake/MilkyPlay.cmake`.
+
+`Source/tracker/PatternText.cpp` adapts the effect conversions and names from
+MilkyTracker's `tracker/PatternTools.cpp` (Copyright 2009 Peter Barth,
+GPL-3.0-or-later).

@@ -3,6 +3,8 @@
 #include "Settings.h"
 #include "FindPanel.h"
 #include "Visualizer.h"
+#include "TrackerWindow.h"
+#include "../tracker/TrackerEngine.h"
 #if PHINYX_HAVE_PROJECTM
  #include "MilkDrop.h"
 #endif
@@ -213,6 +215,8 @@ MainWindow::MainWindow (AudioEngine& e)
         }
         feedAmbiScene();
         feedVisualizers();
+        if (trackerWin != nullptr && trackerWin->isVisible())
+            trackerWin->refresh();
 
         // Looping plays the selection, or the whole file when nothing is selected.
         const auto d = data();
@@ -249,6 +253,7 @@ MainWindow::MainWindow (AudioEngine& e)
 MainWindow::~MainWindow()
 {
     loadWatcher.waitForFinished();
+    engine.setLiveSource ({});   // the Tracker goes before the engine
     delete batchWindow;   // stops its workers while the engine they render through still exists
 }
 
@@ -456,6 +461,7 @@ void MainWindow::registerCommands()
     registerAlbumCommands();
     registerAnalysisCommands();
     registerVisualizerCommands();
+    registerTrackerCommands();
     registerReferenceCommands();
     registerMacroCommands();
     add ("tools.managePlugins", Category::tools, tr ("Manage &Plug-ins..."), {}, [this] { managePlugins(); });
@@ -718,6 +724,8 @@ void MainWindow::buildMenus()
                                "view.visualizerNext", "view.visualizerPrevious", "view.visualizerChoose", "-",
                                "@visual.artistic", "@visual.science", "-", "@visual.milkdrop", "@visual.rain", "-",
                                "view.opacityUp", "view.opacityDown", "view.opacityFull" } },
+        { tr ("Trac&ker"),   { "tracker.window", "tracker.open", "-", "tracker.playSong", "tracker.playPattern", "tracker.stop", "-",
+                               "tracker.recordStereo", "tracker.recordMulti", "-", "tracker.resetTracks", "tracker.about" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "-", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
     };
@@ -3250,6 +3258,8 @@ Frame MainWindow::snapToZero (Frame f) const
 
 void MainWindow::togglePlayback()
 {
+    if (engine.hasLiveSource())
+        trackerStop();   // the Tracker hands the sound back to the file
     if (engine.isPlaying())
     {
         engine.stop();

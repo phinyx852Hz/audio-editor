@@ -244,6 +244,16 @@ private:
     void registerAnalysisCommands();
     // The Visualizer (VisualizerSection.cpp).
     void registerVisualizerCommands();
+
+    // The Tracker (TrackerSection.cpp): MilkyTracker's module player.
+    void registerTrackerCommands();
+    class TrackerWindow* trackerWindow();
+    void openModule();
+    void trackerPlay (bool patternOnly);
+    void trackerStop();
+    void trackerRecord (bool multiChannel);
+    std::unique_ptr<class TrackerEngine> tracker;
+    class TrackerWindow* trackerWin = nullptr;
     class VisualizerWindow* visualizerWindow();
     void setVisualMode (int index, bool openIfHidden);
     void toggleVisualizerBehind();
