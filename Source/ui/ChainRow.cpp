@@ -971,8 +971,12 @@ void ChainRow::insertAfter (int slot)
             select (i, -1);
 
     Q_EMIT chainChanged();
-    window()->activateWindow();
     setFocus (Qt::OtherFocusReason);
+    // A new plugin opens in its own floating window (Esc closes it and the keys come back to the chain).
+    if (engine.canShowPluginWindow (target))
+        engine.showPluginWindow (target);
+    else
+        window()->activateWindow();
 }
 
 void ChainRow::movePlugin (int from, int to)

@@ -11,6 +11,10 @@ namespace x11
     // (Hyprland's class:^(phinyx)$) apply to it like the main window.
     void setWindowClass (void* nativeWindowHandle);
 
+    // Marks a window as a dialog, so tiling window managers (Hyprland) float it
+    // like a traditional plugin window. Call it before the window is shown.
+    void setFloating (void* nativeWindowHandle);
+
     // If the window manager kills a plugin window's X connection (a forced
     // close), Xlib would end the whole program. After this, only plugin
     // windows stop working; the editor keeps running.

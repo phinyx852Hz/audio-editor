@@ -12,9 +12,10 @@
 
 //==============================================================================
 // The plugin's own editor in a JUCE window (X11, so XWayland on Wayland).
-// Always resizable, so a tiling window manager (Hyprland) can tile it at any
-// size like any other window; an editor of fixed size sits centred in it.
-// With the window focused (on Hyprland, under the mouse): Ctrl+W closes it,
+// Always resizable, so it can be made any size (or tiled with a window rule);
+// an editor of fixed size sits centred in it.
+// It floats (a dialog to the window manager). With the window focused (on Hyprland,
+// under the mouse): Esc or Ctrl+W closes it,
 // Ctrl+Tab and Ctrl+Shift+Tab go to the next and previous plugin window.
 class MasterChain::PluginWindow final : public juce::DocumentWindow
 {
@@ -34,6 +35,12 @@ public:
         setResizeLimits (160, 120, 16384, 16384);
         centreWithSize (getWidth(), getHeight());
         setWantsKeyboardFocus (true);
+        // Before it is shown: the class for window rules, and floating like a traditional plugin window.
+        if (auto* peer = getPeer())
+        {
+            x11::setWindowClass (peer->getNativeHandle());
+            x11::setFloating (peer->getNativeHandle());
+        }
         setVisible (true);
         toFront (true);
     }
@@ -48,7 +55,8 @@ public:
     bool keyPressed (const juce::KeyPress& key) override
     {
         const auto mods = key.getModifiers();
-        if (mods.isCtrlDown() && ! mods.isAltDown() && (key.getKeyCode() == 'W' || key.getKeyCode() == 'w'))
+        if ((key.getKeyCode() == juce::KeyPress::escapeKey && ! mods.isAnyModifierKeyDown())
+            || (mods.isCtrlDown() && ! mods.isAltDown() && (key.getKeyCode() == 'W' || key.getKeyCode() == 'w')))
         {
             closeButtonPressed();
             return true;

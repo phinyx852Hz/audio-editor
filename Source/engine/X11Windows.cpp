@@ -35,6 +35,20 @@ namespace x11
         x->xFlush (d);
     }
 
+    void setFloating (void* handle)
+    {
+        auto* d = display();
+        if (d == nullptr || handle == nullptr || lost)
+            return;
+
+        auto* x = juce::X11Symbols::getInstance();
+        const auto type = x->xInternAtom (d, "_NET_WM_WINDOW_TYPE", False);
+        ::Atom dialog = x->xInternAtom (d, "_NET_WM_WINDOW_TYPE_DIALOG", False);
+        x->xChangeProperty (d, (::Window) (juce::pointer_sized_uint) handle, type, XA_ATOM, 32, PropModeReplace,
+                            reinterpret_cast<unsigned char*> (&dialog), 1);
+        x->xFlush (d);
+    }
+
     void surviveLostConnection (std::function<void()> whenLost)
     {
         auto* d = display();
