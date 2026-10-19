@@ -734,24 +734,61 @@ QSlider* MainWindow::makeOpacitySlider (QWidget* parent)
 
 void MainWindow::focusPanel (int direction)
 {
-    // The waveform, then the panels in the order they usually sit: below, right, left.
+    // The waveform, then every panel in the order they usually sit: below, right, left. A closed
+    // panel is opened while F6 is on it and closed again when F6 moves on.
     struct Stop { QWidget* widget; DockablePanel* panel; };
     const std::vector<Stop> stops { { waveform, nullptr }, { chainRow, chainPanel }, { masterWidget, masterPanel },
                                     { metersPanel->content(), metersPanel }, { markerList, markerPanel },
                                     { historyList, historyPanel }, { diagnostics, diagnosticsPanel },
                                     { referencePanel, referencesPanel }, { findWidget, findPanel } };
-    std::vector<Stop> showing;
-    for (const auto& s : stops)
-        if (s.panel == nullptr || s.panel->isShown())
-            showing.push_back (s);
+    const int count = (int) stops.size();
 
-    int at = 0;
-    for (int i = 0; i < (int) showing.size(); ++i)
-        if (showing[(size_t) i].panel != nullptr ? showing[(size_t) i].panel->containsFocus() : waveform->hasFocus())
-            at = i;
-    const auto& next = showing[(size_t) ((at + direction + (int) showing.size()) % (int) showing.size())];
+    // Where the keyboard is now; if it is somewhere F6 cannot tell (a panel that takes no keys), where F6 last went.
+    // If the focus has not moved since F6 last moved on (the panel takes no keys, or was still opening), F6 goes by where it last went.
+    auto* focus = QApplication::focusWidget();
+    int at = -1;
+    if (focus == nullptr || focus != cycleFrom)
+        for (int i = 0; i < count && at < 0; ++i)
+            if (stops[(size_t) i].panel != nullptr ? stops[(size_t) i].panel->containsFocus() : waveform->hasFocus())
+                at = i;
+    if (at < 0)
+        at = std::clamp (panelStop, 0, count - 1);
+    cycleFrom = focus;
+
+    panelStop = (at + direction + count) % count;
+    const auto& next = stops[(size_t) panelStop];
+
+    if (openedByCycle != nullptr && openedByCycle != next.panel)
+    {
+        if (openedByCycle->isShown())
+            openedByCycle->hide();
+        openedByCycle = nullptr;
+    }
+
     if (next.panel != nullptr)
+    {
+        if (! next.panel->isShown())
+            openedByCycle = next.panel;
         next.panel->show (true);
+        // The panel itself, or else the first thing in it that takes the keyboard.
+        auto* target = next.widget;
+        if (target != nullptr && target->focusPolicy() == Qt::NoFocus)
+        {
+            const auto children = target->findChildren<QWidget*>();
+            const auto it = std::find_if (children.begin(), children.end(), [] (QWidget* c)
+                                          { return (c->focusPolicy() & Qt::TabFocus) != 0 && c->isEnabled(); });
+            target = it != children.end() ? *it : nullptr;
+        }
+        if (target != nullptr)
+            QTimer::singleShot (0, target, [target]
+            {
+                if (target->isVisible())
+                {
+                    target->window()->activateWindow();
+                    target->setFocus (Qt::TabFocusReason);
+                }
+            });
+    }
     else
     {
         activateWindow();

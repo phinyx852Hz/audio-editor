@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #pragma once
+#include <QPointer>
 
 #include "NyquistUi.h"
 
@@ -106,7 +107,10 @@ private:
 
     // Tools (ToolsSection.cpp).
     void managePlugins();
-    void focusPanel (int direction);   // F6 / Shift+F6: the next or previous of the waveform and the panels showing
+    void focusPanel (int direction);   // F6 / Shift+F6: the next or previous of the waveform and every panel
+    int panelStop = 0;                         // where F6 last went, when the focus cannot tell
+    DockablePanel* openedByCycle = nullptr;    // a closed panel F6 opened; it closes again when F6 moves on
+    QPointer<QWidget> cycleFrom;               // the keyboard focus when F6 last moved on
     void resetConfiguration();
 public:
     // After the window is gone: clears the settings if Reset Configuration asked to; true if it did (then restart).
