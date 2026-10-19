@@ -57,22 +57,37 @@ Cubase and Harrison Mixbus mixers. What the owner likes most:
    - Right-click picks a display from a list. Double-click opens it large in a floating
      window.
    - It reuses PHINYX's existing goniometer, spectrum and meter code.
-5. **Panner**
+5. **Sends (Ableton)**: two send dials, **A Reverb** and **B Delay**, from −∞ to 0 dB, and
+   post-fader by default. Right-click a dial to switch it to pre-fader.
+6. **Panner**: both kinds are on every strip, with no switching between them.
    - **Pan pot**, a traditional knob. Mono tracks use an equal-power law (−3 dB in the
      middle; −4.5 and −6 dB laws are options). Stereo tracks use balance.
    - **Width dial** (stereo tracks only), from 0 % (mono) to 200 %. It is hidden unless
      the Panner section is wide.
-   - **Spatial button**: opens the Harrison-style spatial panner. With a stereo master it
-     shows position and width as a stereo image. With a surround or ambisonic master it
+   - **Spatial panner (Harrison)**: a small live picture under the pot that you can drag;
+     the pot and the picture move together. Double-click it to open it large. With a stereo
+     master it shows position and width as a stereo image. With a surround or ambisonic master it
      becomes a top-down room (5.1 to 9.1.6) or a sphere (ambisonics), using PHINYX's
      existing Spatial code.
-6. **Mute, Solo, Record**. Solo works like a console: soloing a track mutes the others,
+7. **Mute, Solo, Record**. Solo works like a console: soloing a track mutes the others,
    and any number of tracks can be soloed.
-7. **Fader and meter (Audition)**
+8. **Fader and meter (Audition)**
    - A thin, long-throw fader from −∞ to +6 dB, with a peak and RMS meter beside it.
    - The meter has peak hold and a clip light; clicking the clip light clears it.
    - Underneath: the fader value and the highest peak, as text. Typing on a selected strip
      sets the value exactly.
+
+## The return strips: A Reverb and B Delay
+
+These are two narrow strips between the tracks and the master, as Ableton's return tracks
+are. Each one holds a single effect, fully wet, then a pan pot, mute, a fader and a meter.
+- **A** starts with PHINYX's built-in reverb (a plate, about 1.8 s long).
+- **B** starts with a tempo-synced delay (a dotted eighth, with feedback at 30 %).
+- Either effect can be swapped for any plugin. The templates set their own (the podcast
+  templates use a short room reverb and no delay).
+- More sends and returns can come later; two cover most mixes.
+
+The master still has no plugins. The returns are part of the mix that feeds it.
 
 ## The master strip (track 9)
 
@@ -163,7 +178,6 @@ Every control has a screen-reader name and announces its value.
 
 ## Left for later, unless the owner wants them now
 
-- Sends and return tracks (shared reverb or delay).
 - Automation (recording fader moves).
 - Mix snapshots, A/B (cheap to add: store and recall all strip settings).
 - Groups and VCAs. With 8 tracks these matter less.
@@ -173,7 +187,8 @@ Every control has a screen-reader name and announces its value.
 1. Engine: 8 stem players plus a master summing bus, with trim, polarity, pan, fader and
    meters, and Mix Down to Editor.
 2. The window and the strips, keyboard first.
-3. Inserts, using the Master Section's chain code.
+3. Inserts, using the Master Section's chain code, then the two sends and the Reverb and
+   Delay returns.
 4. Thumbnail displays.
 5. Live inputs, record and monitoring.
 6. Instruments with MIDI keyboard input.
