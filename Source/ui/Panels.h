@@ -44,6 +44,28 @@ private:
     bool enabled = true;
 };
 
+// Where a horizontal and a vertical dock separator meet (three or four panels), dragging
+// moves both at once, as in Adobe Audition. Qt's own separators only move one way.
+class DockCornerDrag final : public QObject
+{
+public:
+    explicit DockCornerDrag (QMainWindow& window);
+
+protected:
+    bool eventFilter (QObject*, QEvent*) override;
+
+private:
+    // The dock that moves a separator; "before" when it is left of or above it.
+    struct Edge { QDockWidget* dock = nullptr; bool before = false; int start = 0; };
+    bool findCorner (QPoint, Edge& across, Edge& upDown) const;
+    void showCursor (bool on);
+
+    QMainWindow& window;
+    Edge across, upDown;   // across: the upright separator, moved sideways; upDown: the level one
+    QPoint pressedAt;
+    bool dragging = false, cursorShown = false;
+};
+
 class NavigationKeyGuard final : public QObject
 {
 public:

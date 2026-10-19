@@ -897,6 +897,7 @@ void MainWindow::buildPanels()
     buildReferences();
     panels = { masterPanel, chainPanel, metersPanel, markerPanel, historyPanel, diagnosticsPanel, findPanel, referencesPanel };
 
+    new DockCornerDrag (*this);   // drag where three or four panels meet to resize both ways
     focusFollowsMouse = new FocusFollowsMouse (this);
     focusFollowsMouse->setAreas ({ waveform, chainRow, masterWidget, markerList, historyList, diagnostics, findWidget, referencePanel,
                                    metersPanel->content() });

@@ -20,6 +20,8 @@
 #include <QDockWidget>
 #include <QHeaderView>
 #include <QKeyEvent>
+#include <QMouseEvent>
+#include <QHoverEvent>
 #include <QMainWindow>
 #include <QPainter>
 #include <QTimer>
@@ -44,6 +46,129 @@ namespace
     {
         home->window()->activateWindow();
         home->setFocus (Qt::ShortcutFocusReason);
+    }
+}
+
+//==============================================================================
+DockCornerDrag::DockCornerDrag (QMainWindow& w) : QObject (&w), window (w)
+{
+    window.setMouseTracking (true);
+    window.setAttribute (Qt::WA_Hover);
+    window.installEventFilter (this);
+}
+
+bool DockCornerDrag::findCorner (QPoint p, Edge& sideways, Edge& upright) const
+{
+    constexpr int gap = 10;
+    if (window.childAt (p) != nullptr)
+        return false;
+
+    struct Area { QRect rect; QDockWidget* dock; };
+    std::vector<Area> areas;
+    if (auto* central = window.centralWidget())
+        areas.push_back ({ central->geometry(), nullptr });
+    for (auto* d : window.findChildren<QDockWidget*> (Qt::FindDirectChildrenOnly))
+        if (d->isVisible() && ! d->isFloating())
+            areas.push_back ({ d->geometry(), d });
+
+    for (const auto& a : areas)
+        if (a.rect.contains (p))
+            return false;
+
+    // A dock that sits beside the separator; docks along the window's sides are preferred for moving
+    // it sideways and docks along the top or bottom for moving it up and down, since those own it.
+    const auto pick = [&] (bool horizontal, Edge& edge)
+    {
+        bool before = false, after = false;
+        int bestScore = -1;
+        for (const auto& a : areas)
+        {
+            const auto& r = a.rect;
+            const bool nearSpan = horizontal ? (p.y() >= r.top() - gap && p.y() <= r.bottom() + gap)
+                                             : (p.x() >= r.left() - gap && p.x() <= r.right() + gap);
+            if (! nearSpan)
+                continue;
+            const int lead = horizontal ? p.x() - r.right() : p.y() - r.bottom();
+            const int trail = horizontal ? r.left() - p.x() : r.top() - p.y();
+            const bool isBefore = lead > 0 && lead <= gap;
+            const bool isAfter = trail > 0 && trail <= gap;
+            before = before || isBefore;
+            after = after || isAfter;
+            if (a.dock == nullptr || ! (isBefore || isAfter))
+                continue;
+            const auto dockArea = window.dockWidgetArea (a.dock);
+            const bool owns = horizontal ? (dockArea == Qt::LeftDockWidgetArea || dockArea == Qt::RightDockWidgetArea)
+                                         : (dockArea == Qt::TopDockWidgetArea || dockArea == Qt::BottomDockWidgetArea);
+            const int score = (owns ? 2 : 0) + (isBefore ? 1 : 0);
+            if (score > bestScore)
+            {
+                bestScore = score;
+                edge = { a.dock, isBefore, horizontal ? r.width() : r.height() };
+            }
+        }
+        return before && after && bestScore >= 0;
+    };
+    return pick (true, sideways) && pick (false, upright);
+}
+
+void DockCornerDrag::showCursor (bool on)
+{
+    if (on == cursorShown)
+        return;
+    cursorShown = on;
+    if (on)
+        QApplication::setOverrideCursor (Qt::SizeAllCursor);
+    else
+        QApplication::restoreOverrideCursor();
+}
+
+bool DockCornerDrag::eventFilter (QObject* watched, QEvent* e)
+{
+    if (watched != &window)
+        return false;
+
+    switch (e->type())
+    {
+        case QEvent::HoverMove:
+        case QEvent::MouseMove:
+        {
+            const auto p = e->type() == QEvent::HoverMove ? static_cast<QHoverEvent*> (e)->position().toPoint()
+                                                          : static_cast<QMouseEvent*> (e)->position().toPoint();
+            if (dragging)
+            {
+                const auto d = p - pressedAt;
+                window.resizeDocks ({ across.dock }, { std::max (1, across.start + (across.before ? d.x() : -d.x())) }, Qt::Horizontal);
+                window.resizeDocks ({ upDown.dock }, { std::max (1, upDown.start + (upDown.before ? d.y() : -d.y())) }, Qt::Vertical);
+                return true;
+            }
+            Edge a, b;
+            const bool corner = findCorner (p, a, b);
+            showCursor (corner);
+            return corner;
+        }
+        case QEvent::MouseButtonPress:
+        {
+            auto* m = static_cast<QMouseEvent*> (e);
+            if (m->button() != Qt::LeftButton || ! findCorner (m->position().toPoint(), across, upDown))
+                return false;
+            pressedAt = m->position().toPoint();
+            dragging = true;
+            showCursor (true);
+            return true;
+        }
+        case QEvent::MouseButtonRelease:
+            if (! dragging)
+                return false;
+            dragging = false;
+            showCursor (findCorner (static_cast<QMouseEvent*> (e)->position().toPoint(), across, upDown));
+            return true;
+        case QEvent::HoverLeave:
+        case QEvent::Leave:
+            if (! dragging)
+                showCursor (false);
+            return false;
+        default:
+            return false;
     }
 }
 
