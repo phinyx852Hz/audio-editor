@@ -45,12 +45,16 @@ struct Theme
     static void setColorOverrides (const QMap<QString, QColor>&);
     static QString formatColor (const QColor&);  // #RRGGBBAA, or #RRGGBB when opaque
 
-    // Window opacity, from minOpacity to 1. Backgrounds of translucent windows
-    // are drawn with this alpha; text and waveforms stay solid. The compositor's
+    // Window opacity, from minOpacity to 1. A translucent window's own background
+    // is drawn with this alpha; text and waveforms stay solid. The compositor's
     // own opacity (for example a Hyprland window rule) still applies on top.
+    // Backgrounds inside the window (panels, lists, fields, the waveform) lie on
+    // top of that, so they get much less (surfaceOpacity) and don't add up to a
+    // solid block wherever several are stacked.
     static constexpr double minOpacity = 0.2;
     static double opacity();
     static void setOpacity (double);   // updates every translucent window and remembers the value
     static void makeTranslucent (QWidget* window);  // call before the window is first shown
-    static QColor withOpacity (QColor);
+    static double surfaceOpacity();
+    static QColor withOpacity (QColor);   // a background inside a translucent window
 };

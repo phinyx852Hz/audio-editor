@@ -49,10 +49,17 @@ public:
     void milkDropChoose (int index);
     void reloadMilkDrop();
 
+    // Digital Rain's speed, shared by every view: 0 (still) to 240 BPM, a row per sixteenth note.
+    static constexpr double maxRainTempo = 240.0;
+    static double rainTempo();
+    static void setRainTempo (double bpm);
+    bool isRain() const;
+
 Q_SIGNALS:
     void stepMode (int direction);
     void fullScreenRequested();
     void escapePressed();
+    void rainTempoRequested (double bpm);   // Up/Down, 0 or tapping T in Digital Rain
 
 protected:
     void paintEvent (QPaintEvent*) override;
@@ -70,6 +77,9 @@ private:
     void drawCircleWave (QPainter&);
     void drawParticles (QPainter&);
     void drawRibbons (QPainter&);
+    void drawRain (QPainter&);
+    void stepRain (double dt);
+    void buildRainGlyphs (int cell);
     void drawSpectrum (QPainter&);
     void drawOctaves (QPainter&);
     void drawScope (QPainter&);
@@ -113,6 +123,15 @@ private:
 
     std::unique_ptr<MilkDrop> milk;
     QImage milkFrame;
+
+    // Digital Rain: a grid of symbols and a falling trail per column.
+    struct RainColumn { double head; float speed; int length; };
+    std::vector<RainColumn> rain;
+    std::vector<quint8> rainCells;   // glyph per cell, row by row
+    int rainColumns = 0, rainRows = 0, rainCell = 0, rainCellWidth = 0, rainGlyphCount = 0;
+    QImage rainTrailGlyphs, rainHeadGlyphs;   // every glyph in a row, mirrored like the film's
+    double rainShownTempo = -1.0, lastDt = 0.0;
+    std::vector<qint64> rainTaps;
 
     struct Star { float x, y, z; };
     std::vector<Star> stars;

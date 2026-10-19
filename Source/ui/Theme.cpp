@@ -237,13 +237,14 @@ namespace
         return value;
     }
 
-    // The application palette with see-through backgrounds.
+    // The application palette with see-through backgrounds, for everything inside
+    // a translucent window (the window's own background is drawn by BackgroundPainter).
     QPalette translucentPalette()
     {
         auto p = QApplication::palette();
         for (auto group : { QPalette::Active, QPalette::Inactive, QPalette::Disabled })
             for (auto role : { QPalette::Window, QPalette::Base, QPalette::AlternateBase, QPalette::Button })
-                p.setColor (group, role, Theme::withOpacity (p.color (group, role)));
+                p.setColor (group, role, Theme::withOpacity (QApplication::palette().color (group, role)));
         return p;
     }
 
@@ -315,9 +316,15 @@ void Theme::saveName (const QString& name)
 
 double Theme::opacity() { return opacityValue(); }
 
+double Theme::surfaceOpacity()
+{
+    const auto a = opacityValue();
+    return a * a * a;
+}
+
 QColor Theme::withOpacity (QColor c)
 {
-    c.setAlphaF (c.alphaF() * (float) opacityValue());
+    c.setAlphaF (c.alphaF() * (float) surfaceOpacity());
     return c;
 }
 
@@ -343,7 +350,9 @@ namespace
                 auto* w = static_cast<QWidget*> (watched);
                 QPainter g (w);
                 g.setCompositionMode (QPainter::CompositionMode_Source);
-                g.fillRect (static_cast<QPaintEvent*> (e)->rect(), w->palette().window());
+                auto back = QApplication::palette().color (w->isActiveWindow() ? QPalette::Active : QPalette::Inactive, QPalette::Window);
+                back.setAlphaF (back.alphaF() * (float) Theme::opacity());
+                g.fillRect (static_cast<QPaintEvent*> (e)->rect(), back);
             }
             return false;
         }

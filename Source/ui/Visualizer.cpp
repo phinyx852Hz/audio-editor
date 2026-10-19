@@ -14,6 +14,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPushButton>
+#include <QFontMetrics>
 #include <QRandomGenerator>
 #include <QVBoxLayout>
 #include <QWheelEvent>
@@ -40,6 +41,8 @@ namespace
         return QColor::fromRgbF ((float) (a.redF() + (b.redF() - a.redF()) * t), (float) (a.greenF() + (b.greenF() - a.greenF()) * t),
                                  (float) (a.blueF() + (b.blueF() - a.blueF()) * t), (float) (a.alphaF() + (b.alphaF() - a.alphaF()) * t));
     }
+
+    double rainBpm = 120.0;
 
     QColor withAlpha (QColor c, double a) { c.setAlphaF ((float) std::clamp (a, 0.0, 1.0)); return c; }
 
@@ -97,6 +100,7 @@ const std::vector<VisualizerView::Mode>& VisualizerView::modes()
         { "circleWave",  QT_TRANSLATE_NOOP ("VisualizerView", "Circle Wave"),       false, QT_TRANSLATE_NOOP ("VisualizerView", "The waveform wrapped around a circle, with an afterglow") },
         { "particles",   QT_TRANSLATE_NOOP ("VisualizerView", "Starfield"),         false, QT_TRANSLATE_NOOP ("VisualizerView", "Flying through stars at the speed of the music") },
         { "ribbons",     QT_TRANSLATE_NOOP ("VisualizerView", "Ribbons"),           false, QT_TRANSLATE_NOOP ("VisualizerView", "Layers of the spectrum drifting like an aurora") },
+        { "rain",        QT_TRANSLATE_NOOP ("VisualizerView", "Digital Rain"),      false, QT_TRANSLATE_NOOP ("VisualizerView", "Green symbols falling like in The Matrix, at a tempo from 0 (still) to 240 BPM, glowing with the music; Up/Down change the tempo, tap T to set it, 0 stops") },
         { "landscape",   QT_TRANSLATE_NOOP ("VisualizerView", "Spectral Landscape"), false, QT_TRANSLATE_NOOP ("VisualizerView", "Gliding over mountains made of the last seconds of sound; drag to turn, wheel to zoom") },
         { "spectrum",    QT_TRANSLATE_NOOP ("VisualizerView", "Spectrum Analyzer"), true,  QT_TRANSLATE_NOOP ("VisualizerView", "FFT (4096 points, Hann) on a log frequency axis, dBFS, peak hold, peak readout with note") },
         { "octaves",     QT_TRANSLATE_NOOP ("VisualizerView", "Third-Octave Bands"), true, QT_TRANSLATE_NOOP ("VisualizerView", "31 bands, 20 Hz to 20 kHz (IEC 61260 centres), dB with peak hold, like a real-time analyzer") },
@@ -234,9 +238,23 @@ void VisualizerView::addSamples (const std::vector<float>& left, const std::vect
 #endif
 }
 
+double VisualizerView::rainTempo() { return rainBpm; }
+void VisualizerView::setRainTempo (double bpm) { rainBpm = std::clamp (bpm, 0.0, maxRainTempo); }
+bool VisualizerView::isRain() const { return QLatin1String (modes()[(size_t) current].id) == QLatin1String ("rain"); }
+
 void VisualizerView::tick()
 {
     analyse();
+    if (isRain())
+    {
+        stepRain (lastDt);
+        if (std::abs (rainShownTempo - rainBpm) > 0.01)
+        {
+            if (rainShownTempo >= 0.0)
+                modeShownAt = clock.elapsed();   // show the new tempo
+            rainShownTempo = rainBpm;
+        }
+    }
 #if PHINYX_HAVE_PROJECTM
     if (isMilkDrop() && isVisible())
     {
@@ -271,6 +289,7 @@ void VisualizerView::analyse()
     const auto now = clock.elapsed();
     const double dt = std::clamp ((now - lastTick) / 1000.0, 0.001, 0.2);
     lastTick = now;
+    lastDt = dt;
 
     // Nothing playing: let the views fall to silence instead of freezing.
     if (now - lastSamplesAt > 120)
@@ -424,6 +443,140 @@ void VisualizerView::analyse()
 }
 
 //==============================================================================
+void VisualizerView::buildRainGlyphs (int cell)
+{
+    QFont font (QStringLiteral ("monospace"));
+    font.setStyleHint (QFont::Monospace);
+    font.setPixelSize (std::max (8, (int) std::lround (cell * 0.82)));
+    font.setBold (true);
+    const QFontMetrics metrics (font);
+
+    // Half-width katakana (mirrored, as in the film), digits and a few signs; Latin
+    // letters stand in when no font here has katakana.
+    QString symbols = QStringLiteral ("0123456789Z:.\"=*+-<>|");
+    if (metrics.inFontUcs4 (0xFF71))
+        for (char32_t c = 0xFF66; c <= 0xFF9D; ++c)
+            symbols += QString::fromUcs4 (&c, 1);
+    else
+        symbols += QStringLiteral ("ABCDEFHIJKLMNPRSTUVWXYZ");
+
+    rainCell = cell;
+    rainCellWidth = std::max (6, (int) std::lround (cell * 0.72));
+    rainGlyphCount = (int) symbols.size();
+    const qreal dpr = devicePixelRatioF();
+    auto make = [&] (QColor ink, bool glow)
+    {
+        QImage atlas (QSize (rainCellWidth * rainGlyphCount, cell) * dpr, QImage::Format_ARGB32_Premultiplied);
+        atlas.setDevicePixelRatio (dpr);
+        atlas.fill (Qt::transparent);
+        QPainter p (&atlas);
+        p.setRenderHint (QPainter::TextAntialiasing);
+        p.setFont (font);
+        for (int i = 0; i < rainGlyphCount; ++i)
+        {
+            p.save();
+            p.translate ((i + 1) * rainCellWidth, 0);
+            p.scale (-1.0, 1.0);
+            const QRectF box (0, 0, rainCellWidth, cell);
+            if (glow)
+            {
+                p.setPen (withAlpha (ink, 0.35));
+                for (const auto& d : { QPointF (-1, 0), QPointF (1, 0), QPointF (0, -1), QPointF (0, 1) })
+                    p.drawText (box.translated (d), Qt::AlignCenter, symbols.mid (i, 1));
+            }
+            p.setPen (glow ? QColor (235, 255, 240) : ink);
+            p.drawText (box, Qt::AlignCenter, symbols.mid (i, 1));
+            p.restore();
+        }
+        return atlas;
+    };
+    rainTrailGlyphs = make (QColor (0, 255, 70), false);
+    rainHeadGlyphs = make (QColor (120, 255, 150), true);
+}
+
+void VisualizerView::stepRain (double dt)
+{
+    auto* random = QRandomGenerator::global();
+    const int cell = std::clamp (height() / 32, 14, 34);
+    if (cell != rainCell || std::abs (devicePixelRatioF() - rainTrailGlyphs.devicePixelRatio()) > 0.01)
+        buildRainGlyphs (cell);
+
+    const int columns = std::max (1, width() / rainCellWidth + 1), rows = std::max (1, height() / rainCell + 1);
+    auto newColumn = [&] (bool anywhere)
+    {
+        RainColumn c;
+        c.length = 6 + random->bounded (std::max (2, rows * 3 / 4));
+        c.speed = (float) (0.6 + random->bounded (0.8));
+        c.head = anywhere ? random->bounded (rows + c.length) : -random->bounded (std::max (1, rows / 2));
+        return c;
+    };
+    if (columns != rainColumns || rows != rainRows)
+    {
+        rainColumns = columns;
+        rainRows = rows;
+        rain.clear();
+        for (int i = 0; i < columns; ++i)
+            rain.push_back (newColumn (true));
+        rainCells.resize ((size_t) (columns * rows));
+        for (auto& c : rainCells)
+            c = (quint8) random->bounded (rainGlyphCount);
+    }
+
+    if (rainBpm <= 0.0)
+        return;   // still
+
+    // A row per sixteenth note at the tempo, each column a little faster or slower.
+    const double rowsPerSecond = rainBpm / 60.0 * 4.0;
+    for (auto& c : rain)
+    {
+        c.head += dt * rowsPerSecond * c.speed;
+        if (c.head - c.length > rainRows)
+            c = newColumn (false);
+    }
+
+    // Symbols change now and then, more often at faster tempos.
+    const int changes = (int) std::ceil (rainCells.size() * 0.25 * dt * rainBpm / 120.0);
+    for (int i = 0; i < changes; ++i)
+        rainCells[(size_t) random->bounded ((int) rainCells.size())] = (quint8) random->bounded (rainGlyphCount);
+}
+
+void VisualizerView::drawRain (QPainter& g)
+{
+    g.fillRect (rect(), Qt::black);
+    if (rain.empty() || rainTrailGlyphs.isNull())
+        return;
+
+    // The music lights the trails up; the bass makes the heads flare.
+    const double glow = 0.55 + 0.45 * level;
+    const auto dpr = rainTrailGlyphs.devicePixelRatio();
+    for (int x = 0; x < rainColumns && x < (int) rain.size(); ++x)
+    {
+        const auto& c = rain[(size_t) x];
+        const int head = (int) std::floor (c.head);
+        for (int k = 0; k < c.length; ++k)
+        {
+            const int y = head - k;
+            if (y < 0 || y >= rainRows)
+                continue;
+            const auto glyph = rainCells[(size_t) (y * rainColumns + x)];
+            const QRectF source (glyph * rainCellWidth * dpr, 0, rainCellWidth * dpr, rainCell * dpr);
+            const QPointF at (x * rainCellWidth, y * rainCell);
+            if (k == 0)
+            {
+                g.setOpacity (std::min (1.0, 0.75 + 0.5 * bass));
+                g.drawImage (QRectF (at, QSizeF (rainCellWidth, rainCell)), rainHeadGlyphs, source);
+            }
+            else
+            {
+                const double fade = 1.0 - (double) k / c.length;
+                g.setOpacity (glow * fade * fade);
+                g.drawImage (QRectF (at, QSizeF (rainCellWidth, rainCell)), rainTrailGlyphs, source);
+            }
+        }
+    }
+    g.setOpacity (1.0);
+}
+
 void VisualizerView::drawBackground (QPainter& g)
 {
     auto back = colour ("waveformBackground");
@@ -459,6 +612,8 @@ void VisualizerView::paintEvent (QPaintEvent*)
     }
     else if (id == QLatin1String ("circleWave"))
         drawCircleWave (g);
+    else if (id == QLatin1String ("rain"))
+        drawRain (g);
     else
     {
         drawBackground (g);
@@ -474,7 +629,16 @@ void VisualizerView::paintEvent (QPaintEvent*)
         else if (id == QLatin1String ("surface"))     drawSurface (g, true);
         else if (id == QLatin1String ("landscape"))   drawSurface (g, false);
     }
-    if (! backdrop)
+    if (backdrop)
+    {
+        // The window's own background, which this covers: the opacity is how much
+        // of PHINYX's colour lies over the visualizer.
+        auto tint = palette().color (QPalette::Window);
+        tint.setAlpha (255);
+        tint.setAlphaF ((float) Theme::opacity());
+        g.fillRect (rect(), tint);
+    }
+    else
         drawTitle (g);
 }
 
@@ -498,6 +662,9 @@ void VisualizerView::drawTitle (QPainter& g)
     g.setFont (font);
     g.setPen (withAlpha (colour ("text"), fade * 0.7));
     auto about = tr (m.about) + tr ("   (Left/Right: other views, F11: full screen)");
+    if (isRain())
+        about = rainBpm > 0.0 ? tr ("%1 BPM   (Up/Down: tempo, tap T: set it, 0: stop; Left/Right: other views)").arg (std::lround (rainBpm))
+                              : tr ("Still   (Up/Down: tempo, tap T: set it; Left/Right: other views)");
 #if PHINYX_HAVE_PROJECTM
     if (isMilkDrop() && milk != nullptr && milk->presetCount() > 0)
         about = tr ("%1%2   (%3 of %4%5; Up/Down: other presets, L: keep this one)")
@@ -1182,6 +1349,39 @@ void VisualizerView::keyPressEvent (QKeyEvent* e)
         }
     }
 #endif
+    if (isRain())
+    {
+        const bool fine = e->modifiers().testFlag (Qt::ShiftModifier);
+        if (e->key() == Qt::Key_Up || e->key() == Qt::Key_Down)
+        {
+            const double step = fine ? 1.0 : 5.0;
+            const double next = e->key() == Qt::Key_Up ? std::floor (rainBpm / step + 1e-6) * step + step
+                                                       : std::ceil (rainBpm / step - 1e-6) * step - step;
+            Q_EMIT rainTempoRequested (std::clamp (next, 0.0, maxRainTempo));
+            return;
+        }
+        if (e->key() == Qt::Key_0 && ! e->modifiers().testFlag (Qt::ControlModifier))
+        {
+            Q_EMIT rainTempoRequested (0.0);
+            return;
+        }
+        if (e->key() == Qt::Key_T && e->modifiers() == Qt::NoModifier)
+        {
+            // Tap tempo: the average of the last few taps; a pause of 2 s starts over.
+            const auto now = clock.elapsed();
+            if (! rainTaps.empty() && now - rainTaps.back() > 2000)
+                rainTaps.clear();
+            rainTaps.push_back (now);
+            if (rainTaps.size() > 8)
+                rainTaps.erase (rainTaps.begin());
+            if (rainTaps.size() >= 2)
+            {
+                const double beat = (double) (rainTaps.back() - rainTaps.front()) / (double) (rainTaps.size() - 1);
+                Q_EMIT rainTempoRequested (std::clamp (std::round (60000.0 / beat), 1.0, maxRainTempo));
+            }
+            return;
+        }
+    }
     switch (e->key())
     {
         case Qt::Key_Left:

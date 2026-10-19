@@ -248,6 +248,8 @@ private:
     void setVisualMode (int index, bool openIfHidden);
     void toggleVisualizerBehind();
     void feedVisualizers();
+    void setRainTempo (double bpm);   // Digital Rain, saved and shown
+    double fileTempo() const;         // the open file's BPM tag, or 0
     class VisualizerView* showMilkDrop();
     void chooseMilkDropPreset();
     void downloadMilkDropPresets();

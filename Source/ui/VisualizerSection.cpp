@@ -39,6 +39,7 @@ void MainWindow::registerVisualizerCommands()
     };
 
     visualMode = std::max (0, VisualizerView::modeIndex (appSettings().value (QStringLiteral ("visualizer/mode")).toString()));
+    VisualizerView::setRainTempo (appSettings().value (QStringLiteral ("visualizer/rainTempo"), 120.0).toDouble());
 
     add ("view.visualizer", tr ("&Visualizer"), { KS (Qt::SHIFT | Qt::Key_F11) }, [this]
     {
@@ -84,6 +85,39 @@ void MainWindow::registerVisualizerCommands()
             waveform->setFocus();
     });
 
+    // Digital Rain's tempo, for when keys can't reach the view (behind PHINYX).
+    add ("view.rainTempo", tr ("Digital &Rain Tempo..."), {}, [this]
+    {
+        const auto tagged = fileTempo();
+        bool ok = false;
+        const auto bpm = QInputDialog::getInt (this, tr ("Digital Rain Tempo"),
+                                               tagged > 0.0 ? tr ("Beats per minute, 0 (still) to 240. This file's tag says %1 BPM.").arg (tagged)
+                                                            : tr ("Beats per minute, 0 (still) to 240:"),
+                                               (int) std::lround (VisualizerView::rainTempo()), 0, (int) VisualizerView::maxRainTempo, 1, &ok);
+        if (ok)
+        {
+            setRainTempo (bpm);
+            const int rain = VisualizerView::modeIndex (QStringLiteral ("rain"));
+            if (visualMode != rain)
+                setVisualMode (rain, true);
+        }
+        waveform->setFocus();
+    })->setStatusTip (tr ("How fast the Digital Rain visualizer falls: 0 (still) to 240 BPM"));
+    auto* follow = add ("view.rainFollowsFile", tr ("Digital Rain Follows the File's Tempo"), {}, [this]
+    {
+        const bool on = commands.action (QStringLiteral ("view.rainFollowsFile"))->isChecked();
+        appSettings().setValue (QStringLiteral ("visualizer/rainFollowsFile"), on);
+        const auto tagged = fileTempo();
+        if (on && tagged > 0.0)
+            setRainTempo (tagged);
+        statusBar()->showMessage (! on ? tr ("Digital Rain keeps its own tempo")
+                                  : tagged > 0.0 ? tr ("Digital Rain follows this file's %1 BPM").arg (tagged)
+                                                 : tr ("This file has no tempo tag yet: Analyze > Tempo and Key finds and writes one"), 6000);
+    });
+    follow->setCheckable (true);
+    follow->setChecked (appSettings().value (QStringLiteral ("visualizer/rainFollowsFile"), false).toBool());
+    follow->setStatusTip (tr ("Digital Rain takes its tempo from the open file's BPM tag (Analyze > Tempo and Key writes one)"));
+
 #if PHINYX_HAVE_PROJECTM
     // MilkDrop presets: these act on the visualizer showing (the window first), switching it to MilkDrop.
     add ("view.milkdropNext", tr ("Next &MilkDrop Preset"), { KS (Qt::ALT | Qt::Key_F12) }, [this]
@@ -126,6 +160,7 @@ VisualizerWindow* MainWindow::visualizerWindow()
         visualizer->syncPicker();
         connect (visualizer, &VisualizerWindow::modeChosen, this, [this] (int index) { setVisualMode (index, false); });
         connect (visualizer->view(), &VisualizerView::stepMode, this, [this] (int step) { setVisualMode (visualMode + step, false); });
+        connect (visualizer->view(), &VisualizerView::rainTempoRequested, this, [this] (double bpm) { setRainTempo (bpm); });
         connect (visualizer, &VisualizerWindow::backdropRequested, this, [this] { toggleVisualizerBehind(); });
         connect (visualizer, &VisualizerWindow::closed, this, [this]
         {
@@ -194,8 +229,32 @@ void MainWindow::toggleVisualizerBehind()
     statusBar()->showMessage (tr ("Visualizer behind PHINYX: Ctrl+Alt+- and Ctrl+Alt+= (or the Opacity slider) show more or less of it; Alt+F11 changes the view"), 8000);
 }
 
+void MainWindow::setRainTempo (double bpm)
+{
+    VisualizerView::setRainTempo (bpm);
+    appSettings().setValue (QStringLiteral ("visualizer/rainTempo"), VisualizerView::rainTempo());
+    statusBar()->showMessage (VisualizerView::rainTempo() > 0.0 ? tr ("Digital Rain: %1 BPM").arg (std::lround (VisualizerView::rainTempo()))
+                                                                : tr ("Digital Rain: still"), 2500);
+}
+
+double MainWindow::fileTempo() const
+{
+    const auto& tags = doc.current().tags;
+    const auto it = tags.find (tag::bpm);
+    if (it == tags.end())
+        return 0.0;
+    auto bpm = QString::fromStdString (it->second).toDouble();
+    while (bpm > VisualizerView::maxRainTempo)   // 280 BPM falls at 140
+        bpm /= 2.0;
+    return std::max (0.0, std::round (bpm));
+}
+
 void MainWindow::feedVisualizers()
 {
+    if (commands.action (QStringLiteral ("view.rainFollowsFile"))->isChecked())
+        if (const auto tagged = fileTempo(); tagged > 0.0 && std::abs (tagged - VisualizerView::rainTempo()) > 0.01)
+            setRainTempo (tagged);
+
     const auto rate = engine.deviceSampleRate();
     for (auto* view : { visualizer != nullptr && visualizer->isVisible() ? visualizer->view() : nullptr,
                         visualBackdrop != nullptr && visualBackdrop->isVisible() ? visualBackdrop : nullptr })
