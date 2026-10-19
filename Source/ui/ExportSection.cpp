@@ -224,7 +224,7 @@ void MainWindow::exportAudio()
             hi = std::max (hi, p.end);
         }
         std::string error;
-        source = renderWithProgress (lo, hi, error);
+        source = renderWithProgress (lo, hi, error, false);   // each output dithers to its own depth last
         if (source == nullptr)
         {
             if (error != "Cancelled")
@@ -359,7 +359,7 @@ void MainWindow::previewExport (const exporter::Output& output, bool difference,
     engine.stop();
     const bool rendered = throughMaster && engine.masterIsActive();
     std::string error;
-    AudioDataPtr original = rendered ? renderWithProgress (s, e, error) : d->slice (s, e);
+    AudioDataPtr original = rendered ? renderWithProgress (s, e, error, false) : d->slice (s, e);
     if (original == nullptr)
     {
         if (error != "Cancelled")

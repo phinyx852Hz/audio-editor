@@ -14,5 +14,8 @@ namespace builtin
 
     std::vector<juce::PluginDescription> descriptions();
     bool isBuiltin (const juce::PluginDescription&);
+    // The old Dither effect, no longer offered: the Master Section's final dither replaced it.
+    // Saved chains that have it still load it, so its settings can move there.
+    bool isDither (const juce::PluginDescription&);
     std::unique_ptr<juce::AudioPluginInstance> create (const juce::PluginDescription&);
 }

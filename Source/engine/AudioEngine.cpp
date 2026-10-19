@@ -919,6 +919,9 @@ double AudioEngine::masterGainDb() const                             { return im
 void AudioEngine::setMasterBypassed (bool b)                         { impl->master.setAllBypassed (b); }
 bool AudioEngine::isMasterBypassed() const                           { return impl->master.isAllBypassed(); }
 bool AudioEngine::masterIsActive() const                             { return impl->master.isActive(); }
+void AudioEngine::setMasterDither (int bits, dsp::Dither d)          { impl->master.setDither (bits, d); }
+int AudioEngine::masterDitherBits() const                            { return impl->master.ditherBits(); }
+dsp::Dither AudioEngine::masterDitherType() const                    { return impl->master.ditherType(); }
 
 std::vector<PluginParameterInfo> AudioEngine::masterSlotParameters (int slot) const { return impl->master.parameters (slot); }
 PluginParameterInfo AudioEngine::masterSlotParameter (int slot, int index) const   { return impl->master.parameter (slot, index); }
@@ -935,9 +938,9 @@ void AudioEngine::saveMasterSection() const                          { impl->mas
 std::string AudioEngine::restoreMasterSection()                      { return impl->master.restore(); }
 
 AudioDataPtr AudioEngine::renderThroughMaster (const AudioData& data, Frame start, Frame end, std::string& error,
-                                               std::atomic<float>* progress, const std::atomic<bool>* cancel)
+                                               std::atomic<float>* progress, const std::atomic<bool>* cancel, bool withDither)
 {
-    return impl->master.render (data, start, end, error, progress, cancel);
+    return impl->master.render (data, start, end, error, progress, cancel, withDither);
 }
 
 std::vector<std::string> AudioEngine::readableExtensions()
@@ -1288,7 +1291,18 @@ bool AudioEngine::saveFile (const std::string& path, const AudioData& data, cons
             if (! ok)
                 return;
 
-            if (options.dither && bits < 32 && ! isLossy)
+            // Audio the Master Section's final dither already rounded to this depth (or
+            // coarser) is on the grid; dithering it again would only add noise.
+            auto onGrid = [&]
+            {
+                const auto steps = (float) (1 << (bits - 1));
+                for (const auto& ch : block)
+                    for (const auto v : ch)
+                        if (v * steps != std::round (v * steps))
+                            return false;
+                return true;
+            };
+            if (options.dither && bits < 32 && ! isLossy && ! onGrid())
                 dsp::addTpdfDither (block, bits, rng);
 
             std::vector<const float*> ptrs;

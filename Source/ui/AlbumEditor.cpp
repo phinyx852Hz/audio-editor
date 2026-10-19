@@ -797,7 +797,7 @@ void MainWindow::exportAlbum()
     if (master->isChecked())
     {
         std::string error;
-        audio = renderWithProgress (0, album->length(), error);
+        audio = renderWithProgress (0, album->length(), error, false);   // the export dithers last
         if (audio == nullptr)
         {
             if (! error.empty())

@@ -4,6 +4,7 @@
 
 #include <QApplication>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
@@ -45,6 +46,23 @@ MasterPanel::MasterPanel (AudioEngine& e, QWidget* home, QWidget* parent)
     gainBox->setAccessibleName (tr ("Master gain"));
     gainBox->installEventFilter (new NavigationKeyGuard (home, {}, gainBox));
 
+    ditherBits = new QComboBox (this);
+    ditherBits->addItem (tr ("Off"), 0);
+    ditherBits->addItem (tr ("16-bit"), 16);
+    ditherBits->addItem (tr ("20-bit"), 20);
+    ditherBits->addItem (tr ("24-bit"), 24);
+    ditherBits->setAccessibleName (tr ("Final dither bit depth"));
+    ditherBits->setToolTip (tr ("Last in the Master Section, after the gain: rounds playback and Render in Place to this bit depth. "
+                                "Exports round to their own bit depth instead."));
+    ditherType = new QComboBox (this);
+    ditherType->addItem (tr ("Plain rounding"), (int) dsp::Dither::none);
+    ditherType->addItem (tr ("TPDF"), (int) dsp::Dither::tpdf);
+    ditherType->addItem (tr ("Shaped (noise shaping)"), (int) dsp::Dither::shaped);
+    ditherType->setAccessibleName (tr ("Final dither noise"));
+    ditherType->setToolTip (tr ("TPDF hides the rounding as faint even hiss; shaped moves that hiss up where the ear hears it least."));
+    for (auto* box : { ditherBits, ditherType })
+        box->installEventFilter (new NavigationKeyGuard (home, {}, box));
+
     summary->setWordWrap (true);
     summary->setForegroundRole (QPalette::PlaceholderText);
 
@@ -56,6 +74,12 @@ MasterPanel::MasterPanel (AudioEngine& e, QWidget* home, QWidget* parent)
 
     auto* gainRow = new QFormLayout;
     gainRow->addRow (tr ("Master &gain:"), gainBox);
+    auto* ditherRow = new QHBoxLayout;
+    ditherRow->addWidget (ditherBits);
+    ditherRow->addWidget (ditherType, 1);
+    auto* ditherLabel = new QLabel (tr ("Final &dither:"), this);
+    ditherLabel->setBuddy (ditherBits);
+    gainRow->addRow (ditherLabel, ditherRow);
 
     auto* buttons = new QHBoxLayout;
     buttons->addWidget (addButton);
@@ -79,6 +103,13 @@ MasterPanel::MasterPanel (AudioEngine& e, QWidget* home, QWidget* parent)
             editParameters (slot);
     });
     connect (gainBox, &QDoubleSpinBox::valueChanged, this, [this] (double db) { engine.setMasterGainDb (db); refresh(); });
+    auto applyDither = [this]
+    {
+        engine.setMasterDither (ditherBits->currentData().toInt(), (dsp::Dither) ditherType->currentData().toInt());
+        refresh();
+    };
+    connect (ditherBits, &QComboBox::currentIndexChanged, this, applyDither);
+    connect (ditherType, &QComboBox::currentIndexChanged, this, applyDither);
     connect (bypassBox, &QCheckBox::toggled, this, [this] (bool b) { engine.setMasterBypassed (b); refresh(); });
     connect (addButton, &QPushButton::clicked, this, [this] { choosePlugin (currentSlot()); });
     connect (renderButton, &QPushButton::clicked, this, &MasterPanel::renderRequested);
@@ -133,7 +164,12 @@ void MasterPanel::refresh()
     {
         const QSignalBlocker b1 (gainBox);
         const QSignalBlocker b2 (bypassBox);
+        const QSignalBlocker b3 (ditherBits);
+        const QSignalBlocker b4 (ditherType);
         gainBox->setValue (engine.masterGainDb());
+        ditherBits->setCurrentIndex (std::max (0, ditherBits->findData (engine.masterDitherBits())));
+        ditherType->setCurrentIndex (std::max (0, ditherType->findData ((int) engine.masterDitherType())));
+        ditherType->setEnabled (engine.masterDitherBits() > 0);
         bypassBox->setChecked (engine.isMasterBypassed());
     }
 
@@ -141,6 +177,8 @@ void MasterPanel::refresh()
                                           : tr ("%n active plugin(s)", nullptr, active);
     if (! engine.isMasterBypassed() && latency > 0)
         text += tr (", %1 samples latency (compensated)").arg (latency);
+    if (! engine.isMasterBypassed() && engine.masterDitherBits() > 0)
+        text += tr (", dithered to %1-bit last").arg (engine.masterDitherBits());
     summary->setText (text);
 }
 

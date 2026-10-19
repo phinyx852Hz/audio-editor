@@ -310,7 +310,8 @@ namespace
 
     //==========================================================================
     // Dither: rounds to the bit depth the file will be saved at, with dither noise
-    // that hides the rounding distortion. It belongs last in the chain.
+    // that hides the rounding distortion. Kept only to read chains saved when it took
+    // a slot; the Master Section's final dither does this now.
     class DitherProcessor final : public MasteringEffect
     {
     public:
@@ -367,7 +368,12 @@ namespace builtin
 {
     std::vector<juce::PluginDescription> descriptions()
     {
-        return { StereoizeProcessor::description(), LimiterProcessor::description(), DitherProcessor::description() };
+        return { StereoizeProcessor::description(), LimiterProcessor::description() };
+    }
+
+    bool isDither (const juce::PluginDescription& d)
+    {
+        return isBuiltin (d) && d.fileOrIdentifier == DitherProcessor::identifier;
     }
 
     bool isBuiltin (const juce::PluginDescription& d)

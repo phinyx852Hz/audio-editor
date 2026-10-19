@@ -66,13 +66,14 @@ protected:
 private:
     struct Knob
     {
-        int parameter = -1;   // plugin parameter index; -1 = master gain
+        int parameter = -1;   // plugin parameter index; or masterGain, ditherDepth, ditherNoise
         int steps = 0;        // 0 = continuous
         QDial* dial = nullptr;
         QLabel* name = nullptr;
         QLabel* value = nullptr;
     };
 
+    static constexpr int masterGain = -1, ditherDepth = -2, ditherNoise = -3;   // the master card's own knobs
     void addKnob (int parameter, const QString& name, int steps);
     void setKnobFromEngine (Knob&);
     void knobMoved (const Knob&, int position);

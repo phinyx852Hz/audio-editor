@@ -3,6 +3,7 @@
 
 #include "../core/AudioData.h"
 #include "../core/AudioDocument.h"
+#include "../core/Dsp.h"
 #include "../core/Metadata.h"
 #include "TagIO.h"
 
@@ -179,7 +180,11 @@ public:
     double masterGainDb() const;
     void setMasterBypassed (bool);
     bool isMasterBypassed() const;
-    bool masterIsActive() const;  // any plugin running or gain not 0 dB
+    bool masterIsActive() const;  // any plugin running, gain not 0 dB or the final dither on
+    // The final dither, last in the Master Section after the gain: 16, 20 or 24 bits (0 = off).
+    void setMasterDither (int bits, dsp::Dither);
+    int masterDitherBits() const;
+    dsp::Dither masterDitherType() const;
 
     // Solo hears one slot alone in context while playing (-1 = none); renders ignore it.
     void setMasterSoloSlot (int slot);
@@ -203,8 +208,10 @@ public:
 
     // Processes [start, end) through the Master Section at the file's sample rate,
     // compensating plugin latency. Playback is silent meanwhile. Call from a worker thread.
+    // Exports pass withDither false: they round to their own bit depth as the very last step.
     AudioDataPtr renderThroughMaster (const AudioData&, Frame start, Frame end, std::string& error,
-                                      std::atomic<float>* progress = nullptr, const std::atomic<bool>* cancel = nullptr);
+                                      std::atomic<float>* progress = nullptr, const std::atomic<bool>* cancel = nullptr,
+                                      bool withDither = true);
 
     static std::vector<std::string> readableExtensions();
     static std::vector<std::string> writableExtensions();

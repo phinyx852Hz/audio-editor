@@ -647,12 +647,31 @@ void MasterChain::setGainDb (double db)
     gain = (float) dsp::dbToGain (gainDecibels);
 }
 
+void MasterChain::setDither (int bits, dsp::Dither type)
+{
+    finalBits = bits == 16 || bits == 20 || bits == 24 ? bits : 0;
+    finalType = (int) type;
+}
+
+void MasterChain::FinalDither::process (int bits, dsp::Dither type, float* const* channels, int numChannels, int numFrames)
+{
+    if (bits <= 0)
+        return;
+    const auto settings = (bits * 4 + (int) type) * 64 + numChannels;
+    if (settings != applied)
+    {
+        quantizer.set (bits, type, numChannels);
+        applied = settings;
+    }
+    quantizer.process (channels, numChannels, numFrames);
+}
+
 bool MasterChain::isActive() const
 {
     if (allBypassed)
         return false;
 
-    if (std::abs (gainDecibels) > 1.0e-6)
+    if (std::abs (gainDecibels) > 1.0e-6 || finalBits > 0)
         return true;
 
     return std::any_of (slots.begin(), slots.end(), [] (const Slot& s) { return s.usable() && ! s.bypassed; });
@@ -951,6 +970,8 @@ void MasterChain::save() const
     juce::XmlElement root ("PHINYX_MASTER_SECTION");
     root.setAttribute ("gainDb", gainDecibels);
     root.setAttribute ("bypassed", (bool) allBypassed);
+    root.setAttribute ("ditherBits", finalBits.load());
+    root.setAttribute ("ditherType", finalType.load());
 
     for (size_t i = 0; i < slots.size(); ++i)
     {
@@ -986,6 +1007,7 @@ std::string MasterChain::restore()
 
     setGainDb (xml->getDoubleAttribute ("gainDb", 0.0));
     allBypassed = xml->getBoolAttribute ("bypassed", false);
+    setDither (xml->getIntAttribute ("ditherBits", 0), (dsp::Dither) std::clamp (xml->getIntAttribute ("ditherType", 1), 0, 2));
 
     juce::StringArray problems;
     for (auto* slot : xml->getChildWithTagNameIterator ("SLOT"))
@@ -1016,6 +1038,21 @@ std::string MasterChain::restore()
         if (instance == nullptr)
         {
             problems.add (d.name + ": " + error);
+            continue;
+        }
+
+        // The Dither effect used to take a slot; its settings move to the final dither.
+        if (builtin::isDither (d))
+        {
+            static constexpr int depths[] { 16, 20, 24 };
+            const auto params = instance->getParameters();
+            auto index = [&] (int i)
+            {
+                auto* choice = i < params.size() ? dynamic_cast<juce::AudioParameterChoice*> (params[i]) : nullptr;
+                return choice != nullptr ? choice->getIndex() : -1;
+            };
+            if (! slot->getBoolAttribute ("bypassed", false))
+                setDither (depths[std::clamp (index (0), 0, 2)], (dsp::Dither) std::clamp (index (1), 0, 2));
             continue;
         }
 
@@ -1090,6 +1127,15 @@ void MasterChain::processRealtime (juce::AudioBuffer<float>& buffer, int startSa
     }
 
     processChain (buffer, startSample, numSamples, true);
+
+    if (! allBypassed)
+    {
+        std::array<float*, maxChannels> ptrs {};
+        const auto channels = std::min (buffer.getNumChannels(), maxChannels);
+        for (int ch = 0; ch < channels; ++ch)
+            ptrs[(size_t) ch] = buffer.getWritePointer (ch, startSample);
+        liveDither.process (finalBits, (dsp::Dither) finalType.load(), ptrs.data(), channels, numSamples);
+    }
 }
 
 void MasterChain::processChain (juce::AudioBuffer<float>& io, int startSample, int numSamples, bool listening)
@@ -1190,7 +1236,7 @@ void MasterChain::processChain (juce::AudioBuffer<float>& io, int startSample, i
 }
 
 AudioDataPtr MasterChain::render (const AudioData& data, Frame start, Frame end, std::string& error,
-                                  std::atomic<float>* progress, const std::atomic<bool>* cancel)
+                                  std::atomic<float>* progress, const std::atomic<bool>* cancel, bool withDither)
 {
     const auto fileChannels = data.numChannels();
     if (fileChannels < 1 || fileChannels > maxChannels)
@@ -1241,6 +1287,9 @@ AudioDataPtr MasterChain::render (const AudioData& data, Frame start, Frame end,
     const auto outChannels = fileChannels == 1 && ! allBypassed ? 2 : fileChannels;
     float sideDifference = 0.0f;
     AudioData::Builder out (outChannels, data.sampleRate());
+    const auto ditherBits = withDither && ! allBypassed ? finalBits.load() : 0;
+    const auto ditherType = (dsp::Dither) finalType.load();
+    renderDither.applied = -1;   // fresh noise shaping state for every render
     Frame consumed = 0, produced = 0, toSkip = latency;
     bool cancelled = false;
 
@@ -1276,6 +1325,14 @@ AudioDataPtr MasterChain::render (const AudioData& data, Frame start, Frame end,
             if (outChannels != fileChannels)
                 for (int i = 0; i < count; ++i)
                     sideDifference = std::max (sideDifference, std::abs (ptrs[0][i] - ptrs[1][i]));
+            // Last, and after the mono check so its noise does not make two equal sides differ.
+            if (ditherBits > 0)
+            {
+                std::array<float*, maxChannels> write {};
+                for (int ch = 0; ch < outChannels; ++ch)
+                    write[(size_t) ch] = io.getWritePointer (ch) + skip;
+                renderDither.process (ditherBits, ditherType, write.data(), outChannels, count);
+            }
             out.append (ptrs.data(), count);
             produced += count;
         }

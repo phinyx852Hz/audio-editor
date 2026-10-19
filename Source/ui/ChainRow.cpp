@@ -161,7 +161,7 @@ DeviceCard::DeviceCard (AudioEngine& e, Kind k, int slot, QWidget* parent)
     : QFrame (parent), engine (e), cardKind (k), slotIndex (slot)
 {
     setFocusPolicy (Qt::NoFocus);
-    setFixedWidth (k == Kind::add ? 110 : k == Kind::master ? 120 : 236);
+    setFixedWidth (k == Kind::add ? 110 : k == Kind::master ? 186 : 236);
     setMinimumHeight (150);
 
     auto* layout = new QVBoxLayout (this);
@@ -229,7 +229,10 @@ DeviceCard::DeviceCard (AudioEngine& e, Kind k, int slot, QWidget* parent)
     else
     {
         title->setText (tr ("Master"));
-        addKnob (-1, tr ("Gain"), 0);
+        addKnob (masterGain, tr ("Gain"), 0);
+        // The final dither lives here, after the gain, so it never takes a plugin slot.
+        addKnob (ditherDepth, tr ("Dither"), 4);
+        addKnob (ditherNoise, tr ("Noise"), 3);
     }
 
     for (auto& kn : knobs)
@@ -310,11 +313,13 @@ void DeviceCard::addKnob (int parameter, const QString& name, int steps)
     kn.dial->setFocusPolicy (Qt::NoFocus);
     kn.dial->setWrapping (false);
     kn.dial->setAccessibleName (name);
-    if (parameter < 0)
+    if (parameter == masterGain)
     {
         kn.dial->setRange (-120, 48);  // master gain in half-dB steps
         pot->setOrigin (0);            // filled from 0 dB, up or down
     }
+    else if (parameter < 0)
+        kn.dial->setRange (0, steps - 1);
     else
         kn.dial->setRange (0, steps > 1 ? steps - 1 : dialResolution);
 
@@ -345,8 +350,13 @@ void DeviceCard::addKnob (int parameter, const QString& name, int steps)
 
 void DeviceCard::knobMoved (const Knob& kn, int position)
 {
-    if (kn.parameter < 0)
+    static constexpr int depths[] { 0, 16, 20, 24 };
+    if (kn.parameter == masterGain)
         engine.setMasterGainDb (position * 0.5);
+    else if (kn.parameter == ditherDepth)
+        engine.setMasterDither (depths[std::clamp (position, 0, 3)], engine.masterDitherType());
+    else if (kn.parameter == ditherNoise)
+        engine.setMasterDither (engine.masterDitherBits(), (dsp::Dither) std::clamp (position, 0, 2));
     else
         engine.setMasterSlotParameter (slotIndex, kn.parameter,
                                        (float) position / (float) std::max (1, kn.dial->maximum()));
@@ -358,11 +368,24 @@ void DeviceCard::setKnobFromEngine (Knob& kn)
     QString text;
     int position = 0;
 
-    if (kn.parameter < 0)
+    if (kn.parameter == masterGain)
     {
         const auto db = engine.masterGainDb();
         position = (int) std::lround (db * 2.0);
         text = QString::asprintf ("%+.1f dB", db);
+    }
+    else if (kn.parameter == ditherDepth)
+    {
+        const auto bits = engine.masterDitherBits();
+        position = bits == 16 ? 1 : bits == 20 ? 2 : bits == 24 ? 3 : 0;
+        text = bits > 0 ? tr ("%1-bit").arg (bits) : tr ("Off");
+    }
+    else if (kn.parameter == ditherNoise)
+    {
+        const auto type = engine.masterDitherType();
+        position = (int) type;
+        text = type == dsp::Dither::none ? tr ("Round") : type == dsp::Dither::tpdf ? tr ("TPDF") : tr ("Shaped");
+        kn.dial->setEnabled (engine.masterDitherBits() > 0);
     }
     else
     {
@@ -432,7 +455,7 @@ void DeviceCard::nudge (int index, double steps)
         return;
 
     auto& kn = knobs[(size_t) index];
-    const auto perStep = kn.parameter < 0 || kn.steps > 1 ? 1.0 : dialResolution / 100.0;
+    const auto perStep = kn.parameter < 0 || kn.steps > 1 ? 1.0 : dialResolution / 100.0;   // master knobs: half a dB, or one choice
     const auto target = std::clamp ((int) std::lround (kn.dial->value() + steps * perStep), kn.dial->minimum(), kn.dial->maximum());
     kn.dial->setValue (target);  // valueChanged sends it to the engine
 }
@@ -444,8 +467,10 @@ void DeviceCard::editValue (int index, const QString& startText)
 
     const auto& kn = knobs[(size_t) index];
     QString current;
-    if (kn.parameter < 0)
+    if (kn.parameter == masterGain)
         current = QString::number (engine.masterGainDb(), 'f', 1);
+    else if (kn.parameter < 0)
+        current = kn.value->text();
     else
         current = QString::fromStdString (engine.masterSlotParameter (slotIndex, kn.parameter).valueText);
 
@@ -484,7 +509,34 @@ void DeviceCard::applyTypedValue (int index, const QString& text)
 {
     const auto& kn = knobs[(size_t) index];
 
-    if (kn.parameter < 0)
+    if (kn.parameter == ditherDepth || kn.parameter == ditherNoise)
+    {
+        const auto t = text.trimmed().toLower();
+        if (kn.parameter == ditherDepth)
+        {
+            const auto bits = t.startsWith (QStringLiteral ("off")) || t == QStringLiteral ("0") ? 0 : t.left (2).toInt();
+            if (bits != 0 && bits != 16 && bits != 20 && bits != 24)
+            {
+                Q_EMIT message (tr ("Type 16, 20, 24 or off"));
+                return;
+            }
+            engine.setMasterDither (bits, engine.masterDitherType());
+        }
+        else
+        {
+            const auto type = t.startsWith (QStringLiteral ("t")) ? dsp::Dither::tpdf
+                            : t.startsWith (QStringLiteral ("s")) ? dsp::Dither::shaped
+                            : t.startsWith (QStringLiteral ("r")) || t.startsWith (QStringLiteral ("n")) || t.startsWith (QStringLiteral ("p")) ? dsp::Dither::none
+                                                                                                                                            : (dsp::Dither) -1;
+            if ((int) type < 0)
+            {
+                Q_EMIT message (tr ("Type TPDF, shaped or round"));
+                return;
+            }
+            engine.setMasterDither (engine.masterDitherBits(), type);
+        }
+    }
+    else if (kn.parameter < 0)
     {
         bool ok = false;
         auto cleaned = text;

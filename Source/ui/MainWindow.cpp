@@ -3058,7 +3058,7 @@ void MainWindow::showLoudnessStatistics()
 }
 
 //==============================================================================
-AudioDataPtr MainWindow::renderWithProgress (Frame start, Frame end, std::string& error)
+AudioDataPtr MainWindow::renderWithProgress (Frame start, Frame end, std::string& error, bool withDither)
 {
     auto progress = std::make_shared<std::atomic<float>> (0.0f);
     auto cancel = std::make_shared<std::atomic<bool>> (false);
@@ -3080,10 +3080,10 @@ AudioDataPtr MainWindow::renderWithProgress (Frame start, Frame end, std::string
     connect (&poll, &QTimer::timeout, this, [&] { dialog.setValue ((int) (progress->load() * 1000.0f)); });
     poll.start (50);
 
-    watcher.setFuture (QtConcurrent::run ([this, source, start, end, progress, cancel]
+    watcher.setFuture (QtConcurrent::run ([this, source, start, end, progress, cancel, withDither]
     {
         Result r;
-        r.data = engine.renderThroughMaster (*source, start, end, r.error, progress.get(), cancel.get());
+        r.data = engine.renderThroughMaster (*source, start, end, r.error, progress.get(), cancel.get(), withDither);
         return r;
     }));
 
@@ -3604,7 +3604,7 @@ void MainWindow::showBatch()
         batchWindow->masterRender = [this] (const AudioData& audio, std::string& error, const std::atomic<bool>* cancel)
         {
             const std::lock_guard<std::mutex> lock (masterRenderLock);
-            return engine.renderThroughMaster (audio, 0, audio.length(), error, nullptr, cancel);
+            return engine.renderThroughMaster (audio, 0, audio.length(), error, nullptr, cancel, false);   // outputs dither last
         };
         batchWindow->openFiles = [this]
         {

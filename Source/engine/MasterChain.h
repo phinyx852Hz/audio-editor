@@ -51,6 +51,12 @@ public:
     bool isAllBypassed() const   { return allBypassed; }
     bool isActive() const;
 
+    // Final dither: after the master gain, outside the slots, so it never takes one.
+    // Rounds to 16, 20 or 24 bits (0 = off) with plain rounding, TPDF or shaped noise.
+    void setDither (int bits, dsp::Dither);
+    int ditherBits() const { return finalBits.load(); }
+    dsp::Dither ditherType() const { return (dsp::Dither) finalType.load(); }
+
     // Solo: while listening, only this slot runs (-1 = none). Renders ignore it.
     void setSolo (int slot)  { soloSlot = slot; }
     int solo() const         { return soloSlot; }
@@ -81,8 +87,9 @@ public:
     // listening, so switching them never shifts the sound in time.
     int listeningLatency() const { return heardLatency.load (std::memory_order_relaxed); }
 
+    // `withDither` false leaves out the final dither, for exports that round to their own bit depth last.
     AudioDataPtr render (const AudioData&, Frame start, Frame end, std::string& error,
-                         std::atomic<float>* progress, const std::atomic<bool>* cancel);
+                         std::atomic<float>* progress, const std::atomic<bool>* cancel, bool withDither = true);
 
 private:
     struct Slot
@@ -179,6 +186,16 @@ private:
     std::atomic<float> gain { 1.0f };
     double gainDecibels = 0.0;
     std::atomic<bool> allBypassed { false };
+    std::atomic<int> finalBits { 0 };
+    std::atomic<int> finalType { (int) dsp::Dither::tpdf };
+    // One quantizer for listening and one for renders, each set up again when the settings change.
+    struct FinalDither
+    {
+        dsp::Quantizer quantizer;
+        int applied = -1;
+        void process (int bits, dsp::Dither, float* const* channels, int numChannels, int numFrames);
+    };
+    FinalDither liveDither, renderDither;
     std::atomic<int> soloSlot { -1 };
     std::array<std::atomic<float>, AudioEngine::numMasterSlots> peaks {};
     std::array<std::array<std::atomic<float>, 4>, AudioEngine::numMasterSlots> frameLevels {};   // in L/R, out L/R peaks

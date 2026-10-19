@@ -7,6 +7,7 @@
 #include <QWidget>
 
 class QCheckBox;
+class QComboBox;
 class QDoubleSpinBox;
 class QLabel;
 class QLineEdit;
@@ -14,7 +15,7 @@ class QListWidget;
 class QTreeWidget;
 
 // WaveLab-style Master Section: plugin slots applied to playback and renders,
-// then the master gain. In the slot list: Enter edits parameters (or adds a
+// then the master gain, then the final dither (always there, never in a slot). In the slot list: Enter edits parameters (or adds a
 // plugin to an empty slot), Insert picks a plugin, Delete removes it, B
 // bypasses, E opens the plugin's own window, Ctrl+Up/Down reorders.
 class MasterPanel final : public QWidget
@@ -43,6 +44,8 @@ private:
     AudioEngine& engine;
     QListWidget* slotList;
     QDoubleSpinBox* gainBox;
+    QComboBox* ditherBits;
+    QComboBox* ditherType;
     QCheckBox* bypassBox;
     QLabel* summary;
 };

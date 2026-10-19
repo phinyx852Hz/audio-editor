@@ -329,7 +329,7 @@ private:
     void stopExportPreview();
     QString previewName;                       // shown on the badge while a preview is heard
     std::pair<Frame, Frame> previewRange { 0, 0 };
-    AudioDataPtr renderWithProgress (Frame start, Frame end, std::string& error);
+    AudioDataPtr renderWithProgress (Frame start, Frame end, std::string& error, bool withDither = true);
 
     // Cursor and selection
     bool hasSelection() const { return selEnd > selStart; }
