@@ -1714,6 +1714,14 @@ namespace
                "3.3 s snaps to the beat and the bar at 3.25 s");
         check (std::abs (grid.beatAt (2.25) - 2.0) < 0.01, "2.25 s is two beats after the downbeat");
         check (! beatgrid::fit ({ 0.1, 0.6 }, {}).isSet(), "two beats make no grid");
+        {
+            std::vector<float> hitsAudio ((size_t) rate * 2, 0.0f);
+            for (const double t : { 0.2, 0.7, 1.3 })
+                for (size_t i = 0; i < 2000; ++i)
+                    hitsAudio[(size_t) (t * rate) + i] = (float) (0.8 * std::exp (-(double) i / 300.0) * std::sin (0.3 * (double) i));
+            const auto found = timestretch::transients (*build ({ hitsAudio }));
+            check (found.size() == 3 && std::abs ((double) found[1] / rate - 0.7) < 0.004, "transients finds the three hits: " + std::to_string (found.size()));
+        }
 
         // Aligning: kicks on beat 1 at 0.25 s + 2 s * n, hats on the other beats; the grid
         // starts 20 ms early with bar 1 on a hat, and ends on the kicks.
@@ -1736,6 +1744,33 @@ namespace
             off.downbeat = 0.75 - 0.02;
             const auto aligned = beatgrid::align (*build ({ loop }), off, true);
             check (std::abs (aligned.downbeat - 0.25) < 0.006, "align puts bar 1 on the kick at 0.25 s: " + std::to_string (aligned.downbeat));
+        }
+
+        // Quantize: hits 20 ms late on sixteenths (125 ms apart) at 120 BPM move onto the grid (or half way at 50 %).
+        {
+            BeatGrid g;
+            g.bpm = 120.0;
+            std::vector<Frame> hits;
+            for (int i = 0; i < 16; ++i)
+                hits.push_back ((Frame) ((i * 0.125 + 0.02) * rate));
+            timestretch::Quantize q;
+            const auto full = timestretch::quantize (hits, g, rate, q, 0, (Frame) (10 * rate));
+            check (full.size() == 16 && full[3].second == (Frame) (0.375 * rate), "quantize 100 % puts each hit on its sixteenth");
+            q.strength = 0.5;
+            const auto half = timestretch::quantize (hits, g, rate, q, 0, (Frame) (10 * rate));
+            check (! half.empty() && half[3].second == (Frame) ((0.375 + 0.01) * rate), "quantize 50 % moves each hit half way");
+            q.strength = 1.0;
+            q.leaveWithin = 0.25;  // a sixteenth is 125 ms: hits within 15.6 ms stay
+            check (timestretch::quantize (hits, g, rate, q, 0, (Frame) (10 * rate)).size() == 16, "20 ms off is outside a 15.6 ms leave-within");
+            q.leaveWithin = 0.4;   // within 25 ms stay
+            check (timestretch::quantize (hits, g, rate, q, 0, (Frame) (10 * rate)).empty(), "20 ms off is inside a 25 ms leave-within");
+            q.leaveWithin = 0.0;
+            q.reach = 0.25;        // only hits within 15.6 ms move
+            check (timestretch::quantize (hits, g, rate, q, 0, (Frame) (10 * rate)).empty(), "20 ms off is beyond a 15.6 ms reach");
+            q.reach = 1.0;
+            q.swing = 1.0;
+            const auto swung = timestretch::quantize (hits, g, rate, q, 0, (Frame) (10 * rate));
+            check (swung.size() >= 2 && std::abs ((double) swung[1].second / rate - (0.125 + 0.125 / 3.0)) < 1e-3, "full swing puts the second sixteenth a third of a step late");
         }
     }
 

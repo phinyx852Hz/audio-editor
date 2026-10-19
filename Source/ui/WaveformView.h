@@ -11,6 +11,7 @@
 #include <QPolygonF>
 #include <QWidget>
 #include <memory>
+#include <optional>
 #include <vector>
 
 // Waveform display with cursor, selection and markers. Keyboard focusable;
@@ -26,6 +27,11 @@ public:
     // Keeps the current zoom when the length is unchanged, otherwise fits.
     void setData (AudioDataPtr, bool keepView);
     void setMarkers (std::vector<Marker>);
+    // Warp markers (Warp menu): while editing, hits show as ticks along the top and
+    // warp markers as flags. Dragging a tick or a flag moves that point of the audio
+    // (snapped to sixteenths of the grid; Alt: free); Shift+drag moves a flag without
+    // moving the audio; double-click adds or removes a flag.
+    void setWarp (std::shared_ptr<const WarpEdit>, bool editing);
     // The beat grid: bar lines, beats and sixteenths as far as the zoom leaves room, bars numbered.
     void setGrid (const BeatGrid&, bool shown);
     void clear();
@@ -104,6 +110,10 @@ Q_SIGNALS:
     void fadeDragged (bool fadeIn, Frame length, double curve);
     void fadeReleased (bool fadeIn, Frame length, double curve);
     void frequencyRangeChanged();
+    // A warp point dragged: `source` (a frame of the original audio) now lands on `target`.
+    // marker: the index of the flag dragged, or -1 for a tick; reanchor: Shift was held.
+    void warpMoved (Frame source, Frame target, int marker, bool reanchor);
+    void warpToggled (Frame source);
 
 protected:
     void paintEvent (QPaintEvent*) override;
@@ -112,7 +122,7 @@ protected:
     void mouseReleaseEvent (QMouseEvent*) override;
     void wheelEvent (QWheelEvent*) override;
     void mouseDoubleClickEvent (QMouseEvent*) override;
-    void leaveEvent (QEvent*) override { hover = QPointF (-1.0, -1.0); update(); }
+    void leaveEvent (QEvent*) override { hover = QPointF (-1.0, -1.0); warpHover.reset(); update(); }
     void focusInEvent (QFocusEvent*) override  { update(); }
     void focusOutEvent (QFocusEvent*) override { update(); }
 
@@ -156,6 +166,20 @@ private:
     BeatGrid grid;
     bool gridShown = false;
     void drawGrid (QPainter&);
+
+    struct WarpHit
+    {
+        int marker = -1;          // index of a flag, or -1 for a tick
+        Frame source = 0, target = 0;
+    };
+    std::shared_ptr<const WarpEdit> warp;
+    bool warpEditing = false;
+    std::optional<WarpHit> warpHover, warpDrag;
+    Frame warpDragTo = -1;
+    bool warpReanchor = false;
+    std::optional<WarpHit> warpHitAt (double x) const;
+    Frame warpSnap (double x, bool free) const;
+    void drawWarp (QPainter&);
     bool levelColours = false;
     double viewStart = 0.0, viewLength = 0.0;  // in frames
     Frame cursor = 0, selStart = 0, selEnd = 0;

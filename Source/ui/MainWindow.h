@@ -38,6 +38,8 @@ class QListWidget;
 class QSlider;
 namespace vamphost { struct Result; }
 
+namespace timestretch { class SegmentCache; }
+
 class MainWindow final : public QMainWindow
 {
     Q_OBJECT
@@ -250,6 +252,18 @@ private:
     void detectBeatGrid();
     void setTempoDialog();
     void stretchToTempo();
+    // Warp markers: shown and edited while warpEditing; the first move makes the document's warp.
+    std::shared_ptr<const WarpEdit> currentWarp() const;
+    void setWarpEditing (bool);
+    void applyWarp (const QString& description, std::shared_ptr<WarpEdit>);
+    void warpMove (Frame source, Frame target, int marker, bool reanchor);
+    void warpToggle (Frame source);
+    void stepTransient (bool forward);
+    void nudgeWarpMarker (int direction, bool fine);
+    void quantizeDialog();
+    bool warpEditing = false;
+    std::shared_ptr<const WarpEdit> warpDraft;               // hits found, no marker placed yet
+    std::shared_ptr<timestretch::SegmentCache> warpCache;
     // The Visualizer (VisualizerSection.cpp).
     void registerVisualizerCommands();
 

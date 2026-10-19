@@ -3,6 +3,7 @@
 
 #include "AudioData.h"
 #include "BeatGrid.h"
+#include "WarpEdit.h"
 
 #include <cstdint>
 #include <map>
@@ -90,6 +91,9 @@ struct DocumentState
     std::string layout;
     // The tempo grid (Warp menu); set from the BPM tag when a file opens.
     BeatGrid grid;
+    // Set while warp markers are being placed: `data` is then their result. Any other
+    // change to the audio ends the warp (the markers are kept in the audio as it is).
+    std::shared_ptr<const WarpEdit> warp;
 };
 
 // Holds the current audio and markers plus a linear undo history of snapshots.

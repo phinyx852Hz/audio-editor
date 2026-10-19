@@ -360,6 +360,94 @@ void WaveformView::drawGrid (QPainter& g)
     g.restore();
 }
 
+void WaveformView::setWarp (std::shared_ptr<const WarpEdit> w, bool editing)
+{
+    warp = std::move (w);
+    warpEditing = editing && warp != nullptr;
+    if (! warpEditing)
+    {
+        warpHover.reset();
+        warpDrag.reset();
+    }
+    update();
+}
+
+std::optional<WaveformView::WarpHit> WaveformView::warpHitAt (double x) const
+{
+    if (! warpEditing)
+        return std::nullopt;
+    std::optional<WarpHit> best;
+    double distance = 6.0;   // pixels
+    for (size_t i = 0; i < warp->markers.size(); ++i)
+        if (const auto d = std::abs (frameToX (warp->markers[i].target) - x); d < distance)
+        {
+            distance = d;
+            best = WarpHit { (int) i, warp->markers[i].source, warp->markers[i].target };
+        }
+    if (best)
+        return best;
+    for (const auto t : warp->transients)
+    {
+        const auto target = warp->toTarget (t);
+        if (const auto d = std::abs (frameToX (target) - x); d < distance)
+        {
+            distance = d;
+            best = WarpHit { -1, t, target };
+        }
+    }
+    return best;
+}
+
+Frame WaveformView::warpSnap (double x, bool free) const
+{
+    auto f = std::clamp<Frame> (xToFrame (x), 0, length());
+    if (! free && grid.isSet() && data)
+        f = (Frame) std::llround (grid.snap ((double) f / data->sampleRate(), 0.25) * data->sampleRate());
+    return std::clamp<Frame> (f, 0, length());
+}
+
+void WaveformView::drawWarp (QPainter& g)
+{
+    if (! warpEditing)
+        return;
+    auto tick = palette().color (QPalette::Text);
+    tick.setAlpha (140);
+    g.setPen (QPen (tick, 1.0));
+    for (const auto t : warp->transients)
+    {
+        const auto x = frameToX (warp->toTarget (t));
+        if (x >= -2.0 && x <= width() + 2.0)
+            g.drawLine (QPointF (x, 0), QPointF (x, 9));
+    }
+    const auto flag = palette().color (QPalette::Highlight);
+    for (const auto& m : warp->markers)
+    {
+        const auto x = frameToX (m.target);
+        if (x < -8.0 || x > width() + 8.0)
+            continue;
+        g.setPen (QPen (flag, 1.0));
+        g.drawLine (QPointF (x, 0), QPointF (x, height()));
+        g.setBrush (flag);
+        g.drawPolygon (QPolygonF ({ QPointF (x, 0), QPointF (x + 7, 0), QPointF (x + 7, 7), QPointF (x, 11) }));
+        g.setBrush (Qt::NoBrush);
+    }
+    // The point under the mouse, and where a drag is taking it.
+    if (const auto& at = warpDrag ? warpDrag : warpHover; at)
+    {
+        auto ghost = flag;
+        ghost.setAlpha (170);
+        g.setPen (QPen (ghost, 1.0, Qt::DashLine));
+        const auto x = frameToX (warpDrag ? warpDragTo : at->target);
+        g.drawLine (QPointF (x, 0), QPointF (x, height()));
+        if (warpDrag)
+        {
+            ghost.setAlpha (90);
+            g.setPen (QPen (ghost, 1.0, Qt::DotLine));
+            g.drawLine (QPointF (frameToX (at->target), 0), QPointF (frameToX (at->target), height()));
+        }
+    }
+}
+
 void WaveformView::clear()
 {
     data.reset();
@@ -665,6 +753,7 @@ void WaveformView::paintEvent (QPaintEvent*)
         const auto cx = frameToX (cursor);
         g.drawLine (QPointF (cx, 0), QPointF (cx, height()));
 
+        drawWarp (g);
         drawFades (g);
         if (spectral)
             drawReadout (g, laneHeight);
@@ -980,6 +1069,15 @@ void WaveformView::mousePressEvent (QMouseEvent* e)
             return;
         }
 
+    if (const auto hit = warpHitAt (e->position().x()); hit && ! drawing())
+    {
+        warpDrag = hit;
+        warpDragTo = hit->target;
+        warpReanchor = (e->modifiers() & Qt::ShiftModifier) && hit->marker >= 0;
+        update();
+        return;
+    }
+
     const auto f = xToFrame (e->position().x());
     dragLane = std::clamp ((int) (e->position().y() / laneHeight()), 0, std::max (0, data->numChannels() - 1));
 
@@ -1022,6 +1120,12 @@ void WaveformView::mouseDoubleClickEvent (QMouseEvent* e)
     // Double-click selects the stretch between the markers (or region edges) on either side.
     if (! data || e->button() != Qt::LeftButton || drawing() || fadeDrag != 0)
         return;
+    if (const auto hit = warpHitAt (e->position().x()))
+    {
+        warpDrag.reset();
+        Q_EMIT warpToggled (hit->source);
+        return;
+    }
     const auto f = xToFrame (e->position().x());
     Frame from = 0, to = length();
     for (const auto& m : markers)
@@ -1037,6 +1141,24 @@ void WaveformView::mouseDoubleClickEvent (QMouseEvent* e)
 
 void WaveformView::mouseMoveEvent (QMouseEvent* e)
 {
+    if (warpDrag)
+    {
+        warpDragTo = warpSnap (e->position().x(), e->modifiers() & Qt::AltModifier);
+        update();
+        return;
+    }
+    if (warpEditing && ! (e->buttons() & Qt::LeftButton))
+    {
+        const auto hit = warpHitAt (e->position().x());
+        if (hit.has_value() != warpHover.has_value() || (hit && warpHover && hit->source != warpHover->source))
+        {
+            warpHover = hit;
+            update();
+        }
+        QWidget::setCursor (hit ? Qt::SizeHorCursor : Qt::ArrowCursor);
+        if (hit)
+            return;
+    }
     if (fadeDrag != 0)
     {
         const bool in = fadeDrag == 1;
@@ -1111,6 +1233,16 @@ void WaveformView::mouseMoveEvent (QMouseEvent* e)
 
 void WaveformView::mouseReleaseEvent (QMouseEvent*)
 {
+    if (warpDrag)
+    {
+        const auto hit = *warpDrag;
+        const auto to = warpDragTo;
+        warpDrag.reset();
+        update();
+        if (to != hit.target)
+            Q_EMIT warpMoved (hit.source, to, hit.marker, warpReanchor);
+        return;
+    }
     if (fadeDrag != 0)
     {
         const bool in = fadeDrag == 1;

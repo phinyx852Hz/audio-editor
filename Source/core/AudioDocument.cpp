@@ -65,6 +65,8 @@ void AudioDocument::apply (const std::string& description, DocumentState newStat
     if (savedPosition > position)
         savedPosition = -1;
 
+    if (newState.warp != nullptr && newState.warp == current().warp && newState.data != current().data)
+        newState.warp = nullptr;
     history.push_back ({ description, std::move (newState) });
     ++position;
 }

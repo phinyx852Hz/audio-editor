@@ -2,11 +2,41 @@
 #include "TimeStretch.h"
 
 #include "Dsp.h"
+#include "WarpEdit.h"
 
 #include <rubberband/RubberBandStretcher.h>
 
 #include <algorithm>
 #include <cmath>
+
+//==============================================================================
+Frame WarpEdit::toTarget (Frame f) const
+{
+    const auto length = source != nullptr ? source->length() : 0;
+    Frame s0 = 0, t0 = 0;
+    for (const auto& m : markers)
+    {
+        if (f < m.source)
+            return t0 + (Frame) std::llround ((double) (f - s0) * (double) (m.target - t0) / (double) std::max<Frame> (1, m.source - s0));
+        s0 = m.source;
+        t0 = m.target;
+    }
+    return t0 + (Frame) std::llround ((double) (f - s0) * (double) (length - t0) / (double) std::max<Frame> (1, length - s0));
+}
+
+Frame WarpEdit::toSource (Frame f) const
+{
+    const auto length = source != nullptr ? source->length() : 0;
+    Frame s0 = 0, t0 = 0;
+    for (const auto& m : markers)
+    {
+        if (f < m.target)
+            return s0 + (Frame) std::llround ((double) (f - t0) * (double) (m.source - s0) / (double) std::max<Frame> (1, m.target - t0));
+        s0 = m.source;
+        t0 = m.target;
+    }
+    return s0 + (Frame) std::llround ((double) (f - t0) * (double) (length - s0) / (double) std::max<Frame> (1, length - t0));
+}
 
 //==============================================================================
 double BeatGrid::beatAt (double seconds) const
@@ -87,6 +117,45 @@ BeatGrid beatgrid::fit (const std::vector<double>& beats, const std::vector<int>
     return grid;
 }
 
+namespace
+{
+    // Per hop: the level (in dB) of the mono mix and of its low end (one-pole low-pass at 150 Hz).
+    void levels (const AudioData& audio, Frame hop, std::vector<float>& level, std::vector<float>& low)
+    {
+        const auto rate = audio.sampleRate();
+        const auto hops = (size_t) (audio.length() / hop);
+        level.assign (hops, 0.0f);
+        low.assign (hops, 0.0f);
+        const auto channels = audio.numChannels();
+        std::vector<std::vector<float>> buffer ((size_t) channels, std::vector<float> ((size_t) hop));
+        std::vector<float*> ptrs;
+        for (auto& c : buffer)
+            ptrs.push_back (c.data());
+        const auto k = (float) (1.0 - std::exp (-2.0 * M_PI * 150.0 / rate));
+        float lp = 0.0f;
+        for (size_t h = 0; h < hops; ++h)
+        {
+            audio.read ((Frame) h * hop, (int) hop, ptrs.data());
+            double e = 0.0, el = 0.0;
+            for (Frame i = 0; i < hop; ++i)
+            {
+                float x = 0.0f;
+                for (const auto& c : buffer)
+                    x += c[(size_t) i];
+                x /= (float) channels;
+                lp += k * (x - lp);
+                e += (double) x * x;
+                el += (double) lp * lp;
+            }
+            level[h] = (float) (10.0 * std::log10 (e / (double) hop + 1e-12));
+            low[h] = (float) (10.0 * std::log10 (el / (double) hop + 1e-12));
+        }
+    }
+
+    // The rise in level over 3 hops: sharp at a hit.
+    float rise (const std::vector<float>& v, size_t h) { return h >= 3 ? std::max (0.0f, v[h] - v[h - 3]) : 0.0f; }
+}
+
 BeatGrid beatgrid::align (const AudioData& audio, BeatGrid grid, bool chooseBar1)
 {
     if (! grid.isSet() || audio.length() == 0)
@@ -97,35 +166,8 @@ BeatGrid beatgrid::align (const AudioData& audio, BeatGrid grid, bool chooseBar1
     if (hops < 16)
         return grid;
 
-    // Per millisecond: the level (in dB) of the mono mix and of its low end (one-pole low-pass at 150 Hz).
-    std::vector<float> level (hops), low (hops);
-    const auto channels = audio.numChannels();
-    std::vector<std::vector<float>> buffer ((size_t) channels, std::vector<float> ((size_t) hop));
-    std::vector<float*> ptrs;
-    for (auto& c : buffer)
-        ptrs.push_back (c.data());
-    const auto k = (float) (1.0 - std::exp (-2.0 * M_PI * 150.0 / rate));
-    float lp = 0.0f;
-    for (size_t h = 0; h < hops; ++h)
-    {
-        audio.read ((Frame) h * hop, (int) hop, ptrs.data());
-        double e = 0.0, el = 0.0;
-        for (Frame i = 0; i < hop; ++i)
-        {
-            float x = 0.0f;
-            for (const auto& c : buffer)
-                x += c[(size_t) i];
-            x /= (float) channels;
-            lp += k * (x - lp);
-            e += (double) x * x;
-            el += (double) lp * lp;
-        }
-        level[h] = (float) (10.0 * std::log10 (e / (double) hop + 1e-12));
-        low[h] = (float) (10.0 * std::log10 (el / (double) hop + 1e-12));
-    }
-    // The rise in level over 3 ms: sharp at a hit.
-    auto rise = [] (const std::vector<float>& v, size_t h) { return h >= 3 ? std::max (0.0f, v[h] - v[h - 3]) : 0.0f; };
-
+    std::vector<float> level, low;
+    levels (audio, hop, level, low);
     std::vector<double> shifts;
     const auto window = (long) 50;   // ms either side
     const auto last = grid.beatAt (audio.lengthSeconds());
@@ -180,6 +222,80 @@ BeatGrid beatgrid::align (const AudioData& audio, BeatGrid grid, bool chooseBar1
     }
     grid.normalise();
     return grid;
+}
+
+std::vector<Frame> timestretch::transients (const AudioData& audio, double sensitivity)
+{
+    std::vector<Frame> out;
+    const auto hop = std::max<Frame> (1, (Frame) (0.001 * audio.sampleRate()));
+    std::vector<float> level, low;
+    levels (audio, hop, level, low);
+    if (level.size() < 16)
+        return out;
+    // The level over the last 5 ms, so the flicker of noisy decays (snares, cymbals) is not taken for hits.
+    std::vector<float> smooth (level.size());
+    for (size_t h = 0; h < level.size(); ++h)
+    {
+        double sum = 0.0;
+        const auto first = h >= 4 ? h - 4 : 0;
+        for (auto j = first; j <= h; ++j)
+            sum += std::pow (10.0, level[j] / 10.0);
+        smooth[h] = (float) (10.0 * std::log10 (sum / (double) (h - first + 1) + 1e-12));
+    }
+    const auto riseAt = [&] (size_t h) { return h >= 5 ? std::max (0.0f, smooth[h] - smooth[h - 5]) : 0.0f; };
+
+    // A hit: the level rises this much in 5 ms (16 dB at 0 sensitivity to 5 dB at 1),
+    // above -55 dB, and is the biggest rise within 50 ms.
+    const auto threshold = (float) (16.0 - 11.0 * std::clamp (sensitivity, 0.0, 1.0));
+    const size_t gap = 50;
+    for (size_t h = 5; h < level.size(); ++h)
+    {
+        const auto r = riseAt (h);
+        if (r < threshold || smooth[h] < -55.0f)
+            continue;
+        bool biggest = true;
+        for (size_t j = h > gap ? h - gap : 5; j <= std::min (level.size() - 1, h + gap) && biggest; ++j)
+            biggest = j == h || riseAt (j) < r || (riseAt (j) <= r && j > h);
+        if (! biggest)
+            continue;
+        // Where it starts: the first millisecond 6 dB over the level before the rise.
+        auto start = h - 5;
+        while (start < h && level[start] < smooth[h - 5] + 6.0f)
+            ++start;
+        const auto at = (Frame) (start > 0 ? start - 1 : 0) * hop;
+        if (out.empty() || at - out.back() >= (Frame) gap * hop)
+            out.push_back (at);
+    }
+    return out;
+}
+
+std::vector<std::pair<Frame, Frame>> timestretch::quantize (const std::vector<Frame>& hits, const BeatGrid& grid, double rate,
+                                                            const Quantize& q, Frame from, Frame to)
+{
+    std::vector<std::pair<Frame, Frame>> out;
+    if (! grid.isSet() || q.division <= 0.0 || rate <= 0.0)
+        return out;
+    const auto gap = (Frame) (0.001 * rate);
+    for (const auto hit : hits)
+    {
+        if (hit < from || hit >= to)
+            continue;
+        const auto beat = grid.beatAt ((double) hit / rate);
+        const auto step = std::round (beat / q.division);
+        auto line = step * q.division;
+        if ((long long) std::llround (std::abs (step)) % 2 == 1)
+            line += std::clamp (q.swing, 0.0, 1.0) * q.division / 3.0;
+        const auto distance = std::abs (line - beat) / q.division;   // in steps; at most about half
+        if (distance <= q.leaveWithin / 2.0 || distance > q.reach / 2.0 + 1e-9)
+            continue;
+        const auto target = (Frame) std::llround (grid.secondsAt (beat + (line - beat) * std::clamp (q.strength, 0.0, 1.0)) * rate);
+        if (target == hit)
+            continue;
+        if (! out.empty() && (target <= out.back().second + gap || hit <= out.back().first + gap))
+            continue;
+        out.push_back ({ hit, target });
+    }
+    return out;
 }
 
 //==============================================================================
@@ -356,8 +472,30 @@ namespace
 }
 }
 
+AudioDataPtr timestretch::SegmentCache::find (const AudioData& source, Frame from, Frame to, Frame length, Mode mode) const
+{
+    if (owner != &source)
+        return nullptr;
+    const std::array<long long, 4> key { from, to, length, (long long) mode };
+    for (const auto& [k, piece] : pieces)
+        if (k == key)
+            return piece;
+    return nullptr;
+}
+
+void timestretch::SegmentCache::add (const AudioData& source, Frame from, Frame to, Frame length, Mode mode, AudioDataPtr piece)
+{
+    if (owner != &source)
+        clear();
+    owner = &source;
+    pieces.push_back ({ { from, to, length, (long long) mode }, std::move (piece) });
+    if (pieces.size() > 4096)
+        pieces.erase (pieces.begin(), pieces.begin() + 1024);
+}
+
 AudioDataPtr timestretch::render (const AudioData& audio, Frame start, Frame end, Frame resultLength, std::vector<Anchor> anchors,
-                                  Mode mode, std::string& error, std::atomic<float>* progress, const std::atomic<bool>* cancel)
+                                  Mode mode, std::string& error, std::atomic<float>* progress, const std::atomic<bool>* cancel,
+                                  SegmentCache* cache)
 {
     start = std::clamp<Frame> (start, 0, audio.length());
     end = std::clamp<Frame> (end, start, audio.length());
@@ -370,6 +508,12 @@ AudioDataPtr timestretch::render (const AudioData& audio, Frame start, Frame end
     const auto points = segments (std::move (anchors), length, resultLength);
     if (mode == Mode::varispeed)
         return varispeed (audio, start, points, error, progress, cancel);
+    if (points.size() == 2 && resultLength == length)
+    {
+        AudioData::Builder copy (audio.numChannels(), audio.sampleRate());
+        copy.appendShared (audio, start, end);
+        return copy.finish();
+    }
     if (points.size() == 2)
         return renderConstant (audio, start, end, resultLength, mode, error, progress, cancel);
 
@@ -388,13 +532,26 @@ AudioDataPtr timestretch::render (const AudioData& audio, Frame start, Frame end
     for (size_t i = 1; i < points.size(); ++i)
     {
         const auto from = points[i - 1], to = points[i];
+        const bool same = to.target - from.target == to.source - from.source;
         const auto ratio = (double) (to.target - from.target) / (double) (to.source - from.source);
         const auto a = std::max<Frame> (0, from.source - context), b = std::min (length, to.source + context);
-        const auto pieceLength = std::max<Frame> (2, (Frame) std::llround ((double) (b - a) * ratio));
-        std::atomic<float> part { 0.0f };
-        const auto rendered = renderConstant (audio, start + a, start + b, pieceLength, mode, error, &part, cancel);
-        if (rendered == nullptr)
-            return nullptr;
+        const auto pieceLength = same ? b - a : std::max<Frame> (2, (Frame) std::llround ((double) (b - a) * ratio));
+        AudioDataPtr rendered = cache != nullptr && ! same ? cache->find (audio, start + a, start + b, pieceLength, mode) : nullptr;
+        if (same)
+        {
+            AudioData::Builder copy (channels, rate);
+            copy.appendShared (audio, start + a, start + b);
+            rendered = copy.finish();
+        }
+        else if (rendered == nullptr)
+        {
+            std::atomic<float> part { 0.0f };
+            rendered = renderConstant (audio, start + a, start + b, pieceLength, mode, error, &part, cancel);
+            if (rendered == nullptr)
+                return nullptr;
+            if (cache != nullptr)
+                cache->add (audio, start + a, start + b, pieceLength, mode, rendered);
+        }
         for (int c = 0; c < channels; ++c)
         {
             piece[(size_t) c].assign ((size_t) pieceLength, 0.0f);
