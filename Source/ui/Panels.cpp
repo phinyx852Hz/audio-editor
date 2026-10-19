@@ -123,6 +123,32 @@ bool NavigationKeyGuard::eventFilter (QObject*, QEvent* e)
 }
 
 //==============================================================================
+namespace
+{
+    // The frame drawn around a panel while it has the keyboard, like the waveform's.
+    // It lies over the panel's content and lets every click through.
+    class FocusFrame final : public QWidget
+    {
+    public:
+        explicit FocusFrame (QWidget* content) : QWidget (content)
+        {
+            setAttribute (Qt::WA_TransparentForMouseEvents);
+            setAttribute (Qt::WA_NoSystemBackground);
+            setFocusPolicy (Qt::NoFocus);
+            hide();
+        }
+
+    protected:
+        void paintEvent (QPaintEvent*) override
+        {
+            QPainter g (this);
+            g.setPen (QPen (palette().color (QPalette::Link), 2.0));
+            g.setBrush (Qt::NoBrush);
+            g.drawRect (QRectF (rect()).adjusted (1, 1, -1, -1));
+        }
+    };
+}
+
 DockablePanel::DockablePanel (QMainWindow& main, const QString& id, const QString& panelTitle, QWidget* content,
                               Qt::DockWidgetArea area)
     : QObject (&main), mainWindow (main), panelId (id), title (panelTitle), contentWidget (content),
@@ -132,6 +158,19 @@ DockablePanel::DockablePanel (QMainWindow& main, const QString& id, const QStrin
     dockWidget->setWidget (content);
     main.addDockWidget (area, dockWidget);
     dockWidget->hide();
+
+    focusFrame = new FocusFrame (content);
+    content->installEventFilter (this);   // keeps the frame the content's size (see eventFilter)
+    connect (qApp, &QApplication::focusChanged, this, [this]
+    {
+        const auto on = containsFocus();
+        if (on)
+        {
+            focusFrame->setGeometry (contentWidget->rect());
+            focusFrame->raise();
+        }
+        focusFrame->setVisible (on);
+    });
 }
 
 DockablePanel::~DockablePanel()
@@ -270,6 +309,8 @@ bool DockablePanel::eventFilter (QObject* watched, QEvent* e)
     // Closing the popped-out window (for example with the window manager's close key) puts the panel back in its dock, hidden.
     if (watched == window && e->type() == QEvent::Close)
         QTimer::singleShot (0, this, [this] { dockBack (false); });
+    if (watched == contentWidget && e->type() == QEvent::Resize)
+        focusFrame->setGeometry (contentWidget->rect());
 
     return false;
 }

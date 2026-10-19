@@ -93,6 +93,7 @@ private:
     QDockWidget* dockWidget;
     bool sized = false;   // widened to its content once this session
     QWidget* window = nullptr;
+    QWidget* focusFrame = nullptr;
 };
 
 // Marker and region list. Enter jumps to the marker, F2 renames it, Delete removes it.

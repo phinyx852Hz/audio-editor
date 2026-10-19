@@ -106,6 +106,7 @@ private:
 
     // Tools (ToolsSection.cpp).
     void managePlugins();
+    void focusPanel (int direction);   // F6 / Shift+F6: the next or previous of the waveform and the panels showing
     void resetConfiguration();
 public:
     // After the window is gone: clears the settings if Reset Configuration asked to; true if it did (then restart).

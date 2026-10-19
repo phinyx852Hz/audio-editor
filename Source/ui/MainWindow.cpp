@@ -607,11 +607,14 @@ void MainWindow::registerCommands()
     });
     commands.action (QStringLiteral ("view.focusFollowsMouse"))->setCheckable (true);
 
-    add ("view.focusWaveform", Category::view, tr ("Focus &Waveform"), { KS (Qt::Key_F6) }, [this]
+    add ("view.focusWaveform", Category::view, tr ("Focus &Waveform"), { KS (Qt::CTRL | Qt::Key_F6) }, [this]
     {
         activateWindow();
         waveform->setFocus();
     });
+    // F6 and Shift+F6 go round the waveform and every panel that is showing.
+    add ("view.nextPanel", Category::view, tr ("&Next Panel"), { KS (Qt::Key_F6) }, [this] { focusPanel (1); });
+    add ("view.previousPanel", Category::view, tr ("Pre&vious Panel"), { KS (Qt::SHIFT | Qt::Key_F6) }, [this] { focusPanel (-1); });
 
     add ("options.separateOutputs", Category::options, tr ("Play Surround on &Separate Outputs"), {}, [this]
     {
@@ -672,7 +675,7 @@ void MainWindow::buildMenus()
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
-                               "view.overview", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "-", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.references", "view.popOut", "view.resetLayout", "-",
+                               "view.overview", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.references", "view.popOut", "view.resetLayout", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "-", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
@@ -729,6 +732,34 @@ QSlider* MainWindow::makeOpacitySlider (QWidget* parent)
     return slider;
 }
 
+void MainWindow::focusPanel (int direction)
+{
+    // The waveform, then the panels in the order they usually sit: below, right, left.
+    struct Stop { QWidget* widget; DockablePanel* panel; };
+    const std::vector<Stop> stops { { waveform, nullptr }, { chainRow, chainPanel }, { masterWidget, masterPanel },
+                                    { metersPanel->content(), metersPanel }, { markerList, markerPanel },
+                                    { historyList, historyPanel }, { diagnostics, diagnosticsPanel },
+                                    { referencePanel, referencesPanel }, { findWidget, findPanel } };
+    std::vector<Stop> showing;
+    for (const auto& s : stops)
+        if (s.panel == nullptr || s.panel->isShown())
+            showing.push_back (s);
+
+    int at = 0;
+    for (int i = 0; i < (int) showing.size(); ++i)
+        if (showing[(size_t) i].panel != nullptr ? showing[(size_t) i].panel->containsFocus() : waveform->hasFocus())
+            at = i;
+    const auto& next = showing[(size_t) ((at + direction + (int) showing.size()) % (int) showing.size())];
+    if (next.panel != nullptr)
+        next.panel->show (true);
+    else
+    {
+        activateWindow();
+        waveform->setFocus (Qt::TabFocusReason);
+    }
+    statusBar()->showMessage (next.panel != nullptr ? next.panel->dock()->windowTitle() : tr ("Waveform"), 1500);
+}
+
 void MainWindow::changeOpacity (double value, bool announce)
 {
     Theme::setOpacity (value);
@@ -783,6 +814,8 @@ void MainWindow::buildPanels()
     // The goniometer sits above the level meters.
     goniometer = new Goniometer (this);
     auto* meters = new QWidget (this);
+    meters->setFocusPolicy (Qt::StrongFocus);   // so it can be pointed at or tabbed to like the other panels
+    meters->setAccessibleName (tr ("Meters"));
     auto* metersLayout = new QVBoxLayout (meters);
     metersLayout->setContentsMargins (0, 0, 0, 0);
     metersLayout->setSpacing (0);
@@ -828,7 +861,8 @@ void MainWindow::buildPanels()
     panels = { masterPanel, chainPanel, metersPanel, markerPanel, historyPanel, diagnosticsPanel, findPanel, referencesPanel };
 
     focusFollowsMouse = new FocusFollowsMouse (this);
-    focusFollowsMouse->setAreas ({ waveform, chainRow, masterWidget, markerList, historyList, diagnostics, findWidget, referencePanel });
+    focusFollowsMouse->setAreas ({ waveform, chainRow, masterWidget, markerList, historyList, diagnostics, findWidget, referencePanel,
+                                   metersPanel->content() });
     qApp->installEventFilter (focusFollowsMouse);
 }
 
