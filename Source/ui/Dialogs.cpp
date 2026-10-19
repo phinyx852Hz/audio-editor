@@ -848,6 +848,7 @@ WaveformColorsDialog::WaveformColorsDialog (QWidget* parent)
         swatch->setAutoDefault (false);
         swatch->setMinimumWidth (170);
         label->setBuddy (swatch);
+        swatch->setCheckable (true);
         auto* reset = new QPushButton (tr ("Theme default"), this);
         reset->setAutoDefault (false);
         reset->setAccessibleName (tr ("Reset %1 to the theme's colour").arg (QString (name).remove (QLatin1Char ('&'))));
@@ -857,21 +858,17 @@ WaveformColorsDialog::WaveformColorsDialog (QWidget* parent)
         grid->addWidget (reset, i, 2);
         swatches.push_back ({ key, swatch });
 
-        connect (swatch, &QPushButton::clicked, this, [this, key, name]
+        connect (swatch, &QPushButton::clicked, this, [this, key]
         {
-            const auto chosen = QColorDialog::getColor (Theme::current().color (key), this,
-                                                        QString (name).remove (QLatin1Char ('&')),
-                                                        QColorDialog::ShowAlphaChannel);
-            if (chosen.isValid())
-            {
-                Theme::setColorOverride (key, chosen);
-                refresh();
-            }
+            choose (key);
+            picker->setFocus();
         });
         connect (reset, &QPushButton::clicked, this, [this, key]
         {
             Theme::setColorOverride (key, {});
             refresh();
+            if (key == chosenKey)
+                choose (key);
         });
     }
 
@@ -881,12 +878,36 @@ WaveformColorsDialog::WaveformColorsDialog (QWidget* parent)
         if (auto* push = qobject_cast<QPushButton*> (b))
             push->setAutoDefault (false);
 
-    auto* note = new QLabel (tr ("Press Enter or Space on a colour to change it. These colours apply on top of any theme. "
-                                    "The level colours are used when View > Colour Waveform by Level (Ctrl+Alt+Shift+W) is on, blended in between."), this);
+    auto* note = new QLabel (tr ("Pick a colour on the left (Enter or Space), then set it on the right; it shows at once. "
+                                    "These colours apply on top of any theme. The level colours are used when "
+                                    "View > Colour Waveform by Level (Ctrl+Alt+Shift+W) is on, blended in between."), this);
     note->setWordWrap (true);
 
+    picker = new QColorDialog (this);
+    picker->setWindowFlags (Qt::Widget);
+    picker->setOptions (QColorDialog::DontUseNativeDialog | QColorDialog::NoButtons | QColorDialog::ShowAlphaChannel);
+    // Picking a colour off the screen hangs or does nothing under Wayland compositors.
+    if (QGuiApplication::platformName().startsWith (QStringLiteral ("wayland")))
+        for (auto* b : picker->findChildren<QPushButton*>())
+            if (b->text().remove (QLatin1Char ('&')).contains (QStringLiteral ("Screen"), Qt::CaseInsensitive))
+                b->hide();
+    applyTimer = new QTimer (this);
+    applyTimer->setSingleShot (true);
+    applyTimer->setInterval (80);   // dragging in the picker changes the colour many times a second
+    connect (picker, &QColorDialog::currentColorChanged, this, [this] { applyTimer->start(); });
+    connect (applyTimer, &QTimer::timeout, this, [this]
+    {
+        if (chosenKey.isEmpty() || picker->currentColor() == Theme::current().color (chosenKey))
+            return;
+        Theme::setColorOverride (chosenKey, picker->currentColor());
+        refresh();
+    });
+
+    auto* columns = new QHBoxLayout;
+    columns->addLayout (grid);
+    columns->addWidget (picker, 1);
     auto* layout = new QVBoxLayout (this);
-    layout->addLayout (grid);
+    layout->addLayout (columns);
     layout->addWidget (note);
     layout->addWidget (buttons);
 
@@ -899,10 +920,22 @@ WaveformColorsDialog::WaveformColorsDialog (QWidget* parent)
             overrides.remove (s.first);
         Theme::setColorOverrides (overrides);
         refresh();
+        choose (chosenKey);
     });
 
     refresh();
+    choose (swatches.first().first);
     swatches.first().second->setFocus();
+}
+
+void WaveformColorsDialog::choose (const QString& key)
+{
+    applyTimer->stop();
+    chosenKey = key;
+    for (const auto& [k, swatch] : swatches)
+        swatch->setChecked (k == key);
+    const QSignalBlocker blocker (picker);
+    picker->setCurrentColor (Theme::current().color (key));
 }
 
 void WaveformColorsDialog::refresh()
@@ -925,6 +958,12 @@ void WaveformColorsDialog::refresh()
 
 void WaveformColorsDialog::done (int result)
 {
+    if (applyTimer->isActive())
+    {
+        applyTimer->stop();
+        if (result == QDialog::Accepted && ! chosenKey.isEmpty())
+            Theme::setColorOverride (chosenKey, picker->currentColor());
+    }
     if (result != QDialog::Accepted)
         Theme::setColorOverrides (original);
 

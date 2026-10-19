@@ -203,9 +203,15 @@ public:
 
 private:
     void refresh();
+    void choose (const QString& key);
 
     QMap<QString, QColor> original;
     QList<QPair<QString, class QPushButton*>> swatches;
+    // The picker sits in this window: a second window on top of a dialog can open
+    // out of sight on tiling window managers and leave PHINYX looking frozen.
+    class QColorDialog* picker = nullptr;
+    QString chosenKey;
+    class QTimer* applyTimer = nullptr;
 };
 
 // Choose a colour theme. Moving through the list previews it; Esc restores the old one.

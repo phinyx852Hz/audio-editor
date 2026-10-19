@@ -10,6 +10,18 @@
 #include <algorithm>
 #include <cmath>
 
+namespace
+{
+    // What the cached picture depends on: the theme and its personal colour changes.
+    QString themeKey (const Theme& theme)
+    {
+        auto key = theme.name;
+        for (auto it = theme.colors.begin(); it != theme.colors.end(); ++it)
+            key += it.value().name (QColor::HexArgb);
+        return key;
+    }
+}
+
 // The waveform part: the whole file, with the editor's range boxed.
 class Overview::Wave final : public QWidget
 {
@@ -51,8 +63,8 @@ protected:
         if (! data || data->length() == 0 || data->numChannels() == 0)
             return;
 
-        // The waveform is drawn once per file version, size and theme.
-        if (image.size() != size() * devicePixelRatioF() || imageData != data.get() || imageTheme != theme.name)
+        // The waveform is drawn once per file version, size and theme (with its personal colours).
+        if (image.size() != size() * devicePixelRatioF() || imageData != data.get() || imageTheme != themeKey (theme))
             render();
         g.drawImage (rect(), image);
 
@@ -189,7 +201,7 @@ private:
         image.setDevicePixelRatio (ratio);
         image.fill (Qt::transparent);
         imageData = data.get();
-        imageTheme = theme.name;
+        imageTheme = themeKey (theme);
 
         QPainter g (&image);
         const auto& d = *data;
