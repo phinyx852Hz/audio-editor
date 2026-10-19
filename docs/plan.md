@@ -652,6 +652,7 @@ Owner: "add/adapt the tracker from MilkyTracker and give credit to it. The track
 
 ### Next big item: warping, quantizing and stretching (planned 2026-10-19)
 Owner: "warping, time stretching audio, beat detection and how that will be incorporated in the audio editor, e.g. editing and quantizing a single audio file (mono or stereo) for use in quantized looping"; agreed as the next big item after the Tracker; "let's add Paul Xstretch 2 as a builtin effect both destructive and later on non-destructive".
+- Scope: audio only; no MIDI quantizing (owner, 2026-10-19).
 - Builds on what exists: Mark Beats / Mark Onsets / Detect Tempo and Key (QM Vamp) and Export Slices at Markers.
 - Engine: Rubber Band (GPL-2.0-or-later, Arch `rubberband`, R3 "finer" engine for offline quality, R2 for live preview); channels linked so stereo stays phase-coherent; mono and stereo files (later any channel count).
 - Step 1, beat grid: Detect Tempo sets BPM and the first downbeat; bar/beat lines over the waveform and in the time ruler; nudge, halve/double, tap tempo, time signature; grid saved with the file's session and as the WAV acid chunk.
