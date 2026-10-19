@@ -314,6 +314,8 @@ void MainWindow::setRainTempo (double bpm)
 
 double MainWindow::fileTempo() const
 {
+    if (! doc.isOpen())
+        return 0.0;
     const auto& tags = doc.current().tags;
     const auto it = tags.find (tag::bpm);
     if (it == tags.end())

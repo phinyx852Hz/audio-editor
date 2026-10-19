@@ -99,7 +99,12 @@ public:
     bool isAlbum() const { return isOpen() && current().album != nullptr; }
     bool isOpen() const { return ! history.empty() && current().data != nullptr; }
 
-    const DocumentState& current() const { return history[(size_t) position].state; }
+    // With nothing open this is an empty state (no audio, markers or tags), never a bad read.
+    const DocumentState& current() const
+    {
+        static const DocumentState none {};
+        return history.empty() ? none : history[(size_t) position].state;
+    }
     const std::string& path() const      { return filePath; }
     void setPath (const std::string& p)  { filePath = p; }
     // What the channels are, for the state as it is now, without an undo step (used on opening a file).
