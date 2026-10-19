@@ -52,6 +52,14 @@ public:
     void zoomFrequency (double factor, double around = 0.5);   // factor > 1 zooms in; around: 0 bottom to 1 top
     bool showsAllFrequencies() const;
 
+    // Vertical zoom of the waveform: 1 shows full scale, 4 makes it four times taller
+    // (+12 dB), so quiet passages and fades can be seen. Alt+wheel over the waveform.
+    void setAmplitudeZoom (double);
+    double amplitudeZoom() const { return ampZoom; }
+    // Zooms whichever display is shown: amplitude on the waveform, frequencies on the spectrogram.
+    void zoomVertically (double factor);
+    void resetVerticalZoom();
+
     // The selection's frequency band in Hz (none when high <= low), drawn as a box in the spectral view.
     void setBand (double lowHz, double highHz);
 
@@ -163,6 +171,8 @@ private:
     QFutureWatcher<SpectrogramPicture> spectrogramWatcher;
     spectrum::Settings spectrumSet;
     double freqLow = 0.0, freqHigh = 0.0;   // as asked; high 0 = half the sample rate
+    double ampZoom = 1.0;
+    void drawAmplitudeScale (QPainter&, double laneHeight);
     void drawFrequencyAxis (QPainter&, double laneHeight);
     void drawReadout (QPainter&, double laneHeight);
 };

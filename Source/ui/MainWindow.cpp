@@ -552,12 +552,13 @@ void MainWindow::registerCommands()
         spectrogramDialog->raise();
         spectrogramDialog->activateWindow();
     });
-    add ("view.frequencyZoomIn", Category::view, tr ("Zoom Frequencies I&n"), { KS (Qt::ALT | Qt::Key_Equal), KS (Qt::ALT | Qt::Key_Plus) },
-         [this] { waveform->zoomFrequency (1.5); });
-    add ("view.frequencyZoomOut", Category::view, tr ("Zoom Frequencies O&ut"), { KS (Qt::ALT | Qt::Key_Minus) },
-         [this] { waveform->zoomFrequency (1.0 / 1.5); });
-    add ("view.frequencyFull", Category::view, tr ("&All Frequencies Shown"), { KS (Qt::ALT | Qt::Key_0) },
-         [this] { waveform->setFrequencyRange (0.0, 0.0); });
+    // Vertical zoom: the waveform's height (amplitude), or the spectrogram's frequencies.
+    add ("view.verticalZoomIn", Category::view, tr ("Zoom Vertically I&n"), { KS (Qt::ALT | Qt::Key_Equal), KS (Qt::ALT | Qt::Key_Plus) },
+         [this] { waveform->zoomVertically (1.5); });
+    add ("view.verticalZoomOut", Category::view, tr ("Zoom Vertically O&ut"), { KS (Qt::ALT | Qt::Key_Minus) },
+         [this] { waveform->zoomVertically (1.0 / 1.5); });
+    add ("view.verticalZoomReset", Category::view, tr ("Reset Vertical Zoo&m"), { KS (Qt::ALT | Qt::Key_0) },
+         [this] { waveform->resetVerticalZoom(); });
     add ("view.opacityUp", Category::view, tr ("More &Opaque"),
          { KS (Qt::CTRL | Qt::ALT | Qt::Key_Equal), KS (Qt::CTRL | Qt::ALT | Qt::Key_Plus) },
          [this] { changeOpacity (Theme::opacity() + 0.05, true); });
@@ -639,7 +640,7 @@ void MainWindow::buildMenus()
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
-                               "view.overview", "view.spectral", "view.spectrogramSettings", "view.frequencyZoomIn", "view.frequencyZoomOut", "view.frequencyFull", "view.levelColors", "view.gainKnob", "-", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.references", "view.popOut", "view.resetLayout", "-",
+                               "view.overview", "view.spectral", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "-", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.references", "view.popOut", "view.resetLayout", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "-", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },

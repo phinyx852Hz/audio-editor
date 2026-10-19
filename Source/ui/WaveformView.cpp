@@ -74,6 +74,28 @@ void WaveformView::setFrequencyRange (double low, double high)
     update();
 }
 
+void WaveformView::setAmplitudeZoom (double zoom)
+{
+    ampZoom = std::clamp (zoom, 1.0, 1000.0);
+    update();
+}
+
+void WaveformView::zoomVertically (double factor)
+{
+    if (spectral)
+        zoomFrequency (factor);
+    else
+        setAmplitudeZoom (ampZoom * factor);
+}
+
+void WaveformView::resetVerticalZoom()
+{
+    if (spectral)
+        setFrequencyRange (0.0, 0.0);
+    else
+        setAmplitudeZoom (1.0);
+}
+
 void WaveformView::zoomFrequency (double factor, double around)
 {
     const auto [low, high] = frequencyRange();
@@ -401,12 +423,14 @@ void WaveformView::paintEvent (QPaintEvent*)
             for (int ch = 0; ch < numChannels; ++ch)
             {
                 const auto mid = laneHeight * (ch + 0.5);
-                const auto half = laneHeight * 0.45;
+                const auto half = laneHeight * 0.45 * ampZoom;
 
+                g.setClipping (false);
                 g.setPen (theme.color (QStringLiteral ("centerLine")));
                 g.drawLine (QPointF (0, mid), QPointF (width(), mid));
                 if (ch > 0)
                     g.drawLine (QPointF (0, laneHeight * ch), QPointF (width(), laneHeight * ch));
+                g.setClipRect (QRectF (0.0, laneHeight * ch, width(), laneHeight));   // zoomed in, peaks go past the lane
 
                 if (levelColours)
                 {
@@ -449,6 +473,7 @@ void WaveformView::paintEvent (QPaintEvent*)
                             g.drawLine (prev, p);
                         prev = p;
                     }
+                    g.setClipping (false);
                     continue;
                 }
 
@@ -464,6 +489,9 @@ void WaveformView::paintEvent (QPaintEvent*)
                     g.drawLine (QPointF (x, mid - hi * half), QPointF (x, mid - lo * half));
                 }
             }
+            g.setClipping (false);
+            if (ampZoom > 1.001)
+                drawAmplitudeScale (g, laneHeight);
         }
 
         // Speaker names (L, R, C, LFE...) at the top left of each lane.
@@ -614,6 +642,49 @@ void WaveformView::drawFrequencyAxis (QPainter& g, double lane)
             outlinedText (g, QRectF (8.0, top - textHeight / 2.0, 60.0, textHeight), Qt::AlignLeft | Qt::AlignVCenter, hzText (hz));
         }
     }
+    g.setFont (font());
+}
+
+void WaveformView::drawAmplitudeScale (QPainter& g, double lane)
+{
+    auto small = font();
+    small.setPointSizeF (small.pointSizeF() * 0.75);
+    g.setFont (small);
+    const auto textHeight = QFontMetricsF (small).height();
+    const auto half = lane * 0.45 * ampZoom;
+
+    for (int ch = 0; ch < (data ? data->numChannels() : 1); ++ch)
+    {
+        const auto mid = lane * (ch + 0.5);
+        // Levels every 6 dB from full scale down, labelled above the centre line, where there is room.
+        double lastY = -1.0e9;
+        for (int db = 0; db >= -96; db -= 6)
+        {
+            const auto y = mid - std::pow (10.0, db / 20.0) * half;
+            if (y < lane * ch + textHeight * 1.2)
+                continue;
+            if (y > mid - textHeight * 0.6)
+                break;
+            if (y - lastY < textHeight * 1.6)
+                continue;
+            lastY = y;
+            g.setPen (QColor (255, 255, 255, 40));
+            g.drawLine (QPointF (0.0, y), QPointF (width(), y));
+            g.drawLine (QPointF (0.0, 2.0 * mid - y), QPointF (width(), 2.0 * mid - y));
+            outlinedText (g, QRectF (8.0, y - textHeight / 2.0, 70.0, textHeight), Qt::AlignLeft | Qt::AlignVCenter,
+                          db == 0 ? tr ("0 dB") : tr ("%1 dB").arg (db));
+        }
+    }
+
+    // How far it is zoomed, at the top right.
+    const auto text = tr ("Vertical zoom %1x (+%2 dB)").arg (ampZoom, 0, 'f', ampZoom < 10.0 ? 1 : 0).arg (20.0 * std::log10 (ampZoom), 0, 'f', 1);
+    const QFontMetricsF metrics (small);
+    const QRectF box (width() - metrics.horizontalAdvance (text) - 28.0, 4.0, metrics.horizontalAdvance (text) + 14.0, metrics.height() + 4.0);
+    g.setPen (Qt::NoPen);
+    g.setBrush (QColor (0, 0, 0, 140));
+    g.drawRoundedRect (box, 4.0, 4.0);
+    g.setPen (QColor (235, 235, 235));
+    g.drawText (box, Qt::AlignCenter, text);
     g.setFont (font());
 }
 
@@ -919,11 +990,14 @@ void WaveformView::wheelEvent (QWheelEvent* e)
     const auto delta = e->angleDelta().y() != 0 ? e->angleDelta().y() : e->angleDelta().x();
     const auto steps = delta / 120.0;
 
-    if (spectral && (e->modifiers() & Qt::AltModifier))
+    if (e->modifiers() & Qt::AltModifier)
     {
         const auto lane = laneHeight();
         const auto y = std::fmod (e->position().y(), std::max (1.0, lane));
-        zoomFrequency (std::pow (1.25, steps), 1.0 - y / std::max (1.0, lane));
+        if (spectral)
+            zoomFrequency (std::pow (1.25, steps), 1.0 - y / std::max (1.0, lane));
+        else
+            setAmplitudeZoom (ampZoom * std::pow (1.25, steps));
     }
     else if (e->modifiers() & Qt::ControlModifier)
     {
