@@ -15,6 +15,7 @@
 #include "../Source/core/Generate.h"
 #include "../Source/core/Pitch.h"
 #include "../Source/core/PitchFix.h"
+#include "../Source/core/TimeStretch.h"
 #include "../Source/core/Binaural.h"
 #include "../Source/core/Ambisonics.h"
 
@@ -1613,6 +1614,131 @@ namespace
     }
 }
 
+    void testTimeStretch()
+    {
+        const double rate = 48000.0;
+        auto build = [&] (const std::vector<std::vector<float>>& x)
+        {
+            AudioData::Builder b ((int) x.size(), rate);
+            std::vector<const float*> p;
+            for (const auto& c : x)
+                p.push_back (c.data());
+            b.append (p.data(), (int) x[0].size());
+            return b.finish();
+        };
+        auto channel = [] (const AudioData& d, int c)
+        {
+            std::vector<std::vector<float>> all ((size_t) d.numChannels(), std::vector<float> ((size_t) d.length()));
+            std::vector<float*> p;
+            for (auto& v : all)
+                p.push_back (v.data());
+            d.read (0, (int) d.length(), p.data());
+            return all[(size_t) c];
+        };
+        auto crossings = [] (const std::vector<float>& x, size_t from, size_t to)
+        {
+            int n = 0;
+            for (size_t i = from + 1; i < to && i < x.size(); ++i)
+                n += (x[i - 1] < 0.0f) != (x[i] < 0.0f);
+            return n;
+        };
+        // The loudest point in [from, to), for finding a click.
+        auto peakAt = [] (const std::vector<float>& x, size_t from, size_t to)
+        {
+            size_t best = from;
+            for (size_t i = from; i < to && i < x.size(); ++i)
+                if (std::abs (x[i]) > std::abs (x[best]))
+                    best = i;
+            return (double) best;
+        };
+
+        // Pitch is kept: a 440 Hz tone 1.5 times as long still crosses zero at 440 Hz.
+        std::vector<float> tone (96000);
+        for (size_t i = 0; i < tone.size(); ++i)
+            tone[i] = (float) (0.5 * std::sin (2.0 * M_PI * 440.0 * (double) i / rate));
+        const auto stereo = build ({ tone, tone });
+        std::string error;
+        const auto longer = timestretch::stretch (*stereo, 0, stereo->length(), 1.5, timestretch::Mode::fullMix, error);
+        check (longer != nullptr && longer->length() == 144000, "stretch 1.5x gives exactly 1.5 times the length: " + error);
+        if (longer != nullptr)
+        {
+            const auto l = channel (*longer, 0), r = channel (*longer, 1);
+            const auto hz = crossings (l, 24000, 120000) / 2.0 / 2.0;
+            check (std::abs (hz - 440.0) < 3.0, "the stretched tone stays at 440 Hz: " + std::to_string (hz));
+            double diff = 0.0;
+            for (size_t i = 0; i < l.size(); ++i)
+                diff = std::max (diff, (double) std::abs (l[i] - r[i]));
+            check (diff < 1e-4, "equal channels stay equal (stretched together)");
+        }
+
+        // Varispeed: twice as long and an octave lower.
+        const auto slow = timestretch::stretch (*stereo, 0, stereo->length(), 2.0, timestretch::Mode::varispeed, error);
+        check (slow != nullptr && slow->length() == 192000, "varispeed 2x doubles the length");
+        if (slow != nullptr)
+        {
+            const auto hz = crossings (channel (*slow, 0), 24000, 168000) / 3.0 / 2.0;
+            check (std::abs (hz - 220.0) < 2.0, "varispeed 2x plays an octave lower: " + std::to_string (hz));
+        }
+
+        // Anchors: clicks every half second; the second click is moved from 0.5 s to 0.6 s.
+        std::vector<float> clicks (96000, 0.0f);
+        for (size_t at = 4800; at < clicks.size(); at += 24000)
+            for (size_t i = 0; i < 48; ++i)
+                clicks[at + i] = (float) (0.9 * std::exp (-(double) i / 8.0) * (i % 2 == 0 ? 1.0 : -1.0));
+        const auto drums = build ({ clicks });
+        const auto warped = timestretch::render (*drums, 0, drums->length(), drums->length(), { { 28800, 33600 }, { 52800, 52800 } },
+                                                 timestretch::Mode::drums, error);
+        check (warped != nullptr && warped->length() == drums->length(), "a warp keeps the result length asked for");
+        if (warped != nullptr)
+        {
+            const auto x = channel (*warped, 0);
+            const auto first = peakAt (x, 0, 16000), second = peakAt (x, 26000, 42000), third = peakAt (x, 48000, 62000);
+            check (std::abs (first - 5600.0) < 150.0, "the click before the anchor moves with its stretch, to 5600: " + std::to_string (first));
+            check (std::abs (second - 33600.0) < 150.0, "the anchored click lands at 0.7 s: " + std::to_string (second));
+            check (std::abs (third - 52800.0) < 150.0, "the click at the next anchor stays put: " + std::to_string (third));
+        }
+
+        // The grid: beats at 120 BPM with jitter and a missed beat, bars starting on the third beat.
+        std::vector<double> beats;
+        std::vector<int> inBar;
+        for (int i = 0; i < 40; ++i)
+            if (i != 7)
+            {
+                beats.push_back (0.25 + i * 0.5 + ((i * 37) % 5 - 2) * 0.002);
+                inBar.push_back ((i + 2) % 4 + 1);
+            }
+        const auto grid = beatgrid::fit (beats, inBar);
+        check (std::abs (grid.bpm - 120.0) < 0.1, "the grid's tempo is 120 BPM: " + std::to_string (grid.bpm));
+        check (std::abs (grid.downbeat - 1.25) < 0.01, "the downbeat is the first beat 1, at 1.25 s: " + std::to_string (grid.downbeat));
+        check (std::abs (grid.snap (3.3, 1.0) - 3.25) < 0.01 && std::abs (grid.snap (3.3, 4.0) - 3.25) < 0.01,
+               "3.3 s snaps to the beat and the bar at 3.25 s");
+        check (std::abs (grid.beatAt (2.25) - 2.0) < 0.01, "2.25 s is two beats after the downbeat");
+        check (! beatgrid::fit ({ 0.1, 0.6 }, {}).isSet(), "two beats make no grid");
+
+        // Aligning: kicks on beat 1 at 0.25 s + 2 s * n, hats on the other beats; the grid
+        // starts 20 ms early with bar 1 on a hat, and ends on the kicks.
+        {
+            std::vector<float> loop ((size_t) (rate * 9.0), 0.0f);
+            std::mt19937 noise (7);
+            std::uniform_real_distribution<float> uniform (-1.0f, 1.0f);
+            for (int b = 0; b < 16; ++b)
+            {
+                const auto at = (size_t) ((0.25 + b * 0.5) * rate);
+                for (size_t i = 0; i < (size_t) (0.2 * rate) && at + i < loop.size(); ++i)
+                {
+                    const auto t = (double) i / rate;
+                    loop[at + i] += b % 4 == 0 ? (float) (0.8 * std::exp (-t * 15.0) * std::sin (2.0 * M_PI * 60.0 * t))
+                                               : (float) (0.3 * std::exp (-t * 90.0)) * uniform (noise);
+                }
+            }
+            BeatGrid off;
+            off.bpm = 120.0;
+            off.downbeat = 0.75 - 0.02;
+            const auto aligned = beatgrid::align (*build ({ loop }), off, true);
+            check (std::abs (aligned.downbeat - 0.25) < 0.006, "align puts bar 1 on the kick at 0.25 s: " + std::to_string (aligned.downbeat));
+        }
+    }
+
 int main()
 {
     testStorage();
@@ -1625,6 +1751,7 @@ int main()
     testGenerate();
     testPitch();
     testPitchFix();
+    testTimeStretch();
     testBinaural();
     testAmbisonics();
     testRepair();

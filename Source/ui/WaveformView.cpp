@@ -309,6 +309,57 @@ void WaveformView::setMarkers (std::vector<Marker> m)
     update();
 }
 
+void WaveformView::setGrid (const BeatGrid& g, bool shown)
+{
+    if (g == grid && shown == gridShown)
+        return;
+    grid = g;
+    gridShown = shown;
+    update();
+}
+
+void WaveformView::drawGrid (QPainter& g)
+{
+    if (! gridShown || ! grid.isSet() || ! data || viewLength <= 0.0)
+        return;
+    const auto rate = data->sampleRate();
+    const auto pixelsPerBeat = grid.beatSeconds() * rate / viewLength * width();
+    const auto pixelsPerBar = pixelsPerBeat * grid.beatsPerBar;
+    // Bars always (every 2nd, 4th... bar when they crowd), beats from 8 px apart, sixteenths from 48 px.
+    int barStep = 1;
+    while (pixelsPerBar * barStep < 8.0 && barStep < 1 << 20)
+        barStep *= 2;
+    const double step = pixelsPerBeat >= 48.0 ? 0.25 : pixelsPerBeat >= 8.0 ? 1.0 : (double) (grid.beatsPerBar * barStep);
+
+    auto colour = palette().color (QPalette::Text);
+    const auto first = std::floor (grid.beatAt (viewStart / rate) / step) * step;
+    const auto last = grid.beatAt ((viewStart + viewLength) / rate);
+    g.save();
+    QFont small = font();
+    small.setPointSizeF (std::max (6.0, small.pointSizeF() * 0.8));
+    g.setFont (small);
+    double lastLabel = -1e9;
+    for (auto beat = first; beat <= last + step; beat += step)
+    {
+        const auto x = frameToX ((Frame) std::llround (grid.secondsAt (beat) * rate));
+        const auto inBar = std::fmod (std::fmod (beat, grid.beatsPerBar) + grid.beatsPerBar, grid.beatsPerBar);
+        const bool bar = std::abs (inBar) < 1e-6 || std::abs (inBar - grid.beatsPerBar) < 1e-6;
+        const bool onBeat = std::abs (beat - std::round (beat)) < 1e-6;
+        colour.setAlpha (bar ? 90 : onBeat ? 40 : 18);
+        g.setPen (QPen (colour, 1.0));
+        g.drawLine (QPointF (x, 0), QPointF (x, height()));
+        if (bar && x - lastLabel >= 28.0)
+        {
+            lastLabel = x;
+            const auto number = (long) std::llround (std::floor (beat / grid.beatsPerBar + 1e-6)) + 1;
+            colour.setAlpha (150);
+            g.setPen (colour);
+            g.drawText (QPointF (x + 3, height() - 4), QString::number (number));
+        }
+    }
+    g.restore();
+}
+
 void WaveformView::clear()
 {
     data.reset();
@@ -564,6 +615,8 @@ void WaveformView::paintEvent (QPaintEvent*)
 
         if (spectral && pitchShown)
             drawPitch (g, laneHeight);
+
+        drawGrid (g);
 
         if (selEnd > selStart && ! (spectral && shape))
         {

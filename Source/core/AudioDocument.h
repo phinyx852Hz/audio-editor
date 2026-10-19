@@ -2,6 +2,7 @@
 #pragma once
 
 #include "AudioData.h"
+#include "BeatGrid.h"
 
 #include <cstdint>
 #include <map>
@@ -87,6 +88,8 @@ struct DocumentState
     // The channel layout when it is not the usual one for the channel count ("5.2",
     // "Ambisonics (1st order)"...; see dsp::layoutChoices). Empty: the usual one.
     std::string layout;
+    // The tempo grid (Warp menu); set from the BPM tag when a file opens.
+    BeatGrid grid;
 };
 
 // Holds the current audio and markers plus a linear undo history of snapshots.

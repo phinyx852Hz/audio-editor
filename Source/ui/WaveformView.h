@@ -26,6 +26,8 @@ public:
     // Keeps the current zoom when the length is unchanged, otherwise fits.
     void setData (AudioDataPtr, bool keepView);
     void setMarkers (std::vector<Marker>);
+    // The beat grid: bar lines, beats and sixteenths as far as the zoom leaves room, bars numbered.
+    void setGrid (const BeatGrid&, bool shown);
     void clear();
     void setLoading (bool, float progress = 0.0f);
 
@@ -151,6 +153,9 @@ private:
 
     AudioDataPtr data;
     std::vector<Marker> markers;
+    BeatGrid grid;
+    bool gridShown = false;
+    void drawGrid (QPainter&);
     bool levelColours = false;
     double viewStart = 0.0, viewLength = 0.0;  // in frames
     Frame cursor = 0, selStart = 0, selEnd = 0;

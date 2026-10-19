@@ -242,6 +242,14 @@ private:
     // Analysis with Vamp plugins (Analysis.cpp): markers from beats, onsets or
     // any plugin, tempo and key into tags, and slices cut at the markers.
     void registerAnalysisCommands();
+    // The Warp menu (WarpSection.cpp): the beat grid and stretching to a tempo.
+    void registerWarpCommands();
+    void updateWarpCommandStates();
+    void refreshGrid();
+    void applyGrid (const QString& description, BeatGrid);
+    void detectBeatGrid();
+    void setTempoDialog();
+    void stretchToTempo();
     // The Visualizer (VisualizerSection.cpp).
     void registerVisualizerCommands();
 

@@ -60,6 +60,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/Generate.cpp
     Source/core/Pitch.cpp
     Source/core/PitchFix.cpp
+    Source/core/TimeStretch.cpp
     Source/core/Binaural.cpp
     Source/core/Ambisonics.cpp
     Source/core/Nyquist.cpp
@@ -119,6 +120,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/Visualizer.cpp
     Source/ui/VisualizerSection.cpp
     Source/ui/TrackerSection.cpp
+    Source/ui/WarpSection.cpp
     Source/ui/TrackerWindow.cpp
     Source/tracker/PatternText.cpp
     Source/tracker/TrackerEngine.cpp
@@ -278,6 +280,7 @@ if(PHINYX_BUILD_TESTS)
         Source/core/Generate.cpp
         Source/core/Pitch.cpp
         Source/core/PitchFix.cpp
+        Source/core/TimeStretch.cpp
     Source/core/Binaural.cpp
     Source/core/Ambisonics.cpp
         Source/core/Nyquist.cpp

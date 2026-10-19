@@ -460,6 +460,7 @@ void MainWindow::registerCommands()
     registerNyquistCommands();
     registerAlbumCommands();
     registerAnalysisCommands();
+    registerWarpCommands();
     registerVisualizerCommands();
     registerTrackerCommands();
     registerReferenceCommands();
@@ -707,6 +708,7 @@ void MainWindow::buildMenus()
                                "repair.frequencyRange", "repair.allFrequencies", "-", "view.spectral" } },
         { tr ("Effe&ct"),    { "effect.repeat", "-", "@nyquist.generate", "-", "@nyquist.effect" } },
         { tr ("Spat&ial"),   { "spatial.binaural", "-", "spatial.layout", "-", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.fumaToAmbix", "spatial.ambixToFuma", "-", "view.ambiScene", "analyze.imagingView" } },
+        { tr ("&Warp"),      { "warp.showGrid", "-", "warp.detectGrid", "warp.setTempo", "warp.downbeat", "warp.halve", "warp.double", "-", "warp.stretch" } },
         { tr ("&Markers"),   { "marker.add", "marker.addRegion", "-", "marker.next", "marker.previous", "-", "marker.exportSlices", "marker.exportLabels", "-", "view.markers" } },
         { tr ("Al&bum"),   { "album.new", "album.addSongs", "-", "album.previousSong", "album.nextSong", "-",
                                "album.moveEarlier", "album.moveLater", "album.longerPause", "album.shorterPause", "-",
@@ -1202,6 +1204,7 @@ void MainWindow::updateCommandStates()
     commands.action (QStringLiteral ("edit.paste"))->setEnabled (open && clipboard != nullptr);
     updateAlbumCommandStates();
     updateAnalysisCommandStates();
+    updateWarpCommandStates();
     commands.action (QStringLiteral ("marker.addRegion"))->setEnabled (open);
     commands.action (QStringLiteral ("master.render"))->setEnabled (open);
     commands.action (QStringLiteral ("master.renderNew"))->setEnabled (open);
@@ -1425,6 +1428,7 @@ void MainWindow::refreshFromDocument (bool keepView)
     waveform->setLayoutName (layoutName);
     meterPanel->setLayoutName (layoutName);
     waveform->setMarkers (d ? doc.current().markers : std::vector<Marker>());
+    refreshGrid();
     albumView->setAlbum (doc.isAlbum() ? doc.current().album : nullptr);
     albumView->setVisible (doc.isAlbum());
     waveform->setFadeHandles (! doc.isAlbum());

@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdlib>
 
 void adjustMarkersForEdit (std::vector<Marker>& markers, Frame start, Frame end, Frame insertedLength)
 {
@@ -37,6 +38,15 @@ void AudioDocument::reset (AudioDataPtr data, std::vector<Marker> markers, const
     history.clear();
     history.push_back ({ "Open", { std::move (data), std::move (markers), std::move (tags), std::move (album) } });
     position = savedPosition = 0;
+    // A file's BPM tag gives its grid a tempo (the downbeat at the start until set).
+    auto& state = history.front().state;
+    if (const auto it = state.tags.find (tag::bpm); it != state.tags.end())
+    {
+        char* end = nullptr;
+        const auto bpm = std::strtod (it->second.c_str(), &end);
+        if (end != it->second.c_str() && bpm >= 20.0 && bpm <= 400.0)
+            state.grid.bpm = bpm;
+    }
     filePath = path;
     savedAudio = path.empty() ? nullptr : current().data;
     static std::atomic<std::uint64_t> lastId { 0 };
