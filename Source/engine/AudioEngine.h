@@ -114,6 +114,7 @@ public:
     double length() const;    // seconds
 
     std::string deviceDescription() const;
+    double deviceSampleRate() const;     // what the scope samples run at
     std::vector<AudioOutputChoice> availableOutputs();
     AudioOutputChoice currentOutput() const;
     std::string selectOutput (const AudioOutputChoice&);

@@ -2,6 +2,7 @@
 #include "Goniometer.h"
 #include "InfoStrip.h"
 #include "Theme.h"
+#include "../core/Fft.h"
 
 #include <QEvent>
 #include <QMouseEvent>
@@ -67,6 +68,7 @@ QString Goniometer::viewName (View v)
         case View::polarSample: return tr ("Polar Sample");
         case View::polarLevel:  return tr ("Polar Level");
         case View::lissajous:   return tr ("Lissajous");
+        case View::binaural:    return tr ("Binaural");
     }
     return {};
 }
@@ -90,6 +92,7 @@ void Goniometer::reset()
     trace.fill (Qt::transparent);
     rays.fill (0.0f);
     skin.fill (0.0f);
+    bands.fill ({});
     correlation = 0.0;
     hasSignal = false;
     update();
@@ -144,6 +147,13 @@ void Goniometer::addSamples (const std::vector<float>& left, const std::vector<f
     {
         const auto now = ll > 0.0 && rr > 0.0 ? lr / std::sqrt (ll * rr) : 0.0;
         correlation += (now - correlation) * 0.25;
+    }
+
+    if (current == View::binaural)
+    {
+        analyseBinaural (left, right);
+        update();
+        return;
     }
 
     // Polar Level keeps rays, not a trace.
@@ -234,6 +244,7 @@ void Goniometer::addSamples (const std::vector<float>& left, const std::vector<f
                 break;
             }
             case View::polarLevel:
+            case View::binaural:
                 break;
         }
     }
@@ -331,6 +342,9 @@ void Goniometer::drawGuides (QPainter& g, const QRectF& plot) const
             label (leftCorner + QPointF (10, -10), QStringLiteral ("S"));
             break;
         }
+
+        case View::binaural:
+            break;   // drawn with the bands
     }
 }
 
@@ -386,6 +400,8 @@ void Goniometer::paintEvent (QPaintEvent*)
     drawGuides (g, plot);
     if (current == View::polarLevel)
         drawRays (g, plot);
+    else if (current == View::binaural)
+        drawBinaural (g, plot);
     else
         g.drawImage (plot.topLeft(), trace);
 
@@ -438,5 +454,174 @@ void Goniometer::paintEvent (QPaintEvent*)
     {
         const auto number = QString::number (std::abs (value) < 0.005 ? 0.0 : value, 'f', 2);
         steady::draw (g, left + fm.horizontalAdvance (name) + gap + slot - steady::width (fm, number), baseline, number);
+    }
+}
+
+//==============================================================================
+namespace
+{
+    constexpr double lowestBand = 150.0, highestBand = 12000.0;
+    constexpr int binauralOrder = 11;   // 2048 samples
+
+    // The lateral angle (degrees, right positive) for a time difference between the ears
+    // (seconds, positive when the right ear hears it first), by Woodworth's spherical head.
+    double angleForDelay (double seconds)
+    {
+        constexpr double headRadius = 0.0875, speedOfSound = 343.0;
+        const auto target = std::abs (seconds) * speedOfSound / headRadius;
+        double lo = 0.0, hi = M_PI / 2.0;
+        if (target >= hi + 1.0)
+            return std::copysign (90.0, seconds);
+        for (int i = 0; i < 30; ++i)
+        {
+            const auto mid = (lo + hi) / 2.0;
+            (mid + std::sin (mid) < target ? lo : hi) = mid;
+        }
+        return std::copysign (lo * 180.0 / M_PI, seconds);
+    }
+}
+
+void Goniometer::analyseBinaural (const std::vector<float>& left, const std::vector<float>& right)
+{
+    const auto size = (size_t) 1 << binauralOrder;
+    recentLeft.insert (recentLeft.end(), left.begin(), left.end());
+    recentRight.insert (recentRight.end(), right.begin(), right.end());
+    if (recentLeft.size() > size)
+    {
+        recentLeft.erase (recentLeft.begin(), recentLeft.end() - (std::ptrdiff_t) size);
+        recentRight.erase (recentRight.begin(), recentRight.end() - (std::ptrdiff_t) size);
+    }
+
+    // Nothing new, or silence: the dots fade.
+    if (left.empty() || ! hasSignal || recentLeft.size() < size)
+    {
+        for (auto& b : bands)
+            b.level *= 0.9;
+        return;
+    }
+
+    static const Fft fft (binauralOrder);
+    std::vector<std::complex<float>> l (size), r (size);
+    for (size_t i = 0; i < size; ++i)
+    {
+        const auto w = (float) (0.5 - 0.5 * std::cos (2.0 * M_PI * (double) i / (double) size));
+        l[i] = recentLeft[i] * w;
+        r[i] = recentRight[i] * w;
+    }
+    fft.forward (l);
+    fft.forward (r);
+
+    const auto binHz = sampleRate / (double) size;
+    for (int b = 0; b < numBands; ++b)
+    {
+        const auto from = lowestBand * std::pow (highestBand / lowestBand, (double) b / numBands);
+        const auto to = lowestBand * std::pow (highestBand / lowestBand, (double) (b + 1) / numBands);
+        const auto centre = std::sqrt (from * to);
+        std::complex<double> cross;
+        double pl = 0.0, pr = 0.0;
+        for (auto k = std::max<size_t> (1, (size_t) (from / binHz)); k <= (size_t) (to / binHz) && k < size / 2; ++k)
+        {
+            cross += std::complex<double> (l[k]) * std::conj (std::complex<double> (r[k]));
+            pl += std::norm (l[k]);
+            pr += std::norm (r[k]);
+        }
+        auto& band = bands[(size_t) b];
+        const auto power = (pl + pr) / (double) size;
+        // Level on a 60 dB scale from about -66 dBFS per band.
+        const auto level = power > 1e-12 ? std::clamp ((10.0 * std::log10 (power) + 66.0) / 60.0, 0.0, 1.0) : 0.0;
+        band.level = level > band.level ? level : band.level * 0.9 + level * 0.1;
+        if (pl <= 1e-12 || pr <= 1e-12)
+            continue;
+
+        // Below about 1.4 kHz the ears go by time, above it by level.
+        double angle = 0.0;
+        if (centre < 1400.0)
+            angle = angleForDelay (-std::arg (cross) / (2.0 * M_PI * centre));
+        else
+        {
+            const auto ildDb = 10.0 * std::log10 (pr / pl);
+            const auto most = 6.0 + 14.0 * std::clamp ((centre - 1400.0) / 6600.0, 0.0, 1.0);
+            angle = std::asin (std::clamp (ildDb / most, -1.0, 1.0)) * 180.0 / M_PI;
+        }
+        const auto coherence = std::abs (cross) / std::sqrt (pl * pr);
+        band.angle += (angle - band.angle) * 0.3;
+        band.coherence += (coherence - band.coherence) * 0.3;
+    }
+}
+
+void Goniometer::drawBinaural (QPainter& g, const QRectF& plot) const
+{
+    const auto& theme = Theme::current();
+    const auto centre = polarOrigin (plot);
+    const auto radius = polarRadius (plot) - 2.0;
+    const auto line = theme.color (QStringLiteral ("mid"));
+    const auto text = theme.color (QStringLiteral ("placeholderText"));
+    const auto radiusFor = [&] (double hz)
+    {
+        return radius * (0.24 + 0.76 * std::log (hz / lowestBand) / std::log (highestBand / lowestBand));
+    };
+
+    // The front half: rings at 200 Hz, 1 kHz and 5 kHz, the 45 degree lines and the head.
+    auto small = font();
+    small.setPointSizeF (small.pointSizeF() * 0.75);
+    g.setFont (small);
+    g.setBrush (Qt::NoBrush);
+    for (const auto& [hz, name] : { std::pair { 200.0, QStringLiteral ("200") }, std::pair { 1000.0, QStringLiteral ("1k") },
+                                    std::pair { 5000.0, QStringLiteral ("5k") } })
+    {
+        const auto r = radiusFor (hz);
+        g.setPen (QPen (line, 1.0, Qt::DotLine));
+        g.drawArc (QRectF (centre.x() - r, centre.y() - r, 2 * r, 2 * r), 0, 180 * 16);
+        g.setPen (text);
+        g.drawText (QPointF (centre.x() + 3, centre.y() - r + 10), name);
+    }
+    g.setPen (QPen (line, 1.0));
+    g.drawArc (QRectF (centre.x() - radius, centre.y() - radius, 2 * radius, 2 * radius), 0, 180 * 16);
+    g.drawLine (QPointF (centre.x() - radius, centre.y()), QPointF (centre.x() + radius, centre.y()));
+    g.setPen (QPen (line, 1.0, Qt::DashLine));
+    g.drawLine (centre, centre + QPointF (-radius * M_SQRT1_2, -radius * M_SQRT1_2));
+    g.drawLine (centre, centre + QPointF (radius * M_SQRT1_2, -radius * M_SQRT1_2));
+    const auto head = radius * 0.13;
+    g.setPen (QPen (theme.color (QStringLiteral ("windowText")), 1.4));
+    g.drawEllipse (centre, head, head);
+    g.drawLine (QPointF (centre.x() - head * 0.35, centre.y() - head * 0.92), QPointF (centre.x(), centre.y() - head * 1.45));
+    g.drawLine (QPointF (centre.x() + head * 0.35, centre.y() - head * 0.92), QPointF (centre.x(), centre.y() - head * 1.45));
+    auto bold = small;
+    bold.setBold (true);
+    bold.setPointSizeF (small.pointSizeF() * 1.15);
+    g.setFont (bold);
+    g.setPen (text);
+    g.drawText (QRectF (centre.x() - radius, centre.y() + 2, 20, 14), Qt::AlignLeft, QStringLiteral ("L"));
+    g.drawText (QRectF (centre.x() + radius - 20, centre.y() + 2, 20, 14), Qt::AlignRight, QStringLiteral ("R"));
+    g.drawText (QRectF (centre.x() - 30, centre.y() - radius - 14, 60, 14), Qt::AlignCenter, tr ("front"));
+
+    // Each band: a dot where it seems to come from, as big as it is loud; diffuse sound spreads faint.
+    auto colour = theme.color (QStringLiteral ("scope"));
+    for (int b = 0; b < numBands; ++b)
+    {
+        const auto& band = bands[(size_t) b];
+        if (band.level < 0.02)
+            continue;
+        const auto hz = lowestBand * std::pow (highestBand / lowestBand, (b + 0.5) / numBands);
+        const auto r = radiusFor (hz);
+        const auto a = band.angle * M_PI / 180.0;
+        const auto p = QPointF (centre.x() + r * std::sin (a), centre.y() - r * std::cos (a));
+        const auto coherence = std::clamp (band.coherence, 0.0, 1.0);
+        const auto spread = (1.0 - coherence) * 70.0;
+        if (spread > 4.0)
+        {
+            auto haze = colour;
+            haze.setAlphaF (0.25 * band.level);
+            g.setPen (QPen (haze, 2.0 + 6.0 * band.level, Qt::SolidLine, Qt::RoundCap));
+            g.setBrush (Qt::NoBrush);
+            g.drawArc (QRectF (centre.x() - r, centre.y() - r, 2 * r, 2 * r),
+                       (int) ((90.0 - band.angle - spread / 2.0) * 16.0), (int) (spread * 16.0));
+        }
+        auto dot = colour;
+        dot.setAlphaF (0.35 + 0.65 * coherence);
+        g.setPen (Qt::NoPen);
+        g.setBrush (dot);
+        const auto size = 1.5 + 3.5 * band.level;
+        g.drawEllipse (p, size, size);
     }
 }

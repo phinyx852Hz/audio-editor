@@ -104,6 +104,7 @@ private:
     void insertSilence();
     void generateSignal (bool noise);   // Effect > Generate > Tone or Noise
     void correctPitch();                // Repair > Correct Pitch (PitchSection.cpp)
+    void binauralRender();              // Spatial > Binaural (SpatialSection.cpp)
 
     // Tools (ToolsSection.cpp).
     void managePlugins();

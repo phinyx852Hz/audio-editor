@@ -88,6 +88,7 @@ namespace
         const QString analyze   = QObject::tr ("Analyze");
         const QString effect    = QObject::tr ("Effect");
         const QString generate  = QObject::tr ("Generate");
+        const QString spatial   = QObject::tr ("Spatial");
         const QString tools     = QObject::tr ("Tools");
         const QString master    = QObject::tr ("Master Section");
         const QString transport = QObject::tr ("Transport");
@@ -198,7 +199,10 @@ MainWindow::MainWindow (AudioEngine& e)
         scopeRight.clear();
         engine.takeScopeSamples (scopeLeft, scopeRight);
         if (goniometer->isVisible())
+        {
+            goniometer->setSampleRate (engine.deviceSampleRate());
             goniometer->addSamples (scopeLeft, scopeRight);
+        }
 
         // Looping plays the selection, or the whole file when nothing is selected.
         const auto d = data();
@@ -304,6 +308,8 @@ void MainWindow::registerCommands()
     add ("process.invert", Category::process, tr ("In&vert Polarity"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_I) },
          [this] { simpleProcess (tr ("Invert"), &dsp::invert); });
     add ("process.stereoize", Category::process, tr ("&Stereoize..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_W) }, [this] { stereoize(); });
+    add ("spatial.binaural", Category::spatial, tr ("&Binaural..."), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_B) }, [this] { binauralRender(); });
+    commands.action (QStringLiteral ("spatial.binaural"))->setStatusTip (tr ("Place the sound around your head for headphones: HRTF, 3D, spatial audio, immersive"));
     add ("process.convert", Category::process, tr ("&Convert Sample Type..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_T) },
          [this] { convertSampleType(); });
     add ("repair.autoHeal", Category::repair, tr ("&Auto Heal"), { KS (Qt::CTRL | Qt::Key_U) }, [this] { autoHeal(); });
@@ -664,6 +670,7 @@ void MainWindow::buildMenus()
                                "repair.brushSmaller", "repair.brushLarger", "repair.addHarmonics", "-",
                                "repair.frequencyRange", "repair.allFrequencies", "-", "view.spectral" } },
         { tr ("Effe&ct"),    { "effect.repeat", "-", "@nyquist.generate", "-", "@nyquist.effect" } },
+        { tr ("Spat&ial"),   { "spatial.binaural", "-", "analyze.imagingView" } },
         { tr ("&Markers"),   { "marker.add", "marker.addRegion", "-", "marker.next", "marker.previous", "-", "marker.exportSlices", "marker.exportLabels", "-", "view.markers" } },
         { tr ("Al&bum"),   { "album.new", "album.addSongs", "-", "album.previousSong", "album.nextSong", "-",
                                "album.moveEarlier", "album.moveLater", "album.longerPause", "album.shorterPause", "-",
@@ -1095,7 +1102,7 @@ void MainWindow::updateCommandStates()
     for (const auto* id : { "file.save", "file.saveAs", "file.export", "file.metadata", "file.close", "edit.insertSilence", "edit.copyToNew", "select.all", "select.none",
                             "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
                             "select.toStart", "select.toEnd", "process.gain", "process.normalize",
-                            "process.reverse", "process.invert", "process.dcOffset", "process.stereoize", "process.convert",
+                            "process.reverse", "process.invert", "process.dcOffset", "process.stereoize", "process.convert", "spatial.binaural",
                             "repair.findSimilar", "repair.addHarmonics",
                             "repair.spectralGain", "repair.frequencyRange", "repair.allFrequencies", "repair.learnNoise",
                             "repair.noiseReduction", "repair.declick", "repair.declip", "repair.dehum", "repair.deess",
@@ -1132,7 +1139,7 @@ void MainWindow::updateCommandStates()
     if (doc.isAlbum())
         for (const auto* id : { "edit.cut", "edit.paste", "edit.delete", "edit.trim", "edit.insertSilence", "file.metadata",
                                 "process.gain", "process.normalize", "process.fadeIn", "process.fadeOut", "process.reverse",
-                                "process.invert", "process.dcOffset", "process.stereoize", "process.convert",
+                                "process.invert", "process.dcOffset", "process.stereoize", "process.convert", "spatial.binaural",
                                 "repair.autoHeal", "repair.spectralGain", "repair.noiseReduction", "repair.declick",
                                 "repair.declip", "repair.dehum", "repair.deess", "repair.addHarmonics", "repair.correctPitch",
                                 "marker.add", "marker.addRegion" })

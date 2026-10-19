@@ -60,6 +60,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/Generate.cpp
     Source/core/Pitch.cpp
     Source/core/PitchFix.cpp
+    Source/core/Binaural.cpp
     Source/core/Nyquist.cpp
     Source/core/Album.cpp
     Source/engine/AudioCapture.cpp
@@ -111,7 +112,9 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/PitchSection.cpp
     Source/ui/MacroSection.cpp
     Source/ui/Macros.cpp
-    Source/ui/ToolsSection.cpp)
+    Source/ui/ToolsSection.cpp
+    Source/ui/BinauralDialog.cpp
+    Source/ui/SpatialSection.cpp)
 
 # CLAP plugin hosting needs only the CLAP headers: a local checkout, the
 # system's (clap/clap.h, e.g. the clap package), or the pinned release.
@@ -203,6 +206,12 @@ target_link_libraries(${APP_ID} PRIVATE phinyx_vamp_host)
 include(cmake/RubberBand.cmake)
 target_link_libraries(${APP_ID} PRIVATE phinyx_rubberband)
 
+# libmysofa (cmake/Mysofa.cmake): HRTF sets for binaural rendering, with the MIT KEMAR set.
+include(cmake/Mysofa.cmake)
+target_link_libraries(${APP_ID} PRIVATE phinyx_mysofa)
+target_compile_definitions(${APP_ID} PRIVATE PHINYX_DEFAULT_HRTF="${PHINYX_DEFAULT_HRTF}")
+install(FILES "${PHINYX_DEFAULT_HRTF}" DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/hrtf")
+
 # Nyquist effects (cmake/Nyquist.cmake): libnyquist, its runtime and the bundled plug-ins.
 include(cmake/Nyquist.cmake)
 target_link_libraries(${APP_ID} PRIVATE phinyx_nyquist)
@@ -248,9 +257,11 @@ if(PHINYX_BUILD_TESTS)
         Source/core/Generate.cpp
         Source/core/Pitch.cpp
         Source/core/PitchFix.cpp
+    Source/core/Binaural.cpp
         Source/core/Nyquist.cpp
         Source/core/Album.cpp)
-    target_link_libraries(phinyx-core-tests PRIVATE phinyx_nyquist phinyx_rubberband)
+    target_link_libraries(phinyx-core-tests PRIVATE phinyx_nyquist phinyx_rubberband phinyx_mysofa)
+    target_compile_definitions(phinyx-core-tests PRIVATE PHINYX_DEFAULT_HRTF="${PHINYX_DEFAULT_HRTF}")
     target_compile_definitions(phinyx-core-tests PRIVATE PHINYX_SHARE_SOURCE_DIR="${CMAKE_SOURCE_DIR}/share")
     add_test(NAME core COMMAND phinyx-core-tests)
 endif()

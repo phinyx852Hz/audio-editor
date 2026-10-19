@@ -688,6 +688,13 @@ double AudioEngine::length() const
     return d != nullptr ? d->lengthSeconds() : 0.0;
 }
 
+double AudioEngine::deviceSampleRate() const
+{
+    if (auto* device = impl->deviceManager.getCurrentAudioDevice())
+        return device->getCurrentSampleRate();
+    return 48000.0;
+}
+
 std::string AudioEngine::deviceDescription() const
 {
     if (auto* device = impl->deviceManager.getCurrentAudioDevice())

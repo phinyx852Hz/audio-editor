@@ -15,6 +15,7 @@
 #include "../Source/core/Generate.h"
 #include "../Source/core/Pitch.h"
 #include "../Source/core/PitchFix.h"
+#include "../Source/core/Binaural.h"
 
 #include <algorithm>
 #include <cmath>
@@ -1402,6 +1403,98 @@ namespace
         error.clear();
         check (pitchfix::correct (*silence, 0, 48000, *pitch::track (*silence), {}, error) == nullptr && ! error.empty(), "silence is refused");
     }
+
+    void testBinaural()
+    {
+        // The convolver matches a direct convolution, across several partitions.
+        {
+            std::mt19937 random (1);
+            std::uniform_real_distribution<float> u (-1.0f, 1.0f);
+            std::vector<float> x (1000), h (300);
+            for (auto& v : x) v = u (random);
+            for (auto& v : h) v = u (random);
+            binaural::Convolver conv (h, 64);
+            std::vector<float> y;
+            for (size_t pos = 0; pos < x.size() + h.size(); pos += 64)
+            {
+                std::vector<float> in (64, 0.0f), out (64);
+                for (size_t i = 0; i < 64 && pos + i < x.size(); ++i)
+                    in[i] = x[pos + i];
+                conv.process (in.data(), out.data());
+                y.insert (y.end(), out.begin(), out.end());
+            }
+            double worst = 0.0;
+            for (size_t n = 0; n < x.size() + h.size() - 1; ++n)
+            {
+                double expected = 0.0;
+                for (size_t k = 0; k < h.size(); ++k)
+                    if (n >= k && n - k < x.size())
+                        expected += (double) h[k] * x[n - k];
+                worst = std::max (worst, std::abs (expected - y[n]));
+            }
+            check (worst < 1e-3, "partitioned convolution matches direct convolution");
+        }
+
+        const double rate = 48000.0;
+        std::vector<float> click (48000, 0.0f);
+        click[24000] = 1.0f;
+        AudioData::Builder b (1, rate);
+        const float* p = click.data();
+        b.append (&p, (int) click.size());
+        const auto mono = b.finish();
+
+        binaural::Settings settings;
+        settings.hrtfPath = PHINYX_DEFAULT_HRTF;
+        std::string error;
+        const auto ears = [&] (double azimuth, double& leftEnergy, double& rightEnergy, Frame& leftPeak, Frame& rightPeak)
+        {
+            settings.azimuth = azimuth;
+            const auto out = binaural::render (*mono, 0, mono->length(), settings, error);
+            if (out == nullptr || out->numChannels() != 2 || out->length() != mono->length())
+                return false;
+            std::vector<float> l ((size_t) out->length()), r ((size_t) out->length());
+            float* both[] { l.data(), r.data() };
+            out->read (0, (int) out->length(), both);
+            leftEnergy = rightEnergy = 0.0;
+            leftPeak = rightPeak = 0;
+            for (size_t i = 0; i < l.size(); ++i)
+            {
+                leftEnergy += (double) l[i] * l[i];
+                rightEnergy += (double) r[i] * r[i];
+                if (std::abs (l[i]) > std::abs (l[(size_t) leftPeak])) leftPeak = (Frame) i;
+                if (std::abs (r[i]) > std::abs (r[(size_t) rightPeak])) rightPeak = (Frame) i;
+            }
+            return true;
+        };
+
+        double le = 0, re = 0;
+        Frame lp = 0, rp = 0;
+        check (ears (90.0, le, re, lp, rp), "binaural render of a click (" + error + ")");
+        check (re > le * 4.0, "a sound at 90 degrees is louder in the right ear");
+        check (rp < lp, "and reaches the right ear first");
+        check (ears (-90.0, le, re, lp, rp) && le > re * 4.0 && lp < rp, "a sound at -90 degrees is on the left");
+        check (ears (0.0, le, re, lp, rp) && std::abs (10.0 * std::log10 (le / re)) < 2.0, "a sound in front reaches both ears alike");
+
+        // Further away is quieter; room sound adds a tail.
+        double nearEnergy = le + re;
+        settings.distance = 4.0;
+        ears (0.0, le, re, lp, rp);
+        check (le + re < nearEnergy / 8.0, "4 m away is about 12 dB quieter than 1 m");
+        settings.distance = 1.0;
+        settings.room = 1.0;
+        const auto withRoom = binaural::render (*mono, 0, mono->length(), settings, error);
+        std::vector<float> l (48000), r (48000);
+        float* both[] { l.data(), r.data() };
+        withRoom->read (0, 48000, both);
+        double late = 0.0;
+        for (size_t i = 24000 + 4800; i < 24000 + 14400; ++i)
+            late += (double) l[i] * l[i];
+        check (late > 1e-4, "the room rings on after the click");
+
+        settings.hrtfPath = "/no/such.sofa";
+        error.clear();
+        check (binaural::render (*mono, 0, mono->length(), settings, error) == nullptr && ! error.empty(), "a missing HRTF file is reported");
+    }
 }
 
 int main()
@@ -1416,6 +1509,7 @@ int main()
     testGenerate();
     testPitch();
     testPitchFix();
+    testBinaural();
     testRepair();
     testRestoration();
     testShapes();
