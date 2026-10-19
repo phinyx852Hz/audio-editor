@@ -21,7 +21,11 @@ public:
     void setConfigFolder (const juce::File&);
 
     // Plugin list
-    std::vector<PluginInfo> knownPlugins() const;
+    std::vector<PluginInfo> knownPlugins() const;    // enabled only
+    std::vector<PluginInfo> allPlugins() const;
+    void setPluginEnabled (const std::string& pluginId, bool);
+    std::vector<std::string> skippedFiles() const;
+    void retrySkipped (const std::string& file);
     std::vector<std::string> searchFolders() const;
     int startScan();
     bool scanNext (std::string& fileBeingScanned);
@@ -150,6 +154,8 @@ private:
     juce::File pluginListFile() const   { return configFolder.getChildFile ("plugins.xml"); }
     juce::File deadMansPedal() const    { return configFolder.getChildFile ("plugin-scan-in-progress.txt"); }
     juce::File masterFile() const       { return configFolder.getChildFile ("master-section.xml"); }
+    juce::File disabledListFile() const { return configFolder.getChildFile ("disabled-plugins.txt"); }
+    juce::StringArray disabled;        // plugin ids turned off in Manage Plug-ins
     juce::File stockListFile() const    { return configFolder.getChildFile ("stock-plugins.xml"); }
 
     juce::AudioPluginFormatManager formats;

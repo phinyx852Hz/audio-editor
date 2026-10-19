@@ -46,6 +46,8 @@ struct PluginInfo
 {
     std::string id;           // stable identifier used to load the plugin
     std::string name, manufacturer, format, category;
+    std::string file;         // where it was found (empty for built-in ones)
+    bool enabled = true;      // turned off in Manage Plug-ins: not offered in the plugin list
 };
 
 struct MasterSlotInfo
@@ -140,7 +142,11 @@ public:
 
     //==========================================================================
     // Plugins (VST3, LV2, LADSPA)
-    std::vector<PluginInfo> knownPlugins() const;
+    std::vector<PluginInfo> knownPlugins() const;          // the enabled ones
+    std::vector<PluginInfo> allPlugins() const;            // enabled or not (Manage Plug-ins)
+    void setPluginEnabled (const std::string& pluginId, bool);
+    std::vector<std::string> skippedPluginFiles() const;   // crashed or hung while being checked; not checked again
+    void retrySkippedPlugin (const std::string& file);     // checked again at the next scan
     std::vector<std::string> pluginSearchFolders() const;  // "VST3: /usr/lib/vst3" etc.
 
     // Incremental scan so the UI can show progress: start, then call next until it returns false.

@@ -2,6 +2,7 @@
 // The Album (album assembly) part of MainWindow: commands, dialogs, saving
 // and exporting. The model and its mixdown are in core/Album.h.
 #include "MainWindow.h"
+#include "Settings.h"
 #include "AlbumFile.h"
 #include "AlbumView.h"
 
@@ -688,7 +689,7 @@ void MainWindow::exportAlbum()
     if (m == nullptr || album == nullptr || m->clips.empty())
         return;
 
-    QSettings settings;
+    auto settings = appSettings();
     QDialog dialog (this);
     dialog.setWindowTitle (tr ("Export Album"));
     auto* form = new QFormLayout (&dialog);

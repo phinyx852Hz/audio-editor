@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MainWindow.h"
+#include "Settings.h"
 #include "FindPanel.h"
 #include "Goniometer.h"
 #include "AlbumFile.h"
@@ -123,7 +124,7 @@ MainWindow::MainWindow (AudioEngine& e)
     editorLayout->setSpacing (0);
     editorLayout->addWidget (tabBar);
     overview = new Overview (editor);
-    overview->setVisible (QSettings().value (QStringLiteral ("view/overview"), true).toBool());
+    overview->setVisible (appSettings().value (QStringLiteral ("view/overview"), true).toBool());
     editorLayout->addWidget (overview);
     timeRuler = new TimeRuler (editor);
     editorLayout->addWidget (timeRuler);
@@ -424,6 +425,9 @@ void MainWindow::registerCommands()
     registerAlbumCommands();
     registerAnalysisCommands();
     registerReferenceCommands();
+    registerMacroCommands();
+    add ("tools.managePlugins", Category::tools, tr ("Manage &Plug-ins..."), {}, [this] { managePlugins(); });
+    add ("tools.resetConfig", Category::tools, tr ("Reset &Configuration..."), {}, [this] { resetConfiguration(); });
 
     add ("transport.playStop", Category::transport, tr ("&Play / Stop"), { KS (Qt::Key_Space) }, [this] { togglePlayback(); });
     add ("transport.stop", Category::transport, tr ("&Stop"), { KS (Qt::Key_K) }, [this]
@@ -457,38 +461,38 @@ void MainWindow::registerCommands()
     {
         const bool on = commands.action (QStringLiteral ("view.overview"))->isChecked();
         overview->setVisible (on);
-        QSettings().setValue (QStringLiteral ("view/overview"), on);
+        appSettings().setValue (QStringLiteral ("view/overview"), on);
     });
     commands.action (QStringLiteral ("view.overview"))->setCheckable (true);
     commands.action (QStringLiteral ("view.overview"))->setChecked (! overview->isHidden());
     add ("view.gainKnob", Category::view, tr ("&Gain Knob"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_K) }, [this]
     {
-        QSettings().setValue (QStringLiteral ("view/gainKnob"), commands.action (QStringLiteral ("view.gainKnob"))->isChecked());
+        appSettings().setValue (QStringLiteral ("view/gainKnob"), commands.action (QStringLiteral ("view.gainKnob"))->isChecked());
         placeGainHud();
     });
     commands.action (QStringLiteral ("view.gainKnob"))->setCheckable (true);
-    commands.action (QStringLiteral ("view.gainKnob"))->setChecked (QSettings().value (QStringLiteral ("view/gainKnob"), true).toBool());
+    commands.action (QStringLiteral ("view.gainKnob"))->setChecked (appSettings().value (QStringLiteral ("view/gainKnob"), true).toBool());
     add ("view.levelColors", Category::view, tr ("Colour Waveform by &Level"), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_W) }, [this]
     {
         const auto on = commands.action (QStringLiteral ("view.levelColors"))->isChecked();
-        QSettings().setValue (QStringLiteral ("view/levelColors"), on);
+        appSettings().setValue (QStringLiteral ("view/levelColors"), on);
         waveform->setLevelColours (on);
         statusBar()->showMessage (on ? tr ("Waveform coloured by level: blue when quiet, through green and yellow, to red at 0 dB. "
                                            "Change the colours in Options > Waveform Colors.")
                                      : tr ("Waveform in one colour (Options > Waveform Colors)"), 6000);
     });
     commands.action (QStringLiteral ("view.levelColors"))->setCheckable (true);
-    commands.action (QStringLiteral ("view.levelColors"))->setChecked (QSettings().value (QStringLiteral ("view/levelColors"), false).toBool());
+    commands.action (QStringLiteral ("view.levelColors"))->setChecked (appSettings().value (QStringLiteral ("view/levelColors"), false).toBool());
     waveform->setLevelColours (commands.action (QStringLiteral ("view.levelColors"))->isChecked());
     add ("edit.snapZero", Category::edit, tr ("Snap to &Zero Crossings"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_Z) }, [this]
     {
         const auto on = commands.action (QStringLiteral ("edit.snapZero"))->isChecked();
-        QSettings().setValue (QStringLiteral ("edit/snapZero"), on);
+        appSettings().setValue (QStringLiteral ("edit/snapZero"), on);
         statusBar()->showMessage (on ? tr ("Selection edges snap to the nearest zero crossing, so cuts and pastes do not click")
                                      : tr ("Selection edges go exactly where you put them"), 5000);
     });
     commands.action (QStringLiteral ("edit.snapZero"))->setCheckable (true);
-    commands.action (QStringLiteral ("edit.snapZero"))->setChecked (QSettings().value (QStringLiteral ("edit/snapZero"), false).toBool());
+    commands.action (QStringLiteral ("edit.snapZero"))->setChecked (appSettings().value (QStringLiteral ("edit/snapZero"), false).toBool());
     add ("view.zoomFit", Category::view, tr ("Zoom to &Fit"), { KS (Qt::CTRL | Qt::Key_0) }, [this] { waveform->zoomToFit(); });
     add ("view.zoomSelection", Category::view, tr ("Zoom to &Selection"), { KS (Qt::CTRL | Qt::Key_E) },
          [this] { if (requireSelection()) waveform->zoomToSelection(); });
@@ -555,7 +559,7 @@ void MainWindow::registerCommands()
             spectrogramDialog = new SpectrogramDialog (*waveform, this);
             connect (spectrogramDialog, &SpectrogramDialog::changed, this, [this]
             {
-                QSettings().setValue (QStringLiteral ("view/spectrum"), QString::fromStdString (spectrum::toString (waveform->spectrumSettings())));
+                appSettings().setValue (QStringLiteral ("view/spectrum"), QString::fromStdString (spectrum::toString (waveform->spectrumSettings())));
             });
         }
         spectrogramDialog->refresh();
@@ -646,7 +650,7 @@ void MainWindow::buildMenus()
                                "album.songProperties", "album.openSong", "album.removeSong", "-",
                                "album.properties", "album.twoTracks", "album.export" } },
         { tr ("&Analyze"),   { "analyze.loudness", "-", "analyze.beats", "analyze.onsets", "analyze.tempoKey", "analyze.vamp", "-", "view.meters", "analyze.imagingView", "analyze.resetMeters", "-", "view.spectral", "-", "@nyquist.analyze" } },
-        { tr ("Too&ls"),     { "tools.batch", "-", "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan" } },
+        { tr ("Too&ls"),     { "tools.macroRecord", "tools.macroApply", "tools.macros", "-", "tools.batch", "-", "tools.managePlugins", "-", "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan", "-", "tools.resetConfig" } },
         { tr ("Ma&ster"),    { "view.master", "view.chain", "master.addPlugin", "master.bypass", "-", "master.render", "master.renderNew", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
@@ -907,15 +911,6 @@ DockablePanel* MainWindow::focusedOrLastPanel() const
             return p;
 
     return lastPanel != nullptr && lastPanel->isShown() ? lastPanel : nullptr;
-}
-
-namespace
-{
-    QSettings appSettings()
-    {
-        return QSettings (QStandardPaths::writableLocation (QStandardPaths::GenericConfigLocation)
-                              + QStringLiteral ("/" APP_ID "/settings.ini"), QSettings::IniFormat);
-    }
 }
 
 void MainWindow::restoreLayout()

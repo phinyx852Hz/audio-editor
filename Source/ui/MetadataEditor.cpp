@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MetadataEditor.h"
+#include "Settings.h"
 
 #include "../core/RiffChunks.h"
 #include "../core/Xmp.h"
@@ -101,7 +102,7 @@ namespace
 //==============================================================================
 tagio::Options MetadataEditor::writeOptionsFor (const QString& extension)
 {
-    QSettings s;
+    auto s = appSettings();
     tagio::Options o;
     const auto read = [&] (const char* name, bool def) { return s.value (settingsKey (extension, name), def).toBool(); };
     o.riff = read ("riff", true);
@@ -122,7 +123,7 @@ tagio::Options MetadataEditor::writeOptionsFor (const QString& extension)
 
 void MetadataEditor::saveWriteOptions (const QString& extension, const tagio::Options& o)
 {
-    QSettings s;
+    auto s = appSettings();
     const std::pair<const char*, bool> flags[] { { "riff", o.riff }, { "bext", o.bext }, { "cart", o.cart }, { "ixml", o.ixml }, { "id3", o.id3 },
                                                  { "id3v1", o.id3v1 }, { "vorbis", o.vorbis }, { "mp4", o.mp4 }, { "ape", o.ape },
                                                  { "xmp", o.xmp }, { "chapters", o.chapters } };
@@ -133,7 +134,7 @@ void MetadataEditor::saveWriteOptions (const QString& extension, const tagio::Op
 
 QStringList MetadataEditor::templateNames()
 {
-    QSettings s;
+    auto s = appSettings();
     s.beginGroup (QStringLiteral ("metadata/templates"));
     auto names = s.childKeys();
     for (auto& n : names)
@@ -144,17 +145,17 @@ QStringList MetadataEditor::templateNames()
 
 QString MetadataEditor::templateText (const QString& name)
 {
-    return QSettings().value (QStringLiteral ("metadata/templates/") + QString::fromUtf8 (QUrl::toPercentEncoding (name))).toString();
+    return appSettings().value (QStringLiteral ("metadata/templates/") + QString::fromUtf8 (QUrl::toPercentEncoding (name))).toString();
 }
 
 void MetadataEditor::saveTemplate (const QString& name, const QString& text)
 {
-    QSettings().setValue (QStringLiteral ("metadata/templates/") + QString::fromUtf8 (QUrl::toPercentEncoding (name)), text);
+    appSettings().setValue (QStringLiteral ("metadata/templates/") + QString::fromUtf8 (QUrl::toPercentEncoding (name)), text);
 }
 
 void MetadataEditor::removeTemplate (const QString& name)
 {
-    QSettings().remove (QStringLiteral ("metadata/templates/") + QString::fromUtf8 (QUrl::toPercentEncoding (name)));
+    appSettings().remove (QStringLiteral ("metadata/templates/") + QString::fromUtf8 (QUrl::toPercentEncoding (name)));
 }
 
 QString MetadataEditor::variablesHelp()
@@ -489,10 +490,10 @@ void MetadataEditor::buildXmp (QTabWidget* tabs)
         {
             auto* action = displayMenu->addAction (qs (f->group));
             action->setCheckable (true);
-            action->setChecked (! QSettings().value (QStringLiteral ("metadata/xmpHidden/") + qs (f->group), false).toBool());
+            action->setChecked (! appSettings().value (QStringLiteral ("metadata/xmpHidden/") + qs (f->group), false).toBool());
             connect (action, &QAction::toggled, this, [this, g = f->group] (bool on)
             {
-                QSettings().setValue (QStringLiteral ("metadata/xmpHidden/") + qs (g), ! on);
+                appSettings().setValue (QStringLiteral ("metadata/xmpHidden/") + qs (g), ! on);
                 refreshXmp();
             });
         }
@@ -581,7 +582,7 @@ void MetadataEditor::refreshXmp()
 
     for (const auto* f : meta::fieldsOf (meta::Schema::xmp))
     {
-        if (QSettings().value (QStringLiteral ("metadata/xmpHidden/") + qs (f->group), false).toBool())
+        if (appSettings().value (QStringLiteral ("metadata/xmpHidden/") + qs (f->group), false).toBool())
             continue;
         const bool own = current.count (f->key) > 0;
         const auto value = qs (meta::get (current, *f));

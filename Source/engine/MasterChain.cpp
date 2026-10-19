@@ -167,6 +167,8 @@ void MasterChain::setConfigFolder (const juce::File& folder)
 
     if (auto xml = juce::XmlDocument::parse (pluginListFile()))
         pluginList.recreateFromXml (*xml);
+    disabled = juce::StringArray::fromLines (disabledListFile().loadFileAsString());
+    disabled.removeEmptyStrings();
 
     loadStockPlugins();
 }
@@ -234,6 +236,38 @@ std::unique_ptr<juce::PluginDescription> MasterChain::findDescription (const std
 //==============================================================================
 std::vector<PluginInfo> MasterChain::knownPlugins() const
 {
+    auto all = allPlugins();
+    all.erase (std::remove_if (all.begin(), all.end(), [] (const PluginInfo& p) { return ! p.enabled; }), all.end());
+    return all;
+}
+
+void MasterChain::setPluginEnabled (const std::string& pluginId, bool on)
+{
+    const juce::String id (pluginId);
+    if (on)
+        disabled.removeString (id);
+    else
+        disabled.addIfNotAlreadyThere (id);
+    disabledListFile().replaceWithText (disabled.joinIntoString ("\n"));
+}
+
+std::vector<std::string> MasterChain::skippedFiles() const
+{
+    std::vector<std::string> result;
+    for (const auto& f : pluginList.getBlacklistedFiles())
+        result.push_back (f.toStdString());
+    return result;
+}
+
+void MasterChain::retrySkipped (const std::string& file)
+{
+    pluginList.removeFromBlacklist (file);
+    if (auto xml = pluginList.createXml())
+        xml->writeTo (pluginListFile());
+}
+
+std::vector<PluginInfo> MasterChain::allPlugins() const
+{
     std::vector<PluginInfo> result;
     auto all = builtin::descriptions();
     for (const auto* list : { &stockList, &pluginList })
@@ -251,9 +285,13 @@ std::vector<PluginInfo> MasterChain::knownPlugins() const
 
     for (const auto& d : all)
         if (! d.isInstrument)
-            result.push_back ({ d.createIdentifierString().toStdString(), d.name.toStdString(), d.manufacturerName.toStdString(),
+        {
+            const auto id = d.createIdentifierString();
+            result.push_back ({ id.toStdString(), d.name.toStdString(), d.manufacturerName.toStdString(),
                                 stock::find (d) != nullptr ? builtin::formatName : d.pluginFormatName.toStdString(),
-                                category (d) });
+                                category (d), builtin::isBuiltin (d) ? std::string() : d.fileOrIdentifier.toStdString(),
+                                ! disabled.contains (id) });
+        }
 
     std::sort (result.begin(), result.end(), [] (const PluginInfo& a, const PluginInfo& b)
     {

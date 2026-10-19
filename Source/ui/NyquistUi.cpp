@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "NyquistUi.h"
+#include "Settings.h"
 
 #include <QCoreApplication>
 #include <QComboBox>
@@ -102,7 +103,7 @@ namespace nyquistui
 
     void restoreValues (const QString& key, nyquist::Script& script)
     {
-        QSettings settings;
+        auto settings = appSettings();
         for (auto& c : script.controls)
         {
             const auto v = settings.value (settingsKey (key, QString::fromStdString (c.var)));
@@ -118,7 +119,7 @@ namespace nyquistui
 
     void storeValues (const QString& key, const nyquist::Script& script)
     {
-        QSettings settings;
+        auto settings = appSettings();
         for (const auto& c : script.controls)
         {
             using T = nyquist::Control::Type;
@@ -316,7 +317,7 @@ NyquistPromptDialog::NyquistPromptDialog (QWidget* parent)
     editor->setFont (QFontDatabase::systemFont (QFontDatabase::FixedFont));
     editor->setTabChangesFocus (false);
     editor->setPlaceholderText (tr ("(mult *track* 0.5)"));
-    editor->setPlainText (QSettings().value (QStringLiteral ("nyquist/prompt")).toString());
+    editor->setPlainText (appSettings().value (QStringLiteral ("nyquist/prompt")).toString());
     editor->setToolTip (tr ("Nyquist code. *track* is the selection (or the whole file). Lisp starts with (, SAL uses return. Ctrl+Enter runs it."));
 
     auto* buttons = new QDialogButtonBox (QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
@@ -340,7 +341,7 @@ NyquistPromptDialog::NyquistPromptDialog (QWidget* parent)
     auto finish = [this] (bool withDebug)
     {
         debug = withDebug;
-        QSettings().setValue (QStringLiteral ("nyquist/prompt"), editor->toPlainText());
+        appSettings().setValue (QStringLiteral ("nyquist/prompt"), editor->toPlainText());
         accept();
     };
     connect (buttons, &QDialogButtonBox::accepted, this, [finish] { finish (false); });

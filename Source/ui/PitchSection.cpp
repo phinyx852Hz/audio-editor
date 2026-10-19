@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Repair > Correct Pitch: moves a selected note to the right pitch.
 #include "MainWindow.h"
+#include "Settings.h"
 #include "../core/PitchFix.h"
 #include "../core/SpectrumView.h"
 
@@ -41,7 +42,7 @@ void MainWindow::correctPitch()
         return;
     }
 
-    QSettings settings;
+    auto settings = appSettings();
     settings.beginGroup (QStringLiteral ("repair/pitch"));
 
     QDialog dialog (this);

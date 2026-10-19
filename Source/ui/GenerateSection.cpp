@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Effect > Generate > Tone and Noise.
 #include "MainWindow.h"
+#include "Settings.h"
 #include "../core/Generate.h"
 
 #include <QCheckBox>
@@ -33,7 +34,7 @@ namespace
 void MainWindow::generateSignal (bool makeNoise)
 {
     const auto d = data();
-    QSettings settings;
+    auto settings = appSettings();
     settings.beginGroup (QStringLiteral ("generate"));
 
     QDialog dialog (this);

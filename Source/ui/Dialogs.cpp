@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "Dialogs.h"
+#include "Settings.h"
 #include "../core/Repair.h"
 #include "CommandRegistry.h"
 #include "DesktopShortcuts.h"
@@ -488,7 +489,7 @@ NormalizeDialog::NormalizeDialog (QWidget* parent)
     referenceLabel->setForegroundRole (QPalette::PlaceholderText);
     referenceLabel->setWordWrap (true);
 
-    QSettings settings;
+    auto settings = appSettings();
     const auto savedLoudness = settings.value (QStringLiteral ("normalize/loudness"), -14.0).toDouble();
     const auto savedPeak = settings.value (QStringLiteral ("normalize/peak"), -1.0).toDouble();
     limitBox->setChecked (settings.value (QStringLiteral ("normalize/limit"), true).toBool());
@@ -594,7 +595,7 @@ void NormalizeDialog::matchReference()
 
 void NormalizeDialog::store()
 {
-    QSettings settings;
+    auto settings = appSettings();
     settings.setValue (QStringLiteral ("normalize/mode"), modeBox->currentIndex());
     settings.setValue (modeBox->currentIndex() == 1 ? QStringLiteral ("normalize/loudness") : QStringLiteral ("normalize/peak"), targetBox->value());
     settings.setValue (QStringLiteral ("normalize/limit"), limitBox->isChecked());

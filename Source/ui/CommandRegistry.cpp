@@ -29,7 +29,24 @@ QAction* CommandRegistry::add (const QString& id, const QString& category, const
     action->setObjectName (id);
     action->setShortcuts (defaults);
     action->setShortcutContext (Qt::WindowShortcut);
-    connect (action, &QAction::triggered, this, [handler = std::move (handler)] { handler(); });
+    connect (action, &QAction::triggered, this, [this, id, handler = std::move (handler)]
+    {
+        if (transparent.contains (id))
+        {
+            handler();
+            return;
+        }
+        const bool outer = depth == 0 && observer;
+        if (outer)
+            observer (id, false);
+        {
+            ++depth;
+            struct Leave { int& d; ~Leave() { --d; } } leave { depth };   // also if the handler throws
+            handler();
+        }
+        if (outer)
+            observer (id, true);
+    });
 
     commands.push_back ({ id, category, action, defaults });
     return action;

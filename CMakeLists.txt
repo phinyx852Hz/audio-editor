@@ -108,7 +108,10 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/WaveformView.cpp
     Source/ui/SpectrogramDialog.cpp
     Source/ui/GenerateSection.cpp
-    Source/ui/PitchSection.cpp)
+    Source/ui/PitchSection.cpp
+    Source/ui/MacroSection.cpp
+    Source/ui/Macros.cpp
+    Source/ui/ToolsSection.cpp)
 
 # CLAP plugin hosting needs only the CLAP headers: a local checkout, the
 # system's (clap/clap.h, e.g. the clap package), or the pinned release.

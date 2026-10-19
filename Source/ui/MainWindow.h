@@ -9,6 +9,7 @@
 #include "../engine/AudioCapture.h"
 #include "../engine/AudioEngine.h"
 #include "CommandRegistry.h"
+#include "Macros.h"
 #include "Recovery.h"
 
 #include <mutex>
@@ -102,6 +103,24 @@ private:
     void insertSilence();
     void generateSignal (bool noise);   // Effect > Generate > Tone or Noise
     void correctPitch();                // Repair > Correct Pitch (PitchSection.cpp)
+
+    // Tools (ToolsSection.cpp).
+    void managePlugins();
+    void resetConfiguration();
+public:
+    // After the window is gone: clears the settings if Reset Configuration asked to; true if it did (then restart).
+    static bool finishReset();
+private:
+    struct Reset { bool requested = false, keys = false, plugins = false; };
+    static Reset pendingReset;
+
+    // Macros (MacroSection.cpp, Macros.h).
+    void registerMacroCommands();
+    void toggleMacroRecording();
+    void runMacro (const macro::Macro&);
+    MacroRecorder* macroRecorder = nullptr;
+    QLabel* macroStatus = nullptr;
+    QString lastMacro;
 
     // Processing applies to the selection, or to the whole file when nothing is selected.
     std::pair<Frame, Frame> processRange() const;

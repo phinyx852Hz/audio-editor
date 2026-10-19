@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "BatchWindow.h"
+#include "Settings.h"
 #include "ExportDialog.h"
 #include "MetadataEditor.h"
 
@@ -269,11 +270,11 @@ BatchWindow::BatchWindow (QWidget* parent)
         QStringList patterns;
         for (const auto& e : AudioEngine::readableExtensions())
             patterns << QStringLiteral ("*.") + qs (e);
-        const auto chosen = QFileDialog::getOpenFileNames (this, tr ("Add Files"), QSettings().value (QStringLiteral ("batch/folder")).toString(),
+        const auto chosen = QFileDialog::getOpenFileNames (this, tr ("Add Files"), appSettings().value (QStringLiteral ("batch/folder")).toString(),
                                                            tr ("Audio files (%1);;All files (*)").arg (patterns.join (QLatin1Char (' '))));
         if (! chosen.isEmpty())
         {
-            QSettings().setValue (QStringLiteral ("batch/folder"), QFileInfo (chosen.first()).absolutePath());
+            appSettings().setValue (QStringLiteral ("batch/folder"), QFileInfo (chosen.first()).absolutePath());
             addFiles (chosen);
         }
     });
@@ -374,7 +375,7 @@ BatchWindow::BatchWindow (QWidget* parent)
 
     // The last batch comes back.
     std::string error;
-    const auto last = QSettings().value (QStringLiteral ("batch/last")).toString().toStdString();
+    const auto last = appSettings().value (QStringLiteral ("batch/last")).toString().toStdString();
     if (! last.empty())
         job = batch::fromJson (last, error);
     if (job.outputs.empty())
@@ -428,10 +429,10 @@ void BatchWindow::addFiles (const QStringList& paths)
 
 void BatchWindow::addFolder()
 {
-    const auto folder = QFileDialog::getExistingDirectory (this, tr ("Add Folder"), QSettings().value (QStringLiteral ("batch/folder")).toString());
+    const auto folder = QFileDialog::getExistingDirectory (this, tr ("Add Folder"), appSettings().value (QStringLiteral ("batch/folder")).toString());
     if (folder.isEmpty())
         return;
-    QSettings().setValue (QStringLiteral ("batch/folder"), folder);
+    appSettings().setValue (QStringLiteral ("batch/folder"), folder);
     const auto subfolders = QMessageBox::question (this, tr ("Add Folder"), tr ("Include the folders inside it too?")) == QMessageBox::Yes;
     bool ok = false;
     const auto filter = QInputDialog::getText (this, tr ("Add Folder"), tr ("Only names containing (leave empty for every audio file):"),
@@ -638,12 +639,12 @@ void BatchWindow::remember()
         return;
     auto copy = job;
     copy.reportPath = reportBox->isChecked() ? reportEdit->text().toStdString() : std::string();
-    QSettings().setValue (QStringLiteral ("batch/last"), qs (batch::toJson (copy)));
+    appSettings().setValue (QStringLiteral ("batch/last"), qs (batch::toJson (copy)));
 }
 
 void BatchWindow::openBatch()
 {
-    const auto path = QFileDialog::getOpenFileName (this, tr ("Open Batch"), QSettings().value (QStringLiteral ("batch/saved")).toString(),
+    const auto path = QFileDialog::getOpenFileName (this, tr ("Open Batch"), appSettings().value (QStringLiteral ("batch/saved")).toString(),
                                                     tr ("PHINYX batches (*.phbatch)"));
     if (path.isEmpty())
         return;
@@ -660,7 +661,7 @@ void BatchWindow::openBatch()
         QMessageBox::warning (this, tr ("Open Batch"), tr ("%1: %2").arg (QFileInfo (path).fileName(), qs (error)));
         return;
     }
-    QSettings().setValue (QStringLiteral ("batch/saved"), path);
+    appSettings().setValue (QStringLiteral ("batch/saved"), path);
     job = std::move (loaded);
     filling = true;
     modeBox->setCurrentIndex (std::max (0, modeBox->findData ((int) job.mode)));
@@ -679,7 +680,7 @@ void BatchWindow::openBatch()
 
 void BatchWindow::saveBatch()
 {
-    auto path = QFileDialog::getSaveFileName (this, tr ("Save Batch"), QSettings().value (QStringLiteral ("batch/saved"), QDir::homePath() + tr ("/Batch.phbatch")).toString(),
+    auto path = QFileDialog::getSaveFileName (this, tr ("Save Batch"), appSettings().value (QStringLiteral ("batch/saved"), QDir::homePath() + tr ("/Batch.phbatch")).toString(),
                                               tr ("PHINYX batches (*.phbatch)"));
     if (path.isEmpty())
         return;
@@ -693,7 +694,7 @@ void BatchWindow::saveBatch()
         QMessageBox::warning (this, tr ("Save Batch"), file.errorString());
         return;
     }
-    QSettings().setValue (QStringLiteral ("batch/saved"), path);
+    appSettings().setValue (QStringLiteral ("batch/saved"), path);
     setWindowTitle (tr ("Batch Processor: %1").arg (QFileInfo (path).completeBaseName()));
     status->setText (tr ("Saved %1").arg (QFileInfo (path).fileName()));
 }

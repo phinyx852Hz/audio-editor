@@ -804,6 +804,10 @@ void AudioEngine::dispatchMessages()
 void AudioEngine::setConfigFolder (const std::string& folder) { impl->master.setConfigFolder (juce::File (folder)); }
 
 std::vector<PluginInfo> AudioEngine::knownPlugins() const            { return impl->master.knownPlugins(); }
+std::vector<PluginInfo> AudioEngine::allPlugins() const              { return impl->master.allPlugins(); }
+void AudioEngine::setPluginEnabled (const std::string& id, bool on)  { impl->master.setPluginEnabled (id, on); }
+std::vector<std::string> AudioEngine::skippedPluginFiles() const     { return impl->master.skippedFiles(); }
+void AudioEngine::retrySkippedPlugin (const std::string& file)       { impl->master.retrySkipped (file); }
 std::vector<std::string> AudioEngine::pluginSearchFolders() const    { return impl->master.searchFolders(); }
 int AudioEngine::startPluginScan()                                   { return impl->master.startScan(); }
 bool AudioEngine::scanNextPlugin (std::string& file)                 { return impl->master.scanNext (file); }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "ExportDialog.h"
+#include "Settings.h"
 
 #include "MetadataEditor.h"
 #include "../core/Metadata.h"
@@ -76,7 +77,7 @@ exporter::Output ExportDialog::defaultOutput (const std::string& formatId)
 
 std::vector<exporter::Output> ExportDialog::remembered()
 {
-    auto outputs = exporter::fromJson (QSettings().value (QStringLiteral ("export/outputs")).toString().toStdString());
+    auto outputs = exporter::fromJson (appSettings().value (QStringLiteral ("export/outputs")).toString().toStdString());
     std::erase_if (outputs, [] (const auto& o) { return codec::find (o.formatId) == nullptr; });
     if (outputs.empty())
         outputs.push_back (defaultOutput ("wav"));
@@ -87,7 +88,7 @@ std::vector<exporter::Output> ExportDialog::remembered()
 
 void ExportDialog::remember (const std::vector<exporter::Output>& outputs)
 {
-    QSettings().setValue (QStringLiteral ("export/outputs"), qs (exporter::toJson (outputs)));
+    appSettings().setValue (QStringLiteral ("export/outputs"), qs (exporter::toJson (outputs)));
 }
 
 ExportDialog::ExportDialog (const Context& c, QWidget* parent)
@@ -254,10 +255,10 @@ ExportDialog::ExportDialog (const Context& c, QWidget* parent)
         rangeBox->addItem (tr ("Each region, as its own file (%1)").arg (context.regions), (int) Range::regions);
     if (context.markers > 0)
         rangeBox->addItem (tr ("Each part between markers (%1)").arg (context.markers + 1), (int) Range::markers);
-    rangeBox->setCurrentIndex (std::max (0, rangeBox->findData (QSettings().value (QStringLiteral ("export/range"), 0).toInt())));
+    rangeBox->setCurrentIndex (std::max (0, rangeBox->findData (appSettings().value (QStringLiteral ("export/range"), 0).toInt())));
     masterBox = new QCheckBox (tr ("Through the &Master Section"), this);
     masterBox->setEnabled (context.masterActive);
-    masterBox->setChecked (context.masterActive && QSettings().value (QStringLiteral ("export/throughMaster"), true).toBool());
+    masterBox->setChecked (context.masterActive && appSettings().value (QStringLiteral ("export/throughMaster"), true).toBool());
     previewButton = new QPushButton (tr ("&Preview"), this);
     previewButton->setCheckable (true);
     previewButton->setToolTip (tr ("Hear this output encoded (the selection, or 20 seconds from the cursor); A switches between it and the original"));
@@ -392,9 +393,9 @@ ExportDialog::ExportDialog (const Context& c, QWidget* parent)
             return;
         }
         remember (list);
-        QSettings().setValue (QStringLiteral ("export/range"), rangeBox->currentData());
+        appSettings().setValue (QStringLiteral ("export/range"), rangeBox->currentData());
         if (masterBox->isEnabled())
-            QSettings().setValue (QStringLiteral ("export/throughMaster"), masterBox->isChecked());
+            appSettings().setValue (QStringLiteral ("export/throughMaster"), masterBox->isChecked());
         accept();
     });
     connect (buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -649,7 +650,7 @@ void ExportDialog::refreshPath()
 
 void ExportDialog::loadPreset()
 {
-    QSettings settings;
+    auto settings = appSettings();
     settings.beginGroup (QStringLiteral ("export/presets"));
     QStringList names;
     for (const auto& key : settings.childKeys())
@@ -699,7 +700,7 @@ void ExportDialog::loadPreset()
         loaded.push_back (o);
     }
     else
-        loaded = exporter::fromJson (QSettings().value (QStringLiteral ("export/presets/") + QString::fromUtf8 (QUrl::toPercentEncoding (choice))).toString().toStdString());
+        loaded = exporter::fromJson (appSettings().value (QStringLiteral ("export/presets/") + QString::fromUtf8 (QUrl::toPercentEncoding (choice))).toString().toStdString());
     std::erase_if (loaded, [] (const auto& o) { return codec::find (o.formatId) == nullptr; });
     if (loaded.empty())
         return;
@@ -719,5 +720,5 @@ void ExportDialog::savePreset()
     const auto name = QInputDialog::getText (this, tr ("Save as a Preset"), tr ("Preset name:"), QLineEdit::Normal, {}, &ok).trimmed();
     if (! ok || name.isEmpty())
         return;
-    QSettings().setValue (QStringLiteral ("export/presets/") + QString::fromUtf8 (QUrl::toPercentEncoding (name)), qs (exporter::toJson (list)));
+    appSettings().setValue (QStringLiteral ("export/presets/") + QString::fromUtf8 (QUrl::toPercentEncoding (name)), qs (exporter::toJson (list)));
 }

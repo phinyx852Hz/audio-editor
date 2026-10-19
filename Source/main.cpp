@@ -2,11 +2,13 @@
 #include "engine/AudioEngine.h"
 #include "engine/MasterChain.h"
 #include "ui/MainWindow.h"
+#include "ui/Settings.h"
 #include "ui/Theme.h"
 
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QDir>
+#include <QProcess>
 #include <QStandardPaths>
 
 #include <cstdio>
@@ -50,6 +52,7 @@ int main (int argc, char* argv[])
 
     Application app (argc, argv);
     QApplication::setApplicationName (QStringLiteral (APP_ID));
+    moveOldSettings();
     QApplication::setApplicationDisplayName (QStringLiteral (APP_DISPLAY_NAME));
     QApplication::setApplicationVersion (QStringLiteral (APP_VERSION));
     // Wayland app-id, used by Hyprland window rules (class:^(phinyx)$).
@@ -85,6 +88,10 @@ int main (int argc, char* argv[])
 
         result = app.exec();
     }
+
+    // Tools > Reset Configuration: clear the settings now that nothing will write them again, and start afresh.
+    if (MainWindow::finishReset())
+        QProcess::startDetached (QCoreApplication::applicationFilePath(), {});
 
     return result;
 }

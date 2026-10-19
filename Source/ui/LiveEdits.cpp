@@ -3,6 +3,7 @@
 // the fade handles change what you hear and see while you adjust them, then
 // become a single undo step.
 #include "MainWindow.h"
+#include "Settings.h"
 #include "GainHud.h"
 
 #include "../core/Dsp.h"
@@ -16,7 +17,7 @@
 void MainWindow::buildLiveEdits()
 {
     gainHud = new GainHud (waveform);
-    gainHud->setVisible (QSettings().value (QStringLiteral ("view/gainKnob"), true).toBool());
+    gainHud->setVisible (appSettings().value (QStringLiteral ("view/gainKnob"), true).toBool());
 
     liveTimer.setSingleShot (true);
     liveTimer.setInterval (40);
@@ -62,7 +63,7 @@ void MainWindow::buildLiveEdits()
     {
         // Kept as where its centre sits across and down the waveform, so it stays put when the window changes size.
         const auto room = waveform->size() - gainHud->size();
-        QSettings().setValue (QStringLiteral ("view/gainKnobAt"),
+        appSettings().setValue (QStringLiteral ("view/gainKnobAt"),
                               QPointF (room.width() > 0 ? (double) at.x() / room.width() : 0.5,
                                        room.height() > 0 ? (double) at.y() / room.height() : 0.0));
     });
@@ -99,15 +100,15 @@ void MainWindow::buildLiveEdits()
 
 void MainWindow::placeGainHud()
 {
-    const bool show = QSettings().value (QStringLiteral ("view/gainKnob"), true).toBool()
+    const bool show = appSettings().value (QStringLiteral ("view/gainKnob"), true).toBool()
                    && data() != nullptr && ! doc.isAlbum() && ! waveform->isSpectral();
     if (gainHud->isVisible() != show)
         gainHud->setVisible (show);
     if (gainHud->isMoving())
         return;
     const auto room = waveform->size() - gainHud->size();
-    const auto place = QSettings().value (QStringLiteral ("view/gainKnobAt")).toPointF();
-    const auto stored = QSettings().contains (QStringLiteral ("view/gainKnobAt"));
+    const auto place = appSettings().value (QStringLiteral ("view/gainKnobAt")).toPointF();
+    const auto stored = appSettings().contains (QStringLiteral ("view/gainKnobAt"));
     const QPoint at (stored ? (int) std::lround (std::clamp (place.x(), 0.0, 1.0) * std::max (0, room.width())) : std::max (0, room.width()) / 2,
                      stored ? (int) std::lround (std::clamp (place.y(), 0.0, 1.0) * std::max (0, room.height())) : 6);
     if (gainHud->pos() != at)
