@@ -59,6 +59,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/SpectrumView.cpp
     Source/core/Generate.cpp
     Source/core/Pitch.cpp
+    Source/core/PitchFix.cpp
     Source/core/Nyquist.cpp
     Source/core/Album.cpp
     Source/engine/AudioCapture.cpp
@@ -106,7 +107,8 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/NyquistUi.cpp
     Source/ui/WaveformView.cpp
     Source/ui/SpectrogramDialog.cpp
-    Source/ui/GenerateSection.cpp)
+    Source/ui/GenerateSection.cpp
+    Source/ui/PitchSection.cpp)
 
 # CLAP plugin hosting needs only the CLAP headers: a local checkout, the
 # system's (clap/clap.h, e.g. the clap package), or the pinned release.
@@ -194,6 +196,10 @@ include(GNUInstallDirs)
 include(cmake/Vamp.cmake)
 target_link_libraries(${APP_ID} PRIVATE phinyx_vamp_host)
 
+# Rubber Band (cmake/RubberBand.cmake): pitch correction.
+include(cmake/RubberBand.cmake)
+target_link_libraries(${APP_ID} PRIVATE phinyx_rubberband)
+
 # Nyquist effects (cmake/Nyquist.cmake): libnyquist, its runtime and the bundled plug-ins.
 include(cmake/Nyquist.cmake)
 target_link_libraries(${APP_ID} PRIVATE phinyx_nyquist)
@@ -238,9 +244,10 @@ if(PHINYX_BUILD_TESTS)
         Source/core/SpectrumView.cpp
         Source/core/Generate.cpp
         Source/core/Pitch.cpp
+        Source/core/PitchFix.cpp
         Source/core/Nyquist.cpp
         Source/core/Album.cpp)
-    target_link_libraries(phinyx-core-tests PRIVATE phinyx_nyquist)
+    target_link_libraries(phinyx-core-tests PRIVATE phinyx_nyquist phinyx_rubberband)
     target_compile_definitions(phinyx-core-tests PRIVATE PHINYX_SHARE_SOURCE_DIR="${CMAKE_SOURCE_DIR}/share")
     add_test(NAME core COMMAND phinyx-core-tests)
 endif()

@@ -101,6 +101,7 @@ private:
     void trimToSelection();
     void insertSilence();
     void generateSignal (bool noise);   // Effect > Generate > Tone or Noise
+    void correctPitch();                // Repair > Correct Pitch (PitchSection.cpp)
 
     // Processing applies to the selection, or to the whole file when nothing is selected.
     std::pair<Frame, Frame> processRange() const;

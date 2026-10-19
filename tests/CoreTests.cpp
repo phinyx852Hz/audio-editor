@@ -14,6 +14,7 @@
 #include "../Source/core/SpectrumView.h"
 #include "../Source/core/Generate.h"
 #include "../Source/core/Pitch.h"
+#include "../Source/core/PitchFix.h"
 
 #include <algorithm>
 #include <cmath>
@@ -1302,6 +1303,105 @@ namespace
         const auto silence = pitch::track (*toData (std::vector<float> (48000, 0.0f)));
         check (std::all_of (silence->points.begin(), silence->points.end(), [] (const pitch::Point& p) { return p.hz == 0.0f; }), "silence has no pitch");
     }
+    void testPitchFix()
+    {
+        const double rate = 48000.0;
+        auto toData = [&] (const std::vector<float>& x)
+        {
+            AudioData::Builder b (1, rate);
+            const float* p = x.data();
+            b.append (&p, (int) x.size());
+            return b.finish();
+        };
+        // A band-limited sawtooth-like tone (8 harmonics) whose pitch follows `hzAt`.
+        auto voice = [&] (Frame length, const std::function<double (double)>& hzAt)
+        {
+            std::vector<float> x ((size_t) length);
+            double phase = 0.0;
+            for (Frame i = 0; i < length; ++i)
+            {
+                phase += hzAt ((double) i / rate) / rate;
+                double v = 0.0;
+                for (int h = 1; h <= 8; ++h)
+                    v += std::sin (2.0 * M_PI * phase * h) / h;
+                x[(size_t) i] = (float) (0.3 * v);
+            }
+            return x;
+        };
+        auto spread = [] (const pitch::Track& t, double hz, Frame from, Frame to, double& meanCents, double& worstCents)
+        {
+            double sum = 0.0;
+            int n = 0;
+            worstCents = 0.0;
+            for (const auto& p : t.points)
+                if (p.at >= from && p.at < to && p.hz > 0.0f)
+                {
+                    const auto c = pitchfix::cents (hz, p.hz);
+                    sum += c;
+                    worstCents = std::max (worstCents, std::abs (c));
+                    ++n;
+                }
+            meanCents = n > 0 ? sum / n : 1e9;
+        };
+
+        check (std::abs (pitchfix::nearestNoteHz (216.24) - 220.0) < 1e-9, "216 Hz is nearest A3");
+        check (std::abs (pitchfix::nearestNoteHz (453.0) - 466.1637615) < 1e-3, "453 Hz is nearest A#4");
+
+        // A flat A3 (30 cents low) moved to 220 Hz, the audio outside the selection untouched.
+        const auto flatHz = 220.0 * std::pow (2.0, -30.0 / 1200.0);
+        const auto flat = toData (voice (96000, [&] (double) { return flatHz; }));
+        const auto track = pitch::track (*flat);
+        std::string error;
+        const Frame start = 12000, end = 84000;
+        const auto fixed = pitchfix::correct (*flat, start, end, *track, {}, error);
+        check (fixed != nullptr && fixed->length() == end - start, "corrected audio has the selection's length " + error);
+        if (fixed != nullptr)
+        {
+            const auto result = flat->replaced (start, end, fixed.get());
+            double mean = 0.0, worst = 0.0;
+            spread (*pitch::track (*result), 220.0, 24000, 72000, mean, worst);
+            check (std::abs (mean) < 4.0 && worst < 12.0, "flat note corrected to A3: mean " + std::to_string (mean) + " worst " + std::to_string (worst) + " cents");
+            std::vector<float> a (100), b (100);
+            float* pa = a.data();
+            float* pb = b.data();
+            flat->read (start - 200, 100, &pa);
+            result->read (start - 200, 100, &pb);
+            check (a == b, "audio before the selection is untouched");
+        }
+
+        // Moved to another note: the flat A3 up to C4.
+        pitchfix::Settings toC;
+        toC.targetHz = 261.6256;
+        if (const auto c4 = pitchfix::correct (*flat, start, end, *track, toC, error))
+        {
+            double mean = 0.0, worst = 0.0;
+            spread (*pitch::track (*flat->replaced (start, end, c4.get())), toC.targetHz, 24000, 72000, mean, worst);
+            check (std::abs (mean) < 5.0 && worst < 20.0, "moved to C4: mean " + std::to_string (mean) + " worst " + std::to_string (worst) + " cents");
+        }
+        else
+            check (false, "moved to C4");
+
+        // Vibrato of +-40 cents at 5 Hz, flattened.
+        const auto wobbly = toData (voice (96000, [] (double t) { return 220.0 * std::pow (2.0, 40.0 * std::sin (2.0 * M_PI * 5.0 * t) / 1200.0); }));
+        const auto wobblyTrack = pitch::track (*wobbly);
+        double before = 0.0, wobble = 0.0;
+        spread (*wobblyTrack, 220.0, 24000, 72000, before, wobble);
+        pitchfix::Settings flatten;
+        flatten.flatten = 1.0;
+        const auto steady = pitchfix::correct (*wobbly, start, end, *wobblyTrack, flatten, error);
+        check (steady != nullptr, "vibrato corrected");
+        if (steady != nullptr)
+        {
+            double mean = 0.0, worst = 0.0;
+            spread (*pitch::track (*wobbly->replaced (start, end, steady.get())), 220.0, 24000, 72000, mean, worst);
+            check (wobble > 35.0 && worst < 15.0, "vibrato flattened from " + std::to_string (wobble) + " to " + std::to_string (worst) + " cents");
+        }
+
+        // Silence has no pitch to correct.
+        const auto silence = toData (std::vector<float> (48000, 0.0f));
+        error.clear();
+        check (pitchfix::correct (*silence, 0, 48000, *pitch::track (*silence), {}, error) == nullptr && ! error.empty(), "silence is refused");
+    }
 }
 
 int main()
@@ -1315,6 +1415,7 @@ int main()
     testSpectrumView();
     testGenerate();
     testPitch();
+    testPitchFix();
     testRepair();
     testRestoration();
     testShapes();

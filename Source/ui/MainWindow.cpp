@@ -312,6 +312,8 @@ void MainWindow::registerCommands()
          [this] { learnNoise(); });
     add ("repair.noiseReduction", Category::repair, tr ("&Noise Reduction..."), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_N) },
          [this] { noiseReduction(); });
+    add ("repair.correctPitch", Category::repair, tr ("Correct &Pitch..."), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_P) },
+         [this] { correctPitch(); });
     add ("repair.declick", Category::repair, tr ("De&Click..."), {}, [this] { declick(); });
     add ("repair.declip", Category::repair, tr ("DeCli&p..."), {}, [this] { declip(); });
     add ("repair.dehum", Category::repair, tr ("De&Hum..."), {}, [this] { dehum(); });
@@ -632,7 +634,7 @@ void MainWindow::buildMenus()
         { tr ("&Process"),   { "process.gain", "process.gainUp", "process.gainDown", "process.normalize", "-", "process.fadeIn", "process.fadeOut", "-",
                                "process.fadeShape.linear", "process.fadeShape.equalPower", "process.fadeShape.exponential",
                                "process.fadeShape.sCurve", "-", "process.reverse", "process.invert", "process.dcOffset", "-", "process.stereoize", "process.convert" } },
-        { tr ("&Repair"),    { "view.diagnostics", "-", "repair.autoHeal", "repair.spectralGain", "repair.findSimilar", "-", "repair.learnNoise", "repair.noiseReduction", "-",
+        { tr ("&Repair"),    { "view.diagnostics", "-", "repair.autoHeal", "repair.spectralGain", "repair.findSimilar", "repair.correctPitch", "-", "repair.learnNoise", "repair.noiseReduction", "-",
                                "repair.declick", "repair.declip", "repair.dehum", "repair.deess", "-",
                                "repair.toolBox", "repair.toolLasso", "repair.toolBrush", "repair.toolSpotHeal",
                                "repair.brushSmaller", "repair.brushLarger", "repair.addHarmonics", "-",
@@ -1020,7 +1022,7 @@ void MainWindow::updateCommandStates()
     // Selection commands stay enabled so pressing their key without a selection
     // explains what is missing instead of silently doing nothing.
     for (const auto* id : { "edit.cut", "edit.copy", "edit.delete", "edit.trim", "process.fadeIn", "process.fadeOut", "repair.autoHeal",
-                            "view.zoomSelection" })
+                            "repair.correctPitch", "view.zoomSelection" })
         commands.action (QString::fromLatin1 (id))->setEnabled (open);
     Q_UNUSED (sel);
 
@@ -1047,7 +1049,7 @@ void MainWindow::updateCommandStates()
                                 "process.gain", "process.normalize", "process.fadeIn", "process.fadeOut", "process.reverse",
                                 "process.invert", "process.dcOffset", "process.stereoize", "process.convert",
                                 "repair.autoHeal", "repair.spectralGain", "repair.noiseReduction", "repair.declick",
-                                "repair.declip", "repair.dehum", "repair.deess", "repair.addHarmonics",
+                                "repair.declip", "repair.dehum", "repair.deess", "repair.addHarmonics", "repair.correctPitch",
                                 "marker.add", "marker.addRegion" })
             commands.action (QString::fromLatin1 (id))->setEnabled (false);
 }
