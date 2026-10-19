@@ -492,9 +492,123 @@ namespace
     }
 }
 
+void PatternText::convertEffectsFromFT2(pp_int32& eff, pp_int32& op)
+{
+	bool f = false;
+	for (pp_uint32 i = 0; i < XModule::numValidXMEffects; i++)
+		if (eff == XModule::validXMEffects[i]) 
+			f = true;
+
+	if (!f)
+	{
+		eff = op = 0;
+		return;
+	}
+
+	if ((eff==0xC)||(eff==0x10)) 
+	{
+		op = XModule::vol64to255(op);
+	}
+	
+	else if ((!eff)&&(op)) 
+		eff=0x20;
+	
+	else if (eff==0xE) 
+	{
+		eff=(op>>4)+0x30;
+		op=op&0xf;
+	}
+	
+	else if (eff==0x21) 
+	{
+		eff=(op>>4)+0x40;
+		op=op&0xf;
+	}
+	
+}
+
+void PatternText::convertVolumeToEffect(pp_int32 vol, pp_int32& effect, pp_int32& operand)
+{
+	effect = operand = 0;
+
+	if (vol>=0x10&&vol<=0x50) 
+	{
+		effect = 0x0C;
+		operand = XModule::vol64to255(vol-0x10);
+		return;
+	}
+	
+	if (vol>=0x60) 
+	{
+		mp_ubyte eff = (mp_ubyte)(vol>>4);
+		mp_ubyte op  = (mp_ubyte)(vol&0xf);
+		
+		switch (eff) 
+		{
+		case 0x6 : 
+			eff=0x0A;
+			break;
+			
+		case 0x7 : 
+			eff=0x0A;
+			op=op<<4;
+			break;
+			
+		case 0x8 : 
+			eff=0x3B;
+			break;
+			
+		case 0x9 : 
+			eff=0x3A;
+			break;
+			
+		case 0xA : 
+			eff=0x4;
+			op=op<<4;
+			break;
+			
+		case 0xB : 
+			eff=0x4;
+			break;
+			
+		case 0xC : 
+			eff=0x8;
+			op=op*0x11;
+			break;
+			
+		case 0xD : 
+			eff=0x19;
+			break;
+			
+		case 0xE : 
+			eff=0x19;
+			op=op<<4;
+			break;
+			
+		case 0xF : 
+			eff=0x3;
+			op=op<<4;
+			break;
+			
+		}
+
+		effect = eff;
+		operand = op;
+
+	}
+	
+}
+
 PatternText::Cell PatternText::cell (const TXMPattern& pattern, int row, int channel)
 {
     Cell c;
+    if (row < 0 || row >= pattern.rows || channel < 0 || channel >= pattern.channum)
+    {
+        c.note = glyphs ("\xf4\xf4\xf4");
+        c.instrument = c.volume = c.operand = glyphs ("\xf4\xf4");
+        c.effect = glyphs ("\xf4");
+        return c;
+    }
     const int slot = 2 + pattern.effnum * 2;
     const mp_ubyte* p = pattern.patternData + (row * pattern.channum + channel) * slot;
 

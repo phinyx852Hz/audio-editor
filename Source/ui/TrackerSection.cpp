@@ -37,8 +37,15 @@ void MainWindow::registerTrackerCommands()
         w->activateWindow();
         w->patternView()->setFocus();
     })->setStatusTip (tr ("The Tracker, from MilkyTracker: play XM, MOD, IT and S3M modules and record them into the editor"));
+    add ("tracker.new", tr ("&New Song"), {}, [this] { trackerNew(); })
+        ->setStatusTip (tr ("Start a new, empty XM song in the Tracker: 8 channels and one pattern of 64 rows"));
     add ("tracker.open", tr ("&Open Module..."), {}, [this] { openModule(); })
         ->setStatusTip (tr ("Open a tracker module (XM, MOD, IT, S3M, MTM, 669, FAR, ...) in the Tracker"));
+    add ("tracker.save", tr ("Sa&ve Song"), {}, [this] { trackerSave (false); })
+        ->setStatusTip (tr ("Save the Tracker's song as an XM module"));
+    add ("tracker.saveAs", tr ("Save Song &As..."), {}, [this] { trackerSave (true); });
+    add ("tracker.loadSample", tr ("&Load Sample..."), {}, [this] { trackerLoadSample (trackerWindow()->currentInstrument()); })
+        ->setStatusTip (tr ("Load an audio file into the Tracker's current instrument"));
     add ("tracker.playSong", tr ("Play &Song"), {}, [this] { trackerPlay (false); });
     add ("tracker.playPattern", tr ("Play &Pattern"), {}, [this] { trackerPlay (true); });
     add ("tracker.stop", tr ("S&top Tracker"), {}, [this] { trackerStop(); });
@@ -60,7 +67,7 @@ void MainWindow::registerTrackerCommands()
     {
         QMessageBox::about (this, tr ("About the Tracker"),
                             tr ("<p>The Tracker is built on <b>MilkyTracker</b> (milkytracker.org, github.com/milkytracker/MilkyTracker): "
-                                "its player library MilkyPlay plays the modules, and its pattern display is followed here.</p>"
+                                "its player library MilkyPlay plays the modules, and its pattern display and its module and pattern editors are followed here.</p>"
                                 "<p>MilkyTracker is by Peter \"pailes\" Barth and its contributors (Christopher O'Neill, Dale Whinham, "
                                 "Julian Harnath and many others). MilkyPlay is under the New BSD licence and MilkyTracker under the "
                                 "GNU GPL version 3 or later; PHINYX uses both with thanks, under the GNU AGPL version 3.</p>"));
@@ -72,7 +79,12 @@ TrackerWindow* MainWindow::trackerWindow()
     if (trackerWin == nullptr)
     {
         trackerWin = new TrackerWindow (*tracker, this);
+        connect (trackerWin, &TrackerWindow::newRequested, this, [this] { trackerNew(); });
         connect (trackerWin, &TrackerWindow::openRequested, this, [this] { openModule(); });
+        connect (trackerWin, &TrackerWindow::saveRequested, this, [this] (bool saveAs) { trackerSave (saveAs); });
+        connect (trackerWin, &TrackerWindow::loadSampleRequested, this, [this] (int instrument) { trackerLoadSample (instrument); });
+        connect (trackerWin, &TrackerWindow::notePreview, this, [this] (int channel, int note, int instrument) { trackerPreview (channel, note, instrument); });
+        connect (trackerWin, &TrackerWindow::noteRelease, this, [this] (int channel, int instrument) { tracker->releaseNote (channel, instrument); });
         connect (trackerWin, &TrackerWindow::playSongRequested, this, [this] { trackerPlay (false); });
         connect (trackerWin, &TrackerWindow::playPatternRequested, this, [this] { trackerPlay (true); });
         connect (trackerWin, &TrackerWindow::stopRequested, this, [this] { trackerStop(); });
@@ -93,7 +105,7 @@ void MainWindow::openModule()
     const auto folder = appSettings().value (QStringLiteral ("tracker/folder"), QDir::homePath()).toString();
     const auto path = QFileDialog::getOpenFileName (w, tr ("Open Module"), folder,
                                                     tr ("Modules (*.xm *.mod *.it *.s3m *.stm *.mtm *.669 *.far *.mdl *.okt *.ptm *.ult *.amf *.dbm *.dsm *.gdm *.imf *.psm *.mxm *.umx);;All files (*)"));
-    if (path.isEmpty())
+    if (path.isEmpty() || ! trackerConfirmDiscard())
         return;
     appSettings().setValue (QStringLiteral ("tracker/folder"), QFileInfo (path).absolutePath());
 
@@ -201,4 +213,116 @@ void MainWindow::trackerRecord (bool multiChannel)
     const auto channels = data() != nullptr ? data()->numChannels() : 2;
     statusBar()->showMessage (multiChannel ? tr ("Recorded the song into a new tab: %1 channels, a stereo pair per track").arg (channels)
                                            : tr ("Recorded the song into a new stereo tab"), 8000);
+}
+
+bool MainWindow::trackerConfirmDiscard()
+{
+    if (tracker == nullptr || ! tracker->isModified())
+        return true;
+    auto* w = trackerWindow();
+    w->show();
+    w->raise();
+    auto name = QString::fromStdString (tracker->title());
+    if (name.isEmpty() && ! tracker->path().empty())
+        name = QFileInfo (QString::fromStdString (tracker->path())).fileName();
+    name = name.isEmpty() ? tr ("the Tracker song") : QStringLiteral ("\u201c%1\u201d").arg (name);
+    const auto answer = QMessageBox::question (w, tr ("Tracker"), tr ("Save the changes to %1?").arg (name),
+                                               QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel, QMessageBox::Save);
+    if (answer == QMessageBox::Save)
+        return trackerSave (false);
+    return answer == QMessageBox::Discard;
+}
+
+void MainWindow::trackerNew()
+{
+    auto* w = trackerWindow();
+    if (! trackerConfirmDiscard())
+        return;
+    trackerStop();
+    tracker->newSong (8);
+    w->moduleChanged();
+    w->show();
+    w->raise();
+    w->activateWindow();
+    w->patternView()->setFocus();
+    w->patternView()->setEditing (true);
+}
+
+bool MainWindow::trackerSave (bool saveAs)
+{
+    auto* w = trackerWindow();
+    if (! tracker->isLoaded())
+        return false;
+    auto path = QString::fromStdString (tracker->path());
+    if (saveAs || path.isEmpty() || ! path.endsWith (QStringLiteral (".xm"), Qt::CaseInsensitive))
+    {
+        if (! tracker->isEditable()
+            && QMessageBox::question (w, tr ("Save Song"), tr ("The song is saved as an XM module (FastTracker 2), which PHINYX can edit. Continue?")) != QMessageBox::Yes)
+            return false;
+        const auto folder = appSettings().value (QStringLiteral ("tracker/folder"), QDir::homePath()).toString();
+        auto base = tracker->title().empty() ? tr ("Untitled") : QString::fromStdString (tracker->title());
+        if (! path.isEmpty())
+            base = QFileInfo (path).completeBaseName();
+        path = QFileDialog::getSaveFileName (w, tr ("Save Song As"), QDir (folder).filePath (base + QStringLiteral (".xm")), tr ("XM modules (*.xm)"));
+        if (path.isEmpty())
+            return false;
+        if (! path.endsWith (QStringLiteral (".xm"), Qt::CaseInsensitive))
+            path += QStringLiteral (".xm");
+        appSettings().setValue (QStringLiteral ("tracker/folder"), QFileInfo (path).absolutePath());
+    }
+    const auto error = tracker->save (path.toStdString());
+    if (! error.empty())
+    {
+        QMessageBox::warning (w, tr ("Save Song"), QString::fromStdString (error));
+        return false;
+    }
+    w->songChanged();
+    statusBar()->showMessage (tr ("Saved the song to %1").arg (path), 5000);
+    return true;
+}
+
+void MainWindow::trackerLoadSample (int instrument)
+{
+    auto* w = trackerWindow();
+    if (! tracker->isLoaded())
+        trackerNew();
+    if (! tracker->isLoaded())
+        return;
+    const auto folder = appSettings().value (QStringLiteral ("tracker/sampleFolder"),
+                                             appSettings().value (QStringLiteral ("tracker/folder"), QDir::homePath())).toString();
+    QStringList patterns;
+    for (const auto& ext : AudioEngine::readableExtensions())
+        patterns << QStringLiteral ("*.") + QString::fromStdString (ext);
+    const auto path = QFileDialog::getOpenFileName (w, tr ("Load Sample into Instrument %1").arg (instrument), folder,
+                                                    tr ("Audio files (%1);;All files (*)").arg (patterns.join (QLatin1Char (' '))));
+    if (path.isEmpty())
+        return;
+    appSettings().setValue (QStringLiteral ("tracker/sampleFolder"), QFileInfo (path).absolutePath());
+
+    std::vector<Marker> markers;
+    Tags tags;
+    std::string error;
+    const auto audio = AudioEngine::loadFile (path.toStdString(), markers, tags, error);
+    if (audio == nullptr)
+    {
+        QMessageBox::warning (w, tr ("Load Sample"), error.empty() ? tr ("The file could not be read.") : QString::fromStdString (error));
+        return;
+    }
+    error = tracker->loadSample (instrument, *audio, QFileInfo (path).completeBaseName().toStdString());
+    if (! error.empty())
+    {
+        QMessageBox::warning (w, tr ("Load Sample"), QString::fromStdString (error));
+        return;
+    }
+    w->songChanged();
+    w->patternView()->setFocus();
+    statusBar()->showMessage (tr ("Loaded %1 into instrument %2").arg (QFileInfo (path).fileName()).arg (instrument), 5000);
+}
+
+void MainWindow::trackerPreview (int channel, int note, int instrument)
+{
+    const auto rate = engine.deviceSampleRate() > 0.0 ? engine.deviceSampleRate() : 48000.0;
+    tracker->previewNote (channel, note, instrument, rate);
+    if (! engine.hasLiveSource())
+        engine.setLiveSource ([t = tracker.get()] (float* left, float* right, int frames) { t->render (left, right, frames); });
 }

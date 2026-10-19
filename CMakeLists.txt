@@ -122,6 +122,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/TrackerWindow.cpp
     Source/tracker/PatternText.cpp
     Source/tracker/TrackerEngine.cpp
+    Source/tracker/TrackerEdit.cpp
     Source/ui/BinauralDialog.cpp
     Source/ui/SpatialSection.cpp)
 

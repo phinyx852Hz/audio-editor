@@ -724,7 +724,7 @@ void MainWindow::buildMenus()
                                "view.visualizerNext", "view.visualizerPrevious", "view.visualizerChoose", "-",
                                "@visual.artistic", "@visual.science", "-", "@visual.milkdrop", "@visual.rain", "-",
                                "view.opacityUp", "view.opacityDown", "view.opacityFull" } },
-        { tr ("Trac&ker"),   { "tracker.window", "tracker.open", "-", "tracker.playSong", "tracker.playPattern", "tracker.stop", "-",
+        { tr ("Trac&ker"),   { "tracker.window", "tracker.new", "tracker.open", "tracker.save", "tracker.saveAs", "tracker.loadSample", "-", "tracker.playSong", "tracker.playPattern", "tracker.stop", "-",
                                "tracker.recordStereo", "tracker.recordMulti", "-", "tracker.resetTracks", "tracker.about" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "-", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
@@ -3325,6 +3325,12 @@ void MainWindow::closeEvent (QCloseEvent* e)
             e->ignore();
             return;
         }
+    }
+
+    if (! trackerConfirmDiscard())
+    {
+        e->ignore();
+        return;
     }
 
     engine.stop();

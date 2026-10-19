@@ -1,123 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "TrackerEngine.h"
 
-#include "AudioDriver_NULL.h"
-#include "MasterMixer.h"
-#include "Mixable.h"
-#include "PlayerSTD.h"
-#include "XModule.h"
+#include "TrackerPlayer.h"
 
 #include <algorithm>
 #include <cmath>
-
-//==============================================================================
-// One MilkyPlay player with its mixer, pulled a block at a time instead of by a
-// sound card. The mix is taken before MilkyPlay rounds it to 16 bits, so nothing
-// clips on the way into PHINYX.
-class TrackerEngine::Player final : private Mixable
-{
-public:
-    Player (XModule& m, double sampleRate)
-        : module (m),
-          rate ((int) std::lround (sampleRate)),
-          blockFrames ((int) ChannelMixer::beatPacketsToBufferSize ((mp_uint32) rate, 4)),
-          mixer ((mp_uint32) rate, (mp_uint32) blockFrames, 1, &driver),
-          player ((mp_uint32) rate)
-    {
-        mixer.setSampleShift (shift);
-        mixer.setFilterHook (this);
-        player.resetMainVolumeOnStartPlay (true);
-        player.resetOnStop (false);
-        player.setBufferSize ((mp_uint32) blockFrames);
-        player.setResamplerType (ChannelMixer::MIXER_LERPING_RAMPING);   // MilkyTracker's default
-        player.setMasterVolume (256);
-        player.setPanningSeparation (256);
-        player.setPlayMode (PlayerBase::PlayMode_Auto);
-        player.enable (PlayerBase::PlayModeOptionPanning8xx, true);
-        player.enable (PlayerBase::PlayModeOptionForcePTPitchLimit, true);
-    }
-
-    ~Player() override
-    {
-        mixer.stop();
-        if (! mixer.isDeviceRemoved (&player))
-            mixer.removeDevice (&player);
-    }
-
-    void start (bool repeat, int order, int row, int patternIndex)
-    {
-        if (! mixer.isDeviceRemoved (&player))
-            mixer.removeDevice (&player);
-        player.startPlaying (&module, repeat, (mp_uint32) std::max (0, order), (mp_uint32) std::max (0, row), -1, nullptr, false, patternIndex);
-        mixer.addDevice (&player);
-        if (! mixer.isPlaying())
-            mixer.start();
-        fifo.clear();
-        fifoRead = 0;
-    }
-
-    void mute (int channel, bool m) { player.muteChannel (channel, m); }
-    bool halted() const { return player.hasSongHalted(); }
-    void position (int& order, int& row) const
-    {
-        mp_sint32 o = 0, r = 0;
-        player.getPosition (o, r);
-        order = o;
-        row = r;
-    }
-    int tempo() const { return player.getTempo(); }
-    int speed() const { return player.getSpeed(); }
-
-    // Fills [left, right) with the next frames.
-    void pull (float* left, float* right, int numFrames)
-    {
-        int done = 0;
-        while (done < numFrames)
-        {
-            if (fifoRead >= fifo.size())
-            {
-                fifo.clear();
-                fifoRead = 0;
-                driver.advance();   // the mixer runs and mix() below collects it
-                if (fifo.empty())
-                {
-                    std::fill (left + done, left + numFrames, 0.0f);
-                    std::fill (right + done, right + numFrames, 0.0f);
-                    return;
-                }
-            }
-            const auto available = (int) ((fifo.size() - fifoRead) / 2);
-            const auto n = std::min (available, numFrames - done);
-            for (int i = 0; i < n; ++i)
-            {
-                left[done + i] = fifo[fifoRead++];
-                right[done + i] = fifo[fifoRead++];
-            }
-            done += n;
-        }
-    }
-
-private:
-    // MilkyPlay's mix, interleaved stereo in fixed point, before it is cut to 16 bits.
-    void mix (mp_sint32* buffer, mp_uint32 numSamples) override
-    {
-        const float scale = 1.0f / (32768.0f * (float) (1 << shift));
-        const auto count = (size_t) numSamples * 2;
-        const auto at = fifo.size();
-        fifo.resize (at + count);
-        for (size_t i = 0; i < count; ++i)
-            fifo[at + i] = (float) buffer[i] * scale;
-    }
-
-    static constexpr int shift = 1;   // MilkyPlay's headroom: full scale is 32768 << shift
-    XModule& module;
-    int rate, blockFrames;
-    AudioDriver_NULL driver;
-    MasterMixer mixer;
-    PlayerSTD player;
-    std::vector<float> fifo;
-    size_t fifoRead = 0;
-};
 
 //==============================================================================
 TrackerEngine::TrackerEngine() = default;
@@ -140,13 +27,20 @@ std::string TrackerEngine::load (const std::string& path)
         std::lock_guard lock (liveLock);
         live.reset();
         module = std::move (loaded);
+        undoSteps.clear();
+        redoSteps.clear();
+        modified = false;
     }
     filePath = path;
-    const auto channels = (size_t) numChannels();
-    muted.assign (channels, false);
-    soloed.assign (channels, false);
-    resetTracks();
+    resetChannels();
     return {};
+}
+
+void TrackerEngine::resetChannels()
+{
+    muted.assign (maxChannels, false);
+    soloed.assign (maxChannels, false);
+    resetTracks();
 }
 
 bool TrackerEngine::isLoaded() const { return module != nullptr; }
@@ -258,7 +152,7 @@ void TrackerEngine::stop()
 bool TrackerEngine::isPlaying() const
 {
     std::lock_guard lock (liveLock);
-    return live != nullptr && ! live->halted();
+    return live != nullptr && ! live->halted() && ! live->idle();
 }
 
 void TrackerEngine::position (int& order, int& row) const
@@ -318,7 +212,8 @@ bool TrackerEngine::isSoloed (int channel) const { return channel >= 0 && channe
 
 bool TrackerEngine::isHeard (int channel) const
 {
-    const bool anySolo = std::find (soloed.begin(), soloed.end(), true) != soloed.end();
+    const auto end = soloed.begin() + std::min ((int) soloed.size(), numChannels());
+    const bool anySolo = std::find (soloed.begin(), end, true) != end;
     return ! isMuted (channel) && (! anySolo || isSoloed (channel));
 }
 
@@ -327,7 +222,7 @@ void TrackerEngine::applyMutes()
 {
     if (live == nullptr)
         return;
-    for (int c = 0; c < (int) muted.size(); ++c)
+    for (int c = 0; c < std::min ((int) muted.size(), numChannels()); ++c)
         live->mute (c, ! isHeard (c));
 }
 
@@ -341,17 +236,17 @@ int TrackerEngine::track (int channel) const { return channel >= 0 && channel < 
 
 void TrackerEngine::resetTracks()
 {
-    const int n = numChannels();
+    const int n = std::max (1, numChannels());
     const int used = std::min (n, numTracks);
-    tracks.assign ((size_t) n, 0);
-    for (int c = 0; c < n; ++c)
-        tracks[(size_t) c] = used > 0 ? c * used / n : 0;
+    tracks.assign (maxChannels, 0);
+    for (int c = 0; c < maxChannels; ++c)
+        tracks[(size_t) c] = std::min (used - 1, c * used / n);
 }
 
 int TrackerEngine::tracksInUse() const
 {
     int highest = -1;
-    for (int c = 0; c < (int) tracks.size(); ++c)
+    for (int c = 0; c < std::min ((int) tracks.size(), numChannels()); ++c)
         if (isHeard (c))
             highest = std::max (highest, tracks[(size_t) c]);
     return highest + 1;

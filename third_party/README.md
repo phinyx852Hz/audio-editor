@@ -43,3 +43,8 @@ Changes for PHINYX:
 `Source/tracker/PatternText.cpp` adapts the effect conversions and names from
 MilkyTracker's `tracker/PatternTools.cpp` (Copyright 2009 Peter Barth,
 GPL-3.0-or-later).
+Its `convertEffectsFromFT2` and `convertVolumeToEffect` are ported from there too.
+
+`Source/tracker/TrackerEdit.cpp` follows MilkyTracker's `tracker/ModuleEditor.cpp`
+and `tracker/PatternEditor.cpp` (Copyright 2009 Peter Barth, GPL-3.0-or-later)
+for new songs, instrument and sample slots, note entry and block operations.

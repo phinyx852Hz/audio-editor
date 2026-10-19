@@ -19,6 +19,8 @@ public:
     static Cell cell (const TXMPattern&, int row, int channel);
 
     static void convertEffectsToFT2 (int& eff, int& op);
+    static void convertEffectsFromFT2 (int& eff, int& op);
+    static void convertVolumeToEffect (int vol, int& eff, int& op);
     static int getVolumeFromEffect (int eff, int op);
     static void getVolumeName (char* name, unsigned int volume);
 };

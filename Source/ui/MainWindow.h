@@ -252,6 +252,11 @@ private:
     void trackerPlay (bool patternOnly);
     void trackerStop();
     void trackerRecord (bool multiChannel);
+    void trackerNew();
+    bool trackerSave (bool saveAs);
+    void trackerLoadSample (int instrument);
+    void trackerPreview (int channel, int note, int instrument);
+    bool trackerConfirmDiscard();   // false when the user cancels
     std::unique_ptr<class TrackerEngine> tracker;
     class TrackerWindow* trackerWin = nullptr;
     class VisualizerWindow* visualizerWindow();
