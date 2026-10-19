@@ -13,6 +13,7 @@
 #include <QPushButton>
 #include <QRandomGenerator>
 #include <QVBoxLayout>
+#include <QWheelEvent>
 
 #include <algorithm>
 #include <cmath>
@@ -21,6 +22,7 @@ namespace
 {
     constexpr size_t ringSize = 16384;
     constexpr int numBars = 64, spectrogramRows = 256, spectrogramColumns = 600, waterfallPoints = 160, waterfallDepth = 56;
+    constexpr int surfacePoints = 72, surfaceDepth = 64;
     constexpr double lowest = 20.0, highest = 20000.0;
 
     // Third-octave bands (IEC 61260 nominal centres).
@@ -92,11 +94,13 @@ const std::vector<VisualizerView::Mode>& VisualizerView::modes()
         { "circleWave",  QT_TRANSLATE_NOOP ("VisualizerView", "Circle Wave"),       false, QT_TRANSLATE_NOOP ("VisualizerView", "The waveform wrapped around a circle, with an afterglow") },
         { "particles",   QT_TRANSLATE_NOOP ("VisualizerView", "Starfield"),         false, QT_TRANSLATE_NOOP ("VisualizerView", "Flying through stars at the speed of the music") },
         { "ribbons",     QT_TRANSLATE_NOOP ("VisualizerView", "Ribbons"),           false, QT_TRANSLATE_NOOP ("VisualizerView", "Layers of the spectrum drifting like an aurora") },
+        { "landscape",   QT_TRANSLATE_NOOP ("VisualizerView", "Spectral Landscape"), false, QT_TRANSLATE_NOOP ("VisualizerView", "Gliding over mountains made of the last seconds of sound; drag to turn, wheel to zoom") },
         { "spectrum",    QT_TRANSLATE_NOOP ("VisualizerView", "Spectrum Analyzer"), true,  QT_TRANSLATE_NOOP ("VisualizerView", "FFT (4096 points, Hann) on a log frequency axis, dBFS, peak hold, peak readout with note") },
         { "octaves",     QT_TRANSLATE_NOOP ("VisualizerView", "Third-Octave Bands"), true, QT_TRANSLATE_NOOP ("VisualizerView", "31 bands, 20 Hz to 20 kHz (IEC 61260 centres), dB with peak hold, like a real-time analyzer") },
         { "scope",       QT_TRANSLATE_NOOP ("VisualizerView", "Oscilloscope"),      true,  QT_TRANSLATE_NOOP ("VisualizerView", "Left and right over 40 ms, triggered on a rising zero crossing") },
         { "spectrogram", QT_TRANSLATE_NOOP ("VisualizerView", "Spectrogram"),       true,  QT_TRANSLATE_NOOP ("VisualizerView", "Frequency over time, scrolling, log frequency, -100 to 0 dBFS") },
         { "waterfall",   QT_TRANSLATE_NOOP ("VisualizerView", "Waterfall"),         true,  QT_TRANSLATE_NOOP ("VisualizerView", "Recent spectra stacked in depth, newest in front") },
+        { "surface",     QT_TRANSLATE_NOOP ("VisualizerView", "3D Spectrum"),       true,  QT_TRANSLATE_NOOP ("VisualizerView", "Frequency, time and level as a coloured surface, about 4 s deep; drag to turn, wheel to zoom") },
     };
     return list;
 }
@@ -312,6 +316,33 @@ void VisualizerView::analyse()
     while ((int) history.size() > waterfallDepth)
         history.pop_front();
 
+    // The 3D views' history: a row every other tick, peak per log band so narrow tones stand up.
+    if (++surfaceTicks % 2 == 0)
+    {
+        std::vector<float> row ((size_t) surfacePoints);
+        for (int i = 0; i < surfacePoints; ++i)
+        {
+            const double from = frequencyAt ((double) i / surfacePoints), to = frequencyAt ((double) (i + 1) / surfacePoints);
+            const int a = std::max (1, (int) std::floor (from * analyzer.size() / rate));
+            const int b = std::min ((int) smooth.size() - 1, std::max (a, (int) std::ceil (to * analyzer.size() / rate)));
+            float best = -120.0f;
+            if (b - a < 2)
+            {
+                // Narrower than the bins (low down): between the bins, for a smooth slope.
+                const double bin = std::sqrt (from * to) * analyzer.size() / rate;
+                const int k = std::clamp ((int) bin, 1, (int) spectrum.size() - 2);
+                best = (float) (spectrum[(size_t) k] + (spectrum[(size_t) k + 1] - spectrum[(size_t) k]) * (bin - k));
+            }
+            else
+                for (int k = a; k <= b; ++k)
+                    best = std::max (best, spectrum[(size_t) k]);
+            row[(size_t) i] = (float) std::clamp ((best + 90.0) / 90.0, 0.0, 1.0);
+        }
+        surface.push_back (std::move (row));
+        while ((int) surface.size() > surfaceDepth)
+            surface.pop_front();
+    }
+
     // The stars move faster with the music.
     const auto speed = (float) ((0.08 + level * 0.9 + bass * 0.6) * dt);
     auto* random = QRandomGenerator::global();
@@ -351,6 +382,8 @@ void VisualizerView::paintEvent (QPaintEvent*)
         else if (id == QLatin1String ("scope"))       drawScope (g);
         else if (id == QLatin1String ("spectrogram")) drawSpectrogram (g);
         else if (id == QLatin1String ("waterfall"))   drawWaterfall (g);
+        else if (id == QLatin1String ("surface"))     drawSurface (g, true);
+        else if (id == QLatin1String ("landscape"))   drawSurface (g, false);
     }
     if (! backdrop)
         drawTitle (g);
@@ -867,6 +900,174 @@ void VisualizerView::drawWaterfall (QPainter& g)
 }
 
 //==============================================================================
+// The 3D views: the last few seconds as a surface, frequency across, time going
+// back, level up, seen through a camera that can be turned and zoomed.
+void VisualizerView::drawSurface (QPainter& g, bool science)
+{
+    const int rows = (int) surface.size();
+    if (rows < 2)
+        return;
+
+    // World: x -1 (20 Hz) to 1 (20 kHz), z 0 (now) to 2 (oldest), y 0 to 0.8 (level).
+    const double yaw = (cameraYaw + (science ? 0.0 : 18.0 * std::sin (phase * 0.35))) * M_PI / 180.0;
+    const double pitch = (cameraPitch + (science ? 0.0 : -8.0 + 6.0 * std::sin (phase * 0.23))) * M_PI / 180.0;
+    const double cy = std::cos (yaw), sy = std::sin (yaw), cp = std::cos (pitch), sp = std::sin (pitch);
+    const double distance = (science ? 4.4 : 3.9) / cameraZoom, focal = std::min ((double) width(), height() * 1.6) * 0.9;
+    const QPointF screenCentre (width() / 2.0, height() * (science ? 0.5 : 0.5));
+    struct Projected { QPointF p; double depth; };
+    const auto project = [&] (double x, double y, double z)
+    {
+        // Centre the box, turn it, then look at it from in front and above.
+        x -= 0.0; z -= 1.0; y -= 0.3;
+        const double x1 = x * cy - z * sy, z1 = x * sy + z * cy;
+        const double y2 = y * cp + z1 * sp, z2 = z1 * cp - y * sp;   // the camera is above, in front
+        const double depth = distance + z2;
+        return Projected { QPointF (screenCentre.x() + x1 * focal / depth, screenCentre.y() - y2 * focal / depth), depth };
+    };
+
+    const double height3d = science ? 0.8 : 0.65;
+    const auto xAt = [] (int i) { return -1.0 + 2.0 * i / (surfacePoints - 1); };
+    const auto zAt = [rows] (int r) { return 2.0 * (rows - 1 - r) / (surfaceDepth - 1); };   // newest row at z 0
+
+    // Every point once.
+    std::vector<Projected> grid ((size_t) rows * surfacePoints);
+    for (int r = 0; r < rows; ++r)
+        for (int i = 0; i < surfacePoints; ++i)
+            grid[(size_t) (r * surfacePoints + i)] = project (xAt (i), surface[(size_t) r][(size_t) i] * height3d, zAt (r));
+
+    const auto text = colour ("text");
+    auto background = colour ("waveformBackground");
+    background.setAlpha (255);
+
+    // The floor and walls with their scales, behind the surface.
+    if (science)
+    {
+        g.setFont (QFont (g.font().family(), 8));
+        const double back = zAt (0);
+        const auto line = [&] (double x0, double y0, double z0, double x1, double y1, double z1)
+        {
+            g.drawLine (project (x0, y0, z0).p, project (x1, y1, z1).p);
+        };
+        g.setPen (QPen (withAlpha (text, 0.18), 1.0));
+        for (double hz : { 20.0, 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0 })
+        {
+            const double x = -1.0 + 2.0 * logPosition (hz);
+            line (x, 0, 0, x, 0, back);
+            line (x, 0, back, x, height3d, back);
+        }
+        for (double db = 0.0; db >= -90.0; db -= 15.0)
+        {
+            const double y = (db + 90.0) / 90.0 * height3d;
+            line (-1, y, back, 1, y, back);
+            line (-1, y, 0, -1, y, back);
+        }
+        for (double z = 0.0; z <= back + 1e-6; z += 0.5)
+            line (-1, 0, z, 1, 0, z);
+        line (-1, 0, 0, -1, height3d, 0);
+
+        // Labels: frequency along the front, time down the side, level up the back.
+        g.setPen (withAlpha (text, 0.75));
+        for (double hz : { 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0 })
+        {
+            const auto p = project (-1.0 + 2.0 * logPosition (hz), 0, -0.08).p;
+            g.drawText (QRectF (p.x() - 24, p.y() + 2, 48, 14), Qt::AlignCenter, frequencyLabel (hz));
+        }
+        const double secondsPerRow = 0.066;
+        for (int s = 0; s <= (int) (surfaceDepth * secondsPerRow); ++s)
+        {
+            const double z = s / secondsPerRow * 2.0 / (surfaceDepth - 1);
+            if (z > back + 1e-6)
+                break;
+            const auto p = project (1.06, 0, z).p;
+            g.drawText (QRectF (p.x() + 2, p.y() - 7, 50, 14), Qt::AlignLeft | Qt::AlignVCenter, s == 0 ? tr ("now") : QStringLiteral ("-%1 s").arg (s));
+        }
+        for (double db = 0.0; db >= -90.0; db -= 15.0)
+        {
+            const auto p = project (-1.04, (db + 90.0) / 90.0 * height3d, back).p;
+            g.drawText (QRectF (p.x() - 44, p.y() - 7, 40, 14), Qt::AlignRight | Qt::AlignVCenter, QString::number (db));
+        }
+        const auto unit = project (-1.04, height3d * 1.08, back).p;
+        g.drawText (QRectF (unit.x() - 44, unit.y() - 7, 40, 14), Qt::AlignRight | Qt::AlignVCenter, QStringLiteral ("dBFS"));
+    }
+
+    // The surface's cells, far ones first so near ones cover them.
+    struct Cell { int r, i; double depth; };
+    std::vector<Cell> cells;
+    cells.reserve ((size_t) (rows - 1) * (surfacePoints - 1));
+    for (int r = 0; r + 1 < rows; ++r)
+        for (int i = 0; i + 1 < surfacePoints; ++i)
+        {
+            const auto& a = grid[(size_t) (r * surfacePoints + i)];
+            const auto& b = grid[(size_t) ((r + 1) * surfacePoints + i + 1)];
+            cells.push_back ({ r, i, a.depth + b.depth });
+        }
+    std::sort (cells.begin(), cells.end(), [] (const Cell& a, const Cell& b) { return a.depth > b.depth; });
+
+    g.setRenderHint (QPainter::Antialiasing, false);
+    for (const auto& c : cells)
+    {
+        const int k = c.r * surfacePoints + c.i;
+        const QPointF quad[4] { grid[(size_t) k].p, grid[(size_t) k + 1].p,
+                                grid[(size_t) (k + surfacePoints + 1)].p, grid[(size_t) (k + surfacePoints)].p };
+        const double v = (surface[(size_t) c.r][(size_t) c.i] + surface[(size_t) c.r][(size_t) c.i + 1]
+                          + surface[(size_t) c.r + 1][(size_t) c.i] + surface[(size_t) c.r + 1][(size_t) c.i + 1]) / 4.0;
+        if (science)
+        {
+            const QColor fill (heat (0.08 + 0.92 * v));
+            g.setPen (QPen (fill.darker (170), 0.0));
+            g.setBrush (fill);
+        }
+        else
+        {
+            // Dark ground with glowing ridges: colour from the hue sweep, brighter where it is loud.
+            const double age = (double) c.r / (rows - 1);   // 0 oldest, 1 newest
+            const auto glow = art ((double) c.i / surfacePoints * 0.55 + v * 0.3, phase * 0.02);
+            g.setPen (QPen (withAlpha (glow, 0.15 + 0.85 * age * (0.35 + v)), 0.0));
+            g.setBrush (mix (background, glow, 0.08 + v * 0.55 * (0.3 + 0.7 * age)));
+        }
+        g.drawPolygon (quad, 4);
+    }
+    g.setRenderHint (QPainter::Antialiasing, true);
+
+    // The newest row drawn on top, as the leading edge.
+    QPainterPath edge;
+    for (int i = 0; i < surfacePoints; ++i)
+    {
+        const auto& p = grid[(size_t) ((rows - 1) * surfacePoints + i)].p;
+        if (i == 0)
+            edge.moveTo (p);
+        else
+            edge.lineTo (p);
+    }
+    g.setPen (QPen (science ? withAlpha (colour ("text"), 0.8) : art (0.5, phase * 0.02).lighter (130), science ? 1.2 : 2.0));
+    g.setBrush (Qt::NoBrush);
+    g.drawPath (edge);
+}
+
+void VisualizerView::mousePressEvent (QMouseEvent* e)
+{
+    dragFrom = e->position();
+    QWidget::mousePressEvent (e);
+}
+
+void VisualizerView::mouseMoveEvent (QMouseEvent* e)
+{
+    if ((e->buttons() & Qt::LeftButton) == 0)
+        return;
+    const auto delta = e->position() - dragFrom;
+    dragFrom = e->position();
+    cameraYaw = std::clamp (cameraYaw + delta.x() * 0.3, -85.0, 85.0);
+    cameraPitch = std::clamp (cameraPitch + delta.y() * 0.25, 5.0, 80.0);
+    update();
+}
+
+void VisualizerView::wheelEvent (QWheelEvent* e)
+{
+    cameraZoom = std::clamp (cameraZoom * std::pow (1.1, e->angleDelta().y() / 120.0), 0.5, 2.5);
+    update();
+}
+
+//==============================================================================
 void VisualizerView::keyPressEvent (QKeyEvent* e)
 {
     switch (e->key())
@@ -891,6 +1092,12 @@ void VisualizerView::keyPressEvent (QKeyEvent* e)
             break;
         case Qt::Key_Escape:
             Q_EMIT escapePressed();
+            return;
+        case Qt::Key_Home:   // the 3D views' camera back where it started
+            cameraYaw = -32.0;
+            cameraPitch = 28.0;
+            cameraZoom = 1.0;
+            update();
             return;
         default:
             break;

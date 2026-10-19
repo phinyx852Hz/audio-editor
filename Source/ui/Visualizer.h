@@ -48,6 +48,9 @@ protected:
     void paintEvent (QPaintEvent*) override;
     void keyPressEvent (QKeyEvent*) override;
     void mouseDoubleClickEvent (QMouseEvent*) override;
+    void mousePressEvent (QMouseEvent*) override;
+    void mouseMoveEvent (QMouseEvent*) override;
+    void wheelEvent (QWheelEvent*) override;
     void resizeEvent (QResizeEvent*) override;
     bool eventFilter (QObject*, QEvent*) override;   // a backdrop follows its window's size
 
@@ -62,6 +65,7 @@ private:
     void drawScope (QPainter&);
     void drawSpectrogram (QPainter&);
     void drawWaterfall (QPainter&);
+    void drawSurface (QPainter&, bool science);
     void drawBackground (QPainter&);
     void drawTitle (QPainter&);
 
@@ -91,6 +95,10 @@ private:
     QImage spectrogram;   // one column per tick, log frequency up
     int spectrogramColumn = 0;
     std::deque<std::vector<float>> history;   // recent spectra for the waterfall, 0 to 1
+    std::deque<std::vector<float>> surface;   // coarser and longer, for the 3D views, 0 to 1
+    int surfaceTicks = 0;
+    double cameraYaw = -32.0, cameraPitch = 28.0, cameraZoom = 1.0;   // the 3D views' camera (drag and wheel)
+    QPointF dragFrom;
     QImage trail;   // the circle wave's afterglow
 
     struct Star { float x, y, z; };
