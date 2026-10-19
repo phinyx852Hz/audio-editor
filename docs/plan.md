@@ -366,7 +366,7 @@ One browser panel (dockable, pops out to its own tile) with a single search fiel
 ### 2.10 Workflow and UI
 - P0 HiDPI, resizable dockable panels
 - P1 Workspaces (Edit, Restore, Master, Album) like Audition's workspaces
-- P0 Any panel pops out to its own window (one command per panel, plus a generic "pop out focused panel"), designed for tiling window managers like Hyprland
+- P0 Any panel pops out to its own window (one command per panel, plus a generic "pop out focused panel"), designed for tiling window managers like Hyprland. Done: Esc in a popped-out window closes it back to its (hidden) dock and focuses the waveform, unless a text field with text or a number box has focus (owner, 2026-10-19)
 - P1 Waveform/spectral thumbnails in the browser (see 2.9c)
 - P0 Autosave and crash recovery (requested 2026-10-18 after a crash lost unsaved edits). Done: see "Where things stand". Later: keep the undo history too
 

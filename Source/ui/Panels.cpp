@@ -2,6 +2,7 @@
 #include "Panels.h"
 #include "InfoStrip.h"
 #include <QAbstractSpinBox>
+#include <QAction>
 #include <QLineEdit>
 #include "../core/Dsp.h"
 #include "Theme.h"
@@ -276,6 +277,7 @@ void DockablePanel::setPoppedOut (bool popOut)
     window->setWindowTitle (title + QStringLiteral (" - " APP_DISPLAY_NAME));
     window->setAttribute (Qt::WA_DeleteOnClose, false);
     window->installEventFilter (this);
+    qApp->installEventFilter (this);   // Escape anywhere in the window closes it (see eventFilter)
     Theme::makeTranslucent (window);
 
     // Every command shortcut works in the popped-out window too.
@@ -298,6 +300,7 @@ void DockablePanel::dockBack (bool keepVisible)
     auto* old = window;
     window = nullptr;
     old->removeEventFilter (this);
+    qApp->removeEventFilter (this);
     dockWidget->setWidget (contentWidget);
     old->hide();
     old->deleteLater();
@@ -306,6 +309,38 @@ void DockablePanel::dockBack (bool keepVisible)
 
 bool DockablePanel::eventFilter (QObject* watched, QEvent* e)
 {
+    // In a popped-out window, Escape closes it (back to its dock, hidden) and returns to the
+    // waveform, wherever the focus is in it, except while a text field is being typed in or edited.
+    if (window != nullptr && (e->type() == QEvent::ShortcutOverride || e->type() == QEvent::KeyPress) && watched->isWidgetType())
+    {
+        auto* k = static_cast<QKeyEvent*> (e);
+        auto* w = static_cast<QWidget*> (watched);
+        const bool plain = (k->modifiers() & ~Qt::KeypadModifier) == Qt::NoModifier;
+        if (k->key() == Qt::Key_Escape && plain && w->window() == window && QApplication::activePopupWidget() == nullptr)
+        {
+            const auto* edit = qobject_cast<QLineEdit*> (w);
+            const bool typing = (edit != nullptr && ! edit->text().isEmpty() && ! edit->isReadOnly())
+                             || qobject_cast<QAbstractSpinBox*> (w) != nullptr;
+            if (! typing)
+            {
+                if (e->type() == QEvent::ShortcutOverride)
+                    e->accept();   // so Select None (Escape) does not take it
+                else
+                {
+                    QTimer::singleShot (0, this, [this]
+                    {
+                        dockBack (false);
+                        mainWindow.activateWindow();
+                        for (auto* action : mainWindow.actions())
+                            if (action->objectName() == QLatin1String ("view.focusWaveform"))
+                                action->trigger();
+                    });
+                }
+                return e->type() == QEvent::KeyPress;
+            }
+        }
+    }
+
     // Closing the popped-out window (for example with the window manager's close key) puts the panel back in its dock, hidden.
     if (watched == window && e->type() == QEvent::Close)
         QTimer::singleShot (0, this, [this] { dockBack (false); });
