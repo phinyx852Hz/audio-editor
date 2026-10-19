@@ -52,6 +52,7 @@ namespace
             case FindItem::Kind::process: return QObject::tr ("Processes");
             case FindItem::Kind::effect:  return QObject::tr ("Effects");
             case FindItem::Kind::plugin:  return QObject::tr ("Plugins");
+            case FindItem::Kind::visual:  return QObject::tr ("Visualizations");
             case FindItem::Kind::file:    return QObject::tr ("Files");
         }
         return {};
@@ -110,6 +111,8 @@ QSize FindPanel::sizeHint() const
     // Wide enough for the categories and readable names side by side.
     return { 480, 520 };
 }
+
+static const FindItem* itemOf (QTreeWidgetItem* row);
 
 FindPanel::FindPanel (QWidget* home, QWidget* parent)
     : QWidget (parent), homeWidget (home), search (new QLineEdit (this)), sidebar (new QTreeWidget (this)), results (new QTreeWidget (this))
@@ -176,6 +179,12 @@ FindPanel::FindPanel (QWidget* home, QWidget* parent)
             results->setFocus (Qt::OtherFocusReason);
     });
     connect (results, &QTreeWidget::itemActivated, this, &FindPanel::activate);
+    // Browsing: moving onto a visualization shows it in the visualizer that is open.
+    connect (results, &QTreeWidget::currentItemChanged, this, [this] (QTreeWidgetItem* row)
+    {
+        if (const auto* item = itemOf (row); item != nullptr && item->preview)
+            item->preview();
+    });
     connect (sidebar, &QTreeWidget::itemChanged, this, [this] (QTreeWidgetItem* item)
     {
         if (static_cast<Section> (item->data (0, sectionRole).toInt()) != Section::colour)
@@ -267,6 +276,7 @@ void FindPanel::buildSidebar()
     entry (tr ("Processes"), Section::processes);
     entry (tr ("Effects"), Section::effects);
     entry (tr ("Plugins"), Section::plugins);
+    entry (tr ("Visualizations"), Section::visuals);
     entry (tr ("Files"), Section::files);
 
     heading (tr ("Places"));
@@ -334,6 +344,7 @@ void FindPanel::refilter()
             case Section::processes: return item.kind == FindItem::Kind::process;
             case Section::effects:   return item.kind == FindItem::Kind::effect;
             case Section::plugins:   return item.kind == FindItem::Kind::plugin;
+            case Section::visuals:   return item.kind == FindItem::Kind::visual;
             case Section::files:     return item.kind == FindItem::Kind::file;
             case Section::place:     return item.kind == FindItem::Kind::file
                                          && item.key.startsWith (QStringLiteral ("file:") + current->data (0, placeRole).toString() + QLatin1Char ('/'));
@@ -385,6 +396,10 @@ void FindPanel::refilter()
         if (section == Section::plugins || section == Section::files || section == Section::place || byKind)
             std::stable_sort (list.begin(), list.end(), [] (const FindItem* a, const FindItem* b)
             {
+                // Among visualizations, PHINYX's own views come before the many MilkDrop presets.
+                const bool aView = a->key.startsWith (QStringLiteral ("command:")), bView = b->key.startsWith (QStringLiteral ("command:"));
+                if (a->kind == FindItem::Kind::visual && b->kind == FindItem::Kind::visual && aView != bView)
+                    return aView;
                 return QString::localeAwareCompare (a->name, b->name) < 0;
             });
 

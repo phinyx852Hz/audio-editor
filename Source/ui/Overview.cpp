@@ -57,9 +57,7 @@ protected:
     {
         QPainter g (this);
         const auto& theme = Theme::current();
-        g.setCompositionMode (QPainter::CompositionMode_Source);
         g.fillRect (rect(), Theme::withOpacity (theme.color (QStringLiteral ("waveformBackground"))));
-        g.setCompositionMode (QPainter::CompositionMode_SourceOver);
         if (! data || data->length() == 0 || data->numChannels() == 0)
             return;
 

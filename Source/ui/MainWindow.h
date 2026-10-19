@@ -248,6 +248,11 @@ private:
     void setVisualMode (int index, bool openIfHidden);
     void toggleVisualizerBehind();
     void feedVisualizers();
+    bool visualizerShowing() const;
+    void addVisualizerSubmenu (QMenu* menu, const QString& which);   // artistic, science, milkdrop, rain
+    void syncVisualModeActions();
+    class QActionGroup* visualModeActions = nullptr;   // the window or the one behind PHINYX
+    void showMilkDropPreset (const QString& path);
     void setRainTempo (double bpm);   // Digital Rain, saved and shown
     double fileTempo() const;         // the open file's BPM tag, or 0
     class VisualizerView* showMilkDrop();

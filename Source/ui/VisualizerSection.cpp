@@ -10,7 +10,9 @@
  #include "MilkDrop.h"
 #endif
 
+#include <QActionGroup>
 #include <QDialog>
+#include <QMenu>
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QFileInfo>
@@ -38,6 +40,8 @@ void MainWindow::registerVisualizerCommands()
         return action;
     };
 
+    visualModeActions = new QActionGroup (this);
+    visualModeActions->setExclusive (true);
     visualMode = std::max (0, VisualizerView::modeIndex (appSettings().value (QStringLiteral ("visualizer/mode")).toString()));
     VisualizerView::setRainTempo (appSettings().value (QStringLiteral ("visualizer/rainTempo"), 120.0).toDouble());
 
@@ -194,6 +198,7 @@ void MainWindow::setVisualMode (int index, bool openIfHidden)
         w->activateWindow();
         w->view()->setFocus();
     }
+    syncVisualModeActions();
     statusBar()->showMessage (tr ("Visualizer: %1").arg (VisualizerView::tr (VisualizerView::modes()[(size_t) visualMode].name)), 2500);
 }
 
@@ -227,6 +232,76 @@ void MainWindow::toggleVisualizerBehind()
         changeOpacity (0.55, false);
     }
     statusBar()->showMessage (tr ("Visualizer behind PHINYX: Ctrl+Alt+- and Ctrl+Alt+= (or the Opacity slider) show more or less of it; Alt+F11 changes the view"), 8000);
+}
+
+void MainWindow::addVisualizerSubmenu (QMenu* menu, const QString& which)
+{
+    if (which == QStringLiteral ("artistic") || which == QStringLiteral ("science"))
+    {
+        const bool science = which == QStringLiteral ("science");
+        auto* sub = menu->addMenu (science ? tr ("&Science") : tr ("&Artistic"));
+        const auto& list = VisualizerView::modes();
+        for (const auto& m : list)
+            if (m.science == science)
+            {
+                // Its own entry, named just by the view (the command reads "Visualizer: name" elsewhere).
+                const int index = VisualizerView::modeIndex (QString::fromLatin1 (m.id));
+                auto* a = sub->addAction (VisualizerView::tr (m.name), this, [this, index] { setVisualMode (index, true); });
+                a->setStatusTip (VisualizerView::tr (m.about));
+                a->setCheckable (true);
+                a->setData (index);
+                visualModeActions->addAction (a);
+            }
+        syncVisualModeActions();
+    }
+#if PHINYX_HAVE_PROJECTM
+    else if (which == QStringLiteral ("milkdrop"))
+    {
+        auto* sub = menu->addMenu (tr ("&MilkDrop"));
+        for (const auto* id : { "view.milkdropNext", "view.milkdropPrevious", "view.milkdropChoose", "-", "view.milkdropDownload" })
+            if (QLatin1String (id) == QLatin1String ("-"))
+                sub->addSeparator();
+            else
+                sub->addAction (commands.action (QString::fromLatin1 (id)));
+    }
+#endif
+    else if (which == QStringLiteral ("rain"))
+    {
+        auto* sub = menu->addMenu (tr ("Digital &Rain"));
+        sub->addAction (commands.action (QStringLiteral ("view.rainTempo")));
+        sub->addAction (commands.action (QStringLiteral ("view.rainFollowsFile")));
+    }
+}
+
+void MainWindow::syncVisualModeActions()
+{
+    for (auto* a : visualModeActions->actions())
+        a->setChecked (a->data().toInt() == visualMode);
+}
+
+bool MainWindow::visualizerShowing() const
+{
+    return (visualizer != nullptr && visualizer->isVisible()) || (visualBackdrop != nullptr && visualBackdrop->isVisible());
+}
+
+void MainWindow::showMilkDropPreset (const QString& path)
+{
+#if PHINYX_HAVE_PROJECTM
+    auto* view = showMilkDrop();
+    auto* milk = view != nullptr ? view->milkDrop() : nullptr;
+    if (milk == nullptr)
+        return;
+    auto index = (int) milk->presets().indexOf (path);
+    if (index < 0)
+    {
+        milk->reloadPresets();   // downloaded since
+        index = (int) milk->presets().indexOf (path);
+    }
+    if (index >= 0)
+        view->milkDropChoose (index);
+#else
+    Q_UNUSED (path);
+#endif
 }
 
 void MainWindow::setRainTempo (double bpm)

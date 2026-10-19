@@ -431,9 +431,8 @@ void WaveformView::paintEvent (QPaintEvent*)
     QPainter g (this);
     const auto pal = palette();
     const auto& theme = Theme::current();
-    g.setCompositionMode (QPainter::CompositionMode_Source);  // replace, so the window's opacity shows through
+    // Over the window's own background (and the visualizer when it is behind PHINYX), not replacing it.
     g.fillRect (rect(), Theme::withOpacity (theme.color (QStringLiteral ("waveformBackground"))));
-    g.setCompositionMode (QPainter::CompositionMode_SourceOver);
 
     if (! data || data->numChannels() == 0)
     {
@@ -455,7 +454,8 @@ void WaveformView::paintEvent (QPaintEvent*)
             requestSpectrogram();
             if (! spectrogram.image.isNull())
             {
-                g.setOpacity (Theme::opacity() * std::min (1.0, 2.0 * mix));
+                // See-through like the rest when the window is: the visualizer behind PHINYX shows through.
+                g.setOpacity (Theme::opacity() * Theme::opacity() * std::min (1.0, 2.0 * mix));
                 g.drawImage (rect(), spectrogram.image);  // stretched while a fresh one renders
                 g.setOpacity (1.0);
             }

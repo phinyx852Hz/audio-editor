@@ -2,6 +2,10 @@
 #include "MainWindow.h"
 #include "Settings.h"
 #include "FindPanel.h"
+#include "Visualizer.h"
+#if PHINYX_HAVE_PROJECTM
+ #include "MilkDrop.h"
+#endif
 #include "Goniometer.h"
 #include "AmbiScene.h"
 #include "../core/Ambisonics.h"
@@ -39,6 +43,7 @@
 #include <QWidgetAction>
 #include <QStandardPaths>
 #include <QFileDialog>
+#include <QDirIterator>
 #include <QFileInfo>
 #include <QHBoxLayout>
 #include <QInputDialog>
@@ -707,8 +712,12 @@ void MainWindow::buildMenus()
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
-                               "view.overview", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "-", "view.visualizer", "view.visualizerFullScreen", "view.visualizerBehind", "view.visualizerNext", "view.visualizerPrevious", "view.visualizerChoose", "view.rainTempo", "view.rainFollowsFile", "-",
+                               "view.overview", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
+        { tr ("Visuali&zer"), { "view.visualizer", "view.visualizerFullScreen", "view.visualizerBehind", "-",
+                               "view.visualizerNext", "view.visualizerPrevious", "view.visualizerChoose", "-",
+                               "@visual.artistic", "@visual.science", "-", "@visual.milkdrop", "@visual.rain", "-",
+                               "view.opacityUp", "view.opacityDown", "view.opacityFull" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "-", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
     };
@@ -720,6 +729,8 @@ void MainWindow::buildMenus()
         {
             if (id == QLatin1String ("-"))
                 menu->addSeparator();
+            else if (id.startsWith (QLatin1String ("@visual.")))
+                addVisualizerSubmenu (menu, id.mid (8));
             else if (id == QLatin1String ("@nyquist.generate"))
                 generateMenu = menu->addMenu (tr ("&Generate"));
             else if (id.startsWith (QLatin1Char ('@')))
@@ -955,6 +966,17 @@ QList<FindItem> MainWindow::findItems()
         item.detail = c.shortcutText();
         item.group = c.category;
         item.searchText = c.action->statusTip();
+        if (c.id.startsWith (QStringLiteral ("visualizer.")))
+        {
+            // The visualizations, browsable: moving onto one shows it if a visualizer is open.
+            const int mode = VisualizerView::modeIndex (c.id.mid (11));
+            item.kind = FindItem::Kind::visual;
+            item.name = VisualizerView::tr (VisualizerView::modes()[(size_t) std::max (0, mode)].name);
+            item.group = VisualizerView::modes()[(size_t) std::max (0, mode)].science ? tr ("Science") : tr ("Artistic");
+            item.detail = item.group;
+            item.searchText += tr (" visualizer visualization");
+            item.preview = [this, mode] { if (visualizerShowing()) setVisualMode (mode, false); };
+        }
         item.enabled = c.action->isEnabled();
         item.activate = [this, id = c.id]
         {
@@ -1003,6 +1025,29 @@ QList<FindItem> MainWindow::findItems()
         };
         list.push_back (item);
     }
+
+#if PHINYX_HAVE_PROJECTM
+    // MilkDrop presets, by category, browsable like the views.
+    for (const auto& folder : MilkDrop::presetFolders())
+    {
+        QDirIterator it (folder, { QStringLiteral ("*.milk") }, QDir::Files, QDirIterator::Subdirectories);
+        while (it.hasNext())
+        {
+            const auto path = it.next();
+            const auto category = MilkDrop::categoryOf (path);
+            FindItem item;
+            item.kind = FindItem::Kind::visual;
+            item.key = QStringLiteral ("milkdrop:") + path;
+            item.name = QFileInfo (path).completeBaseName();
+            item.group = category.isEmpty() ? tr ("MilkDrop") : tr ("MilkDrop: %1").arg (category);
+            item.detail = tr ("MilkDrop");
+            item.searchText = category + tr (" milkdrop preset visualizer visualization");
+            item.activate = [this, path] { showMilkDropPreset (path); };
+            item.preview = [this, path] { if (visualizerShowing()) showMilkDropPreset (path); };
+            list.push_back (item);
+        }
+    }
+#endif
 
     // Vamp analysis plugins: running one adds markers or regions (Analysis.cpp).
     for (const auto& o : vamphost::outputs())

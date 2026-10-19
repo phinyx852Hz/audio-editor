@@ -12,10 +12,10 @@ class QTreeWidget;
 class QTreeWidgetItem;
 
 // Something the Find panel can list: a process (any command), an effect, a
-// plugin or an audio file. `key` identifies it for the colour collections.
+// plugin, a visualization or an audio file. `key` identifies it for the colour collections.
 struct FindItem
 {
-    enum class Kind { process, effect, plugin, file };
+    enum class Kind { process, effect, plugin, visual, file };
 
     Kind kind = Kind::process;
     QString key;          // "command:file.open", "plugin:<id>", "file:<path>"
@@ -25,6 +25,7 @@ struct FindItem
     QString searchText;   // everything the search matches against, besides name and detail
     bool enabled = true;
     std::function<void()> activate;
+    std::function<void()> preview;   // run when the row is selected, for browsing (visualizations)
 };
 
 // Ableton-style browser on the left: one search field that finds anything,
@@ -63,7 +64,7 @@ protected:
     void showEvent (QShowEvent*) override;
 
 private:
-    enum class Section { colour, all, processes, effects, plugins, files, place, addPlace };
+    enum class Section { colour, all, processes, effects, plugins, visuals, files, place, addPlace };
 
     void buildSidebar();
     void refilter();
