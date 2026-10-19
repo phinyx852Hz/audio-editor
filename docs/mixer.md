@@ -4,7 +4,8 @@ Status: proposal for the owner to review (2026-10-19). Nothing here is built yet
 
 ## What it is
 
-A small mixer in its own window: **8 tracks and a master out (track 9)**. It mixes bus stems
+A small mixer in its own window: **up to 8 tracks and a master out (track 9)**. A new mix
+starts with 2 tracks; Ctrl+T adds one (up to 8) and Ctrl+Shift+T removes the selected one. It mixes bus stems
 from another DAW, or works as an instrument for composing, producing and performing. The
 mix goes straight into the PHINYX editor, where the Master Section does the mastering.
 
@@ -116,7 +117,34 @@ with Monitor set to Auto.
 **DAW Stems** (mixing bus stems): Drums, Bass, Music, Keys, Guitars, Vocals, FX,
 Ambience. Every source is a stem file, and each strip is set flat.
 
-**Empty**: Track 1 to Track 8.
+**Default** (a new mix): Track 1 and Track 2, both flat, with stem files as their sources.
+
+**Rock**: Kick & Snare, Drum Room, Bass, Rhythm Guitars, Lead Guitar, Keys, Vocals,
+Backing Vocals. Drum Room has low cut at 120 Hz. Bass is mono. Both guitar strips have low
+cut at 80 Hz. Vocals have low cut at 90 Hz.
+
+**Folk**: Acoustic Guitar, Banjo / Mandolin, Fiddle, Upright Bass, Percussion, Room Mics,
+Lead Vocal, Harmonies. Everything is kept natural: low cut at 60 Hz, and none on the
+bass. Room Mics is panned wide, and Upright Bass is mono.
+
+**Orchestral + Synths** (group stems): Strings, Brass, Woodwinds, Percussion, Choir /
+Keys, Synth Pads, Synth Bass / Leads, Hall / Ambience. The pan pots start at the usual
+stage seats: violins left, cellos and basses right, brass right-centre, woodwinds centre.
+The Hall / Ambience strip is stereo at full width.
+
+**Podcast** templates. All are voice-first: low cut at 80 Hz, polarity checked, a voice
+chain in each strip's inserts (de-esser, then a gentle compressor), pan centred, and the
+master set to Stereo.
+- **Solo Host**: Host, Music Bed, SFX / Stingers, Ads.
+- **Interview**: Host, Guest, Music Bed, SFX.
+- **Roundtable**: Host, Guest 1, Guest 2, Guest 3, Music Bed, SFX. The voices are panned
+  slightly apart (±15) so listeners can tell them apart.
+- **Remote Guest**: Host (live input), Remote Guest (a call recording or live input),
+  Music Bed, SFX. The remote guest strip adds a noise gate.
+- **Narrative / Audio Drama**: Narrator, Voice 1, Voice 2, Voice 3, Ambience, Foley,
+  Music, SFX.
+
+More templates can be added in the same way; each is a small file.
 
 ## Keyboard (PHINYX is keyboard-first)
 
