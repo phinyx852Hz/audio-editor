@@ -47,6 +47,7 @@ public:
     bool isSpectral() const { return spectral; }      // the spectrogram is shown at least half way (its tools apply)
     // A blend of the two: 0 waveform only, 1 spectrogram only, between both drawn over each other.
     void setBlend (double);
+    void setLayoutName (const std::string& name) { layoutName = name; update(); }   // lane labels (dsp::layoutChoices)
     double blend() const { return mix; }
     void setSpectrumSettings (const spectrum::Settings&);
     const spectrum::Settings& spectrumSettings() const { return spectrumSet; }
@@ -194,4 +195,5 @@ private:
     QFutureWatcher<std::shared_ptr<pitch::Track>> pitchWatcher;
     void requestPitch();
     void drawPitch (QPainter&, double laneHeight);
+    std::string layoutName;
 };

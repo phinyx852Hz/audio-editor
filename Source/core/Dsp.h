@@ -168,7 +168,8 @@ namespace dsp
     // Speakers, and the layout PHINYX assumes for each channel count, in WAV
     // (WAVEFORMATEXTENSIBLE / SMPTE) order: 5.1 is L R C LFE Ls Rs.
     enum class Speaker { mono, left, right, centre, lfe, sideLeft, sideRight, rearLeft, rearRight, rearCentre,
-                         topFrontLeft, topFrontRight, topRearLeft, topRearRight, other };
+                         topFrontLeft, topFrontRight, topRearLeft, topRearRight, other,
+                         lfe2, wideLeft, wideRight, topMiddleLeft, topMiddleRight, ambisonic };
 
     struct SpeakerLayout
     {
@@ -180,9 +181,19 @@ namespace dsp
     Speaker speakerAt (int channel, int numChannels);
     std::string channelName (int channel, int numChannels);  // "L", "LFE", "Ls", or "Ch 9"
 
+    // Layouts a file of this many channels can be, the usual one first: 7 channels are 6.1 or
+    // 5.2, 16 are 9.1.6 or third-order Ambisonics, and so on. Two-subwoofer layouts put LFE2
+    // straight after LFE; Ambisonics is AmbiX (ACN order, SN3D).
+    std::vector<std::string> layoutChoices (int numChannels);
+    // The named layout when it fits the channel count, else the usual one.
+    SpeakerLayout speakerLayout (int numChannels, const std::string& name);
+    std::string channelName (int channel, int numChannels, const std::string& layoutName);
+    int ambisonicOrder (const std::string& layoutName);   // 0 when it is not Ambisonics
+
     // Stereo fold-down for monitoring: gains from each channel into left and right
-    // (ITU-R BS.775: centre and surrounds at -3 dB, LFE left out).
+    // (ITU-R BS.775: centre and surrounds at -3 dB, LFE left out). Ambisonics is decoded.
     std::array<std::vector<float>, 2> stereoDownmix (int numChannels);
+    std::array<std::vector<float>, 2> stereoDownmix (int numChannels, const std::string& layoutName);
 
     // Channel weight for loudness summing (BS.1770: surrounds count 1.41, LFE not at all).
     double loudnessChannelWeight (int channel, int numChannels);

@@ -147,6 +147,7 @@ public:
     explicit MeterPanel (QWidget* parent);
 
     void addBlocks (const std::vector<MeterBlock>&);  // call regularly, also with no blocks, so bars fall
+    void setLayoutName (const std::string& name) { layoutName = name; update(); }   // bar labels
     void reset();
 
     QSize sizeHint() const override { return { 260, 320 }; }
@@ -158,6 +159,7 @@ private:
     static constexpr int maxChannels = MeterBlock::maxChannels;
 
     int numChannels = 2;
+    std::string layoutName;
     float level[maxChannels] {};         // displayed dB, falls over time
     float hold[maxChannels] {};          // held peak dB
     double holdAge[maxChannels] {};      // seconds since the hold was set

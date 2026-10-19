@@ -49,7 +49,7 @@ namespace
 }
 
 //==============================================================================
-BinauralField::BinauralField (bool s, QWidget* parent) : QWidget (parent), stereo (s)
+BinauralField::BinauralField (bool s, QWidget* parent, bool distanceToo) : QWidget (parent), stereo (s), withDistance (distanceToo)
 {
     setFocusPolicy (Qt::StrongFocus);
     setMinimumSize (360, 200);
@@ -103,6 +103,8 @@ void BinauralField::paintEvent (QPaintEvent*)
     g.setBrush (Qt::NoBrush);
     for (const double ring : { 1.0, 3.0, 10.0 })
     {
+        if (! withDistance)
+            break;
         const auto r = R * radiusFor (ring);
         g.setPen (QPen (line, 1.0, ring == 1.0 ? Qt::SolidLine : Qt::DotLine));
         g.drawEllipse (c, r, r);
@@ -124,7 +126,7 @@ void BinauralField::paintEvent (QPaintEvent*)
     g.drawText (QRectF (top.left() - 2, c.y() - 7, 30, 14), Qt::AlignLeft | Qt::AlignVCenter, tr ("L"));
     g.drawText (QRectF (top.right() - 28, c.y() - 7, 30, 14), Qt::AlignRight | Qt::AlignVCenter, tr ("R"));
 
-    const auto r = R * radiusFor (distance);
+    const auto r = withDistance ? R * radiusFor (distance) : R * 0.75;
     const auto pointAt = [&] (double az) { return QPointF (c.x() + r * std::sin (radians (az)), c.y() - r * std::cos (radians (az))); };
     const bool focused = hasFocus();
     if (stereo)
@@ -198,7 +200,8 @@ void BinauralField::dragTo (QPointF p, bool topView)
         const auto R = top.width() / 2.0 - 14.0;
         const auto d = p - c;
         azimuth = std::round (wrap (std::atan2 (d.x(), -d.y()) * 180.0 / M_PI));
-        distance = distanceFor (std::hypot (d.x(), d.y()) / R);
+        if (withDistance)
+            distance = distanceFor (std::hypot (d.x(), d.y()) / R);
     }
     else
     {
@@ -229,7 +232,7 @@ void BinauralField::wheelEvent (QWheelEvent* e)
     const auto steps = e->angleDelta().y() / 120.0;
     if (stereo)
         spread = std::clamp (spread + steps * 5.0, 0.0, 180.0);
-    else
+    else if (withDistance)
         distance = distanceFor (radiusFor (distance) + steps * 0.03);
     changed();
 }
@@ -249,8 +252,8 @@ void BinauralField::keyPressEvent (QKeyEvent* e)
                 azimuth = wrap (azimuth + sign * 5.0);
             break;
         }
-        case Qt::Key_Up:   distance = distanceFor (radiusFor (distance) - 0.03); break;
-        case Qt::Key_Down: distance = distanceFor (radiusFor (distance) + 0.03); break;
+        case Qt::Key_Up:   if (withDistance) distance = distanceFor (radiusFor (distance) - 0.03); break;
+        case Qt::Key_Down: if (withDistance) distance = distanceFor (radiusFor (distance) + 0.03); break;
         case Qt::Key_PageUp:   elevation = std::clamp (elevation + 5.0, -40.0, 90.0); break;
         case Qt::Key_PageDown: elevation = std::clamp (elevation - 5.0, -40.0, 90.0); break;
         default:

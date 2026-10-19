@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "Dsp.h"
+#include "Ambisonics.h"
 
 #include <algorithm>
 #include <cmath>
@@ -404,9 +405,70 @@ namespace dsp
         return layout;
     }
 
+    std::vector<std::string> layoutChoices (int n)
+    {
+        std::vector<std::string> names { speakerLayout (n).name };
+        const auto add = [&] (const char* name, int count) { if (n == count) names.push_back (name); };
+        add ("5.2", 7);
+        add ("7.2", 9);
+        add ("7.2.4", 13);
+        add ("9.1.6", 16);
+        add ("Quad", 4);
+        static const char* orders[] { "", "Ambisonics (1st order)", "Ambisonics (2nd order)", "Ambisonics (3rd order)" };
+        for (int order = 1; order <= 3; ++order)
+            add (orders[order], ambi::channelsFor (order));
+        names.erase (std::unique (names.begin(), names.end()), names.end());
+        return names;
+    }
+
+    int ambisonicOrder (const std::string& name)
+    {
+        if (name.rfind ("Ambisonics", 0) != 0)
+            return 0;
+        for (int order = 1; order <= 3; ++order)
+            if (name.find (std::to_string (order)) != std::string::npos)
+                return order;
+        return 0;
+    }
+
+    SpeakerLayout speakerLayout (int n, const std::string& name)
+    {
+        if (name.empty() || name == speakerLayout (n).name)
+            return speakerLayout (n);
+        const auto choices = layoutChoices (n);
+        if (std::find (choices.begin(), choices.end(), name) == choices.end())
+            return speakerLayout (n);
+
+        using S = Speaker;
+        SpeakerLayout layout;
+        layout.name = name;
+        if (ambisonicOrder (name) > 0)
+            layout.speakers.assign ((size_t) n, S::ambisonic);
+        else if (name == "5.2")
+            layout.speakers = { S::left, S::right, S::centre, S::lfe, S::lfe2, S::sideLeft, S::sideRight };
+        else if (name == "7.2" || name == "7.2.4")
+        {
+            layout.speakers = { S::left, S::right, S::centre, S::lfe, S::lfe2, S::rearLeft, S::rearRight, S::sideLeft, S::sideRight };
+            if (name == "7.2.4")
+                layout.speakers.insert (layout.speakers.end(), { S::topFrontLeft, S::topFrontRight, S::topRearLeft, S::topRearRight });
+        }
+        else if (name == "9.1.6")
+            layout.speakers = { S::left, S::right, S::centre, S::lfe, S::rearLeft, S::rearRight, S::sideLeft, S::sideRight,
+                                S::wideLeft, S::wideRight, S::topFrontLeft, S::topFrontRight, S::topMiddleLeft, S::topMiddleRight,
+                                S::topRearLeft, S::topRearRight };
+        else
+            return speakerLayout (n);
+        return layout;
+    }
+
     std::string channelName (int channel, int numChannels)
     {
-        const auto layout = speakerLayout (numChannels);
+        return channelName (channel, numChannels, {});
+    }
+
+    std::string channelName (int channel, int numChannels, const std::string& layoutName)
+    {
+        const auto layout = speakerLayout (numChannels, layoutName);
         if (channel < 0 || channel >= (int) layout.speakers.size())
             return {};
 
@@ -416,7 +478,7 @@ namespace dsp
             case Speaker::left:          return "L";
             case Speaker::right:         return "R";
             case Speaker::centre:        return "C";
-            case Speaker::lfe:           return "LFE";
+            case Speaker::lfe:           return layout.name.find (".2") != std::string::npos ? "LFE1" : "LFE";
             case Speaker::sideLeft:      return "Ls";
             case Speaker::sideRight:     return "Rs";
             case Speaker::rearLeft:      return numChannels == 4 ? "Ls" : "Lb";
@@ -426,6 +488,12 @@ namespace dsp
             case Speaker::topFrontRight: return "Rtf";
             case Speaker::topRearLeft:   return "Ltb";
             case Speaker::topRearRight:  return "Rtb";
+            case Speaker::lfe2:          return "LFE2";
+            case Speaker::wideLeft:      return "Lw";
+            case Speaker::wideRight:     return "Rw";
+            case Speaker::topMiddleLeft: return "Ltm";
+            case Speaker::topMiddleRight: return "Rtm";
+            case Speaker::ambisonic:     return ambi::channelName (channel);
             case Speaker::other:         break;
         }
         return "Ch " + std::to_string (channel + 1);
@@ -433,8 +501,22 @@ namespace dsp
 
     std::array<std::vector<float>, 2> stereoDownmix (int numChannels)
     {
+        return stereoDownmix (numChannels, {});
+    }
+
+    std::array<std::vector<float>, 2> stereoDownmix (int numChannels, const std::string& layoutName)
+    {
         constexpr float minus3 = 0.70710678f;
-        const auto layout = speakerLayout (numChannels);
+        const auto layout = speakerLayout (numChannels, layoutName);
+        if (const auto order = ambisonicOrder (layout.name); order > 0)
+        {
+            const auto d = ambi::decoder (order, ambi::layout ("Stereo"));
+            std::array<std::vector<float>, 2> m;
+            for (size_t side = 0; side < 2; ++side)
+                for (int ch = 0; ch < numChannels; ++ch)
+                    m[side].push_back ((float) d[side][(size_t) ch]);
+            return m;
+        }
         std::array<std::vector<float>, 2> m { std::vector<float> ((size_t) numChannels), std::vector<float> ((size_t) numChannels) };
 
         for (int ch = 0; ch < numChannels; ++ch)
@@ -447,8 +529,12 @@ namespace dsp
                 case Speaker::left:          l = 1.0f; break;
                 case Speaker::right:         r = 1.0f; break;
                 case Speaker::centre:        l = r = minus3; break;
-                case Speaker::lfe:           break;
+                case Speaker::lfe:
+                case Speaker::lfe2:
+                case Speaker::ambisonic:     break;
                 case Speaker::rearCentre:    l = r = 0.5f; break;
+                case Speaker::wideLeft:
+                case Speaker::topMiddleLeft:
                 case Speaker::sideLeft:
                 case Speaker::rearLeft:
                 case Speaker::topFrontLeft:
@@ -456,7 +542,9 @@ namespace dsp
                 case Speaker::sideRight:
                 case Speaker::rearRight:
                 case Speaker::topFrontRight:
-                case Speaker::topRearRight:  r = minus3; break;
+                case Speaker::topRearRight:
+                case Speaker::wideRight:
+                case Speaker::topMiddleRight: r = minus3; break;
                 case Speaker::other:
                     // Unknown layout: odd channels left, even right, a last odd one in the middle.
                     if (ch == numChannels - 1 && numChannels % 2 == 1) l = r = minus3;

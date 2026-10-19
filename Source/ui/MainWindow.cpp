@@ -3,6 +3,8 @@
 #include "Settings.h"
 #include "FindPanel.h"
 #include "Goniometer.h"
+#include "AmbiScene.h"
+#include "../core/Ambisonics.h"
 #include "AlbumFile.h"
 #include "AlbumView.h"
 #include "../core/Album.h"
@@ -50,6 +52,7 @@
 #include <QMessageBox>
 #include <QProgressDialog>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QEventLoop>
 #include <QStatusBar>
 #include <QTabBar>
@@ -203,6 +206,7 @@ MainWindow::MainWindow (AudioEngine& e)
             goniometer->setSampleRate (engine.deviceSampleRate());
             goniometer->addSamples (scopeLeft, scopeRight);
         }
+        feedAmbiScene();
 
         // Looping plays the selection, or the whole file when nothing is selected.
         const auto d = data();
@@ -310,6 +314,21 @@ void MainWindow::registerCommands()
     add ("process.stereoize", Category::process, tr ("&Stereoize..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_W) }, [this] { stereoize(); });
     add ("spatial.binaural", Category::spatial, tr ("&Binaural..."), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_B) }, [this] { binauralRender(); });
     commands.action (QStringLiteral ("spatial.binaural"))->setStatusTip (tr ("Place the sound around your head for headphones: HRTF, 3D, spatial audio, immersive"));
+    add ("spatial.layout", Category::spatial, tr ("Channel &Layout..."), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_L) }, [this] { chooseChannelLayout(); });
+    commands.action (QStringLiteral ("spatial.layout"))->setStatusTip (tr ("What the channels are: 5.1, 5.2 two subwoofers, 7.2.4, 9.1.6, quad, ambisonics, surround, Atmos-style beds"));
+    add ("spatial.encode", Category::spatial, tr ("&Encode to Ambisonics..."), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_E) }, [this] { ambiEncode(); });
+    commands.action (QStringLiteral ("spatial.encode"))->setStatusTip (tr ("Place a mono or stereo sound in an ambisonic scene: AmbiX, B-format, 360, VR, spatial audio"));
+    add ("spatial.rotate", Category::spatial, tr ("&Rotate / Mirror Scene..."), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_Y) }, [this] { ambiRotate(); });
+    commands.action (QStringLiteral ("spatial.rotate"))->setStatusTip (tr ("Turn or flip an ambisonic scene: yaw, pitch, roll, head tracking, 360 video"));
+    add ("spatial.decode", Category::spatial, tr ("&Decode Ambisonics..."), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_D) }, [this] { ambiDecode(); });
+    commands.action (QStringLiteral ("spatial.decode"))->setStatusTip (tr ("Render an ambisonic scene to headphones (binaural) or speakers: stereo, 5.1, 7.1.4, 9.1.6"));
+    add ("spatial.fumaToAmbix", Category::spatial, tr ("&FuMa to AmbiX"), {}, [this] { ambiConvertFuma (false); });
+    commands.action (QStringLiteral ("spatial.fumaToAmbix"))->setStatusTip (tr ("Convert an old-style (FuMa, WXYZ) ambisonic file to AmbiX"));
+    add ("spatial.ambixToFuma", Category::spatial, tr ("AmbiX to F&uMa"), {}, [this] { ambiConvertFuma (true); });
+    commands.action (QStringLiteral ("spatial.ambixToFuma"))->setStatusTip (tr ("Convert an AmbiX file to old-style FuMa (WXYZ) for older tools"));
+    add ("view.ambiScene", Category::spatial, tr ("Ambisonic &Scene"), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_A) },
+         [this] { ambiScenePanel->toggle(); lastPanel = ambiScenePanel; });
+    commands.action (QStringLiteral ("view.ambiScene"))->setStatusTip (tr ("Where the sound is in an ambisonic file: sphere, energy map, direction"));
     add ("process.convert", Category::process, tr ("&Convert Sample Type..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_T) },
          [this] { convertSampleType(); });
     add ("repair.autoHeal", Category::repair, tr ("&Auto Heal"), { KS (Qt::CTRL | Qt::Key_U) }, [this] { autoHeal(); });
@@ -633,6 +652,10 @@ void MainWindow::registerCommands()
 
     add ("options.audio", Category::options, tr ("&Audio Settings..."), { KS (Qt::CTRL | Qt::Key_Comma) },
          [this] { AudioSettingsDialog (engine, this).exec(); });
+    add ("options.interfaceMixer", Category::options, tr ("Audio &Interface Mixer"), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_I) },
+         [this] { openInterfaceMixer(); });
+    commands.action (QStringLiteral ("options.interfaceMixer"))->setStatusTip (tr ("Open your interface's routing and mixer: alsa-scarlett-gui, Focusrite Scarlett, Clarett"));
+    add ("options.interfaceMixerProgram", Category::options, tr ("Audio Interface Mixer &Program..."), {}, [this] { chooseInterfaceMixer(); });
     add ("options.keymap", Category::options, tr ("&Keyboard Shortcuts..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_K) },
          [this] { KeymapDialog (commands, this).exec(); });
     add ("options.waveformColors", Category::options, tr ("&Waveform and Meter Colors..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_W) },
@@ -670,7 +693,7 @@ void MainWindow::buildMenus()
                                "repair.brushSmaller", "repair.brushLarger", "repair.addHarmonics", "-",
                                "repair.frequencyRange", "repair.allFrequencies", "-", "view.spectral" } },
         { tr ("Effe&ct"),    { "effect.repeat", "-", "@nyquist.generate", "-", "@nyquist.effect" } },
-        { tr ("Spat&ial"),   { "spatial.binaural", "-", "analyze.imagingView" } },
+        { tr ("Spat&ial"),   { "spatial.binaural", "-", "spatial.layout", "-", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.fumaToAmbix", "spatial.ambixToFuma", "-", "view.ambiScene", "analyze.imagingView" } },
         { tr ("&Markers"),   { "marker.add", "marker.addRegion", "-", "marker.next", "marker.previous", "-", "marker.exportSlices", "marker.exportLabels", "-", "view.markers" } },
         { tr ("Al&bum"),   { "album.new", "album.addSongs", "-", "album.previousSong", "album.nextSong", "-",
                                "album.moveEarlier", "album.moveLater", "album.longerPause", "album.shorterPause", "-",
@@ -682,9 +705,9 @@ void MainWindow::buildMenus()
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
-                               "view.overview", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.references", "view.popOut", "view.resetLayout", "-",
+                               "view.overview", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
-        { tr ("&Options"),   { "options.audio", "options.separateOutputs", "-", "options.keymap", "options.theme", "options.waveformColors" } },
+        { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "-", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
     };
 
@@ -747,7 +770,7 @@ void MainWindow::focusPanel (int direction)
     const std::vector<Stop> stops { { waveform, nullptr }, { chainRow, chainPanel }, { masterWidget, masterPanel },
                                     { metersPanel->content(), metersPanel }, { markerList, markerPanel },
                                     { historyList, historyPanel }, { diagnostics, diagnosticsPanel },
-                                    { referencePanel, referencesPanel }, { findWidget, findPanel } };
+                                    { referencePanel, referencesPanel }, { ambiSceneView, ambiScenePanel }, { findWidget, findPanel } };
     const int count = (int) stops.size();
 
     // Where the keyboard is now; if it is somewhere F6 cannot tell (a panel that takes no keys), where F6 last went.
@@ -902,11 +925,14 @@ void MainWindow::buildPanels()
     findPanel = new DockablePanel (*this, QStringLiteral ("findPanel"), tr ("Find"), findWidget, Qt::LeftDockWidgetArea);
 
     buildReferences();
-    panels = { masterPanel, chainPanel, metersPanel, markerPanel, historyPanel, diagnosticsPanel, findPanel, referencesPanel };
+    ambiSceneView = new AmbiScene (this);
+    ambiSceneView->setFocusPolicy (Qt::StrongFocus);
+    ambiScenePanel = new DockablePanel (*this, QStringLiteral ("ambiScenePanel"), tr ("Ambisonic Scene"), ambiSceneView, Qt::RightDockWidgetArea);
+    panels = { masterPanel, chainPanel, metersPanel, markerPanel, historyPanel, diagnosticsPanel, findPanel, referencesPanel, ambiScenePanel };
 
     new DockCornerDrag (*this);   // drag where three or four panels meet to resize both ways
     focusFollowsMouse = new FocusFollowsMouse (this);
-    focusFollowsMouse->setAreas ({ waveform, chainRow, masterWidget, markerList, historyList, diagnostics, findWidget, referencePanel,
+    focusFollowsMouse->setAreas ({ waveform, chainRow, masterWidget, markerList, historyList, diagnostics, findWidget, referencePanel, ambiSceneView,
                                    metersPanel->content() });
     qApp->installEventFilter (focusFollowsMouse);
 }
@@ -1102,7 +1128,7 @@ void MainWindow::updateCommandStates()
     for (const auto* id : { "file.save", "file.saveAs", "file.export", "file.metadata", "file.close", "edit.insertSilence", "edit.copyToNew", "select.all", "select.none",
                             "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
                             "select.toStart", "select.toEnd", "process.gain", "process.normalize",
-                            "process.reverse", "process.invert", "process.dcOffset", "process.stereoize", "process.convert", "spatial.binaural",
+                            "process.reverse", "process.invert", "process.dcOffset", "process.stereoize", "process.convert", "spatial.binaural", "spatial.layout", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.fumaToAmbix", "spatial.ambixToFuma",
                             "repair.findSimilar", "repair.addHarmonics",
                             "repair.spectralGain", "repair.frequencyRange", "repair.allFrequencies", "repair.learnNoise",
                             "repair.noiseReduction", "repair.declick", "repair.declip", "repair.dehum", "repair.deess",
@@ -1139,7 +1165,7 @@ void MainWindow::updateCommandStates()
     if (doc.isAlbum())
         for (const auto* id : { "edit.cut", "edit.paste", "edit.delete", "edit.trim", "edit.insertSilence", "file.metadata",
                                 "process.gain", "process.normalize", "process.fadeIn", "process.fadeOut", "process.reverse",
-                                "process.invert", "process.dcOffset", "process.stereoize", "process.convert", "spatial.binaural",
+                                "process.invert", "process.dcOffset", "process.stereoize", "process.convert", "spatial.binaural", "spatial.layout", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.fumaToAmbix", "spatial.ambixToFuma",
                                 "repair.autoHeal", "repair.spectralGain", "repair.noiseReduction", "repair.declick",
                                 "repair.declip", "repair.dehum", "repair.deess", "repair.addHarmonics", "repair.correctPitch",
                                 "marker.add", "marker.addRegion" })
@@ -1320,7 +1346,7 @@ void MainWindow::updateStatus()
                                               formatTime ((double) (selEnd - selStart) / rate))
                                   : QString());
 
-        auto format = QStringLiteral ("%1 Hz, %2").arg ((int) rate).arg (QString::fromStdString (dsp::speakerLayout (d->numChannels()).name));
+        auto format = QStringLiteral ("%1 Hz, %2").arg ((int) rate).arg (QString::fromStdString (dsp::speakerLayout (d->numChannels(), doc.current().layout).name));
         if (d->numChannels() > 2 && engine.isPlaying() && engine.isDownmixing())
             format += tr (" (heard folded to stereo)");
         fields << format;
@@ -1338,7 +1364,11 @@ void MainWindow::refreshFromDocument (bool keepView)
 {
     const auto d = data();
     engine.setData (d);
+    const auto layoutName = d != nullptr ? doc.current().layout : std::string();
+    engine.setLayoutName (layoutName);
     waveform->setData (d, keepView);
+    waveform->setLayoutName (layoutName);
+    meterPanel->setLayoutName (layoutName);
     waveform->setMarkers (d ? doc.current().markers : std::vector<Marker>());
     albumView->setAlbum (doc.isAlbum() ? doc.current().album : nullptr);
     albumView->setVisible (doc.isAlbum());
@@ -1438,6 +1468,17 @@ void MainWindow::loadFinished()
 
     doc.reset (r.data, std::move (r.markers), r.path.toStdString(), std::move (r.tags));
     cursor = selStart = selEnd = selAnchor = 0;
+    // A file named as ambisonic (AmbiX, FOA, HOA, B-format) with a fitting channel count opens as one.
+    {
+        const auto name = QFileInfo (r.path).completeBaseName().toLower();
+        const int order = ambi::orderFor (r.data->numChannels());
+        static const QRegularExpression ambisonicName (QStringLiteral ("ambix|ambisonic|b-?format|(^|[^a-z])(foa|hoa|[123]oa)([^a-z]|$)"));
+        if (order >= 1 && order <= 3 && ambisonicName.match (name).hasMatch())
+        {
+            static const char* names[] { "", "Ambisonics (1st order)", "Ambisonics (2nd order)", "Ambisonics (3rd order)" };
+            doc.setLayout (names[order]);
+        }
+    }
     optionsConfirmedFor.clear();
     if (recoveringFrom.contains (r.path))
     {

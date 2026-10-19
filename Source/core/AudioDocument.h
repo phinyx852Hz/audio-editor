@@ -84,6 +84,9 @@ struct DocumentState
     Tags tags;
     // Set when the document is an album: `data` is then its mixdown and `markers` its tracks.
     std::shared_ptr<const Album> album;
+    // The channel layout when it is not the usual one for the channel count ("5.2",
+    // "Ambisonics (1st order)"...; see dsp::layoutChoices). Empty: the usual one.
+    std::string layout;
 };
 
 // Holds the current audio and markers plus a linear undo history of snapshots.
@@ -99,6 +102,8 @@ public:
     const DocumentState& current() const { return history[(size_t) position].state; }
     const std::string& path() const      { return filePath; }
     void setPath (const std::string& p)  { filePath = p; }
+    // What the channels are, for the state as it is now, without an undo step (used on opening a file).
+    void setLayout (std::string l)       { if (! history.empty()) history[(size_t) position].state.layout = std::move (l); }
 
     void apply (const std::string& description, DocumentState newState);
 

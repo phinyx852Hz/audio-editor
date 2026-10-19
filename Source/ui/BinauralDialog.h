@@ -22,7 +22,8 @@ class BinauralField final : public QWidget
     Q_OBJECT
 
 public:
-    BinauralField (bool stereo, QWidget* parent);
+    // Without distance (for Ambisonics) the sound stays on one circle.
+    BinauralField (bool stereo, QWidget* parent, bool withDistance = true);
 
     void set (const binaural::Settings&);
     QSize sizeHint() const override { return { 460, 260 }; }
@@ -43,7 +44,7 @@ private:
     void dragTo (QPointF, bool top);
     void changed();
 
-    bool stereo;
+    bool stereo, withDistance;
     double azimuth = 0.0, elevation = 0.0, distance = 1.0, spread = 60.0;   // spread: the stereo width
     int dragging = 0;   // 1: the view from above, 2: the side view
 };

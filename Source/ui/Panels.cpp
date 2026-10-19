@@ -683,7 +683,7 @@ void MeterPanel::paintEvent (QPaintEvent*)
     g.setFont (labelFont);
     for (int ch = 0; ch < numChannels; ++ch)
         g.drawText (QRectF (area.left() + ch * barWidth, area.bottom() + 2, barWidth, 14), Qt::AlignCenter,
-                    QString::fromStdString (dsp::channelName (ch, numChannels)));
+                    QString::fromStdString (dsp::channelName (ch, numChannels, layoutName)));
     g.setFont (small);
 
     for (float db : { 0.0f, -6.0f, -12.0f, -18.0f, -24.0f, -36.0f, -48.0f, -60.0f })

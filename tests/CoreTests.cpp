@@ -16,6 +16,7 @@
 #include "../Source/core/Pitch.h"
 #include "../Source/core/PitchFix.h"
 #include "../Source/core/Binaural.h"
+#include "../Source/core/Ambisonics.h"
 
 #include <algorithm>
 #include <cmath>
@@ -1495,6 +1496,121 @@ namespace
         error.clear();
         check (binaural::render (*mono, 0, mono->length(), settings, error) == nullptr && ! error.empty(), "a missing HRTF file is reported");
     }
+
+    void testAmbisonics()
+    {
+        const auto near = [] (double a, double b, double tolerance = 1e-6) { return std::abs (a - b) <= tolerance; };
+        const auto right = ambi::harmonics (1, 90.0, 0.0);
+        check (near (right[0], 1.0) && near (right[1], -1.0) && near (right[2], 0.0) && near (right[3], 0.0, 1e-9),
+               "first order: a sound on the right is W 1, Y -1 (Y points left)");
+        const auto up = ambi::harmonics (3, 0.0, 90.0);
+        check (near (up[2], 1.0) && near (up[6], 1.0) && near (up[12], 1.0), "straight up: Z, R and K are 1");
+
+        const auto apply = [] (const ambi::Matrix& m, const std::vector<double>& v)
+        {
+            std::vector<double> out (m.size(), 0.0);
+            for (size_t r = 0; r < m.size(); ++r)
+                for (size_t c = 0; c < v.size(); ++c)
+                    out[r] += m[r][c] * v[c];
+            return out;
+        };
+        const auto distance = [] (const std::vector<double>& a, const std::vector<double>& b)
+        {
+            double d = 0.0;
+            for (size_t i = 0; i < a.size(); ++i)
+                d = std::max (d, std::abs (a[i] - b[i]));
+            return d;
+        };
+        const auto turned = apply (ambi::rotation (3, 90.0, 0.0, 0.0), ambi::harmonics (3, 0.0, 0.0));
+        check (distance (turned, ambi::harmonics (3, 90.0, 0.0)) < 1e-6, "yaw 90 turns the front to the right (3rd order)");
+        const auto tilted = apply (ambi::rotation (2, 0.0, 90.0, 0.0), ambi::harmonics (2, 0.0, 0.0));
+        check (distance (tilted, ambi::harmonics (2, 0.0, 90.0)) < 1e-6, "pitch 90 lifts the front straight up");
+        const auto mirrored = apply (ambi::mirror (3, true, false, false), ambi::harmonics (3, -40.0, 20.0));
+        check (distance (mirrored, ambi::harmonics (3, 40.0, 20.0)) < 1e-6, "left-right mirror");
+
+        const auto fuma = apply (ambi::ambixToFuma (3), ambi::harmonics (3, 30.0, 10.0));
+        check (near (fuma[0], M_SQRT1_2) && distance (apply (ambi::fumaToAmbix (3), fuma), ambi::harmonics (3, 30.0, 10.0)) < 1e-9,
+               "FuMa W is 3 dB down and converts back exactly");
+
+        // Decoders: a sound at 30 degrees right comes mostly from R; LFE stays silent.
+        const auto five = ambi::layout ("5.1");
+        const auto out51 = apply (ambi::decoder (3, five), ambi::harmonics (3, 30.0, 0.0));
+        size_t loudest = 0;
+        double energy = 0.0;
+        for (size_t i = 0; i < out51.size(); ++i)
+        {
+            energy += out51[i] * out51[i];
+            if (std::abs (out51[i]) > std::abs (out51[loudest])) loudest = i;
+        }
+        check (five[loudest].name == "R" && out51[3] == 0.0, "5.1 decode: 30 degrees right is the R speaker");
+        check (energy > 0.5 && energy < 2.0, "5.1 decode keeps the level");
+        const auto atmos = ambi::layout ("7.1.4");
+        const auto high = apply (ambi::decoder (3, atmos), ambi::harmonics (3, 45.0, 45.0));
+        loudest = 0;
+        for (size_t i = 0; i < high.size(); ++i)
+            if (std::abs (high[i]) > std::abs (high[loudest])) loudest = i;
+        check (atmos[loudest].name == "Rtf", "7.1.4 decode: up and to the right front is Rtf");
+        const auto stereo = apply (ambi::decoder (1, ambi::layout ("Stereo")), ambi::harmonics (1, -60.0, 0.0));
+        check (stereo[0] > stereo[1] * 2.0, "stereo decode: the left is on the left");
+
+        // Encode a click at 90 degrees, decode for headphones: louder on the right.
+        const double rate = 48000.0;
+        std::vector<float> click (24000, 0.0f);
+        click[12000] = 1.0f;
+        AudioData::Builder b (1, rate);
+        const float* p = click.data();
+        b.append (&p, (int) click.size());
+        ambi::EncodeSettings settings;
+        settings.order = 2;
+        settings.azimuth = 90.0;
+        const auto encoded = ambi::encode (*b.finish(), settings);
+        check (encoded->numChannels() == 9 && encoded->length() == 24000, "2nd order encoding has 9 channels");
+        std::string error;
+        const auto ears = ambi::decodeBinaural (*encoded, PHINYX_DEFAULT_HRTF, error);
+        check (ears != nullptr && ears->numChannels() == 2, "binaural decode (" + error + ")");
+        if (ears != nullptr)
+        {
+            std::vector<float> l (24000), r (24000);
+            float* both[] { l.data(), r.data() };
+            ears->read (0, 24000, both);
+            double le = 0.0, re = 0.0;
+            for (size_t i = 0; i < l.size(); ++i) { le += (double) l[i] * l[i]; re += (double) r[i] * r[i]; }
+            check (re > le * 3.0, "binaural decode: 90 degrees is on the right");
+        }
+
+        // The energy map peaks where the sound is.
+        std::vector<std::vector<float>> noise (9, std::vector<float> (2048));
+        std::mt19937 random (3);
+        std::normal_distribution<float> gauss;
+        const auto y = ambi::harmonics (2, -60.0, 30.0);
+        for (int t = 0; t < 2048; ++t)
+        {
+            const auto x = gauss (random);
+            for (size_t c = 0; c < 9; ++c)
+                noise[c][(size_t) t] = (float) y[c] * x;
+        }
+        std::vector<const float*> ptrs;
+        for (auto& v : noise)
+            ptrs.push_back (v.data());
+        std::vector<float> map;
+        ambi::energyMap (ptrs.data(), 9, 2048, 72, 36, map);
+        const auto peak = (size_t) (std::max_element (map.begin(), map.end()) - map.begin());
+        const auto az = -180.0 + ((double) (peak % 72) + 0.5) * 5.0, el = 90.0 - ((double) (peak / 72) + 0.5) * 5.0;
+        check (std::abs (az + 60.0) <= 10.0 && std::abs (el - 30.0) <= 10.0, "energy map peaks at the sound");
+
+        // Layouts beyond the usual one for a channel count.
+        const auto seven = dsp::layoutChoices (7);
+        check (seven.size() == 2 && seven[0] == "6.1" && seven[1] == "5.2", "7 channels can be 6.1 or 5.2");
+        check (dsp::channelName (4, 7, "5.2") == "LFE2" && dsp::channelName (3, 7, "5.2") == "LFE1", "5.2 has LFE1 and LFE2");
+        check (dsp::channelName (8, 16, "9.1.6") == "Lw" && dsp::channelName (3, 16, "Ambisonics (3rd order)") == "X",
+               "16 channels as 9.1.6 or 3rd-order Ambisonics");
+        const auto fold = dsp::stereoDownmix (4, "Ambisonics (1st order)");
+        const auto leftSound = ambi::harmonics (1, -90.0, 0.0);
+        double l = 0.0, r = 0.0;
+        for (size_t c = 0; c < 4; ++c) { l += fold[0][c] * leftSound[c]; r += fold[1][c] * leftSound[c]; }
+        check (l > r * 3.0, "an ambisonic file folds down to stereo by decoding");
+        check (dsp::speakerLayout (4, "nonsense").name == "Quad", "an unknown layout name falls back to the usual one");
+    }
 }
 
 int main()
@@ -1510,6 +1626,7 @@ int main()
     testPitch();
     testPitchFix();
     testBinaural();
+    testAmbisonics();
     testRepair();
     testRestoration();
     testShapes();

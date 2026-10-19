@@ -499,14 +499,15 @@ namespace
                     for (int ch = 0; ch < outs; ++ch)
                         info.buffer->clear (ch, at, count);
 
+                    const auto& matrix = customFor.load() == n ? custom : downmix[(size_t) n];
                     for (int side = 0; side < std::min (outs, 2); ++side)
                         for (int src = 0; src < n; ++src)
-                            if (const auto gain = downmix[(size_t) n][(size_t) side][(size_t) src]; gain > 0.0f)
+                            if (const auto gain = matrix[(size_t) side][(size_t) src]; gain != 0.0f)
                                 info.buffer->addFrom (side, at, file, src, 0, count, outs == 1 ? gain * 0.5f : gain);
 
                     if (outs == 1)
                         for (int src = 0; src < n; ++src)
-                            if (const auto gain = downmix[(size_t) n][1][(size_t) src]; gain > 0.0f)
+                            if (const auto gain = matrix[1][(size_t) src]; gain != 0.0f)
                                 info.buffer->addFrom (0, at, file, src, 0, count, gain * 0.5f);
                 }
 
@@ -516,6 +517,17 @@ namespace
 
         std::atomic<int> channels { 2 };
         std::atomic<bool> separate { false }, alsaOrder { false }, downmixing { false };
+
+        // A fold-down for a layout other than the usual one, used while customFor is the channel count.
+        void setCustom (int n, const std::array<std::vector<float>, 2>& m)
+        {
+            customFor = 0;
+            for (size_t side = 0; side < 2; ++side)
+                for (size_t ch = 0; ch < (size_t) maxChannels; ++ch)
+                    custom[side][ch] = ch < m[side].size() ? m[side][ch] : 0.0f;
+            customFor = n;
+        }
+        std::atomic<int> customFor { 0 };
 
     private:
         // Where each WAV-ordered channel goes on an ALSA device (FL FR RL RR FC LFE SL SR).
@@ -528,6 +540,7 @@ namespace
         juce::AudioSource& input;
         juce::AudioBuffer<float> work { maxChannels, 2048 };
         std::array<std::array<std::array<float, maxChannels>, 2>, maxChannels + 1> downmix {};
+        std::array<std::array<float, maxChannels>, 2> custom {};
     };
 
     juce::AudioFormatManager& formats()
@@ -686,6 +699,15 @@ double AudioEngine::length() const
 {
     const auto d = impl->document.getData();
     return d != nullptr ? d->lengthSeconds() : 0.0;
+}
+
+void AudioEngine::setLayoutName (const std::string& name)
+{
+    const auto n = std::clamp (impl->monitor.channels.load(), 1, MeterBlock::maxChannels);
+    if (name.empty())
+        impl->monitor.customFor = 0;
+    else
+        impl->monitor.setCustom (n, dsp::stereoDownmix (n, name));
 }
 
 double AudioEngine::deviceSampleRate() const

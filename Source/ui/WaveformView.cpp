@@ -552,7 +552,7 @@ void WaveformView::paintEvent (QPaintEvent*)
             g.setPen (pal.color (QPalette::PlaceholderText));
             for (int ch = 0; ch < numChannels; ++ch)
                 g.drawText (QRectF (6, laneHeight * ch + 2, 80, 16), Qt::AlignLeft | Qt::AlignTop,
-                            QString::fromStdString (dsp::channelName (ch, numChannels)));
+                            QString::fromStdString (dsp::channelName (ch, numChannels, layoutName)));
             g.setFont (font());
         }
 

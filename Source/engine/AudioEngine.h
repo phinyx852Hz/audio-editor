@@ -115,6 +115,8 @@ public:
 
     std::string deviceDescription() const;
     double deviceSampleRate() const;     // what the scope samples run at
+    // The file's channel layout when it is not the usual one (dsp::layoutChoices): sets the stereo fold-down.
+    void setLayoutName (const std::string&);
     std::vector<AudioOutputChoice> availableOutputs();
     AudioOutputChoice currentOutput() const;
     std::string selectOutput (const AudioOutputChoice&);
