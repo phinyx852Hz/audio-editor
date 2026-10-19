@@ -401,6 +401,8 @@ void MainWindow::registerCommands()
     add ("master.scan", Category::master, tr ("&Scan Plugins"), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_S) },
          [this] { masterWidget->scanPlugins(); });
 
+    add ("generate.tone", Category::effect, tr ("&Tone..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_G) }, [this] { generateSignal (false); });
+    add ("generate.noise", Category::effect, tr ("&Noise..."), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_G) }, [this] { generateSignal (true); });
     add ("effect.repeat", Category::effect, tr ("&Repeat Last Effect"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_Y) }, [this]
     {
         if (lastEffectId.isEmpty())
@@ -3163,7 +3165,13 @@ void MainWindow::fillNyquistMenus()
             for (auto* a : nyquistMenuItems)
                 menu->removeAction (a);
     if (generateMenu != nullptr)
+    {
         generateMenu->clear();
+        // PHINYX's own generators first, then the Nyquist ones.
+        generateMenu->addAction (commands.action (QStringLiteral ("generate.tone")));
+        generateMenu->addAction (commands.action (QStringLiteral ("generate.noise")));
+        generateMenu->addSeparator();
+    }
     nyquistMenuItems.clear();
 
     auto sorted = nyquistEntries;

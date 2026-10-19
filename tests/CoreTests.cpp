@@ -12,6 +12,7 @@
 #include "../Source/core/Nyquist.h"
 #include "../Source/core/Repair.h"
 #include "../Source/core/SpectrumView.h"
+#include "../Source/core/Generate.h"
 
 #include <algorithm>
 #include <cmath>
@@ -1176,6 +1177,80 @@ namespace
         const auto lane = render (*quiet, n, 0.0, 48000.0, 10, 100, 0.0, 0.0)[0];
         check (near (*std::max_element (lane.begin(), lane.end()), 0.0, 0.01), "column normalised to 0 dB");
     }
+    // Power in a band, averaged over 2048-point frames.
+    double bandPowerDb (const std::vector<float>& x, double rate, double lowHz, double highHz)
+    {
+        SpectrumAnalyzer analyzer (11);
+        std::vector<float> db ((size_t) analyzer.numBins());
+        double total = 0.0;
+        int frames = 0;
+        for (size_t start = 0; start + 2048 <= x.size(); start += 1024, ++frames)
+        {
+            analyzer.magnitudesDb (x.data() + start, db.data());
+            for (int k = 0; k < analyzer.numBins(); ++k)
+                if (const auto hz = k * rate / 2048.0; hz >= lowHz && hz < highHz)
+                    total += std::pow (10.0, db[(size_t) k] / 10.0);
+        }
+        return 10.0 * std::log10 (std::max (total / std::max (1, frames), 1.0e-30));
+    }
+
+    void testGenerate()
+    {
+        const double rate = 48000.0;
+        gen::Tone t;
+        t.startHz = t.endHz = 1000.0;
+        auto sine = gen::tone (t, rate, 48000);
+        int crossings = 0;
+        for (size_t i = 1; i < sine.size(); ++i)
+            crossings += (sine[i - 1] < 0.0f) != (sine[i] < 0.0f);
+        check (std::abs (crossings - 2000) <= 2, "1 kHz sine crosses zero 2000 times: " + std::to_string (crossings));
+        check (near (*std::max_element (sine.begin(), sine.end()), std::pow (10.0, -6.0 / 20.0), 1.0e-4), "peak at -6 dBFS");
+
+        // Band-limited waves keep (almost) nothing where the raw ones alias: a 5 kHz saw's
+        // 7th harmonic (35 kHz) folds to 13 kHz.
+        for (auto wave : { gen::Wave::sawtooth, gen::Wave::square, gen::Wave::triangle })
+        {
+            gen::Tone w;
+            w.wave = wave;
+            w.startHz = w.endHz = 5000.0;
+            auto clean = gen::tone (w, rate, 48000);
+            w.bandLimited = false;
+            auto raw = gen::tone (w, rate, 48000);
+            const auto alias = [&] (const std::vector<float>& x) { return bandPowerDb (x, rate, 12800.0, 13200.0); };
+            const auto fundamental = bandPowerDb (clean, rate, 4800.0, 5200.0);
+            check (alias (clean) < alias (raw) - 10.0, "band-limiting removes aliasing, wave " + std::to_string ((int) wave)
+                   + ": " + std::to_string (alias (clean)) + " vs " + std::to_string (alias (raw)));
+            check (fundamental > alias (clean) + 30.0, "fundamental well above the alias, wave " + std::to_string ((int) wave));
+            float lo = 1.0f, hi = -1.0f;
+            for (auto v : clean) { lo = std::min (lo, v); hi = std::max (hi, v); }
+            check (hi > 0.3f && lo < -0.3f, "wave swings both ways " + std::to_string ((int) wave));
+        }
+
+        // A sweep starts and ends at the asked frequencies.
+        gen::Tone sweep;
+        sweep.startHz = 100.0;
+        sweep.endHz = 10000.0;
+        auto up = gen::tone (sweep, rate, 96000);
+        const std::vector<float> head (up.begin(), up.begin() + 4096), tail (up.end() - 4096, up.end());
+        check (bandPowerDb (head, rate, 50.0, 200.0) > bandPowerDb (head, rate, 5000.0, 12000.0) + 30.0, "sweep starts low");
+        check (bandPowerDb (tail, rate, 8000.0, 12000.0) > bandPowerDb (tail, rate, 50.0, 2000.0) + 30.0, "sweep ends high");
+
+        // Noise colours: the change in power per octave band, measured three octaves apart.
+        const std::vector<std::pair<gen::Noise, double>> slopes { { gen::Noise::white, 9.0 }, { gen::Noise::pink, 0.0 },
+            { gen::Noise::brown, -9.0 }, { gen::Noise::blue, 18.0 }, { gen::Noise::violet, 27.0 } };
+        for (const auto& [colour, expected] : slopes)
+        {
+            auto n = gen::noise (colour, -3.0, rate, 480000, 1234);
+            const auto low = bandPowerDb (n, rate, 500.0, 1000.0), high = bandPowerDb (n, rate, 4000.0, 8000.0);
+            check (near (high - low, expected, 2.0), "noise colour " + std::to_string ((int) colour) + " slope "
+                   + std::to_string (high - low) + " dB, expected " + std::to_string (expected));
+            float peak = 0.0f;
+            for (auto v : n)
+                peak = std::max (peak, std::abs (v));
+            check (near (peak, std::pow (10.0, -3.0 / 20.0), 1.0e-4), "noise peak level");
+        }
+        check (gen::noise (gen::Noise::white, -3.0, rate, 100, 7) == gen::noise (gen::Noise::white, -3.0, rate, 100, 7), "same seed, same noise");
+    }
 }
 
 int main()
@@ -1187,6 +1262,7 @@ int main()
     testStereoize();
     testSpectrum();
     testSpectrumView();
+    testGenerate();
     testRepair();
     testRestoration();
     testShapes();
