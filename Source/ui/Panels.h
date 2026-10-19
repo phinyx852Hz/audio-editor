@@ -91,6 +91,7 @@ private:
     QString panelId, title;
     QWidget* contentWidget;
     QDockWidget* dockWidget;
+    bool sized = false;   // widened to its content once this session
     QWidget* window = nullptr;
 };
 

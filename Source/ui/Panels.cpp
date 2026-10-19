@@ -169,10 +169,16 @@ void DockablePanel::show (bool giveFocus)
             if (window != nullptr || dockWidget->isFloating() || ! dockWidget->isVisible())
                 return;
 
+            // The first time in a session, a dock much narrower than its content wants
+            // (a restored layout, or Qt's default share) is widened to fit it.
             const auto hint = contentWidget->sizeHint().expandedTo (QSize (220, 180));
+            const bool first = ! sized;
+            sized = true;
             if (dockWidget->height() < 80)
                 mainWindow.resizeDocks ({ dockWidget }, { hint.height() }, Qt::Vertical);
-            if (dockWidget->width() < 80)
+            const auto area = mainWindow.dockWidgetArea (dockWidget);
+            const bool side = area == Qt::LeftDockWidgetArea || area == Qt::RightDockWidgetArea;
+            if (dockWidget->width() < 80 || (first && side && dockWidget->width() < hint.width() * 3 / 4))
                 mainWindow.resizeDocks ({ dockWidget }, { hint.width() }, Qt::Horizontal);
         });
     }

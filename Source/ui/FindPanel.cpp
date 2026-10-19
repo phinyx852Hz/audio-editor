@@ -105,6 +105,12 @@ QString FindPanel::collectionName (int index) const
 }
 
 //==============================================================================
+QSize FindPanel::sizeHint() const
+{
+    // Wide enough for the categories and readable names side by side.
+    return { 480, 520 };
+}
+
 FindPanel::FindPanel (QWidget* home, QWidget* parent)
     : QWidget (parent), homeWidget (home), search (new QLineEdit (this)), sidebar (new QTreeWidget (this)), results (new QTreeWidget (this))
 {
@@ -138,7 +144,9 @@ FindPanel::FindPanel (QWidget* home, QWidget* parent)
     split->addWidget (results);
     split->setStretchFactor (0, 0);
     split->setStretchFactor (1, 1);
-    split->setSizes ({ 150, 330 });
+    split->setSizes ({ 130, 350 });
+    sidebar->setMinimumWidth (90);
+    results->setMinimumWidth (160);
     split->setChildrenCollapsible (false);
 
     auto* layout = new QVBoxLayout (this);

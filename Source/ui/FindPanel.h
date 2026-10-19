@@ -40,6 +40,7 @@ class FindPanel final : public QWidget
 
 public:
     FindPanel (QWidget* home, QWidget* parent);
+    QSize sizeHint() const override;
     ~FindPanel() override;
 
     // Supplies the processes, effects and plugins; files come from the places.
