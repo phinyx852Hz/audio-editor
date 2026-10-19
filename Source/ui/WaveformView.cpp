@@ -67,7 +67,13 @@ void WaveformView::requestPitch()
 
 void WaveformView::setSpectral (bool on)
 {
-    spectral = on;
+    setBlend (on ? 1.0 : 0.0);
+}
+
+void WaveformView::setBlend (double amount)
+{
+    mix = std::clamp (std::round (amount * 20.0) / 20.0, 0.0, 1.0);   // in steps of 5 %
+    spectral = mix >= 0.5;
     update();
 }
 
@@ -442,23 +448,26 @@ void WaveformView::paintEvent (QPaintEvent*)
         const auto numChannels = d.numChannels();
         const auto laneHeight = (double) height() / numChannels;
 
-        if (spectral)
+        // A blend shows both: the spectrogram fades in over the first half, and the waveform
+        // over it fades out all the way, so at 50 % both read.
+        if (mix > 0.0)
         {
             requestSpectrogram();
             if (! spectrogram.image.isNull())
             {
-                g.setOpacity (Theme::opacity());
+                g.setOpacity (Theme::opacity() * std::min (1.0, 2.0 * mix));
                 g.drawImage (rect(), spectrogram.image);  // stretched while a fresh one renders
                 g.setOpacity (1.0);
             }
-            else
+            else if (mix >= 1.0)
             {
                 g.setPen (pal.color (QPalette::PlaceholderText));
                 g.drawText (rect(), Qt::AlignCenter, tr ("Computing spectrogram..."));
             }
         }
-        else
+        if (mix < 1.0)
         {
+            g.setOpacity (mix > 0.0 ? std::min (0.85, 1.0 - mix) : 1.0);
             for (int ch = 0; ch < numChannels; ++ch)
             {
                 const auto mid = laneHeight * (ch + 0.5);
@@ -529,7 +538,8 @@ void WaveformView::paintEvent (QPaintEvent*)
                 }
             }
             g.setClipping (false);
-            if (ampZoom > 1.001)
+            g.setOpacity (1.0);
+            if (ampZoom > 1.001 && ! spectral)
                 drawAmplitudeScale (g, laneHeight);
         }
 
@@ -727,6 +737,7 @@ void WaveformView::drawAmplitudeScale (QPainter& g, double lane)
     g.drawRoundedRect (box, 4.0, 4.0);
     g.setPen (QColor (235, 235, 235));
     g.drawText (box, Qt::AlignCenter, text);
+    g.setBrush (Qt::NoBrush);   // shapes drawn after this (the focus frame) would otherwise be filled
     g.setFont (font());
 }
 
@@ -818,6 +829,7 @@ void WaveformView::drawReadout (QPainter& g, double lane)
     g.setPen (Qt::NoPen);
     g.setBrush (QColor (0, 0, 0, 160));
     g.drawRoundedRect (box, 4.0, 4.0);
+    g.setBrush (Qt::NoBrush);   // the focus frame drawn after this would otherwise be filled, darkening the whole view
     g.setPen (QColor (235, 235, 235));
     g.drawText (box, Qt::AlignCenter, text);
     g.setFont (font());

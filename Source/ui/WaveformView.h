@@ -44,7 +44,10 @@ public:
     // time and frequency; a drag over nearly the whole height selects every
     // frequency shown. Alt+wheel zooms the frequencies around the mouse.
     void setSpectral (bool);
-    bool isSpectral() const { return spectral; }
+    bool isSpectral() const { return spectral; }      // the spectrogram is shown at least half way (its tools apply)
+    // A blend of the two: 0 waveform only, 1 spectrogram only, between both drawn over each other.
+    void setBlend (double);
+    double blend() const { return mix; }
     void setSpectrumSettings (const spectrum::Settings&);
     const spectrum::Settings& spectrumSettings() const { return spectrumSet; }
     // The frequencies shown, low to high (high 0 = half the sample rate).
@@ -172,6 +175,7 @@ private:
     float loadProgress = 0.0f;
 
     bool spectral = false;
+    double mix = 0.0;
     SpectrogramPicture spectrogram;
     SpectrogramKey spectrogramKey, pendingKey;
     QFutureWatcher<SpectrogramPicture> spectrogramWatcher;

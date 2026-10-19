@@ -543,6 +543,22 @@ void MainWindow::registerCommands()
             setBand (0.0, 0.0);   // a frequency box only makes sense where it can be seen
         commands.action (QStringLiteral ("view.spectral"))->setChecked (waveform->isSpectral());
     })->setCheckable (true);
+    // The blend between the waveform and the spectrogram, a tenth at a time.
+    const auto blendBy = [this] (double step)
+    {
+        const bool wasSpectral = waveform->isSpectral();
+        waveform->setBlend (waveform->blend() + step);
+        if (wasSpectral && ! waveform->isSpectral())
+            setBand (0.0, 0.0);
+        commands.action (QStringLiteral ("view.spectral"))->setChecked (waveform->isSpectral());
+        const auto percent = (int) std::lround (waveform->blend() * 100.0);
+        statusBar()->showMessage (percent == 0 ? tr ("Waveform") : percent == 100 ? tr ("Spectrogram")
+                                               : tr ("Blend: %1% spectrogram, %2% waveform").arg (percent).arg (100 - percent), 2500);
+    };
+    add ("view.blendSpectral", Category::view, tr ("Blend Towards Spectro&gram"), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_Up) },
+         [blendBy] { blendBy (0.1); });
+    add ("view.blendWaveform", Category::view, tr ("Blend Towards &Waveform"), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_Down) },
+         [blendBy] { blendBy (-0.1); });
     add ("view.pitchLine", Category::view, tr ("&Pitch Line"), { KS (Qt::SHIFT | Qt::Key_P) }, [this]
     {
         waveform->setPitchLine (! waveform->pitchLine());
@@ -575,9 +591,10 @@ void MainWindow::registerCommands()
     add ("view.verticalZoomReset", Category::view, tr ("Reset Vertical Zoo&m"), { KS (Qt::ALT | Qt::Key_0) },
          [this] { waveform->resetVerticalZoom(); });
     add ("view.opacityUp", Category::view, tr ("More &Opaque"),
-         { KS (Qt::CTRL | Qt::ALT | Qt::Key_Equal), KS (Qt::CTRL | Qt::ALT | Qt::Key_Plus) },
+         { KS (Qt::CTRL | Qt::ALT | Qt::Key_Equal), KS (Qt::CTRL | Qt::ALT | Qt::Key_Plus), KS (Qt::CTRL | Qt::ALT | Qt::KeypadModifier | Qt::Key_Plus) },
          [this] { changeOpacity (Theme::opacity() + 0.05, true); });
-    add ("view.opacityDown", Category::view, tr ("More &Transparent"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_Minus) },
+    add ("view.opacityDown", Category::view, tr ("More &Transparent"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_Minus), KS (Qt::CTRL | Qt::ALT | Qt::Key_Underscore),
+                                                                               KS (Qt::CTRL | Qt::ALT | Qt::KeypadModifier | Qt::Key_Minus) },
          [this] { changeOpacity (Theme::opacity() - 0.05, true); });
     add ("view.opacityFull", Category::view, tr ("&Fully Opaque"), {}, [this] { changeOpacity (1.0, true); });
 
@@ -655,7 +672,7 @@ void MainWindow::buildMenus()
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
-                               "view.overview", "view.spectral", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "-", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.references", "view.popOut", "view.resetLayout", "-",
+                               "view.overview", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "-", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.references", "view.popOut", "view.resetLayout", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "-", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
@@ -927,9 +944,9 @@ void MainWindow::restoreLayout()
     commands.action (QStringLiteral ("options.separateOutputs"))->setChecked (separate);
 
     const bool spectral = settings.value (QStringLiteral ("view/spectral"), false).toBool();
-    waveform->setSpectral (spectral);
+    waveform->setBlend (settings.value (QStringLiteral ("view/blend"), spectral ? 1.0 : 0.0).toDouble());
     waveform->setSpectrumSettings (spectrum::fromString (settings.value (QStringLiteral ("view/spectrum")).toString().toStdString()));
-    commands.action (QStringLiteral ("view.spectral"))->setChecked (spectral);
+    commands.action (QStringLiteral ("view.spectral"))->setChecked (waveform->isSpectral());
     waveform->setPitchLine (settings.value (QStringLiteral ("view/pitchLine"), false).toBool());
     commands.action (QStringLiteral ("view.pitchLine"))->setChecked (waveform->pitchLine());
 
@@ -981,6 +998,7 @@ void MainWindow::saveLayout()
     settings.setValue (QStringLiteral ("window/geometry"), saveGeometry());
     settings.setValue (QStringLiteral ("window/state"), saveState (layoutVersion));
     settings.setValue (QStringLiteral ("view/spectral"), waveform->isSpectral());
+    settings.setValue (QStringLiteral ("view/blend"), waveform->blend());
     settings.setValue (QStringLiteral ("view/pitchLine"), waveform->pitchLine());
     settings.setValue (QStringLiteral ("view/focusFollowsMouse"), focusFollowsMouse->isEnabled());
     settings.setValue (QStringLiteral ("audio/separateOutputs"), engine.monitorMode() == AudioEngine::MonitorMode::separateOutputs);
