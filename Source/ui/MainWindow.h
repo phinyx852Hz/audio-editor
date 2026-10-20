@@ -253,6 +253,19 @@ private:
     void autoDetectGrid();   // on opening a loop with no tempo yet, in the background
     void setTempoDialog();
     void stretchToTempo();
+    void stretchBy (double speed);
+    // Live-style clip editing (WarpSection.cpp): the selection copied right after itself, or
+    // dragged elsewhere, overwriting what is there; a moved selection leaves silence behind.
+    void duplicateSelection();
+    void splitAtCursor();
+    void showGridStep();
+    // Repeated Double or Half Speed on the same audio renders once from the audio before the
+    // first one (one stretch at the total ratio, not a stretch of a stretch).
+    struct SpeedChain { AudioDataPtr base, result; Frame start = 0, baseEnd = 0; double speed = 1.0; double baseBpm = 0.0; };
+    SpeedChain speedChain;
+    void moveSelection (Frame from, Frame to, Frame start, bool copy);   // 2: double speed, 0.5: half speed
+    // Replaces [s, e) with it stretched to `target` frames; on the whole file the grid takes `newBpm` (when > 0).
+    void applyStretch (const QString& title, Frame s, Frame e, Frame target, int mode, double newBpm);
     // Warp markers: shown and edited while warpEditing; the first move makes the document's warp.
     std::shared_ptr<const WarpEdit> currentWarp() const;
     void setWarpEditing (bool);

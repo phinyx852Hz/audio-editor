@@ -345,8 +345,9 @@ void WaveformView::drawGrid (QPainter& g)
         const auto inBar = std::fmod (std::fmod (beat, grid.beatsPerBar) + grid.beatsPerBar, grid.beatsPerBar);
         const bool bar = std::abs (inBar) < 1e-6 || std::abs (inBar - grid.beatsPerBar) < 1e-6;
         const bool onBeat = std::abs (beat - std::round (beat)) < 1e-6;
-        colour.setAlpha (bar ? 90 : onBeat ? 40 : 18);
-        g.setPen (QPen (colour, 1.0));
+        // Bars stand out (brighter and 2 px), beats less, sixteenths faintly.
+        colour.setAlpha (bar ? 170 : onBeat ? 55 : 22);
+        g.setPen (QPen (colour, bar ? 2.0 : 1.0));
         g.drawLine (QPointF (x, 0), QPointF (x, height()));
         if (bar && x - lastLabel >= 28.0)
         {
@@ -372,10 +373,11 @@ void WaveformView::setWarp (std::shared_ptr<const WarpEdit> w, bool editing)
     update();
 }
 
-std::optional<WaveformView::WarpHit> WaveformView::warpHitAt (double x) const
+std::optional<WaveformView::WarpHit> WaveformView::warpHitAt (QPointF at) const
 {
-    if (! warpEditing)
+    if (! warpEditing || at.y() > warpStrip)
         return std::nullopt;
+    const auto x = at.x();
     std::optional<WarpHit> best;
     double distance = 6.0;   // pixels
     for (size_t i = 0; i < warp->markers.size(); ++i)
@@ -396,6 +398,32 @@ std::optional<WaveformView::WarpHit> WaveformView::warpHitAt (double x) const
         }
     }
     return best;
+}
+
+double WaveformView::gridStep() const
+{
+    if (! grid.isSet() || ! data || width() <= 0)
+        return 0.25;
+    // The finest grid line at least 10 pixels from the next: sixteenths, beats, bars, then 2, 4, 8... bars;
+    // Narrow and Widen Grid move from there (down to 1/64 notes).
+    const auto pixelsPerBeat = grid.beatSeconds() * data->sampleRate() / std::max (1e-9, viewLength) * width();
+    double step = 0.25;
+    while (step * pixelsPerBeat < 10.0 && step < 4096.0)
+        step = step < 1.0 ? 1.0 : step < grid.beatsPerBar ? (double) grid.beatsPerBar : step * 2.0;
+    for (int i = 0; i < gridDensity; ++i)
+        step = step < 1.0 ? step * 2.0 : step < grid.beatsPerBar ? (double) grid.beatsPerBar : step * 2.0;
+    for (int i = 0; i > gridDensity; --i)
+        step = step > grid.beatsPerBar ? step / 2.0 : step > 1.0 ? 1.0 : std::max (1.0 / 16.0, step / 2.0);
+    return step;
+}
+
+Frame WaveformView::snapToGrid (Frame f) const
+{
+    if (! snapGrid || ! grid.isSet() || ! data || width() <= 0)
+        return f;
+    const auto step = gridStep();
+    const auto rate = data->sampleRate();
+    return std::clamp<Frame> ((Frame) std::llround (grid.snap ((double) f / rate, step) * rate), 0, length());
 }
 
 Frame WaveformView::warpSnap (double x, bool free) const
@@ -425,8 +453,14 @@ void WaveformView::drawWarp (QPainter& g)
         const auto x = frameToX (m.target);
         if (x < -8.0 || x > width() + 8.0)
             continue;
+        // A short stem under the flag, so the bar and beat lines stay readable behind many markers.
         g.setPen (QPen (flag, 1.0));
-        g.drawLine (QPointF (x, 0), QPointF (x, height()));
+        g.drawLine (QPointF (x, 0), QPointF (x, warpStrip));
+        auto stem = flag;
+        stem.setAlpha (45);
+        g.setPen (QPen (stem, 1.0));
+        g.drawLine (QPointF (x, warpStrip), QPointF (x, height()));
+        g.setPen (QPen (flag, 1.0));
         g.setBrush (flag);
         g.drawPolygon (QPolygonF ({ QPointF (x, 0), QPointF (x + 7, 0), QPointF (x + 7, 7), QPointF (x, 11) }));
         g.setBrush (Qt::NoBrush);
@@ -753,6 +787,17 @@ void WaveformView::paintEvent (QPaintEvent*)
         const auto cx = frameToX (cursor);
         g.drawLine (QPointF (cx, 0), QPointF (cx, height()));
 
+        // Where a dragged selection will land.
+        if (movePress >= 0 && moving)
+        {
+            const QRectF ghost (QPointF (frameToX (moveStart), 0.0), QPointF (frameToX (moveStart + selEnd - selStart), height()));
+            auto fill = theme.color (QStringLiteral ("accent"));
+            fill.setAlphaF (0.18f);
+            g.fillRect (ghost, fill);
+            g.setPen (QPen (theme.color (QStringLiteral ("accent")), 1.5, Qt::DashLine));
+            g.drawRect (ghost.adjusted (0.5, 0.5, -0.5, -0.5));
+        }
+
         drawWarp (g);
         drawFades (g);
         if (spectral)
@@ -1069,7 +1114,7 @@ void WaveformView::mousePressEvent (QMouseEvent* e)
             return;
         }
 
-    if (const auto hit = warpHitAt (e->position().x()); hit && ! drawing())
+    if (const auto hit = warpHitAt (e->position()); hit && ! drawing())
     {
         warpDrag = hit;
         warpDragTo = hit->target;
@@ -1110,6 +1155,17 @@ void WaveformView::mousePressEvent (QMouseEvent* e)
         return;
     }
 
+    // Grabbing the selection (away from its edges) drags it to a new place; a click without moving places the cursor.
+    if (! spectral && selEnd > selStart && f > selStart && f < selEnd
+        && std::abs (e->position().x() - frameToX (selStart)) > 5.0 && std::abs (e->position().x() - frameToX (selEnd)) > 5.0)
+    {
+        movePress = f;
+        movePressX = e->position().x();
+        moveStart = selStart;
+        moving = false;
+        return;
+    }
+
     dragAnchor = f;
     dragAnchorY = e->position().y() - dragLane * laneHeight();
     Q_EMIT cursorRequested (f);
@@ -1120,13 +1176,33 @@ void WaveformView::mouseDoubleClickEvent (QMouseEvent* e)
     // Double-click selects the stretch between the markers (or region edges) on either side.
     if (! data || e->button() != Qt::LeftButton || drawing() || fadeDrag != 0)
         return;
-    if (const auto hit = warpHitAt (e->position().x()))
+    const auto f = xToFrame (e->position().x());
+    if (warpEditing)
     {
+        // On a tick or flag along the top, a double-click adds or removes a marker;
+        // anywhere else it selects the slice between the hits or markers on either side.
+        if (const auto hit = warpHitAt (e->position()))
+        {
+            warpDrag.reset();
+            Q_EMIT warpToggled (hit->source);
+            return;
+        }
         warpDrag.reset();
-        Q_EMIT warpToggled (hit->source);
+        Frame from = 0, to = length();
+        auto edge = [&] (Frame at)
+        {
+            if (at <= f)
+                from = std::max (from, at);
+            else
+                to = std::min (to, at);
+        };
+        for (const auto& m : warp->markers)
+            edge (m.target);
+        for (const auto t : warp->transients)
+            edge (warp->toTarget (t));
+        Q_EMIT rangeRequested (from, to);
         return;
     }
-    const auto f = xToFrame (e->position().x());
     Frame from = 0, to = length();
     for (const auto& m : markers)
         for (const auto edge : { m.start, m.end })
@@ -1141,6 +1217,18 @@ void WaveformView::mouseDoubleClickEvent (QMouseEvent* e)
 
 void WaveformView::mouseMoveEvent (QMouseEvent* e)
 {
+    if (movePress >= 0 && (e->buttons() & Qt::LeftButton))
+    {
+        moving = moving || std::abs (e->position().x() - movePressX) > 4.0;
+        if (moving)
+        {
+            const auto start = selStart + xToFrame (e->position().x()) - movePress;
+            moveStart = std::max<Frame> (0, snapToGrid (start));
+            QWidget::setCursor ((e->modifiers() & (Qt::ControlModifier | Qt::AltModifier)) ? Qt::DragCopyCursor : Qt::ClosedHandCursor);
+            update();
+        }
+        return;
+    }
     if (warpDrag)
     {
         warpDragTo = warpSnap (e->position().x(), e->modifiers() & Qt::AltModifier);
@@ -1149,7 +1237,7 @@ void WaveformView::mouseMoveEvent (QMouseEvent* e)
     }
     if (warpEditing && ! (e->buttons() & Qt::LeftButton))
     {
-        const auto hit = warpHitAt (e->position().x());
+        const auto hit = warpHitAt (e->position());
         if (hit.has_value() != warpHover.has_value() || (hit && warpHover && hit->source != warpHover->source))
         {
             warpHover = hit;
@@ -1176,8 +1264,11 @@ void WaveformView::mouseMoveEvent (QMouseEvent* e)
     if (! (e->buttons() & Qt::LeftButton))
     {
         const auto over = [&] (bool in) { const auto b = fadeHandle (in); return ! b.isEmpty() && b.adjusted (-5, -5, 5, 5).contains (e->position()); };
+        const auto x = e->position().x();
         if (over (true) || over (false))
             QWidget::setCursor (Qt::SizeHorCursor);
+        else if (! spectral && ! drawing() && selEnd > selStart && x > frameToX (selStart) + 5.0 && x < frameToX (selEnd) - 5.0)
+            QWidget::setCursor (Qt::OpenHandCursor);   // the selection can be dragged
         else
             QWidget::setCursor (currentTool == Tool::box ? Qt::ArrowCursor : Qt::CrossCursor);
     }
@@ -1231,8 +1322,21 @@ void WaveformView::mouseMoveEvent (QMouseEvent* e)
     }
 }
 
-void WaveformView::mouseReleaseEvent (QMouseEvent*)
+void WaveformView::mouseReleaseEvent (QMouseEvent* e)
 {
+    if (movePress >= 0)
+    {
+        const auto press = movePress;
+        movePress = -1;
+        QWidget::setCursor (Qt::ArrowCursor);
+        update();
+        if (moving && moveStart != selStart)
+            Q_EMIT selectionMoved (selStart, selEnd, moveStart, (e->modifiers() & (Qt::ControlModifier | Qt::AltModifier)) != 0);
+        else if (! moving)
+            Q_EMIT cursorRequested (press);
+        moving = false;
+        return;
+    }
     if (warpDrag)
     {
         const auto hit = *warpDrag;

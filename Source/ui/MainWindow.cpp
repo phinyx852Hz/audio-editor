@@ -168,7 +168,8 @@ MainWindow::MainWindow (AudioEngine& e)
     });
     restoreLayout();
 
-    connect (waveform, &WaveformView::cursorRequested, this, &MainWindow::setCursor);
+    connect (waveform, &WaveformView::cursorRequested, this, [this] (Frame f) { setCursor (waveform->snapToGrid (f)); });
+    connect (waveform, &WaveformView::selectionMoved, this, &MainWindow::moveSelection);
     connect (timeRuler, &TimeRuler::cursorRequested, this, &MainWindow::setCursor);
     connect (albumView, &AlbumView::cursorRequested, this, &MainWindow::setCursor);
     connect (albumView, &AlbumView::propertiesRequested, this, &MainWindow::songProperties);
@@ -328,7 +329,7 @@ void MainWindow::registerCommands()
          [this] { normalize(); });
     add ("process.fadeIn", Category::process, tr ("Fade &In"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_I) }, [this] { fade (true); });
     add ("process.fadeOut", Category::process, tr ("Fade &Out"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_O) }, [this] { fade (false); });
-    add ("process.reverse", Category::process, tr ("&Reverse"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_R) },
+    add ("process.reverse", Category::process, tr ("&Reverse"), { KS (Qt::Key_R), KS (Qt::CTRL | Qt::SHIFT | Qt::Key_R) },
          [this] { simpleProcess (tr ("Reverse"), &dsp::reverse); });
     add ("process.invert", Category::process, tr ("In&vert Polarity"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_I) },
          [this] { simpleProcess (tr ("Invert"), &dsp::invert); });
@@ -542,8 +543,25 @@ void MainWindow::registerCommands()
     });
     commands.action (QStringLiteral ("edit.snapZero"))->setCheckable (true);
     commands.action (QStringLiteral ("edit.snapZero"))->setChecked (appSettings().value (QStringLiteral ("edit/snapZero"), false).toBool());
+    add ("edit.snapGrid", Category::edit, tr ("Snap to &Grid"), { KS (Qt::CTRL | Qt::Key_4) }, [this]
+    {
+        const auto on = commands.action (QStringLiteral ("edit.snapGrid"))->isChecked();
+        appSettings().setValue (QStringLiteral ("edit/snapGrid"), on);
+        waveform->setSnapToGrid (on);
+        statusBar()->showMessage (on ? tr ("Clicks, selections and dragged selections snap to the beat grid (when the file has a tempo)")
+                                     : tr ("Snap to Grid off"), 4000);
+    });
+    commands.action (QStringLiteral ("edit.snapGrid"))->setCheckable (true);
+    commands.action (QStringLiteral ("edit.snapGrid"))->setChecked (appSettings().value (QStringLiteral ("edit/snapGrid"), true).toBool());
+    waveform->setSnapToGrid (commands.action (QStringLiteral ("edit.snapGrid"))->isChecked());
+    add ("edit.split", Category::edit, tr ("S&plit"), { KS (Qt::CTRL | Qt::Key_E) }, [this] { splitAtCursor(); });
+    commands.action (QStringLiteral ("edit.split"))->setStatusTip (tr ("Put a slice marker at the cursor, or at both ends of the selection; double-click between them selects a slice"));
+    add ("edit.narrowGrid", Category::edit, tr ("&Narrow Grid"), { KS (Qt::CTRL | Qt::Key_1) }, [this] { waveform->changeGridDensity (-1); showGridStep(); });
+    add ("edit.widenGrid", Category::edit, tr ("&Widen Grid"), { KS (Qt::CTRL | Qt::Key_2) }, [this] { waveform->changeGridDensity (1); showGridStep(); });
+    add ("edit.duplicate", Category::edit, tr ("D&uplicate"), { KS (Qt::CTRL | Qt::Key_D) }, [this] { duplicateSelection(); });
+    commands.action (QStringLiteral ("edit.duplicate"))->setStatusTip (tr ("Copy the selection to right after it, over what is there, and select the copy"));
     add ("view.zoomFit", Category::view, tr ("Zoom to &Fit"), { KS (Qt::CTRL | Qt::Key_0) }, [this] { waveform->zoomToFit(); });
-    add ("view.zoomSelection", Category::view, tr ("Zoom to &Selection"), { KS (Qt::CTRL | Qt::Key_E) },
+    add ("view.zoomSelection", Category::view, tr ("Zoom to &Selection"), { KS (Qt::Key_Z) },
          [this] { if (requireSelection()) waveform->zoomToSelection(); });
     add ("view.chain", Category::master, tr ("Device &Chain"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_C) },
          [this] { chainPanel->toggle(); });
@@ -705,7 +723,7 @@ void MainWindow::buildMenus()
     const QList<QPair<QString, QStringList>> layout {
         { tr ("&File"),      { "file.open", "album.new", "file.record", "-", "file.save", "file.saveAs", "file.export", "-", "file.metadata", "-", "file.close", "file.nextTab", "file.previousTab", "-", "file.quit" } },
         { tr ("&Edit"),      { "edit.undo", "edit.redo", "-", "edit.cut", "edit.copy", "edit.copyToNew", "edit.paste", "edit.delete", "-",
-                               "edit.trim", "edit.insertSilence", "-", "edit.snapZero", "-", "select.all", "select.none", "-",
+                               "edit.trim", "edit.insertSilence", "edit.split", "edit.duplicate", "-", "edit.snapZero", "edit.snapGrid", "edit.narrowGrid", "edit.widenGrid", "-", "select.all", "select.none", "-",
                                "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
                                "select.toStart", "select.toEnd" } },
         { tr ("&Process"),   { "process.gain", "process.gainUp", "process.gainDown", "process.normalize", "-", "process.fadeIn", "process.fadeOut", "-",
@@ -720,7 +738,7 @@ void MainWindow::buildMenus()
         { tr ("Spat&ial"),   { "spatial.binaural", "-", "spatial.layout", "-", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.fumaToAmbix", "spatial.ambixToFuma", "-", "view.ambiScene", "analyze.imagingView" } },
         { tr ("&Warp"),      { "warp.showGrid", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "-", "warp.detectGrid", "warp.autoDetect", "warp.setTempo", "warp.downbeat", "warp.halve", "warp.double", "-",
                                "warp.edit", "warp.previousHit", "warp.nextHit", "warp.toggleMarker", "warp.nudgeEarlier", "warp.nudgeLater", "-",
-                               "warp.quantize", "warp.stretch" } },
+                               "warp.quantize", "warp.stretch", "warp.halfSpeed", "warp.doubleSpeed" } },
         { tr ("&Markers"),   { "marker.add", "marker.addRegion", "-", "marker.next", "marker.previous", "-", "marker.exportSlices", "marker.exportLabels", "-", "view.markers" } },
         { tr ("Al&bum"),   { "album.new", "album.addSongs", "-", "album.previousSong", "album.nextSong", "-",
                                "album.moveEarlier", "album.moveLater", "album.longerPause", "album.shorterPause", "-",
@@ -3270,6 +3288,10 @@ void MainWindow::extendSelectionTo (Frame head)
 
 Frame MainWindow::snapToZero (Frame f) const
 {
+    // Snap to Grid comes first: a grid line is exactly where the beat is.
+    if (const auto g = waveform->snapToGrid (f); g != f || (doc.isOpen() && doc.current().grid.isSet()
+                                                             && commands.action (QStringLiteral ("edit.snapGrid"))->isChecked()))
+        return g;
     const auto d = data();
     if (d == nullptr || ! commands.action (QStringLiteral ("edit.snapZero"))->isChecked())
         return f;

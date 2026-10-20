@@ -27,13 +27,21 @@ public:
     // Keeps the current zoom when the length is unchanged, otherwise fits.
     void setData (AudioDataPtr, bool keepView);
     void setMarkers (std::vector<Marker>);
-    // Warp markers (Warp menu): while editing, hits show as ticks along the top and
-    // warp markers as flags. Dragging a tick or a flag moves that point of the audio
-    // (snapped to sixteenths of the grid; Alt: free); Shift+drag moves a flag without
-    // moving the audio; double-click adds or removes a flag.
+    // Warp markers (Warp menu): while editing, hits show as ticks in a strip along the
+    // top and warp markers as flags. Dragging a tick or a flag in that strip moves that
+    // point of the audio (snapped to sixteenths of the grid; Alt: free); Shift+drag moves
+    // a flag without moving the audio; double-click on one adds or removes a flag, and
+    // double-click anywhere else selects the slice between the hits on either side.
     void setWarp (std::shared_ptr<const WarpEdit>, bool editing);
     // The beat grid: bar lines, beats and sixteenths as far as the zoom leaves room, bars numbered.
     void setGrid (const BeatGrid&, bool shown);
+    // Snap to Grid: clicks, selections and moved selections land on the nearest grid line
+    // shown at this zoom (sixteenths, beats, bars or groups of bars), as in Live.
+    void setSnapToGrid (bool on) { snapGrid = on; }
+    Frame snapToGrid (Frame) const;   // unchanged when snapping is off or there is no tempo
+    // Narrow (-1) or widen (+1) the snapping grid from the one the zoom picks (Ctrl+1, Ctrl+2 in Live).
+    void changeGridDensity (int step) { gridDensity = std::clamp (gridDensity + step, -4, 6); }
+    double gridStep() const;          // beats between snapping lines at this zoom
     void clear();
     void setLoading (bool, float progress = 0.0f);
 
@@ -114,6 +122,8 @@ Q_SIGNALS:
     // marker: the index of the flag dragged, or -1 for a tick; reanchor: Shift was held.
     void warpMoved (Frame source, Frame target, int marker, bool reanchor);
     void warpToggled (Frame source);
+    // The selection [from, to) dragged so it starts at `start` (copy: Ctrl or Alt held, the original stays).
+    void selectionMoved (Frame from, Frame to, Frame start, bool copy);
 
 protected:
     void paintEvent (QPaintEvent*) override;
@@ -177,13 +187,21 @@ private:
     std::optional<WarpHit> warpHover, warpDrag;
     Frame warpDragTo = -1;
     bool warpReanchor = false;
-    std::optional<WarpHit> warpHitAt (double x) const;
+    // The tick or flag at a point of the strip along the top (below it the mouse selects as usual).
+    static constexpr double warpStrip = 18.0;
+    std::optional<WarpHit> warpHitAt (QPointF) const;
     Frame warpSnap (double x, bool free) const;
     void drawWarp (QPainter&);
     bool levelColours = false;
     double viewStart = 0.0, viewLength = 0.0;  // in frames
     Frame cursor = 0, selStart = 0, selEnd = 0;
     Frame dragAnchor = -1;
+    bool snapGrid = false;
+    int gridDensity = 0;
+    // Dragging the selection to move it: where it was grabbed, and whether it has moved yet.
+    Frame movePress = -1, moveStart = -1;
+    double movePressX = 0.0;
+    bool moving = false;
     double dragAnchorY = 0.0;
     int dragLane = 0;
     double bandLow = 0.0, bandHigh = 0.0;

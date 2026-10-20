@@ -98,7 +98,7 @@ void MainWindow::registerWarpCommands()
     // The time ruler counts time, bars and beats, or both (bars and beats need a tempo).
     auto* rulerModes = new QActionGroup (this);
     const auto rulerSetting = appSettings().value (QStringLiteral ("view/ruler"), QStringLiteral ("both")).toString();
-    for (const auto& [id, text, value, tip] : { std::tuple { "view.rulerTime", tr ("Ruler in &Time"), "time", tr ("The ruler counts minutes and seconds") },
+    for (const auto& [id, text, value, tip] : { std::tuple { "view.rulerTime", tr ("Ruler in T&ime"), "time", tr ("The ruler counts minutes and seconds") },
                                                 std::tuple { "view.rulerBeats", tr ("Ruler in &Bars and Beats"), "beats", tr ("The ruler counts bars, beats and sixteenths (1, 1.2, 1.2.3) once the file has a tempo") },
                                                 std::tuple { "view.rulerBoth", tr ("Ruler in Time &and Beats"), "both", tr ("Bars and beats above, time below") } })
     {
@@ -114,7 +114,7 @@ void MainWindow::registerWarpCommands()
     }
     add ("warp.detectGrid", tr ("&Detect Beat Grid"), {}, [this] { detectBeatGrid(); })
         ->setStatusTip (tr ("Find the beats and bars and fit a steady tempo grid to them"));
-    auto* autoDetect = add ("warp.autoDetect", tr ("Detect Tempo When &Opening Loops"), {}, [this]
+    auto* autoDetect = add ("warp.autoDetect", tr ("Detect Tem&po When Opening Loops"), {}, [this]
     {
         appSettings().setValue (QStringLiteral ("warp/autoDetect"), commands.action (QStringLiteral ("warp.autoDetect"))->isChecked());
     });
@@ -132,27 +132,27 @@ void MainWindow::registerWarpCommands()
         grid.normalise();
         applyGrid (tr ("Set Downbeat"), grid);
     })->setStatusTip (tr ("Move the grid so a bar starts where the cursor is"));
-    add ("warp.halve", tr ("&Halve Tempo"), {}, [this]
+    add ("warp.halve", tr ("&Halve Grid Tempo"), {}, [this]
     {
         auto grid = doc.current().grid;
         grid.bpm /= 2.0;
         grid.normalise();
         applyGrid (tr ("Halve Tempo"), grid);
-    });
-    add ("warp.double", tr ("D&ouble Tempo"), {}, [this]
+    })->setStatusTip (tr ("Count beats half as fast (the audio does not change); Stretch ×2 makes the audio twice as long"));
+    add ("warp.double", tr ("D&ouble Grid Tempo"), {}, [this]
     {
         auto grid = doc.current().grid;
         grid.bpm *= 2.0;
         grid.normalise();
         applyGrid (tr ("Double Tempo"), grid);
-    });
+    })->setStatusTip (tr ("Count beats twice as fast (the audio does not change); Shrink ÷2 makes the audio half as long"));
     auto* edit = add ("warp.edit", tr ("Edit &Warp Markers"), { KS (Qt::SHIFT | Qt::Key_W) }, [this]
     {
         setWarpEditing (commands.action (QStringLiteral ("warp.edit"))->isChecked());
     });
     edit->setCheckable (true);
     edit->setStatusTip (tr ("Show the hits as ticks; drag one to move it, Shift+drag a flag to move it without moving the audio, double-click to add or remove a flag"));
-    add ("warp.previousHit", tr ("Previous &Hit"), { KS (Qt::Key_Comma) }, [this] { stepTransient (false); });
+    add ("warp.previousHit", tr ("Pre&vious Hit"), { KS (Qt::Key_Comma) }, [this] { stepTransient (false); });
     add ("warp.nextHit", tr ("Ne&xt Hit"), { KS (Qt::Key_Period) }, [this] { stepTransient (true); });
     add ("warp.toggleMarker", tr ("Add or Remove Warp &Marker"), { KS (Qt::Key_W) }, [this]
     {
@@ -183,13 +183,17 @@ void MainWindow::registerWarpCommands()
     connect (waveform, &WaveformView::warpToggled, this, [this] (Frame source) { warpToggle (source); });
     add ("warp.stretch", tr ("&Stretch to Tempo..."), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_J) }, [this] { stretchToTempo(); })
         ->setStatusTip (tr ("Change the tempo of the selection or the whole file, keeping the pitch (or with it, in Varispeed)"));
+    add ("warp.halfSpeed", tr ("Stretch &×2 (Twice as Long)"), { KS (Qt::Key_Asterisk), KS (Qt::CTRL | Qt::ALT | Qt::Key_Down) }, [this] { stretchBy (0.5); })
+        ->setStatusTip (tr ("Make the selection or the whole file twice as long (half speed, half-time), keeping the pitch; press again for 4×, 8×..."));
+    add ("warp.doubleSpeed", tr ("Shrink &÷2 (Half as Long)"), { KS (Qt::Key_Slash), KS (Qt::CTRL | Qt::ALT | Qt::Key_Up) }, [this] { stretchBy (2.0); })
+        ->setStatusTip (tr ("Make the selection or the whole file half as long (double speed), keeping the pitch; press again for a quarter..."));
 }
 
 void MainWindow::updateWarpCommandStates()
 {
     const bool open = doc.isOpen() && ! loading && ! doc.isAlbum();
     const bool grid = open && doc.current().grid.isSet();
-    for (const auto* a : { "warp.detectGrid", "warp.setTempo", "warp.downbeat", "warp.stretch" })
+    for (const auto* a : { "warp.detectGrid", "warp.setTempo", "warp.downbeat", "warp.stretch", "warp.doubleSpeed", "warp.halfSpeed" })
         commands.action (QString::fromLatin1 (a))->setEnabled (open);
     for (const auto* a : { "warp.halve", "warp.double" })
         commands.action (QString::fromLatin1 (a))->setEnabled (grid);
@@ -719,8 +723,62 @@ void MainWindow::stretchToTempo()
 
     const auto m = (timestretch::Mode) mode->currentData().toInt();
     appSettings().setValue (QStringLiteral ("warp/mode"), (int) m);
-    const auto target = newLength();
-    if (target == length)
+    applyStretch (title, s, e, newLength(), (int) m, to->value());
+}
+
+void MainWindow::stretchBy (double speed)
+{
+    const auto d = data();
+    if (d == nullptr || refuseAlbumEdit())
+        return;
+    const auto [s, e] = processRange();
+    const auto m = (timestretch::Mode) appSettings().value (QStringLiteral ("warp/mode"), (int) timestretch::Mode::fullMix).toInt();
+    const auto title = speed > 1.0 ? tr ("Shrink") : tr ("Stretch");
+
+    // Pressed again on what the last one made: undo it and stretch the audio from before it
+    // at the total ratio, so five presses are one clean stretch, not five on top of each other.
+    const auto& c = speedChain;
+    const bool again = c.result != nullptr && c.result == d && c.start == s
+                    && e - s == (Frame) std::llround ((double) (c.baseEnd - c.start) / c.speed) && doc.canUndo();
+    const auto total = again ? c.speed * speed : speed;
+    if (again && (total > 64.0 || total < 1.0 / 64.0))
+    {
+        statusBar()->showMessage (tr ("That is as far as it goes (64 times)"), 3000);
+        return;
+    }
+    if (again)
+    {
+        const auto base = c.base;
+        const auto baseEnd = c.baseEnd;
+        const auto baseBpm = c.baseBpm;
+        doc.undo();
+        if (doc.current().data != base)
+        {
+            doc.redo();   // something else happened in between: stretch what is there
+            speedChain = {};
+            return stretchBy (speed);
+        }
+        if (hasSelection())
+            selEnd = baseEnd;
+        applyStretch ((total < 1.0 ? tr ("%1 ×%2") : tr ("%1 ÷%2")).arg (title).arg (total >= 1.0 ? total : 1.0 / total), s, baseEnd,
+                      (Frame) std::llround ((double) (baseEnd - s) / total), (int) m, baseBpm > 0.0 ? baseBpm * total : 0.0);
+        speedChain = { base, data(), s, baseEnd, total, baseBpm };
+        return;
+    }
+    const auto grid = doc.current().grid;
+    const auto bpm = grid.isSet() ? grid.bpm : 0.0;
+    applyStretch (title, s, e, (Frame) std::llround ((double) (e - s) / speed), (int) m, bpm > 0.0 ? bpm * speed : 0.0);
+    speedChain = data() != d ? SpeedChain { d, data(), s, e, speed, bpm } : SpeedChain {};
+}
+
+void MainWindow::applyStretch (const QString& title, Frame s, Frame e, Frame target, int modeIndex, double newBpm)
+{
+    const auto d = data();
+    const auto rate = d->sampleRate();
+    const auto length = e - s;
+    const bool whole = s == 0 && e == d->length();
+    const auto m = (timestretch::Mode) modeIndex;
+    if (target == length || target <= 0)
         return;
     AudioDataPtr stretched;
     std::string error;
@@ -747,16 +805,113 @@ void MainWindow::stretchToTempo()
     for (auto& marker : state.markers)
         for (auto* f : { &marker.start, &marker.end })
             *f = *f >= e ? *f + (target - length) : *f > s ? s + (Frame) std::llround ((double) (*f - s) * ratio) : *f;
-    if (whole)
+    if (whole && newBpm > 0.0)
     {
-        state.grid.bpm = to->value();
+        state.grid.bpm = newBpm;
         state.grid.downbeat *= ratio;
         state.grid.normalise();
-        state.tags[tag::bpm] = bpmText (to->value()).toStdString();
+        state.tags[tag::bpm] = bpmText (newBpm).toStdString();
     }
     doc.apply ((title + QStringLiteral (" (%1)").arg (tr (timestretch::modeName (m)))).toStdString(), std::move (state));
     if (hasSelection())
         selEnd = s + target;
     refreshFromDocument (true);
     statusBar()->showMessage (tr ("Stretched to %1 s").arg ((double) target / rate, 0, 'f', 3), 6000);
+}
+
+void MainWindow::duplicateSelection()
+{
+    if (! hasSelection())
+    {
+        statusBar()->showMessage (tr ("Select something to duplicate first"), 3000);
+        return;
+    }
+    moveSelection (selStart, selEnd, selEnd, true);
+}
+
+void MainWindow::moveSelection (Frame from, Frame to, Frame start, bool copy)
+{
+    const auto d = data();
+    if (d == nullptr || refuseAlbumEdit() || to <= from || start < 0)
+        return;
+    const auto length = to - from;
+    const auto clip = d->slice (from, to);
+    AudioDataPtr result = d;
+    if (! copy)
+    {
+        // What is left behind is silence, as when a clip is moved in Live.
+        AudioData::Builder silence (d->numChannels(), d->sampleRate());
+        std::vector<std::vector<float>> zeros ((size_t) d->numChannels(), std::vector<float> (4096, 0.0f));
+        std::vector<const float*> pointers;
+        for (const auto& z : zeros)
+            pointers.push_back (z.data());
+        for (Frame done = 0; done < length;)
+        {
+            const auto n = (int) std::min<Frame> (4096, length - done);
+            silence.append (pointers.data(), n);
+            done += n;
+        }
+        const auto gap = silence.finish();
+        result = result->replaced (from, to, gap.get());
+    }
+    const auto end = std::min (start + length, result->length());
+    result = result->replaced (start, end, clip.get());   // past the end of the file, it grows
+
+    auto state = doc.current();
+    state.data = result;
+    const auto what = copy ? (start == to ? tr ("Duplicate") : tr ("Copy Selection")) : tr ("Move Selection");
+    doc.apply (what.toStdString(), std::move (state));
+    selAnchor = selStart = start;
+    selEnd = start + length;
+    cursor = start;
+    refreshFromDocument (true);
+    statusBar()->showMessage (tr ("%1: %2 s").arg (what).arg ((double) length / d->sampleRate(), 0, 'f', 3), 3000);
+}
+
+void MainWindow::splitAtCursor()
+{
+    const auto d = data();
+    if (d == nullptr || refuseAlbumEdit())
+        return;
+    std::vector<Frame> cuts;
+    if (hasSelection())
+        cuts = { selStart, selEnd };
+    else
+        cuts = { cursor };
+    auto state = doc.current();
+    int added = 0;
+    for (const auto at : cuts)
+    {
+        if (at <= 0 || at >= d->length())
+            continue;
+        if (std::any_of (state.markers.begin(), state.markers.end(), [at] (const Marker& m) { return m.start == at || m.end == at; }))
+            continue;
+        Marker m;
+        m.id = doc.nextMarkerId();
+        m.start = m.end = at;
+        m.name = tr ("Slice").toStdString();
+        state.markers.push_back (m);
+        ++added;
+    }
+    if (added == 0)
+    {
+        statusBar()->showMessage (tr ("There is already a slice there"), 3000);
+        return;
+    }
+    std::sort (state.markers.begin(), state.markers.end(), [] (const Marker& a, const Marker& b) { return a.start < b.start; });
+    doc.apply (tr ("Split").toStdString(), std::move (state));
+    refreshFromDocument (true);
+    statusBar()->showMessage (tr ("Split: double-click between slices to select one; R reverses it, Ctrl+D duplicates it, drag it to move it"), 5000);
+}
+
+void MainWindow::showGridStep()
+{
+    const auto step = waveform->gridStep();
+    const auto perBar = doc.isOpen() ? doc.current().grid.beatsPerBar : 4;
+    QString name;
+    if (step >= perBar)
+        name = step < perBar + 0.5 ? tr ("1 bar") : tr ("%1 bars").arg (step / perBar);
+    else
+        name = QStringLiteral ("1/%1").arg (std::lround (4.0 / step));
+    statusBar()->showMessage (tr ("Grid: %1 at this zoom").arg (name), 3000);
 }

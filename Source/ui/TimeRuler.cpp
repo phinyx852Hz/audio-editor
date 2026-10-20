@@ -252,10 +252,17 @@ void TimeRuler::drawBeats (QPainter& g, double top, double bottom) const
             text += QLatin1Char ('.') + QString::number (sixteenth);
         const auto x = xOf (b);
         const bool isBar = beatInBar == 1 && sixteenth == 1;
-        g.setPen (faint);
+        // Bars stand out: a brighter, thicker line and a bold number.
+        auto line = ink;
+        line.setAlphaF (isBar ? 0.85f : 0.45f);
+        g.setPen (QPen (line, isBar ? 2.0 : 1.0));
         g.drawLine (QPointF (x, isBar ? top : bottom - 8), QPointF (x, bottom));
         g.setPen (ink);
+        auto f = font();
+        f.setBold (isBar);
+        g.setFont (f);
         steady::draw (g, x + 4.0, baseline, text);
+        g.setFont (font());
     }
 }
 
