@@ -497,7 +497,7 @@ void FindPanel::activate (QTreeWidgetItem* row)
     if (row != nullptr && row->data (0, indexRole).toInt() == folderRow)
     {
         const auto folder = row->data (0, folderRole).toString();
-        if (folder == placesRoot || (browseFolder.startsWith (folder + QLatin1Char ('/')) && folder.size() < browseFolder.size()))
+        if (row->text (0) == QStringLiteral (".."))
             folderUp();
         else
             openFolder (folder);
@@ -559,15 +559,21 @@ void FindPanel::listFolder (const QString& select)
     const bool inPlace = static_cast<Section> (current->data (0, sectionRole).toInt()) == Section::place;
     const auto place = inPlace ? current->data (0, placeRole).toString() : QString();
 
-    // Stay inside the place (or the places) chosen in the sidebar.
-    auto placeOf = [this] (const QString& folder)
+    // Stay inside the place (or the places) chosen in the sidebar. Places can sit inside
+    // one another (a whole library, and one folder of it added again), so the place a
+    // folder belongs to is the one chosen in the sidebar, or else the closest one.
+    auto within = [] (const QString& folder, const QString& p) { return folder == p || folder.startsWith (p + QLatin1Char ('/')); };
+    auto placeOf = [&] (const QString& folder)
     {
+        if (inPlace)
+            return within (folder, place) ? place : QString();
+        QString best;
         for (const auto& p : places)
-            if (folder == p || folder.startsWith (p + QLatin1Char ('/')))
-                return p;
-        return QString();
+            if (within (folder, p) && p.size() > best.size())
+                best = p;
+        return best;
     };
-    if (inPlace && (browseFolder.isEmpty() || placeOf (browseFolder) != place))
+    if (inPlace && (browseFolder.isEmpty() || ! within (browseFolder, place)))
         browseFolder = place;
     if (! inPlace && ! browseFolder.isEmpty() && placeOf (browseFolder).isEmpty())
         browseFolder.clear();
@@ -624,7 +630,7 @@ void FindPanel::listFolder (const QString& select)
     };
     if (! browseFolder.isEmpty() && (browseFolder != root || ! inPlace))
     {
-        auto* up = folderLine (QStringLiteral (".."), browseFolder == root ? placesRoot : QFileInfo (browseFolder).absolutePath(), tr ("Up"));
+        auto* up = folderLine (QStringLiteral (".."), browseFolder == root && ! inPlace ? placesRoot : QFileInfo (browseFolder).absolutePath(), tr ("Up"));
         up->setIcon (0, style()->standardIcon (QStyle::SP_FileDialogToParent));
     }
     QTreeWidgetItem* chosen = nullptr;
@@ -676,11 +682,19 @@ void FindPanel::folderUp()
     if (browseFolder.isEmpty())
         return;
     const auto from = browseFolder;
-    const bool isPlace = places.contains (browseFolder);
+    if (atTopOfPlace())
+        return;   // the top of the place chosen in the sidebar
+    // In Files, a place's top goes back to the list of places.
     const auto* current = sidebar->currentItem();
-    if (isPlace && static_cast<Section> (current->data (0, sectionRole).toInt()) == Section::place)
-        return;   // the top of this place
-    openFolder (isPlace ? placesRoot : QFileInfo (browseFolder).absolutePath(), from);
+    const bool inPlace = static_cast<Section> (current->data (0, sectionRole).toInt()) == Section::place;
+    openFolder (! inPlace && places.contains (browseFolder) ? placesRoot : QFileInfo (browseFolder).absolutePath(), from);
+}
+
+bool FindPanel::atTopOfPlace() const
+{
+    const auto* current = sidebar->currentItem();
+    return current != nullptr && static_cast<Section> (current->data (0, sectionRole).toInt()) == Section::place
+        && browseFolder == current->data (0, placeRole).toString();
 }
 
 void FindPanel::startAudition (QTreeWidgetItem* row)
@@ -877,8 +891,7 @@ bool FindPanel::eventFilter (QObject* watched, QEvent* e)
         {
             auto* row = results->currentItem();
             const bool onFolder = row != nullptr && row->data (0, indexRole).toInt() == folderRow;
-            if (k->key() == Qt::Key_Backspace || (k->key() == Qt::Key_Left && ! browseFolder.isEmpty()
-                                                  && ! (places.contains (browseFolder) && sidebar->currentItem()->data (0, sectionRole).toInt() == (int) Section::place)))
+            if (k->key() == Qt::Key_Backspace || (k->key() == Qt::Key_Left && ! browseFolder.isEmpty() && ! atTopOfPlace()))
             {
                 folderUp();
                 return true;

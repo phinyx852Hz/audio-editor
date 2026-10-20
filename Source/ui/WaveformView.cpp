@@ -599,27 +599,12 @@ double WaveformView::frameToX (Frame f) const
     return viewLength > 0.0 ? ((double) f - viewStart) / viewLength * width() : 0.0;
 }
 
-void WaveformView::paintEvent (QPaintEvent*)
+void WaveformView::paintBase (QPainter& g, double laneHeight)
 {
-    QPainter g (this);
     const auto pal = palette();
     const auto& theme = Theme::current();
-    // Over the window's own background (and the visualizer when it is behind PHINYX), not replacing it.
-    g.fillRect (rect(), Theme::withOpacity (theme.color (QStringLiteral ("waveformBackground"))));
-
-    if (! data || data->numChannels() == 0)
-    {
-        g.setPen (pal.color (QPalette::PlaceholderText));
-        g.drawText (rect(), Qt::AlignCenter,
-                    loading ? tr ("Reading file... %1%").arg ((int) (loadProgress * 100.0f))
-                            : tr ("Press Ctrl+O to open a file, or Ctrl+Shift+P to search all commands"));
-    }
-    else
-    {
-        const auto& d = *data;
-        const auto numChannels = d.numChannels();
-        const auto laneHeight = (double) height() / numChannels;
-
+    const auto& d = *data;
+    const auto numChannels = d.numChannels();
         // A blend shows both: the spectrogram fades in over the first half, and the waveform
         // over it fades out all the way, so at 50 % both read.
         if (mix > 0.0)
@@ -728,6 +713,53 @@ void WaveformView::paintEvent (QPaintEvent*)
                             QString::fromStdString (dsp::channelName (ch, numChannels, layoutName)));
             g.setFont (font());
         }
+
+}
+
+void WaveformView::paintEvent (QPaintEvent*)
+{
+    QPainter g (this);
+    const auto pal = palette();
+    const auto& theme = Theme::current();
+
+    if (! data || data->numChannels() == 0)
+    {
+        // Over the window's own background (and the visualizer when it is behind PHINYX), not replacing it.
+        g.fillRect (rect(), Theme::withOpacity (theme.color (QStringLiteral ("waveformBackground"))));
+        g.setPen (pal.color (QPalette::PlaceholderText));
+        g.drawText (rect(), Qt::AlignCenter,
+                    loading ? tr ("Reading file... %1%").arg ((int) (loadProgress * 100.0f))
+                            : tr ("Press Ctrl+O to open a file, or Ctrl+Shift+P to search all commands"));
+    }
+    else
+    {
+        const auto& d = *data;
+        const auto numChannels = d.numChannels();
+        const auto laneHeight = (double) height() / numChannels;
+
+        // The background, the waveform (or spectrogram) and the lane names change only when
+        // the view or the audio does; they are kept in a picture so that playback, which
+        // redraws for the cursor many times a second, only draws what moves.
+        const auto ratio = devicePixelRatioF();
+        // Every colour drawn there, so a changed theme or colour is drawn afresh.
+        quint64 colours = 0;
+        for (const auto* name : { "waveform", "waveformBackground", "centerLine", "levelQuiet", "levelSoft", "levelMedium",
+                                  "levelLoud", "levelHot", "levelPeak" })
+            colours = colours * 1099511628211ull ^ theme.color (QString::fromLatin1 (name)).rgba();
+        colours = colours * 1099511628211ull ^ pal.color (QPalette::PlaceholderText).rgba();
+        const BaseKey key { data.get(), viewStart, viewLength, width(), height(), ratio, mix, ampZoom, levelColours, spectral,
+                            Theme::opacity(), spectrogram.image.cacheKey(), colours, layoutName };
+        if (! (key == baseKey) || base.isNull())
+        {
+            base = QPixmap ((QSizeF (size()) * ratio).toSize());
+            base.setDevicePixelRatio (ratio);
+            base.fill (Qt::transparent);
+            QPainter b (&base);
+            b.fillRect (rect(), Theme::withOpacity (theme.color (QStringLiteral ("waveformBackground"))));
+            paintBase (b, laneHeight);
+            baseKey = key;
+        }
+        g.drawPixmap (0, 0, base);
 
         if (spectral)
         {

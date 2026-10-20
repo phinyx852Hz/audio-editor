@@ -83,6 +83,7 @@ private:
     void listFolder (const QString& select);      // the browse folder's subfolders and files
     void openFolder (const QString& folder, const QString& select = {});
     void folderUp();
+    bool atTopOfPlace() const;   // browsing the very folder chosen under Places
     void startAudition (QTreeWidgetItem*);
     void endAudition();
     QIcon dots (int mask) const;

@@ -192,6 +192,24 @@ private:
     std::optional<WarpHit> warpHitAt (QPointF) const;
     Frame warpSnap (double x, bool free) const;
     void drawWarp (QPainter&);
+
+    // The picture of what changes only with the view or the audio (see paintEvent).
+    void paintBase (QPainter&, double laneHeight);
+    struct BaseKey
+    {
+        const void* audio = nullptr;
+        double start = 0.0, length = 0.0;
+        int w = 0, h = 0;
+        double ratio = 1.0, mix = 0.0, amp = 1.0;
+        bool levels = false, spectral = false;
+        double opacity = 1.0;
+        qint64 spectrogram = 0;
+        quint64 colours = 0;
+        std::string layout;
+        bool operator== (const BaseKey&) const = default;
+    };
+    BaseKey baseKey;
+    QPixmap base;
     bool levelColours = false;
     double viewStart = 0.0, viewLength = 0.0;  // in frames
     Frame cursor = 0, selStart = 0, selEnd = 0;
