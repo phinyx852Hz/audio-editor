@@ -672,6 +672,8 @@ void SamplerWindow::keyReleaseEvent (QKeyEvent* e)
 void SamplerWindow::changeEvent (QEvent* e)
 {
     // Keys let go while another window had them would stay down: release them.
+    if (e->type() == QEvent::ActivationChange && isActiveWindow())
+        Q_EMIT activated();
     if (e->type() == QEvent::ActivationChange && ! isActiveWindow())
     {
         for (const auto& [code, note] : heldKeys)

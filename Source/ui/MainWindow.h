@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #pragma once
+#include <atomic>
 #include <QPointer>
 
 #include "NyquistUi.h"
@@ -41,6 +42,7 @@ namespace vamphost { struct Result; }
 namespace timestretch { class SegmentCache; }
 
 namespace sampler { class Engine; }
+namespace slicer { class Engine; }
 
 class MainWindow final : public QMainWindow
 {
@@ -328,6 +330,23 @@ private:
     AudioDataPtr samplerSource;
     QTimer samplerFollowTimer;
     QFutureWatcher<void> samplerLoad;
+
+    // The Slicer likewise (sampler/SlicerEngine.h); MIDI notes play whichever of the two
+    // windows was used last (0 Sampler, 1 Slicer).
+    void sendToSlicer (bool keepSlices);
+    void showSlicer();
+    void slicerFollow();
+    void playInstruments();
+    std::unique_ptr<slicer::Engine> slicerEngine;
+    class SlicerWindow* slicerWin = nullptr;
+    int slicerTab = -1;
+    std::string slicerPath;
+    Frame slicerFrom = 0, slicerTo = 0;
+    bool slicerWhole = true;
+    AudioDataPtr slicerSource;
+    QTimer slicerFollowTimer;
+    QFutureWatcher<void> slicerLoad;
+    std::atomic<int> midiTarget { 0 };
     class TrackerWindow* trackerWin = nullptr;
     class VisualizerWindow* visualizerWindow();
     void setVisualMode (int index, bool openIfHidden);

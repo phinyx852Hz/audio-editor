@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MainWindow.h"
 #include "SamplerWindow.h"
+#include "SlicerWindow.h"
 #include "../engine/MidiInputs.h"
 #include "../sampler/SamplerEngine.h"
+#include "../sampler/SlicerEngine.h"
 #include "Settings.h"
 #include "FindPanel.h"
 #include "Visualizer.h"
@@ -268,7 +270,7 @@ MainWindow::~MainWindow()
 {
     loadWatcher.waitForFinished();
     engine.setLiveSource ({});   // the Tracker goes before the engine
-    engine.setInstrument ({});   // and the Sampler
+    engine.setInstrument ({});   // and the Sampler and Slicer
     midiInputs = nullptr;
     delete batchWindow;   // stops its workers while the engine they render through still exists
 }
@@ -764,7 +766,7 @@ void MainWindow::buildMenus()
                                "view.visualizerNext", "view.visualizerPrevious", "view.visualizerChoose", "-",
                                "@visual.artistic", "@visual.science", "-", "@visual.milkdrop", "@visual.rain", "-",
                                "view.opacityUp", "view.opacityDown", "view.opacityFull" } },
-        { tr ("S&ample"),    { "sample.send", "sample.window", "sample.refresh", "-", "sample.midiInputs", "sample.panic" } },
+        { tr ("S&ample"),    { "sample.send", "sample.window", "sample.refresh", "-", "slice.send", "slice.window", "slice.refresh", "-", "sample.midiInputs", "sample.panic" } },
         { tr ("Trac&ker"),   { "tracker.window", "tracker.new", "tracker.open", "tracker.save", "tracker.saveAs", "tracker.loadSample", "-", "tracker.playSong", "tracker.playPattern", "tracker.stop", "-",
                                "tracker.recordStereo", "tracker.recordMulti", "-", "tracker.resetTracks", "tracker.about" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "-", "options.keymap", "options.theme", "options.waveformColors" } },
@@ -1474,6 +1476,7 @@ void MainWindow::refreshFromDocument (bool keepView)
     albumView->setAlbum (doc.isAlbum() ? doc.current().album : nullptr);
     albumView->setVisible (doc.isAlbum());
     samplerFollow();
+    slicerFollow();
     waveform->setFadeHandles (! doc.isAlbum());
 
     const auto len = d ? d->length() : 0;

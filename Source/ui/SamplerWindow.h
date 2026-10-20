@@ -100,6 +100,7 @@ public:
 Q_SIGNALS:
     void refreshRequested();
     void midiInputsRequested();
+    void activated();
 
 protected:
     void keyPressEvent (class QKeyEvent*) override;

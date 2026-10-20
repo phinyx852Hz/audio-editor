@@ -49,6 +49,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/Dsp.cpp
     Source/core/MidSide.cpp
     Source/sampler/SamplerEngine.cpp
+    Source/sampler/SlicerEngine.cpp
     Source/core/Ixml.cpp
     Source/core/Metadata.cpp
     Source/core/MiniXml.cpp
@@ -112,6 +113,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/MidSideDialog.cpp
     Source/ui/SamplerSection.cpp
     Source/ui/SamplerWindow.cpp
+    Source/ui/SlicerWindow.cpp
     Source/ui/Audition.cpp
     Source/ui/Goniometer.cpp
     Source/ui/NyquistUi.cpp
@@ -277,6 +279,7 @@ if(PHINYX_BUILD_TESTS)
         Source/core/Dsp.cpp
         Source/core/MidSide.cpp
         Source/sampler/SamplerEngine.cpp
+        Source/sampler/SlicerEngine.cpp
         Source/core/Ixml.cpp
         Source/core/Metadata.cpp
         Source/core/MiniXml.cpp

@@ -5,6 +5,7 @@
 #include "../Source/core/Dsp.h"
 #include "../Source/core/MidSide.h"
 #include "../Source/sampler/SamplerEngine.h"
+#include "../Source/sampler/SlicerEngine.h"
 #include "../Source/core/Ixml.h"
 #include "../Source/core/Metadata.h"
 #include "../Source/core/RiffChunks.h"
@@ -1229,6 +1230,81 @@ namespace
         e.noteOn (64, 1.0f);
         play (512);
         check (! e.isSounding (60) && e.isSounding (62) && e.isSounding (64), "sampler: the oldest voice is taken when all are busy");
+    }
+
+    void testSlicer()
+    {
+        // Push layout: bottom-left 4x4 is bank A, pad 1 at the bottom left; every note round-trips.
+        check (slicer::padForNote (36, slicer::Layout::push) == 0 && slicer::padForNote (40, slicer::Layout::push) == 16
+               && slicer::padForNote (68, slicer::Layout::push) == 32 && slicer::padForNote (99, slicer::Layout::push) == 63
+               && slicer::padForNote (44, slicer::Layout::push) == 4 && slicer::padForNote (35, slicer::Layout::push) == -1,
+               "slicer: Push notes to banks A-D");
+        bool round = true;
+        for (int n = 36; n < 100; ++n)
+            for (const auto layout : { slicer::Layout::push, slicer::Layout::chromatic })
+                round = round && slicer::noteForPad (slicer::padForNote (n, layout), layout) == n;
+        check (round, "slicer: notes and pads round-trip");
+
+        const auto cuts = slicer::slicesFromCuts ({ 1000, 1010, 5000 }, 8000, 100);
+        check (cuts.size() == 3 && cuts[0] == std::pair<Frame, Frame> (0, 1000) && cuts[1] == std::pair<Frame, Frame> (1000, 5000)
+               && cuts[2].second == 8000, "slicer: slivers join the next slice");
+        const auto equal = slicer::equalSlices (6400, 64);
+        check (equal.size() == 64 && equal[1] == std::pair<Frame, Frame> (100, 200), "slicer: equal slices");
+
+        // A ramp makes the slice being played easy to see.
+        const double rate = 48000.0;
+        AudioData::Builder b (1, rate);
+        std::vector<float> x (8000);
+        for (size_t i = 0; i < x.size(); ++i)
+            x[i] = (float) i / 8000.0f;
+        const float* p[1] { x.data() };
+        b.append (p, (int) x.size());
+
+        slicer::Engine e;
+        e.prepare (rate);
+        e.setSample (sampler::makeSample (*b.finish()));
+        slicer::Kit kit;
+        kit.velocity = 0.0;
+        slicer::assign (kit, slicer::equalSlices (8000, 4));
+        for (auto& pad : kit.pads)
+            pad.attack = 0.0;
+        kit.pads[2].reverse = true;
+        kit.pads[0].choke = kit.pads[1].choke = 1;
+        kit.pads[3].play = slicer::Play::gate;
+        e.setKit (kit);
+        check (! kit.pads[4].used, "slicer: pads past the slices are empty");
+
+        auto play = [&] (int frames)
+        {
+            std::vector<float> l ((size_t) frames, 0.0f), r ((size_t) frames, 0.0f);
+            e.render (l.data(), r.data(), frames);
+            return l;
+        };
+        e.hit (1, 1.0f);
+        auto out = play (2500);
+        check (near (out[10], x[2010], 1.0e-5) && out[2100] == 0.0f && ! e.isSounding (1), "slicer: a pad plays its slice and stops");
+        e.hit (2, 1.0f);
+        out = play (100);
+        check (near (out[10], x[5989], 1.0e-5), "slicer: reverse plays the slice backwards");
+        e.panic();
+
+        e.hit (0, 1.0f);
+        play (100);
+        e.hit (1, 1.0f);
+        play (1000);
+        check (! e.isSounding (0) && e.isSounding (1), "slicer: a pad chokes its group");
+        e.panic();
+
+        e.hit (3, 1.0f);
+        play (200);
+        e.letGo (3);
+        play (4800);
+        check (! e.isSounding (3), "slicer: gate pads stop when let go");
+        e.hit (0, 1.0f);
+        play (200);
+        e.letGo (0);
+        play (200);
+        check (e.isSounding (0), "slicer: one-shot pads play on when let go");
     }
 
     void testCurvedFade()
