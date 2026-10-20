@@ -495,10 +495,29 @@ void MainWindow::detectBeatGrid()
     int perBar = 0;
     for (const auto b : inBar)
         perBar = std::max (perBar, b);
-    const auto grid = beatgrid::align (*d, beatgrid::fit (beats, inBar, std::clamp (perBar, 2, 16)), true);
+    auto grid = beatgrid::fit (beats, inBar, std::clamp (perBar, 2, 16));
+
+    // Loops are cut to whole bars, which pins the tempo exactly; that also reads short,
+    // busy breaks the beat tracker cannot follow (it needs several seconds of steady beat).
+    const auto rate = d->sampleRate();
+    std::vector<double> hits;
+    for (const auto h : timestretch::transients (*d, appSettings().value (QStringLiteral ("warp/sensitivity"), 0.5).toDouble()))
+        if (h >= s && h < e)
+            hits.push_back ((double) (h - s) / rate);
+    // Bar 1 of a loop is where it starts.
+    auto loop = beatgrid::fromLoop ((double) (e - s) / rate, hits, grid.bpm);
+    if (loop.isSet())
+    {
+        loop.downbeat += (double) s / rate;
+        loop.normalise();
+        grid = loop;
+    }
+    grid = beatgrid::align (*d, grid, ! loop.isSet());
     if (! grid.isSet())
     {
-        QMessageBox::information (this, title, tr ("No steady beat was found in %1.").arg (hasSelection() ? tr ("the selection") : tr ("the file")));
+        QMessageBox::information (this, title, tr ("No steady beat was found in %1. If you know the tempo, type it in with "
+                                                   "Warp > Set Tempo and Grid (Ctrl+Shift+J).")
+                                                   .arg (hasSelection() ? tr ("the selection") : tr ("the file")));
         return;
     }
     applyGrid (title, grid);

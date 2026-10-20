@@ -117,6 +117,52 @@ BeatGrid beatgrid::fit (const std::vector<double>& beats, const std::vector<int>
     return grid;
 }
 
+BeatGrid beatgrid::fromLoop (double length, const std::vector<double>& hits, double near)
+{
+    BeatGrid grid;
+    if (hits.size() < 4 || length <= 0.0)
+        return grid;
+    struct Candidate { double bpm, score; };
+    std::vector<Candidate> candidates;
+    for (int bars = 16; bars >= 1; --bars)
+    {
+        const auto bpm = 240.0 * bars / length;
+        if (bpm < 60.0 || bpm > 200.0)
+            continue;
+        const auto step = 15.0 / bpm;
+        const auto tolerance = std::max (0.012, 0.15 * step);
+        size_t on = 0;
+        for (const auto t : hits)
+            if (std::abs (t - std::round (t / step) * step) <= tolerance)
+                ++on;
+        candidates.push_back ({ bpm, (double) on / (double) hits.size() });
+    }
+    if (candidates.empty())
+        return grid;
+    auto best = 0.0;
+    for (const auto& c : candidates)
+        best = std::max (best, c.score);
+    if (best < 0.8)
+        return grid;
+    // Candidates run from slow to fast; a faster tempo always fits at least as well,
+    // so the slowest that fits about as well as the best is the honest reading.
+    const Candidate* pick = nullptr;
+    for (const auto& c : candidates)
+        if (c.score >= best - 0.05)
+        {
+            if (pick == nullptr)
+                pick = &c;
+            if (near > 0.0 && std::abs (c.bpm / near - 1.0) <= 0.04)
+            {
+                pick = &c;
+                break;
+            }
+        }
+    grid.bpm = pick->bpm;
+    grid.downbeat = 0.0;
+    return grid;
+}
+
 namespace
 {
     // Per hop: the level (in dB) of the mono mix and of its low end (one-pole low-pass at 150 Hz).

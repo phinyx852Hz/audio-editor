@@ -33,4 +33,12 @@ namespace beatgrid
     // and the downbeat from the first beat marked as beat 1 of a bar (`beatInBar`,
     // 1-based; empty or all 0: the first beat). No grid with fewer than 4 beats.
     BeatGrid fit (const std::vector<double>& beatSeconds, const std::vector<int>& beatInBar, int beatsPerBar = 4);
+
+    // The tempo of a loop from its length and hits (in seconds from its start): the
+    // loop is taken to be 1 to 16 bars of 4/4, and the slowest such tempo from 60 to
+    // 200 BPM whose sixteenths the hits sit on wins, so busy breaks (jungle, drum and
+    // bass) are read at full speed. When `near` is set and one of the fitting tempos is
+    // within 4 % of it, that one wins. Bar 1 starts at the loop's start. Unset when no
+    // tempo fits at least 80 % of the hits.
+    BeatGrid fromLoop (double lengthSeconds, const std::vector<double>& hitSeconds, double near = 0.0);
 }

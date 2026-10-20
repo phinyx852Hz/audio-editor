@@ -1714,6 +1714,25 @@ namespace
                "3.3 s snaps to the beat and the bar at 3.25 s");
         check (std::abs (grid.beatAt (2.25) - 2.0) < 0.01, "2.25 s is two beats after the downbeat");
         check (! beatgrid::fit ({ 0.1, 0.6 }, {}).isSet(), "two beats make no grid");
+
+        // A 4-bar break at 155 BPM with ghost notes on sixteenths reads as 155, not 77.5;
+        // straight eighths at 130 BPM over 2 bars read as 130; random hits read as nothing.
+        {
+            const auto step = 15.0 / 155.0;
+            std::vector<double> hits;
+            for (int bar = 0; bar < 4; ++bar)
+                for (const int st : { 0, 4, 7, 9, 10, 12, 15 })
+                    hits.push_back ((bar * 16 + st) * step + 0.004);
+            const auto loop = beatgrid::fromLoop (64 * step, hits);
+            check (std::abs (loop.bpm - 155.0) < 0.01, "a busy break reads at full speed");
+            check (std::abs (beatgrid::fromLoop (64 * step, hits, 154.0).bpm - 155.0) < 0.01, "the tracker's tempo picks among fitting ones");
+            std::vector<double> eighths;
+            for (int i = 0; i < 16; ++i)
+                eighths.push_back (i * 30.0 / 130.0);
+            check (std::abs (beatgrid::fromLoop (8 * 60.0 / 130.0, eighths, 130.0).bpm - 130.0) < 0.01, "the tracker's tempo wins a tie");
+            std::vector<double> scattered { 0.0, 0.31, 0.77, 1.13, 1.52, 2.05, 2.41, 2.93, 3.37, 3.61 };
+            check (! beatgrid::fromLoop (4.0, scattered).isSet(), "scattered hits make no loop grid");
+        }
         {
             std::vector<float> hitsAudio ((size_t) rate * 2, 0.0f);
             for (const double t : { 0.2, 0.7, 1.3 })
