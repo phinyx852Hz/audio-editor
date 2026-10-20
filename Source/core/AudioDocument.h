@@ -116,6 +116,8 @@ public:
     void setPath (const std::string& p)  { filePath = p; }
     // What the channels are, for the state as it is now, without an undo step (used on opening a file).
     void setLayout (std::string l)       { if (! history.empty()) history[(size_t) position].state.layout = std::move (l); }
+    // The tempo grid likewise (detected on opening a loop).
+    void setGrid (const BeatGrid& g)     { if (! history.empty()) history[(size_t) position].state.grid = g; }
 
     void apply (const std::string& description, DocumentState newState);
 

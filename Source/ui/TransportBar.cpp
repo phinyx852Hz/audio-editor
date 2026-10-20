@@ -5,6 +5,8 @@
 #include "Theme.h"
 
 #include <QAction>
+#include <QDoubleSpinBox>
+#include <QSignalBlocker>
 #include <QHBoxLayout>
 #include <QHelpEvent>
 #include <QPainter>
@@ -223,7 +225,36 @@ TransportBar::TransportBar (CommandRegistry& registry, QWidget* parent)
     row->addWidget (loopButton = new TransportButton (S::loop, QStringLiteral ("transport.loop"), commands, this));
     row->addSpacing (16);
     row->addWidget (time = new TimeDisplay (this));
+    row->addSpacing (16);
+
+    // The tempo: filled in from the file's BPM tag or detected on opening a loop;
+    // typing a new one sets the beat grid (Warp menu) and goes back to the editor.
+    tempo = new QDoubleSpinBox (this);
+    tempo->setRange (0.0, 400.0);
+    tempo->setDecimals (2);
+    tempo->setSuffix (tr (" BPM"));
+    tempo->setSpecialValueText (tr ("– BPM"));
+    tempo->setKeyboardTracking (false);
+    tempo->setButtonSymbols (QAbstractSpinBox::NoButtons);
+    tempo->setAlignment (Qt::AlignRight);
+    tempo->setAccessibleName (tr ("Tempo"));
+    tempo->setToolTip (tr ("The file's tempo: type a new one and press Enter. Warp > Detect Beat Grid finds it."));
+    tempo->setFocusPolicy (Qt::ClickFocus);
+    row->addWidget (tempo);
+    connect (tempo, &QDoubleSpinBox::valueChanged, this, [this] (double bpm)
+    {
+        if (bpm >= 20.0)
+            Q_EMIT tempoEdited (bpm);
+    });
     row->addStretch (1);
+}
+
+void TransportBar::setTempo (double bpm)
+{
+    if (tempo->hasFocus() || std::abs (tempo->value() - bpm) < 0.005)
+        return;
+    const QSignalBlocker blocker (tempo);
+    tempo->setValue (bpm);
 }
 
 void TransportBar::setState (Frame position, double sampleRate, bool playing, bool looping)

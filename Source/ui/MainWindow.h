@@ -250,6 +250,7 @@ private:
     void refreshGrid();
     void applyGrid (const QString& description, BeatGrid);
     void detectBeatGrid();
+    void autoDetectGrid();   // on opening a loop with no tempo yet, in the background
     void setTempoDialog();
     void stretchToTempo();
     // Warp markers: shown and edited while warpEditing; the first move makes the document's warp.
@@ -273,6 +274,15 @@ private:
     void openModule();
     void trackerPlay (bool patternOnly);
     void trackerStop();
+
+    // Auditioning files from the Find panel (Audition.cpp): played live, not opened.
+    struct AuditionVoice;
+    void auditionFile (const QString& path);
+    void stopAudition();
+    void auditionTick();
+    std::shared_ptr<AuditionVoice> auditionVoice;
+    int auditionRequest = 0;   // a newer request outdates a file still loading
+    QTimer auditionWatch;
     void trackerRecord (bool multiChannel);
     void trackerNew();
     bool trackerSave (bool saveAs);

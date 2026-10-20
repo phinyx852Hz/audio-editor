@@ -5,11 +5,16 @@
 #include "MainWindow.h"
 
 #include "Settings.h"
+#include "TimeRuler.h"
+#include "TransportBar.h"
 #include "WaveformView.h"
 #include "../core/TimeStretch.h"
 #include "../engine/VampHost.h"
 
+#include <QActionGroup>
 #include <QCheckBox>
+#include <QFutureWatcher>
+#include <QtConcurrent>
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -33,6 +38,41 @@ namespace
     {
         return QString::number (bpm, 'f', 2).remove (QRegularExpression (QStringLiteral ("\\.?0+$")));
     }
+
+    constexpr double longestLoop = 60.0;   // seconds: longer files are not detected on opening
+
+    // The grid for [s, e) from the beat tracker's beats and the hits. Loops are cut to
+    // whole bars, which pins the tempo exactly; that also reads short, busy breaks the
+    // beat tracker cannot follow (it needs several seconds of steady beat). Call from any thread.
+    BeatGrid gridFrom (const AudioData& d, Frame s, Frame e, const vamphost::Result& result, double sensitivity)
+    {
+        std::vector<double> beats;
+        std::vector<int> inBar;
+        for (const auto& f : result.features)
+        {
+            beats.push_back ((double) f.start / d.sampleRate());
+            inBar.push_back (QString::fromStdString (f.label).trimmed().toInt());
+        }
+        int perBar = 0;
+        for (const auto b : inBar)
+            perBar = std::max (perBar, b);
+        auto grid = beatgrid::fit (beats, inBar, std::clamp (perBar, 2, 16));
+
+        const auto rate = d.sampleRate();
+        std::vector<double> hits;
+        for (const auto h : timestretch::transients (d, sensitivity))
+            if (h >= s && h < e)
+                hits.push_back ((double) (h - s) / rate);
+        // Bar 1 of a loop is where it starts.
+        auto loop = beatgrid::fromLoop ((double) (e - s) / rate, hits, grid.bpm);
+        if (loop.isSet())
+        {
+            loop.downbeat += (double) s / rate;
+            loop.normalise();
+            grid = loop;
+        }
+        return beatgrid::align (d, grid, ! loop.isSet());
+    }
 }
 
 void MainWindow::registerWarpCommands()
@@ -54,8 +94,33 @@ void MainWindow::registerWarpCommands()
     show->setCheckable (true);
     show->setChecked (appSettings().value (QStringLiteral ("warp/showGrid"), true).toBool());
     show->setStatusTip (tr ("Bar and beat lines over the waveform, from the file's tempo"));
+
+    // The time ruler counts time, bars and beats, or both (bars and beats need a tempo).
+    auto* rulerModes = new QActionGroup (this);
+    const auto rulerSetting = appSettings().value (QStringLiteral ("view/ruler"), QStringLiteral ("both")).toString();
+    for (const auto& [id, text, value, tip] : { std::tuple { "view.rulerTime", tr ("Ruler in &Time"), "time", tr ("The ruler counts minutes and seconds") },
+                                                std::tuple { "view.rulerBeats", tr ("Ruler in &Bars and Beats"), "beats", tr ("The ruler counts bars, beats and sixteenths (1, 1.2, 1.2.3) once the file has a tempo") },
+                                                std::tuple { "view.rulerBoth", tr ("Ruler in Time &and Beats"), "both", tr ("Bars and beats above, time below") } })
+    {
+        auto* a = add (id, text, {}, [this, value = QString::fromLatin1 (value)]
+        {
+            appSettings().setValue (QStringLiteral ("view/ruler"), value);
+            refreshGrid();
+        });
+        a->setCheckable (true);
+        a->setChecked (rulerSetting == QLatin1String (value));
+        a->setStatusTip (tip);
+        rulerModes->addAction (a);
+    }
     add ("warp.detectGrid", tr ("&Detect Beat Grid"), {}, [this] { detectBeatGrid(); })
         ->setStatusTip (tr ("Find the beats and bars and fit a steady tempo grid to them"));
+    auto* autoDetect = add ("warp.autoDetect", tr ("Detect Tempo When &Opening Loops"), {}, [this]
+    {
+        appSettings().setValue (QStringLiteral ("warp/autoDetect"), commands.action (QStringLiteral ("warp.autoDetect"))->isChecked());
+    });
+    autoDetect->setCheckable (true);
+    autoDetect->setChecked (appSettings().value (QStringLiteral ("warp/autoDetect"), true).toBool());
+    autoDetect->setStatusTip (tr ("Files up to a minute long with no tempo get one as they open, as in Acid and Live"));
     add ("warp.setTempo", tr ("Set &Tempo and Grid..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_J) }, [this] { setTempoDialog(); })
         ->setStatusTip (tr ("Type the tempo, beats per bar and where bar 1 starts"));
     add ("warp.downbeat", tr ("Bar 1 Starts at the &Cursor"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_J) }, [this]
@@ -139,8 +204,12 @@ void MainWindow::updateWarpCommandStates()
 
 void MainWindow::refreshGrid()
 {
-    waveform->setGrid (doc.isOpen() ? doc.current().grid : BeatGrid(),
-                       commands.action (QStringLiteral ("warp.showGrid"))->isChecked());
+    const auto grid = doc.isOpen() ? doc.current().grid : BeatGrid();
+    waveform->setGrid (grid, commands.action (QStringLiteral ("warp.showGrid"))->isChecked());
+    const auto ruler = commands.action (QStringLiteral ("view.rulerBeats"))->isChecked() ? TimeRuler::Mode::beats
+                     : commands.action (QStringLiteral ("view.rulerBoth"))->isChecked() ? TimeRuler::Mode::both : TimeRuler::Mode::time;
+    timeRuler->setGrid (grid, ruler);
+    transportBar->setTempo (grid.isSet() ? grid.bpm : 0.0);
     waveform->setWarp (currentWarp(), warpEditing);
 }
 
@@ -485,34 +554,7 @@ void MainWindow::detectBeatGrid()
     vamphost::Result result;
     if (! runAnalysis (title, *d, s, e, QString::fromLatin1 (beatTracker), result))
         return;
-    std::vector<double> beats;
-    std::vector<int> inBar;
-    for (const auto& f : result.features)
-    {
-        beats.push_back ((double) f.start / d->sampleRate());
-        inBar.push_back (QString::fromStdString (f.label).trimmed().toInt());
-    }
-    int perBar = 0;
-    for (const auto b : inBar)
-        perBar = std::max (perBar, b);
-    auto grid = beatgrid::fit (beats, inBar, std::clamp (perBar, 2, 16));
-
-    // Loops are cut to whole bars, which pins the tempo exactly; that also reads short,
-    // busy breaks the beat tracker cannot follow (it needs several seconds of steady beat).
-    const auto rate = d->sampleRate();
-    std::vector<double> hits;
-    for (const auto h : timestretch::transients (*d, appSettings().value (QStringLiteral ("warp/sensitivity"), 0.5).toDouble()))
-        if (h >= s && h < e)
-            hits.push_back ((double) (h - s) / rate);
-    // Bar 1 of a loop is where it starts.
-    auto loop = beatgrid::fromLoop ((double) (e - s) / rate, hits, grid.bpm);
-    if (loop.isSet())
-    {
-        loop.downbeat += (double) s / rate;
-        loop.normalise();
-        grid = loop;
-    }
-    grid = beatgrid::align (*d, grid, ! loop.isSet());
+    const auto grid = gridFrom (*d, s, e, result, appSettings().value (QStringLiteral ("warp/sensitivity"), 0.5).toDouble());
     if (! grid.isSet())
     {
         QMessageBox::information (this, title, tr ("No steady beat was found in %1. If you know the tempo, type it in with "
@@ -521,6 +563,35 @@ void MainWindow::detectBeatGrid()
         return;
     }
     applyGrid (title, grid);
+}
+
+void MainWindow::autoDetectGrid()
+{
+    // Like Acid and Live: a loop with no tempo yet gets one as it opens, quietly
+    // (no undo step, nothing to save unless something else changes).
+    const auto d = data();
+    if (d == nullptr || doc.isAlbum() || doc.current().grid.isSet() || d->lengthSeconds() > longestLoop || d->lengthSeconds() < 1.0
+        || ! commands.action (QStringLiteral ("warp.autoDetect"))->isChecked() || vamphost::find (beatTracker) == nullptr)
+        return;
+    const auto sensitivity = appSettings().value (QStringLiteral ("warp/sensitivity"), 0.5).toDouble();
+    auto* watcher = new QFutureWatcher<BeatGrid> (this);
+    connect (watcher, &QFutureWatcher<BeatGrid>::finished, this, [this, watcher, d]
+    {
+        watcher->deleteLater();
+        const auto grid = watcher->result();
+        // Only if the same audio is still in front, untouched.
+        if (! grid.isSet() || data() != d || doc.historyPosition() != 0 || doc.current().grid.isSet())
+            return;
+        doc.setGrid (grid);
+        refreshGrid();
+        statusBar()->showMessage (tr ("Tempo detected: %1 BPM. Type another in the BPM box, or use Warp > Halve or Double Tempo.")
+                                      .arg (bpmText (grid.bpm)), 8000);
+    });
+    watcher->setFuture (QtConcurrent::run ([d, sensitivity]
+    {
+        const auto result = vamphost::run (*d, 0, d->length(), beatTracker);
+        return gridFrom (*d, 0, d->length(), result, sensitivity);
+    }));
 }
 
 void MainWindow::setTempoDialog()

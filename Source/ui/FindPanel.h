@@ -30,8 +30,11 @@ struct FindItem
 
 // Ableton-style browser on the left: one search field that finds anything,
 // a sidebar of colour collections, categories and places, and the results.
-// Keyboard: typing searches everything, Up/Down and Page Up/Down move through
-// the results, Enter runs or loads the selection, Tab moves between search,
+// Files and places are browsed one folder at a time until something is typed:
+// Enter or Right opens a folder, Left or Backspace goes up.
+// Moving onto a file with the keys, or clicking it, auditions it; clicking it
+// again or K stops. Keyboard: typing searches everything, Up/Down and Page Up/Down
+// move through the results, Enter runs or loads the selection, Tab moves between search,
 // sidebar and results, 1 to 7 toggle a colour on the selected result (0 clears
 // them), F2 renames the selected collection, Escape clears the search or goes
 // back to the editor.
@@ -46,6 +49,10 @@ public:
 
     // Supplies the processes, effects and plugins; files come from the places.
     std::function<QList<FindItem>()> collect;
+    // Plays a file without opening it, and stops it.
+    std::function<void (const QString& path)> audition;
+    std::function<void()> stopAudition;
+    void auditionEnded();   // the file played to its end or something else took the sound
 
     void focusSearch();          // selects the search text, ready to type over
     bool searchIsReady() const;  // the search has the keyboard with nothing to keep: empty or all selected
@@ -72,6 +79,12 @@ private:
     void toggleColour (QTreeWidgetItem*, int colour);   // -1 clears every colour
     void addPlace();
     void scanFiles();
+    bool browsing() const;                        // a folder is listed rather than search results
+    void listFolder (const QString& select);      // the browse folder's subfolders and files
+    void openFolder (const QString& folder, const QString& select = {});
+    void folderUp();
+    void startAudition (QTreeWidgetItem*);
+    void endAudition();
     QIcon dots (int mask) const;
     void loadCollections();
     void saveCollections() const;
@@ -85,6 +98,9 @@ private:
     QList<FindItem> items;          // from `collect`
     QList<FindItem> files;          // from scanning the places
     QStringList places;
+    QString browseFolder;           // empty: the list of places (Files), else a folder in one
+    QList<FindItem> folderItems;    // the files of the folder listed
+    QString auditioning;            // the file being auditioned
     QFutureWatcher<QList<FindItem>> fileScan;
     bool filesStale = true;
     QHash<QString, int> collections;   // item key -> bit mask of colours

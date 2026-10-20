@@ -21,12 +21,18 @@ public:
 
     // Called on every UI tick.
     void setState (Frame position, double sampleRate, bool playing, bool looping);
+    // The file's tempo in the BPM box (0: none yet; the box then reads "BPM").
+    void setTempo (double bpm);
+
+Q_SIGNALS:
+    void tempoEdited (double bpm);   // typed or stepped in the BPM box
 
 private:
     CommandRegistry& commands;
     class TransportButton* playButton = nullptr;
     class TransportButton* loopButton = nullptr;
     class TimeDisplay* time = nullptr;
+    class QDoubleSpinBox* tempo = nullptr;
 };
 
 // One flat button drawing its own symbol.

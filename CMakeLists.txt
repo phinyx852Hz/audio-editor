@@ -106,6 +106,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/TimeRuler.cpp
     Source/ui/Overview.cpp
     Source/ui/FindPanel.cpp
+    Source/ui/Audition.cpp
     Source/ui/Goniometer.cpp
     Source/ui/NyquistUi.cpp
     Source/ui/WaveformView.cpp

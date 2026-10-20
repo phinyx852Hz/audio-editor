@@ -156,6 +156,16 @@ MainWindow::MainWindow (AudioEngine& e)
     fillNyquistMenus();
     transportBar = new TransportBar (commands, editor);
     editorLayout->insertWidget (0, transportBar);
+    connect (transportBar, &TransportBar::tempoEdited, this, [this] (double bpm)
+    {
+        if (data() == nullptr || refuseAlbumEdit())
+            return;
+        auto grid = doc.current().grid;
+        grid.bpm = bpm;
+        grid.normalise();
+        applyGrid (tr ("Set Tempo"), grid);
+        waveform->setFocus();
+    });
     restoreLayout();
 
     connect (waveform, &WaveformView::cursorRequested, this, &MainWindow::setCursor);
@@ -708,7 +718,7 @@ void MainWindow::buildMenus()
                                "repair.frequencyRange", "repair.allFrequencies", "-", "view.spectral" } },
         { tr ("Effe&ct"),    { "effect.repeat", "-", "@nyquist.generate", "-", "@nyquist.effect" } },
         { tr ("Spat&ial"),   { "spatial.binaural", "-", "spatial.layout", "-", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.fumaToAmbix", "spatial.ambixToFuma", "-", "view.ambiScene", "analyze.imagingView" } },
-        { tr ("&Warp"),      { "warp.showGrid", "-", "warp.detectGrid", "warp.setTempo", "warp.downbeat", "warp.halve", "warp.double", "-",
+        { tr ("&Warp"),      { "warp.showGrid", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "-", "warp.detectGrid", "warp.autoDetect", "warp.setTempo", "warp.downbeat", "warp.halve", "warp.double", "-",
                                "warp.edit", "warp.previousHit", "warp.nextHit", "warp.toggleMarker", "warp.nudgeEarlier", "warp.nudgeLater", "-",
                                "warp.quantize", "warp.stretch" } },
         { tr ("&Markers"),   { "marker.add", "marker.addRegion", "-", "marker.next", "marker.previous", "-", "marker.exportSlices", "marker.exportLabels", "-", "view.markers" } },
@@ -722,7 +732,7 @@ void MainWindow::buildMenus()
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
-                               "view.overview", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "-",
+                               "view.overview", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
         { tr ("Visuali&zer"), { "view.visualizer", "view.visualizerFullScreen", "view.visualizerBehind", "-",
                                "view.visualizerNext", "view.visualizerPrevious", "view.visualizerChoose", "-",
@@ -939,6 +949,9 @@ void MainWindow::buildPanels()
 
     findWidget = new FindPanel (waveform, this);
     findWidget->collect = [this] { return findItems(); };
+    findWidget->audition = [this] (const QString& path) { auditionFile (path); };
+    findWidget->stopAudition = [this] { stopAudition(); };
+    connect (&auditionWatch, &QTimer::timeout, this, &MainWindow::auditionTick);
     connect (findWidget, &FindPanel::openRequested, this, [this] (const QString& path)
     {
         // With an album in front, a file chosen in the Find panel joins it as a song.
@@ -1550,6 +1563,7 @@ void MainWindow::loadFinished()
     }
     refreshFromDocument (false);
     waveform->setFocus();
+    autoDetectGrid();
 }
 
 bool MainWindow::confirmDiscard()

@@ -16,6 +16,7 @@
 #include <QMap>
 #include <QPainter>
 #include <QSplitter>
+#include <QStyle>
 #include <QStandardPaths>
 #include <QToolTip>
 #include <QTreeWidget>
@@ -32,6 +33,10 @@ namespace
     constexpr int colourRole  = Qt::UserRole + 2;   // sidebar: colour index
     constexpr int indexRole   = Qt::UserRole + 3;   // results: 0 for an item, -1 for a group or note
     constexpr int itemRole    = Qt::UserRole + 4;   // results: the FindItem
+    constexpr int folderRole  = Qt::UserRole + 5;   // results: the folder a folder row opens
+
+    constexpr int folderRow = -2;   // indexRole of a folder row (or the row that goes up)
+    const QString placesRoot = QStringLiteral (":places");   // folderRole of the row back up to the places
 
     constexpr int filesPerPlace = 50000;   // stops a scan of a huge folder tree
     constexpr int shownPerGroup = 300;     // when searching everything; a category shows more
@@ -184,6 +189,23 @@ FindPanel::FindPanel (QWidget* home, QWidget* parent)
     {
         if (const auto* item = itemOf (row); item != nullptr && item->preview)
             item->preview();
+        // Moving onto a file with the keys auditions it (clicks are handled below).
+        if (results->hasFocus() && QApplication::mouseButtons() == Qt::NoButton)
+        {
+            if (const auto* item = itemOf (row); item != nullptr && item->kind == FindItem::Kind::file)
+                startAudition (row);
+        }
+    });
+    // One click auditions a file, a second click on it stops.
+    connect (results, &QTreeWidget::itemClicked, this, [this] (QTreeWidgetItem* row)
+    {
+        const auto* item = itemOf (row);
+        if (item == nullptr || item->kind != FindItem::Kind::file)
+            return;
+        if (auditioning == item->key.mid (5))
+            endAudition();
+        else
+            startAudition (row);
     });
     connect (sidebar, &QTreeWidget::itemChanged, this, [this] (QTreeWidgetItem* item)
     {
@@ -335,6 +357,12 @@ void FindPanel::refilter()
     const auto section = current != nullptr ? static_cast<Section> (current->data (0, sectionRole).toInt()) : Section::all;
     const auto words = search->text().split (QLatin1Char (' '), Qt::SkipEmptyParts);
     const bool everything = section == Section::all && words.isEmpty();
+    if (browsing())
+    {
+        listFolder ({});
+        return;
+    }
+    results->setHeaderLabels ({ tr ("Name"), QString(), QString() });
 
     auto wanted = [&] (const FindItem& item)
     {
@@ -466,6 +494,15 @@ static const FindItem* itemOf (QTreeWidgetItem* row)
 
 void FindPanel::activate (QTreeWidgetItem* row)
 {
+    if (row != nullptr && row->data (0, indexRole).toInt() == folderRow)
+    {
+        const auto folder = row->data (0, folderRole).toString();
+        if (folder == placesRoot || (browseFolder.startsWith (folder + QLatin1Char ('/')) && folder.size() < browseFolder.size()))
+            folderUp();
+        else
+            openFolder (folder);
+        return;
+    }
     if (row != nullptr && row->data (0, indexRole).toInt() < 0)
     {
         row->setExpanded (! row->isExpanded());
@@ -478,6 +515,7 @@ void FindPanel::activate (QTreeWidgetItem* row)
 
     if (item->kind == FindItem::Kind::file)
     {
+        endAudition();
         Q_EMIT openRequested (item->key.mid (5));
         return;
     }
@@ -506,6 +544,168 @@ void FindPanel::toggleColour (QTreeWidgetItem* row, int c)
 }
 
 //==============================================================================
+bool FindPanel::browsing() const
+{
+    const auto* current = sidebar->currentItem();
+    if (current == nullptr || ! search->text().trimmed().isEmpty())
+        return false;
+    const auto section = static_cast<Section> (current->data (0, sectionRole).toInt());
+    return section == Section::files || section == Section::place;
+}
+
+void FindPanel::listFolder (const QString& select)
+{
+    const auto* current = sidebar->currentItem();
+    const bool inPlace = static_cast<Section> (current->data (0, sectionRole).toInt()) == Section::place;
+    const auto place = inPlace ? current->data (0, placeRole).toString() : QString();
+
+    // Stay inside the place (or the places) chosen in the sidebar.
+    auto placeOf = [this] (const QString& folder)
+    {
+        for (const auto& p : places)
+            if (folder == p || folder.startsWith (p + QLatin1Char ('/')))
+                return p;
+        return QString();
+    };
+    if (inPlace && (browseFolder.isEmpty() || placeOf (browseFolder) != place))
+        browseFolder = place;
+    if (! inPlace && ! browseFolder.isEmpty() && placeOf (browseFolder).isEmpty())
+        browseFolder.clear();
+
+    // The header shows where we are: the place, then each folder inside it.
+    const auto root = placeOf (browseFolder);
+    QString where = browseFolder.isEmpty() ? tr ("Places") : QDir (root).dirName();
+    if (! browseFolder.isEmpty() && browseFolder != root)
+        where += QStringLiteral (" / ") + QDir (root).relativeFilePath (browseFolder).replace (QLatin1Char ('/'), QStringLiteral (" / "));
+    results->setHeaderLabels ({ where, QString(), QString() });
+
+    folderItems.clear();
+    struct Folder { QString name, path; };
+    std::vector<Folder> folders;
+    if (browseFolder.isEmpty())
+    {
+        for (const auto& p : places)
+            folders.push_back ({ QDir (p).dirName(), p });
+    }
+    else
+    {
+        const QDir dir (browseFolder);
+        for (const auto& info : dir.entryInfoList (QDir::Dirs | QDir::NoDotAndDotDot | QDir::Readable, QDir::Name | QDir::IgnoreCase))
+            folders.push_back ({ info.fileName(), info.absoluteFilePath() });
+        for (const auto& info : dir.entryInfoList (audioPatterns, QDir::Files | QDir::Readable, QDir::Name | QDir::IgnoreCase))
+        {
+            FindItem item;
+            item.kind = FindItem::Kind::file;
+            item.key = QStringLiteral ("file:") + info.absoluteFilePath();
+            item.name = info.fileName();
+            item.detail = info.suffix().toUpper();
+            item.group = where;
+            folderItems.push_back (item);
+        }
+    }
+
+    // Keep the row that was chosen when the same folder is listed again (after a rescan).
+    auto keep = select;
+    if (keep.isEmpty() && results->currentItem() != nullptr)
+        keep = results->currentItem()->toolTip (0);
+
+    results->setUpdatesEnabled (false);
+    results->clear();
+    const auto folderIcon = style()->standardIcon (QStyle::SP_DirIcon);
+    const auto disabled = palette().color (QPalette::Disabled, QPalette::Text);
+    auto folderLine = [&] (const QString& name, const QString& path, const QString& detail)
+    {
+        auto* row = new QTreeWidgetItem (results, { name, QString(), detail });
+        row->setData (0, indexRole, folderRow);
+        row->setData (0, folderRole, path);
+        row->setIcon (0, folderIcon);
+        row->setToolTip (0, path == placesRoot ? tr ("Back to the places") : path);
+        return row;
+    };
+    if (! browseFolder.isEmpty() && (browseFolder != root || ! inPlace))
+    {
+        auto* up = folderLine (QStringLiteral (".."), browseFolder == root ? placesRoot : QFileInfo (browseFolder).absolutePath(), tr ("Up"));
+        up->setIcon (0, style()->standardIcon (QStyle::SP_FileDialogToParent));
+    }
+    QTreeWidgetItem* chosen = nullptr;
+    for (const auto& f : folders)
+    {
+        auto* row = folderLine (f.name, f.path, tr ("Folder"));
+        if (f.path == keep)
+            chosen = row;
+    }
+    for (const auto& item : folderItems)
+    {
+        auto* row = new QTreeWidgetItem (results, { item.name, QString(), item.detail });
+        row->setData (0, indexRole, 0);
+        row->setData (0, itemRole, QVariant::fromValue (static_cast<const void*> (&item)));
+        if (const auto mask = collections.value (item.key); mask != 0)
+            row->setIcon (1, dots (mask));
+        row->setToolTip (0, item.key.mid (5));
+        if (item.key.mid (5) == keep)
+            chosen = row;
+    }
+    if (results->topLevelItemCount() == 0)
+    {
+        auto* note = new QTreeWidgetItem (results, { browseFolder.isEmpty() ? tr ("No places yet: choose Add Folder...")
+                                                                            : tr ("No audio files or folders here") });
+        note->setData (0, indexRole, -1);
+        note->setFlags (Qt::ItemIsEnabled);
+        note->setForeground (0, disabled);
+    }
+    results->setUpdatesEnabled (true);
+
+    // Selecting here must not audition: the keys did not move onto it.
+    const QSignalBlocker blocker (results);
+    // A new folder starts on its first entry, past "..".
+    if (chosen == nullptr)
+        chosen = results->topLevelItem (results->topLevelItemCount() > 1 && results->topLevelItem (0)->text (0) == QStringLiteral ("..") ? 1 : 0);
+    results->setCurrentItem (chosen);
+    if (auto* row = results->currentItem())
+        results->scrollToItem (row);
+}
+
+void FindPanel::openFolder (const QString& folder, const QString& select)
+{
+    browseFolder = folder == placesRoot ? QString() : folder;
+    listFolder (select);
+}
+
+void FindPanel::folderUp()
+{
+    if (browseFolder.isEmpty())
+        return;
+    const auto from = browseFolder;
+    const bool isPlace = places.contains (browseFolder);
+    const auto* current = sidebar->currentItem();
+    if (isPlace && static_cast<Section> (current->data (0, sectionRole).toInt()) == Section::place)
+        return;   // the top of this place
+    openFolder (isPlace ? placesRoot : QFileInfo (browseFolder).absolutePath(), from);
+}
+
+void FindPanel::startAudition (QTreeWidgetItem* row)
+{
+    const auto* item = itemOf (row);
+    if (item == nullptr || item->kind != FindItem::Kind::file || ! audition)
+        return;
+    auditioning = item->key.mid (5);
+    audition (auditioning);
+}
+
+void FindPanel::endAudition()
+{
+    if (auditioning.isEmpty())
+        return;
+    auditioning.clear();
+    if (stopAudition)
+        stopAudition();
+}
+
+void FindPanel::auditionEnded()
+{
+    auditioning.clear();
+}
+
 void FindPanel::addPlace()
 {
     const auto folder = QFileDialog::getExistingDirectory (this, tr ("Add a Folder to Find"), QDir::homePath());
@@ -583,6 +783,7 @@ bool FindPanel::eventFilter (QObject* watched, QEvent* e)
         {
             case Qt::Key_Up: case Qt::Key_Down: case Qt::Key_Left: case Qt::Key_Right: case Qt::Key_PageUp: case Qt::Key_PageDown:
             case Qt::Key_Home: case Qt::Key_End: case Qt::Key_Return: case Qt::Key_Enter: case Qt::Key_Escape: case Qt::Key_F2:
+            case Qt::Key_Backspace:
                 if (plain)
                     e->accept();
                 break;
@@ -666,6 +867,28 @@ bool FindPanel::eventFilter (QObject* watched, QEvent* e)
 
     if (watched == results)
     {
+        // K stops an audition (and otherwise starts a search like any letter).
+        if (plain && k->key() == Qt::Key_K && ! auditioning.isEmpty())
+        {
+            endAudition();
+            return true;
+        }
+        if (browsing() && plain)
+        {
+            auto* row = results->currentItem();
+            const bool onFolder = row != nullptr && row->data (0, indexRole).toInt() == folderRow;
+            if (k->key() == Qt::Key_Backspace || (k->key() == Qt::Key_Left && ! browseFolder.isEmpty()
+                                                  && ! (places.contains (browseFolder) && sidebar->currentItem()->data (0, sectionRole).toInt() == (int) Section::place)))
+            {
+                folderUp();
+                return true;
+            }
+            if (k->key() == Qt::Key_Right && onFolder)
+            {
+                activate (row);
+                return true;
+            }
+        }
         if (digit)
         {
             const int n = k->key() - Qt::Key_0;
