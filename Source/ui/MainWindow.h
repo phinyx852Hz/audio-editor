@@ -259,6 +259,7 @@ private:
     void duplicateSelection();
     void splitAtCursor();
     void showGridStep();
+    void exportLoop();
     // Repeated Double or Half Speed on the same audio renders once from the audio before the
     // first one (one stretch at the total ratio, not a stretch of a stretch).
     struct SpeedChain { AudioDataPtr base, result; Frame start = 0, baseEnd = 0; double speed = 1.0; double baseBpm = 0.0; };

@@ -18,7 +18,10 @@
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QDir>
 #include <QDoubleSpinBox>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QLabel>
 #include <QMessageBox>
@@ -187,6 +190,8 @@ void MainWindow::registerWarpCommands()
         ->setStatusTip (tr ("Make the selection or the whole file twice as long (half speed, half-time), keeping the pitch; press again for 4×, 8×..."));
     add ("warp.doubleSpeed", tr ("Shrink &÷2 (Half as Long)"), { KS (Qt::Key_Slash), KS (Qt::CTRL | Qt::ALT | Qt::Key_Up) }, [this] { stretchBy (2.0); })
         ->setStatusTip (tr ("Make the selection or the whole file half as long (double speed), keeping the pitch; press again for a quarter..."));
+    add ("warp.exportLoop", tr ("Export &Loop..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_L) }, [this] { exportLoop(); })
+        ->setStatusTip (tr ("Save whole bars as a WAV loop with its tempo and loop points, for samplers and DAWs"));
 }
 
 void MainWindow::updateWarpCommandStates()
@@ -195,7 +200,7 @@ void MainWindow::updateWarpCommandStates()
     const bool grid = open && doc.current().grid.isSet();
     for (const auto* a : { "warp.detectGrid", "warp.setTempo", "warp.downbeat", "warp.stretch", "warp.doubleSpeed", "warp.halfSpeed" })
         commands.action (QString::fromLatin1 (a))->setEnabled (open);
-    for (const auto* a : { "warp.halve", "warp.double" })
+    for (const auto* a : { "warp.halve", "warp.double", "warp.exportLoop" })
         commands.action (QString::fromLatin1 (a))->setEnabled (grid);
     commands.action (QStringLiteral ("warp.edit"))->setEnabled (open);
     commands.action (QStringLiteral ("warp.quantize"))->setEnabled (open);
@@ -588,7 +593,7 @@ void MainWindow::autoDetectGrid()
             return;
         doc.setGrid (grid);
         refreshGrid();
-        statusBar()->showMessage (tr ("Tempo detected: %1 BPM. Type another in the BPM box, or use Warp > Halve or Double Tempo.")
+        statusBar()->showMessage (tr ("Tempo detected: %1 BPM. Type another in the BPM box, or use Warp > Halve or Double Grid Tempo.")
                                       .arg (bpmText (grid.bpm)), 8000);
     });
     watcher->setFuture (QtConcurrent::run ([d, sensitivity]
@@ -914,4 +919,194 @@ void MainWindow::showGridStep()
     else
         name = QStringLiteral ("1/%1").arg (std::lround (4.0 / step));
     statusBar()->showMessage (tr ("Grid: %1 at this zoom").arg (name), 3000);
+}
+
+// A loop of whole bars for samplers and DAWs: the bars from the grid, the seam crossfaded
+// with what comes just before bar 1 (so the end runs into the start as it did in the
+// recording), saved as WAV with its tempo, loop points and length in beats (the smpl and
+// acid chunks Acid, Live, FL Studio and hardware samplers read).
+void MainWindow::exportLoop()
+{
+    const auto d = data();
+    if (d == nullptr || refuseAlbumEdit())
+        return;
+    const auto title = tr ("Export Loop");
+    const auto grid = doc.current().grid;
+    if (! grid.isSet())
+    {
+        statusBar()->showMessage (tr ("The file needs a tempo first: Detect Beat Grid (Warp menu) or type it with Ctrl+Shift+J"), 8000);
+        return;
+    }
+    const auto rate = d->sampleRate();
+    const auto bar = grid.barSeconds();
+    const auto [s, e] = processRange();
+    const bool whole = s == 0 && e == d->length();
+    // Bars are numbered from 1 at the downbeat; the part before it is bar 0.
+    auto barAt = [&] (double seconds) { return (int) std::lround (grid.beatAt (seconds) / grid.beatsPerBar) + 1; };
+    const int firstBar = (int) std::floor (grid.beatAt (0.0) / grid.beatsPerBar) + 1;
+    const int lastBar = std::max (firstBar, (int) std::ceil (grid.beatAt (d->lengthSeconds()) / grid.beatsPerBar));
+
+    QDialog dialog (this);
+    dialog.setWindowTitle (title);
+    auto* layout = new QVBoxLayout (&dialog);
+    auto* form = new QFormLayout;
+    layout->addLayout (form);
+    auto* start = new QSpinBox (&dialog);
+    start->setRange (firstBar, lastBar);
+    start->setPrefix (tr ("bar "));
+    start->setValue (std::clamp (barAt ((double) s / rate), firstBar, lastBar));
+    auto* bars = new QSpinBox (&dialog);
+    bars->setRange (1, 256);
+    bars->setSuffix (tr (" bars"));
+    const int selected = std::max (1, (int) std::lround ((double) (e - s) / rate / bar));
+    bars->setValue (whole ? std::max (1, std::min (selected, lastBar - start->value() + 1)) : selected);
+    auto* fade = new QSpinBox (&dialog);
+    fade->setRange (0, 50);
+    fade->setSuffix (tr (" ms"));
+    fade->setValue (appSettings().value (QStringLiteral ("warp/loopFade"), 5).toInt());
+    fade->setToolTip (tr ("The end of the loop is blended into what comes just before its start, so it runs round without a click"));
+    auto* depth = new QComboBox (&dialog);
+    depth->addItem (tr ("16-bit"), 16);
+    depth->addItem (tr ("24-bit"), 24);
+    depth->addItem (tr ("32-bit float"), 32);
+    depth->setCurrentIndex (std::max (0, depth->findData (saveOptions.bitDepth)));
+    form->addRow (tr ("&Start at:"), start);
+    form->addRow (tr ("&Length:"), bars);
+    form->addRow (tr ("Seam &crossfade:"), fade);
+    form->addRow (tr ("&Bit depth:"), depth);
+    auto* summary = new QLabel (&dialog);
+    summary->setWordWrap (true);
+    layout->addWidget (summary);
+    auto* buttons = new QDialogButtonBox (QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    buttons->button (QDialogButtonBox::Ok)->setText (tr ("Export..."));
+    layout->addWidget (buttons);
+    connect (buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect (buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    // A file of whole bars is a loop already: it is read round, so a grid a few ms off
+    // the start takes its last few ms from the start of the file, and the seam blends
+    // with the end of the file.
+    const auto fileBars = d->lengthSeconds() / bar;
+    const bool circular = std::lround (fileBars) >= 1 && std::abs (fileBars - (double) std::lround (fileBars)) * bar <= 0.05;
+    auto range = [&]
+    {
+        const auto a = (Frame) std::llround (grid.secondsAt ((double) (start->value() - 1) * grid.beatsPerBar) * rate);
+        const auto b = (Frame) std::llround (grid.secondsAt ((double) (start->value() - 1 + bars->value()) * grid.beatsPerBar) * rate);
+        return std::pair { std::max<Frame> (0, a), b };
+    };
+    auto describe = [&]
+    {
+        const auto [a, b] = range();
+        auto text = tr ("%1 bars of %2/4 at %3 BPM, %4 s from %5 s, %6 beats long.")
+                        .arg (bars->value()).arg (grid.beatsPerBar).arg (bpmText (grid.bpm))
+                        .arg ((double) (b - a) / rate, 0, 'f', 3).arg ((double) a / rate, 0, 'f', 3)
+                        .arg (bars->value() * grid.beatsPerBar);
+        if (b > d->length() && ! circular)
+            text += QLatin1Char (' ') + tr ("It runs past the end of the file, which is filled with silence.");
+        else if (fade->value() > 0 && a < (Frame) (fade->value() * 0.001 * rate) && ! circular)
+            text += QLatin1Char (' ') + tr ("Nothing comes before bar %1, so the end fades out instead of blending.").arg (start->value());
+        summary->setText (text);
+    };
+    connect (start, &QSpinBox::valueChanged, &dialog, describe);
+    connect (bars, &QSpinBox::valueChanged, &dialog, describe);
+    connect (fade, &QSpinBox::valueChanged, &dialog, describe);
+    describe();
+    bars->selectAll();
+    bars->setFocus();
+    if (dialog.exec() != QDialog::Accepted)
+    {
+        waveform->setFocus();
+        return;
+    }
+    appSettings().setValue (QStringLiteral ("warp/loopFade"), fade->value());
+
+    const auto source = QFileInfo (QString::fromStdString (doc.path()));
+    const auto base = source.completeBaseName().isEmpty() ? tr ("Loop") : source.completeBaseName();
+    const auto suggested = QDir (source.exists() ? source.absolutePath() : QDir::homePath())
+                               .filePath (tr ("%1 loop %2 BPM %3 bars.wav").arg (base, bpmText (grid.bpm)).arg (bars->value()));
+    auto path = QFileDialog::getSaveFileName (this, title, suggested, tr ("WAV loops (*.wav)"));
+    waveform->setFocus();
+    if (path.isEmpty())
+        return;
+    if (! path.endsWith (QLatin1String (".wav"), Qt::CaseInsensitive))
+        path += QStringLiteral (".wav");
+
+    // The loop, then its last `n` frames blended with the `n` before bar 1: played round,
+    // the end becomes the audio that led into the start.
+    const auto [a, b] = range();
+    const auto length = b - a;
+    const int channels = d->numChannels();
+    std::vector<std::vector<float>> loop ((size_t) channels, std::vector<float> ((size_t) length));
+    std::vector<float*> out;
+    for (auto& c : loop)
+        out.push_back (c.data());
+    // Reads [from, from + count), round the file when it is a loop.
+    auto readRound = [&] (Frame from, Frame count, std::vector<float*> dest)
+    {
+        const auto total = d->length();
+        while (count > 0)
+        {
+            if (circular)
+                from = ((from % total) + total) % total;
+            const auto part = circular ? std::min (count, total - from) : count;
+            d->read (from, (int) part, dest.data());
+            for (auto& p : dest)
+                p += part;
+            from += part;
+            count -= part;
+        }
+    };
+    readRound (a, length, out);
+    const auto n = std::min<Frame> ((Frame) std::llround (fade->value() * 0.001 * rate), length / 2);
+    if (n > 0 && (a >= n || circular))
+    {
+        std::vector<std::vector<float>> before ((size_t) channels, std::vector<float> ((size_t) n));
+        std::vector<float*> in;
+        for (auto& c : before)
+            in.push_back (c.data());
+        readRound (a - n, n, in);
+        for (int ch = 0; ch < channels; ++ch)
+            for (Frame i = 0; i < n; ++i)
+            {
+                const auto t = (float) (i + 1) / (float) (n + 1);
+                auto& x = loop[(size_t) ch][(size_t) (length - n + i)];
+                x = x * (1.0f - t) + before[(size_t) ch][(size_t) i] * t;
+            }
+    }
+    else if (n > 0)
+    {
+        for (auto& c : loop)
+            for (Frame i = 0; i < n; ++i)
+                c[(size_t) (length - n + i)] *= (float) (n - 1 - i) / (float) n;
+    }
+    AudioData::Builder builder (channels, rate);
+    std::vector<const float*> pointers;
+    for (const auto& c : loop)
+        pointers.push_back (c.data());
+    for (Frame done = 0; done < length;)
+    {
+        const auto count = (int) std::min<Frame> (65536, length - done);
+        std::vector<const float*> at;
+        for (const auto* p : pointers)
+            at.push_back (p + done);
+        builder.append (at.data(), count);
+        done += count;
+    }
+    const auto result = builder.finish();
+
+    auto tags = doc.current().tags;
+    tags[tag::bpm] = bpmText (grid.bpm).toStdString();
+    auto options = saveOptions;
+    options.bitDepth = depth->currentData().toInt();
+    options.loopStart = 0;
+    options.loopEnd = length;
+    options.loopBeats = bars->value() * grid.beatsPerBar;
+    options.beatsPerBar = grid.beatsPerBar;
+    std::string error;
+    if (! AudioEngine::saveFile (path.toStdString(), *result, {}, tags, options, error))
+    {
+        QMessageBox::warning (this, title, QString::fromStdString (error));
+        return;
+    }
+    statusBar()->showMessage (tr ("Exported a %1-bar loop at %2 BPM to %3").arg (bars->value()).arg (bpmText (grid.bpm), path), 8000);
 }

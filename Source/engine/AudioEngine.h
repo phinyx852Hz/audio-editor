@@ -42,6 +42,10 @@ struct SaveOptions
     int oggQuality = 6;     // 0..10 for Ogg Vorbis
     tagio::Options metadata;   // which schemas are written
     std::map<std::string, std::string> codecSettings;   // compressed formats (see codec::Format); empty: defaults
+    // A loop for samplers and DAWs (WAV only): [loopStart, loopEnd) in the smpl chunk, and the
+    // acid chunk marked as a loop of `loopBeats` beats in `beatsPerBar` time, to stretch to the song's tempo.
+    Frame loopStart = -1, loopEnd = -1;
+    int loopBeats = 0, beatsPerBar = 4;
 };
 
 struct PluginInfo

@@ -1227,8 +1227,23 @@ bool AudioEngine::saveFile (const std::string& path, const AudioData& data, cons
     {
         // JUCE writes the acid chunk (where WAV keeps a tempo) only with a time signature in it.
         meta[juce::WavAudioFormat::acidTempo] = juce::String::fromUTF8 (bpm->second.c_str());
-        meta.emplace (juce::WavAudioFormat::acidNumerator, "4");
+        meta.emplace (juce::WavAudioFormat::acidNumerator, juce::String (std::clamp (options.beatsPerBar, 1, 32)));
         meta.emplace (juce::WavAudioFormat::acidDenominator, "4");
+    }
+    if (ext == ".wav" && options.loopEnd > options.loopStart && options.loopStart >= 0)
+    {
+        meta["NumSampleLoops"] = "1";
+        meta["MidiUnityNote"] = "60";
+        meta["SamplePeriod"] = juce::String ((juce::int64) std::llround (1.0e9 / data.sampleRate()));
+        meta["Loop0Identifier"] = "0";
+        meta["Loop0Type"] = "0";   // forward
+        meta["Loop0Start"] = juce::String (options.loopStart);
+        meta["Loop0End"] = juce::String (options.loopEnd - 1);   // the last frame played, inclusive
+        if (options.loopBeats > 0)
+        {
+            meta[juce::WavAudioFormat::acidStretch] = "1";   // a loop that follows the song's tempo, not a one-shot
+            meta[juce::WavAudioFormat::acidBeats] = juce::String (options.loopBeats);
+        }
     }
 
     if (ext == ".wav" && ! markers.empty())
