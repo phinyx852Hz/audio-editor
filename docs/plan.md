@@ -697,6 +697,9 @@ Order: cava-style first (small, useful), then projectM, then GLava's shaders if 
 
 ## 6. Risks and open questions
 
+### Must fix before the final release (owner's list)
+- **Playback cursor lags behind the beat** (owner, 2026-10-20: "keep note that this needs fixing before a final version of PHINYX is complete"). Seen on Omarchy with Intel Meteor Lake graphics (real driver, not llvmpipe), Master Section empty, with a MilkDrop visual running; the owner suspects MilkDrop. Done so far: the waveform layer is cached so playback redraws only the cursor and overlays. Still to do: confirm whether the gap grows or is fixed; if MilkDrop, throttle its frame rate when the editor needs time and drive the cursor from its own timer; if fixed, a cursor offset setting; add an xrun count to Diagnostics.
+
 1. **License model.** Decided 2026-10-17: **open source under AGPLv3**, using JUCE under its AGPLv3 license. GPL-family dependencies such as Rubber Band are compatible.
 2. **Restoration quality.** Noise reduction and spectral healing are the hardest DSP to make competitive; budget research time or plan ML models in Phase 5.
 3. **Plugin stability.** Third-party plugins crash. Out-of-process scanning is in scope; full per-instance sandboxing is a later decision.
