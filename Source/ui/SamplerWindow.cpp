@@ -1,0 +1,702 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+#include "SamplerWindow.h"
+#include "Theme.h"
+
+#include <QCheckBox>
+#include <QCloseEvent>
+#include <QComboBox>
+#include <QDoubleSpinBox>
+#include <QFormLayout>
+#include <QGridLayout>
+#include <QHBoxLayout>
+#include <QKeyEvent>
+#include <QLabel>
+#include <QMouseEvent>
+#include <QPainter>
+#include <QPushButton>
+#include <QSpinBox>
+#include <QVBoxLayout>
+
+#include <algorithm>
+#include <cmath>
+
+namespace
+{
+    // Note names as Live and Push show them: C3 is MIDI note 60.
+    QString noteName (int note)
+    {
+        static const char* names[12] { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+        return QString::fromLatin1 (names[note % 12]) + QString::number (note / 12 - 2);
+    }
+
+    bool isBlack (int note)
+    {
+        const auto n = note % 12;
+        return n == 1 || n == 3 || n == 6 || n == 8 || n == 10;
+    }
+
+    // The computer keyboard as Live's: by key position (PC scan codes), so any layout works.
+    struct NoteKey { int scanCode, semitone; };
+    constexpr NoteKey noteKeys[] {
+        { 0x1E, 0 }, { 0x11, 1 }, { 0x1F, 2 }, { 0x12, 3 }, { 0x20, 4 }, { 0x21, 5 }, { 0x14, 6 }, { 0x22, 7 },
+        { 0x15, 8 }, { 0x23, 9 }, { 0x16, 10 }, { 0x24, 11 }, { 0x25, 12 }, { 0x18, 13 }, { 0x26, 14 }, { 0x19, 15 }, { 0x27, 16 },
+    };
+    constexpr int keyZ = 0x2C, keyX = 0x2D, keyC = 0x2E, keyV = 0x2F;
+    int scanCodeOf (const QKeyEvent* e) { return (int) e->nativeScanCode() - 8; }   // X11 and Wayland: evdev + 8
+}
+
+//==============================================================================
+SampleView::SampleView (sampler::Engine& e, QWidget* parent) : QWidget (parent), engine (e)
+{
+    setFocusPolicy (Qt::StrongFocus);
+    setMouseTracking (true);
+    setToolTip (tr ("Drag the white lines to set where the sound starts and ends, and the shaded part to set the loop"));
+}
+
+void SampleView::setSample (sampler::SamplePtr s, double r)
+{
+    sample = std::move (s);
+    rate = r;
+    buildPeaks();
+    update();
+}
+
+void SampleView::setMarkers (Frame start, Frame end, Frame loopStart, Frame loopEnd, bool loop)
+{
+    markers[0] = start;
+    markers[1] = end;
+    markers[2] = loopStart;
+    markers[3] = loopEnd;
+    showLoop = loop;
+    update();
+}
+
+double SampleView::xFor (double frame) const
+{
+    const auto n = sample != nullptr ? std::max<Frame> (1, sample->length()) : 1;
+    return frame / (double) n * width();
+}
+
+Frame SampleView::frameAt (double x) const
+{
+    const auto n = sample != nullptr ? sample->length() : 0;
+    return std::clamp<Frame> ((Frame) std::llround (x / std::max (1, width()) * (double) n), 0, n);
+}
+
+void SampleView::resizeEvent (QResizeEvent*)
+{
+    buildPeaks();
+}
+
+void SampleView::buildPeaks()
+{
+    peaks.clear();
+    if (sample == nullptr || sample->length() == 0 || width() <= 0)
+        return;
+    const auto columns = width();
+    peaks.assign ((size_t) columns, { 0.0f, 0.0f });
+    const auto n = sample->length();
+    for (int c = 0; c < columns; ++c)
+    {
+        const auto from = (Frame) ((double) c / columns * (double) n);
+        const auto to = std::max (from + 1, (Frame) ((double) (c + 1) / columns * (double) n));
+        float lo = 0.0f, hi = 0.0f;
+        for (Frame i = from; i < std::min (to, n); ++i)
+        {
+            const auto v = 0.5f * (sample->left[(size_t) i] + sample->right[(size_t) i]);
+            lo = std::min (lo, v);
+            hi = std::max (hi, v);
+        }
+        peaks[(size_t) c] = { lo, hi };
+    }
+}
+
+void SampleView::paintEvent (QPaintEvent*)
+{
+    const auto& theme = Theme::current();
+    QPainter g (this);
+    g.fillRect (rect(), Theme::withOpacity (theme.color (QStringLiteral ("waveformBackground"))));
+    if (sample == nullptr)
+    {
+        g.setPen (theme.color (QStringLiteral ("placeholderText")));
+        g.drawText (rect(), Qt::AlignCenter, tr ("Send a sound here from the editor: Sample > Send to Sampler (F7)"));
+        return;
+    }
+    const auto mid = height() / 2.0;
+    const auto start = xFor ((double) markers[0]), end = xFor ((double) markers[1]);
+
+    // Outside start..end is dimmed; the loop is shaded.
+    if (showLoop)
+    {
+        auto loop = theme.color (QStringLiteral ("region"));
+        loop.setAlpha (70);
+        g.fillRect (QRectF (QPointF (xFor ((double) markers[2]), 0), QPointF (xFor ((double) markers[3]), height())), loop);
+    }
+    auto wave = theme.color (QStringLiteral ("waveform"));
+    auto dim = wave;
+    dim.setAlpha (70);
+    for (size_t c = 0; c < peaks.size(); ++c)
+    {
+        const auto x = (double) c + 0.5;
+        g.setPen ((x < start || x > end) ? dim : wave);
+        g.drawLine (QPointF (x, mid - peaks[c].second * mid * 0.95), QPointF (x, mid - peaks[c].first * mid * 0.95));
+    }
+    g.setPen (QPen (theme.color (QStringLiteral ("centerLine")), 1.0));
+    g.drawLine (QPointF (0, mid), QPointF (width(), mid));
+
+    auto small = font();
+    small.setPointSizeF (small.pointSizeF() * 0.85);
+    g.setFont (small);
+    const auto text = theme.color (QStringLiteral ("windowText"));
+    const auto drawMarker = [&] (double x, QColor colour, const QString& label, bool atTop)
+    {
+        g.setPen (QPen (colour, 2.0));
+        g.drawLine (QPointF (x, 0), QPointF (x, height()));
+        g.setPen (text);
+        g.drawText (QRectF (x + 3, atTop ? 2 : height() - 16, 80, 14), Qt::AlignLeft | Qt::AlignVCenter, label);
+    };
+    drawMarker (start, theme.color (QStringLiteral ("windowText")), tr ("S"), true);
+    drawMarker (end, theme.color (QStringLiteral ("windowText")), tr ("E"), true);
+    if (showLoop)
+    {
+        const auto accent = theme.color (QStringLiteral ("marker"));
+        drawMarker (xFor ((double) markers[2]), accent, tr ("L"), false);
+        drawMarker (xFor ((double) markers[3]), accent, QString(), false);
+    }
+
+    // Where the voices are.
+    g.setPen (QPen (theme.color (QStringLiteral ("cursor")), 1.5));
+    for (const auto head : engine.playheads())
+        if (head >= 0.0)
+            g.drawLine (QPointF (xFor (head), 0), QPointF (xFor (head), height()));
+
+    g.setPen (theme.color (QStringLiteral ("placeholderText")));
+    g.drawText (QRectF (4, 2, width() - 8, 14), Qt::AlignRight | Qt::AlignVCenter,
+                tr ("%1 s").arg ((double) (markers[1] - markers[0]) / rate, 0, 'f', 3));
+}
+
+void SampleView::mousePressEvent (QMouseEvent* e)
+{
+    if (sample == nullptr || e->button() != Qt::LeftButton)
+        return;
+    // The nearest marker within 8 px; the loop handles only while the loop shows.
+    double best = 8.0;
+    dragging = -1;
+    for (int i = 0; i < (showLoop ? 4 : 2); ++i)
+        if (const auto d = std::abs (xFor ((double) markers[i]) - e->position().x()); d <= best)
+        {
+            best = d;
+            dragging = i;
+        }
+    // Away from the markers a click does nothing, so nothing jumps.
+}
+
+void SampleView::mouseMoveEvent (QMouseEvent* e)
+{
+    if (dragging < 0 || ! (e->buttons() & Qt::LeftButton))
+    {
+        bool near = false;
+        for (int i = 0; i < (showLoop ? 4 : 2) && sample != nullptr; ++i)
+            near = near || std::abs (xFor ((double) markers[i]) - e->position().x()) <= 8.0;
+        setCursor (near ? Qt::SizeHorCursor : Qt::ArrowCursor);
+        return;
+    }
+    Q_EMIT markerMoved (dragging, frameAt (e->position().x()));
+}
+
+void SampleView::mouseReleaseEvent (QMouseEvent*)
+{
+    dragging = -1;
+}
+
+//==============================================================================
+PianoKeys::PianoKeys (sampler::Engine& e, QWidget* parent) : QWidget (parent), engine (e)
+{
+    setFocusPolicy (Qt::StrongFocus);
+    setMinimumHeight (60);
+}
+
+void PianoKeys::setLowestNote (int note)
+{
+    lowest = std::clamp (note - note % 12, 0, 96);
+    update();
+}
+
+int PianoKeys::whiteCount() const
+{
+    int n = 0;
+    for (int note = lowest; note < std::min (128, lowest + 48); ++note)
+        n += isBlack (note) ? 0 : 1;
+    return std::max (1, n);
+}
+
+QRectF PianoKeys::keyRect (int note) const
+{
+    const auto whiteWidth = (double) width() / whiteCount();
+    int whites = 0;
+    for (int n = lowest; n < note; ++n)
+        whites += isBlack (n) ? 0 : 1;
+    if (isBlack (note))
+        return { whites * whiteWidth - whiteWidth * 0.3, 0.0, whiteWidth * 0.6, height() * 0.6 };
+    return { whites * whiteWidth, 0.0, whiteWidth, (double) height() };
+}
+
+int PianoKeys::noteAt (QPointF p, float* velocity) const
+{
+    for (int pass = 0; pass < 2; ++pass)   // black keys sit on top
+        for (int note = lowest; note < std::min (128, lowest + 48); ++note)
+            if (isBlack (note) == (pass == 0) && keyRect (note).contains (p))
+            {
+                if (velocity != nullptr)
+                    *velocity = (float) std::clamp (0.35 + 0.65 * (p.y() / keyRect (note).height()), 0.1, 1.0);
+                return note;
+            }
+    return -1;
+}
+
+void PianoKeys::paintEvent (QPaintEvent*)
+{
+    const auto& theme = Theme::current();
+    QPainter g (this);
+    g.setRenderHint (QPainter::Antialiasing);
+    const auto lit = theme.color (QStringLiteral ("highlight"));
+    auto small = font();
+    small.setPointSizeF (small.pointSizeF() * 0.75);
+    g.setFont (small);
+    for (int pass = 0; pass < 2; ++pass)
+        for (int note = lowest; note < std::min (128, lowest + 48); ++note)
+        {
+            if (isBlack (note) != (pass == 1))
+                continue;
+            const auto r = keyRect (note).adjusted (0.5, 0.5, -0.5, -0.5);
+            const bool on = engine.isSounding (note) || note == pressed;
+            g.setPen (QPen (QColor (40, 40, 40), 1.0));
+            g.setBrush (on ? lit : (isBlack (note) ? QColor (30, 30, 34) : QColor (225, 225, 228)));
+            g.drawRoundedRect (r, 2, 2);
+            if (! isBlack (note) && (note % 12 == 0 || note == root))
+            {
+                g.setPen (note == root ? theme.color (QStringLiteral ("marker")) : QColor (90, 90, 90));
+                g.drawText (QRectF (r.left(), r.bottom() - 16, r.width(), 14), Qt::AlignCenter, noteName (note));
+            }
+        }
+    if (hasFocus())
+    {
+        g.setPen (QPen (lit, 2.0));
+        g.setBrush (Qt::NoBrush);
+        g.drawRect (rect().adjusted (1, 1, -1, -1));
+    }
+}
+
+void PianoKeys::mousePressEvent (QMouseEvent* e)
+{
+    float velocity = 1.0f;
+    pressed = noteAt (e->position(), &velocity);
+    if (pressed >= 0)
+        Q_EMIT played (pressed, velocity);
+    setFocus();
+    update();
+}
+
+void PianoKeys::mouseMoveEvent (QMouseEvent* e)
+{
+    if (! (e->buttons() & Qt::LeftButton))
+        return;
+    float velocity = 1.0f;
+    const auto note = noteAt (e->position(), &velocity);
+    if (note == pressed)
+        return;
+    if (pressed >= 0)
+        Q_EMIT released (pressed);
+    pressed = note;
+    if (pressed >= 0)
+        Q_EMIT played (pressed, velocity);
+    update();
+}
+
+void PianoKeys::mouseReleaseEvent (QMouseEvent*)
+{
+    if (pressed >= 0)
+        Q_EMIT released (pressed);
+    pressed = -1;
+    update();
+}
+
+//==============================================================================
+SamplerWindow::SamplerWindow (sampler::Engine& e, QWidget* parent)
+    : QWidget (parent, Qt::Window), engine (e)
+{
+    setWindowTitle (tr ("Sampler"));
+    setObjectName (QStringLiteral ("SamplerWindow"));
+    settings = engine.settings();
+
+    title = new QLabel (tr ("No sound yet"), this);
+    auto bold = title->font();
+    bold.setBold (true);
+    title->setFont (bold);
+    view = new SampleView (engine, this);
+    piano = new PianoKeys (engine, this);
+    status = new QLabel (this);
+    midiStatus = new QLabel (this);
+    midiStatus->setAlignment (Qt::AlignRight | Qt::AlignVCenter);
+
+    modeBox = new QComboBox (this);
+    modeBox->addItems ({ tr ("Classic"), tr ("1-Shot") });
+    modeBox->setToolTip (tr ("Classic loops while a key is held and fades by the envelope; 1-Shot plays the whole sound, whatever the key does"));
+    loopBox = new QCheckBox (tr ("&Loop"), this);
+    loopBox->setToolTip (tr ("Classic: keep playing the shaded part while the key is held"));
+    snapBox = new QCheckBox (tr ("S&nap to zero"), this);
+    snapBox->setChecked (true);
+    snapBox->setToolTip (tr ("Markers land where the wave crosses zero, so starts and loops do not click"));
+    followBox = new QCheckBox (tr ("&Follow editor"), this);
+    followBox->setChecked (true);
+    followBox->setToolTip (tr ("Edits you make to this sound in the editor reach the Sampler straight away"));
+    auto* refresh = new QPushButton (tr ("&Refresh"), this);
+    refresh->setToolTip (tr ("Take the sound from the editor again"));
+    auto* midi = new QPushButton (tr ("&MIDI Inputs..."), this);
+
+    auto real = [this] (double lo, double hi, double step, int decimals, const QString& suffix)
+    {
+        auto* b = new QDoubleSpinBox (this);
+        b->setRange (lo, hi);
+        b->setSingleStep (step);
+        b->setDecimals (decimals);
+        b->setSuffix (suffix);
+        b->setAccelerated (true);
+        return b;
+    };
+    auto whole = [this] (int lo, int hi, int step, const QString& suffix)
+    {
+        auto* b = new QSpinBox (this);
+        b->setRange (lo, hi);
+        b->setSingleStep (step);
+        b->setSuffix (suffix);
+        b->setAccelerated (true);
+        return b;
+    };
+    gainBox = real (-48.0, 12.0, 0.5, 1, tr (" dB"));
+    panBox = whole (-100, 100, 5, QString());
+    panBox->setToolTip (tr ("-100 is left, 100 right"));
+    transposeBox = whole (-48, 48, 1, tr (" st"));
+    detuneBox = whole (-50, 50, 1, tr (" ct"));
+    rootBox = new QComboBox (this);
+    for (int n = 0; n < 128; ++n)
+        rootBox->addItem (noteName (n));
+    rootBox->setToolTip (tr ("The key that plays the sound at its own pitch"));
+    voicesBox = whole (1, sampler::Engine::maxVoices, 1, QString());
+    voicesBox->setToolTip (tr ("How many notes can sound at once; 1 is monophonic"));
+    velocityBox = whole (0, 100, 5, tr (" %"));
+    velocityBox->setToolTip (tr ("How much softer notes are quieter; 0% plays every note at full level"));
+    attackBox = real (0.0, 10000.0, 5.0, 0, tr (" ms"));
+    decayBox = real (1.0, 20000.0, 10.0, 0, tr (" ms"));
+    sustainBox = whole (0, 100, 5, tr (" %"));
+    releaseBox = real (1.0, 20000.0, 10.0, 0, tr (" ms"));
+    fadeInBox = real (0.0, 2000.0, 1.0, 0, tr (" ms"));
+    fadeOutBox = real (0.0, 2000.0, 1.0, 0, tr (" ms"));
+
+    auto* top = new QHBoxLayout;
+    top->addWidget (title, 1);
+    top->addWidget (followBox);
+    top->addWidget (refresh);
+    top->addWidget (midi);
+
+    auto labelled = [this] (const QString& text, QWidget* w)
+    {
+        auto* box = new QWidget (this);
+        auto* l = new QVBoxLayout (box);
+        l->setContentsMargins (0, 0, 0, 0);
+        l->setSpacing (2);
+        auto* label = new QLabel (text, box);
+        label->setBuddy (w);
+        l->addWidget (label);
+        l->addWidget (w);
+        return box;
+    };
+    auto* controls = new QHBoxLayout;
+    controls->addWidget (labelled (tr ("M&ode"), modeBox));
+    auto* checks = new QVBoxLayout;
+    checks->addWidget (loopBox);
+    checks->addWidget (snapBox);
+    controls->addLayout (checks);
+    controls->addWidget (labelled (tr ("&Gain"), gainBox));
+    controls->addWidget (labelled (tr ("&Pan"), panBox));
+    controls->addWidget (labelled (tr ("&Transpose"), transposeBox));
+    controls->addWidget (labelled (tr ("&Detune"), detuneBox));
+    controls->addWidget (labelled (tr ("Roo&t key"), rootBox));
+    controls->addWidget (labelled (tr ("&Voices"), voicesBox));
+    controls->addWidget (labelled (tr ("V&elocity"), velocityBox));
+    controls->addStretch (1);
+
+    envelopeRow = new QWidget (this);
+    auto* env = new QHBoxLayout (envelopeRow);
+    env->setContentsMargins (0, 0, 0, 0);
+    env->addWidget (labelled (tr ("&Attack"), attackBox));
+    env->addWidget (labelled (tr ("Deca&y"), decayBox));
+    env->addWidget (labelled (tr ("&Sustain"), sustainBox));
+    env->addWidget (labelled (tr ("&Release"), releaseBox));
+    env->addStretch (1);
+    fadeRow = new QWidget (this);
+    auto* fades = new QHBoxLayout (fadeRow);
+    fades->setContentsMargins (0, 0, 0, 0);
+    fades->addWidget (labelled (tr ("Fade &in"), fadeInBox));
+    fades->addWidget (labelled (tr ("Fade o&ut"), fadeOutBox));
+    fades->addStretch (1);
+
+    auto* bottom = new QHBoxLayout;
+    bottom->addWidget (status, 1);
+    bottom->addWidget (midiStatus);
+
+    auto* layout = new QVBoxLayout (this);
+    layout->addLayout (top);
+    layout->addWidget (view, 1);
+    layout->addLayout (controls);
+    layout->addWidget (envelopeRow);
+    layout->addWidget (fadeRow);
+    layout->addWidget (piano);
+    layout->addLayout (bottom);
+
+    toControls();
+    for (auto* w : findChildren<QWidget*>())
+        if (qobject_cast<QAbstractSpinBox*> (w) != nullptr || qobject_cast<QComboBox*> (w) != nullptr)
+            w->installEventFilter (this);
+
+    connect (view, &SampleView::markerMoved, this, &SamplerWindow::markerMoved);
+    connect (piano, &PianoKeys::played, this, [this] (int note, float velocity) { engine.noteOn (note, velocity); });
+    connect (piano, &PianoKeys::released, this, [this] (int note) { engine.noteOff (note); });
+    connect (refresh, &QPushButton::clicked, this, &SamplerWindow::refreshRequested);
+    connect (midi, &QPushButton::clicked, this, &SamplerWindow::midiInputsRequested);
+    connect (modeBox, &QComboBox::currentIndexChanged, this, &SamplerWindow::fromControls);
+    connect (rootBox, &QComboBox::currentIndexChanged, this, &SamplerWindow::fromControls);
+    for (auto* b : { loopBox, snapBox })
+        connect (b, &QCheckBox::toggled, this, &SamplerWindow::fromControls);
+    for (auto* b : { gainBox, attackBox, decayBox, releaseBox, fadeInBox, fadeOutBox })
+        connect (b, &QDoubleSpinBox::valueChanged, this, &SamplerWindow::fromControls);
+    for (auto* b : { panBox, transposeBox, detuneBox, voicesBox, velocityBox, sustainBox })
+        connect (b, &QSpinBox::valueChanged, this, &SamplerWindow::fromControls);
+
+    // The playheads and lit keys follow the sound.
+    redraw.setInterval (33);
+    connect (&redraw, &QTimer::timeout, this, [this]
+    {
+        view->update();
+        piano->update();
+    });
+    redraw.start();
+    piano->setLowestNote (12 * (octave + 2) - 12);
+    showStatus();
+    resize (900, 520);
+    piano->setFocus();
+}
+
+void SamplerWindow::setSample (sampler::SamplePtr s, double r, const QString& n, bool keepMarkers)
+{
+    const auto length = s != nullptr ? s->length() : 0;
+    const bool fits = keepMarkers && settings.end > 0 && settings.end <= length;
+    if (! fits)
+    {
+        settings.start = 0;
+        settings.end = length;
+        settings.loopStart = 0;
+        settings.loopEnd = length;
+    }
+    rate = r;
+    name = n;
+    engine.setSample (s);
+    engine.setSettings (settings);
+    view->setSample (s, rate);
+    title->setText (tr ("%1   %2 s").arg (name).arg ((double) length / rate, 0, 'f', 3));
+    setWindowTitle (tr ("Sampler: %1").arg (name));
+    toControls();
+}
+
+bool SamplerWindow::followsEditor() const { return followBox->isChecked(); }
+
+void SamplerWindow::setMidiStatus (const QString& text) { midiStatus->setText (text); }
+
+void SamplerWindow::toControls()
+{
+    updating = true;
+    modeBox->setCurrentIndex (settings.mode == sampler::Mode::classic ? 0 : 1);
+    loopBox->setChecked (settings.loop);
+    gainBox->setValue (settings.gainDb);
+    panBox->setValue ((int) std::lround (settings.pan * 100.0));
+    transposeBox->setValue ((int) std::lround (settings.transpose));
+    detuneBox->setValue ((int) std::lround (settings.detune));
+    rootBox->setCurrentIndex (std::clamp (settings.rootNote, 0, 127));
+    voicesBox->setValue (settings.voices);
+    velocityBox->setValue ((int) std::lround (settings.velocity * 100.0));
+    attackBox->setValue (settings.attack * 1000.0);
+    decayBox->setValue (settings.decay * 1000.0);
+    sustainBox->setValue ((int) std::lround (settings.sustain * 100.0));
+    releaseBox->setValue (settings.release * 1000.0);
+    fadeInBox->setValue (settings.fadeIn * 1000.0);
+    fadeOutBox->setValue (settings.fadeOut * 1000.0);
+    updating = false;
+    const bool classic = settings.mode == sampler::Mode::classic;
+    loopBox->setEnabled (classic);
+    envelopeRow->setVisible (classic);
+    fadeRow->setVisible (! classic);
+    piano->setRootNote (settings.rootNote);
+    view->setMarkers (settings.start, settings.end, settings.loopStart, settings.loopEnd, classic && settings.loop);
+}
+
+void SamplerWindow::fromControls()
+{
+    if (updating)
+        return;
+    settings.mode = modeBox->currentIndex() == 0 ? sampler::Mode::classic : sampler::Mode::oneShot;
+    settings.loop = loopBox->isChecked();
+    settings.gainDb = gainBox->value();
+    settings.pan = panBox->value() / 100.0;
+    settings.transpose = transposeBox->value();
+    settings.detune = detuneBox->value();
+    settings.rootNote = rootBox->currentIndex();
+    settings.voices = voicesBox->value();
+    settings.velocity = velocityBox->value() / 100.0;
+    settings.attack = attackBox->value() / 1000.0;
+    settings.decay = decayBox->value() / 1000.0;
+    settings.sustain = sustainBox->value() / 100.0;
+    settings.release = releaseBox->value() / 1000.0;
+    settings.fadeIn = fadeInBox->value() / 1000.0;
+    settings.fadeOut = fadeOutBox->value() / 1000.0;
+    engine.setSettings (settings);
+    toControls();
+}
+
+Frame SamplerWindow::snap (Frame f) const
+{
+    const auto s = engine.sample();
+    if (s == nullptr || ! snapBox->isChecked())
+        return f;
+    // The nearest rising zero crossing within 10 ms.
+    const auto reach = (Frame) (rate * 0.01);
+    const auto n = s->length();
+    auto value = [&] (Frame i) { return s->left[(size_t) i] + s->right[(size_t) i]; };
+    for (Frame d = 0; d <= reach; ++d)
+        for (const auto i : { f + d, f - d })
+            if (i > 0 && i < n && value (i - 1) <= 0.0f && value (i) > 0.0f)
+                return i;
+    return f;
+}
+
+void SamplerWindow::markerMoved (int which, Frame position)
+{
+    const auto s = engine.sample();
+    if (s == nullptr)
+        return;
+    const auto n = s->length();
+    position = which == 1 || which == 3 ? (position >= n ? n : snap (position)) : snap (position);
+    const auto gap = (Frame) (rate * 0.002);   // markers stay at least 2 ms apart
+    // A loop that ran from the start (or to the end) keeps doing so.
+    const bool loopAtStart = settings.loopStart == settings.start, loopAtEnd = settings.loopEnd == settings.end;
+    switch (which)
+    {
+        case 0: settings.start = std::clamp<Frame> (position, 0, settings.end - gap); break;
+        case 1: settings.end = std::clamp<Frame> (position, settings.start + gap, n); break;
+        case 2: settings.loopStart = std::clamp<Frame> (position, settings.start, settings.loopEnd - gap); break;
+        default: settings.loopEnd = std::clamp<Frame> (position, settings.loopStart + gap, settings.end); break;
+    }
+    if (which == 0 && loopAtStart)
+        settings.loopStart = settings.start;
+    if (which == 1 && loopAtEnd)
+        settings.loopEnd = settings.end;
+    settings.loopStart = std::clamp<Frame> (settings.loopStart, settings.start, settings.end - gap);
+    settings.loopEnd = std::clamp<Frame> (settings.loopEnd, settings.loopStart + gap, settings.end);
+    engine.setSettings (settings);
+    toControls();
+}
+
+void SamplerWindow::showStatus()
+{
+    status->setText (tr ("Keys A to K play from %1 · Z/X octave · C/V velocity %2 · Esc back to the keys")
+                         .arg (noteName (12 * (octave + 2))).arg (keyVelocity));
+}
+
+int SamplerWindow::noteForKey (const QKeyEvent* e) const
+{
+    const auto code = scanCodeOf (e);
+    for (const auto& k : noteKeys)
+        if (k.scanCode == code)
+            return std::clamp (12 * (octave + 2) + k.semitone, 0, 127);
+    return -1;
+}
+
+void SamplerWindow::keyPressEvent (QKeyEvent* e)
+{
+    if (e->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))
+    {
+        QWidget::keyPressEvent (e);
+        return;
+    }
+    if (e->isAutoRepeat())
+        return;
+    const auto code = scanCodeOf (e);
+    if (code == keyZ || code == keyX)
+    {
+        octave = std::clamp (octave + (code == keyX ? 1 : -1), -2, 8);
+        piano->setLowestNote (12 * (octave + 2) - 12);
+        showStatus();
+        return;
+    }
+    if (code == keyC || code == keyV)
+    {
+        keyVelocity = std::clamp (keyVelocity + (code == keyV ? 20 : -20), 1, 127);
+        if (keyVelocity > 100 && keyVelocity < 120)
+            keyVelocity = code == keyV ? 127 : 100;
+        showStatus();
+        return;
+    }
+    if (const auto note = noteForKey (e); note >= 0)
+    {
+        heldKeys.emplace_back (code, note);
+        engine.noteOn (note, (float) keyVelocity / 127.0f);
+        return;
+    }
+    QWidget::keyPressEvent (e);
+}
+
+void SamplerWindow::keyReleaseEvent (QKeyEvent* e)
+{
+    if (e->isAutoRepeat())
+        return;
+    const auto code = scanCodeOf (e);
+    for (auto it = heldKeys.begin(); it != heldKeys.end(); ++it)
+        if (it->first == code)
+        {
+            engine.noteOff (it->second);
+            heldKeys.erase (it);
+            return;
+        }
+    QWidget::keyReleaseEvent (e);
+}
+
+void SamplerWindow::changeEvent (QEvent* e)
+{
+    // Keys let go while another window had them would stay down: release them.
+    if (e->type() == QEvent::ActivationChange && ! isActiveWindow())
+    {
+        for (const auto& [code, note] : heldKeys)
+            engine.noteOff (note);
+        heldKeys.clear();
+    }
+    QWidget::changeEvent (e);
+}
+
+bool SamplerWindow::eventFilter (QObject* o, QEvent* e)
+{
+    // Esc in a field goes back to playing.
+    if (e->type() == QEvent::KeyPress && static_cast<QKeyEvent*> (e)->key() == Qt::Key_Escape)
+    {
+        piano->setFocus();
+        return true;
+    }
+    return QWidget::eventFilter (o, e);
+}
+
+void SamplerWindow::closeEvent (QCloseEvent* e)
+{
+    for (const auto& [code, note] : heldKeys)
+        engine.noteOff (note);
+    heldKeys.clear();
+    engine.allNotesOff();
+    QWidget::closeEvent (e);
+}

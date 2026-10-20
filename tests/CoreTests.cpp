@@ -4,6 +4,7 @@
 #include "../Source/core/AudioDocument.h"
 #include "../Source/core/Dsp.h"
 #include "../Source/core/MidSide.h"
+#include "../Source/sampler/SamplerEngine.h"
 #include "../Source/core/Ixml.h"
 #include "../Source/core/Metadata.h"
 #include "../Source/core/RiffChunks.h"
@@ -1128,6 +1129,108 @@ namespace
         check (rendered->numChannels() == 2 && rendered->length() == n, "mid/side: render keeps the length, two channels");
     }
 
+    void testSampler()
+    {
+        const double rate = 48000.0;
+        // One second of 100 Hz.
+        AudioData::Builder b (1, rate);
+        std::vector<float> x (48000);
+        for (size_t i = 0; i < x.size(); ++i)
+            x[i] = (float) (0.5 * std::sin (2.0 * M_PI * 100.0 * (double) i / rate));
+        const float* p[1] { x.data() };
+        b.append (p, (int) x.size());
+        const auto sound = b.finish();
+
+        sampler::Engine e;
+        e.prepare (rate);
+        e.setSample (sampler::makeSample (*sound));
+        sampler::Settings s;
+        s.attack = 0.0;
+        s.decay = 0.0;
+        s.sustain = 1.0;
+        s.release = 0.01;
+        s.velocity = 0.0;
+        s.loop = false;
+        e.setSettings (s);
+
+        auto play = [&] (int frames)
+        {
+            std::vector<float> l ((size_t) frames, 0.0f), r ((size_t) frames, 0.0f);
+            for (int done = 0; done < frames; done += 512)
+            {
+                const auto n = std::min (512, frames - done);
+                e.render (l.data() + done, r.data() + done, n);
+            }
+            return std::pair { l, r };
+        };
+        auto crossings = [] (const std::vector<float>& v, size_t from, size_t to)
+        {
+            int n = 0;
+            for (size_t i = from + 1; i < to; ++i)
+                n += (v[i - 1] < 0.0f) != (v[i] < 0.0f) ? 1 : 0;
+            return n;
+        };
+
+        // The root note plays the sample as it is.
+        e.noteOn (60, 1.0f);
+        auto [l, r] = play (24000);
+        double worst = 0;
+        for (size_t i = 0; i < l.size(); ++i)
+            worst = std::max ({ worst, (double) std::abs (l[i] - x[i]), (double) std::abs (r[i] - x[i]) });
+        check (worst < 1.0e-5, "sampler: the root note plays the sample unchanged");
+        e.panic();
+
+        // An octave up plays twice as fast (and ends after half a second).
+        e.noteOn (72, 1.0f);
+        auto [up, upR] = play (48000);
+        check (near (crossings (up, 0, 24000), 200, 2), "sampler: an octave up is twice the pitch");
+        check (crossings (up, 24100, 48000) == 0, "sampler: the note ends with the sample");
+
+        // Note-off releases a Classic voice.
+        e.noteOn (60, 1.0f);
+        play (4800);
+        e.noteOff (60);
+        auto [rel, relR] = play (9600);
+        check (std::abs (rel.back()) < 1.0e-3 && ! e.isSounding (60), "sampler: note-off releases");
+
+        // Looping keeps a held note going past the end of the sample.
+        s.loop = true;
+        s.loopStart = 24000;
+        s.loopEnd = 48000;
+        e.setSettings (s);
+        e.noteOn (60, 1.0f);
+        auto [held, heldR] = play (96000);
+        check (crossings (held, 80000, 96000) > 60, "sampler: a held looped note keeps sounding");
+        e.panic();
+
+        // 1-Shot plays through even after note-off.
+        s.mode = sampler::Mode::oneShot;
+        s.loop = false;
+        e.setSettings (s);
+        e.noteOn (60, 1.0f);
+        play (480);
+        e.noteOff (60);
+        auto [shot, shotR] = play (24000);
+        check (crossings (shot, 12000, 24000) > 45, "sampler: 1-Shot ignores note-off");
+        e.panic();
+
+        // Velocity scales the level when it is turned up; voices are limited.
+        s.mode = sampler::Mode::classic;
+        s.velocity = 1.0;
+        s.voices = 2;
+        e.setSettings (s);
+        e.noteOn (60, 0.5f);
+        auto [soft, softR] = play (4800);
+        double peak = 0;
+        for (const auto v : soft)
+            peak = std::max (peak, (double) std::abs (v));
+        check (near (peak, 0.5 * 0.25, 0.01), "sampler: velocity 0.5 plays at a quarter level (squared)");
+        e.noteOn (62, 1.0f);
+        e.noteOn (64, 1.0f);
+        play (512);
+        check (! e.isSounding (60) && e.isSounding (62) && e.isSounding (64), "sampler: the oldest voice is taken when all are busy");
+    }
+
     void testCurvedFade()
     {
         check (dsp::curvedFadeGain (0.0, 0.5) == 0.0f && dsp::curvedFadeGain (1.0, -0.5) == 1.0f, "curved fade: ends");
@@ -1932,6 +2035,7 @@ int main()
     testAlbum();
     testCurvedFade();
     testMidSide();
+    testSampler();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");

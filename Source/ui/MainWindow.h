@@ -40,6 +40,8 @@ namespace vamphost { struct Result; }
 
 namespace timestretch { class SegmentCache; }
 
+namespace sampler { class Engine; }
+
 class MainWindow final : public QMainWindow
 {
     Q_OBJECT
@@ -305,6 +307,27 @@ private:
     void trackerPreview (int channel, int note, int instrument);
     bool trackerConfirmDiscard();   // false when the user cancels
     std::unique_ptr<class TrackerEngine> tracker;
+
+    // The Sampler (SamplerSection.cpp): its engine plays through engine.setInstrument, its
+    // window pops out, and MIDI inputs play it. It remembers which tab and range it came
+    // from, so edits there can follow it.
+    void registerSamplerCommands();
+    void sendToSampler (bool keepMarkers);
+    void showSampler();
+    void samplerFollow();
+    void midiInputsDialog();
+    void openMidiInputs();
+    void updateMidiStatus();
+    std::unique_ptr<sampler::Engine> samplerEngine;
+    class SamplerWindow* samplerWin = nullptr;
+    std::unique_ptr<class MidiInputs> midiInputs;
+    int samplerTab = -1;
+    std::string samplerPath;
+    Frame samplerFrom = 0, samplerTo = 0;
+    bool samplerWhole = true;
+    AudioDataPtr samplerSource;
+    QTimer samplerFollowTimer;
+    QFutureWatcher<void> samplerLoad;
     class TrackerWindow* trackerWin = nullptr;
     class VisualizerWindow* visualizerWindow();
     void setVisualMode (int index, bool openIfHidden);

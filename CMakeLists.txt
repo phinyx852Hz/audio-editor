@@ -48,6 +48,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/AudioDocument.cpp
     Source/core/Dsp.cpp
     Source/core/MidSide.cpp
+    Source/sampler/SamplerEngine.cpp
     Source/core/Ixml.cpp
     Source/core/Metadata.cpp
     Source/core/MiniXml.cpp
@@ -69,6 +70,7 @@ target_sources(${APP_ID} PRIVATE
     Source/engine/AudioCapture.cpp
     Source/engine/AudioEngine.cpp
     Source/engine/BuiltinEffects.cpp
+    Source/engine/MidiInputs.cpp
     Source/engine/ClapFormat.cpp
     Source/engine/Codec.cpp
     Source/engine/Export.cpp
@@ -108,6 +110,8 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/Overview.cpp
     Source/ui/FindPanel.cpp
     Source/ui/MidSideDialog.cpp
+    Source/ui/SamplerSection.cpp
+    Source/ui/SamplerWindow.cpp
     Source/ui/Audition.cpp
     Source/ui/Goniometer.cpp
     Source/ui/NyquistUi.cpp
@@ -272,6 +276,7 @@ if(PHINYX_BUILD_TESTS)
         Source/core/AudioDocument.cpp
         Source/core/Dsp.cpp
         Source/core/MidSide.cpp
+        Source/sampler/SamplerEngine.cpp
         Source/core/Ixml.cpp
         Source/core/Metadata.cpp
         Source/core/MiniXml.cpp

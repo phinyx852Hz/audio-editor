@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MainWindow.h"
+#include "SamplerWindow.h"
+#include "../engine/MidiInputs.h"
+#include "../sampler/SamplerEngine.h"
 #include "Settings.h"
 #include "FindPanel.h"
 #include "Visualizer.h"
@@ -265,6 +268,8 @@ MainWindow::~MainWindow()
 {
     loadWatcher.waitForFinished();
     engine.setLiveSource ({});   // the Tracker goes before the engine
+    engine.setInstrument ({});   // and the Sampler
+    midiInputs = nullptr;
     delete batchWindow;   // stops its workers while the engine they render through still exists
 }
 
@@ -476,6 +481,7 @@ void MainWindow::registerCommands()
     registerWarpCommands();
     registerVisualizerCommands();
     registerTrackerCommands();
+    registerSamplerCommands();
     registerReferenceCommands();
     registerMacroCommands();
     add ("tools.managePlugins", Category::tools, tr ("Manage &Plug-ins..."), {}, [this] { managePlugins(); });
@@ -746,7 +752,7 @@ void MainWindow::buildMenus()
                                "album.moveEarlier", "album.moveLater", "album.longerPause", "album.shorterPause", "-",
                                "album.songProperties", "album.openSong", "album.removeSong", "-",
                                "album.properties", "album.twoTracks", "album.export" } },
-        { tr ("&Analyze"),   { "analyze.loudness", "-", "analyze.beats", "analyze.onsets", "analyze.tempoKey", "analyze.vamp", "-", "view.meters", "analyze.imagingView", "analyze.resetMeters", "-", "view.spectral", "-", "@nyquist.analyze" } },
+        { tr ("A&nalyze"),   { "analyze.loudness", "-", "analyze.beats", "analyze.onsets", "analyze.tempoKey", "analyze.vamp", "-", "view.meters", "analyze.imagingView", "analyze.resetMeters", "-", "view.spectral", "-", "@nyquist.analyze" } },
         { tr ("Too&ls"),     { "tools.macroRecord", "tools.macroApply", "tools.macros", "-", "tools.batch", "-", "tools.managePlugins", "-", "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan", "-", "tools.resetConfig" } },
         { tr ("Ma&ster"),    { "view.master", "view.chain", "master.addPlugin", "master.bypass", "-", "master.render", "master.renderNew", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
@@ -758,6 +764,7 @@ void MainWindow::buildMenus()
                                "view.visualizerNext", "view.visualizerPrevious", "view.visualizerChoose", "-",
                                "@visual.artistic", "@visual.science", "-", "@visual.milkdrop", "@visual.rain", "-",
                                "view.opacityUp", "view.opacityDown", "view.opacityFull" } },
+        { tr ("S&ample"),    { "sample.send", "sample.window", "sample.refresh", "-", "sample.midiInputs", "sample.panic" } },
         { tr ("Trac&ker"),   { "tracker.window", "tracker.new", "tracker.open", "tracker.save", "tracker.saveAs", "tracker.loadSample", "-", "tracker.playSong", "tracker.playPattern", "tracker.stop", "-",
                                "tracker.recordStereo", "tracker.recordMulti", "-", "tracker.resetTracks", "tracker.about" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "-", "options.keymap", "options.theme", "options.waveformColors" } },
@@ -1466,6 +1473,7 @@ void MainWindow::refreshFromDocument (bool keepView)
     refreshGrid();
     albumView->setAlbum (doc.isAlbum() ? doc.current().album : nullptr);
     albumView->setVisible (doc.isAlbum());
+    samplerFollow();
     waveform->setFadeHandles (! doc.isAlbum());
 
     const auto len = d ? d->length() : 0;

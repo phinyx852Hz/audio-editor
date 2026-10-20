@@ -106,6 +106,10 @@ public:
     using LiveRender = std::function<void (float* left, float* right, int numFrames)>;
     void setLiveSource (LiveRender render);
     bool hasLiveSource() const;
+    // An instrument (the Sampler), added on top of the file, the Tracker or silence;
+    // stereo at deviceSampleRate(). Empty: none.
+    void setInstrument (LiveRender render);
+    bool hasInstrument() const;
     bool isPlaying() const;
     // Plays [start, end) over and over; end <= start turns looping off.
     void setLoop (Frame start, Frame end);
@@ -237,6 +241,7 @@ public:
 
 private:
     void useOutputsFor (int channels);
+    void updateInstrumentChannels();
 
     struct Impl;
     std::unique_ptr<Impl> impl;

@@ -486,6 +486,52 @@ namespace
         std::vector<float> scratch;
     };
 
+    // Instruments (the Sampler) played on top of whatever else is heard: stereo at the
+    // device's rate, added after the Master Section, so they sound while a file plays too.
+    class InstrumentSource final : public juce::AudioSource
+    {
+    public:
+        explicit InstrumentSource (juce::AudioSource& in) : input (in) {}
+
+        void prepareToPlay (int blockSize, double sampleRate) override { input.prepareToPlay (blockSize, sampleRate); }
+        void releaseResources() override { input.releaseResources(); }
+
+        void getNextAudioBlock (const juce::AudioSourceChannelInfo& info) override
+        {
+            input.getNextAudioBlock (info);
+            std::unique_lock lock (mutex, std::try_to_lock);
+            if (! lock.owns_lock() || ! render)
+                return;
+            auto* left = info.buffer->getWritePointer (0, info.startSample);
+            if (info.buffer->getNumChannels() < 2)
+            {
+                scratch.assign ((size_t) info.numSamples * 2, 0.0f);
+                render (scratch.data(), scratch.data() + info.numSamples, info.numSamples);
+                for (int i = 0; i < info.numSamples; ++i)
+                    left[i] += 0.5f * (scratch[(size_t) i] + scratch[(size_t) (info.numSamples + i)]);
+                return;
+            }
+            auto* right = info.buffer->getWritePointer (1, info.startSample);
+            if (monoInput.load())
+                std::copy (left, left + info.numSamples, right);   // a mono file, heard on both sides
+            render (left, right, info.numSamples);
+        }
+
+        void set (AudioEngine::LiveRender r)
+        {
+            std::lock_guard lock (mutex);
+            render = std::move (r);
+            active = (bool) render;
+        }
+        std::atomic<bool> active { false }, monoInput { false };
+
+    private:
+        juce::AudioSource& input;
+        std::mutex mutex;
+        AudioEngine::LiveRender render;
+        std::vector<float> scratch;
+    };
+
     class MonitorSource final : public juce::AudioSource
     {
     public:
@@ -629,7 +675,8 @@ struct AudioEngine::Impl
     juce::AudioTransportSource transport;
     MasterSource masterSource { transport, master, document };
     LiveSource live { masterSource };
-    MeterSource meter { live };
+    InstrumentSource instrument { live };
+    MeterSource meter { instrument };
     MonitorSource monitor { meter };
     juce::AudioSourcePlayer player;
     double sourceRate = 0.0;
@@ -684,6 +731,7 @@ void AudioEngine::setData (AudioDataPtr data)
         if (wasPlaying)
             impl->transport.start();
     }
+    updateInstrumentChannels();
 }
 
 bool AudioEngine::hasAudio() const { return impl->document.getData() != nullptr; }
@@ -724,9 +772,31 @@ void AudioEngine::setLiveSource (LiveRender render)
     const auto channels = on ? 2 : std::max (1, impl->sourceChannels);
     impl->monitor.channels = channels;
     impl->meter.channels = channels;
+    updateInstrumentChannels();
 }
 
 bool AudioEngine::hasLiveSource() const { return impl->live.active.load(); }
+
+void AudioEngine::setInstrument (LiveRender render)
+{
+    impl->instrument.set (std::move (render));
+    updateInstrumentChannels();
+}
+
+bool AudioEngine::hasInstrument() const { return impl->instrument.active.load(); }
+
+void AudioEngine::updateInstrumentChannels()
+{
+    // An instrument is stereo: a mono file is then sent to both sides before it is added.
+    const bool on = impl->instrument.active.load();
+    const auto file = std::max (1, impl->sourceChannels);
+    impl->instrument.monoInput = on && file == 1 && ! impl->live.active.load();
+    if (impl->live.active.load())
+        return;
+    const auto channels = on ? std::max (2, file) : file;
+    impl->monitor.channels = channels;
+    impl->meter.channels = channels;
+}
 void AudioEngine::setLoop (Frame start, Frame end) { impl->document.setLoop (start, end); }
 bool AudioEngine::isPlaying() const { return impl->transport.isPlaying(); }
 
