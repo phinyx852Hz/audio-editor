@@ -3,6 +3,7 @@
 #include "../Source/core/AudioData.h"
 #include "../Source/core/AudioDocument.h"
 #include "../Source/core/Dsp.h"
+#include "../Source/core/MidSide.h"
 #include "../Source/core/Ixml.h"
 #include "../Source/core/Metadata.h"
 #include "../Source/core/RiffChunks.h"
@@ -1016,6 +1017,117 @@ namespace
         return b.finish();
     }
 
+    void testMidSide()
+    {
+        const double rate = 48000.0;
+        const int n = 48000;
+        auto run = [&] (midside::Settings s, auto&& source, std::vector<float>& l, std::vector<float>& r)
+        {
+            midside::Processor p;
+            p.prepare (rate);
+            p.set (s);
+            l.assign ((size_t) n, 0.0f);
+            r.assign ((size_t) n, 0.0f);
+            for (int i = 0; i < n; ++i)
+            {
+                auto [a, b] = source (i);
+                p.process (a, b);
+                l[(size_t) i] = a;
+                r[(size_t) i] = b;
+            }
+            return p.correlation();
+        };
+        auto tone = [&] (double hz, int i) { return (float) (0.5 * std::sin (2.0 * M_PI * hz * i / rate)); };
+        auto rms = [] (const std::vector<float>& x, size_t from)
+        {
+            double sum = 0;
+            for (size_t i = from; i < x.size(); ++i)
+                sum += (double) x[i] * x[i];
+            return std::sqrt (sum / (double) (x.size() - from));
+        };
+        std::vector<float> l, r;
+
+        // Unchanged settings leave the audio alone.
+        midside::Settings plain;
+        plain.matchLevel = false;
+        run (plain, [&] (int i) { return std::pair { tone (440, i), tone (660, i) }; }, l, r);
+        double worst = 0;
+        for (int i = 0; i < n; ++i)
+            worst = std::max ({ worst, (double) std::abs (l[(size_t) i] - tone (440, i)), (double) std::abs (r[(size_t) i] - tone (660, i)) });
+        check (worst < 1.0e-6, "mid/side: unchanged settings pass the audio through");
+
+        // 0 % width is mono.
+        auto mono = plain;
+        mono.width = 0.0;
+        run (mono, [&] (int i) { return std::pair { tone (440, i), tone (660, i) }; }, l, r);
+        worst = 0;
+        for (int i = n / 10; i < n; ++i)
+            worst = std::max (worst, (double) std::abs (l[(size_t) i] - r[(size_t) i]));
+        check (worst < 1.0e-5, "mid/side: 0 % width makes both sides the same");
+
+        // Mono below 150 Hz takes a 50 Hz side away and keeps a 2 kHz one.
+        auto tight = plain;
+        tight.monoBelowHz = 150.0;
+        run (tight, [&] (int i) { return std::pair { tone (50, i), -tone (50, i) }; }, l, r);
+        check (rms (l, (size_t) n / 2) < 0.354 * 0.05, "mid/side: side below the crossover is removed");
+        run (tight, [&] (int i) { return std::pair { tone (2000, i), -tone (2000, i) }; }, l, r);
+        check (near (rms (l, (size_t) n / 2), 0.354, 0.02), "mid/side: side above the crossover is kept");
+
+        // Made-up width from a mono source cancels when summed back to mono.
+        auto generate = plain;
+        generate.generate = 1.0;
+        run (generate, [&] (int i) { return std::pair { tone (1000, i), tone (1000, i) }; }, l, r);
+        worst = 0;
+        double apart = 0;
+        for (int i = 0; i < n; ++i)
+        {
+            worst = std::max (worst, (double) std::abs (0.5f * (l[(size_t) i] + r[(size_t) i]) - tone (1000, i)));
+            apart = std::max (apart, (double) std::abs (l[(size_t) i] - r[(size_t) i]));
+        }
+        check (worst < 1.0e-5 && apart > 0.1, "mid/side: generated sides widen a mono sound and cancel in mono");
+
+        // Rotating a centred sound by 45 degrees puts it on the right.
+        auto turn = plain;
+        turn.rotation = 45.0;
+        run (turn, [&] (int i) { return std::pair { tone (440, i), tone (440, i) }; }, l, r);
+        check (rms (l, 0) < 1.0e-5 && near (rms (r, 0), 0.5, 0.01), "mid/side: 45 degree rotation moves the centre to the right");
+
+        // Level match keeps a widened sound about as loud as it was.
+        auto wide = midside::Settings {};
+        wide.width = 2.0;
+        run (wide, [&] (int i) { return std::pair { tone (440, i), tone (660, i) }; }, l, r);
+        const auto in = 0.354;
+        check (near (std::sqrt (0.5 * (rms (l, (size_t) n / 2) * rms (l, (size_t) n / 2) + rms (r, (size_t) n / 2) * rms (r, (size_t) n / 2))), in, 0.03),
+               "mid/side: level match keeps the loudness");
+
+        // Huge pulls back while the image is out of phase.
+        auto huge = plain;
+        huge.huge = true;
+        huge.width = 3.0;
+        const auto corr = run (huge, [&] (int i) { return std::pair { tone (440, i) + 0.6f * tone (660, i), tone (440, i) - 0.6f * tone (660, i) }; }, l, r);
+        check (corr > -0.4, "mid/side: huge backs off when the correlation falls");
+
+        // Readouts.
+        AudioData::Builder b (2, rate);
+        std::vector<float> a ((size_t) n), c ((size_t) n);
+        for (int i = 0; i < n; ++i)
+            a[(size_t) i] = c[(size_t) i] = tone (440, i);
+        const float* p[2] { a.data(), c.data() };
+        b.append (p, n);
+        const auto same = b.finish();
+        const auto same1 = midside::analyse (*same, 0, n);
+        check (near (same1.correlation, 1.0, 1.0e-6) && near (same1.monoSumDb, 0.0, 1.0e-6), "mid/side: identical sides read +1 and no mono loss");
+        for (auto& x : c)
+            x = -x;
+        AudioData::Builder b2 (2, rate);
+        b2.append (p, n);
+        const auto anti = midside::analyse (*b2.finish(), 0, n);
+        check (near (anti.correlation, -1.0, 1.0e-6) && anti.monoSumDb < -60.0, "mid/side: opposite sides read -1 and vanish in mono");
+
+        const auto rendered = midside::render (*same, 1000, 20000, wide);
+        check (rendered->numChannels() == 2 && rendered->length() == n, "mid/side: render keeps the length, two channels");
+    }
+
     void testCurvedFade()
     {
         check (dsp::curvedFadeGain (0.0, 0.5) == 0.0f && dsp::curvedFadeGain (1.0, -0.5) == 1.0f, "curved fade: ends");
@@ -1819,6 +1931,7 @@ int main()
     testNyquist();
     testAlbum();
     testCurvedFade();
+    testMidSide();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");

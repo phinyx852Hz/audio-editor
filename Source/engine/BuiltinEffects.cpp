@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "BuiltinEffects.h"
 #include "../core/Dsp.h"
+#include "../core/MidSide.h"
 
 #include <algorithm>
 #include <cmath>
@@ -243,6 +244,98 @@ namespace
     };
 
     //==========================================================================
+    // Mid/Side Width: the live version of Process > Mid/Side Width (core/MidSide.h).
+    class MidSideProcessor final : public MasteringEffect
+    {
+    public:
+        static constexpr const char* identifier = "phinyx:mid-side-width";
+
+        MidSideProcessor() : MasteringEffect ("PHINYX_MIDSIDE")
+        {
+            auto w = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "width", 1 }, "Width",
+                juce::NormalisableRange<float> (0.0f, 300.0f, 1.0f), 100.0f, number (0, "%"));
+            auto h = std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "huge", 1 }, "Huge", false);
+            auto m = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "monoBelow", 1 }, "Mono Below",
+                juce::NormalisableRange<float> (0.0f, 500.0f, 1.0f, 0.5f), 0.0f,
+                juce::AudioParameterFloatAttributes()
+                    .withStringFromValueFunction ([] (float v, int) { return v < 20.0f ? juce::String ("Off") : juce::String (juce::roundToInt (v)) + " Hz"; })
+                    .withValueFromStringFunction ([] (const juce::String& t)
+                    {
+                        return t.trim().equalsIgnoreCase ("off") ? 0.0f : t.retainCharacters ("+-.0123456789eE").getFloatValue();
+                    }));
+            auto g = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "generate", 1 }, "Generate",
+                juce::NormalisableRange<float> (0.0f, 100.0f, 1.0f), 0.0f, number (0, "%"));
+            auto a = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "air", 1 }, "Air",
+                juce::NormalisableRange<float> (-6.0f, 6.0f, 0.1f), 0.0f, number (1, "dB"));
+            auto r = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "rotation", 1 }, "Rotation",
+                juce::NormalisableRange<float> (-45.0f, 45.0f, 0.5f), 0.0f, number (1, "°"));
+            auto l = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "lift", 1 }, "Lift",
+                juce::NormalisableRange<float> (0.0f, 100.0f, 1.0f), 0.0f, number (0, "%"));
+            auto o = std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "matchLevel", 1 }, "Match Level", true);
+            auto li = std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "listen", 1 }, "Listen",
+                juce::StringArray { "Stereo", "Mono", "Side", "Bass" }, 0);
+            width = w.get(); huge = h.get(); monoBelow = m.get(); generate = g.get(); air = a.get();
+            rotation = r.get(); lift = l.get(); matchLevel = o.get(); listen = li.get();
+            addHostedParameter (std::move (w));
+            addHostedParameter (std::move (h));
+            addHostedParameter (std::move (m));
+            addHostedParameter (std::move (g));
+            addHostedParameter (std::move (a));
+            addHostedParameter (std::move (r));
+            addHostedParameter (std::move (l));
+            addHostedParameter (std::move (o));
+            addHostedParameter (std::move (li));
+        }
+
+        static juce::PluginDescription description()
+        {
+            return describe ("Mid/Side Width", identifier, "Spatial", 0x50484d53);   // "PHMS"
+        }
+        void fillInPluginDescription (juce::PluginDescription& d) const override { d = description(); }
+        const juce::String getName() const override { return "Mid/Side Width"; }
+        double getTailLengthSeconds() const override { return 0.01; }
+
+        void prepareToPlay (double sampleRate, int) override
+        {
+            core.prepare (sampleRate);
+            core.set (current());
+        }
+
+        using AudioPluginInstance::processBlock;
+        void processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override
+        {
+            if (buffer.getNumChannels() < 2)
+                return;
+            core.set (current());
+            auto* left = buffer.getWritePointer (0);
+            auto* right = buffer.getWritePointer (1);
+            for (int i = 0; i < buffer.getNumSamples(); ++i)
+                core.process (left[i], right[i]);
+        }
+
+    private:
+        midside::Settings current() const
+        {
+            midside::Settings s;
+            s.width = width->get() / 100.0;
+            s.huge = huge->get();
+            s.monoBelowHz = monoBelow->get() < 20.0f ? 0.0 : (double) monoBelow->get();
+            s.generate = generate->get() / 100.0;
+            s.airDb = air->get();
+            s.rotation = rotation->get();
+            s.lift = lift->get() / 100.0;
+            s.matchLevel = matchLevel->get();
+            s.listen = (midside::Listen) listen->getIndex();
+            return s;
+        }
+
+        juce::AudioParameterFloat *width = nullptr, *monoBelow = nullptr, *generate = nullptr, *air = nullptr, *rotation = nullptr, *lift = nullptr;
+        juce::AudioParameterBool *huge = nullptr, *matchLevel = nullptr;
+        juce::AudioParameterChoice* listen = nullptr;
+        midside::Processor core;
+    };
+
+    //==========================================================================
     // True Peak Limiter: a look-ahead brickwall limiter that keeps the true peak
     // (as loudness meters and streaming services measure it) under the ceiling.
     class LimiterProcessor final : public MasteringEffect
@@ -368,7 +461,7 @@ namespace builtin
 {
     std::vector<juce::PluginDescription> descriptions()
     {
-        return { StereoizeProcessor::description(), LimiterProcessor::description() };
+        return { StereoizeProcessor::description(), MidSideProcessor::description(), LimiterProcessor::description() };
     }
 
     bool isDither (const juce::PluginDescription& d)
@@ -385,6 +478,8 @@ namespace builtin
     {
         if (isBuiltin (d) && d.fileOrIdentifier == StereoizeProcessor::identifier)
             return std::make_unique<StereoizeProcessor>();
+        if (isBuiltin (d) && d.fileOrIdentifier == MidSideProcessor::identifier)
+            return std::make_unique<MidSideProcessor>();
         if (isBuiltin (d) && d.fileOrIdentifier == LimiterProcessor::identifier)
             return std::make_unique<LimiterProcessor>();
         if (isBuiltin (d) && d.fileOrIdentifier == DitherProcessor::identifier)

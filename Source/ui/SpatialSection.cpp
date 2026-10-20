@@ -5,11 +5,13 @@
 #include "AmbiDialogs.h"
 #include "AmbiScene.h"
 #include "BinauralDialog.h"
+#include "MidSideDialog.h"
 #include "WaveformView.h"
 #include "../core/Ambisonics.h"
 #include "Settings.h"
 #include "../core/Binaural.h"
 #include "../core/Dsp.h"
+#include "../core/MidSide.h"
 #include <QAbstractButton>
 #include <QCoreApplication>
 #include <QDir>
@@ -163,6 +165,96 @@ void MainWindow::binauralRender()
     doc.apply (tr ("Binaural").toStdString(), std::move (state));
     refreshFromDocument (true);
     statusBar()->showMessage (tr ("Rendered binaurally: listen on headphones"), 5000);
+}
+
+//==============================================================================
+// Process or Spatial > Mid/Side Width.
+void MainWindow::midSideWidth()
+{
+    if (refuseAlbumEdit())
+        return;
+    const auto d = data();
+    if (d == nullptr)
+        return;
+    if (d->numChannels() > 2)
+    {
+        statusBar()->showMessage (tr ("Mid/Side Width works on mono and stereo files"), 6000);
+        return;
+    }
+
+    auto settings = appSettings();
+    settings.beginGroup (QStringLiteral ("midside"));
+    midside::Settings initial;
+    initial.width = settings.value (QStringLiteral ("width"), initial.width).toDouble();
+    initial.huge = settings.value (QStringLiteral ("huge"), initial.huge).toBool();
+    initial.monoBelowHz = settings.value (QStringLiteral ("monoBelowHz"), initial.monoBelowHz).toDouble();
+    initial.generate = settings.value (QStringLiteral ("generate"), initial.generate).toDouble();
+    initial.airDb = settings.value (QStringLiteral ("airDb"), initial.airDb).toDouble();
+    initial.rotation = settings.value (QStringLiteral ("rotation"), initial.rotation).toDouble();
+    initial.lift = settings.value (QStringLiteral ("lift"), initial.lift).toDouble();
+    initial.matchLevel = settings.value (QStringLiteral ("matchLevel"), initial.matchLevel).toBool();
+
+    const auto [s, e] = processRange();
+    // The preview plays up to 15 s from the start of the range, looping, in place of your audio.
+    const auto previewEnd = std::min<Frame> (e, s + (Frame) (d->sampleRate() * 15.0));
+    const auto sample = dsp::toStereo (d->slice (s, previewEnd));
+    const auto play = [this, d, s = s, previewEnd] (AudioDataPtr heard)
+    {
+        if (heard == nullptr)
+        {
+            stopExportPreview();
+            return;
+        }
+        engine.setReference (dsp::toStereo (d)->replaced (s, previewEnd, heard.get()), 1.0f);
+        engine.setReferenceBypassesMaster (false);
+        if (previewName.isEmpty() || ! engine.isPlaying())
+        {
+            engine.setHearingReference (true);
+            previewName = tr ("Mid/Side preview");
+            previewRange = { s, previewEnd };
+            engine.setLoop (s, previewEnd);
+            engine.setPositionFrames (s);
+            engine.play();
+            placeReferenceBadge();
+        }
+    };
+    const auto flip = [this]
+    {
+        engine.setHearingReference (! engine.isHearingReference());
+        placeReferenceBadge();
+        return engine.isHearingReference();
+    };
+
+    MidSideDialog dialog (initial, ! hasSelection(), sample, play, flip, this);
+    const bool accepted = dialog.exec() == QDialog::Accepted;
+    waveform->setFocus();
+    if (! accepted)
+        return;
+
+    const auto chosen = dialog.settings();
+    settings.setValue (QStringLiteral ("width"), chosen.width);
+    settings.setValue (QStringLiteral ("huge"), chosen.huge);
+    settings.setValue (QStringLiteral ("monoBelowHz"), chosen.monoBelowHz);
+    settings.setValue (QStringLiteral ("generate"), chosen.generate);
+    settings.setValue (QStringLiteral ("airDb"), chosen.airDb);
+    settings.setValue (QStringLiteral ("rotation"), chosen.rotation);
+    settings.setValue (QStringLiteral ("lift"), chosen.lift);
+    settings.setValue (QStringLiteral ("matchLevel"), chosen.matchLevel);
+
+    AudioDataPtr result;
+    runWithProgress (tr ("Mid/Side Width"), [&] (std::atomic<float>&, const std::atomic<bool>&)
+    {
+        result = midside::render (*d, s, e, chosen);
+    });
+    if (result == nullptr)
+        return;
+    // The whole file is replaced (a mono file becomes stereo); its length and markers stay the same.
+    auto state = doc.current();
+    state.data = std::move (result);
+    doc.apply (tr ("Mid/Side Width").toStdString(), std::move (state));
+    refreshFromDocument (true);
+    const auto after = midside::analyse (*data(), s, e);
+    statusBar()->showMessage (tr ("Mid/Side Width applied: correlation %1, mono sum %2 dB").arg (after.correlation, 0, 'f', 2).arg (after.monoSumDb, 0, 'f', 1), 6000);
 }
 
 //==============================================================================

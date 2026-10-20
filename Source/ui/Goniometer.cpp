@@ -69,6 +69,7 @@ QString Goniometer::viewName (View v)
         case View::polarLevel:  return tr ("Polar Level");
         case View::lissajous:   return tr ("Lissajous");
         case View::binaural:    return tr ("Binaural");
+        case View::midSide:     return tr ("Mid/Side Levels");
     }
     return {};
 }
@@ -93,6 +94,9 @@ void Goniometer::reset()
     rays.fill (0.0f);
     skin.fill (0.0f);
     bands.fill ({});
+    midPower = sidePower = midPeak = sidePeak = 0.0;
+    midHold = sideHold = 0;
+    sideHistory.clear();
     correlation = 0.0;
     hasSignal = false;
     update();
@@ -152,6 +156,50 @@ void Goniometer::addSamples (const std::vector<float>& left, const std::vector<f
     if (current == View::binaural)
     {
         analyseBinaural (left, right);
+        update();
+        return;
+    }
+
+    if (current == View::midSide)
+    {
+        double mm = 0.0, ss = 0.0, mp = 0.0, sp = 0.0;
+        for (size_t i = 0; i < n; ++i)
+        {
+            const auto m = 0.5 * ((double) left[i] + right[i]), s = 0.5 * ((double) left[i] - right[i]);
+            mm += m * m;
+            ss += s * s;
+            mp = std::max (mp, std::abs (m));
+            sp = std::max (sp, std::abs (s));
+        }
+        if (n > 0)
+        {
+            // About 300 ms of smoothing at the meters' 30 frames a second.
+            const auto k = std::min (1.0, (double) n / (0.3 * sampleRate));
+            midPower += (mm / (double) n - midPower) * k;
+            sidePower += (ss / (double) n - sidePower) * k;
+        }
+        // Peaks hold for a second, then fall about 20 dB a second.
+        auto peak = [] (double now, double& held, int& hold)
+        {
+            if (now >= held)
+            {
+                held = now;
+                hold = 30;
+            }
+            else if (hold > 0)
+                --hold;
+            else
+                held *= 0.93;
+        };
+        peak (mp, midPeak, midHold);
+        peak (sp, sidePeak, sideHold);
+        if (hasSignal)
+        {
+            const auto ratio = 10.0 * std::log10 (std::max (sidePower, 1.0e-12) / std::max (midPower, 1.0e-12));
+            sideHistory.push_back ((float) std::clamp (ratio, -40.0, 20.0));
+            if (sideHistory.size() > 300)
+                sideHistory.erase (sideHistory.begin(), sideHistory.begin() + (std::ptrdiff_t) (sideHistory.size() - 300));
+        }
         update();
         return;
     }
@@ -245,6 +293,7 @@ void Goniometer::addSamples (const std::vector<float>& left, const std::vector<f
             }
             case View::polarLevel:
             case View::binaural:
+            case View::midSide:
                 break;
         }
     }
@@ -344,7 +393,8 @@ void Goniometer::drawGuides (QPainter& g, const QRectF& plot) const
         }
 
         case View::binaural:
-            break;   // drawn with the bands
+        case View::midSide:
+            break;   // drawn with their levels
     }
 }
 
@@ -402,6 +452,8 @@ void Goniometer::paintEvent (QPaintEvent*)
         drawRays (g, plot);
     else if (current == View::binaural)
         drawBinaural (g, plot);
+    else if (current == View::midSide)
+        drawMidSide (g, plot);
     else
         g.drawImage (plot.topLeft(), trace);
 
@@ -623,5 +675,92 @@ void Goniometer::drawBinaural (QPainter& g, const QRectF& plot) const
         g.setBrush (dot);
         const auto size = 1.5 + 3.5 * band.level;
         g.drawEllipse (p, size, size);
+    }
+}
+
+//==============================================================================
+void Goniometer::drawMidSide (QPainter& g, const QRectF& plot) const
+{
+    const auto& theme = Theme::current();
+    constexpr double floorDb = -60.0;
+    const auto toDb = [] (double amplitude) { return amplitude > 1.0e-6 ? 20.0 * std::log10 (amplitude) : -120.0; };
+    auto small = font();
+    small.setPointSizeF (small.pointSizeF() * 0.8);
+    g.setFont (small);
+    const QFontMetricsF fm (small);
+    const auto line = theme.color (QStringLiteral ("mid"));
+    const auto text = theme.color (QStringLiteral ("placeholderText"));
+
+    // The two meters, with a dB scale between them.
+    const QRectF meters (plot.left() + 4, plot.top() + 20, plot.width() - 8, plot.height() * 0.5);
+    const auto barWidth = std::min (40.0, meters.width() * 0.25);
+    const QRectF midBar (meters.center().x() - barWidth * 1.6, meters.top(), barWidth, meters.height());
+    const QRectF sideBar (meters.center().x() + barWidth * 0.6, meters.top(), barWidth, meters.height());
+    const auto yFor = [&] (double db) { return meters.bottom() - std::clamp ((db - floorDb) / -floorDb, 0.0, 1.0) * meters.height(); };
+    for (double db = 0.0; db >= floorDb; db -= 12.0)
+    {
+        const auto y = yFor (db);
+        g.setPen (QPen (line, 1.0, Qt::DotLine));
+        g.drawLine (QPointF (midBar.right() + 2, y), QPointF (sideBar.left() - 2, y));
+        g.setPen (text);
+        g.drawText (QRectF (midBar.right(), y - 7, sideBar.left() - midBar.right(), 14), Qt::AlignCenter, QString::number ((int) db));
+    }
+    const auto drawBar = [&] (const QRectF& bar, double power, double peak, const QString& name)
+    {
+        auto outline = line;
+        outline.setAlphaF (0.6f);
+        g.setPen (QPen (outline, 1.0));
+        g.setBrush (Qt::NoBrush);
+        g.drawRect (bar);
+        const auto rmsDb = 10.0 * std::log10 (std::max (power, 1.0e-12));
+        auto fill = theme.color (QString::fromLatin1 (rmsDb > -6.0 ? "meterHigh" : rmsDb > -18.0 ? "meterMid" : "meterLow"));
+        if (! hasSignal)
+            fill.setAlpha (90);
+        g.setPen (Qt::NoPen);
+        g.setBrush (fill);
+        g.drawRect (QRectF (QPointF (bar.left() + 1, yFor (rmsDb)), QPointF (bar.right() - 1, bar.bottom())));
+        g.setPen (QPen (theme.color (QStringLiteral ("meterPeakHold")), 2.0));
+        const auto y = yFor (toDb (peak));
+        if (peak > 1.0e-6)
+            g.drawLine (QPointF (bar.left(), y), QPointF (bar.right(), y));
+        g.setPen (theme.color (QStringLiteral ("windowText")));
+        g.drawText (QRectF (bar.left() - 20, bar.top() - 18, bar.width() + 40, 16), Qt::AlignCenter, name);
+        g.drawText (QRectF (bar.left() - 20, bar.bottom() + 2, bar.width() + 40, 16), Qt::AlignCenter,
+                    hasSignal && rmsDb > -100.0 ? QString::number (rmsDb, 'f', 1) : QStringLiteral ("-"));
+    };
+    drawBar (midBar, midPower, midPeak, tr ("Mid"));
+    drawBar (sideBar, sidePower, sidePeak, tr ("Side"));
+
+    // The side against the mid: now, and over the last 10 seconds.
+    const auto ratio = 10.0 * std::log10 (std::max (sidePower, 1.0e-12) / std::max (midPower, 1.0e-12));
+    const QRectF history (plot.left() + 4, meters.bottom() + 38, plot.width() - 8, plot.bottom() - meters.bottom() - 38);
+    g.setPen (theme.color (QStringLiteral ("windowText")));
+    g.drawText (QRectF (plot.left(), meters.bottom() + 20, plot.width(), 16), Qt::AlignCenter,
+                hasSignal ? tr ("S/M %1 dB").arg (ratio > -40.0 ? QString::number (ratio, 'f', 1) : QStringLiteral ("< -40")) : tr ("S/M"));
+    if (history.height() < 16)
+        return;
+    constexpr double top = 6.0, bottom = -30.0;
+    const auto yRatio = [&] (double db) { return history.top() + (top - std::clamp (db, bottom, top)) / (top - bottom) * history.height(); };
+    auto outline = line;
+    outline.setAlphaF (0.6f);
+    g.setPen (QPen (outline, 1.0));
+    g.setBrush (Qt::NoBrush);
+    g.drawRect (history);
+    for (const double db : { 0.0, -12.0, -24.0 })
+    {
+        g.setPen (QPen (db > -1.0 ? theme.color (QStringLiteral ("meterHigh")) : line, 1.0, Qt::DotLine));
+        g.drawLine (QPointF (history.left(), yRatio (db)), QPointF (history.right(), yRatio (db)));
+        g.setPen (text);
+        g.drawText (QRectF (history.left() + 2, yRatio (db) - 13, 40, 12), Qt::AlignLeft | Qt::AlignBottom, QString::number ((int) db));
+    }
+    if (sideHistory.size() > 1)
+    {
+        QPolygonF curve;
+        const auto step = history.width() / 299.0;
+        const auto start = history.right() - step * (double) (sideHistory.size() - 1);
+        for (size_t i = 0; i < sideHistory.size(); ++i)
+            curve << QPointF (start + step * (double) i, yRatio (sideHistory[i]));
+        g.setPen (QPen (theme.color (QStringLiteral ("scope")), 1.5));
+        g.drawPolyline (curve);
     }
 }

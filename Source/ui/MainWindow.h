@@ -170,6 +170,7 @@ private:
     void nyquistPrompt();
     void runNyquist (nyquist::Script, const QString& title, bool debug);
     void stereoize();
+    void midSideWidth();
     void convertSampleType();
     void editMetadata();
     void autoHeal();

@@ -20,13 +20,17 @@
 //   come from, judged from the time and level differences between the ears
 //   (low bands nearest the head). Front and back sound alike to this, so it
 //   shows the front half. Faint, spread dots are diffuse (room) sound.
+// - Mid/Side Levels: the centre (mid, (L+R)/2) and the side ((L-R)/2) as two
+//   meters in dBFS (bar: RMS over 300 ms, line: peak with hold), the side's level
+//   against the mid's, and that difference over the last 10 seconds. Side close
+//   to or above the mid is very wide and loses a lot in mono.
 // Points glow and fade like a phosphor screen. The correlation meter runs from
 // -1 (out of phase: cancels in mono) through 0 (unrelated) to +1 (mono).
 class Goniometer final : public QWidget
 {
 public:
-    enum class View { goniometer, polarSample, polarLevel, lissajous, binaural };
-    static constexpr int numViews = 5;
+    enum class View { goniometer, polarSample, polarLevel, lissajous, binaural, midSide };
+    static constexpr int numViews = 6;
 
     explicit Goniometer (QWidget* parent);
 
@@ -59,6 +63,12 @@ private:
     void drawRays (QPainter&, const QRectF& plot) const;
     void analyseBinaural (const std::vector<float>& left, const std::vector<float>& right);
     void drawBinaural (QPainter&, const QRectF& plot) const;
+    void drawMidSide (QPainter&, const QRectF& plot) const;
+
+    // Mid/Side Levels: mean squares (smoothed), peaks with hold, and the side against the mid over time (dB).
+    double midPower = 0.0, sidePower = 0.0, midPeak = 0.0, sidePeak = 0.0;
+    int midHold = 0, sideHold = 0;
+    std::vector<float> sideHistory;
 
     View current = View::goniometer;
     QImage trace;                // the glowing points, faded a little every frame
