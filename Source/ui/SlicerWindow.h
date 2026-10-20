@@ -29,7 +29,7 @@ public:
     void setSample (sampler::SamplePtr);
     void setKit (const slicer::Kit& k) { kit = k; update(); }
     void setSelected (int pad) { selected = pad; update(); }
-    QSize sizeHint() const override { return { 820, 170 }; }
+    QSize sizeHint() const override { return { 620, 120 }; }
     QSize minimumSizeHint() const override { return { 300, 100 }; }
 
     // Moves the line at `from` towards `to`; gives where it landed.
@@ -75,8 +75,8 @@ public:
     void setBank (int b) { bank = b; update(); }
     void setSelected (int pad) { selected = pad; update(); }
     void setKit (const slicer::Kit& k) { kit = k; update(); }
-    QSize sizeHint() const override { return { 340, 340 }; }
-    QSize minimumSizeHint() const override { return { 260, 260 }; }
+    QSize sizeHint() const override { return { 270, 270 }; }
+    QSize minimumSizeHint() const override { return { 220, 220 }; }
     bool hasHeightForWidth() const override { return true; }
     int heightForWidth (int w) const override { return w; }
 
@@ -120,6 +120,7 @@ Q_SIGNALS:
     void refreshRequested();
     void midiInputsRequested();
     void activated();
+    void closed();
 
 protected:
     void keyPressEvent (class QKeyEvent*) override;

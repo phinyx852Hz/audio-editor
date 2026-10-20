@@ -452,6 +452,7 @@ SamplerWindow::SamplerWindow (sampler::Engine& e, QWidget* parent)
     layout->addWidget (envelopeRow);
     layout->addWidget (fadeRow);
     layout->addWidget (piano);
+    piano->hide();   // the computer keyboard and MIDI play it; the piano stays for later
     layout->addLayout (bottom);
 
     toControls();
@@ -483,8 +484,8 @@ SamplerWindow::SamplerWindow (sampler::Engine& e, QWidget* parent)
     redraw.start();
     piano->setLowestNote (12 * (octave + 2) - 12);
     showStatus();
-    resize (900, 520);
-    piano->setFocus();
+    adjustSize();
+    view->setFocus();
 }
 
 void SamplerWindow::setSample (sampler::SamplePtr s, double r, const QString& n, bool keepMarkers)
@@ -607,7 +608,7 @@ void SamplerWindow::markerMoved (int which, Frame position)
 
 void SamplerWindow::showStatus()
 {
-    status->setText (tr ("Keys A to K play from %1 · Z/X octave · C/V velocity %2 · Esc back to the keys")
+    status->setText (tr ("Keys A to K play from %1 · Z/X octave · C/V velocity %2 · Esc back to playing")
                          .arg (noteName (12 * (octave + 2))).arg (keyVelocity));
 }
 
@@ -688,7 +689,7 @@ bool SamplerWindow::eventFilter (QObject* o, QEvent* e)
     // Esc in a field goes back to playing.
     if (e->type() == QEvent::KeyPress && static_cast<QKeyEvent*> (e)->key() == Qt::Key_Escape)
     {
-        piano->setFocus();
+        view->setFocus();
         return true;
     }
     return QWidget::eventFilter (o, e);
@@ -699,6 +700,7 @@ void SamplerWindow::closeEvent (QCloseEvent* e)
     for (const auto& [code, note] : heldKeys)
         engine.noteOff (note);
     heldKeys.clear();
-    engine.allNotesOff();
+    engine.panic();
     QWidget::closeEvent (e);
+    Q_EMIT closed();
 }

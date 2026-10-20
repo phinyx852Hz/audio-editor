@@ -572,7 +572,7 @@ SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
     setKit (kit);
     select (0);
     showStatus();
-    resize (900, 680);
+    adjustSize();
     pads->setFocus();
 }
 
@@ -889,5 +889,7 @@ void SlicerWindow::closeEvent (QCloseEvent* e)
     for (const auto& [code, pad] : heldKeys)
         engine.letGo (pad);
     heldKeys.clear();
+    engine.panic();
     QWidget::closeEvent (e);
+    Q_EMIT closed();
 }

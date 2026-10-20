@@ -57,7 +57,11 @@ void MainWindow::registerSamplerCommands()
     // MIDI plays the Sampler or the Slicer (whichever was used last) straight from the MIDI thread.
     midiInputs->setHandler ([this, e = samplerEngine.get(), s = slicerEngine.get()] (int status, int, int a, int b)
     {
-        const bool slices = midiTarget.load (std::memory_order_relaxed) == 1;
+        // No instrument window open: MIDI plays nothing.
+        const auto target = midiTarget.load (std::memory_order_relaxed);
+        const bool slices = target == 1;
+        if (target < 0 && (status == 0x90 || status == 0xE0))
+            return;
         switch (status)
         {
             case 0x90:
@@ -72,7 +76,10 @@ void MainWindow::registerSamplerCommands()
                 else
                     e->noteOff (a);
                 break;
-            case 0xE0: e->pitchBend ((a - 8192) / 8192.0); break;
+            case 0xE0:
+                if (! slices)
+                    e->pitchBend ((a - 8192) / 8192.0);
+                break;
             case 0xB0:
                 if (a == 64)
                     e->sustainPedal (b >= 64);
@@ -97,7 +104,7 @@ void MainWindow::registerSamplerCommands()
     connect (&slicerFollowTimer, &QTimer::timeout, this, [this] { sendToSlicer (true); });
 }
 
-// Both instruments play through the engine together.
+// Both instruments play through the engine together while either window is open.
 void MainWindow::playInstruments()
 {
     if (! engine.hasInstrument())
@@ -116,9 +123,11 @@ void MainWindow::showSampler()
         connect (samplerWin, &SamplerWindow::refreshRequested, this, [this] { sendToSampler (true); });
         connect (samplerWin, &SamplerWindow::midiInputsRequested, this, [this] { midiInputsDialog(); });
         connect (samplerWin, &SamplerWindow::activated, this, [this] { midiTarget = 0; });
+        connect (samplerWin, &SamplerWindow::closed, this, [this] { instrumentClosed(); });
         updateMidiStatus();
     }
     midiTarget = 0;
+    playInstruments();
     samplerWin->show();
     samplerWin->raise();
     samplerWin->activateWindow();
@@ -175,7 +184,7 @@ void MainWindow::sendToSampler (bool keepMarkers)
         if (*result == nullptr || samplerWin == nullptr)
             return;
         samplerWin->setSample (*result, rate, name, keepMarkers);
-        statusBar()->showMessage (keepMarkers ? tr ("Sampler updated") : tr ("In the Sampler: play it with A to K, a MIDI keyboard or the piano"), 4000);
+        statusBar()->showMessage (keepMarkers ? tr ("Sampler updated") : tr ("In the Sampler: play it with A to K or a MIDI keyboard"), 4000);
     });
     samplerLoad.setFuture (QtConcurrent::run ([d, from, to, rate, result]
     {
@@ -196,6 +205,17 @@ void MainWindow::samplerFollow()
     samplerFollowTimer.start();
 }
 
+// A closed window stops sounding: MIDI goes to the other one if it is open, and with
+// both closed the instruments leave the engine (a mono file plays mono again).
+void MainWindow::instrumentClosed()
+{
+    const bool sampler = samplerWin != nullptr && samplerWin->isVisible();
+    const bool slices = slicerWin != nullptr && slicerWin->isVisible();
+    midiTarget = sampler ? 0 : (slices ? 1 : -1);
+    if (! sampler && ! slices)
+        engine.setInstrument ({});
+}
+
 void MainWindow::showSlicer()
 {
     if (slicerWin == nullptr)
@@ -204,9 +224,11 @@ void MainWindow::showSlicer()
         connect (slicerWin, &SlicerWindow::refreshRequested, this, [this] { sendToSlicer (true); });
         connect (slicerWin, &SlicerWindow::midiInputsRequested, this, [this] { midiInputsDialog(); });
         connect (slicerWin, &SlicerWindow::activated, this, [this] { midiTarget = 1; });
+        connect (slicerWin, &SlicerWindow::closed, this, [this] { instrumentClosed(); });
         updateMidiStatus();
     }
     midiTarget = 1;
+    playInstruments();
     slicerWin->show();
     slicerWin->raise();
     slicerWin->activateWindow();

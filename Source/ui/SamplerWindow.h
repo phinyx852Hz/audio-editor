@@ -24,8 +24,8 @@ public:
     SampleView (sampler::Engine&, QWidget* parent);
     void setSample (sampler::SamplePtr, double rate);
     void setMarkers (Frame start, Frame end, Frame loopStart, Frame loopEnd, bool showLoop);
-    QSize sizeHint() const override { return { 760, 190 }; }
-    QSize minimumSizeHint() const override { return { 300, 110 }; }
+    QSize sizeHint() const override { return { 620, 130 }; }
+    QSize minimumSizeHint() const override { return { 300, 90 }; }
 
 Q_SIGNALS:
     void markerMoved (int which, Frame position);   // 0 start, 1 end, 2 loop start, 3 loop end
@@ -81,8 +81,7 @@ private:
     int lowest = 36, root = 60, pressed = -1;
 };
 
-// Sample > Sampler: one sound across the keyboard. Played from MIDI, the piano at the
-// bottom or the computer keyboard (A to K as the white keys with W, E, T, Y, U as the
+// Sample > Sampler: one sound across the keyboard. Played from MIDI or the computer keyboard (A to K as the white keys with W, E, T, Y, U as the
 // black ones, as in Live; Z and X octave down and up, C and V velocity down and up).
 class SamplerWindow final : public QWidget
 {
@@ -101,6 +100,7 @@ Q_SIGNALS:
     void refreshRequested();
     void midiInputsRequested();
     void activated();
+    void closed();
 
 protected:
     void keyPressEvent (class QKeyEvent*) override;

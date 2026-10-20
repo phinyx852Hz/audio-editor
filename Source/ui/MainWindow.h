@@ -332,11 +332,12 @@ private:
     QFutureWatcher<void> samplerLoad;
 
     // The Slicer likewise (sampler/SlicerEngine.h); MIDI notes play whichever of the two
-    // windows was used last (0 Sampler, 1 Slicer).
+    // windows was used last (0 Sampler, 1 Slicer, -1 neither is open).
     void sendToSlicer (bool keepSlices);
     void showSlicer();
     void slicerFollow();
     void playInstruments();
+    void instrumentClosed();
     std::unique_ptr<slicer::Engine> slicerEngine;
     class SlicerWindow* slicerWin = nullptr;
     int slicerTab = -1;
@@ -346,7 +347,7 @@ private:
     AudioDataPtr slicerSource;
     QTimer slicerFollowTimer;
     QFutureWatcher<void> slicerLoad;
-    std::atomic<int> midiTarget { 0 };
+    std::atomic<int> midiTarget { -1 };
     class TrackerWindow* trackerWin = nullptr;
     class VisualizerWindow* visualizerWindow();
     void setVisualMode (int index, bool openIfHidden);
