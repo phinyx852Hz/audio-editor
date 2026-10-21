@@ -2,9 +2,9 @@
 #pragma once
 
 // The mixer's sound: up to 8 tracks summed into a master out. Every track is the
-// same kind of track: it can hold an audio file, a MIDI file and an instrument, in
-// any mix. The audio clip plays as it is; the MIDI clip and a MIDI keyboard play
-// the instrument; both are heard when a track has both. Each track then goes
+// same kind of track: a timeline of clips, each an audio file or a MIDI file, placed
+// one after another or overlapping, plus an instrument. Audio clips play as they
+// are; MIDI clips and a MIDI keyboard play the instrument. Each track then goes
 // through trim, polarity, pan, fader, mute and solo. No MIDI editing.
 // Plain C++, no JUCE or Qt: the UI sets things from its thread, render() runs on
 // the audio thread, mixdown() on a worker thread.
@@ -52,6 +52,25 @@ namespace mixer
     using MidiClipPtr = std::shared_ptr<const MidiClip>;
     MidiClipPtr placeMidi (midifile::SongPtr, const std::string& path, double sampleRate, double bpm);
 
+    // A clip on a track's timeline: an audio file or a MIDI file (one of the two),
+    // the part of it heard, and where that part starts.
+    struct Clip
+    {
+        AudioClipPtr audio;
+        MidiClipPtr midi;
+        Frame start = 0;     // on the timeline
+        Frame offset = 0;    // into the file: what is trimmed off the front
+        Frame length = 0;    // heard from there
+        bool muted = false;
+        uint32_t id = 0;     // for the UI, to know a clip again after edits; not used here
+        Frame end() const { return start + length; }
+        Frame sourceLength() const { return audio != nullptr ? audio->length() : midi != nullptr ? midi->length : 0; }
+        bool isMidi() const { return midi != nullptr; }
+    };
+    using Clips = std::vector<Clip>;
+    Clip makeClip (AudioClipPtr, Frame start);   // the whole file
+    Clip makeClip (MidiClipPtr, Frame start);
+
     // A track's controls, set from any thread.
     struct Strip
     {
@@ -60,10 +79,8 @@ namespace mixer
         std::atomic<float> pan { 0.0f };        // -1 left .. 1 right: equal power for mono audio, balance otherwise
         std::atomic<bool> invertLeft { false }, invertRight { false };
         std::atomic<bool> mute { false }, solo { false };
-        std::atomic<bool> audioOn { true }, midiOn { true };   // hear the audio clip / play the MIDI clip
-        std::atomic<double> audioOffset { 0.0 }, midiOffset { 0.0 };   // seconds the clip starts at
-        std::atomic<int> transpose { 0 };       // semitones for the MIDI clip; channel 10 (drums) is left alone
-        std::atomic<uint32_t> channels { 0xFFFF };   // MIDI channels of the clip that play, a bit each
+        std::atomic<int> transpose { 0 };       // semitones for the MIDI clips; channel 10 (drums) is left alone
+        std::atomic<uint32_t> channels { 0xFFFF };   // MIDI channels of the clips that play, a bit each
     };
 
     struct Meter
@@ -84,12 +101,11 @@ namespace mixer
         int numTracks() const { return tracks.load(); }
         void setNumTracks (int);   // 1..8
 
-        // Clips and instruments. Null clears. Safe while playing.
-        void setAudio (int track, AudioClipPtr);
-        void setMidi (int track, MidiClipPtr);
+        // A track's clips (kept in order of their starts) and its instrument; null
+        // clears it. Safe while playing: notes the old clips held are let go.
+        void setClips (int track, Clips);
+        Clips clips (int track) const;
         void setInstrument (int track, InstrumentPtr);   // prepared here
-        AudioClipPtr audio (int track) const;
-        MidiClipPtr midi (int track) const;
         InstrumentPtr instrument (int track) const;
         Strip& strip (int track) { return strips[(size_t) track]; }
         const Strip& strip (int track) const { return strips[(size_t) track]; }
@@ -103,6 +119,7 @@ namespace mixer
         Frame position() const { return pos.load(); }
         void setPosition (Frame);
         Frame length() const;      // where the last clip ends
+        Frame trackEnd (int track) const;
         // Loops [start, end) while on; end <= start turns it off.
         void setLoop (Frame start, Frame end);
         bool isLooping() const { return loopEnd.load() > loopStart.load(); }
@@ -121,7 +138,7 @@ namespace mixer
         // Renders the whole mix from the start, stereo at the mixer's rate, with the
         // instruments' tails (up to `tailSeconds` of sound after the last clip ends).
         // With `onlyTrack` it is a bounce: that track alone, from the start of the mix to
-        // its own end, before its fader and pan, whatever mute and solo say.
+        // its own last clip's end, before its fader and pan, whatever mute and solo say.
         // Live playback is silent meanwhile. Worker thread.
         AudioDataPtr mixdown (double tailSeconds, std::string& error,
                               std::atomic<float>* progress = nullptr, const std::atomic<bool>* cancel = nullptr,
@@ -132,16 +149,16 @@ namespace mixer
 
         struct Track
         {
-            AudioClipPtr audio;
-            MidiClipPtr midi;
+            Clips clips;
             InstrumentPtr instrument;
-            size_t cursor = 0;         // the next MIDI event to play
-            bool relocate = true;      // the cursor needs finding again
-            std::array<std::array<uint8_t, 128>, 16> held {};   // MIDI clip notes sounding: the note played + 1
+            std::vector<size_t> cursors;   // each MIDI clip's next event
+            bool relocate = true;      // the cursors need finding again
+            std::array<std::array<uint8_t, 128>, 16> held {};    // MIDI clip notes sounding: the note played + 1
+            std::array<std::array<uint16_t, 128>, 16> owner {};  // and the clip that played it
             bool wasPlayingMidi = false;
             uint32_t lastChannels = 0xFFFF;
-            float gainL = 0.0f, gainR = 0.0f;   // last block's gains, ramped from
-            float audioL = 0.0f, audioR = 0.0f;
+            float gainL = 0.0f, gainR = 0.0f;   // last block's gains, ramped from: stereo and instrument
+            float monoL = 0.0f, monoR = 0.0f;   // mono audio, equal power
         };
         struct MeterState
         {
@@ -152,7 +169,7 @@ namespace mixer
         void renderBlock (float* left, float* right, int frames, Frame at, bool play, bool withLive);
         Frame lengthLocked() const;
         Frame trackEndLocked (int track) const;
-        void releaseHeld (Track&, std::vector<NoteEvent>&);
+        void releaseHeld (Track&, std::vector<NoteEvent>&, int offset = 0, int clip = -1);   // -1: every clip's
         void meter (int index, const float* left, const float* right, int frames);
 
         mutable std::mutex lock;   // tracks: held by render and by changes
@@ -174,7 +191,7 @@ namespace mixer
         std::vector<NoteEvent> liveQueue, liveTaken;
         std::atomic<bool> panicPending { false };
 
-        std::vector<float> mixL, mixR, trackL, trackR, instL, instR, outL, outR;
+        std::vector<float> mixL, mixR, trackL, trackR, instL, instR, monoBuf, outL, outR;
         std::vector<NoteEvent> events;
     };
 }

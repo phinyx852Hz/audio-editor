@@ -10,6 +10,9 @@
 #include <QWidget>
 
 #include <array>
+#include <map>
+#include <memory>
+#include <vector>
 #include <functional>
 #include <tuple>
 
@@ -22,6 +25,7 @@ class QHBoxLayout;
 class MixerStrip;
 class QSplitter;
 class TrackLanes;
+class FileBrowser;
 
 // A level meter for a strip: peak and RMS for both sides, with a peak hold and a
 // clip light (click to clear it).
@@ -47,13 +51,16 @@ private:
 };
 
 // The mixer (docs/mixer.md): up to 8 tracks and the master out, in its own window.
-// Every track can hold an audio file, a MIDI file and an instrument, together: the
-// MIDI file (and the MIDI keyboard, on the armed track) plays the instrument and both
-// it and the audio are heard. No MIDI editing. Keyboard-first: 1-8 pick a track,
-// 9 the master, Left/Right move, Up/Down move the fader (Shift finer), 0 resets it,
-// M mute, S solo, R arms the track for the MIDI keyboard, Space plays and stops,
-// Home goes to the start, L loops, V shows the tracks across time, B bounces in place and Shift+B to a new track,
-// Ctrl+T adds a track and Ctrl+Shift+T removes the last.
+// Every track is a timeline of clips, each an audio file or a MIDI file, plus an
+// instrument: the MIDI clips (and the MIDI keyboard, on the armed track) play it. No
+// MIDI editing. Three sections, gone round with F6 or Tab: the file browser (Enter puts
+// a file on the selected track at the playhead), the tracks across time (clips dragged,
+// trimmed, split), and the strips. Keyboard-first: 1-8 pick a track, 9 the master,
+// Left/Right move, Up/Down move the fader (Shift finer), 0 resets it, M mute, S solo,
+// R arms the track for the MIDI keyboard, Space plays and stops, Home goes to the start,
+// L loops, V shows the tracks across time, Ctrl+B the browser, B bounces in place and
+// Shift+B to a new track, Ctrl+Z undoes clip edits, Ctrl+T adds a track and
+// Ctrl+Shift+T removes the last.
 class MixerWindow final : public QWidget
 {
     Q_OBJECT
@@ -97,10 +104,12 @@ protected:
     void keyPressEvent (class QKeyEvent*) override;
     void changeEvent (QEvent*) override;
     void closeEvent (class QCloseEvent*) override;
+    bool focusNextPrevChild (bool next) override;
 
 private:
     friend class MixerStrip;
     friend class TrackLanes;
+    friend class FileBrowser;
 
     // What the window keeps about a track besides the engine's settings.
     struct TrackInfo
@@ -109,16 +118,28 @@ private:
         QColor colour;
         AudioDataPtr sound;          // the track Sampler or Slicer's sound, for its window
         QPointer<QWidget> editor;    // its Sampler, Slicer or Synth window
-        int loading = 0;             // a newer load outdates one still running
-        bool busy = false;           // an audio file is loading
+        int generation = 0;          // a cleared track outdates loads still running
+        int busy = 0;                // audio files loading
     };
 
     void rebuildStrips();
     void select (int index);         // 0..7 a track, 8 the master
     void tick();
     void refreshTransport();
-    void loadAudio (int track, const QString& path);
-    bool loadMidi (int track, const QString& path, QString& error);
+    // Files become clips at `place` (start, and the part heard; length 0: the whole file).
+    void addFiles (int track, const QStringList& paths, Frame at, bool movePlayhead = false);   // one after another
+    void placeFiles (int track, QStringList paths, Frame at, bool movePlayhead);
+    void stamp (mixer::Clips&);      // ids for new clips
+    void loadAudio (int track, const QString& path, mixer::Clip place, std::function<void (Frame end)> then = {});
+    bool loadMidi (int track, const QString& path, QString& error, mixer::Clip place, Frame* end = nullptr);
+    void addClip (int track, mixer::Clip);
+    void editClips (int track, mixer::Clips);   // no undo step: call remember() first
+    using Snapshot = std::array<mixer::Clips, mixer::maxTracks>;
+    Snapshot snapshot() const;
+    void restore (const Snapshot&);
+    void remember();                 // an undo step: the clips as they are, before an edit
+    void undo();
+    void redo();
     void chooseAudio (int track);
     void chooseMidi (int track);
     void placeAllMidi();             // again, after a tempo change
@@ -128,6 +149,8 @@ private:
     void takeInstrumentSound (int track);                         // from the Sample menu's
     void arm (int track);
     void toggleLanes();              // the tracks across time, above the strips (V)
+    void toggleBrowser();            // the file browser on the left (Ctrl+B)
+    void cycleFocus (bool forward);  // F6, Tab: the browser, the tracks, the strips
     // Renders the track (MIDI through its instrument, and its audio) to a WAV: in place
     // it becomes the track's audio, else it goes on a new track and this one is muted.
     void bounce (int track, bool inPlace);
@@ -143,7 +166,9 @@ private:
     std::array<MixerStrip*, mixer::maxTracks> strips {};
     QWidget* stripArea;
     TrackLanes* lanes = nullptr;
+    FileBrowser* browser = nullptr;
     QSplitter* splitter;
+    QSplitter* sideSplitter;
     QHBoxLayout* stripRow;
     LevelMeter* masterMeter;
     class QSlider* masterFader;
@@ -163,4 +188,7 @@ private:
     QString path;                    // the mix file; empty: not saved yet
     bool modified = false;
     bool restoring = false;
+    std::vector<Snapshot> undoStack, redoStack;
+    uint32_t nextClipId = 1;
+    std::map<QString, std::weak_ptr<const mixer::AudioClip>> audioCache;
 };
