@@ -120,9 +120,12 @@ namespace mixer
 
         // Renders the whole mix from the start, stereo at the mixer's rate, with the
         // instruments' tails (up to `tailSeconds` of sound after the last clip ends).
+        // With `onlyTrack` it is a bounce: that track alone, from the start of the mix to
+        // its own end, before its fader and pan, whatever mute and solo say.
         // Live playback is silent meanwhile. Worker thread.
         AudioDataPtr mixdown (double tailSeconds, std::string& error,
-                              std::atomic<float>* progress = nullptr, const std::atomic<bool>* cancel = nullptr);
+                              std::atomic<float>* progress = nullptr, const std::atomic<bool>* cancel = nullptr,
+                              int onlyTrack = -1);
 
     private:
         static constexpr int block = 256;
@@ -148,6 +151,7 @@ namespace mixer
         // One block of up to `block` frames at `at`; the lock must be held.
         void renderBlock (float* left, float* right, int frames, Frame at, bool play, bool withLive);
         Frame lengthLocked() const;
+        Frame trackEndLocked (int track) const;
         void releaseHeld (Track&, std::vector<NoteEvent>&);
         void meter (int index, const float* left, const float* right, int frames);
 
@@ -163,6 +167,7 @@ namespace mixer
         Frame expected = -1;       // where the last block ended: anything else is a jump
         std::atomic<Frame> loopStart { 0 }, loopEnd { 0 };
         float masterGain = 1.0f;
+        int only = -1;             // a bounce renders this track alone
 
         std::atomic<int> armed { 0 };
         std::mutex liveLock;

@@ -1455,6 +1455,28 @@ namespace
             check (near (a[0], 0.25f, 1.0e-3), "mixer: mixdown plays the MIDI clip into the instrument");
         }
 
+        // Bounce: one track alone, before its fader and pan, whatever mute and solo say.
+        m.strip (0).mute = true;
+        m.strip (0).faderDb = -12.0f;
+        m.strip (0).pan = -1.0f;
+        m.strip (1).solo = true;
+        auto bounced = m.mixdown (2.0, error, nullptr, nullptr, 0);
+        check (bounced != nullptr && bounced->length() >= 4800 && bounced->length() < 53000,
+               "mixer: a bounce ends with its own track");
+        if (bounced != nullptr && bounced->length() > 100)
+        {
+            float a[1], c[1];
+            float* pa[2] = { a, c };
+            bounced->read (100, 1, pa);
+            check (near (a[0], 0.5f, 1.0e-3) && near (c[0], 0.5f, 1.0e-3), "mixer: a bounce is the track alone, pre-fader, unpanned");
+        }
+        m.strip (0).mute = false;
+        m.strip (0).faderDb = 0.0f;
+        m.strip (0).pan = 0.0f;
+        m.strip (1).solo = false;
+        auto again = m.mixdown (2.0, error);
+        check (again != nullptr && again->length() >= 53000, "mixer: after a bounce the mixdown is the whole mix again");
+
         // The built-in Synth: a note sounds and dies after its release; a drum rings out by itself.
         mixer::Synth synth;
         synth.prepare (rate, 256);

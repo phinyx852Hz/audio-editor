@@ -191,6 +191,8 @@ More templates can be added in the same way; each is a small file.
 | 0 | Reset the focused control |
 | M / S / R | Mute, solo, record |
 | T | Step the thumbnail display |
+| B | Bounce in place: the track's sound (MIDI through its instrument, and its audio) becomes its audio |
+| Shift+B | Bounce to a new track and mute this one (not when all 8 tracks are in use) |
 
 Every control has a screen-reader name and announces its value.
 
@@ -236,6 +238,14 @@ Every control has a screen-reader name and announces its value.
   in `~/.config/phinyx/mixer/`. The mixer is heard through the engine's instrument slot with
   the Sampler and Slicer, so it sounds on top of the editor; MIDI goes to the mixer while its
   window was used last.
+- Bounce (`B`, `Shift+B`, or the strip's right-click menu): `Engine::mixdown` with one track
+  renders it alone, from the start of the mix to its own end plus the instrument's tail, after
+  trim and polarity but before fader and pan, whatever mute and solo say. The WAV (32-bit float)
+  goes in `<mix> Bounces/` beside the mix (`~/Music/PHINYX Bounces/` until it is saved).
+  In place, the WAV becomes the track's audio, the MIDI file is turned off but kept with the
+  instrument, and trim and polarity reset since they are in the WAV. To a new track, the new
+  track takes the fader, pan and colour and the original is muted; with 8 tracks it says to
+  bounce in place or remove a track.
 - Tests: the MIDI reader (tempo map, ordering, damaged files) and the engine (pan law, fader,
   polarity, mute and solo, sample-accurate MIDI, transpose, channels, notes let go on a jump,
   the keyboard, meters, mixdown) and the Synth.

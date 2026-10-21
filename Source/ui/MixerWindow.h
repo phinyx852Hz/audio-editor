@@ -50,7 +50,8 @@ private:
 // it and the audio are heard. No MIDI editing. Keyboard-first: 1-8 pick a track,
 // 9 the master, Left/Right move, Up/Down move the fader (Shift finer), 0 resets it,
 // M mute, S solo, R arms the track for the MIDI keyboard, Space plays and stops,
-// Home goes to the start, L loops, Ctrl+T adds a track and Ctrl+Shift+T removes the last.
+// Home goes to the start, L loops, B bounces in place and Shift+B to a new track,
+// Ctrl+T adds a track and Ctrl+Shift+T removes the last.
 class MixerWindow final : public QWidget
 {
     Q_OBJECT
@@ -123,6 +124,9 @@ private:
     void loadInstrumentSound (int track, const QString& path);   // into the track's Sampler or Slicer
     void takeInstrumentSound (int track);                         // from the Sample menu's
     void arm (int track);
+    // Renders the track (MIDI through its instrument, and its audio) to a WAV: in place
+    // it becomes the track's audio, else it goes on a new track and this one is muted.
+    void bounce (int track, bool inPlace);
     void changed();                  // the mix differs from its file
     void updateTitle();
     double rate() const;

@@ -206,19 +206,24 @@ namespace mixer
         loopEnd = end;
     }
 
-    Frame Engine::lengthLocked() const
+    Frame Engine::trackEndLocked (int i) const
     {
         Frame end = 0;
         const auto r = rate.load();
+        const auto& t = lanes[(size_t) i];
+        const auto& s = strips[(size_t) i];
+        if (t.audio != nullptr)
+            end = std::max (end, (Frame) std::llround (s.audioOffset.load() * r) + t.audio->length());
+        if (t.midi != nullptr)
+            end = std::max (end, (Frame) std::llround (s.midiOffset.load() * r) + t.midi->length);
+        return end;
+    }
+
+    Frame Engine::lengthLocked() const
+    {
+        Frame end = 0;
         for (int i = 0; i < tracks.load(); ++i)
-        {
-            const auto& t = lanes[(size_t) i];
-            const auto& s = strips[(size_t) i];
-            if (t.audio != nullptr)
-                end = std::max (end, (Frame) std::llround (s.audioOffset.load() * r) + t.audio->length());
-            if (t.midi != nullptr)
-                end = std::max (end, (Frame) std::llround (s.midiOffset.load() * r) + t.midi->length);
-        }
+            end = std::max (end, trackEndLocked (i));
         return end;
     }
 
@@ -352,6 +357,8 @@ namespace mixer
 
         for (int i = 0; i < count; ++i)
         {
+            if (only >= 0 && i != only)
+                continue;   // a bounce: this track alone
             auto& t = lanes[(size_t) i];
             auto& s = strips[(size_t) i];
             events.clear();
@@ -445,9 +452,14 @@ namespace mixer
                 t.instrument->process (events.data(), (int) events.size(), instL.data(), instR.data(), frames);
 
             // Trim, polarity, pan, fader, mute and solo, as one gain a side for each source.
-            const bool audible = ! s.mute.load() && (! anySolo || s.solo.load());
-            const auto level = audible ? dbToGain (s.trimDb.load()) * dbToGain (s.faderDb.load()) : 0.0f;
-            const auto pan = std::clamp (s.pan.load(), -1.0f, 1.0f);
+            // A bounce takes the track before its fader and pan (trim and polarity included),
+            // whatever mute and solo say; a mono file is then on both sides at full level.
+            const bool bouncing = only >= 0;
+            const bool audible = bouncing || (! s.mute.load() && (! anySolo || s.solo.load()));
+            const auto level = audible ? dbToGain (s.trimDb.load()) * (bouncing ? 1.0f : dbToGain (s.faderDb.load())) : 0.0f;
+            const auto pan = bouncing ? 0.0f : std::clamp (s.pan.load(), -1.0f, 1.0f);
+            if (bouncing)
+                mono = false;
             const auto signL = s.invertLeft.load() ? -1.0f : 1.0f, signR = s.invertRight.load() ? -1.0f : 1.0f;
             const auto balanceL = std::min (1.0f, 1.0f - pan), balanceR = std::min (1.0f, 1.0f + pan);
             const auto angle = (pan + 1.0f) * 0.25f * 3.14159265f;
@@ -492,7 +504,7 @@ namespace mixer
             }
         }
 
-        const auto master = dbToGain (masterDb.load());
+        const auto master = only >= 0 ? 1.0f : dbToGain (masterDb.load());
         if (jumped)
             masterGain = master;
         for (int k = 0; k < frames; ++k)
@@ -506,14 +518,17 @@ namespace mixer
             meter (masterIndex, left, right, frames);
     }
 
-    AudioDataPtr Engine::mixdown (double tailSeconds, std::string& error, std::atomic<float>* progress, const std::atomic<bool>* cancel)
+    AudioDataPtr Engine::mixdown (double tailSeconds, std::string& error, std::atomic<float>* progress, const std::atomic<bool>* cancel,
+                                  int onlyTrack)
     {
         const std::lock_guard<std::mutex> l (lock);
         const auto r = rate.load();
-        const auto end = lengthLocked();
+        only = onlyTrack >= 0 && onlyTrack < tracks.load() ? onlyTrack : -1;
+        const auto end = only >= 0 ? trackEndLocked (only) : lengthLocked();
         if (end <= 0)
         {
-            error = "There is nothing on the tracks to mix down.";
+            error = only >= 0 ? "There is nothing on the track to bounce." : "There is nothing on the tracks to mix down.";
+            only = -1;
             return nullptr;
         }
         for (auto& t : lanes)
@@ -565,6 +580,7 @@ namespace mixer
             t.relocate = true;
         }
         expected = -1;
+        only = -1;
         for (auto& m : meters)
             for (int c = 0; c < 2; ++c)
             {

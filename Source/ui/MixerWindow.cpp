@@ -19,6 +19,10 @@
 #include <QDoubleSpinBox>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QEventLoop>
+#include <QFutureWatcher>
+#include <QProgressDialog>
+#include <QRegularExpression>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
@@ -700,6 +704,11 @@ protected:
                 window.loadInstrumentSound (index, file);
         })->setEnabled (sampled);
         menu.addAction (MixerWindow::tr ("Take Sound from the Sample &Menu"), this, [this] { window.takeInstrumentSound (index); })->setEnabled (sampled);
+        menu.addSeparator();
+        const bool hasSound = audio != nullptr || midi != nullptr;
+        menu.addAction (MixerWindow::tr ("&Bounce in Place (B)"), this, [this] { window.bounce (index, true); })->setEnabled (hasSound);
+        menu.addAction (MixerWindow::tr ("Bounce to &New Track (Shift+B)"), this, [this] { window.bounce (index, false); })
+            ->setEnabled (hasSound && window.engine.numTracks() < mixer::maxTracks);
         menu.addSeparator();
         menu.addAction (MixerWindow::tr ("&Colour..."), this, [this]
         {
@@ -1556,6 +1565,13 @@ void MixerWindow::keyPressEvent (QKeyEvent* e)
             case Qt::Key_Space: togglePlay(); return;
             case Qt::Key_Home: toStart(); return;
             case Qt::Key_L: loopButton->toggle(); return;
+            case Qt::Key_B:
+                if (shift && ! master)
+                {
+                    bounce (selected, false);
+                    return;
+                }
+                break;
             default: break;
         }
         if (! master && ! shift)
@@ -1569,6 +1585,7 @@ void MixerWindow::keyPressEvent (QKeyEvent* e)
                 case Qt::Key_A: chooseAudio (selected); return;
                 case Qt::Key_I: chooseMidi (selected); return;
                 case Qt::Key_E: editInstrument (selected); return;
+                case Qt::Key_B: bounce (selected, true); return;
                 default: break;
             }
         }
@@ -1917,4 +1934,122 @@ void MixerWindow::restoreAutosave()
         path = lastPath;
         updateTitle();
     }
+}
+
+//==============================================================================
+// Bounce: the track's sound (its MIDI through its instrument, and its audio file), before
+// its fader and pan, from the start of the mix, written to a WAV and put back as audio.
+void MixerWindow::bounce (int track, bool inPlace)
+{
+    if (track < 0 || track >= engine.numTracks())
+        return;
+    if (engine.audio (track) == nullptr && engine.midi (track) == nullptr)
+    {
+        status->setText (tr ("Track %1 has nothing on it to bounce.").arg (track + 1));
+        return;
+    }
+    if (! inPlace && engine.numTracks() >= mixer::maxTracks)
+    {
+        QMessageBox::information (this, tr ("Bounce to New Track"),
+                                  tr ("All 8 tracks are in use. Use Bounce in Place (B), or remove a track first."));
+        return;
+    }
+    if (info[(size_t) track].busy)
+    {
+        status->setText (tr ("Track %1's audio file is still loading.").arg (track + 1));
+        return;
+    }
+    engine.stop();
+
+    // Where it goes: beside the mix, or in the Music folder until the mix is saved.
+    const auto base = path.isEmpty() ? QDir (QStandardPaths::writableLocation (QStandardPaths::MusicLocation)).filePath (tr ("PHINYX Bounces"))
+                                     : QFileInfo (path).absoluteDir().filePath (QFileInfo (path).completeBaseName() + tr (" Bounces"));
+    QDir().mkpath (base);
+    auto stem = QStringLiteral ("Track %1 %2").arg (track + 1).arg (info[(size_t) track].name).trimmed();
+    stem.replace (QRegularExpression (QStringLiteral ("[/\\\\:*?\"<>|]")), QStringLiteral ("_"));
+    auto file = QDir (base).filePath (stem + QStringLiteral (".wav"));
+    for (int n = 2; QFileInfo::exists (file); ++n)
+        file = QDir (base).filePath (QStringLiteral ("%1 %2.wav").arg (stem).arg (n));
+
+    auto progress = std::make_shared<std::atomic<float>> (0.0f);
+    auto cancel = std::make_shared<std::atomic<bool>> (false);
+    QProgressDialog dialog (tr ("Bouncing track %1...").arg (track + 1), tr ("Cancel"), 0, 1000, this);
+    dialog.setWindowTitle (inPlace ? tr ("Bounce in Place") : tr ("Bounce to New Track"));
+    dialog.setWindowModality (Qt::WindowModal);
+    dialog.setMinimumDuration (300);
+    connect (&dialog, &QProgressDialog::canceled, this, [cancel] { cancel->store (true); });
+
+    struct Result { AudioDataPtr data; std::string error; };
+    QFutureWatcher<Result> watcher;
+    QEventLoop loop;
+    connect (&watcher, &QFutureWatcher<Result>::finished, &loop, &QEventLoop::quit);
+    QTimer poll;
+    connect (&poll, &QTimer::timeout, this, [&] { dialog.setValue ((int) (progress->load() * 1000.0f)); });
+    poll.start (50);
+    watcher.setFuture (QtConcurrent::run ([m = &engine, track, file, progress, cancel]
+    {
+        Result r;
+        r.data = m->mixdown (10.0, r.error, progress.get(), cancel.get(), track);
+        if (r.data != nullptr)
+        {
+            SaveOptions options;
+            options.bitDepth = 32;
+            if (! AudioEngine::saveFile (file.toStdString(), *r.data, {}, {}, options, r.error))
+                r.data = nullptr;
+        }
+        return r;
+    }));
+    loop.exec();
+    poll.stop();
+    dialog.reset();
+
+    const auto result = watcher.result();
+    if (result.data == nullptr)
+    {
+        if (result.error != "Cancelled.")
+            QMessageBox::warning (this, dialog.windowTitle(), result.error.empty() ? tr ("The track could not be bounced.") : QString::fromStdString (result.error));
+        return;
+    }
+
+    const auto clip = mixer::makeAudioClip (*result.data, file.toStdString());
+    auto& from = engine.strip (track);
+    int target = track;
+    if (inPlace)
+    {
+        // The MIDI file and the instrument stay, switched off, so turning MIDI back on undoes it;
+        // trim and polarity are in the sound now.
+        from.midiOn = false;
+        from.trimDb = 0.0f;
+        from.invertLeft = from.invertRight = false;
+    }
+    else
+    {
+        target = engine.numTracks();
+        engine.setNumTracks (target + 1);
+        auto& to = engine.strip (target);
+        to.trimDb = 0.0f;
+        to.invertLeft = to.invertRight = false;
+        to.faderDb = from.faderDb.load();
+        to.pan = from.pan.load();
+        to.mute = false;
+        to.solo = false;
+        to.midiOn = true;
+        to.transpose = 0;
+        to.channels = 0xFFFF;
+        to.midiOffset = 0.0;
+        engine.setMidi (target, nullptr);
+        engine.setInstrument (target, nullptr);
+        info[(size_t) target].name = tr ("%1 bounce").arg (info[(size_t) track].name);
+        info[(size_t) target].colour = info[(size_t) track].colour;
+        from.mute = true;   // heard once, from the new track
+    }
+    auto& to = engine.strip (target);
+    to.audioOffset = 0.0;   // the bounce starts at the start of the mix
+    to.audioOn = true;
+    engine.setAudio (target, clip);
+    rebuildStrips();
+    select (target);
+    changed();
+    status->setText (inPlace ? tr ("Bounced track %1 in place to %2 (its MIDI file is kept, switched off)").arg (track + 1).arg (file)
+                             : tr ("Bounced track %1 to track %2 (%3); track %1 is muted").arg (track + 1).arg (target + 1).arg (file));
 }
