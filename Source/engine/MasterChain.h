@@ -10,6 +10,8 @@
 #include <memory>
 #include <mutex>
 
+class PluginWindow;
+
 // Plugin hosting for the Master Section. Internal to the engine; the UI talks
 // to it through AudioEngine.
 class MasterChain
@@ -22,7 +24,11 @@ public:
 
     // Plugin list
     std::vector<PluginInfo> knownPlugins() const;    // enabled only
-    std::vector<PluginInfo> allPlugins() const;
+    std::vector<PluginInfo> allPlugins() const;     // effects, enabled or not
+    std::vector<PluginInfo> instruments() const;    // instrument plugins, enabled only (the mixer's tracks)
+    // An instrument for a mixer track: stereo out, MIDI in, prepared; nullptr with `error` if that failed.
+    std::unique_ptr<juce::AudioPluginInstance> createInstrument (const std::string& pluginId, double sampleRate, int maxBlock,
+                                                                 juce::String& error) const;
     void setPluginEnabled (const std::string& pluginId, bool);
     std::vector<std::string> skippedFiles() const;
     void retrySkipped (const std::string& file);
@@ -117,8 +123,6 @@ private:
         bool usable() const { return plugin != nullptr && ! health->failed.load (std::memory_order_acquire); }
     };
 
-    class PluginWindow;
-
     // Runs a call into a slot's plugin; false (and the slot marked failed) if it threw.
     template <typename Fn>
     bool guard (const Slot& s, Fn&& fn) const
@@ -150,6 +154,7 @@ private:
     void setCompareSide (int slot, int side);
     void copyCompareSide (int slot);
 
+    std::vector<PluginInfo> listPlugins (bool instruments) const;
     std::unique_ptr<juce::AudioPluginInstance> createInstance (const juce::PluginDescription&, juce::String& error) const;
     void preparePlugin (juce::AudioPluginInstance&, double rate, int blockSize) const;
     void applyLayout (juce::AudioPluginInstance&, int numChannels) const;
