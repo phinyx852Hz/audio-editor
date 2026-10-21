@@ -967,6 +967,8 @@ void AudioEngine::dispatchMessages()
 //==============================================================================
 void AudioEngine::setConfigFolder (const std::string& folder) { impl->master.setConfigFolder (juce::File (folder)); }
 
+MasterChain& AudioEngine::masterChain() { return impl->master; }
+
 std::vector<PluginInfo> AudioEngine::knownPlugins() const            { return impl->master.knownPlugins(); }
 std::vector<PluginInfo> AudioEngine::allPlugins() const              { return impl->master.allPlugins(); }
 void AudioEngine::setPluginEnabled (const std::string& id, bool on)  { impl->master.setPluginEnabled (id, on); }

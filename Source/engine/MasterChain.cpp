@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MasterChain.h"
+#include "PluginWindow.h"
 #include "BuiltinEffects.h"
 #include "ClapFormat.h"
 #include "StockFrame.h"
@@ -9,89 +10,6 @@
 
 #include <algorithm>
 #include <cstdlib>
-
-//==============================================================================
-// The plugin's own editor in a JUCE window (X11, so XWayland on Wayland).
-// Always resizable, so it can be made any size (or tiled with a window rule);
-// an editor of fixed size sits centred in it.
-// It floats (a dialog to the window manager). With the window focused (on Hyprland,
-// under the mouse): Esc or Ctrl+W closes it,
-// Ctrl+Tab and Ctrl+Shift+Tab go to the next and previous plugin window.
-class MasterChain::PluginWindow final : public juce::DocumentWindow
-{
-public:
-    // `content` is the plugin's editor, or a StockFrame holding it.
-    PluginWindow (juce::Component* content, bool contentResizes, const juce::String& title,
-                  std::function<void()> onClose, std::function<void (int)> onCycle)
-        : DocumentWindow (title, juce::Colours::black, DocumentWindow::closeButton),
-          closed (std::move (onClose)), cycle (std::move (onCycle))
-    {
-        setUsingNativeTitleBar (true);
-        if (contentResizes)
-            setContentOwned (content, true);
-        else
-            setContentOwned (new Centred (content), true);
-        setResizable (true, false);
-        setResizeLimits (160, 120, 16384, 16384);
-        centreWithSize (getWidth(), getHeight());
-        setWantsKeyboardFocus (true);
-        // Before it is shown: the class for window rules, and floating like a traditional plugin window.
-        if (auto* peer = getPeer())
-        {
-            x11::setWindowClass (peer->getNativeHandle());
-            x11::setFloating (peer->getNativeHandle());
-        }
-        setVisible (true);
-        toFront (true);
-    }
-
-    void closeButtonPressed() override
-    {
-        if (closed)
-            closed();
-    }
-
-    // Keys the plugin's own view did not use.
-    bool keyPressed (const juce::KeyPress& key) override
-    {
-        const auto mods = key.getModifiers();
-        if ((key.getKeyCode() == juce::KeyPress::escapeKey && ! mods.isAnyModifierKeyDown())
-            || (mods.isCtrlDown() && ! mods.isAltDown() && (key.getKeyCode() == 'W' || key.getKeyCode() == 'w')))
-        {
-            closeButtonPressed();
-            return true;
-        }
-        if (mods.isCtrlDown() && key.getKeyCode() == juce::KeyPress::tabKey)
-        {
-            if (cycle)
-                cycle (mods.isShiftDown() ? -1 : 1);
-            return true;
-        }
-        return DocumentWindow::keyPressed (key);
-    }
-
-private:
-    // Holds an editor that cannot resize, centred, so the window still can.
-    class Centred final : public juce::Component
-    {
-    public:
-        explicit Centred (juce::Component* e) : editor (e)
-        {
-            addAndMakeVisible (editor.get());
-            setSize (editor->getWidth(), editor->getHeight());
-        }
-
-        void paint (juce::Graphics& g) override { g.fillAll (juce::Colours::black); }
-        void resized() override { editor->setCentrePosition (getLocalBounds().getCentre()); }
-        void childBoundsChanged (juce::Component*) override { resized(); }
-
-    private:
-        std::unique_ptr<juce::Component> editor;
-    };
-
-    std::function<void()> closed;
-    std::function<void (int)> cycle;
-};
 
 //==============================================================================
 void MasterChain::addExtraFormats (juce::AudioPluginFormatManager& manager)
@@ -274,7 +192,16 @@ void MasterChain::retrySkipped (const std::string& file)
         xml->writeTo (pluginListFile());
 }
 
-std::vector<PluginInfo> MasterChain::allPlugins() const
+std::vector<PluginInfo> MasterChain::allPlugins() const { return listPlugins (false); }
+
+std::vector<PluginInfo> MasterChain::instruments() const
+{
+    auto all = listPlugins (true);
+    all.erase (std::remove_if (all.begin(), all.end(), [] (const PluginInfo& p) { return ! p.enabled; }), all.end());
+    return all;
+}
+
+std::vector<PluginInfo> MasterChain::listPlugins (bool wantInstruments) const
 {
     std::vector<PluginInfo> result;
     auto all = builtin::descriptions();
@@ -292,7 +219,7 @@ std::vector<PluginInfo> MasterChain::allPlugins() const
     };
 
     for (const auto& d : all)
-        if (! d.isInstrument)
+        if (d.isInstrument == wantInstruments)
         {
             const auto id = d.createIdentifierString();
             result.push_back ({ id.toStdString(), d.name.toStdString(), d.manufacturerName.toStdString(),
@@ -492,6 +419,39 @@ void MasterChain::applyLayout (juce::AudioPluginInstance& p, int n) const
     if (n > 2 && (trySetLayout (p, channelSetFor (n)) || trySetLayout (p, juce::AudioChannelSet::discreteChannels (n))))
         return;
     trySetLayout (p, juce::AudioChannelSet::stereo());
+}
+
+std::unique_ptr<juce::AudioPluginInstance> MasterChain::createInstrument (const std::string& pluginId, double sampleRate, int maxBlock,
+                                                                          juce::String& error) const
+{
+    const auto d = findDescription (pluginId);
+    if (d == nullptr)
+    {
+        error = "this instrument is not in the plugin list; scan for plugins again";
+        return nullptr;
+    }
+    std::unique_ptr<juce::AudioPluginInstance> instance;
+    try
+    {
+        instance = formats.createPluginInstance (*d, sampleRate, maxBlock, error);
+        if (instance == nullptr)
+            return nullptr;
+        // Stereo out, no audio in where the plugin allows it; MIDI in.
+        instance->disableNonMainBuses();
+        auto layout = instance->getBusesLayout();
+        if (! layout.inputBuses.isEmpty())
+            layout.inputBuses.getReference (0) = juce::AudioChannelSet::disabled();
+        if (! layout.outputBuses.isEmpty())
+            layout.outputBuses.getReference (0) = juce::AudioChannelSet::stereo();
+        if (! instance->setBusesLayout (layout))
+            trySetLayout (*instance, juce::AudioChannelSet::stereo());
+        preparePlugin (*instance, sampleRate, maxBlock);
+        return instance;
+    }
+    catch (const std::exception& e) { error = e.what(); }
+    catch (...)                      { error = "an unknown error"; }
+    (void) instance.release();   // it threw: deleting it would call into it again
+    return nullptr;
 }
 
 void MasterChain::setChannels (int n)

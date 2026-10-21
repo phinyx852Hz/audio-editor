@@ -34,6 +34,7 @@ struct MeterBlock
 };
 
 namespace codec { struct Format; }
+namespace mixer { class Instrument; }
 
 struct SaveOptions
 {
@@ -173,6 +174,12 @@ public:
     bool scanNextPlugin (std::string& fileBeingScanned);
     std::string finishPluginScan();                          // saves the list; returns a summary
 
+    // Instrument plugins for the mixer's tracks (PluginInstrument.cpp): MIDI in, stereo out.
+    std::vector<PluginInfo> knownInstruments() const;
+    // Message thread. Null with `error` when it could not be started.
+    std::shared_ptr<mixer::Instrument> loadInstrumentPlugin (const std::string& pluginId, double sampleRate, std::string& error);
+    static std::string instrumentPluginId (const mixer::Instrument&);   // empty for the built-in ones
+
     //==========================================================================
     // Master Section: slots of plugins applied to everything played and rendered,
     // followed by the master gain.
@@ -240,6 +247,7 @@ public:
                            const tagio::Options&, std::string& error);
 
 private:
+    class MasterChain& masterChain();
     void useOutputsFor (int channels);
     void updateInstrumentChannels();
 

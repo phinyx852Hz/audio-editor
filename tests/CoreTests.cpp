@@ -6,6 +6,8 @@
 #include "../Source/core/MidSide.h"
 #include "../Source/sampler/SamplerEngine.h"
 #include "../Source/sampler/SlicerEngine.h"
+#include "../Source/mixer/MidiFile.h"
+#include "../Source/mixer/MixerEngine.h"
 #include "../Source/core/Ixml.h"
 #include "../Source/core/Metadata.h"
 #include "../Source/core/RiffChunks.h"
@@ -1232,6 +1234,265 @@ namespace
         check (! e.isSounding (60) && e.isSounding (62) && e.isSounding (64), "sampler: the oldest voice is taken when all are busy");
     }
 
+
+    // A standard MIDI file made byte by byte.
+    struct SmfWriter
+    {
+        std::vector<uint8_t> bytes;
+        void be (uint32_t v, int n) { for (int i = n - 1; i >= 0; --i) bytes.push_back ((uint8_t) (v >> (8 * i))); }
+        void header (int format, int tracks, int division)
+        {
+            bytes.insert (bytes.end(), { 'M', 'T', 'h', 'd' });
+            be (6, 4); be ((uint32_t) format, 2); be ((uint32_t) tracks, 2); be ((uint32_t) division, 2);
+        }
+        void track (const std::vector<uint8_t>& body)
+        {
+            bytes.insert (bytes.end(), { 'M', 'T', 'r', 'k' });
+            be ((uint32_t) body.size(), 4);
+            bytes.insert (bytes.end(), body.begin(), body.end());
+        }
+    };
+
+    void testMidiFile()
+    {
+        SmfWriter w;
+        w.header (1, 2, 480);
+        // Track 1: 120 BPM, then 60 BPM at beat 2.
+        w.track ({ 0x00, 0xFF, 0x51, 0x03, 0x07, 0xA1, 0x20,
+                   0x83, 0x60, 0xFF, 0x51, 0x03, 0x0F, 0x42, 0x40,
+                   0x00, 0xFF, 0x2F, 0x00 });
+        // Track 2: a name, C4 on at 0, off by running status (velocity 0) at 480, a kick on channel 10
+        // at 480, and E4 at 480 on channel 1 (so the note-off goes first at that tick).
+        w.track ({ 0x00, 0xFF, 0x03, 0x04, 'L', 'e', 'a', 'd',
+                   0x00, 0x90, 60, 100,
+                   0x83, 0x60, 60, 0,
+                   0x00, 0x99, 36, 110,
+                   0x00, 0x90, 64, 90,
+                   0x87, 0x40, 0x80, 64, 0,
+                   0x00, 0xFF, 0x2F, 0x00 });
+        std::string error;
+        auto song = midifile::parse (w.bytes.data(), w.bytes.size(), error);
+        check (song != nullptr && error.empty(), "midi file: a type 1 file reads");
+        if (song == nullptr)
+            return;
+        check (song->format == 1 && song->ticksPerQuarter == 480 && song->trackNames.size() == 2 && song->trackNames[1] == "Lead",
+               "midi file: header and track names");
+        check (song->events.size() == 5 && song->noteCount() == 3, "midi file: channel events, velocity 0 is a note-off");
+        check (song->events.size() == 5 && song->events[1].kind() == 0x80 && song->events[1].tick == 480,
+               "midi file: at the same tick a note-off comes before the note-ons");
+        check (song->channelsUsed == ((1u << 0) | (1u << 9)), "midi file: channels with notes");
+        check (near (song->fileBpm(), 120.0, 1.0e-9) && near (song->seconds (480), 0.5, 1.0e-9) && near (song->seconds (1440), 2.5, 1.0e-9),
+               "midi file: the tempo map (120 then 60 BPM)");
+        check (near (song->seconds (1440, 90.0), 2.0, 1.0e-9), "midi file: played at a fixed tempo");
+        check (song->lastTick == 1440, "midi file: length to the last event");
+
+        const auto clip = mixer::placeMidi (song, "", 48000.0, 0.0);
+        check (clip->events.size() == 5 && clip->events[1].frame == 24000 && clip->events.back().frame == 120000 && clip->length == 120000,
+               "midi file: events placed at frames through the tempo map");
+
+        const uint8_t junk[] = { 'R', 'I', 'F', 'F', 0, 0, 0, 0 };
+        check (midifile::parse (junk, sizeof junk, error) == nullptr && ! error.empty(), "midi file: not a MIDI file is refused");
+        // Cut short in the middle of a track: what was read is kept.
+        auto cut = w.bytes;
+        cut.resize (cut.size() - 8);
+        check (midifile::parse (cut.data(), cut.size(), error) != nullptr, "midi file: a truncated file still reads");
+    }
+
+    // An instrument that writes down what it was sent and plays a constant level while a note is held.
+    struct ProbeInstrument final : mixer::Instrument
+    {
+        std::vector<std::pair<Frame, mixer::NoteEvent>> heard;
+        Frame clock = 0;
+        int sounding = 0;
+        Kind kind() const override { return Kind::synth; }
+        std::string name() const override { return "Probe"; }
+        void prepare (double, int) override {}
+        void process (const mixer::NoteEvent* e, int n, float* left, float* right, int frames) override
+        {
+            int k = 0;
+            for (int i = 0; i < frames; ++i)
+            {
+                while (k < n && e[k].offset <= i)
+                {
+                    heard.push_back ({ clock + i, e[k] });
+                    if ((e[k].status & 0xF0) == 0x90 && e[k].data2 > 0)
+                        ++sounding;
+                    else if ((e[k].status & 0xF0) == 0x80 || (e[k].status & 0xF0) == 0x90)
+                        sounding = std::max (0, sounding - 1);
+                    ++k;
+                }
+                left[i] += sounding > 0 ? 0.25f : 0.0f;
+                right[i] += sounding > 0 ? 0.25f : 0.0f;
+            }
+            clock += frames;
+        }
+        void releaseAll() override {}
+        void reset() override { sounding = 0; }
+    };
+
+    void testMixer()
+    {
+        const double rate = 48000.0;
+        mixer::Engine m;
+        m.prepare (rate);
+        m.setNumTracks (2);
+
+        // A mono clip of 0.5, centred: equal power, -3 dB on each side.
+        AudioData::Builder b (1, rate);
+        std::vector<float> half (4800, 0.5f);
+        const float* one[1] = { half.data() };
+        b.append (one, 4800);
+        const auto dc = b.finish();
+        m.setAudio (0, mixer::makeAudioClip (*dc, "dc.wav"));
+        check (m.length() == 4800, "mixer: length from the clips");
+
+        std::vector<float> l (512), r (512);
+        auto render = [&] (int n)
+        {
+            std::fill (l.begin(), l.end(), 0.0f);
+            std::fill (r.begin(), r.end(), 0.0f);
+            m.render (l.data(), r.data(), n);
+        };
+        m.play();
+        render (512);
+        check (near (l[100], 0.5 * std::sqrt (0.5), 1.0e-4) && near (r[100], 0.5 * std::sqrt (0.5), 1.0e-4), "mixer: mono audio is equal-power panned");
+        check (m.position() == 512, "mixer: the transport moves while playing");
+
+        m.strip (0).pan = -1.0f;
+        render (512);
+        render (512);
+        check (near (l[100], 0.5, 1.0e-4) && near (r[100], 0.0, 1.0e-4), "mixer: hard left");
+        m.strip (0).pan = 0.0f;
+        m.strip (0).faderDb = -6.0206f;
+        m.strip (0).invertLeft = true;
+        render (512);
+        render (512);
+        check (near (l[100], -0.25 * std::sqrt (0.5), 1.0e-4) && near (r[100], 0.25 * std::sqrt (0.5), 1.0e-4), "mixer: fader and polarity");
+        m.strip (0).faderDb = 0.0f;
+        m.strip (0).invertLeft = false;
+        m.strip (1).solo = true;
+        render (512);
+        render (512);
+        check (std::abs (l[100]) < 1.0e-6, "mixer: soloing another track mutes this one");
+        m.strip (1).solo = false;
+        m.strip (0).mute = true;
+        render (512);
+        render (512);
+        check (std::abs (l[100]) < 1.0e-6, "mixer: mute");
+        m.strip (0).mute = false;
+        render (512);
+        render (512);
+        check (! m.isPlaying(), "mixer: the transport stops at the end");
+
+        // Track 2: a MIDI clip and an instrument, with the audio clip on the same track too.
+        SmfWriter w;
+        w.header (0, 1, 480);
+        // At 120 BPM: C4 at tick 100 (5000 frames), off at 580 (29000); D4 on channel 2 at 580; drums at 580.
+        w.track ({ 0x64, 0x90, 60, 100, 0x83, 0x60, 0x80, 60, 0, 0x00, 0x91, 62, 100, 0x00, 0x99, 36, 100,
+                   0x83, 0x60, 0x81, 62, 0, 0x00, 0x89, 36, 0, 0x00, 0xFF, 0x2F, 0x00 });
+        std::string error;
+        auto song = midifile::parse (w.bytes.data(), w.bytes.size(), error);
+        auto probe = std::make_shared<ProbeInstrument>();
+        m.setMidi (1, mixer::placeMidi (song, "song.mid", rate, 0.0));
+        m.setInstrument (1, probe);
+        m.setAudio (1, mixer::makeAudioClip (*dc, "dc.wav"));
+        m.strip (1).transpose = 12;
+        m.strip (1).channels = 0xFFFF & ~(1u << 1);   // channel 2 left out
+        m.setPosition (0);
+        m.play();
+        for (int i = 0; i < 100; ++i)
+            render (480);
+        bool atFrame = probe->heard.size() >= 2 && probe->heard[0].first == 5000 && probe->heard[0].second.data1 == 72
+                       && probe->heard[1].first == 29000 && probe->heard[1].second.data1 == 72 && (probe->heard[1].second.status & 0xF0) == 0x80;
+        check (atFrame, "mixer: MIDI clip notes play at their frames, transposed, and end with the transposed note");
+        const bool drumsKept = std::any_of (probe->heard.begin(), probe->heard.end(), [] (const auto& h) { return h.second.status == 0x99 && h.second.data1 == 36; });
+        const bool channelOut = std::none_of (probe->heard.begin(), probe->heard.end(), [] (const auto& h) { return (h.second.status & 0x0F) == 1; });
+        check (drumsKept && channelOut, "mixer: drums are not transposed; a channel turned off is not played");
+
+        // A note held when the transport jumps is let go.
+        probe->heard.clear();
+        m.setPosition (6000);
+        m.play();
+        render (480);
+        m.setPosition (1000);
+        render (480);
+        check (probe->heard.empty() || std::all_of (probe->heard.begin(), probe->heard.end(), [] (const auto& h) { return (h.second.status & 0xF0) == 0x80; }),
+               "mixer: jumping into the middle of a note does not start it");
+        probe->heard.clear();
+        m.setPosition (5000 - 100);
+        render (480);
+        m.setPosition (20000);
+        render (480);
+        check (probe->heard.size() == 2 && (probe->heard[1].second.status & 0xF0) == 0x80 && probe->heard[1].second.data1 == 72,
+               "mixer: a note held across a jump is let go");
+        m.stop();
+
+        // Live MIDI plays the armed track's instrument while stopped.
+        probe->heard.clear();
+        m.setLiveTrack (1);
+        m.liveMidi (0x90, 50, 100);
+        render (480);
+        check (probe->heard.size() == 1 && probe->heard[0].second.data1 == 50 && l[10] > 0.1f, "mixer: a MIDI keyboard plays the armed track");
+        m.liveMidi (0x80, 50, 0);
+        render (480);
+        render (480);
+        auto meterTrack = m.takeMeter (1), meterMaster = m.takeMeter (mixer::masterIndex);
+        check (meterTrack.peak[0] > 0.1f && meterMaster.peak[0] > 0.1f && m.takeMeter (1).peak[0] == 0.0f, "mixer: meters, taken once");
+
+        // Mixdown: the whole mix from the start, audio and instrument both heard.
+        m.strip (1).audioOn = true;
+        auto mix = m.mixdown (2.0, error);
+        check (mix != nullptr && mix->numChannels() == 2 && mix->length() >= 53000 && mix->length() <= 53000 + 96000,
+               "mixer: mixdown covers the clips and stops after the tail");
+        if (mix != nullptr)
+        {
+            float a[1], c[1];
+            float* pa[2] = { a, c };
+            mix->read (100, 1, pa);
+            const auto audioOnly = 2.0f * 0.5f * (float) std::sqrt (0.5);   // both tracks' clips at 100
+            check (near (a[0], audioOnly, 1.0e-3), "mixer: mixdown sums the tracks");
+            mix->read (6000, 1, pa);
+            check (near (a[0], 0.25f, 1.0e-3), "mixer: mixdown plays the MIDI clip into the instrument");
+        }
+
+        // The built-in Synth: a note sounds and dies after its release; a drum rings out by itself.
+        mixer::Synth synth;
+        synth.prepare (rate, 256);
+        std::vector<float> sl (4800, 0.0f), sr (4800, 0.0f);
+        const mixer::NoteEvent on { 0, 0x90, 69, 100 };
+        synth.process (&on, 1, sl.data(), sr.data(), 4800);
+        float peak = 0.0f;
+        for (auto v : sl)
+            peak = std::max (peak, std::abs (v));
+        check (peak > 0.05f, "synth: a note sounds");
+        const mixer::NoteEvent off { 0, 0x80, 69, 0 };
+        std::fill (sl.begin(), sl.end(), 0.0f);
+        synth.process (&off, 1, sl.data(), sr.data(), 4800);
+        for (int i = 0; i < 20; ++i)
+        {
+            std::fill (sl.begin(), sl.end(), 0.0f);
+            synth.process (nullptr, 0, sl.data(), sr.data(), 4800);
+        }
+        peak = 0.0f;
+        for (auto v : sl)
+            peak = std::max (peak, std::abs (v));
+        check (peak < 1.0e-3f, "synth: the note ends after its release");
+        const mixer::NoteEvent kick { 0, 0x99, 36, 120 };
+        std::fill (sl.begin(), sl.end(), 0.0f);
+        synth.process (&kick, 1, sl.data(), sr.data(), 4800);
+        peak = 0.0f;
+        for (auto v : sl)
+            peak = std::max (peak, std::abs (v));
+        check (peak > 0.1f, "synth: channel 10 plays drums");
+        mixer::Synth copy;
+        auto settings = synth.settings();
+        settings.wave = mixer::SynthSettings::square;
+        settings.cutoff = 1234.0;
+        synth.setSettings (settings);
+        copy.setState (synth.state());
+        check (copy.settings().wave == mixer::SynthSettings::square && near (copy.settings().cutoff, 1234.0, 1.0e-9), "synth: settings saved and restored");
+    }
+
     void testSlicer()
     {
         // Push layout: bottom-left 4x4 is bank A, pad 1 at the bottom left; every note round-trips.
@@ -2112,6 +2373,8 @@ int main()
     testCurvedFade();
     testMidSide();
     testSampler();
+    testMidiFile();
+    testMixer();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");

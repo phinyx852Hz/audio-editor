@@ -43,6 +43,7 @@ namespace timestretch { class SegmentCache; }
 
 namespace sampler { class Engine; }
 namespace slicer { class Engine; }
+namespace mixer { class Engine; }
 
 class MainWindow final : public QMainWindow
 {
@@ -347,7 +348,16 @@ private:
     AudioDataPtr slicerSource;
     QTimer slicerFollowTimer;
     QFutureWatcher<void> slicerLoad;
-    std::atomic<int> midiTarget { -1 };
+    std::atomic<int> midiTarget { -1 };   // 2: the Mixer's armed track
+
+    // The Mixer (MixerSection.cpp, docs/mixer.md): 8 tracks, each with an audio file,
+    // a MIDI file and an instrument; heard through engine.setInstrument with the Sampler.
+    void registerMixerCommands();
+    class MixerWindow* mixerWindow();
+    void showMixer();
+    void mixDownToEditor();
+    std::unique_ptr<mixer::Engine> mixerEngine;
+    class MixerWindow* mixerWin = nullptr;
     class TrackerWindow* trackerWin = nullptr;
     class VisualizerWindow* visualizerWindow();
     void setVisualMode (int index, bool openIfHidden);

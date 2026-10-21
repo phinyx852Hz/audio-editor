@@ -3,10 +3,12 @@
 // (sampler/SlicerEngine.h) in their own windows, fed from the editor, and MIDI inputs
 // that play them.
 #include "MainWindow.h"
+#include "MixerWindow.h"
 #include "SamplerWindow.h"
 #include "SlicerWindow.h"
 #include "Settings.h"
 #include "../engine/MidiInputs.h"
+#include "../mixer/MixerEngine.h"
 #include "../sampler/SamplerEngine.h"
 #include "../sampler/SlicerEngine.h"
 
@@ -55,10 +57,23 @@ void MainWindow::registerSamplerCommands()
     });
 
     // MIDI plays the Sampler or the Slicer (whichever was used last) straight from the MIDI thread.
-    midiInputs->setHandler ([this, e = samplerEngine.get(), s = slicerEngine.get()] (int status, int, int a, int b)
+    midiInputs->setHandler ([this, e = samplerEngine.get(), s = slicerEngine.get()] (int status, int channel, int a, int b)
     {
         // No instrument window open: MIDI plays nothing.
         const auto target = midiTarget.load (std::memory_order_relaxed);
+        // The Mixer: everything goes to its armed track, on the channel it came on.
+        if (target == 2)
+        {
+            if (auto* m = mixerEngine.get())
+            {
+                const auto st = (uint8_t) (status | std::clamp (channel - 1, 0, 15));
+                if (status == 0xE0)
+                    m->liveMidi (st, (uint8_t) (a & 0x7F), (uint8_t) ((a >> 7) & 0x7F));
+                else
+                    m->liveMidi (st, (uint8_t) a, (uint8_t) b);
+            }
+            return;
+        }
         const bool slices = target == 1;
         if (target < 0 && (status == 0x90 || status == 0xE0))
             return;
@@ -108,10 +123,12 @@ void MainWindow::registerSamplerCommands()
 void MainWindow::playInstruments()
 {
     if (! engine.hasInstrument())
-        engine.setInstrument ([e = samplerEngine.get(), s = slicerEngine.get()] (float* left, float* right, int frames)
+        engine.setInstrument ([e = samplerEngine.get(), s = slicerEngine.get(), m = mixerEngine.get()] (float* left, float* right, int frames)
         {
             e->render (left, right, frames);
             s->render (left, right, frames);
+            if (m != nullptr)
+                m->render (left, right, frames);
         });
 }
 
@@ -211,8 +228,9 @@ void MainWindow::instrumentClosed()
 {
     const bool sampler = samplerWin != nullptr && samplerWin->isVisible();
     const bool slices = slicerWin != nullptr && slicerWin->isVisible();
-    midiTarget = sampler ? 0 : (slices ? 1 : -1);
-    if (! sampler && ! slices)
+    const bool mixing = mixerWin != nullptr && mixerWin->isVisible();
+    midiTarget = sampler ? 0 : (slices ? 1 : (mixing ? 2 : -1));
+    if (! sampler && ! slices && ! mixing)
         engine.setInstrument ({});
 }
 
@@ -332,7 +350,7 @@ void MainWindow::openMidiInputs()
 
 void MainWindow::updateMidiStatus()
 {
-    if (samplerWin == nullptr && slicerWin == nullptr)
+    if (samplerWin == nullptr && slicerWin == nullptr && mixerWin == nullptr)
         return;
     QStringList names;
     const auto open = midiInputs->opened();
@@ -344,6 +362,8 @@ void MainWindow::updateMidiStatus()
         samplerWin->setMidiStatus (text);
     if (slicerWin != nullptr)
         slicerWin->setMidiStatus (text);
+    if (mixerWin != nullptr)
+        mixerWin->setMidiStatus (text);
 }
 
 void MainWindow::midiInputsDialog()
@@ -353,6 +373,8 @@ void MainWindow::midiInputsDialog()
         parent = samplerWin;
     else if (slicerWin != nullptr && slicerWin->isActiveWindow())
         parent = slicerWin;
+    else if (mixerWin != nullptr && mixerWin->isActiveWindow())
+        parent = mixerWin;
     QDialog dialog (parent);
     dialog.setWindowTitle (tr ("MIDI Inputs"));
     auto* layout = new QVBoxLayout (&dialog);

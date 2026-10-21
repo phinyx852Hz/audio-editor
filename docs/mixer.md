@@ -1,6 +1,24 @@
 # PHINYX Mixer: design draft
 
-Status: proposal for the owner to review (2026-10-19). Nothing here is built yet.
+Status: step 1 built (2026-10-21); the rest is the proposal the owner reviewed (2026-10-19).
+See "Built so far" at the end.
+
+## One kind of track (owner, 2026-10-21)
+
+"Create 8 track mixer to host a unified track architecture: a track can host either an audio
+file or a MIDI file, but there will be no MIDI editor. It can play back MIDI on a file or audio
+on a file, or both on the same file, like Reaper or Bitwig or Tracktion."
+
+So there are no audio tracks and MIDI tracks, only tracks. Each track has three slots, all
+optional and all heard together:
+- **Audio file**: played as it is, from its start offset.
+- **MIDI file** (.mid, types 0 and 1): played, never edited, into the track's instrument; transpose
+  (channel 10, the drums, stays) and which of its 16 channels play.
+- **Instrument**: what turns MIDI into sound, from the MIDI file and from the MIDI keyboard when the
+  track is armed: the built-in Synth (with General MIDI drums), the track's own Sampler or Slicer,
+  or a VST3, LV2 or CLAP instrument plugin.
+This replaces the single "Source" (stem, live input or instrument) below: a stem is the audio
+slot, an instrument is the instrument slot, and a live input will be a fourth slot.
 
 ## What it is
 
@@ -184,12 +202,44 @@ Every control has a screen-reader name and announces its value.
 
 ## Build order
 
-1. Engine: 8 stem players plus a master summing bus, with trim, polarity, pan, fader and
-   meters, and Mix Down to Editor.
+1. Engine: 8 tracks (audio file, MIDI file and instrument each) plus a master summing bus,
+   with trim, polarity, pan, fader and meters, and Mix Down to Editor. **Built.**
 2. The window and the strips, keyboard first.
 3. Inserts, using the Master Section's chain code, then the two sends and the Reverb and
    Delay returns.
 4. Thumbnail displays.
 5. Live inputs, record and monitoring.
-6. Instruments with MIDI keyboard input.
+6. Instruments with MIDI keyboard input. **Built with step 1** (the unified track needs them).
 7. The spatial panner and surround or ambisonic masters.
+
+## Built so far (step 1, 2026-10-21)
+
+- `Source/mixer/MidiFile.*` (plain C++): standard MIDI files, types 0, 1 and 2 (and RIFF .rmi),
+  running status, SMPTE time, the tempo map; note-on at velocity 0 is a note-off; at the same tick
+  note-offs come first. A file cut short keeps what was read.
+- `Source/mixer/Instruments.*` (plain C++): the instrument interface (block of events with
+  sample offsets, stereo out), the Synth (up to 64 voices, sine/triangle/saw/square with PolyBLEP,
+  a two-pole low-pass opened by velocity, ADSR, CC7, CC10, CC11, CC64, pitch bend ±2, and channel
+  10 as a General MIDI kit made from sweeps and noise: kick, snare, clap, hats with the open one
+  choked by the closed, toms, crash, ride), and track Sampler and Slicer wrappers.
+- `Source/mixer/MixerEngine.*` (plain C++): up to 8 tracks and the master; the MIDI clip is
+  placed at frames once (again when the tempo changes) and played sample-accurately; notes held
+  when the transport stops, jumps or loops, or a channel is turned off, are let go; the
+  keyboard plays the armed track; gains ramp over each block; mute and console solo; meters;
+  loop; stops at the end; mixdown from the start with up to 10 s of tails (ends after 0.25 s of
+  silence), while live playback is silent.
+- `Source/engine/PluginInstrument.cpp`: instrument plugins from the scanned list, stereo out
+  and MIDI in, their own windows (`Source/engine/PluginWindow.h`, now shared with the Master
+  Section), settings saved in the mix; a plugin that throws is not called again.
+- `Source/ui/MixerWindow.*`, `MixerSection.cpp`: the window, the strips and master, the Mixer
+  menu (`F3`), keys, `.phinyxmix` files (JSON, paths relative to the mix) and the autosaved mix
+  in `~/.config/phinyx/mixer/`. The mixer is heard through the engine's instrument slot with
+  the Sampler and Slicer, so it sounds on top of the editor; MIDI goes to the mixer while its
+  window was used last.
+- Tests: the MIDI reader (tempo map, ordering, damaged files) and the engine (pan law, fader,
+  polarity, mute and solo, sample-accurate MIDI, transpose, channels, notes let go on a jump,
+  the keyboard, meters, mixdown) and the Synth.
+
+Next: Pre (cuts, track delay), inserts, the A and B returns, thumbnails, live inputs and
+recording, templates, the spatial panner. The Sampler and Slicer windows of the Sample menu
+could dock into the mixer as track 1 (the other thread's docking work).
