@@ -20,6 +20,8 @@ class QLabel;
 class QPushButton;
 class QHBoxLayout;
 class MixerStrip;
+class QSplitter;
+class TrackLanes;
 
 // A level meter for a strip: peak and RMS for both sides, with a peak hold and a
 // clip light (click to clear it).
@@ -50,7 +52,7 @@ private:
 // it and the audio are heard. No MIDI editing. Keyboard-first: 1-8 pick a track,
 // 9 the master, Left/Right move, Up/Down move the fader (Shift finer), 0 resets it,
 // M mute, S solo, R arms the track for the MIDI keyboard, Space plays and stops,
-// Home goes to the start, L loops, B bounces in place and Shift+B to a new track,
+// Home goes to the start, L loops, V shows the tracks across time, B bounces in place and Shift+B to a new track,
 // Ctrl+T adds a track and Ctrl+Shift+T removes the last.
 class MixerWindow final : public QWidget
 {
@@ -98,6 +100,7 @@ protected:
 
 private:
     friend class MixerStrip;
+    friend class TrackLanes;
 
     // What the window keeps about a track besides the engine's settings.
     struct TrackInfo
@@ -124,6 +127,7 @@ private:
     void loadInstrumentSound (int track, const QString& path);   // into the track's Sampler or Slicer
     void takeInstrumentSound (int track);                         // from the Sample menu's
     void arm (int track);
+    void toggleLanes();              // the tracks across time, above the strips (V)
     // Renders the track (MIDI through its instrument, and its audio) to a WAV: in place
     // it becomes the track's audio, else it goes on a new track and this one is muted.
     void bounce (int track, bool inPlace);
@@ -138,6 +142,8 @@ private:
     std::array<TrackInfo, mixer::maxTracks> info;
     std::array<MixerStrip*, mixer::maxTracks> strips {};
     QWidget* stripArea;
+    TrackLanes* lanes = nullptr;
+    QSplitter* splitter;
     QHBoxLayout* stripRow;
     LevelMeter* masterMeter;
     class QSlider* masterFader;

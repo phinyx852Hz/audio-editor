@@ -191,6 +191,7 @@ More templates can be added in the same way; each is a small file.
 | 0 | Reset the focused control |
 | M / S / R | Mute, solo, record |
 | T | Step the thumbnail display |
+| V | Show or hide the tracks across time above the strips |
 | B | Bounce in place: the track's sound (MIDI through its instrument, and its audio) becomes its audio |
 | Shift+B | Bounce to a new track and mute this one (not when all 8 tracks are in use) |
 
@@ -246,6 +247,14 @@ Every control has a screen-reader name and announces its value.
   instrument, and trim and polarity reset since they are in the WAV. To a new track, the new
   track takes the fader, pan and colour and the original is muted; with 8 tracks it says to
   bounce in place or remove a track.
+- The tracks across time (`TrackLanes` in `MixerWindow.cpp`): above the strips, in a splitter,
+  one horizontal row per track in its colour, with the waveform (peaks per 256 frames, made
+  once per clip) and the MIDI notes, stacked when the track has both, each at its start
+  offset; a part that is switched off, muted or silenced by another track's solo is drawn
+  grey, and so are notes on channels turned off. Bars from the tempo box, the loop, the
+  playhead; click or drag to move it, `Ctrl`+wheel zooms around the pointer, the wheel scrolls,
+  a double-click on the ruler fits the mix, and while zoomed in the view follows the playhead.
+  Envelope lanes (docs: automation design) will fold out under these rows.
 - Tests: the MIDI reader (tempo map, ordering, damaged files) and the engine (pan law, fader,
   polarity, mute and solo, sample-accurate MIDI, transpose, channels, notes let go on a jump,
   the keyboard, meters, mixdown) and the Synth.

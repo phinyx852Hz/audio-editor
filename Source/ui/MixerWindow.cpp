@@ -44,9 +44,11 @@
 #include <QSaveFile>
 #include <QScrollArea>
 #include <QSlider>
+#include <QSplitter>
 #include <QSpinBox>
 #include <QStandardPaths>
 #include <QVBoxLayout>
+#include <QWheelEvent>
 #include <QtConcurrent>
 
 #include <algorithm>
@@ -794,6 +796,457 @@ public:
 };
 
 //==============================================================================
+//==============================================================================
+// The tracks across time, one horizontal row each: the audio file's waveform and
+// the MIDI file's notes (both, stacked, when the track has both), the bars, the
+// playhead and the loop. Click to move the playhead and pick the track; Ctrl+wheel
+// zooms, the wheel scrolls, a double-click on the ruler fits the whole mix.
+class TrackLanes final : public QWidget
+{
+public:
+    explicit TrackLanes (MixerWindow& w) : QWidget (&w), window (w)
+    {
+        setAcceptDrops (true);
+        setFocusPolicy (Qt::NoFocus);
+        setMinimumHeight (120);
+        setMouseTracking (false);
+        setToolTip (MixerWindow::tr ("The tracks across time. Click to move the playhead; Ctrl+wheel zooms, "
+                                     "the wheel scrolls, double-click the ruler to see the whole mix. V shows and hides them."));
+    }
+
+    QSize sizeHint() const override { return { 900, 260 }; }
+
+    // Called by the window's timer: keeps the playhead in view while zoomed in.
+    void follow()
+    {
+        if (fit || ! window.engine.isPlaying())
+            return;
+        const auto p = (double) window.engine.position();
+        const auto span = framesPerPixel * timelineWidth();
+        if (p < start || p > start + span)
+            start = std::max (0.0, p - span * 0.05);
+    }
+
+protected:
+    void paintEvent (QPaintEvent*) override
+    {
+        QPainter g (this);
+        const auto pal = palette();
+        g.fillRect (rect(), pal.color (QPalette::Base));
+        updateScale();
+
+        const int count = window.engine.numTracks();
+        const auto r = window.rate();
+        const auto bpm = window.tempoBox->value();
+        const auto text = pal.color (QPalette::Text);
+        auto faint = text;
+        faint.setAlpha (28);
+        auto softer = text;
+        softer.setAlpha (150);
+
+        // The ruler: bars, labelled so they stay apart.
+        g.fillRect (QRect (0, 0, width(), rulerHeight), pal.color (QPalette::Window));
+        if (window.engine.isLooping())
+        {
+            auto loop = Theme::current().color (QStringLiteral ("selection"));
+            loop.setAlpha (110);
+            g.fillRect (QRectF (xOf (0.0), 0, xOf ((double) window.engine.length()) - xOf (0.0), rulerHeight), loop);
+        }
+        const auto barFrames = 4.0 * 60.0 / bpm * r;
+        int every = 1;
+        while (every < 4096 && barFrames * every / framesPerPixel < 56.0)
+            every *= 2;
+        const auto firstBar = std::max (0, (int) std::floor (start / barFrames));
+        const auto lastBar = (int) std::ceil ((start + framesPerPixel * timelineWidth()) / barFrames);
+        g.setFont (smallFont());
+        for (int bar = firstBar; bar <= lastBar; ++bar)
+        {
+            const auto x = xOf (bar * barFrames);
+            if (x < headerWidth)
+                continue;
+            const bool labelled = bar % every == 0;
+            if (! labelled && barFrames / framesPerPixel < 6.0)
+                continue;
+            g.setPen (labelled ? faint.darker (100) : faint);
+            g.drawLine (QPointF (x, labelled ? 0 : rulerHeight - 6), QPointF (x, height()));
+            if (labelled)
+            {
+                g.setPen (softer);
+                g.drawText (QPointF (x + 3, rulerHeight - 6), QString::number (bar + 1));
+            }
+        }
+        g.setPen (faint);
+        g.drawLine (0, rulerHeight - 1, width(), rulerHeight - 1);
+
+        // The rows.
+        bool anySolo = false;
+        for (int i = 0; i < count; ++i)
+            anySolo = anySolo || window.engine.strip (i).solo.load();
+        const auto rowH = rowHeight();
+        for (int i = 0; i < count; ++i)
+        {
+            const QRect row (0, rulerHeight + i * rowH, width(), rowH);
+            const auto& s = window.engine.strip (i);
+            const auto colour = window.info[(size_t) i].colour;
+            const bool heard = ! s.mute.load() && (! anySolo || s.solo.load());
+            if (i == window.selected)
+            {
+                auto tint = colour;
+                tint.setAlpha (34);
+                g.fillRect (row, tint);
+            }
+            g.setPen (faint);
+            g.drawLine (row.bottomLeft(), row.bottomRight());
+
+            // The header: colour, number and name, and what is on.
+            const QRect header (0, row.top(), headerWidth, rowH);
+            g.fillRect (header, pal.color (QPalette::Window));
+            g.fillRect (QRect (0, row.top(), 5, rowH - 1), colour);
+            g.setPen (text);
+            auto bold = smallFont();
+            bold.setBold (true);
+            g.setFont (bold);
+            g.drawText (header.adjusted (10, 3, -4, 0), Qt::AlignLeft | Qt::AlignTop,
+                        QStringLiteral ("%1  %2").arg (i + 1).arg (g.fontMetrics().elidedText (window.info[(size_t) i].name, Qt::ElideRight, headerWidth - 34)));
+            QStringList flags;
+            if (s.mute.load())
+                flags << MixerWindow::tr ("M");
+            if (s.solo.load())
+                flags << MixerWindow::tr ("S");
+            if (window.engine.liveTrack() == i)
+                flags << QStringLiteral ("●");
+            g.setFont (smallFont());
+            g.setPen (softer);
+            if (! flags.isEmpty() && rowH >= 34)
+                g.drawText (header.adjusted (10, 0, -4, -3), Qt::AlignLeft | Qt::AlignBottom, flags.join (QLatin1Char (' ')));
+
+            // The clips, stacked when there are both.
+            const auto audioClip = window.engine.audio (i);
+            const auto midiClip = window.engine.midi (i);
+            const QRect lane (headerWidth, row.top() + 2, timelineWidth(), rowH - 5);
+            g.save();
+            g.setClipRect (lane);
+            if (audioClip != nullptr && midiClip != nullptr)
+            {
+                const auto split = lane.top() + lane.height() * 3 / 5;
+                drawAudio (g, i, *audioClip, QRect (lane.left(), lane.top(), lane.width(), split - lane.top()), s, heard);
+                drawMidi (g, i, *midiClip, QRect (lane.left(), split + 1, lane.width(), lane.bottom() - split), s, heard);
+            }
+            else if (audioClip != nullptr)
+                drawAudio (g, i, *audioClip, lane, s, heard);
+            else if (midiClip != nullptr)
+                drawMidi (g, i, *midiClip, lane, s, heard);
+            else if (rowH >= 30)
+            {
+                g.setPen (faint.darker (100));
+                g.setFont (smallFont());
+                g.drawText (lane.adjusted (8, 0, 0, 0), Qt::AlignVCenter | Qt::AlignLeft,
+                            MixerWindow::tr ("Drop an audio or MIDI file here"));
+            }
+            g.restore();
+        }
+
+        // The playhead.
+        const auto px = xOf ((double) window.engine.position());
+        if (px >= headerWidth && px <= width())
+        {
+            g.setPen (QPen (Theme::current().color (QStringLiteral ("highlight")), 1.5));
+            g.drawLine (QPointF (px, 0), QPointF (px, rulerHeight + count * rowH));
+        }
+    }
+
+    void mousePressEvent (QMouseEvent* e) override
+    {
+        const auto pos = e->position();
+        const int row = rowAt (pos.y());
+        if (row >= 0)
+            window.select (row);
+        if (pos.x() >= headerWidth && e->button() == Qt::LeftButton)
+        {
+            locate (pos.x());
+            scrubbing = true;
+        }
+        window.setFocus();
+        update();
+    }
+
+    void mouseMoveEvent (QMouseEvent* e) override
+    {
+        if (scrubbing && (e->buttons() & Qt::LeftButton))
+            locate (e->position().x());
+    }
+
+    void mouseReleaseEvent (QMouseEvent*) override { scrubbing = false; }
+
+    void mouseDoubleClickEvent (QMouseEvent* e) override
+    {
+        if (e->position().y() < rulerHeight)
+        {
+            fit = true;
+            update();
+        }
+    }
+
+    void wheelEvent (QWheelEvent* e) override
+    {
+        const auto steps = (double) e->angleDelta().y() / 120.0 + (double) e->angleDelta().x() / 120.0;
+        if (std::abs (steps) < 1.0e-9)
+            return;
+        updateScale();
+        if (e->modifiers() & Qt::ControlModifier)
+        {
+            const auto x = std::max ((double) headerWidth, e->position().x());
+            const auto at = start + (x - headerWidth) * framesPerPixel;
+            framesPerPixel = std::clamp (framesPerPixel * std::pow (0.8, steps), 4.0, std::max (4.0, fitFramesPerPixel() * 4.0));
+            start = std::max (0.0, at - (x - headerWidth) * framesPerPixel);
+        }
+        else
+            start = std::max (0.0, start - steps * 80.0 * framesPerPixel);
+        fit = false;
+        e->accept();
+        update();
+    }
+
+    void dragEnterEvent (QDragEnterEvent* e) override
+    {
+        if (e->mimeData()->hasUrls())
+            e->acceptProposedAction();
+    }
+
+    void dropEvent (QDropEvent* e) override
+    {
+        const int row = rowAt (e->position().y());
+        if (row < 0)
+            return;
+        window.select (row);
+        for (const auto& url : e->mimeData()->urls())
+        {
+            if (! url.isLocalFile())
+                continue;
+            const auto file = url.toLocalFile();
+            if (isMidiFile (file))
+            {
+                QString error;
+                if (! window.loadMidi (row, file, error))
+                    QMessageBox::warning (&window, MixerWindow::tr ("MIDI File"), error);
+            }
+            else
+                window.loadAudio (row, file);
+        }
+        e->acceptProposedAction();
+        update();
+    }
+
+private:
+    static constexpr int headerWidth = 132;
+    static constexpr int rulerHeight = 20;
+    static constexpr Frame peakBlock = 256;   // frames per waveform peak
+
+    // Pictures of the clips, made again when a clip changes.
+    struct Picture
+    {
+        mixer::AudioClipPtr audio;
+        std::vector<std::pair<float, float>> peaks;   // min and max of both sides, per block
+        mixer::MidiClipPtr midi;
+        struct Note { Frame on, off; int pitch, channel; };
+        std::vector<Note> notes;
+        int low = 60, high = 72;
+    };
+
+    QFont smallFont() const
+    {
+        auto f = font();
+        f.setPointSizeF (std::max (7.0, f.pointSizeF() * 0.85));
+        return f;
+    }
+
+    int timelineWidth() const { return std::max (1, width() - headerWidth); }
+
+    int rowHeight() const
+    {
+        const auto count = std::max (1, window.engine.numTracks());
+        return std::clamp ((height() - rulerHeight) / count, 22, 140);
+    }
+
+    int rowAt (double y) const
+    {
+        if (y < rulerHeight)
+            return window.selected < mixer::masterIndex ? window.selected : -1;
+        const auto row = (int) ((y - rulerHeight) / rowHeight());
+        return row < window.engine.numTracks() ? row : -1;
+    }
+
+    double fitFramesPerPixel() const
+    {
+        const auto r = window.rate();
+        const auto span = std::max ((double) window.engine.length() * 1.04, 16.0 * r);
+        return span / timelineWidth();
+    }
+
+    void updateScale()
+    {
+        if (fit)
+        {
+            framesPerPixel = fitFramesPerPixel();
+            start = 0.0;
+        }
+    }
+
+    double xOf (double frame) const { return headerWidth + (frame - start) / framesPerPixel; }
+
+    void locate (double x)
+    {
+        const auto frame = std::max (0.0, start + (x - headerWidth) * framesPerPixel);
+        window.engine.setPosition ((Frame) std::llround (frame));
+        window.refreshTransport();
+        update();
+    }
+
+    const Picture& picture (int track)
+    {
+        auto& p = pictures[(size_t) track];
+        const auto audio = window.engine.audio (track);
+        if (audio != p.audio)
+        {
+            p.audio = audio;
+            p.peaks.clear();
+            if (audio != nullptr)
+            {
+                const auto n = audio->length();
+                p.peaks.reserve ((size_t) (n / peakBlock + 1));
+                for (Frame at = 0; at < n; at += peakBlock)
+                {
+                    float lo = 0.0f, hi = 0.0f;
+                    const auto end = std::min (n, at + peakBlock);
+                    for (Frame f = at; f < end; ++f)
+                    {
+                        const auto l = audio->left[(size_t) f], r = audio->right[(size_t) f];
+                        lo = std::min ({ lo, l, r });
+                        hi = std::max ({ hi, l, r });
+                    }
+                    p.peaks.push_back ({ lo, hi });
+                }
+            }
+        }
+        const auto midi = window.engine.midi (track);
+        if (midi != p.midi)
+        {
+            p.midi = midi;
+            p.notes.clear();
+            p.low = 127;
+            p.high = 0;
+            if (midi != nullptr)
+            {
+                std::array<std::array<Frame, 128>, 16> on;
+                for (auto& c : on)
+                    c.fill (-1);
+                for (const auto& e : midi->events)
+                {
+                    const auto type = e.status & 0xF0;
+                    const auto channel = e.status & 0x0F;
+                    if (type != 0x80 && type != 0x90)
+                        continue;
+                    auto& held = on[(size_t) channel][e.data1 & 0x7F];
+                    if (held >= 0)
+                    {
+                        p.notes.push_back ({ held, e.frame, e.data1 & 0x7F, channel });
+                        held = -1;
+                    }
+                    if (type == 0x90 && e.data2 > 0)
+                        held = e.frame;
+                }
+                for (int c = 0; c < 16; ++c)
+                    for (int n = 0; n < 128; ++n)
+                        if (on[(size_t) c][(size_t) n] >= 0)
+                            p.notes.push_back ({ on[(size_t) c][(size_t) n], midi->length, n, c });
+                for (const auto& n : p.notes)
+                {
+                    p.low = std::min (p.low, n.pitch);
+                    p.high = std::max (p.high, n.pitch);
+                }
+                if (p.low > p.high)
+                    p.low = p.high = 60;
+            }
+        }
+        return p;
+    }
+
+    QColor clipColour (int track, bool on, bool heard, int alpha) const
+    {
+        auto c = window.info[(size_t) track].colour;
+        if (! on || ! heard)
+            c = QColor::fromHsvF (c.hsvHueF(), c.hsvSaturationF() * 0.25f, c.valueF() * 0.75f);
+        c.setAlpha (alpha);
+        return c;
+    }
+
+    void drawAudio (QPainter& g, int track, const mixer::AudioClip& clip, QRect area, const mixer::Strip& s, bool heard)
+    {
+        const auto& p = picture (track);
+        const auto offset = s.audioOffset.load() * window.rate();
+        const auto left = std::max ((double) area.left(), xOf (offset));
+        const auto right = std::min ((double) area.right(), xOf (offset + (double) clip.length()));
+        if (right <= left)
+            return;
+        const bool on = s.audioOn.load();
+        g.fillRect (QRectF (left, area.top(), right - left, area.height()), clipColour (track, on, heard, 40));
+        g.setPen (clipColour (track, on, heard, 230));
+        const auto mid = area.top() + area.height() / 2.0;
+        const auto half = area.height() / 2.0 - 1.0;
+        for (int x = (int) left; x < (int) right; ++x)
+        {
+            const auto from = (start + (x - headerWidth) * framesPerPixel - offset) / peakBlock;
+            const auto to = (start + (x + 1 - headerWidth) * framesPerPixel - offset) / peakBlock;
+            auto a = (size_t) std::max (0.0, std::floor (from));
+            if (a >= p.peaks.size())
+                break;
+            const auto b = std::min (p.peaks.size(), std::max (a + 1, (size_t) std::max (0.0, std::ceil (to))));
+            float lo = 0.0f, hi = 0.0f;
+            for (; a < b; ++a)
+            {
+                lo = std::min (lo, p.peaks[a].first);
+                hi = std::max (hi, p.peaks[a].second);
+            }
+            g.drawLine (QPointF (x + 0.5, mid - std::min (1.0f, hi) * half), QPointF (x + 0.5, mid - std::max (-1.0f, lo) * half));
+        }
+    }
+
+    void drawMidi (QPainter& g, int track, const mixer::MidiClip& clip, QRect area, const mixer::Strip& s, bool heard)
+    {
+        const auto& p = picture (track);
+        const auto offset = s.midiOffset.load() * window.rate();
+        const auto left = std::max ((double) area.left(), xOf (offset));
+        const auto right = std::min ((double) area.right(), xOf (offset + (double) clip.length));
+        if (right <= left)
+            return;
+        const bool on = s.midiOn.load();
+        g.fillRect (QRectF (left, area.top(), right - left, area.height()), clipColour (track, on, heard, 28));
+        const auto range = std::max (12, p.high - p.low + 1);
+        const auto low = p.low - (range - (p.high - p.low + 1)) / 2;
+        const auto noteH = std::max (1.0, (double) area.height() / range);
+        const auto colour = clipColour (track, on, heard, 235);
+        const auto channels = s.channels.load();
+        auto muted = colour;
+        muted.setAlpha (70);
+        for (const auto& n : p.notes)
+        {
+            const auto x0 = xOf (offset + (double) n.on), x1 = xOf (offset + (double) n.off);
+            if (x1 < area.left() || x0 > area.right())
+                continue;
+            const auto y = area.bottom() - (n.pitch - low + 1) * (double) area.height() / range;
+            const bool playing = (channels & (1u << n.channel)) != 0;
+            g.fillRect (QRectF (x0, y, std::max (1.5, x1 - x0), noteH), playing ? colour : muted);
+        }
+    }
+
+    MixerWindow& window;
+    std::array<Picture, mixer::maxTracks> pictures;
+    bool fit = true;
+    bool scrubbing = false;
+    double start = 0.0;            // the frame at the left edge of the timeline
+    double framesPerPixel = 1000.0;
+};
+
 MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* parent)
     : QWidget (parent, Qt::Window), engine (e), audio (a), hooks (std::move (h))
 {
@@ -911,9 +1364,22 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     masterValues->addWidget (masterPeak);
     masterLayout->addLayout (masterValues);
 
-    auto* mixRow = new QHBoxLayout;
+    auto* mixArea = new QWidget (this);
+    auto* mixRow = new QHBoxLayout (mixArea);
+    mixRow->setContentsMargins (0, 0, 0, 0);
     mixRow->addWidget (scroll, 1);
     mixRow->addWidget (masterStrip);
+
+    // The tracks across time above the strips, as in a DAW's arrangement.
+    lanes = new TrackLanes (*this);
+    splitter = new QSplitter (Qt::Vertical, this);
+    splitter->setChildrenCollapsible (false);
+    splitter->addWidget (lanes);
+    splitter->addWidget (mixArea);
+    splitter->setStretchFactor (0, 2);
+    splitter->setStretchFactor (1, 3);
+    splitter->restoreState (appSettings().value (QStringLiteral ("mixer/splitter")).toByteArray());
+    lanes->setVisible (appSettings().value (QStringLiteral ("mixer/lanes"), true).toBool());
 
     status = new QLabel (this);
     status->setWordWrap (true);
@@ -924,7 +1390,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
 
     auto* layout = new QVBoxLayout (this);
     layout->addLayout (top);
-    layout->addLayout (mixRow, 1);
+    layout->addWidget (splitter, 1);
     layout->addLayout (bottom);
 
     connect (toStartButton, &QPushButton::clicked, this, [this] { toStart(); });
@@ -966,7 +1432,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     rebuildStrips();
     select (0);
     restoring = false;
-    resize (1180, 720);
+    resize (1180, 860);
     status->setText (tr ("Each track can hold an audio file and a MIDI file together. The MIDI file plays the track's instrument; "
                          "R arms a track for the MIDI keyboard. Right-click a strip for more."));
 }
@@ -1002,6 +1468,8 @@ void MixerWindow::select (int index)
     selected = index;
     for (int i = 0; i < mixer::maxTracks; ++i)
         strips[(size_t) i]->setSelected (i == selected);
+    if (lanes != nullptr)
+        lanes->update();
     masterStrip->setStyleSheet (selected == mixer::masterIndex
                                     ? QStringLiteral ("QFrame#masterStrip { border: 2px solid %1; }").arg (Theme::current().color (QStringLiteral ("highlight")).name())
                                     : QString());
@@ -1017,6 +1485,11 @@ void MixerWindow::tick()
     masterMeter->setLevels (engine.takeMeter (mixer::masterIndex), seconds);
     masterPeak->setText (peakText (masterMeter->highestPeak()));
     refreshTransport();
+    if (lanes->isVisible())
+    {
+        lanes->follow();
+        lanes->update();
+    }
 }
 
 void MixerWindow::refreshTransport()
@@ -1565,6 +2038,13 @@ void MixerWindow::keyPressEvent (QKeyEvent* e)
             case Qt::Key_Space: togglePlay(); return;
             case Qt::Key_Home: toStart(); return;
             case Qt::Key_L: loopButton->toggle(); return;
+            case Qt::Key_V:
+                if (! shift)
+                {
+                    toggleLanes();
+                    return;
+                }
+                break;
             case Qt::Key_B:
                 if (shift && ! master)
                 {
@@ -1607,6 +2087,7 @@ void MixerWindow::closeEvent (QCloseEvent* e)
         if (t.editor != nullptr)
             t.editor->close();
     autosave();
+    appSettings().setValue (QStringLiteral ("mixer/splitter"), splitter->saveState());
     QWidget::closeEvent (e);
     Q_EMIT closed();
 }
@@ -2052,4 +2533,12 @@ void MixerWindow::bounce (int track, bool inPlace)
     changed();
     status->setText (inPlace ? tr ("Bounced track %1 in place to %2 (its MIDI file is kept, switched off)").arg (track + 1).arg (file)
                              : tr ("Bounced track %1 to track %2 (%3); track %1 is muted").arg (track + 1).arg (target + 1).arg (file));
+}
+
+void MixerWindow::toggleLanes()
+{
+    lanes->setVisible (! lanes->isVisible());
+    appSettings().setValue (QStringLiteral ("mixer/lanes"), lanes->isVisible());
+    status->setText (lanes->isVisible() ? tr ("The tracks across time are shown above the strips (V hides them).")
+                                        : tr ("The tracks across time are hidden (V shows them)."));
 }
