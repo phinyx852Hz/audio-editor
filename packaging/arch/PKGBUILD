@@ -17,9 +17,9 @@ optdepends=('pipewire-jack: JACK output through PipeWire (recommended; jack2 als
             'lsp-plugins: a large free set of mastering plugins (LV2/VST3/CLAP)'
             'yabridge: Windows VST3 and CLAP plugins through Wine')
 # X11 headers are for JUCE (juceaide and plugin windows); ladspa.h and clap for plugin hosting;
-# clang builds the ZL Audio stock plugins; python builds Cardinal and rust CA-72 and OctaSine (stock instruments)
+# clang builds the ZL Audio stock plugins; python and wget build Cardinal and rust CA-72 and OctaSine (stock instruments)
 makedepends=('git' 'cmake' 'ninja' 'ladspa' 'clap' 'libx11' 'libxrandr'
-             'libxinerama' 'libxcursor' 'libxcomposite' 'libxext' 'mesa' 'clang' 'python' 'rust' 'xcb-util-wm')
+             'libxinerama' 'libxcursor' 'libxcomposite' 'libxext' 'mesa' 'clang' 'python' 'rust' 'xcb-util-wm' 'wget')
 provides=('phinyx')
 conflicts=('phinyx')
 source=("git+${url}.git")

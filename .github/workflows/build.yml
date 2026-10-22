@@ -14,7 +14,7 @@ jobs:
         run: |
           pacman -Syu --noconfirm --needed git cmake ninja qt6-base qt6-wayland alsa-lib libpipewire pipewire-jack \
             ladspa clap freetype2 fontconfig libx11 libxrandr libxinerama libxcursor libxcomposite libxext mesa \
-            cairo libsndfile clang libxi ffmpeg taglib python rust xcb-util-wm fftw curl
+            cairo libsndfile clang libxi ffmpeg taglib python rust xcb-util-wm fftw curl wget
       - uses: actions/checkout@v4
       - name: Configure
         # Fails if PipeWire was not found, since then recording would be left out
