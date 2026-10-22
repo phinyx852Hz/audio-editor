@@ -105,11 +105,13 @@ Q_SIGNALS:
 protected:
     void keyPressEvent (class QKeyEvent*) override;
     void keyReleaseEvent (class QKeyEvent*) override;
-    void changeEvent (QEvent*) override;
+    bool event (QEvent*) override;
     bool eventFilter (QObject*, QEvent*) override;
-    void closeEvent (class QCloseEvent*) override;
+    void hideEvent (class QHideEvent*) override;
 
 private:
+    void releaseKeys();
+    void focusMoved (QWidget* old, QWidget* now);
     void fromControls();
     void toControls();
     void markerMoved (int which, Frame position);

@@ -324,6 +324,8 @@ private:
     void updateMidiStatus();
     std::unique_ptr<sampler::Engine> samplerEngine;
     class SamplerWindow* samplerWin = nullptr;
+    DockablePanel* samplerPanel = nullptr;
+    DockablePanel* slicerPanel = nullptr;
     std::unique_ptr<class MidiInputs> midiInputs;
     int samplerTab = -1;
     std::string samplerPath;

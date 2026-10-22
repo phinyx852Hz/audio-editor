@@ -6,7 +6,8 @@
 
 #include <QButtonGroup>
 #include <QCheckBox>
-#include <QCloseEvent>
+#include <QApplication>
+#include <QHideEvent>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
@@ -316,8 +317,9 @@ void PadGrid::mouseReleaseEvent (QMouseEvent*)
 
 //==============================================================================
 SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
-    : QWidget (parent, Qt::Window), engine (e)
+    : QWidget (parent), engine (e)
 {
+    setFocusPolicy (Qt::StrongFocus);   // docked, it takes the playing keys when shown or clicked
     setWindowTitle (tr ("Slicer"));
     setObjectName (QStringLiteral ("SlicerWindow"));
     kit = engine.kit();
@@ -341,8 +343,8 @@ SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
     refresh->setToolTip (tr ("Take the sound from the editor again"));
     auto* midi = new QPushButton (tr ("&MIDI Inputs..."), this);
     auto* top = new QHBoxLayout;
-    top->addWidget (title, 1);
     top->addWidget (followBox);
+    top->addStretch (1);
     top->addWidget (refresh);
     top->addWidget (midi);
 
@@ -388,10 +390,11 @@ SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
     methodLabel->setBuddy (methodBox);
     method->addWidget (methodLabel);
     method->addWidget (methodBox);
-    method->addWidget (methodOptions);
-    method->addWidget (sliceButton);
-    method->addStretch (1);
-    method->addWidget (snapBox);
+    method->addWidget (methodOptions, 1);
+    auto* method2 = new QHBoxLayout;
+    method2->addWidget (sliceButton);
+    method2->addStretch (1);
+    method2->addWidget (snapBox);
 
     // The banks and the pads.
     banks = new QButtonGroup (this);
@@ -482,16 +485,18 @@ SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
     middle->addLayout (padForm);
     middle->addStretch (1);
 
-    auto* bottom = new QHBoxLayout;
-    bottom->addWidget (status, 1);
-    bottom->addWidget (midiStatus);
+    midiStatus->setAlignment (Qt::AlignLeft | Qt::AlignVCenter);
+    midiStatus->setWordWrap (true);
 
     auto* layout = new QVBoxLayout (this);
+    layout->addWidget (title);
     layout->addLayout (top);
     layout->addWidget (view, 1);
     layout->addLayout (method);
+    layout->addLayout (method2);
     layout->addLayout (middle, 2);
-    layout->addLayout (bottom);
+    layout->addWidget (status);
+    layout->addWidget (midiStatus);
 
     // The slicing settings are remembered.
     methodBox->setCurrentIndex (std::clamp (stored.value (QStringLiteral ("slicer/method"), 0).toInt(), 0, 3));
@@ -569,6 +574,7 @@ SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
         pads->update();
     });
     redraw.start();
+    connect (qApp, &QApplication::focusChanged, this, &SlicerWindow::focusMoved);
     setKit (kit);
     select (0);
     showStatus();
@@ -805,7 +811,7 @@ void SlicerWindow::padFromControls()
 
 void SlicerWindow::showStatus()
 {
-    QString text = tr ("Keys: Z X C V, A S D F, Q W E R, 1 2 3 4 play bank %1 (bottom row first) · 5 6 7 8 choose banks · Esc back to the pads")
+    QString text = tr ("Z X C V, A S D F, Q W E R, 1 2 3 4 play bank %1 from the bottom row · 5 to 8 choose banks")
                        .arg (QChar ('A' + bank));
     if (found > slicer::numPads)
         text = tr ("%1 slices found: the first 64 are on the pads (lower the sensitivity for fewer). ").arg (found) + text;
@@ -856,21 +862,43 @@ void SlicerWindow::keyReleaseEvent (QKeyEvent* e)
     QWidget::keyReleaseEvent (e);
 }
 
-void SlicerWindow::changeEvent (QEvent* e)
+void SlicerWindow::releaseKeys()
 {
-    if (e->type() == QEvent::ActivationChange)
+    for (const auto& [code, pad] : heldKeys)
+        engine.letGo (pad);
+    heldKeys.clear();
+}
+
+void SlicerWindow::focusMoved (QWidget* old, QWidget* now)
+{
+    // Keys let go while the focus was elsewhere would stay down: release them.
+    const bool was = old != nullptr && (old == this || isAncestorOf (old));
+    const bool is = now != nullptr && (now == this || isAncestorOf (now));
+    if (was && ! is)
+        releaseKeys();
+    if (is && ! was)
+        Q_EMIT activated();
+}
+
+bool SlicerWindow::event (QEvent* e)
+{
+    // Docked or popped out, the editor's single-key shortcuts would take the pad keys.
+    if (e->type() == QEvent::ShortcutOverride)
     {
-        if (isActiveWindow())
-            Q_EMIT activated();
-        else
+        auto* k = static_cast<QKeyEvent*> (e);
+        const auto code = scanCodeOf (k);
+        bool ours = false;
+        for (const auto key : padKeys)
+            ours = ours || key == code;
+        for (const auto key : bankKeys)
+            ours = ours || key == code;
+        if (ours && ! (k->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier)))
         {
-            // Keys let go while another window had them would stay down: release them.
-            for (const auto& [code, pad] : heldKeys)
-                engine.letGo (pad);
-            heldKeys.clear();
+            e->accept();
+            return true;
         }
     }
-    QWidget::changeEvent (e);
+    return QWidget::event (e);
 }
 
 bool SlicerWindow::eventFilter (QObject* o, QEvent* e)
@@ -884,12 +912,13 @@ bool SlicerWindow::eventFilter (QObject* o, QEvent* e)
     return QWidget::eventFilter (o, e);
 }
 
-void SlicerWindow::closeEvent (QCloseEvent* e)
+void SlicerWindow::hideEvent (QHideEvent* e)
 {
-    for (const auto& [code, pad] : heldKeys)
-        engine.letGo (pad);
-    heldKeys.clear();
+    // Closed (not minimised with the main window): silent at once.
+    QWidget::hideEvent (e);
+    if (e->spontaneous())
+        return;
+    releaseKeys();
     engine.panic();
-    QWidget::closeEvent (e);
     Q_EMIT closed();
 }

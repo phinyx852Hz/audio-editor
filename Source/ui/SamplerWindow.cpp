@@ -3,7 +3,8 @@
 #include "Theme.h"
 
 #include <QCheckBox>
-#include <QCloseEvent>
+#include <QApplication>
+#include <QHideEvent>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
@@ -323,8 +324,9 @@ void PianoKeys::mouseReleaseEvent (QMouseEvent*)
 
 //==============================================================================
 SamplerWindow::SamplerWindow (sampler::Engine& e, QWidget* parent)
-    : QWidget (parent, Qt::Window), engine (e)
+    : QWidget (parent), engine (e)
 {
+    setFocusPolicy (Qt::StrongFocus);   // docked, it takes the playing keys when shown or clicked
     setWindowTitle (tr ("Sampler"));
     setObjectName (QStringLiteral ("SamplerWindow"));
     settings = engine.settings();
@@ -394,8 +396,8 @@ SamplerWindow::SamplerWindow (sampler::Engine& e, QWidget* parent)
     fadeOutBox = real (0.0, 2000.0, 1.0, 0, tr (" ms"));
 
     auto* top = new QHBoxLayout;
-    top->addWidget (title, 1);
     top->addWidget (followBox);
+    top->addStretch (1);
     top->addWidget (refresh);
     top->addWidget (midi);
 
@@ -411,20 +413,21 @@ SamplerWindow::SamplerWindow (sampler::Engine& e, QWidget* parent)
         l->addWidget (w);
         return box;
     };
-    auto* controls = new QHBoxLayout;
-    controls->addWidget (labelled (tr ("M&ode"), modeBox));
+    // Two short rows, so the Sampler fits a side panel.
+    auto* controls = new QGridLayout;
+    controls->addWidget (labelled (tr ("M&ode"), modeBox), 0, 0);
+    controls->addWidget (labelled (tr ("&Gain"), gainBox), 0, 1);
+    controls->addWidget (labelled (tr ("&Pan"), panBox), 0, 2);
+    controls->addWidget (labelled (tr ("&Transpose"), transposeBox), 0, 3);
+    controls->addWidget (labelled (tr ("&Detune"), detuneBox), 0, 4);
+    controls->addWidget (labelled (tr ("Roo&t key"), rootBox), 1, 0);
+    controls->addWidget (labelled (tr ("&Voices"), voicesBox), 1, 1);
+    controls->addWidget (labelled (tr ("V&elocity"), velocityBox), 1, 2);
     auto* checks = new QVBoxLayout;
     checks->addWidget (loopBox);
     checks->addWidget (snapBox);
-    controls->addLayout (checks);
-    controls->addWidget (labelled (tr ("&Gain"), gainBox));
-    controls->addWidget (labelled (tr ("&Pan"), panBox));
-    controls->addWidget (labelled (tr ("&Transpose"), transposeBox));
-    controls->addWidget (labelled (tr ("&Detune"), detuneBox));
-    controls->addWidget (labelled (tr ("Roo&t key"), rootBox));
-    controls->addWidget (labelled (tr ("&Voices"), voicesBox));
-    controls->addWidget (labelled (tr ("V&elocity"), velocityBox));
-    controls->addStretch (1);
+    controls->addLayout (checks, 1, 3, 1, 2);
+    controls->setColumnStretch (5, 1);
 
     envelopeRow = new QWidget (this);
     auto* env = new QHBoxLayout (envelopeRow);
@@ -441,11 +444,12 @@ SamplerWindow::SamplerWindow (sampler::Engine& e, QWidget* parent)
     fades->addWidget (labelled (tr ("Fade o&ut"), fadeOutBox));
     fades->addStretch (1);
 
-    auto* bottom = new QHBoxLayout;
-    bottom->addWidget (status, 1);
-    bottom->addWidget (midiStatus);
+    status->setWordWrap (true);
+    midiStatus->setAlignment (Qt::AlignLeft | Qt::AlignVCenter);
+    midiStatus->setWordWrap (true);
 
     auto* layout = new QVBoxLayout (this);
+    layout->addWidget (title);
     layout->addLayout (top);
     layout->addWidget (view, 1);
     layout->addLayout (controls);
@@ -453,7 +457,9 @@ SamplerWindow::SamplerWindow (sampler::Engine& e, QWidget* parent)
     layout->addWidget (fadeRow);
     layout->addWidget (piano);
     piano->hide();   // the computer keyboard and MIDI play it; the piano stays for later
-    layout->addLayout (bottom);
+    layout->addWidget (status);
+    layout->addWidget (midiStatus);
+    layout->addStretch (0);
 
     toControls();
     for (auto* w : findChildren<QWidget*>())
@@ -482,6 +488,7 @@ SamplerWindow::SamplerWindow (sampler::Engine& e, QWidget* parent)
         piano->update();
     });
     redraw.start();
+    connect (qApp, &QApplication::focusChanged, this, &SamplerWindow::focusMoved);
     piano->setLowestNote (12 * (octave + 2) - 12);
     showStatus();
     adjustSize();
@@ -670,18 +677,39 @@ void SamplerWindow::keyReleaseEvent (QKeyEvent* e)
     QWidget::keyReleaseEvent (e);
 }
 
-void SamplerWindow::changeEvent (QEvent* e)
+void SamplerWindow::releaseKeys()
 {
-    // Keys let go while another window had them would stay down: release them.
-    if (e->type() == QEvent::ActivationChange && isActiveWindow())
+    for (const auto& [code, note] : heldKeys)
+        engine.noteOff (note);
+    heldKeys.clear();
+}
+
+void SamplerWindow::focusMoved (QWidget* old, QWidget* now)
+{
+    // Keys let go while the focus was elsewhere would stay down: release them.
+    const bool was = old != nullptr && (old == this || isAncestorOf (old));
+    const bool is = now != nullptr && (now == this || isAncestorOf (now));
+    if (was && ! is)
+        releaseKeys();
+    if (is && ! was)
         Q_EMIT activated();
-    if (e->type() == QEvent::ActivationChange && ! isActiveWindow())
+}
+
+bool SamplerWindow::event (QEvent* e)
+{
+    // Docked or popped out, the editor's single-key shortcuts would take the playing keys.
+    if (e->type() == QEvent::ShortcutOverride)
     {
-        for (const auto& [code, note] : heldKeys)
-            engine.noteOff (note);
-        heldKeys.clear();
+        auto* k = static_cast<QKeyEvent*> (e);
+        const auto code = scanCodeOf (k);
+        const bool ours = noteForKey (k) >= 0 || code == keyZ || code == keyX || code == keyC || code == keyV;
+        if (ours && ! (k->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier)))
+        {
+            e->accept();
+            return true;
+        }
     }
-    QWidget::changeEvent (e);
+    return QWidget::event (e);
 }
 
 bool SamplerWindow::eventFilter (QObject* o, QEvent* e)
@@ -695,12 +723,13 @@ bool SamplerWindow::eventFilter (QObject* o, QEvent* e)
     return QWidget::eventFilter (o, e);
 }
 
-void SamplerWindow::closeEvent (QCloseEvent* e)
+void SamplerWindow::hideEvent (QHideEvent* e)
 {
-    for (const auto& [code, note] : heldKeys)
-        engine.noteOff (note);
-    heldKeys.clear();
+    // Closed (not minimised with the main window): silent at once.
+    QWidget::hideEvent (e);
+    if (e->spontaneous())
+        return;
+    releaseKeys();
     engine.panic();
-    QWidget::closeEvent (e);
     Q_EMIT closed();
 }

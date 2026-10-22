@@ -5,6 +5,7 @@
 #include "MainWindow.h"
 #include "MixerWindow.h"
 #include "PatchBayWindow.h"
+#include "Panels.h"
 #include "SamplerWindow.h"
 #include "SlicerWindow.h"
 #include "Settings.h"
@@ -134,6 +135,26 @@ void MainWindow::registerSamplerCommands()
     slicerFollowTimer.setSingleShot (true);
     slicerFollowTimer.setInterval (300);
     connect (&slicerFollowTimer, &QTimer::timeout, this, [this] { sendToSlicer (true); });
+
+    // Both are panels like Find and the meters: docked on the left under Find (taking its
+    // place when it is closed), the Slicer under the Sampler; drag them anywhere, or pop
+    // them out into windows of their own (View > Pop Out / Dock Panel, Ctrl+Alt+P).
+    samplerWin = new SamplerWindow (*samplerEngine, this);
+    connect (samplerWin, &SamplerWindow::refreshRequested, this, [this] { sendToSampler (true); });
+    connect (samplerWin, &SamplerWindow::midiInputsRequested, this, [this] { midiInputsDialog(); });
+    connect (samplerWin, &SamplerWindow::activated, this, [this] { midiTarget = 0; });
+    connect (samplerWin, &SamplerWindow::closed, this, [this] { instrumentClosed(); });
+    samplerPanel = new DockablePanel (*this, QStringLiteral ("samplerPanel"), tr ("Sampler"), samplerWin, Qt::LeftDockWidgetArea);
+    slicerWin = new SlicerWindow (*slicerEngine, this);
+    connect (slicerWin, &SlicerWindow::refreshRequested, this, [this] { sendToSlicer (true); });
+    connect (slicerWin, &SlicerWindow::midiInputsRequested, this, [this] { midiInputsDialog(); });
+    connect (slicerWin, &SlicerWindow::activated, this, [this] { midiTarget = 1; });
+    connect (slicerWin, &SlicerWindow::closed, this, [this] { instrumentClosed(); });
+    slicerPanel = new DockablePanel (*this, QStringLiteral ("slicerPanel"), tr ("Slicer"), slicerWin, Qt::LeftDockWidgetArea);
+    splitDockWidget (findPanel->dock(), samplerPanel->dock(), Qt::Vertical);
+    splitDockWidget (samplerPanel->dock(), slicerPanel->dock(), Qt::Vertical);
+    panels << samplerPanel << slicerPanel;
+    updateMidiStatus();
 }
 
 // Everything live plays through the patchbay, which routes it to the engine, while any
@@ -149,20 +170,9 @@ void MainWindow::playInstruments()
 
 void MainWindow::showSampler()
 {
-    if (samplerWin == nullptr)
-    {
-        samplerWin = new SamplerWindow (*samplerEngine, this);
-        connect (samplerWin, &SamplerWindow::refreshRequested, this, [this] { sendToSampler (true); });
-        connect (samplerWin, &SamplerWindow::midiInputsRequested, this, [this] { midiInputsDialog(); });
-        connect (samplerWin, &SamplerWindow::activated, this, [this] { midiTarget = 0; });
-        connect (samplerWin, &SamplerWindow::closed, this, [this] { instrumentClosed(); });
-        updateMidiStatus();
-    }
     midiTarget = 0;
     playInstruments();
-    samplerWin->show();
-    samplerWin->raise();
-    samplerWin->activateWindow();
+    samplerPanel->show (true);
 }
 
 // Takes the selection (or the whole file) of the active tab to the Sampler, at the
@@ -252,20 +262,9 @@ void MainWindow::instrumentClosed()
 
 void MainWindow::showSlicer()
 {
-    if (slicerWin == nullptr)
-    {
-        slicerWin = new SlicerWindow (*slicerEngine, this);
-        connect (slicerWin, &SlicerWindow::refreshRequested, this, [this] { sendToSlicer (true); });
-        connect (slicerWin, &SlicerWindow::midiInputsRequested, this, [this] { midiInputsDialog(); });
-        connect (slicerWin, &SlicerWindow::activated, this, [this] { midiTarget = 1; });
-        connect (slicerWin, &SlicerWindow::closed, this, [this] { instrumentClosed(); });
-        updateMidiStatus();
-    }
     midiTarget = 1;
     playInstruments();
-    slicerWin->show();
-    slicerWin->raise();
-    slicerWin->activateWindow();
+    slicerPanel->show (true);
 }
 
 // As sendToSampler, for the Slicer: the sound comes with the tab's tempo grid and
