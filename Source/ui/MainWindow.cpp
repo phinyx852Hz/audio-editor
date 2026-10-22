@@ -17,6 +17,7 @@
  #include "MilkDrop.h"
 #endif
 #include "AnalysisWindow.h"
+#include "AmbiVisualizer.h"
 #include "Goniometer.h"
 #include "AmbiScene.h"
 #include "../core/Ambisonics.h"
@@ -236,6 +237,7 @@ MainWindow::MainWindow (AudioEngine& e)
         if (analysisWin != nullptr && analysisWin->isVisible())
         {
             analysisWin->addSamples (scopeLeft, scopeRight, engine.deviceSampleRate());
+            feedAnalysisAmbisonics();
             analysisWin->tick();
         }
         feedAmbiScene();
@@ -3741,4 +3743,39 @@ AnalysisWindow* MainWindow::analysisWindow()
         });
     }
     return analysisWin;
+}
+
+// The Analysis window's Ambisonics card: the file's own channels around what is heard (all
+// of them, past the 16 the engine plays), or around the cursor when stopped. Read again only
+// when that place or the audio changes.
+void MainWindow::feedAnalysisAmbisonics()
+{
+    const auto d = data();
+    if (! analysisWin->wantsAmbisonics())
+        return;
+    const auto& layout = doc.current().layout;
+    const int order = d == nullptr ? 0
+                                   : AmbiVisualizer::orderFor (d->numChannels(), dsp::ambisonicOrder (layout),
+                                                               layout.rfind ("Ambisonics", 0) == 0, analysisWin->assumesAmbisonics());
+    const auto at = engine.isPlaying() ? engine.heardPositionFrames() : cursor;
+    if (order <= 0)
+    {
+        if (ambiFedOrder != 0)
+            analysisWin->addAmbisonics ({}, 0);
+        ambiFedOrder = 0;
+        ambiFedData = nullptr;
+        return;
+    }
+    if (d.get() == ambiFedData && at == ambiFedAt && order == ambiFedOrder)
+        return;
+    ambiFedData = d.get();
+    ambiFedAt = at;
+    ambiFedOrder = order;
+    constexpr int frames = 2048;
+    std::vector<std::vector<float>> channels ((size_t) d->numChannels(), std::vector<float> (frames));
+    std::vector<float*> pointers;
+    for (auto& c : channels)
+        pointers.push_back (c.data());
+    d->read (std::max<Frame> (0, at - frames / 2), frames, pointers.data());
+    analysisWin->addAmbisonics (channels, order);
 }
