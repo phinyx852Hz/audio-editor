@@ -94,6 +94,7 @@ private:
     void folderUp();
     bool atTopOfPlace() const;   // browsing the very folder chosen under Places
     void startAudition (QTreeWidgetItem*);
+    void dragFiles (QTreeWidgetItem* pressed);   // the pressed file (and the other selected ones) onto another window
     void endAudition();
     QIcon dots (int mask) const;
     void loadSelector();
@@ -109,6 +110,8 @@ private:
     QTreeWidget* sidebar;
     int rowBeforeDown = -1;   // the sidebar entry chosen before Down went into it from the search
     QTreeWidget* results;
+    QPoint pressedAt;          // where a drag out of the results may start
+    bool mayDrag = false;
 
     QList<FindItem> items;          // from `collect`
     QList<FindItem> files;          // from scanning the places

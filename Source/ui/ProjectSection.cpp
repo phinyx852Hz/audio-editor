@@ -10,6 +10,7 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QStackedWidget>
 
 namespace
 {
@@ -45,7 +46,8 @@ void MainWindow::setProjectState (const QJsonObject& project)
 // The view hook: true while the Mixer is what is in front, rather than the editor.
 bool MainWindow::mixerInView() const
 {
-    return mixerWin != nullptr && mixerWin->isVisible();
+    // In the editor's place it is in view only while it is the page shown.
+    return mixerWin != nullptr && mixerWin->isVisible() && (! mixerDocked() || centralStack->currentWidget() == (QWidget*) mixerWin);
 }
 
 void MainWindow::openProject (const QString& file)
