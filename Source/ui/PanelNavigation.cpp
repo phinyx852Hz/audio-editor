@@ -80,7 +80,7 @@ std::vector<MainWindow::PanelStop> MainWindow::panelStops() const
 {
     // The mixer in the editor's place stands in for the waveform.
     QWidget* editor = waveform;
-    if (mixerDocked() && centre->currentWidget() == mixerWin)
+    if (mixerDocked() && centralStack->currentWidget() == mixerWin)
         editor = mixerWin;
     return { { editor, nullptr }, { samplerWin, samplerPanel }, { chainRow, chainPanel }, { masterWidget, masterPanel },
              { metersPanel->content(), metersPanel }, { markerList, markerPanel }, { historyList, historyPanel },
@@ -224,7 +224,7 @@ void MainWindow::closeFocused()
             if (p == openedByCycle)
                 openedByCycle = nullptr;
             activateWindow();
-            if (mixerDocked() && centre->currentWidget() == mixerWin)
+            if (mixerDocked() && centralStack->currentWidget() == mixerWin)
                 mixerWin->setFocus();
             else
                 waveform->setFocus();

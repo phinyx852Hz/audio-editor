@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Mixer > Patchbay: the routing graph (patchbay/PatchBay.h) for everything played
 // live, its pop-out window, and its patches, synths and effects kept between sessions
-// in settings.ini.
+// in settings.ini and in project files (.phi).
 #include "MainWindow.h"
 #include "MixerWindow.h"
 #include "PatchBayWindow.h"
@@ -14,6 +14,8 @@
 #include "../sampler/SlicerEngine.h"
 
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QStatusBar>
 
 #include <algorithm>
@@ -49,6 +51,19 @@ namespace
     }
 
     QString fileName (const std::string& path) { return QFileInfo (QString::fromStdString (path)).fileName(); }
+
+    // "synth" for the built-in Synth, else the plugin's id; empty for none.
+    std::string synthId (const mixer::InstrumentPtr& s)
+    {
+        return s == nullptr ? std::string() : s->kind() == mixer::Instrument::Kind::synth ? std::string ("synth") : AudioEngine::instrumentPluginId (*s);
+    }
+
+    mixer::InstrumentPtr makeSynth (AudioEngine& engine, const std::string& id, double rate, std::string& error)
+    {
+        if (id == "synth")
+            return std::make_shared<mixer::Synth>();
+        return engine.loadInstrumentPlugin (id, rate, error);
+    }
 }
 
 void MainWindow::registerPatchBayCommands()
@@ -62,7 +77,7 @@ void MainWindow::registerPatchBayCommands()
     patchBaySave.setSingleShot (true);
     patchBaySave.setInterval (500);
     connect (&patchBaySave, &QTimer::timeout, this, [this] { savePatchBay(); });
-    QTimer::singleShot (0, this, [this] { restorePatchBay(); });
+    QTimer::singleShot (0, this, [this] { restoreProject(); });   // the patchbay with it
 }
 
 PatchBayWindow* MainWindow::patchBayWindow()
@@ -134,7 +149,12 @@ PatchBayWindow* MainWindow::patchBayWindow()
     };
 
     patchBayWin = new PatchBayWindow (*patchBay, engine, std::move (hooks), this);
-    connect (patchBayWin, &PatchBayWindow::changed, this, [this] { patchBaySave.start(); });
+    connect (patchBayWin, &PatchBayWindow::changed, this, [this]
+    {
+        patchBaySave.start();
+        if (mixerWin != nullptr)
+            mixerWin->projectChanged();
+    });
     connect (patchBayWin, &PatchBayWindow::activated, this, [this]
     {
         if (patchBay->synth (patchSynth.load()) != nullptr)
@@ -212,8 +232,7 @@ void MainWindow::savePatchBay()
     {
         const auto key = QStringLiteral ("synth%1").arg (i + 1);
         const auto s = patchBay->synth (i);
-        const auto id = s == nullptr ? std::string() : s->kind() == mixer::Instrument::Kind::synth ? std::string ("synth") : AudioEngine::instrumentPluginId (*s);
-        settings.setValue (key, QString::fromStdString (id));
+        settings.setValue (key, QString::fromStdString (synthId (s)));
         settings.setValue (key + QStringLiteral ("State"), s != nullptr ? QString::fromStdString (s->state()) : QString());
     }
     for (int i = 0; i < maxBuses; ++i)
@@ -253,12 +272,8 @@ void MainWindow::restorePatchBay()
         const auto id = settings.value (key).toString().toStdString();
         if (id.empty())
             continue;
-        mixer::InstrumentPtr made;
         std::string error;
-        if (id == "synth")
-            made = std::make_shared<mixer::Synth>();
-        else
-            made = engine.loadInstrumentPlugin (id, rate, error);
+        auto made = makeSynth (engine, id, rate, error);
         if (made == nullptr)
         {
             problems << tr ("Synth %1: %2").arg (i + 1).arg (QString::fromStdString (error));
@@ -298,4 +313,103 @@ void MainWindow::restorePatchBay()
         statusBar()->showMessage (tr ("Patchbay: %1").arg (problems.join (QStringLiteral ("; "))), 10000);
     if (patchBayInUse())
         playInstruments();
+}
+
+//==============================================================================
+QJsonObject MainWindow::patchBayJson() const
+{
+    QJsonArray links, synths, effects;
+    for (const auto& k : patchBay->links())
+        links.append (QJsonObject { { "from", nodeKey (k.from) }, { "to", nodeKey (k.to) }, { "gain", k.gainDb } });
+    for (int i = 0; i < maxSynths; ++i)
+    {
+        const auto s = patchBay->synth (i);
+        synths.append (s == nullptr ? QJsonValue() : QJsonValue (QJsonObject {
+            { "id", QString::fromStdString (synthId (s)) }, { "name", QString::fromStdString (s->name()) }, { "state", QString::fromStdString (s->state()) } }));
+    }
+    for (int i = 0; i < maxBuses; ++i)
+    {
+        const auto fx = patchBay->effect (i);
+        effects.append (fx == nullptr ? QJsonValue() : QJsonValue (QJsonObject {
+            { "id", QString::fromStdString (fx->pluginId()) }, { "name", QString::fromStdString (fx->name()) }, { "state", QString::fromStdString (fx->state()) } }));
+    }
+    return { { "links", links }, { "synths", synths }, { "effects", effects } };
+}
+
+void MainWindow::setPatchBayJson (const QJsonObject& o)
+{
+    const auto rate = engine.deviceSampleRate() > 0.0 ? engine.deviceSampleRate() : 48000.0;
+    patchBay->prepare (rate);
+    QStringList problems;
+    const auto synths = o.value ("synths").toArray();
+    for (int i = 0; i < maxSynths; ++i)
+    {
+        const auto s = i < synths.size() ? synths[i].toObject() : QJsonObject();
+        const auto id = s.value ("id").toString().toStdString();
+        // The one there already is kept when it is the same, so its window and sound go on.
+        if (const auto now = patchBay->synth (i); now != nullptr && ! id.empty() && synthId (now) == id)
+        {
+            now->setState (s.value ("state").toString().toStdString());
+            continue;
+        }
+        mixer::InstrumentPtr made;
+        if (! id.empty())
+        {
+            std::string error;
+            made = makeSynth (engine, id, rate, error);
+            if (made == nullptr)
+                problems << tr ("Synth %1: %2 (%3)").arg (i + 1).arg (s.value ("name").toString(), QString::fromStdString (error));
+            else
+                made->setState (s.value ("state").toString().toStdString());
+        }
+        patchBay->setSynth (i, made);
+    }
+    const auto effects = o.value ("effects").toArray();
+    for (int i = 0; i < maxBuses; ++i)
+    {
+        const auto e = i < effects.size() ? effects[i].toObject() : QJsonObject();
+        const auto id = e.value ("id").toString().toStdString();
+        if (const auto now = patchBay->effect (i); now != nullptr && ! id.empty() && now->pluginId() == id)
+        {
+            now->setState (e.value ("state").toString().toStdString());
+            continue;
+        }
+        EffectPtr made;
+        if (! id.empty())
+        {
+            std::string error;
+            made = engine.loadEffectPlugin (id, rate, error);
+            if (made == nullptr)
+                problems << tr ("FX Bus %1: %2 (%3)").arg (i + 1).arg (e.value ("name").toString(), QString::fromStdString (error));
+            else
+                made->setState (e.value ("state").toString().toStdString());
+        }
+        patchBay->setEffect (i, made);
+    }
+    std::vector<Link> links;
+    for (const auto& value : o.value ("links").toArray())
+    {
+        const auto k = value.toObject();
+        const auto from = nodeFromKey (k.value ("from").toString()), to = nodeFromKey (k.value ("to").toString());
+        if (from >= 0 && to >= 0)
+            links.push_back ({ from, to, (float) k.value ("gain").toDouble() });
+    }
+    patchBay->setLinks (links);
+    if (patchBayWin != nullptr)
+        patchBayWin->refill();
+    if (! problems.isEmpty())
+        statusBar()->showMessage (tr ("Patchbay: %1").arg (problems.join (QStringLiteral ("; "))), 10000);
+    if (patchBayInUse())
+        playInstruments();
+}
+
+void MainWindow::resetPatchBay()
+{
+    for (int i = 0; i < maxSynths; ++i)
+        patchBay->setSynth (i, nullptr);
+    for (int i = 0; i < maxBuses; ++i)
+        patchBay->setEffect (i, nullptr);
+    patchBay->resetLinks();
+    if (patchBayWin != nullptr)
+        patchBayWin->refill();
 }

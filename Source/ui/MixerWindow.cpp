@@ -60,6 +60,7 @@
 #include <functional>
 #include <map>
 #include <set>
+#include <utility>
 
 namespace
 {
@@ -345,9 +346,14 @@ namespace
         return QFileInfo (stored).isAbsolute() ? stored : QDir::cleanPath (base.absoluteFilePath (stored));
     }
 
-    QString autosavePath()
+    QString configFile (const char* name)
     {
-        return QStandardPaths::writableLocation (QStandardPaths::GenericConfigLocation) + QStringLiteral ("/" APP_ID "/mixer/last.phinyxmix");
+        return QStandardPaths::writableLocation (QStandardPaths::GenericConfigLocation) + QStringLiteral ("/" APP_ID "/mixer/") + QLatin1String (name);
+    }
+
+    QString projectFilter()
+    {
+        return MixerWindow::tr ("PHINYX projects (*.phi *.phinyxmix);;All files (*)");
     }
 
     enum Choice { noInstrument, synthChoice, samplerChoice, slicerChoice, firstPlugin };
@@ -2282,8 +2288,8 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     followTempoBox->setToolTip (tr ("Play the MIDI files at the mix's tempo instead of their own tempo maps"));
     auto* addButton = button (tr ("+ Track"), tr ("Add a track, up to 8 (Ctrl+T)"));
     auto* removeButton = button (tr ("− Track"), tr ("Remove the last track (Ctrl+Shift+T)"));
-    auto* openButton = button (tr ("Open..."), tr ("Open a mix (Ctrl+O)"));
-    auto* saveButton = button (tr ("Save"), tr ("Save the mix (Ctrl+S); Ctrl+Shift+S saves it under a new name"));
+    auto* openButton = button (tr ("Open..."), tr ("Open a project (Ctrl+O): the mix, the patchbay and the view"));
+    auto* saveButton = button (tr ("Save"), tr ("Save the project (Ctrl+S); Ctrl+Shift+S saves it under a new name"));
     auto* mixdownButton = button (tr ("Mix Down to Editor"), tr ("Render the whole mix, with the instruments' tails, into a new tab (Ctrl+Return)"));
     auto* midiButton = button (tr ("MIDI Inputs..."), tr ("Choose the MIDI keyboards that play the armed track"));
     midiStatus = new QLabel (this);
@@ -2705,14 +2711,17 @@ void MixerWindow::loadAudio (int track, const QString& file, mixer::Clip place, 
     const auto r = rate();
     appSettings().setValue (QStringLiteral ("mixer/folder"), QFileInfo (file).absolutePath());
 
-    // A file already on a track at this rate is shared rather than read again.
-    auto finish = [this, track, file, place, then] (mixer::AudioClipPtr clip) mutable
+    // A file already on a track at this rate is shared rather than read again. One
+    // that a project being opened put there is not a change to it, however late it lands.
+    auto finish = [this, track, file, place, then, fromFile = restoring] (mixer::AudioClipPtr clip) mutable
     {
         audioCache[file] = clip;
         place.audio = clip;
         if (place.length <= 0)
             place.length = clip->length();
+        const auto keep = std::exchange (restoring, restoring || fromFile);
         addClip (track, place);
+        restoring = keep;
         status->setText (tr ("%1 is on track %2 at %3").arg (QFileInfo (file).fileName()).arg (track + 1).arg (timeText ((double) place.start / rate())));
         if (then)
             then (place.end());
@@ -3059,7 +3068,7 @@ QString MixerWindow::trackName (int track) const
 
 QString MixerWindow::mixName() const
 {
-    return path.isEmpty() ? tr ("Untitled mix") : QFileInfo (path).completeBaseName();
+    return path.isEmpty() ? tr ("Untitled project") : QFileInfo (path).completeBaseName();
 }
 
 void MixerWindow::updateTitle()
@@ -3210,10 +3219,18 @@ void MixerWindow::closeEvent (QCloseEvent* e)
 }
 
 //==============================================================================
+QString MixerWindow::autosavePath() { return configFile ("last.phi"); }
+
+bool MixerWindow::isProjectFile (const QString& file)
+{
+    const auto suffix = QFileInfo (file).suffix();
+    return suffix.compare (projectSuffix, Qt::CaseInsensitive) == 0 || suffix.compare (QLatin1String ("phinyxmix"), Qt::CaseInsensitive) == 0;
+}
+
 bool MixerWindow::newMix()
 {
     if (modified && ! path.isEmpty()
-        && QMessageBox::question (this, tr ("New Mix"), tr ("Start a new mix? Changes to %1 that were not saved are lost.").arg (mixName())) != QMessageBox::Yes)
+        && QMessageBox::question (this, tr ("New Project"), tr ("Start a new project? Changes to %1 that were not saved are lost.").arg (mixName())) != QMessageBox::Yes)
         return false;
     engine.stop();
     engine.setPosition (0);
@@ -3248,6 +3265,8 @@ bool MixerWindow::newMix()
     restoring = false;
     path.clear();
     modified = false;
+    if (! opening && hooks.resetProject)
+        hooks.resetProject();
     rebuildStrips();
     select (0);
     updateTitle();
@@ -3267,45 +3286,62 @@ void MixerWindow::newMixFromSet (const QString& setName, const QStringList& name
     engine.setNumTracks (std::max (count, 1));
     rebuildStrips();
     select (0);
-    status->setText (tr ("A new mix from the %1 set").arg (setName));
+    status->setText (tr ("A new project from the %1 set").arg (setName));
 }
 
 void MixerWindow::openMix()
 {
-    if (modified && QMessageBox::question (this, tr ("Open Mix"), tr ("Open another mix? Changes to %1 that were not saved are lost.").arg (mixName())) != QMessageBox::Yes)
+    if (modified && QMessageBox::question (this, tr ("Open Project"), tr ("Open another project? Changes to %1 that were not saved are lost.").arg (mixName())) != QMessageBox::Yes)
         return;
-    const auto file = QFileDialog::getOpenFileName (this, tr ("Open Mix"), folder(), tr ("PHINYX mixes (*.phinyxmix);;All files (*)"));
+    const auto file = QFileDialog::getOpenFileName (this, tr ("Open Project"), folder(), projectFilter());
     if (file.isEmpty())
         return;
     QString error;
     if (! loadMix (file, error))
-        QMessageBox::warning (this, tr ("Open Mix"), error);
+        QMessageBox::warning (this, tr ("Open Project"), error);
     setFocus();
+}
+
+bool MixerWindow::openMixFile (const QString& file)
+{
+    if (modified && QMessageBox::question (this, tr ("Open Project"), tr ("Open %1? Changes to %2 that were not saved are lost.")
+                                                                           .arg (QFileInfo (file).fileName(), mixName())) != QMessageBox::Yes)
+        return false;
+    QString error;
+    if (! loadMix (QFileInfo (file).absoluteFilePath(), error))
+    {
+        QMessageBox::warning (this, tr ("Open Project"), error);
+        return false;
+    }
+    return true;
 }
 
 bool MixerWindow::saveMix (bool saveAs)
 {
     auto file = path;
+    // A mix from before projects is saved as a project beside it; the old file is left alone.
+    if (! saveAs && ! file.isEmpty() && QFileInfo (file).suffix().compare (projectSuffix, Qt::CaseInsensitive) != 0)
+        file = QFileInfo (file).absoluteDir().filePath (QFileInfo (file).completeBaseName() + QLatin1Char ('.') + projectSuffix);
     if (saveAs || file.isEmpty())
     {
-        file = QFileDialog::getSaveFileName (this, tr ("Save Mix"), QDir (folder()).filePath (mixName() + QStringLiteral (".phinyxmix")),
-                                             tr ("PHINYX mixes (*.phinyxmix)"));
+        file = QFileDialog::getSaveFileName (this, tr ("Save Project"), QDir (folder()).filePath (mixName() + QLatin1Char ('.') + projectSuffix),
+                                             tr ("PHINYX projects (*.phi)"));
         if (file.isEmpty())
             return false;
-        if (! file.endsWith (QStringLiteral (".phinyxmix"), Qt::CaseInsensitive))
-            file += QStringLiteral (".phinyxmix");
+        if (QFileInfo (file).suffix().compare (projectSuffix, Qt::CaseInsensitive) != 0)
+            file += QLatin1Char ('.') + projectSuffix;
     }
     QString error;
     if (! writeMix (file, error))
     {
-        QMessageBox::warning (this, tr ("Save Mix"), error);
+        QMessageBox::warning (this, tr ("Save Project"), error);
         return false;
     }
     path = file;
     modified = false;
     appSettings().setValue (QStringLiteral ("mixer/folder"), QFileInfo (file).absolutePath());
     updateTitle();
-    status->setText (tr ("Saved the mix to %1").arg (file));
+    status->setText (tr ("Saved the project to %1").arg (file));
     return true;
 }
 
@@ -3387,10 +3423,16 @@ bool MixerWindow::writeMix (const QString& file, QString& error)
         }
         tracks.append (o);
     }
-    const QJsonObject root {
-        { "phinyxMix", 2 }, { "tempo", tempoBox->value() }, { "midiFollowsTempo", followTempoBox->isChecked() },
+    QJsonObject root {
+        { "phinyxProject", 1 }, { "phinyxMix", 2 }, { "tempo", tempoBox->value() }, { "midiFollowsTempo", followTempoBox->isChecked() },
         { "master", engine.masterDb.load() }, { "armed", engine.liveTrack() }, { "tracks", tracks },
     };
+    if (hooks.projectState)
+    {
+        const auto extra = hooks.projectState();
+        for (auto it = extra.begin(); it != extra.end(); ++it)
+            root.insert (it.key(), it.value());
+    }
     QSaveFile out (file);
     if (! out.open (QIODevice::WriteOnly))
     {
@@ -3419,13 +3461,15 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
     const auto root = doc.object();
     if (doc.isNull() || ! root.contains (QStringLiteral ("phinyxMix")))
     {
-        error = tr ("%1 is not a PHINYX mix.").arg (QFileInfo (file).fileName());
+        error = tr ("%1 is not a PHINYX project.").arg (QFileInfo (file).fileName());
         return false;
     }
     const auto keepPath = path;
     path.clear();
     modified = false;
+    opening = true;
     newMix();
+    opening = false;
     restoring = true;
     const QDir base = QFileInfo (file).absoluteDir();
     QStringList problems;
@@ -3552,6 +3596,8 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
     engine.masterDb = (float) root.value ("master").toDouble();
     masterFader->setValue (faderPosition (engine.masterDb.load()));
     engine.setLiveTrack (root.value ("armed").toInt (0));
+    if (hooks.setProjectState)
+        hooks.setProjectState (root);
     restoring = false;
     path = file;
     modified = false;
@@ -3573,19 +3619,24 @@ void MixerWindow::autosave()
     QString error;
     writeMix (file, error);
     appSettings().setValue (QStringLiteral ("mixer/lastPath"), path);
+    appSettings().setValue (QStringLiteral ("mixer/lastModified"), modified);
 }
 
 void MixerWindow::restoreAutosave()
 {
-    const auto file = autosavePath();
+    auto file = autosavePath();
+    if (! QFileInfo::exists (file))
+        file = configFile ("last.phinyxmix");   // kept by versions before projects
     if (! QFileInfo::exists (file))
         return;
     QString error;
     const auto lastPath = appSettings().value (QStringLiteral ("mixer/lastPath")).toString();
     if (loadMix (file, error))
     {
-        // It is the mix that was open, not a new one called "last".
+        // It is the project that was open, not a new one called "last", with the
+        // changes not yet saved to it still to save.
         path = lastPath;
+        modified = appSettings().value (QStringLiteral ("mixer/lastModified"), false).toBool();
         updateTitle();
     }
 }

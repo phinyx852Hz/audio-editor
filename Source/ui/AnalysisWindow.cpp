@@ -2,17 +2,26 @@
 // Analysis Meters: the measurements (analysis::State), one widget per meter, the
 // cards they sit in, and the window that lays them out.
 #include "AnalysisWindow.h"
+#include "AnalysisReport.h"
 #include "Goniometer.h"
 #include "Settings.h"
 #include "Theme.h"
 #include "../core/Dsp.h"
 #include "../core/Fft.h"
+#include "../engine/AudioEngine.h"
 
 #include <QActionGroup>
 #include <QApplication>
 #include <QClipboard>
 #include <QCloseEvent>
 #include <QComboBox>
+#include <QDragEnterEvent>
+#include <QFutureWatcher>
+#include <QMimeData>
+#include <QtConcurrent>
+#include <QDateTime>
+#include <QDir>
+#include <QFileInfo>
 #include <QElapsedTimer>
 #include <QFrame>
 #include <QGuiApplication>
@@ -249,6 +258,10 @@ namespace analysis
             for (auto& p : prefix)
                 p.assign ((size_t) numBins() + 1, 0.0);
             cross.assign ((size_t) numBins(), {});
+            for (auto& p : totalPower)
+                p.assign ((size_t) numBins(), 0.0);
+            totalCross.assign ((size_t) numBins(), {});
+            spectra = 0;
         }
 
         void reset()
@@ -268,6 +281,7 @@ namespace analysis
             peakDb = rmsDb = holdDb = { minusInfinity, minusInfinity };
             holdAge = {};
             sumLR = sumLL = sumRR = 0.0;
+            allLR = allLL = allRR = 0.0;
             correlation = balanceDb = 0.0;
             hasSignal = false;
             stats = {};
@@ -301,6 +315,9 @@ namespace analysis
                 }
 
                 sumLR = c * sumLR + d * (double) x[0] * x[1];
+                allLR += (double) x[0] * x[1];
+                allLL += (double) x[0] * x[0];
+                allRR += (double) x[1] * x[1];
                 sumLL = c * sumLL + d * (double) x[0] * x[0];
                 sumRR = c * sumRR + d * (double) x[1] * x[1];
 
@@ -454,7 +471,15 @@ namespace analysis
                 for (int c = 0; c < 4; ++c)
                     power[(size_t) c][(size_t) k] += (now[c] - power[(size_t) c][(size_t) k]) * a;
                 cross[(size_t) k] += (l * std::conj (r) - cross[(size_t) k]) * a;
+                if (accumulate && fresh)
+                {
+                    for (int c = 0; c < 4; ++c)
+                        totalPower[(size_t) c][(size_t) k] += now[c];
+                    totalCross[(size_t) k] += l * std::conj (r);
+                }
             }
+            if (accumulate && fresh)
+                ++spectra;
             for (int c = 0; c < 4; ++c)
                 for (int k = 0; k < bins; ++k)
                     prefix[(size_t) c][(size_t) k + 1] = prefix[(size_t) c][(size_t) k] + power[(size_t) c][(size_t) k];
@@ -546,6 +571,13 @@ namespace analysis
         }
 
         QString statsText() const;
+
+        // For a whole-file report: every spectrum added up, and the sums of whole-file products.
+        bool accumulate = false;
+        std::array<std::vector<double>, 4> totalPower;
+        std::vector<std::complex<double>> totalCross;
+        int spectra = 0;
+        double allLR = 0.0, allLL = 0.0, allRR = 0.0;
     };
 
     struct StatRow { QString name; QString values[2]; };
@@ -589,6 +621,203 @@ namespace analysis
               << QObject::tr ("Maximum momentary loudness\t%1").arg (number (maxMomentary, 1, "LUFS"))
               << QObject::tr ("Maximum short-term loudness\t%1").arg (number (maxShortTerm, 1, "LUFS"));
         return lines.join (QLatin1Char ('\n')) + QLatin1Char ('\n');
+    }
+
+    //==============================================================================
+    QString fileReport (const AudioData& data, const QString& path, int targetIndex)
+    {
+        const int channels = data.numChannels();
+        const auto rate = data.sampleRate();
+        const auto length = data.length();
+        State s;
+        s.setRate (rate);
+        s.setFft (13, 1);
+        s.accumulate = true;
+
+        // Mono is heard on both sides; more channels are folded down to stereo as PHINYX plays them.
+        const auto fold = channels > 2 ? dsp::stereoDownmix (channels) : std::array<std::vector<float>, 2> {};
+        const int block = s.fftSize();
+        std::vector<std::vector<float>> buffers ((size_t) channels, std::vector<float> ((size_t) block));
+        std::vector<float*> pointers;
+        for (auto& b : buffers)
+            pointers.push_back (b.data());
+        std::vector<float> left, right;
+        for (Frame pos = 0; pos < length; pos += block)
+        {
+            const auto count = (size_t) std::min<Frame> (block, length - pos);
+            data.read (pos, (int) count, pointers.data());
+            left.assign (count, 0.0f);
+            right.assign (count, 0.0f);
+            for (size_t i = 0; i < count; ++i)
+            {
+                if (channels == 1)
+                    left[i] = right[i] = buffers[0][i];
+                else if (channels == 2)
+                {
+                    left[i] = buffers[0][i];
+                    right[i] = buffers[1][i];
+                }
+                else
+                    for (size_t ch = 0; ch < (size_t) channels; ++ch)
+                    {
+                        left[i] += fold[0][ch] * buffers[ch][i];
+                        right[i] += fold[1][ch] * buffers[ch][i];
+                    }
+            }
+            s.add (left, right);
+            s.update ((double) count / rate);
+        }
+        s.integrated = dsp::integratedLoudness (s.blocks);
+        s.range = s.loudnessRange();
+        const auto exact = dsp::measureLoudness (data, 0, length);   // every channel, weighted as BS.1770 says
+        const auto monoCorrection = channels == 1 ? -3.0103 : 0.0;   // a mono channel counts once, not on both sides
+
+        QStringList out;
+        const auto line = [&out] (const QString& name, const QString& value)
+        {
+            out << QStringLiteral ("  ") + name.leftJustified (35, QLatin1Char (' ')) + value;
+        };
+        const auto heading = [&out] (const QString& title)
+        {
+            out << QString() << title.toUpper() << QString (title.size(), QLatin1Char ('-'));
+        };
+        const auto clock = [] (double seconds)
+        {
+            const auto ms = (long long) std::llround (seconds * 1000.0);
+            return QStringLiteral ("%1:%2.%3").arg (ms / 60000).arg ((ms / 1000) % 60, 2, 10, QLatin1Char ('0')).arg (ms % 1000, 3, 10, QLatin1Char ('0'));
+        };
+
+        const QFileInfo info (path);
+        const QString title = QObject::tr ("PHINYX analysis report");
+        out << title << QString (title.size(), QLatin1Char ('='));
+        line (QObject::tr ("File"), info.fileName());
+        line (QObject::tr ("Folder"), QDir::toNativeSeparators (info.absolutePath()));
+        line (QObject::tr ("Length"), QObject::tr ("%1 (%2 frames)").arg (clock (data.lengthSeconds())).arg (length));
+        line (QObject::tr ("Format"), QObject::tr ("%1 Hz, %2 (%3)").arg (rate, 0, 'f', 0)
+                                          .arg (channels == 1 ? QObject::tr ("1 channel") : QObject::tr ("%1 channels").arg (channels), QString::fromStdString (dsp::speakerLayout (channels).name)));
+        if (info.exists())
+            line (QObject::tr ("File size"), QStringLiteral ("%1 MB").arg (info.size() / 1048576.0, 0, 'f', 2));
+        line (QObject::tr ("Measured"), QDateTime::currentDateTime().toString (QStringLiteral ("yyyy-MM-dd hh:mm")));
+        if (channels > 2)
+            out << QString() << QObject::tr ("  Loudness counts every channel; the rest is of the stereo fold-down, as PHINYX plays it.");
+        if (channels == 1)
+            out << QString() << QObject::tr ("  Mono: Left and Right below are the same channel.");
+
+        heading (QObject::tr ("Loudness (ITU-R BS.1770 / EBU R128)"));
+        const bool measured = exact.integratedLufs > -150.0;
+        line (QObject::tr ("Integrated loudness"), number (exact.integratedLufs, 2, "LUFS"));
+        line (QObject::tr ("Loudness range"), number (exact.loudnessRange, 1, "LU"));
+        line (QObject::tr ("Max momentary (400 ms)"), number (s.maxMomentary + monoCorrection, 1, "LUFS"));
+        line (QObject::tr ("Max short-term (3 s)"), number (s.maxShortTerm + monoCorrection, 1, "LUFS"));
+        line (QObject::tr ("True peak"), number (exact.truePeakDb, 2, "dBTP"));
+        line (QObject::tr ("Sample peak"), number (exact.samplePeakDb, 2, "dBFS"));
+        if (measured)
+        {
+            line (QObject::tr ("PLR (true peak - integrated)"), number (exact.truePeakDb - exact.integratedLufs, 1, "LU"));
+            if (s.maxShortTerm > -150.0)
+                line (QObject::tr ("PSR (true peak - max short-term)"), number (exact.truePeakDb - (s.maxShortTerm + monoCorrection), 1, "LU"));
+        }
+
+        const auto& target = targets[(size_t) std::clamp (targetIndex, 0, (int) targets.size() - 1)];
+        out << QString();
+        line (QObject::tr ("Target"), QCoreApplication::translate ("AnalysisWindow", target.name));
+        if (measured)
+        {
+            const auto lu = exact.integratedLufs - target.lufs;
+            line (QObject::tr ("  Loudness"), std::abs (lu) <= 0.5 ? QObject::tr ("on target (%1 LU)").arg (signedNumber (lu, 1))
+                                              : lu > 0.0 ? QObject::tr ("%1 LU above: normalised playback turns it down %1 dB").arg (lu, 0, 'f', 1)
+                                                         : QObject::tr ("%1 LU below the target").arg (-lu, 0, 'f', 1));
+        }
+        const auto headroom = target.truePeak - exact.truePeakDb;
+        line (QObject::tr ("  True peak"), headroom >= 0.0 ? QObject::tr ("within the %1 dBTP ceiling, %2 dB to spare").arg (target.truePeak).arg (headroom, 0, 'f', 2)
+                                                           : QObject::tr ("%1 dB over the %2 dBTP ceiling").arg (-headroom, 0, 'f', 2).arg (target.truePeak));
+
+        heading (QObject::tr ("Amplitude statistics"));
+        out << QStringLiteral ("  ") + QString().leftJustified (35, QLatin1Char (' ')) + QObject::tr ("Left").rightJustified (14) + QObject::tr ("Right").rightJustified (14);
+        for (const auto& r : statRows (s))
+            out << QStringLiteral ("  ") + r.name.leftJustified (35, QLatin1Char (' ')) + r.values[0].rightJustified (14) + r.values[1].rightJustified (14);
+
+        heading (QObject::tr ("Stereo"));
+        const auto correlation = s.allLL * s.allRR > 1.0e-18 ? s.allLR / std::sqrt (s.allLL * s.allRR) : 0.0;
+        const auto midPower = (s.allLL + s.allRR + 2.0 * s.allLR) / 4.0, sidePower = (s.allLL + s.allRR - 2.0 * s.allLR) / 4.0;
+        const auto balance = s.allLL > 0.0 && s.allRR > 0.0 ? powerDb (s.allRR) - powerDb (s.allLL) : 0.0;
+        line (QObject::tr ("Correlation (whole file)"), QString::number (correlation, 'f', 3) + QStringLiteral ("   ")
+                                                        + (correlation > 0.9 ? QObject::tr ("(nearly mono)") : correlation > 0.3 ? QObject::tr ("(mono-safe stereo)")
+                                                           : correlation > 0.0 ? QObject::tr ("(wide)") : QObject::tr ("(out of phase: loses a lot in mono)")));
+        line (QObject::tr ("Balance"), std::abs (balance) < 0.05 ? QObject::tr ("centre")
+                                       : QObject::tr ("%1 louder by %2 dB").arg (balance > 0.0 ? QObject::tr ("right") : QObject::tr ("left")).arg (std::abs (balance), 0, 'f', 2));
+        line (QObject::tr ("Side against mid"), sidePower > 1.0e-12 && midPower > 1.0e-12 ? number (powerDb (sidePower) - powerDb (midPower), 1, "dB")
+                                                                                       : QObject::tr ("no side (mono)"));
+
+        // The long-term spectrum, corrected for the window's noise bandwidth so a band reads its power.
+        const auto spectra = std::max (1, s.spectra);
+        const auto squares = std::accumulate (s.window.begin(), s.window.end(), 0.0, [] (double a, float w) { return a + (double) w * w; });
+        const auto sum = std::accumulate (s.window.begin(), s.window.end(), 0.0);
+        const auto noiseBandwidth = s.fftSize() * squares / (sum * sum);
+        const auto strongest = [&] (int ch)
+        {
+            const auto& p = s.totalPower[(size_t) ch];
+            const int first = std::max (1, (int) (lowestHz / s.binHz())), last = std::min (s.numBins() - 2, (int) (highestHz / s.binHz()));
+            int best = first;
+            for (int k = first; k <= last; ++k)
+                if (p[(size_t) k] > p[(size_t) best])
+                    best = k;
+            if (powerDb (p[(size_t) best] / spectra) < -90.0)
+                return QStringLiteral ("-");
+            const auto y0 = powerDb (p[(size_t) best - 1]), y1 = powerDb (p[(size_t) best]), y2 = powerDb (p[(size_t) best + 1]);
+            const auto d = y0 - 2.0 * y1 + y2;
+            const auto hz = (best + (std::abs (d) > 1.0e-9 ? std::clamp (0.5 * (y0 - y2) / d, -0.5, 0.5) : 0.0)) * s.binHz();
+            return QStringLiteral ("%1  %2").arg (hzText (hz), noteText (hz));
+        };
+        line (QObject::tr ("Strongest frequency, left"), strongest (State::left));
+        line (QObject::tr ("Strongest frequency, right"), strongest (State::right));
+
+        heading (QObject::tr ("RMS histogram (50 ms windows, share of the time)"));
+        {
+            std::array<int, 12> buckets {};
+            int total = 0;
+            for (const auto& st : s.stats)
+                for (int b = 0; b < 61; ++b)
+                {
+                    buckets[(size_t) std::min (11, b / 5)] += st.histogram[(size_t) b];
+                    total += st.histogram[(size_t) b];
+                }
+            const auto most = std::max (1, *std::max_element (buckets.begin(), buckets.end()));
+            for (int i = 11; i >= 0; --i)
+            {
+                const auto share = total > 0 ? 100.0 * buckets[(size_t) i] / total : 0.0;
+                out << QStringLiteral ("  %1 to %2 dB  %3 %4 %")
+                           .arg (-60 + i * 5, 3).arg (-55 + i * 5, 3)
+                           .arg (QString ((int) std::lround (40.0 * buckets[(size_t) i] / most), QChar (0x2588)).leftJustified (40, QLatin1Char (' ')))
+                           .arg (share, 5, 'f', 1);
+            }
+        }
+
+        heading (QObject::tr ("Average spectrum (third octaves)"));
+        out << QStringLiteral ("  ") + QObject::tr ("Band").leftJustified (10) + QObject::tr ("Left").rightJustified (12)
+                   + QObject::tr ("Right").rightJustified (12) + QObject::tr ("Correlation").rightJustified (14);
+        for (int b = 0; b < numBands; ++b)
+        {
+            const auto centre = 1000.0 * std::pow (2.0, (b - 17) / 3.0);
+            if (centre > s.nyquist())
+                break;
+            const auto [lo, hi] = s.binRange (centre, 1.0 / 3.0);
+            double pl = 0.0, pr = 0.0, re = 0.0;
+            for (int k = lo; k <= hi; ++k)
+            {
+                pl += s.totalPower[State::left][(size_t) k];
+                pr += s.totalPower[State::right][(size_t) k];
+                re += s.totalCross[(size_t) k].real();
+            }
+            const auto bandDb = [&] (double p) { return number (powerDb (p / spectra / noiseBandwidth), 1, "dB"); };
+            auto band = QString::fromLatin1 (bandNames[b]);
+            band = band.endsWith (QLatin1Char ('k')) ? band.chopped (1) + QStringLiteral (" kHz") : band + QStringLiteral (" Hz");
+            out << QStringLiteral ("  ") + band.leftJustified (10) + bandDb (pl).rightJustified (12)
+                       + bandDb (pr).rightJustified (12)
+                       + (pl * pr > 1.0e-24 ? signedNumber (std::clamp (re / std::sqrt (pl * pr), -1.0, 1.0), 2) : QStringLiteral ("-")).rightJustified (14);
+        }
+        out << QString() << QObject::tr ("Measured by PHINYX from the file itself, without the Master Section.");
+        return out.join (QLatin1Char ('\n')) + QLatin1Char ('\n');
     }
 
     //==============================================================================
@@ -1999,8 +2228,7 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
         connect (copy, &QPushButton::clicked, this, [this]
         {
             QGuiApplication::clipboard()->setText (state->statsText());
-            status->setText (tr ("Statistics copied"));
-            messageTicks = 70;
+            showMessage (tr ("Statistics copied"));
         });
         statsCard->addControl (copy);
     }
@@ -2036,6 +2264,23 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
     layout->setSpacing (8);
     layout->addLayout (bar);
     layout->addWidget (rows, 1);
+
+    // Dropping files: a hint over everything while one is held above the window.
+    setAcceptDrops (true);
+    dropHint = new QLabel (tr ("Drop to measure the whole file\nA full report opens in its own window"), this);
+    dropHint->setAlignment (Qt::AlignCenter);
+    dropHint->setAttribute (Qt::WA_TransparentForMouseEvents);
+    {
+        auto f = dropHint->font();
+        f.setPointSizeF (f.pointSizeF() * 1.4);
+        f.setWeight (QFont::DemiBold);
+        dropHint->setFont (f);
+        auto fill = Theme::current().color (QStringLiteral ("base"));
+        fill.setAlphaF (0.82f);
+        dropHint->setStyleSheet (QStringLiteral ("QLabel { background: %1; color: %2; border: 2px dashed %2; border-radius: 12px; }")
+                                     .arg (fill.name (QColor::HexArgb), Theme::current().color (QStringLiteral ("highlight")).name()));
+    }
+    dropHint->hide();
 
     applyTarget (targetBox->currentIndex());
     restoreLayout();
@@ -2157,11 +2402,11 @@ void AnalysisWindow::saveLayout() const
 void AnalysisWindow::restoreLayout()
 {
     auto settings = appSettings();
-    if (const auto state = settings.value (QStringLiteral ("analysis/rows")).toByteArray(); ! state.isEmpty())
-        rows->restoreState (state);
+    if (const auto saved = settings.value (QStringLiteral ("analysis/rows")).toByteArray(); ! saved.isEmpty())
+        rows->restoreState (saved);
     for (size_t i = 0; i < splitters.size(); ++i)
-        if (const auto state = settings.value (QStringLiteral ("analysis/row%1").arg (i)).toByteArray(); ! state.isEmpty())
-            splitters[i]->restoreState (state);
+        if (const auto saved = settings.value (QStringLiteral ("analysis/row%1").arg (i)).toByteArray(); ! saved.isEmpty())
+            splitters[i]->restoreState (saved);
     if (! restoreGeometry (settings.value (QStringLiteral ("analysis/geometry")).toByteArray()))
     {
         const auto screen = QGuiApplication::primaryScreen()->availableGeometry();
@@ -2173,9 +2418,9 @@ void AnalysisWindow::keyPressEvent (QKeyEvent* e)
 {
     const auto key = e->key();
     const auto mods = e->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::ShiftModifier | Qt::MetaModifier);
-    if ((key == Qt::Key_A && mods == (Qt::ControlModifier | Qt::AltModifier)) || (key == Qt::Key_W && mods == Qt::ControlModifier))
+    if ((key == Qt::Key_A && mods == (Qt::ControlModifier | Qt::AltModifier)) || (key == Qt::Key_W && (mods == Qt::ControlModifier || mods == Qt::MetaModifier)))
     {
-        close();   // the key that opened it closes it again, as does Ctrl+W
+        close();   // the key that opened it closes it again, as do Ctrl+W and Super+W
         return;
     }
     if (e->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))
@@ -2201,4 +2446,101 @@ void AnalysisWindow::closeEvent (QCloseEvent* e)
     saveLayout();
     Q_EMIT closed();
     QWidget::closeEvent (e);
+}
+
+void AnalysisWindow::showMessage (const QString& text)
+{
+    status->setText (text);
+    messageTicks = 90;   // about three seconds, then back to what is measured
+}
+
+namespace
+{
+    QStringList audioFiles (const QMimeData* mime)
+    {
+        static const auto extensions = []
+        {
+            QStringList list;
+            for (const auto& e : AudioEngine::readableExtensions())
+                list << QString::fromStdString (e);
+            return list;
+        }();
+        QStringList paths;
+        if (mime != nullptr)
+            for (const auto& url : mime->urls())
+                if (url.isLocalFile() && extensions.contains (QFileInfo (url.toLocalFile()).suffix().toLower()))
+                    paths << url.toLocalFile();
+        return paths;
+    }
+}
+
+void AnalysisWindow::dragEnterEvent (QDragEnterEvent* e)
+{
+    if (audioFiles (e->mimeData()).isEmpty())
+        return;
+    e->acceptProposedAction();
+    dropHint->setGeometry (rect().adjusted (24, 48, -24, -24));
+    dropHint->show();
+    dropHint->raise();
+}
+
+void AnalysisWindow::dragLeaveEvent (QDragLeaveEvent*)
+{
+    dropHint->hide();
+}
+
+void AnalysisWindow::dropEvent (QDropEvent* e)
+{
+    dropHint->hide();
+    const auto paths = audioFiles (e->mimeData());
+    if (paths.isEmpty())
+        return;
+    e->acceptProposedAction();
+    for (const auto& path : paths)
+        analyseFile (path);
+}
+
+void AnalysisWindow::resizeEvent (QResizeEvent* e)
+{
+    if (dropHint != nullptr)
+        dropHint->setGeometry (rect().adjusted (24, 48, -24, -24));
+    QWidget::resizeEvent (e);
+}
+
+// Reads and measures the file away from the UI thread, then opens its report.
+void AnalysisWindow::analyseFile (const QString& path)
+{
+    using Result = std::pair<QString, QString>;   // the report, or what went wrong
+    const auto name = QFileInfo (path).fileName();
+    const auto target = targetBox->currentIndex();
+    ++measuring;
+    showMessage (tr ("Measuring %1...").arg (name));
+
+    auto* watcher = new QFutureWatcher<Result> (this);
+    connect (watcher, &QFutureWatcher<Result>::finished, this, [this, watcher, path, name]
+    {
+        const auto [text, error] = watcher->result();
+        watcher->deleteLater();
+        --measuring;
+        if (! error.isEmpty())
+        {
+            showMessage (tr ("%1: %2").arg (name, error));
+            return;
+        }
+        auto* report = new AnalysisReport (text, path, this);
+        report->show();
+        report->raise();
+        report->activateWindow();
+        showMessage (measuring > 0 ? tr ("%1 measured, %2 more to go").arg (name).arg (measuring) : tr ("%1 measured").arg (name));
+    });
+    watcher->setFuture (QtConcurrent::run ([path, target]() -> Result
+    {
+        std::vector<Marker> markers;
+        Tags tags;
+        std::string error;
+        const auto audio = AudioEngine::loadFile (path.toStdString(), markers, tags, error);
+        if (audio == nullptr || audio->length() == 0)
+            return { {}, error.empty() ? QObject::tr ("cannot be read") : QString::fromStdString (error) };
+        return { analysis::fileReport (*audio, path, target), {} };
+    }));
 }
