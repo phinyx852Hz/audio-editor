@@ -42,7 +42,7 @@ jobs:
             libfreetype-dev libfontconfig1-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev \
             libxcomposite-dev libxext-dev libcairo2-dev libsndfile1-dev libxi-dev clang \
             libavcodec-dev libavformat-dev libavutil-dev libswresample-dev libtag1-dev zlib1g-dev \
-            libxcb-icccm4-dev libxcb-dri2-0-dev libfftw3-dev libcurl4-openssl-dev
+            libxcb-icccm4-dev libxcb-dri2-0-dev libx11-xcb-dev libxcb1-dev libfftw3-dev libcurl4-openssl-dev
       - uses: actions/checkout@v4
       - name: Configure
         # Fails if PipeWire was not found, since then recording would be left out
