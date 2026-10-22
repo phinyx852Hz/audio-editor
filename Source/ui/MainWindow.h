@@ -426,6 +426,10 @@ private:
     class TrackerWindow* trackerWin = nullptr;
     class AnalysisWindow* analysisWindow();   // Analysis Meters, made when first opened
     class AnalysisWindow* analysisWin = nullptr;
+    void feedAnalysisAmbisonics();
+    const class AudioData* ambiFedData = nullptr;   // what the Ambisonics card last got
+    Frame ambiFedAt = -1;
+    int ambiFedOrder = 0;
     class VisualizerWindow* visualizerWindow();
     void setVisualMode (int index, bool openIfHidden);
     void toggleVisualizerBehind();
