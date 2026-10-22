@@ -342,6 +342,8 @@ private:
     std::shared_ptr<class TrackerLink> trackerLinks;
     bool trackerConfirmDiscard();   // false when the user cancels
     std::unique_ptr<class TrackerEngine> tracker;
+    void openFurnace();   // Tracker2
+    qint64 furnacePid = 0;
 
     // The Performance menu (PerformanceSection.cpp, Source/performance): records PHINYX's
     // window, cameras and sound to MP4 and streams them live.

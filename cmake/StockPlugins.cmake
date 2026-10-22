@@ -180,6 +180,7 @@ else()
 endif()
 
 include(${CMAKE_CURRENT_LIST_DIR}/Instruments.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/Trackers.cmake)
 
 foreach(t IN LISTS stock_targets)
     add_dependencies(${t} ${APP_ID})

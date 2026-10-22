@@ -1,0 +1,95 @@
+diff --git a/src/gui/gui.cpp b/src/gui/gui.cpp
+index 90aa88c..d228ba1 100644
+--- a/src/gui/gui.cpp
++++ b/src/gui/gui.cpp
+@@ -3695,6 +3695,68 @@ bool FurnaceGUI::detectOutOfBoundsWindow(SDL_Rect& failing) {
+   if (x) pendingLayoutImportReopen.push(&x); \
+   x=false;
+ 
++// PHINYX: a thin opacity bar along the bottom of the window, like PHINYX's
++// instrument windows. Click or drag along it, the mouse wheel nudges it, a
++// double-click makes the window solid again. Kept in Furnace's settings.
++#define PHINYX_MIN_OPACITY 0.2f
++
++void FurnaceGUI::drawPhinyxOpacity() {
++  if (phinyxOpacity<0.0f) {
++    phinyxOpacity=CLAMP(e->getConfFloat("phinyxOpacity",1.0f),PHINYX_MIN_OPACITY,1.0f);
++    SDL_SetWindowOpacity(sdlWin,phinyxOpacity);
++  }
++  float height=16.0f*dpiScale;
++  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(0.0f,0.0f));
++  ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize,0.0f);
++  ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize,ImVec2(1.0f,1.0f));
++  bool open=ImGui::BeginViewportSideBar("##PHINYXOpacity",ImGui::GetMainViewport(),ImGuiDir_Down,height,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoNav|ImGuiWindowFlags_NoDocking);
++  ImGui::PopStyleVar(3);
++  if (open) {
++    ImDrawList* dl=ImGui::GetWindowDrawList();
++    ImVec2 pos=ImGui::GetWindowPos();
++    ImVec2 size=ImGui::GetWindowSize();
++    float pad=6.0f*dpiScale;
++    String label=fmt::sprintf("Opacity %d%%",(int)round(phinyxOpacity*100.0f));
++    float labelW=92.0f*dpiScale;
++    ImVec2 textSize=ImGui::CalcTextSize(label.c_str());
++    dl->AddText(ImVec2(pos.x+pad,pos.y+(size.y-textSize.y)*0.5f),ImGui::GetColorU32(ImGuiCol_TextDisabled),label.c_str());
++
++    float trackX=pos.x+pad+labelW;
++    float trackW=size.x-pad*2.0f-labelW;
++    ImGui::SetCursorScreenPos(ImVec2(trackX,pos.y));
++    if (trackW>1.0f) {
++      ImGui::InvisibleButton("##PHINYXOpacityTrack",ImVec2(trackW,size.y));
++      float value=phinyxOpacity;
++      if (ImGui::IsItemActive()) {
++        value=PHINYX_MIN_OPACITY+(1.0f-PHINYX_MIN_OPACITY)*CLAMP((ImGui::GetIO().MousePos.x-trackX)/trackW,0.0f,1.0f);
++      }
++      if (ImGui::IsItemHovered()) {
++        if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) value=1.0f;
++        float wheel=ImGui::GetIO().MouseWheel;
++        if (wheel>0.0f) value+=0.05f;
++        if (wheel<0.0f) value-=0.05f;
++      }
++      value=CLAMP(value,PHINYX_MIN_OPACITY,1.0f);
++      if (fabs(value-phinyxOpacity)>=0.0001f) {
++        phinyxOpacity=value;
++        SDL_SetWindowOpacity(sdlWin,phinyxOpacity);
++        e->setConf("phinyxOpacity",phinyxOpacity);
++      }
++      if (ImGui::IsItemDeactivated()) e->saveConf();
++
++      float trackH=4.0f*dpiScale;
++      ImVec2 a=ImVec2(trackX,pos.y+(size.y-trackH)*0.5f);
++      ImVec2 b=ImVec2(trackX+trackW,a.y+trackH);
++      dl->AddRectFilled(a,b,ImGui::GetColorU32(ImGuiCol_FrameBg),trackH*0.5f);
++      ImVec4 fill=uiColors[GUI_COLOR_ACCENT_PRIMARY];
++      if (!ImGui::IsItemHovered() && !ImGui::IsItemActive()) fill.w*=0.8f;
++      float fraction=(phinyxOpacity-PHINYX_MIN_OPACITY)/(1.0f-PHINYX_MIN_OPACITY);
++      dl->AddRectFilled(a,ImVec2(trackX+trackW*fraction,b.y),ImGui::ColorConvertFloat4ToU32(fill),trackH*0.5f);
++    }
++  }
++  ImGui::End();
++}
++
+ bool FurnaceGUI::loop() {
+   DECLARE_METRIC(calcChanOsc)
+   DECLARE_METRIC(mobileControls)
+@@ -4866,6 +4928,7 @@ bool FurnaceGUI::loop() {
+         ImGui::Text(_("| modified"));
+       }
+       ImGui::EndMainMenuBar();
++      drawPhinyxOpacity();
+     }
+ 
+     MEASURE(calcChanOsc,calcChanOsc());
+diff --git a/src/gui/gui.h b/src/gui/gui.h
+index 15963e2..4704ced 100644
+--- a/src/gui/gui.h
++++ b/src/gui/gui.h
+@@ -2904,6 +2904,9 @@ class FurnaceGUI {
+   void drawRegView();
+   void drawAbout();
+   void drawIntro(double introTime, bool monitor=false);
++  // PHINYX: the window's opacity bar
++  void drawPhinyxOpacity();
++  float phinyxOpacity=-1.0f;
+   void drawSettings();
+   void drawDebug();
+   void drawCSPlayer();
