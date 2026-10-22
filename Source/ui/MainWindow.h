@@ -123,6 +123,7 @@ private:
     void ambiEncode();                  // Spatial > Encode to Ambisonics
     void ambiRotate();                  // Spatial > Rotate / Mirror
     void ambiDecode();                  // Spatial > Decode Ambisonics
+    void speakerArrays();               // Spatial > Speaker Arrays
     void ambiStudio();                  // Spatial > Ambisonic Studio (E4L's devices, in a floating panel)
     void ambiConvertFuma (bool toFuma);
     int ambisonicOrderOrHint (const QString& what);   // the file's order, or 0 with a hint

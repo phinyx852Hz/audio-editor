@@ -5,6 +5,7 @@
 #include "AmbiDialogs.h"
 #include "AmbiScene.h"
 #include "AmbiStudio.h"
+#include "SpeakerArrays.h"
 #include "BinauralDialog.h"
 #include "MidSideDialog.h"
 #include "WaveformView.h"
@@ -17,6 +18,7 @@
 #include "../engine/Codec.h"
 #include <QAbstractButton>
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QInputDialog>
 #include <QLineEdit>
@@ -28,6 +30,9 @@
 #include <QStandardPaths>
 #include <QStatusBar>
 #include <QTimer>
+
+#include <map>
+#include <mutex>
 
 namespace
 {
@@ -451,6 +456,12 @@ void MainWindow::ambiDecode()
     const auto target = dialog.target();
     settings.setValue (QStringLiteral ("decodeTo"), target);
     const bool headphones = target == QStringLiteral ("Headphones");
+    const bool custom = studio::isCustom (target.toStdString());
+    if (custom && speakerarrays::get (target.mid (8)).empty())
+    {
+        QMessageBox::warning (this, tr ("Decode Ambisonics"), tr ("The speaker array %1 is missing or not usable: check it in Spatial > Speaker Arrays").arg (target.mid (8)));
+        return;
+    }
     if (headphones)
     {
         if (dialog.hrtf().isEmpty())
@@ -469,7 +480,7 @@ void MainWindow::ambiDecode()
         if (headphones)
             result = ambi::decodeBinaural (*d, dialog.hrtf().toStdString(), error, &progress);
         else
-            result = ambi::mix (*d, ambi::decoder (order, ambi::layout (target.toStdString())), &progress);
+            result = ambi::mix (*d, ambi::decoder (order, custom ? speakerarrays::get (target.mid (8)) : ambi::layout (target.toStdString())), &progress);
     });
     if (result == nullptr)
     {
@@ -479,7 +490,7 @@ void MainWindow::ambiDecode()
     auto state = doc.current();
     const int channels = result->numChannels();
     state.data = std::move (result);
-    state.layout = headphones ? std::string() : storedLayout (channels, target.toStdString());
+    state.layout = headphones || custom ? std::string() : storedLayout (channels, target.toStdString());
     doc.apply (tr ("Decode Ambisonics").toStdString(), std::move (state));
     refreshFromDocument (true);
     statusBar()->showMessage (headphones ? tr ("Decoded for headphones (binaural stereo)") : tr ("Decoded to %1 speakers").arg (target), 6000);
@@ -546,12 +557,29 @@ void MainWindow::ambiStudio()
             return -1.0;
         return (double) (engine.heardPositionFrames() - previewRange.first) / d->sampleRate();
     };
-    host.load = [] (const std::string& path)
+    // Impulse responses are read once (until the file changes): every preview render asks again.
+    host.load = [] (const std::string& path) -> AudioDataPtr
     {
+        static std::mutex lock;
+        static std::map<std::string, std::pair<QDateTime, AudioDataPtr>> cache;
+        const auto changed = QFileInfo (QString::fromStdString (path)).lastModified();
+        {
+            std::lock_guard<std::mutex> guard (lock);
+            if (const auto it = cache.find (path); it != cache.end() && it->second.first == changed)
+                return it->second.second;
+        }
         std::string error;
-        return codec::decode (path, error);
+        auto read = codec::decode (path, error);
+        if (read != nullptr)
+        {
+            std::lock_guard<std::mutex> guard (lock);
+            if (cache.size() > 16)
+                cache.clear();
+            cache[path] = { changed, read };
+        }
+        return read;
     };
-    host.apply = [this] (const studio::Scene& scene)
+    host.apply = [this, load = host.load] (const studio::Scene& scene)
     {
         const auto d = data();
         if (d == nullptr || refuseAlbumEdit())
@@ -568,11 +596,7 @@ void MainWindow::ambiStudio()
         const bool finished = runWithProgress (tr ("Ambisonic Studio"), [&] (std::atomic<float>& progress, const std::atomic<bool>& cancel)
         {
             std::atomic<float> stage { 0.0f };
-            const auto rendered = studio::render (*d, inputOrder, scene, [] (const std::string& path)
-            {
-                std::string ignored;
-                return codec::decode (path, ignored);
-            }, &progress, &cancel);
+            const auto rendered = studio::render (*d, inputOrder, scene, load, &progress, &cancel);
             error = rendered.error;
             if (rendered.scene == nullptr)
                 return;
@@ -602,6 +626,14 @@ void MainWindow::ambiStudio()
 
     ambiStudioWindow = new AmbiStudio (std::move (host), this);
     ambiStudioWindow->show();
+}
+
+// Spatial > Speaker Arrays: your own speaker setups (up to 16 channels) for the decoders.
+void MainWindow::speakerArrays()
+{
+    SpeakerArraysDialog dialog ({}, this);
+    dialog.exec();
+    waveform->setFocus();
 }
 
 void MainWindow::feedAmbiScene()

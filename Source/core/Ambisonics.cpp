@@ -6,7 +6,9 @@
 #include <array>
 #include <cmath>
 #include <map>
+#include <memory>
 #include <mutex>
+#include <tuple>
 
 namespace ambi
 {
@@ -543,6 +545,98 @@ namespace ambi
         return out.finish();
     }
 
+    namespace
+    {
+        using EarFilters = std::array<std::vector<std::vector<float>>, 2>;   // [ear][channel]
+
+        // The ambisonic channels' filters for each ear: a dense virtual layout heard through the HRTF.
+        std::shared_ptr<const EarFilters> buildEarFilters (const std::string& hrtfPath, int order, double rate, std::string& error)
+        {
+            const auto hrtf = binaural::Hrtf::open (hrtfPath, rate, error);
+            if (hrtf == nullptr)
+                return {};
+
+            // A dense virtual layout, each speaker heard through its HRTF, folded into one filter per channel and ear.
+            const auto k = (size_t) channelsFor (order);
+            const auto virtuals = fibonacci (std::max (50, (int) k * 4));
+            const auto weights = maxReWeights (order);
+            auto made = std::make_shared<EarFilters>();
+            auto& filters = *made;
+            filters[0].resize (k);
+            filters[1].resize (k);
+            std::vector<float> l, r, frontL, frontR;
+            for (const auto& v : virtuals)
+            {
+                double az = 0.0, el = 0.0;
+                toAngles (v, az, el);
+                hrtf->filters (az, el, l, r);
+                const auto y = harmonics (order, az, el);
+                for (size_t c = 0; c < k; ++c)
+                {
+                    const auto g = (float) (y[c] * weights[(size_t) orderOf ((int) c)] * (2 * orderOf ((int) c) + 1) / (double) virtuals.size());
+                    for (int ear = 0; ear < 2; ++ear)
+                    {
+                        const auto& h = ear == 0 ? l : r;
+                        auto& f = filters[(size_t) ear][c];
+                        if (f.size() < h.size())
+                            f.resize (h.size(), 0.0f);
+                        for (size_t t = 0; t < h.size(); ++t)
+                            f[t] += g * h[t];
+                    }
+                }
+            }
+
+            // Level: a plane wave from the front matches the HRTF's own front response.
+            hrtf->filters (0.0, 0.0, frontL, frontR);
+            const auto front = harmonics (order, 0.0, 0.0);
+            double want = 0.0, got = 0.0;
+            for (auto x : frontL) want += (double) x * x;
+            for (auto x : frontR) want += (double) x * x;
+            for (int ear = 0; ear < 2; ++ear)
+            {
+                size_t longest = 0;
+                for (const auto& f : filters[(size_t) ear])
+                    longest = std::max (longest, f.size());
+                for (size_t t = 0; t < longest; ++t)
+                {
+                    double s = 0.0;
+                    for (size_t c = 0; c < k; ++c)
+                        if (t < filters[(size_t) ear][c].size())
+                            s += front[c] * filters[(size_t) ear][c][t];
+                    got += s * s;
+                }
+            }
+            const auto scale = got > 0.0 ? (float) std::sqrt (want / got) : 1.0f;
+            for (auto& ear : filters)
+                for (auto& f : ear)
+                    for (auto& x : f)
+                        x *= scale;
+            return made;
+        }
+
+        // Built once per HRTF file, order and rate: a preview that is made again reuses them.
+        std::shared_ptr<const EarFilters> earFilters (const std::string& hrtfPath, int order, double rate, std::string& error)
+        {
+            static std::mutex lock;
+            static std::map<std::tuple<std::string, int, double>, std::shared_ptr<const EarFilters>> cache;
+            const auto key = std::make_tuple (hrtfPath, order, rate);
+            {
+                std::lock_guard<std::mutex> guard (lock);
+                if (const auto it = cache.find (key); it != cache.end())
+                    return it->second;
+            }
+            auto made = buildEarFilters (hrtfPath, order, rate, error);
+            if (made != nullptr)
+            {
+                std::lock_guard<std::mutex> guard (lock);
+                if (cache.size() > 8)
+                    cache.clear();
+                cache[key] = made;
+            }
+            return made;
+        }
+    }
+
     AudioDataPtr decodeBinaural (const AudioData& d, const std::string& hrtfPath, std::string& error, std::atomic<float>* progress)
     {
         const auto order = orderFor (d.numChannels());
@@ -551,68 +645,17 @@ namespace ambi
             error = "This is not an ambisonic file (it needs 4, 9, 16, 25 or 36 channels)";
             return {};
         }
-        const auto hrtf = binaural::Hrtf::open (hrtfPath, d.sampleRate(), error);
-        if (hrtf == nullptr)
+        const auto cached = earFilters (hrtfPath, order, d.sampleRate(), error);
+        if (cached == nullptr)
             return {};
-
-        // A dense virtual layout, each speaker heard through its HRTF, folded into one filter per channel and ear.
         const auto k = (size_t) channelsFor (order);
-        const auto virtuals = fibonacci (std::max (50, (int) k * 4));
-        const auto weights = maxReWeights (order);
-        std::vector<std::vector<float>> filters[2] { std::vector<std::vector<float>> (k), std::vector<std::vector<float>> (k) };
-        std::vector<float> l, r, frontL, frontR;
-        for (const auto& v : virtuals)
-        {
-            double az = 0.0, el = 0.0;
-            toAngles (v, az, el);
-            hrtf->filters (az, el, l, r);
-            const auto y = harmonics (order, az, el);
-            for (size_t c = 0; c < k; ++c)
-            {
-                const auto g = (float) (y[c] * weights[(size_t) orderOf ((int) c)] * (2 * orderOf ((int) c) + 1) / (double) virtuals.size());
-                for (int ear = 0; ear < 2; ++ear)
-                {
-                    const auto& h = ear == 0 ? l : r;
-                    auto& f = filters[ear][c];
-                    if (f.size() < h.size())
-                        f.resize (h.size(), 0.0f);
-                    for (size_t t = 0; t < h.size(); ++t)
-                        f[t] += g * h[t];
-                }
-            }
-        }
-
-        // Level: a plane wave from the front matches the HRTF's own front response.
-        hrtf->filters (0.0, 0.0, frontL, frontR);
-        const auto front = harmonics (order, 0.0, 0.0);
-        double want = 0.0, got = 0.0;
-        for (auto x : frontL) want += (double) x * x;
-        for (auto x : frontR) want += (double) x * x;
-        for (int ear = 0; ear < 2; ++ear)
-        {
-            size_t longest = 0;
-            for (const auto& f : filters[ear])
-                longest = std::max (longest, f.size());
-            for (size_t t = 0; t < longest; ++t)
-            {
-                double s = 0.0;
-                for (size_t c = 0; c < k; ++c)
-                    if (t < filters[ear][c].size())
-                        s += front[c] * filters[ear][c][t];
-                got += s * s;
-            }
-        }
-        const auto scale = got > 0.0 ? (float) std::sqrt (want / got) : 1.0f;
-        for (auto& ear : filters)
-            for (auto& f : ear)
-                for (auto& x : f)
-                    x *= scale;
+        const auto& filters = *cached;
 
         constexpr int block = 4096;
         std::vector<std::unique_ptr<binaural::Convolver>> conv[2];
         for (int ear = 0; ear < 2; ++ear)
             for (size_t c = 0; c < k; ++c)
-                conv[ear].push_back (std::make_unique<binaural::Convolver> (filters[ear][c], block));
+                conv[ear].push_back (std::make_unique<binaural::Convolver> (filters[(size_t) ear][c], block));
 
         AudioData::Builder out (2, d.sampleRate());
         std::vector<std::vector<float>> ears (2, std::vector<float> (block));

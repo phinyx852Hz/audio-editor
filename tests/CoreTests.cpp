@@ -2481,6 +2481,39 @@ namespace
         check (studio::decodedLayout (leftScene.master, 3) == "Stereo" && studio::decodedLayout ({ 0.0, "AmbiX", {} }, 2) == "Ambisonics (2nd order)",
                "studio: decoded layouts are named");
 
+        // Your own speaker array: parsed from text, kept in a rack, decoded to.
+        std::vector<ambi::Speaker> ring;
+        std::string why;
+        check (studio::parseSpeakers ("# my room\nA -45 0\nB 45 0\nC 135 0\nD -135 0\nSub 0 0 lfe\n", ring, why) && ring.size() == 5 && ring[4].lfe
+                   && near (ring[3].azimuth, -135.0, 1e-9),
+               "studio: a speaker array is read from text (" + why + ")");
+        std::vector<ambi::Speaker> parsed;
+        check (studio::parseSpeakers (studio::formatSpeakers (ring), parsed, why) && parsed.size() == ring.size(), "studio: a speaker array survives being written out");
+        std::string tooMany;
+        for (int i = 0; i < 17; ++i)
+            tooMany += "S" + std::to_string (i) + " " + std::to_string (i * 20 - 170) + " 0\n";
+        check (! studio::parseSpeakers (tooMany, parsed, why) && ! studio::parseSpeakers ("Only 0 0\n", parsed, why)
+                   && ! studio::parseSpeakers ("Bad 0\n", parsed, why),
+               "studio: more than 16 speakers, a lone speaker and a missing elevation are refused");
+        for (const auto& [name, speakers] : studio::exampleArrays())
+            check ((int) speakers.size() <= studio::maxSpeakers && studio::parseSpeakers (studio::formatSpeakers (speakers), parsed, why),
+                   "studio: the example array " + name + " is usable");
+        studio::Master custom;
+        custom.decoder = "Custom: Room";
+        custom.speakers = ring;
+        const auto toRing = heard.scene != nullptr ? studio::decode (*heard.scene, custom, error) : nullptr;
+        check (toRing != nullptr && toRing->numChannels() == 5 && channelEnergy (*toRing, 4, 0, 20000) == 0.0
+                   && channelEnergy (*toRing, 0, 0, 20000) > 2.0 * channelEnergy (*toRing, 1, 0, 20000)
+                   && channelEnergy (*toRing, 0, 0, 20000) > 2.0 * channelEnergy (*toRing, 2, 0, 20000),
+               "studio: a custom array decodes a left source to the front-left speaker, the sub silent");
+        check (studio::decodedLayout (custom, 3).empty(), "studio: a custom array is labelled by its channel count");
+        studio::Scene withArray;
+        withArray.master = custom;
+        studio::Scene arrayBack;
+        check (studio::fromJson (studio::toJson (withArray), arrayBack) && arrayBack.master.speakers.size() == 5 && arrayBack.master.speakers[4].lfe
+                   && arrayBack.master.decoder == "Custom: Room",
+               "studio: a rack keeps its custom array");
+
         // B-Format Input reads a FuMa file into AmbiX.
         ambi::EncodeSettings enc;
         enc.order = 1;

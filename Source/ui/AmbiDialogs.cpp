@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "AmbiDialogs.h"
+#include "SpeakerArrays.h"
 #include "BinauralDialog.h"
 
 #include <QCheckBox>
@@ -226,6 +227,8 @@ AmbiDecodeDialog::AmbiDecodeDialog (const QString& initialTarget, const QStringL
         const auto n = ambi::layout (name).size();
         targetBox->addItem (tr ("%1 speakers (%2 channels)").arg (QString::fromStdString (name)).arg (n), QString::fromStdString (name));
     }
+    for (const auto& name : speakerarrays::names())
+        targetBox->addItem (tr ("Custom: %1 (%2 channels)").arg (name).arg (speakerarrays::get (name).size()), QStringLiteral ("Custom: ") + name);
     targetBox->setCurrentIndex (std::max (0, targetBox->findData (initialTarget)));
 
     hrtfBox = new QComboBox (this);
