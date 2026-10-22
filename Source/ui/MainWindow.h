@@ -117,6 +117,7 @@ private:
     void ambiEncode();                  // Spatial > Encode to Ambisonics
     void ambiRotate();                  // Spatial > Rotate / Mirror
     void ambiDecode();                  // Spatial > Decode Ambisonics
+    void ambiStudio();                  // Spatial > Ambisonic Studio (E4L's devices, in a floating panel)
     void ambiConvertFuma (bool toFuma);
     int ambisonicOrderOrHint (const QString& what);   // the file's order, or 0 with a hint
     void feedAmbiScene();
@@ -494,6 +495,7 @@ private:
     FindPanel* findWidget = nullptr;
     class Goniometer* goniometer = nullptr;
     class AmbiScene* ambiSceneView = nullptr;
+    class AmbiStudio* ambiStudioWindow = nullptr;
     DockablePanel* ambiScenePanel = nullptr;
     std::vector<float> scopeLeft, scopeRight;   // goniometer samples, reused every frame
     DockablePanel* findPanel = nullptr;
