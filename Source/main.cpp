@@ -50,6 +50,9 @@ int main (int argc, char* argv[])
     if (argc == 5 && std::string (argv[1]) == MasterChain::scanOption)
         return MasterChain::scanInThisProcess (argv[2], argv[3], juce::File (argv[4]));
 
+#if PHINYX_WEB_BACKDROP
+    QCoreApplication::setAttribute (Qt::AA_ShareOpenGLContexts);   // Qt WebEngine asks for it before the application starts
+#endif
     Application app (argc, argv);
     QApplication::setApplicationName (QStringLiteral (APP_ID));
     moveOldSettings();
