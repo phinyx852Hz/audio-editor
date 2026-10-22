@@ -70,6 +70,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/TimeStretch.cpp
     Source/core/Binaural.cpp
     Source/core/Ambisonics.cpp
+    Source/core/SpatialStudio.cpp
     Source/core/Nyquist.cpp
     Source/core/Album.cpp
     Source/engine/AudioCapture.cpp
@@ -130,6 +131,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/ProjectSection.cpp
     Source/ui/Audition.cpp
     Source/ui/Goniometer.cpp
+    Source/ui/AmbiVisualizer.cpp
     Source/ui/AnalysisWindow.cpp
     Source/ui/AnalysisReport.cpp
     Source/ui/NyquistUi.cpp
@@ -142,6 +144,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/ToolsSection.cpp
     Source/ui/AmbiDialogs.cpp
     Source/ui/AmbiScene.cpp
+    Source/ui/AmbiStudio.cpp
     Source/ui/Visualizer.cpp
     Source/ui/VisualizerSection.cpp
     Source/ui/TrackerSection.cpp
@@ -151,7 +154,12 @@ target_sources(${APP_ID} PRIVATE
     Source/tracker/TrackerEngine.cpp
     Source/tracker/TrackerEdit.cpp
     Source/ui/BinauralDialog.cpp
-    Source/ui/SpatialSection.cpp)
+    Source/ui/SpatialSection.cpp
+    Source/performance/MediaWriter.cpp
+    Source/performance/Cameras.cpp
+    Source/performance/Recorder.cpp
+    Source/ui/PerformanceDialog.cpp
+    Source/ui/PerformanceSection.cpp)
 
 # CLAP plugin hosting needs only the CLAP headers: a local checkout, the
 # system's (clap/clap.h, e.g. the clap package), or the pinned release.
@@ -201,9 +209,11 @@ else()
     message(STATUS "libpipewire-0.3 not found: building without recording")
 endif()
 
-# Export and import of compressed formats (FFmpeg) and their tags (TagLib).
+# Export and import of compressed formats (FFmpeg) and their tags (TagLib). The Performance
+# menu's video recording and streaming also use FFmpeg: libswscale for the picture and
+# libavdevice for cameras.
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavcodec libavformat libavutil libswresample)
+pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavcodec libavformat libavutil libswresample libswscale libavdevice)
 pkg_check_modules(TAGLIB REQUIRED IMPORTED_TARGET taglib>=1.12)
 target_link_libraries(${APP_ID} PRIVATE PkgConfig::FFMPEG PkgConfig::TAGLIB)
 
@@ -255,6 +265,22 @@ if(PHINYX_HAVE_PROJECTM)
     target_link_libraries(${APP_ID} PRIVATE phinyx_projectm)
 endif()
 install(FILES "${PHINYX_DEFAULT_HRTF}" DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/hrtf")
+
+# A web page behind PHINYX (Visualizer > Web Page) needs Qt WebEngine, a built-in Chromium of a
+# few hundred MB. It is built when Qt WebEngine is installed (qt6-webengine), unless turned off.
+option(PHINYX_WEB_BACKDROP "Build the web page backdrop when Qt WebEngine is installed" ON)
+set(PHINYX_HAVE_WEB 0)
+if(PHINYX_WEB_BACKDROP)
+    find_package(Qt6 QUIET COMPONENTS WebEngineWidgets)
+    if(Qt6WebEngineWidgets_FOUND)
+        set(PHINYX_HAVE_WEB 1)
+        target_sources(${APP_ID} PRIVATE Source/ui/WebBackdrop.cpp)
+        target_link_libraries(${APP_ID} PRIVATE Qt6::WebEngineWidgets)
+    else()
+        message(STATUS "Qt WebEngine not found: building without the web page backdrop")
+    endif()
+endif()
+target_compile_definitions(${APP_ID} PRIVATE PHINYX_WEB_BACKDROP=${PHINYX_HAVE_WEB})
 
 # MilkyPlay (cmake/MilkyPlay.cmake): MilkyTracker's module player, for the Tracker.
 include(cmake/MilkyPlay.cmake)
@@ -316,10 +342,18 @@ if(PHINYX_BUILD_TESTS)
         Source/core/TimeStretch.cpp
     Source/core/Binaural.cpp
     Source/core/Ambisonics.cpp
+    Source/core/SpatialStudio.cpp
         Source/core/Nyquist.cpp
         Source/core/Album.cpp)
     target_link_libraries(phinyx-core-tests PRIVATE phinyx_nyquist phinyx_rubberband phinyx_mysofa)
     target_compile_definitions(phinyx-core-tests PRIVATE PHINYX_DEFAULT_HRTF="${PHINYX_DEFAULT_HRTF}")
     target_compile_definitions(phinyx-core-tests PRIVATE PHINYX_SHARE_SOURCE_DIR="${CMAKE_SOURCE_DIR}/share")
     add_test(NAME core COMMAND phinyx-core-tests)
+
+    # The video writer: an MP4 with H.265 (or H.264) and several AAC tracks, read back.
+    add_executable(phinyx-performance-tests
+        tests/PerformanceTests.cpp
+        Source/performance/MediaWriter.cpp)
+    target_link_libraries(phinyx-performance-tests PRIVATE PkgConfig::FFMPEG)
+    add_test(NAME performance COMMAND phinyx-performance-tests)
 endif()

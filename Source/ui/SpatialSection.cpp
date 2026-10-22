@@ -4,6 +4,7 @@
 #include "MainWindow.h"
 #include "AmbiDialogs.h"
 #include "AmbiScene.h"
+#include "AmbiStudio.h"
 #include "BinauralDialog.h"
 #include "MidSideDialog.h"
 #include "WaveformView.h"
@@ -12,6 +13,8 @@
 #include "../core/Binaural.h"
 #include "../core/Dsp.h"
 #include "../core/MidSide.h"
+#include "../core/SpatialStudio.h"
+#include "../engine/Codec.h"
 #include <QAbstractButton>
 #include <QCoreApplication>
 #include <QDir>
@@ -480,6 +483,125 @@ void MainWindow::ambiDecode()
     doc.apply (tr ("Decode Ambisonics").toStdString(), std::move (state));
     refreshFromDocument (true);
     statusBar()->showMessage (headphones ? tr ("Decoded for headphones (binaural stereo)") : tr ("Decoded to %1 speakers").arg (target), 6000);
+}
+
+//==============================================================================
+// Spatial > Ambisonic Studio: E4L's devices in a floating panel that stays open while you work.
+void MainWindow::ambiStudio()
+{
+    if (refuseAlbumEdit())
+        return;
+    if (ambiStudioWindow != nullptr)
+    {
+        ambiStudioWindow->show();
+        ambiStudioWindow->raise();
+        ambiStudioWindow->activateWindow();
+        return;
+    }
+
+    const auto studioPreview = tr ("Ambisonic Studio preview");
+    AmbiStudio::Host host;
+    host.hrtfFiles = hrtfFiles();
+    host.input = [this] (AmbiStudio::Input& in)
+    {
+        const auto d = data();
+        if (d == nullptr || doc.isAlbum())
+            return false;
+        in.data = d;
+        in.inputOrder = dsp::ambisonicOrder (doc.current().layout);
+        const auto [s, e] = processRange();
+        in.start = s;
+        in.end = e;
+        in.bpm = doc.current().grid.bpm;
+        return true;
+    };
+    host.preview = [this, studioPreview] (AudioDataPtr heard, Frame s, Frame e)
+    {
+        if (heard == nullptr)
+        {
+            if (previewName == studioPreview)
+                stopExportPreview();
+            return;
+        }
+        const auto d = data();
+        if (d == nullptr)
+            return;
+        engine.setReference (dsp::toStereo (d)->replaced (s, e, heard.get()), 1.0f);
+        engine.setReferenceBypassesMaster (false);
+        engine.setHearingReference (true);
+        if (previewName != studioPreview || ! engine.isPlaying() || previewRange != std::pair { s, e })
+        {
+            previewName = studioPreview;
+            previewRange = { s, e };
+            engine.setLoop (s, e);
+            engine.setPositionFrames (s);
+            engine.play();
+            placeReferenceBadge();
+        }
+    };
+    host.previewSeconds = [this, studioPreview]
+    {
+        const auto d = data();
+        if (d == nullptr || previewName != studioPreview || ! engine.isPlaying() || ! engine.isHearingReference())
+            return -1.0;
+        return (double) (engine.heardPositionFrames() - previewRange.first) / d->sampleRate();
+    };
+    host.load = [] (const std::string& path)
+    {
+        std::string error;
+        return codec::decode (path, error);
+    };
+    host.apply = [this] (const studio::Scene& scene)
+    {
+        const auto d = data();
+        if (d == nullptr || refuseAlbumEdit())
+            return;
+        if (scene.master.decoder == "Headphones" && scene.master.hrtfPath.empty())
+        {
+            QMessageBox::warning (ambiStudioWindow, tr ("Ambisonic Studio"), tr ("No HRTF set (.sofa file) was found. Put one in %1.")
+                                      .arg (QStandardPaths::writableLocation (QStandardPaths::GenericDataLocation) + QStringLiteral ("/" APP_ID "/hrtf")));
+            return;
+        }
+        const int inputOrder = dsp::ambisonicOrder (doc.current().layout);
+        AudioDataPtr result;
+        std::string error;
+        const bool finished = runWithProgress (tr ("Ambisonic Studio"), [&] (std::atomic<float>& progress, const std::atomic<bool>& cancel)
+        {
+            std::atomic<float> stage { 0.0f };
+            const auto rendered = studio::render (*d, inputOrder, scene, [] (const std::string& path)
+            {
+                std::string ignored;
+                return codec::decode (path, ignored);
+            }, &progress, &cancel);
+            error = rendered.error;
+            if (rendered.scene == nullptr)
+                return;
+            progress.store (0.99f);
+            result = studio::decode (*rendered.scene, scene.master, error, &stage);
+        });
+        if (! finished)
+            return;
+        if (result == nullptr)
+        {
+            QMessageBox::warning (ambiStudioWindow, tr ("Ambisonic Studio"), QString::fromStdString (error));
+            return;
+        }
+        auto state = doc.current();
+        const int channels = result->numChannels();
+        state.data = std::move (result);
+        state.layout = storedLayout (channels, studio::decodedLayout (scene.master, scene.order));
+        doc.apply (tr ("Ambisonic Studio").toStdString(), std::move (state));
+        refreshFromDocument (true);
+        ambiStudioWindow->inputChanged();
+        const auto what = scene.master.decoder == "Headphones" ? tr ("binaural stereo for headphones")
+                        : scene.master.decoder == "AmbiX" || scene.master.decoder == "FuMa"
+                            ? tr ("%1 (%2)").arg (QString::fromStdString (studio::decodedLayout (scene.master, scene.order)), QString::fromStdString (scene.master.decoder))
+                            : tr ("%1 speakers").arg (QString::fromStdString (scene.master.decoder));
+        statusBar()->showMessage (tr ("Ambisonic Studio rendered the file as %1. Undo brings the original back").arg (what), 8000);
+    };
+
+    ambiStudioWindow = new AmbiStudio (std::move (host), this);
+    ambiStudioWindow->show();
 }
 
 void MainWindow::feedAmbiScene()

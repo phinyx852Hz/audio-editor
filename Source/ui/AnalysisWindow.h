@@ -13,7 +13,7 @@ class QPushButton;
 class QSplitter;
 
 class AudioData;
-class QLabel;
+class AmbiVisualizer;
 
 namespace analysis
 {
@@ -40,10 +40,15 @@ namespace analysis
 //   frequency sits between mono, left, right and inverse), Correlation per band
 //   with the overall correlation and balance, and Amplitude Statistics as in
 //   Audition (Copy puts them on the clipboard), with an RMS histogram.
-// Measured from what is heard, after the Master Section, since the last reset.
+// - Ambisonics (AmbiVisualizer): where the sound is in an ambisonic file, up to
+//   10th order, in seven views; read from the file at the playhead.
+// Measured from what is heard, after the Master Section, since the last reset
+// (Ambisonics apart: that reads the file itself).
 // Each meter is a card that can be hidden (Meters menu) and the splitters
 // between them moved; both are remembered. Keys: Space plays or stops, R
-// resets, F freezes, 1-8 take or clear a spectrum hold, F11 full screen, Esc closes.
+// resets, F freezes, 1-8 take or clear a spectrum hold, F11 full screen, Esc closes;
+// with the Ambisonics card showing, V moves to its next view and the arrows, Ctrl+Up/Down
+// and Home turn it, bring it closer and put it back.
 // Drop audio files on it for a full report of each (AnalysisReport), measured from
 // the file itself rather than from what plays.
 class AnalysisWindow final : public QWidget
@@ -55,6 +60,10 @@ public:
     ~AnalysisWindow() override;
 
     void addSamples (const std::vector<float>& left, const std::vector<float>& right, double sampleRate);
+    // The channels of an ambisonic file around the playhead (order 0: the file is not one).
+    void addAmbisonics (const std::vector<std::vector<float>>& channels, int order);
+    bool wantsAmbisonics() const;   // its card is showing and not frozen
+    bool assumesAmbisonics() const; // 4, 9 or 16 unmarked channels count as Ambisonics too
     void tick();     // call on the UI timer, also when nothing plays, so the meters fall
     void reset();
 
@@ -88,6 +97,8 @@ private:
     QLabel* status = nullptr;
     QMenu* metersMenu = nullptr;
     class Goniometer* imaging = nullptr;
+    AmbiVisualizer* ambisonics = nullptr;
+    bool assumeAmbisonics = false;
     QWidget* spectrum = nullptr;
     std::vector<QPushButton*> holdButtons;
     bool frozen = false;

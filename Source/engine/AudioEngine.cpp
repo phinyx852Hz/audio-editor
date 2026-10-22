@@ -343,6 +343,8 @@ namespace
             current.numChannels = numChannels;
 
             pushScope (*info.buffer, info.startSample, info.numSamples, numChannels);
+            if (tapping.load())
+                pushTap (*info.buffer, info.startSample, info.numSamples, numChannels);
 
             for (int i = 0; i < info.numSamples; ++i)
             {
@@ -379,6 +381,31 @@ namespace
             }
         }
 
+        // The program for the Performance recorder: tapChannels per frame, interleaved.
+        static constexpr int tapChannels = AudioEngine::programChannels;
+        static constexpr int tapFrames = 1 << 18;
+
+        void startTap()
+        {
+            if (tap.empty())
+                tap.assign ((size_t) tapFrames * tapChannels, 0.0f);   // the audio thread only writes while tapping
+            tapFifo.read (tapFifo.getNumReady());                        // anything left from a previous run
+            tapping = true;
+        }
+
+        void stopTap() { tapping = false; }
+
+        int takeTap (std::vector<float>& out, int& numChannels)
+        {
+            numChannels = tapWidth.load();
+            const auto scope = tapFifo.read (tapFifo.getNumReady());
+            for (const auto& [start, size] : { std::pair { scope.startIndex1, scope.blockSize1 }, std::pair { scope.startIndex2, scope.blockSize2 } })
+                out.insert (out.end(), tap.begin() + (ptrdiff_t) start * tapChannels, tap.begin() + (ptrdiff_t) (start + size) * tapChannels);
+            return scope.blockSize1 + scope.blockSize2;
+        }
+
+        uint64_t tapDropped() const { return tapLost.load(); }
+
         void takeBlocks (std::vector<MeterBlock>& out)
         {
             const auto scope = fifo.read (fifo.getNumReady());
@@ -399,6 +426,27 @@ namespace
             std::copy (r, r + scope.blockSize1, scopeRight.begin() + scope.startIndex1);
             std::copy (l + scope.blockSize1, l + scope.blockSize1 + scope.blockSize2, scopeLeft.begin() + scope.startIndex2);
             std::copy (r + scope.blockSize1, r + scope.blockSize1 + scope.blockSize2, scopeRight.begin() + scope.startIndex2);
+        }
+
+        void pushTap (const juce::AudioBuffer<float>& buffer, int start, int numSamples, int numChannels)
+        {
+            // A mono file's buffer has a copy in the second channel, so the program is at least stereo.
+            const auto width = std::min ({ std::max (numChannels, 2), tapChannels, buffer.getNumChannels() });
+            tapWidth = width;
+            const auto scope = tapFifo.write (std::min (numSamples, tapFifo.getFreeSpace()));
+            if (const auto lost = numSamples - scope.blockSize1 - scope.blockSize2; lost > 0)
+                tapLost.fetch_add ((uint64_t) lost);
+            int from = start;
+            for (const auto& [at, size] : { std::pair { scope.startIndex1, scope.blockSize1 }, std::pair { scope.startIndex2, scope.blockSize2 } })
+            {
+                for (int i = 0; i < size; ++i)
+                {
+                    auto* frame = tap.data() + (size_t) (at + i) * tapChannels;
+                    for (int ch = 0; ch < tapChannels; ++ch)
+                        frame[ch] = ch < width ? buffer.getSample (ch, from + i) : 0.0f;
+                }
+                from += size;
+            }
         }
 
     private:
@@ -427,6 +475,12 @@ namespace
         static constexpr int scopeSize = 32768;
         juce::AbstractFifo scopeFifo { scopeSize };
         std::array<float, scopeSize> scopeLeft {}, scopeRight {};
+
+        std::vector<float> tap;
+        juce::AbstractFifo tapFifo { tapFrames };
+        std::atomic<bool> tapping { false };
+        std::atomic<int> tapWidth { 2 };
+        std::atomic<uint64_t> tapLost { 0 };
 
         static constexpr int fifoSize = 256;
         juce::AbstractFifo fifo { fifoSize };
@@ -950,6 +1004,15 @@ bool AudioEngine::isDownmixing() const
 void AudioEngine::takeScopeSamples (std::vector<float>& left, std::vector<float>& right)
 {
     impl->meter.takeScope (left, right);
+}
+
+void AudioEngine::startProgramCapture()  { impl->meter.startTap(); }
+void AudioEngine::stopProgramCapture()   { impl->meter.stopTap(); }
+uint64_t AudioEngine::programFramesLost() const { return impl->meter.tapDropped(); }
+
+int AudioEngine::takeProgram (std::vector<float>& interleaved, int& numChannels)
+{
+    return impl->meter.takeTap (interleaved, numChannels);
 }
 
 std::vector<MeterBlock> AudioEngine::takeMeterBlocks()

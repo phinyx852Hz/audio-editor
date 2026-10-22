@@ -3,6 +3,7 @@
 // cards they sit in, and the window that lays them out.
 #include "AnalysisWindow.h"
 #include "AnalysisReport.h"
+#include "AmbiVisualizer.h"
 #include "Goniometer.h"
 #include "Settings.h"
 #include "Theme.h"
@@ -2059,6 +2060,7 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
     auto* wheel = new PhaseWheelMeter (*state, this);
     auto* correlation = new CorrelationMeter (*state, this);
     auto* stats = new StatsMeter (*state, this);
+    ambisonics = new AmbiVisualizer (this);
 
     const auto hidden = settings.value (QStringLiteral ("analysis/hidden")).toStringList();
     const auto addCard = [this, &hidden] (const char* id, const QString& name, QWidget* body)
@@ -2093,6 +2095,7 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
     auto* wheelCard = addCard ("phaseWheel", tr ("Phase Wheel"), wheel);
     auto* correlationCard = addCard ("correlation", tr ("Correlation"), correlation);
     auto* statsCard = addCard ("statistics", tr ("Amplitude Statistics"), stats);
+    auto* ambiCard = addCard ("ambisonics", tr ("Ambisonics"), ambisonics);
 
     // Loudness History: how much time it shows.
     {
@@ -2221,6 +2224,75 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
         imagingCard->addControl (next);
     }
 
+    // Ambisonics: the view, and the rest in a menu.
+    {
+        QStringList names;
+        for (int v = 0; v < AmbiVisualizer::numViews; ++v)
+            names << AmbiVisualizer::viewName (static_cast<AmbiVisualizer::View> (v));
+        auto* views = smallCombo (ambiCard, names, (int) ambisonics->view(),
+                                  tr ("Sphere, Four Views, Panorama, Head, Energy, Scope, Speakers or Channels (V for the next)"));
+        connect (views, &QComboBox::currentIndexChanged, ambisonics, [this] (int i) { ambisonics->setView (static_cast<AmbiVisualizer::View> (i)); });
+        ambisonics->viewChanged = [views] (AmbiVisualizer::View v) { const QSignalBlocker quiet (views); views->setCurrentIndex ((int) v); };
+        ambiCard->addControl (views);
+
+        assumeAmbisonics = settings.value (QStringLiteral ("analysis/ambi/assume"), false).toBool();
+        auto* more = new QToolButton (ambiCard);
+        more->setText (tr ("Options"));
+        more->setToolTip (tr ("Range, scale, response, order shown and height"));
+        more->setPopupMode (QToolButton::InstantPopup);
+        auto* menu = new QMenu (more);
+        more->setMenu (menu);
+        const auto radio = [this, menu] (const QString& heading, const QStringList& items, int chosen, std::function<void (int)> apply)
+        {
+            auto* sub = menu->addMenu (heading);
+            auto* group = new QActionGroup (sub);
+            for (int i = 0; i < items.size(); ++i)
+            {
+                auto* a = sub->addAction (items[i]);
+                a->setCheckable (true);
+                a->setChecked (i == chosen);
+                group->addAction (a);
+                connect (a, &QAction::triggered, this, [apply, i] { apply (i); });
+            }
+            return group;
+        };
+        const QList<double> ranges { 24.0, 36.0, 48.0, 60.0 };
+        auto* rangeGroup = radio (tr ("Range"), { tr ("24 dB"), tr ("36 dB"), tr ("48 dB"), tr ("60 dB") },
+                                  (int) ranges.indexOf (ambisonics->range()), [this, ranges] (int i) { ambisonics->setRange (ranges.value (i, 24.0)); });
+        radio (tr ("Scale"), { tr ("Relative to the Loudest"), tr ("Absolute (0 dB: full-scale plane wave)") }, ambisonics->relative() ? 0 : 1,
+               [this] (int i) { ambisonics->setRelative (i == 0); });
+        radio (tr ("Response"), { tr ("Fast"), tr ("Medium"), tr ("Slow") }, ambisonics->response(), [this] (int i) { ambisonics->setResponse (i); });
+        QStringList orders;
+        for (int o = 1; o <= AmbiVisualizer::maxOrder; ++o)
+            orders << (o == AmbiVisualizer::maxOrder ? tr ("All of the File's (up to 10th)") : tr ("Up to Order %1").arg (o));
+        radio (tr ("Order Shown"), orders, ambisonics->orderLimit() - 1, [this] (int i) { ambisonics->setOrderLimit (i + 1); });
+        const auto layouts = AmbiVisualizer::speakerLayouts();
+        radio (tr ("Speaker Layout"), layouts, (int) layouts.indexOf (ambisonics->speakerLayout()),
+               [this, layouts] (int i) { ambisonics->setSpeakerLayout (layouts.value (i)); });
+        auto* height = menu->addAction (tr ("Height in Scope"));
+        height->setCheckable (true);
+        height->setChecked (ambisonics->height());
+        connect (height, &QAction::toggled, ambisonics, [this] (bool on) { ambisonics->setHeight (on); });
+        auto* assume = menu->addAction (tr ("Unmarked 4, 9 and 16 Channels Are Ambisonics"));
+        assume->setCheckable (true);
+        assume->setChecked (assumeAmbisonics);
+        connect (assume, &QAction::toggled, this, [this] (bool on)
+        {
+            assumeAmbisonics = on;
+            appSettings().setValue (QStringLiteral ("analysis/ambi/assume"), on);
+        });
+        menu->addSeparator();
+        menu->addAction (tr ("Reset the View (Home)"), ambisonics, [this] { ambisonics->resetCamera(); });
+        // Ctrl+Up/Down in the flat views changes the range: keep the menu's tick in step.
+        connect (menu, &QMenu::aboutToShow, this, [this, rangeGroup, ranges]
+        {
+            const auto i = ranges.indexOf (ambisonics->range());
+            for (int a = 0; a < rangeGroup->actions().size(); ++a)
+                rangeGroup->actions()[a]->setChecked (a == i);
+        });
+        ambiCard->addControl (more);
+    }
+
     // Statistics: Copy, like Audition's Copy All.
     {
         auto* copy = new QPushButton (tr ("Copy"), statsCard);
@@ -2255,7 +2327,7 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
     };
     addRow ({ { loudnessCard, 30 }, { historyCard, 50 }, { levelsCard, 14 } });
     addRow ({ { spectrumCard, 56 }, { spectrogramCard, 22 }, { imagingCard, 22 } });
-    addRow ({ { wheelCard, 24 }, { correlationCard, 34 }, { statsCard, 34 } });
+    addRow ({ { wheelCard, 18 }, { correlationCard, 26 }, { statsCard, 26 }, { ambiCard, 30 } });
     rows->setSizes ({ 340, 360, 330 });
     connect (rows, &QSplitter::splitterMoved, this, [this] { saveLayout(); });
 
@@ -2313,6 +2385,22 @@ void AnalysisWindow::addSamples (const std::vector<float>& left, const std::vect
         imaging->addSamples (left, right);
 }
 
+void AnalysisWindow::addAmbisonics (const std::vector<std::vector<float>>& channels, int order)
+{
+    if (! frozen)
+        ambisonics->analyse (channels, order);
+}
+
+bool AnalysisWindow::wantsAmbisonics() const
+{
+    return ! frozen && ambisonics->isVisible();
+}
+
+bool AnalysisWindow::assumesAmbisonics() const
+{
+    return assumeAmbisonics;
+}
+
 void AnalysisWindow::tick()
 {
     const auto dt = std::clamp (clock.restart() / 1000.0, 0.001, 0.25);
@@ -2322,6 +2410,8 @@ void AnalysisWindow::tick()
         for (auto* c : cards)
             if (auto* m = dynamic_cast<Meter*> (c->content); m != nullptr && c->isVisible())
                 m->step (dt);
+        if (ambisonics->isVisible())
+            ambisonics->step (dt);
     }
     for (auto* c : cards)
         if (c->isVisible())
@@ -2333,6 +2423,7 @@ void AnalysisWindow::reset()
 {
     state->reset();
     imaging->reset();
+    ambisonics->reset();
     for (auto* c : cards)
         if (auto* m = dynamic_cast<Meter*> (c->content))
             m->clear();
@@ -2394,7 +2485,7 @@ void AnalysisWindow::saveLayout() const
     settings.setValue (QStringLiteral ("analysis/hidden"), hidden);
     settings.setValue (QStringLiteral ("analysis/rows"), rows->saveState());
     for (size_t i = 0; i < splitters.size(); ++i)
-        settings.setValue (QStringLiteral ("analysis/row%1").arg (i), splitters[i]->saveState());
+        settings.setValue (QStringLiteral ("analysis/row%1-%2").arg (i).arg (splitters[i]->count()), splitters[i]->saveState());
     if (isVisible())
         settings.setValue (QStringLiteral ("analysis/geometry"), saveGeometry());
 }
@@ -2405,7 +2496,7 @@ void AnalysisWindow::restoreLayout()
     if (const auto saved = settings.value (QStringLiteral ("analysis/rows")).toByteArray(); ! saved.isEmpty())
         rows->restoreState (saved);
     for (size_t i = 0; i < splitters.size(); ++i)
-        if (const auto saved = settings.value (QStringLiteral ("analysis/row%1").arg (i)).toByteArray(); ! saved.isEmpty())
+        if (const auto saved = settings.value (QStringLiteral ("analysis/row%1-%2").arg (i).arg (splitters[i]->count())).toByteArray(); ! saved.isEmpty())
             splitters[i]->restoreState (saved);
     if (! restoreGeometry (settings.value (QStringLiteral ("analysis/geometry")).toByteArray()))
     {
@@ -2423,6 +2514,8 @@ void AnalysisWindow::keyPressEvent (QKeyEvent* e)
         close();   // the key that opened it closes it again, as do Ctrl+W and Super+W
         return;
     }
+    if (ambisonics->isVisible() && ambisonics->handleKey (e))
+        return;   // arrows, Ctrl+Up/Down and Home turn and move the ambisonics view
     if (e->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))
         return QWidget::keyPressEvent (e);
     if (key == Qt::Key_Space)
@@ -2431,6 +2524,8 @@ void AnalysisWindow::keyPressEvent (QKeyEvent* e)
         reset();
     else if (key == Qt::Key_F)
         setFrozen (! frozen);
+    else if (key == Qt::Key_V && ambisonics->isVisible())
+        ambisonics->nextView();
     else if (key >= Qt::Key_1 && key <= Qt::Key_8)
         toggleHold (key - Qt::Key_1);
     else if (key == Qt::Key_F11)

@@ -9,6 +9,10 @@
 #if PHINYX_HAVE_PROJECTM
  #include "MilkDrop.h"
 #endif
+#if PHINYX_WEB_BACKDROP
+ #include "WebBackdrop.h"
+ #include <QUrl>
+#endif
 
 #include <QActionGroup>
 #include <QDialog>
@@ -71,6 +75,30 @@ void MainWindow::registerVisualizerCommands()
     auto* behind = add ("view.visualizerBehind", tr ("Visualizer &Behind PHINYX"), { KS (Qt::CTRL | Qt::Key_F11) }, [this] { toggleVisualizerBehind(); });
     behind->setCheckable (true);
     behind->setStatusTip (tr ("The visualizer as the background of the whole PHINYX window, seen through it as far as the window opacity allows"));
+#if PHINYX_WEB_BACKDROP
+    auto* web = add ("view.webBehind", tr ("&Web Page Behind PHINYX"), {}, [this] { toggleWebBackdrop(); });
+    web->setCheckable (true);
+    web->setStatusTip (tr ("A web page as the background of the whole PHINYX window, like the visualizer behind it, and in the video when recording"));
+    add ("view.webAddress", tr ("Web Page &Address..."), {}, [this] { chooseWebAddress (true); })
+        ->setStatusTip (tr ("Which web page is behind PHINYX"));
+    add ("view.webInteract", tr ("&Use the Web Page"), {}, [this]
+    {
+        if (webBackdrop == nullptr || ! webBackdrop->isVisible())
+            toggleWebBackdrop();
+        if (webBackdrop != nullptr && webBackdrop->isVisible())
+            webBackdrop->setInteractive (true);
+    })->setStatusTip (tr ("Brings the web page in front to click and type in it (log in, start a video); Esc puts it back behind PHINYX"));
+    auto* webSound = add ("view.webSound", tr ("Web Page &Sound"), {}, [this]
+    {
+        const auto on = commands.action (QStringLiteral ("view.webSound"))->isChecked();
+        appSettings().setValue (QStringLiteral ("visualizer/webSound"), on);
+        if (webBackdrop != nullptr)
+            webBackdrop->setMuted (! on);
+    });
+    webSound->setCheckable (true);
+    webSound->setChecked (appSettings().value (QStringLiteral ("visualizer/webSound"), false).toBool());
+    webSound->setStatusTip (tr ("Lets the web page play its sound (through the desktop, not through PHINYX's Master Section)"));
+#endif
     add ("view.visualizerNext", tr ("&Next Visualization"), { KS (Qt::ALT | Qt::Key_F11) }, [this] { setVisualMode (visualMode + 1, true); });
     add ("view.visualizerPrevious", tr ("&Previous Visualization"), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_F11) },
          [this] { setVisualMode (visualMode - 1, true); });
@@ -216,6 +244,10 @@ void MainWindow::toggleVisualizerBehind()
         return;
     }
 
+#if PHINYX_WEB_BACKDROP
+    if (webBackdrop != nullptr && webBackdrop->isVisible())
+        toggleWebBackdrop();   // one background at a time
+#endif
     if (visualBackdrop == nullptr)
         visualBackdrop = new VisualizerView (this, true);
     visualBackdrop->setMode (visualMode);
@@ -263,6 +295,14 @@ void MainWindow::addVisualizerSubmenu (QMenu* menu, const QString& which)
                 sub->addSeparator();
             else
                 sub->addAction (commands.action (QString::fromLatin1 (id)));
+    }
+#endif
+#if PHINYX_WEB_BACKDROP
+    else if (which == QStringLiteral ("web"))
+    {
+        auto* sub = menu->addMenu (tr ("&Web Page"));
+        for (const auto* id : { "view.webBehind", "view.webAddress", "view.webInteract", "view.webSound" })
+            sub->addAction (commands.action (QString::fromLatin1 (id)));
     }
 #endif
     else if (which == QStringLiteral ("rain"))
@@ -522,5 +562,74 @@ void MainWindow::downloadMilkDropPresets()
             view->reloadMilkDrop();
     statusBar()->showMessage (tr ("MilkDrop presets downloaded to %1").arg (folder), 6000);
     showMilkDrop();
+}
+#endif
+
+#if PHINYX_WEB_BACKDROP
+//==============================================================================
+// A web page behind PHINYX (WebBackdrop.h), built with Qt WebEngine.
+void MainWindow::toggleWebBackdrop()
+{
+    auto* action = commands.action (QStringLiteral ("view.webBehind"));
+    if (webBackdrop != nullptr && webBackdrop->isVisible())
+    {
+        webBackdrop->setInteractive (false);
+        webBackdrop->hide();
+        webBackdrop->load (QUrl (QStringLiteral ("about:blank")));   // stops videos and their sound
+        action->setChecked (false);
+        if (opacityBeforeBackdrop > 0.0)
+            changeOpacity (opacityBeforeBackdrop, false);
+        opacityBeforeBackdrop = 0.0;
+        statusBar()->showMessage (tr ("Web page behind PHINYX off"), 3000);
+        return;
+    }
+
+    const auto address = appSettings().value (QStringLiteral ("visualizer/webUrl")).toString();
+    if (address.isEmpty() && ! chooseWebAddress (false))
+    {
+        action->setChecked (false);
+        return;
+    }
+    if (visualBackdrop != nullptr && visualBackdrop->isVisible())
+        toggleVisualizerBehind();   // one background at a time
+    if (webBackdrop == nullptr)
+    {
+        webBackdrop = new WebBackdrop (this);
+        connect (webBackdrop, &WebBackdrop::interactiveChanged, this, [this] (bool on)
+        {
+            if (! on)
+                activateWindow();
+        });
+    }
+    webBackdrop->setMuted (! commands.action (QStringLiteral ("view.webSound"))->isChecked());
+    webBackdrop->load (QUrl::fromUserInput (appSettings().value (QStringLiteral ("visualizer/webUrl")).toString()));
+    webBackdrop->show();
+    webBackdrop->setInteractive (false);
+    action->setChecked (true);
+
+    opacityBeforeBackdrop = 0.0;
+    if (Theme::opacity() > 0.8)
+    {
+        opacityBeforeBackdrop = Theme::opacity();
+        changeOpacity (0.55, false);
+    }
+    statusBar()->showMessage (tr ("Web page behind PHINYX: the Opacity slider shows more or less of it; Visualizer > Web Page > Use the Web Page to click in it"), 8000);
+}
+
+bool MainWindow::chooseWebAddress (bool reload)
+{
+    bool ok = false;
+    const auto current = appSettings().value (QStringLiteral ("visualizer/webUrl")).toString();
+    const auto text = QInputDialog::getText (this, tr ("Web Page Behind PHINYX"), tr ("Web page address:"), QLineEdit::Normal,
+                                             current.isEmpty() ? QStringLiteral ("https://") : current, &ok).trimmed();
+    const auto url = QUrl::fromUserInput (text);
+    if (! ok || text.isEmpty() || ! url.isValid())
+        return false;
+    appSettings().setValue (QStringLiteral ("visualizer/webUrl"), url.toString());
+    if (reload && webBackdrop != nullptr && webBackdrop->isVisible())
+        webBackdrop->load (url);
+    else if (reload)
+        toggleWebBackdrop();
+    return true;
 }
 #endif

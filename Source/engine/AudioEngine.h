@@ -154,6 +154,17 @@ public:
     // Left and right samples heard since the last call, for the goniometer (appended).
     void takeScopeSamples (std::vector<float>& left, std::vector<float>& right);
 
+    // The program as heard (after the Master Section, the Tracker, the Mixer and the
+    // instruments), in the file's own channels, for the Performance recorder. While started,
+    // the audio thread keeps about 5 s of it (at 48 kHz) for takeProgram to empty, from any one thread.
+    static constexpr int programChannels = 8;   // per frame; the channels past numChannels are silent
+    void startProgramCapture();
+    void stopProgramCapture();
+    // Appends the frames heard since the last call, programChannels values each, at
+    // deviceSampleRate(). Returns the frame count; numChannels is how many carry sound (2 to 8).
+    int takeProgram (std::vector<float>& interleaved, int& numChannels);
+    uint64_t programFramesLost() const;   // takeProgram was not called often enough
+
     // Runs pending JUCE messages; call regularly from the UI thread.
     void dispatchMessages();
 
