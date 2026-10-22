@@ -126,7 +126,10 @@ if(Python3_FOUND)
         PATCH_COMMAND ${Python3_EXECUTABLE} -I ${instruments_dir}/cardinal_foundational.py ${instruments_dir}/cardinal-plugins.cpp
         ${stock_one_at_a_time}
         CONFIGURE_COMMAND ""
-        BUILD_COMMAND ${stock_make} clap
+        # Carla first and on one job: its jackbridge.a and jackbridge.min.a rules run make in
+        # the same folder at once, which in parallel can leave an archive without its index.
+        BUILD_COMMAND make -j1 carla
+            COMMAND ${stock_make} clap
         INSTALL_COMMAND ${CMAKE_COMMAND} -E rm -rf ${PHINYX_STOCK_DIR}/Cardinal.clap
             # Its resources are symlinks into the source folder: copied as the files they point to.
             COMMAND cp -rL <SOURCE_DIR>/bin/Cardinal.clap ${PHINYX_STOCK_DIR}/
