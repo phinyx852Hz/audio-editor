@@ -829,7 +829,7 @@ void MainWindow::buildMenus()
         { tr ("S&ample"),    { "sample.send", "sample.window", "sample.refresh", "-", "slice.send", "slice.window", "slice.refresh", "-", "sample.midiInputs", "sample.panic" } },
         { tr ("Trac&ker"),   { "tracker.window", "tracker.new", "tracker.open", "tracker.save", "tracker.saveAs", "tracker.loadSample", "-", "tracker.playSong", "tracker.playPattern", "tracker.stop", "-",
                                "tracker.recordStereo", "tracker.recordMulti", "-", "tracker.resetTracks", "tracker.about" } },
-        { tr ("Performan&ce"), { "performance.record", "performance.stream", "-", "performance.settings", "performance.folder" } },
+        { tr ("Performan&ce"), { "performance.launcher", "-", "performance.record", "performance.stream", "-", "performance.settings", "performance.folder" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "-", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
     };
@@ -998,6 +998,17 @@ void MainWindow::buildPanels()
     findWidget->audition = [this] (const QString& path) { auditionFile (path); };
     findWidget->stopAudition = [this] { stopAudition(); };
     connect (&auditionWatch, &QTimer::timeout, this, &MainWindow::auditionTick);
+    // With the clip launcher in front, a file chosen in the Selector goes into the next empty
+    // slot of the track named and coloured like the Selector colour it was found under.
+    findWidget->sendFile = [this] (const QString& path, int colour)
+    {
+        if (mixerWin == nullptr || ! mixerWin->isVisible() || ! mixerWin->launcherShown())
+            return false;
+        const auto set = findWidget->currentSet();
+        mixerWin->sendToLauncher (path, colour >= 0 ? findWidget->markName (set, colour) : QString(),
+                                  colour >= 0 ? FindPanel::colour (colour) : QColor());
+        return true;
+    };
     connect (findWidget, &FindPanel::openRequested, this, [this] (const QString& path)
     {
         // With an album in front, a file chosen in the Find panel joins it as a song.

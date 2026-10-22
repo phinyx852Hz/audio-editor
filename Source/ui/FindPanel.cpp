@@ -585,7 +585,16 @@ void FindPanel::activate (QTreeWidgetItem* row)
     if (item->kind == FindItem::Kind::file)
     {
         endAudition();
-        Q_EMIT openRequested (item->key.mid (5));
+        const auto path = item->key.mid (5);
+        int colour = -1;
+        if (const auto* shown = sidebar->currentItem();
+            shown != nullptr && static_cast<Section> (shown->data (0, sectionRole).toInt()) == Section::colour)
+            colour = shown->data (0, colourRole).toInt();
+        else if (const auto mask = marks().value (item->key); mask != 0)
+            for (colour = 0; (mask & (1 << colour)) == 0; ++colour) {}
+        if (sendFile && sendFile (path, colour))
+            return;
+        Q_EMIT openRequested (path);
         return;
     }
 

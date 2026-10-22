@@ -6,6 +6,8 @@
 // one after another or overlapping, plus an instrument. Audio clips play as they
 // are; MIDI clips and a MIDI keyboard play the instrument. Each track then goes
 // through trim, polarity, pan, fader, mute and solo. No MIDI editing.
+// The clip launcher (docs/clip-launcher.md) plays the same tracks from a grid of slots,
+// one clip per track at a time, launched on the beat.
 // Plain C++, no JUCE or Qt: the UI sets things from its thread, render() runs on
 // the audio thread, mixdown() on a worker thread.
 #include "Instruments.h"
@@ -78,6 +80,29 @@ namespace mixer
     Clip makeClip (AudioClipPtr, Frame start);   // the whole file
     Clip makeClip (MidiClipPtr, Frame start);
 
+    // The clip launcher: a slot for each track in each scene (a row of the grid).
+    constexpr int maxScenes = 16;
+    constexpr int stopQueued = -2;   // LaunchInfo::queued: the track stops at the next quantise
+
+    // What a slot holds: a clip, and how it plays when launched.
+    struct Slot
+    {
+        Clip clip;                 // its start is not used: the launch places it
+        bool loop = true;          // else it plays once and the track stops
+        double quantise = -1.0;    // beats to launch on: -1 the launcher's, 0 at once
+    };
+    using SlotPtr = std::shared_ptr<const Slot>;
+
+    // What a track's launcher is doing, for the UI.
+    struct LaunchInfo
+    {
+        int playing = -1;          // the scene whose slot plays, -1 none
+        int queued = -1;           // the scene waiting to launch, -1 none, or stopQueued
+        int passes = 0;            // times the playing clip has gone round
+        float progress = 0.0f;     // through the current pass, 0..1
+        bool timeline = true;      // the track plays its timeline clips, not the launcher
+    };
+
     // A track's controls, set from any thread.
     struct Strip
     {
@@ -145,6 +170,23 @@ namespace mixer
         void setLoop (Frame start, Frame end);
         bool isLooping() const { return loopEnd.load() > loopStart.load(); }
 
+        // The clip launcher. Setting a slot is an edit; launching is for playing live and
+        // never holds up the audio. A launch waits for the next quantise of the launch
+        // clock, which runs while the transport plays and starts again at 0 with it; when
+        // stopped, a launch starts the transport and plays at once. Launching takes the
+        // track off its timeline clips until backToTimeline.
+        void setSlot (int track, int scene, SlotPtr);   // null empties it; an emptied playing slot stops
+        SlotPtr slot (int track, int scene) const;
+        void launch (int track, int scene);   // -1 stops the track's clip
+        void launchScene (int scene);         // every track's slot in it; tracks with none stop
+        void stopTrack (int track) { launch (track, -1); }
+        void stopAll();                       // every track's clip, at the next quantise
+        void backToTimeline (int track);      // -1: every track
+        LaunchInfo launchInfo (int track) const;
+        Frame launchClock() const { return clock.load(); }
+        std::atomic<double> tempo { 120.0 };          // for the quantise, in 4/4
+        std::atomic<double> launchQuantise { 4.0 };   // beats; 0 launches at once
+
         // A MIDI keyboard plays the armed track's instrument (-1: none). Any thread.
         void setLiveTrack (int track) { armed = track; }
         int liveTrack() const { return armed.load(); }
@@ -187,6 +229,28 @@ namespace mixer
             uint32_t lastChannels = 0xFFFF;
             float gainL = 0.0f, gainR = 0.0f;   // last block's gains, ramped from: stereo and instrument
             float monoL = 0.0f, monoR = 0.0f;   // mono audio, equal power
+
+            // The launcher: the slots, the one playing and the one waiting, in launch clock frames.
+            std::array<SlotPtr, maxScenes> slots;
+            SlotPtr playing, queued;
+            int playingScene = -1, queuedScene = -1;
+            Frame launchedAt = 0, queuedAt = 0;
+            bool timeline = true;
+            bool launchChanged = false;       // notes held so far are let go
+            Clips passClips = Clips (2);      // the playing clip's pass and the next, by pass parity
+            std::vector<size_t> passCursors = std::vector<size_t> (2, 0);
+        };
+        struct LaunchRequest
+        {
+            int track = 0, scene = -1;
+            bool now = false;          // the transport was stopped: no waiting for the quantise
+            bool toTimeline = false;
+        };
+        struct LaunchShared
+        {
+            std::atomic<int> playing { -1 }, queued { -1 }, passes { 0 };
+            std::atomic<float> progress { 0.0f };
+            std::atomic<bool> timeline { true };
         };
         struct MeterState
         {
@@ -198,6 +262,12 @@ namespace mixer
         Frame lengthLocked() const;
         Frame trackEndLocked (int track) const;
         void releaseHeld (Track&, std::vector<NoteEvent>&, int offset = 0, int clip = -1);   // -1: every clip's
+        // Launcher, with the lock held, on the audio thread.
+        void takeLaunches (bool play);    // requests, and queued launches that are due
+        Frame quantiseFrom (double beats) const;   // the next launch frame for that quantise
+        void placePasses (Track&, Frame at);       // passClips for the block at `at`
+        void endPasses (int frames);      // after a block: one-shot clips that ended, the UI's info
+        bool launcherBusy() const;
         void meter (int index, const float* left, const float* right, int frames);
 
         mutable std::mutex lock;   // tracks: held by render and by changes
@@ -219,6 +289,11 @@ namespace mixer
         std::mutex liveLock;
         std::vector<NoteEvent> liveQueue, liveTaken;
         std::atomic<bool> panicPending { false };
+
+        std::vector<LaunchRequest> launchQueue, launchTaken;   // launchQueue under liveLock
+        std::array<LaunchShared, maxTracks> launchShared {};
+        std::atomic<Frame> clock { 0 };
+        std::atomic<bool> clockReset { false };
 
         std::vector<float> mixL, mixR, trackL, trackR, instL, instR, monoBuf, outL, outR;
         std::vector<NoteEvent> events;

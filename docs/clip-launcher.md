@@ -1,0 +1,114 @@
+# PHINYX Clip Launcher
+
+Status: Tier 1 built (2026-10-22). The design, with a clickable mock and the survey of other
+launchers, is the owner's "PHINYX Clip Launcher" page; this file is what the code does.
+
+## What the owner asked for (2026-10-22)
+
+"Start designing the clip launcher and pick out the best features for live performance from all
+the clip launchers surveyed. Optimized for live performance. It will be in the style of Ableton,
+but the racks on the left. The main feature will be to integrate with the Selector, based on the
+Selector set: the user starts with the top, hits enter or double clicks the sample desired and it
+automatically enters into the first row of the corresponding clip, the mixer follows this. The next
+chosen category goes to the next corresponding clip slot in the launcher, etc."
+
+Earlier: the launcher view shows just the clips, with a compact mixer below them (fader, meter,
+pan, mute and solo).
+
+## Where it is
+
+Performance > Clip Launcher (F5) opens the mixer with the launcher in its upper area, where the
+tracks across time usually are. F5 again goes back to the editor. In the mixer, the Launcher button
+switches between the two, and V goes back to the tracks across time.
+
+- **Left: the rack** of the selected track. Its instrument (with Edit and the MIDI keyboard arm),
+  the track (trim, transpose, MIDI channels, polarity, Back to Timeline) and the clip in the slot
+  under the cursor (loop, reverse, its own launch quantise, choose a file, empty the slot).
+- **Middle: the grid.** Tracks across with their names and colours, scenes down. Each scene has a
+  launch button on the right; each track has a stop button under its column, and Stop All is under
+  the scenes. A ⟲ in a track's header means it is off its timeline; clicking it goes back.
+- **Below: the strips, made compact**: name, pan, mute and solo, fader and meter. The rest is in
+  the rack. The full strips come back with the tracks across time.
+- The top bar gains the launch quantise and the number of scenes (1 to 16, 8 to start).
+
+## The Selector
+
+With the launcher showing, Enter or a double-click on a file in the Find panel puts it into the
+first empty slot of the track for its Selector colour, instead of opening it in the editor:
+
+1. The colour is the one shown in the Selector (the sidebar entry chosen), else the file's first
+   colour mark.
+2. The track is the one named like that colour in the set chosen (DR, BA, PR... in Live
+   Performance), else the one with that colour, else the selected track. A project made with
+   Mixer > New Project from Selector Set has a track for every colour, named and coloured to match.
+3. The first empty slot from the top. A full column gets one more scene, up to 16.
+4. The mixer follows: that track is selected (its strip, the rack) and the cursor is on the slot.
+
+So one pass down the Selector, one pick per colour, builds a scene across the tracks; picking again
+in a colour fills the next scene down. The mixer's own file browser does the same for the selected
+track while the launcher shows.
+
+A WAV (or any audio file PHINYX reads) becomes an audio clip; a MIDI file becomes a MIDI clip that
+plays the track's instrument (the Synth is chosen for a track that has none). A MIDI loop is made
+whole bars long, at the tempo it plays at.
+
+## Playing
+
+- **Launching.** A click on a clip's ▶, a double-click on the clip, or Enter on the cursor launches
+  it; one clip plays per track. A scene's ▶ (or Shift+Enter) launches its whole row; a track with an
+  empty slot in that scene stops.
+- **Launch Quantise.** A launch waits for the next quantise of the launch clock: off, 1/16 note up
+  to 8 bars, 1 bar to start, in 4/4 at the mix's tempo. A clip can have its own. The switch happens
+  on the exact frame (the audio block is split there), with the clips' usual short edge fades.
+- **The launch clock** runs while the transport plays and starts again at 0 with it. Launching with
+  the transport stopped starts it, and the clip plays at once.
+- **Loop or once.** A looping clip goes round until stopped; one that plays once stops its track at
+  its end.
+- **Stopping.** A track's stop button (or .) stops it at the next quantise; Stop All (Shift+.) every
+  track. Stopping the transport stops every clip.
+- **The timeline.** Launching a clip takes the track off its timeline clips, as in Ableton: they are
+  not heard, even once the clip is stopped, until Back to Timeline (T for the selected track,
+  Shift+T for all, the rack's button or the ⟲). The transport keeps going past the end of the
+  timeline while anything is launched. Mix Down renders the timeline.
+- **Feedback.** A waiting clip blinks, a playing clip has a green ▶, a progress bar along its
+  bottom and its pass count (×2, ×3...), and a stop that is waiting blinks its stop button.
+
+## Keys in the launcher
+
+| Key | Does |
+| --- | --- |
+| Arrows | Move the cursor; the strip and the rack follow its track |
+| Enter | Launch the slot under the cursor (an empty one stops the track) |
+| Shift+Enter | Launch the cursor's scene |
+| . | Stop the cursor's track; Shift+. stops every track |
+| Delete, Backspace | Empty the slot |
+| Ctrl+Up, Ctrl+Down | Move the selected fader (Shift for finer steps) |
+| T, Shift+T | Back to Timeline for the track, for every track |
+| 1-8, M, S, R, E, Space, Home | As everywhere in the mixer |
+
+Right-click a clip for loop, reverse, its launch quantise, a file and emptying it; right-click or
+double-click a scene's name to rename it. Files dropped on a slot fill it and the empty slots below.
+
+## In the project
+
+A project (.phi, `phinyxMix` 3) has a `launcher` section: the number of scenes, the quantise in
+beats, the scene names, whether the launcher was showing, and the slots, each with its track and
+scene, its file (relative to the project, like the clips), offset and length in seconds, reversal,
+loop and own quantise (-1 for the launcher's). Older projects open with an empty launcher.
+
+## Engine
+
+`mixer::Engine` keeps a slot (a `mixer::Slot`: a `mixer::Clip` plus loop and quantise) for each
+track and scene. The UI sets slots (an edit, under the engine's lock) and launches (a queue the audio
+thread takes when it can, so a launch never holds up the sound). Each track keeps the clip playing,
+the one waiting and its launch frame; the clip's passes are placed on the launch clock block by
+block, so loops, MIDI notes held over a pass and the notes a stop lets go of all go through the same
+code as the timeline. `launchInfo()` gives the UI what plays, what waits, the pass and the progress.
+The tests are in tests/CoreTests.cpp (`testLauncher`).
+
+## Next (Tier 2 and 3 of the design)
+
+Launch Styles (Trigger, Gate, Toggle, Repeat), Clip Actions with chances, scene tempo and time
+signature, MIDI learn and a generic pad layout with lights, audio clips stretched to the tempo,
+Record Launcher to Timeline; then independent columns, group scenes, Capture Scene, scene chains,
+Pick for me, recording into slots and effects in the rack.
