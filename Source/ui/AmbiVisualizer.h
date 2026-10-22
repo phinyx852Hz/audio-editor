@@ -26,9 +26,12 @@ class QKeyEvent;
 //   a pad with a height slider (ab Visualiser).
 // - Scope: from above with the speakers of a 7.1.4 layout and a glowing cloud
 //   where the sound is (PRISM); Height puts what is above nearer the middle.
-// - Speakers: a bar for each speaker of 7.1.4, the level the scene has there
-//   with a peak hold, beside the energy around the listener with the speakers
-//   marked on it (Kaizen).
+// - Speakers: a bar for each speaker of a layout (Stereo to 9.1.6 and 7.1.8;
+//   7.1.4 at first), the level the scene has there with a peak hold, beside
+//   the energy around the listener with the speakers marked on it (Kaizen).
+//   Scope draws the same layout.
+// - Channels: a bar for each ambisonic channel (W, Y, Z, X...), grouped by
+//   order, so 4 at 1st order and 121 at 10th.
 // Levels are in dB of a full-scale plane wave, or against the loudest place
 // (Relative). Left/Right turn the scene in the flat views. Home or a double
 // click puts the camera back. Hovering shows the direction and level there.
@@ -45,8 +48,8 @@ public:
         bool glass = false;
     };
 
-    enum class View { sphere, fourViews, panorama, head, energy, scope, speakers };
-    static constexpr int numViews = 7;
+    enum class View { sphere, fourViews, panorama, head, energy, scope, speakers, channels };
+    static constexpr int numViews = 8;
     static constexpr int maxOrder = 10;
     static constexpr int cols = 72, rows = 37;   // azimuth -180 to 175, elevation 90 to -90, every 5 degrees
 
@@ -82,6 +85,9 @@ public:
     int orderLimit() const { return limit; }
     void setHeight (bool);
     bool height() const { return showHeight; }
+    static QStringList speakerLayouts();   // for Speakers and Scope
+    void setSpeakerLayout (const QString&);
+    QString speakerLayout() const { return layoutName; }
     void resetCamera();
 
     std::function<void (View)> viewChanged;   // when the view changes here (a key)
@@ -139,6 +145,10 @@ private:
     // Returns where its circle is (centre and radius; radius 0 when there was no room).
     std::pair<QPointF, double> paintPolar (QPainter&, const QRectF&, int plane, const QString& title, const std::array<QString, 4>& edges, bool head);
     void paintSpeakers (QPainter&);
+    void paintChannels (QPainter&);
+    // Bars with a scale on the left, as Speakers and Channels draw them; gaps go before the given bars.
+    struct Bar { QString label; double level, peak; bool gapBefore; };
+    void paintBars (QPainter&, const QRectF&, const std::vector<Bar>&, bool labelEach, bool valueEach);
     void paintHint (QPainter&);
     void emitScope (double dt);
 
@@ -151,8 +161,13 @@ private:
     std::vector<float> target, shown;     // dB per direction
     int order = 0, fileOrderShown = 0, channelCount = 0, analyses = 0;
     double planeWaveSpread = 1.0;         // |rE| of one plane wave at this order
-    static constexpr int numSpeakers = 11;
-    std::array<double, numSpeakers> speakerPeak {}, speakerHold {};
+    struct Speaker { QString name; double azimuth, elevation; };
+    std::vector<Speaker> speakers;        // of the layout chosen (no LFE: the scene has none)
+    QString layoutName;
+    std::vector<double> speakerPeak, speakerHold;
+    std::vector<float> channelTarget, channelShown;   // dB per ACN channel
+    std::vector<double> channelPeak, channelHold;
+    std::vector<QRectF> barRects;         // where Channels drew its bars, for the readout
     double diffuseness = 1.0, shownDiffuseness = 1.0;
     Vec energy, shownEnergy;              // the energy vector (rE), shorter when spread
     bool hasSignal = false;
