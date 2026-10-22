@@ -1,0 +1,69 @@
+# Projects (.phi)
+
+A PHINYX project is a mix and production session in one file: the mixer's tracks with their
+clips and instruments, the strips and master, the patchbay, and which view was in front. It is
+saved with Mixer > Save Project (`Ctrl+S` in the mixer, `Ctrl+Shift+S` for Save As), opened with
+Mixer > Open Project (`Ctrl+O` in the mixer), with File > Open, by passing it to `phinyx` on the
+command line, or by double-clicking it in a file manager.
+
+When PHINYX quits, the project as it is (saved or not) goes to `last.phi` in
+`~/.config/phinyx/mixer/`, and once a minute while it runs (with the recovery autosave). At the
+next start that project opens again, under its own name and still marked unsaved if it was, its
+patchbay comes back with it, and if the Mixer was in front when PHINYX closed, it is in front
+again.
+
+## The file
+
+JSON, written atomically (`QSaveFile`). A project is a mix file (`.phinyxmix`, version 2) with
+more in it, so both open the same way; a mix from before projects keeps the patchbay as it is,
+and `Ctrl+S` on one saves a `.phi` beside it, leaving the old file alone.
+
+```json
+{
+  "phinyxProject": 1,
+  "phinyxMix": 2,
+  "tempo": 120, "midiFollowsTempo": false, "master": 0, "armed": 0,
+  "tracks": [
+    {
+      "name": "DR", "colour": "#c0392b",
+      "trim": 0, "fader": -3.5, "pan": 0, "invertLeft": false, "invertRight": false,
+      "mute": false, "solo": false, "transpose": 0, "channels": 65535,
+      "clips": [ { "kind": "audio", "file": "Audio/kick.wav", "start": 0, "offset": 0,
+                   "length": 4.2, "muted": false, "reversed": false } ],
+      "instrument": { "kind": "synth", "state": "..." }
+    }
+  ],
+  "patchbay": {
+    "links": [ { "from": "track2", "to": "fx1", "gain": -6 } ],
+    "synths": [ { "id": "synth", "name": "Synth", "state": "..." }, null, null, null ],
+    "effects": [ { "id": "<plugin id>", "name": "Reverb", "state": "..." }, null, null, null ]
+  },
+  "view": { "mixer": true }
+}
+```
+
+- Times are in seconds, so a project opens the same at any sample rate.
+- File paths are relative to the project, so a folder of project and files can move; files
+  more than one folder up are kept absolute. Sounds taken from the Sample menu are saved as WAVs
+  in `<project> Samples/`, bounces in `<project> Bounces/`, clip edits in `<project> Edits/`.
+- Patch points are named (`editor`, `sampler`, `slicer`, `synth1`..`4`, `track1`..`8`,
+  `mixbus`, `fx1`..`4`, `main`), as in `settings.ini`, so the numbering inside the patchbay can
+  change. A synth or effect already in its slot with the same id keeps running and takes the
+  saved settings. The grid's rows and columns are a matter of layout and stay in `settings.ini`.
+- New Project clears the patchbay's synths and effects and puts every patch back to default.
+
+## In the code
+
+- `MixerWindow::writeMix` and `loadMix` (`Source/ui/MixerWindow.cpp`) write and read the mix and
+  hand the rest to `Hooks::projectState` and `Hooks::setProjectState`; `Hooks::resetProject` runs
+  for a new project.
+- `Source/ui/ProjectSection.cpp`: those hooks on the main window, `openProject`,
+  `restoreProject` (at start, from `last.phi`; the patchbay from `settings.ini` when the project
+  has none) and `mixerInView()`, the view hook.
+- `MainWindow::patchBayJson`, `setPatchBayJson` and `resetPatchBay` in `PatchBaySection.cpp`.
+
+## Not yet
+
+- The editor's own tabs (files open, their places and zoom) are not part of a project; the
+  editor's crash recovery still brings back unsaved edits.
+- The Sample menu's Sampler and Slicer, the Tracker and the Device Chain keep their own state.

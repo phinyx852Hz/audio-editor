@@ -124,6 +124,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/MixerSection.cpp
     Source/ui/PatchBayWindow.cpp
     Source/ui/PatchBaySection.cpp
+    Source/ui/ProjectSection.cpp
     Source/ui/Audition.cpp
     Source/ui/Goniometer.cpp
     Source/ui/AnalysisWindow.cpp
@@ -278,6 +279,7 @@ target_compile_definitions(${APP_ID} PRIVATE
 
 install(TARGETS ${APP_ID} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES packaging/phinyx.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+install(FILES packaging/phinyx-project.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/mime/packages)
 
 # Core tests: plain C++, no JUCE or Qt. Run with ctest.
 option(PHINYX_BUILD_TESTS "Build the core tests" ON)

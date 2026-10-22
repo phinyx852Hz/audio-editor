@@ -1557,9 +1557,10 @@ void MainWindow::showOpenDialog()
         patterns << QStringLiteral ("*.") + QString::fromStdString (ext);
 
     const auto start = doc.path().empty() ? QString() : QFileInfo (QString::fromStdString (doc.path())).absolutePath();
-    patterns << QStringLiteral ("*.") + albumfile::extension << QStringLiteral ("*.") + albumfile::oldExtension;
+    patterns << QStringLiteral ("*.") + albumfile::extension << QStringLiteral ("*.") + albumfile::oldExtension
+             << QStringLiteral ("*.") + MixerWindow::projectSuffix;
     const auto path = QFileDialog::getOpenFileName (this, tr ("Open Audio File"), start,
-                                                    tr ("Audio files and albums (%1);;All files (*)").arg (patterns.join (QLatin1Char (' '))));
+                                                    tr ("Audio files, albums and projects (%1);;All files (*)").arg (patterns.join (QLatin1Char (' '))));
     if (! path.isEmpty())
         openFile (path);
 }
@@ -1572,6 +1573,12 @@ void MainWindow::openFile (const QString& path)
     if (albumfile::isAlbumFile (path))
     {
         openAlbum (path);
+        return;
+    }
+
+    if (MixerWindow::isProjectFile (path))
+    {
+        openProject (path);
         return;
     }
 
@@ -1978,6 +1985,9 @@ void MainWindow::autosave()
 
     // The Device Chain too, so a crash does not lose the plugins and their settings.
     engine.saveMasterSection();
+    // And the project, so it comes back as it was.
+    if (mixerWin != nullptr)
+        mixerWin->autosave();
 }
 
 void MainWindow::warnAboutDesktopShortcuts()

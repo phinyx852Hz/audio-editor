@@ -242,8 +242,9 @@ Every control has a screen-reader name and announces its value.
   and MIDI in, their own windows (`Source/engine/PluginWindow.h`, now shared with the Master
   Section), settings saved in the mix; a plugin that throws is not called again.
 - `Source/ui/MixerWindow.*`, `MixerSection.cpp`: the window, the strips and master, the Mixer
-  menu (`F3`), keys, `.phinyxmix` files (JSON, paths relative to the mix) and the autosaved mix
-  in `~/.config/phinyx/mixer/`. The mixer is heard through the engine's instrument slot with
+  menu (`F3`), keys, project files (`.phi`, docs/project.md: the mix's JSON with the patchbay
+  and the view; `.phinyxmix` mixes from before still open) and the autosaved project
+  `last.phi` in `~/.config/phinyx/mixer/`. The mixer is heard through the engine's instrument slot with
   the Sampler and Slicer, so it sounds on top of the editor; MIDI goes to the mixer while its
   window was used last.
 - Bounce (`B`, `Shift+B`, or the strip's right-click menu): `Engine::mixdown` with one track
