@@ -895,7 +895,7 @@ void AmbiVisualizer::paintPanorama (QPainter& g)
     for (int lon = -180; lon <= 180; lon += 45)
     {
         const auto p = hammer (lon, 0.0);
-        const Qt::Alignment anchor = lon == -180 ? Qt::AlignLeft : lon == 180 ? Qt::AlignRight : Qt::AlignHCenter;
+        const int anchor = lon == -180 ? Qt::AlignLeft : lon == 180 ? Qt::AlignRight : Qt::AlignHCenter;
         const auto x = lon == -180 ? p.x() : lon == 180 ? p.x() - 60 : p.x() - 30;
         g.drawText (QRectF (x, area.bottom() + 2, 60, fh), anchor | Qt::AlignTop, azimuthText (lon + heading));
     }
