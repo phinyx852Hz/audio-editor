@@ -91,7 +91,7 @@ Built with a Qt 6 interface (native Wayland) on top of a JUCE 8 audio engine.
 ```sh
 sudo pacman -S --needed base-devel git cmake ninja qt6-base qt6-wayland alsa-lib libpipewire ladspa clap \
   freetype2 fontconfig libx11 libxrandr libxinerama libxcursor libxcomposite libxext libxi mesa cairo libsndfile clang \
-  ffmpeg taglib python rust xcb-util-wm
+  ffmpeg taglib python rust xcb-util-wm fftw curl
 git clone https://github.com/phinyx852Hz/audio-editor
 cd audio-editor
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
