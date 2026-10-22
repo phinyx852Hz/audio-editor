@@ -32,8 +32,8 @@ void MainWindow::registerMixerCommands()
 
     add ("mixer.window", tr ("&Mixer"), { KS (Qt::Key_F3) }, [this] { showMixer(); })
         ->setStatusTip (tr ("The 8-track mixer: each track plays an audio file, a MIDI file through an instrument, or both"));
-    add ("mixer.new", tr ("&New Mix"), {}, [this] { showMixer(); mixerWin->newMix(); });
-    add ("mixer.newFromSet", tr ("New Mix from &Selector Set"), {}, [this]
+    add ("mixer.new", tr ("&New Project"), {}, [this] { showMixer(); mixerWin->newMix(); });
+    add ("mixer.newFromSet", tr ("New Project from &Selector Set"), {}, [this]
     {
         showMixer();
         QStringList names;
@@ -45,10 +45,12 @@ void MainWindow::registerMixerCommands()
             colours.push_back (FindPanel::colour (c));
         }
         mixerWin->newMixFromSet (findWidget->setName (set), names, colours);
-    })->setStatusTip (tr ("A new mix of 8 tracks with the names and colours of the set chosen in the Find panel's Selector, from the bottom up"));
-    add ("mixer.open", tr ("&Open Mix..."), {}, [this] { showMixer(); mixerWin->openMix(); });
-    add ("mixer.save", tr ("&Save Mix"), {}, [this] { showMixer(); mixerWin->saveMix (false); });
-    add ("mixer.saveAs", tr ("Save Mix &As..."), {}, [this] { showMixer(); mixerWin->saveMix (true); });
+    })->setStatusTip (tr ("A new project of 8 tracks with the names and colours of the set chosen in the Find panel's Selector, from the bottom up"));
+    add ("mixer.open", tr ("&Open Project..."), {}, [this] { showMixer(); mixerWin->openMix(); })
+        ->setStatusTip (tr ("Open a PHINYX project (.phi): the mix, the patchbay and the view as they were saved"));
+    add ("mixer.save", tr ("&Save Project"), {}, [this] { mixerWindow()->saveMix (false); })
+        ->setStatusTip (tr ("Save the mix, the patchbay and the view in a PHINYX project (.phi)"));
+    add ("mixer.saveAs", tr ("Save Project &As..."), {}, [this] { mixerWindow()->saveMix (true); });
     add ("mixer.addTrack", tr ("Add &Track"), {}, [this] { showMixer(); mixerWin->addTrack(); });
     add ("mixer.removeTrack", tr ("&Remove Last Track"), {}, [this] { showMixer(); mixerWin->removeTrack(); });
     add ("mixer.playStop", tr ("&Play or Stop the Mix"), { KS (Qt::SHIFT | Qt::Key_F3) }, [this]
@@ -69,6 +71,9 @@ MixerWindow* MainWindow::mixerWindow()
         MixerWindow::Hooks hooks;
         hooks.samplerSound = [this] { return std::make_pair (samplerEngine->sample(), samplerEngine->settings()); };
         hooks.slicerSound = [this] { return std::make_pair (slicerEngine->sample(), slicerEngine->kit()); };
+        hooks.projectState = [this] { return projectState(); };
+        hooks.setProjectState = [this] (const QJsonObject& project) { setProjectState (project); };
+        hooks.resetProject = [this] { resetPatchBay(); };
         mixerWin = new MixerWindow (*mixerEngine, engine, std::move (hooks), this);
         connect (mixerWin, &MixerWindow::mixdownRequested, this, [this] { mixDownToEditor(); });
         connect (mixerWin, &MixerWindow::midiInputsRequested, this, [this] { midiInputsDialog(); });

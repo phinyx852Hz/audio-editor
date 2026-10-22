@@ -49,8 +49,9 @@ Mixer > Patchbay (`F4`) pops it out. Sources run down the side, destinations acr
   so Track 2 can't go into FX Bus 1); the status line says which way round. A dash is a pair
   with no ports (a source into itself).
 - Each name has a level meter. Default Patches puts every source back where it started.
-- Patches, synths, effects (with their settings) and the grid's layout are kept in
-  `settings.ini` and come back next time; if anything is patched, it is heard straight away.
+- Patches, synths and effects (with their settings) are part of the project (`.phi`,
+  docs/project.md) and come back with it, also at the next start; they and the grid's layout
+  are kept in `settings.ini` too. If anything is patched, it is heard straight away.
 
 ## How it plays
 

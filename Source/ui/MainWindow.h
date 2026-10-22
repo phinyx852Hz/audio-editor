@@ -374,6 +374,19 @@ private:
     void restorePatchBay();
     void savePatchBay();
     bool patchBayInUse() const;   // its window is open, or it holds patches, synths or effects of its own
+    // The patchbay in a project file (.phi): its patches, synths and effects.
+    class QJsonObject patchBayJson() const;
+    void setPatchBayJson (const class QJsonObject&);
+    void resetPatchBay();         // no synths, no effects, every source where it is heard without a patchbay
+
+    // Projects (.phi, docs/project.md): the mixer's mix, the patchbay and the view, kept
+    // in the file and in last.phi in the config folder, so the next start carries on.
+    void openProject (const QString& path);
+    void restoreProject();        // at start: the project open when PHINYX was last closed
+    bool mixerInView() const;     // the Mixer is what is shown, rather than the editor
+    bool projectPatchBay = false; // the patchbay came from a project, not settings.ini
+    class QJsonObject projectState() const;               // what a project keeps besides the mix
+    void setProjectState (const class QJsonObject&);      // from a project being opened
     std::unique_ptr<patchbay::PatchBay> patchBay;
     class PatchBayWindow* patchBayWin = nullptr;
     std::atomic<int> patchSynth { 0 };   // the synth the MIDI keyboard plays (midiTarget 3)
