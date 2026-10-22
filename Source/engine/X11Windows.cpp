@@ -49,6 +49,20 @@ namespace x11
         x->xFlush (d);
     }
 
+    void setOpacity (void* handle, double opacity)
+    {
+        auto* d = display();
+        if (d == nullptr || handle == nullptr || lost)
+            return;
+
+        auto* x = juce::X11Symbols::getInstance();
+        const auto atom = x->xInternAtom (d, "_NET_WM_WINDOW_OPACITY", False);
+        unsigned long value = (unsigned long) (juce::jlimit (0.0, 1.0, opacity) * 0xffffffffu);
+        x->xChangeProperty (d, (::Window) (juce::pointer_sized_uint) handle, atom, XA_CARDINAL, 32, PropModeReplace,
+                            reinterpret_cast<unsigned char*> (&value), 1);
+        x->xFlush (d);
+    }
+
     void surviveLostConnection (std::function<void()> whenLost)
     {
         auto* d = display();

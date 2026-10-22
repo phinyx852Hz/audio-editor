@@ -1,0 +1,50 @@
+# Vaporizer2's starter set (see Instruments.cmake): paths inside its VASTvaporizer folder.
+# Whole folders end in /.
+Noises/
+Tables/Single Cycles/
+Tables/Additive/
+Tables/Harmonics 64.wav
+Tables/Harmonics.wav
+Tables/Hypersaw.wav
+Tables/Standard Shapes Bandlimited.wav
+Tables/Standard Shapes.wav
+Presets/AR Acid Pattern.vvp
+Presets/AR Comb ARP.vvp
+Presets/AR Power Chords ARP.vvp
+Presets/AT Granular Chords.vvp
+Presets/BA Bassy Formants 4.vvp
+Presets/BA Creak Bass 3.vvp
+Presets/BA Engine Bass.vvp
+Presets/BA Evolve Sub.vvp
+Presets/BA Mountain Brew.vvp
+Presets/BA Pulsedriver.vvp
+Presets/BR Clean Brass.vvp
+Presets/CH Chord Long Verb.vvp
+Presets/DR Hard Kick 2.vvp
+Presets/FX Alarm.vvp
+Presets/FX Computing.vvp
+Presets/FX FM Downlifter.vvp
+Presets/LD Brassy Synth Lead.vvp
+Presets/LD Katana.vvp
+Presets/LD Lime Lead.vvp
+Presets/LD Mighty Lead.vvp
+Presets/LD Visage.vvp
+Presets/OR Clean Organ.vvp
+Presets/PD Aftertouch Formants.vvp
+Presets/PD Fat Sawish Pad.vvp
+Presets/PD Shimmer.vvp
+Presets/PD Sky Pad.vvp
+Presets/PD Sunlight.vvp
+Presets/PL Crushed Pluck.vvp
+Presets/PL Evolve.vvp
+Presets/PL Plucked Pitched 001.vvp
+Presets/PN Granular Vapiano.vvp
+Presets/RI Starting Riser.vvp
+Presets/SY Acid.vvp
+Presets/SY Combine.vvp
+Presets/SY Crushed Trumpets.vvp
+Presets/SY Formant Party.vvp
+Presets/SY Oscillator Drift Chained.vvp
+Presets/SY Pad Formants.vvp
+Presets/TG Phantoms Can Speak.vvp
+Presets/VC Wanna House.vvp

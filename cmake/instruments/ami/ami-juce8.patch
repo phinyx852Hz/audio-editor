@@ -1,0 +1,88 @@
+diff --git a/Source/astro_formats/astro_BrrAudioFormat.h b/Source/astro_formats/astro_BrrAudioFormat.h
+index f620d2e..d7ee524 100755
+--- a/Source/astro_formats/astro_BrrAudioFormat.h
++++ b/Source/astro_formats/astro_BrrAudioFormat.h
+@@ -43,7 +43,21 @@ public:
+                                             unsigned int numberOfChannels,
+                                             int bitsPerSample,
+                                             const juce::StringPairArray& metadataValues,
+-                                            int qualityOptionIndex) override;
++                                            int qualityOptionIndex);
++
++    // JUCE 8 writers: through the ones above (PHINYX build).
++    std::unique_ptr<juce::AudioFormatWriter> createWriterFor (std::unique_ptr<juce::OutputStream>& out,
++                                                              const juce::AudioFormatWriterOptions& o) override
++    {
++        juce::StringPairArray metadata;
++        for (const auto& [k, v] : o.getMetadataValues())
++            metadata.set (k, v);
++        std::unique_ptr<juce::AudioFormatWriter> w (createWriterFor (out.get(), o.getSampleRate(), (unsigned int) o.getNumChannels(),
++                                                                     o.getBitsPerSample(), metadata, o.getQualityOptionIndex()));
++        if (w != nullptr)
++            out.release();
++        return w;
++    }
+ 
+     using AudioFormat::createWriterFor;
+     
+diff --git a/Source/astro_formats/astro_IffAudioFormat.h b/Source/astro_formats/astro_IffAudioFormat.h
+index 177ed77..b2eed95 100755
+--- a/Source/astro_formats/astro_IffAudioFormat.h
++++ b/Source/astro_formats/astro_IffAudioFormat.h
+@@ -63,13 +63,27 @@ public:
+                                               unsigned int numberOfChannels,
+                                               int bitsPerSample,
+                                               const juce::StringPairArray& metadataValues,
+-                                              int qualityOptionIndex) override;
++                                              int qualityOptionIndex);
+ 
+     juce::AudioFormatWriter* createWriterFor (juce::OutputStream* streamToWriteTo, double sampleRateToUse,
+                                               const juce::AudioChannelSet& channelLayout,
+                                               int bitsPerSample,
+                                               const juce::StringPairArray& metadataValues,
+-                                              int qualityOptionIndex) override;
++                                              int qualityOptionIndex);
++    // JUCE 8 writers: through the ones above (PHINYX build).
++    std::unique_ptr<juce::AudioFormatWriter> createWriterFor (std::unique_ptr<juce::OutputStream>& out,
++                                                              const juce::AudioFormatWriterOptions& o) override
++    {
++        juce::StringPairArray metadata;
++        for (const auto& [k, v] : o.getMetadataValues())
++            metadata.set (k, v);
++        std::unique_ptr<juce::AudioFormatWriter> w (createWriterFor (out.get(), o.getSampleRate(), (unsigned int) o.getNumChannels(),
++                                                                     o.getBitsPerSample(), metadata, o.getQualityOptionIndex()));
++        if (w != nullptr)
++            out.release();
++        return w;
++    }
++
+     using juce::AudioFormat::createWriterFor;
+ 
+     //==============================================================================
+diff --git a/Source/astro_formats/astro_MuLawFormat.h b/Source/astro_formats/astro_MuLawFormat.h
+index a75e72a..19db828 100755
+--- a/Source/astro_formats/astro_MuLawFormat.h
++++ b/Source/astro_formats/astro_MuLawFormat.h
+@@ -43,7 +43,21 @@ public:
+                                              unsigned int numberOfChannels,
+                                              int bitsPerSample,
+                                              const juce::StringPairArray& metadataValues,
+-                                             int qualityOptionIndex) override;
++                                             int qualityOptionIndex);
++
++    // JUCE 8 writers: through the ones above (PHINYX build).
++    std::unique_ptr<juce::AudioFormatWriter> createWriterFor (std::unique_ptr<juce::OutputStream>& out,
++                                                              const juce::AudioFormatWriterOptions& o) override
++    {
++        juce::StringPairArray metadata;
++        for (const auto& [k, v] : o.getMetadataValues())
++            metadata.set (k, v);
++        std::unique_ptr<juce::AudioFormatWriter> w (createWriterFor (out.get(), o.getSampleRate(), (unsigned int) o.getNumChannels(),
++                                                                     o.getBitsPerSample(), metadata, o.getQualityOptionIndex()));
++        if (w != nullptr)
++            out.release();
++        return w;
++    }
+ 
+     using AudioFormat::createWriterFor;
+ 

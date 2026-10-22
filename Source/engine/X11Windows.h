@@ -15,6 +15,10 @@ namespace x11
     // like a traditional plugin window. Call it before the window is shown.
     void setFloating (void* nativeWindowHandle);
 
+    // Sets a window's opacity, 0 to 1 (_NET_WM_WINDOW_OPACITY), for compositors
+    // that honour it; JUCE's own setAlpha does nothing for a window on Linux.
+    void setOpacity (void* nativeWindowHandle, double opacity);
+
     // If the window manager kills a plugin window's X connection (a forced
     // close), Xlib would end the whole program. After this, only plugin
     // windows stop working; the editor keeps running.

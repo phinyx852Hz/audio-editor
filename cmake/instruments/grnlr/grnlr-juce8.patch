@@ -1,0 +1,95 @@
+diff --git a/Source/PluginEditor.cpp b/Source/PluginEditor.cpp
+index ee27445..0613c28 100644
+--- a/Source/PluginEditor.cpp
++++ b/Source/PluginEditor.cpp
+@@ -32,6 +32,7 @@
+ GrrnlrrAudioProcessorEditor::GrrnlrrAudioProcessorEditor (GrrnlrrAudioProcessor& p)
+     : AudioProcessorEditor (&p), processor (p)
+ {
++    setLookAndFeel(&lookAndFeel);
+     addAndMakeVisible(openButton);
+     openButton.setButtonText("Open...");
+     openButton.addListener(this);
+@@ -129,7 +130,7 @@ GrrnlrrAudioProcessorEditor::GrrnlrrAudioProcessorEditor (GrrnlrrAudioProcessor&
+ 
+ GrrnlrrAudioProcessorEditor::~GrrnlrrAudioProcessorEditor()
+ {
+-    
++    setLookAndFeel(nullptr);
+ }
+ 
+ //==============================================================================
+@@ -194,15 +195,17 @@ void GrrnlrrAudioProcessorEditor::sliderValueChanged(Slider* slider)
+ 
+ void GrrnlrrAudioProcessorEditor::openButtonClicked()
+ {
+-    FileChooser chooser ("Select a File to open...",
+-                         File::nonexistent,
+-                         "*.wav", "*.aif", "*.aiff");
+-    
+-    if(chooser.browseForFileToOpen()){
+-        const File file (chooser.getResult());
++    chooser = std::make_unique<FileChooser> ("Select a File to open...",
++                                             File(),
++                                             "*.wav;*.aif;*.aiff");
++    
++    chooser->launchAsync (FileBrowserComponent::openMode | FileBrowserComponent::canSelectFiles, [this] (const FileChooser& c){
++        const File file (c.getResult());
++        if (file == File())
++            return;
+         String path (file.getFullPathName());
+-        swapVariables (processor.chosenPath, path);
+-    }
++        std::swap (processor.chosenPath, path);
++    });
+ }
+ 
+ void GrrnlrrAudioProcessorEditor::paint (Graphics& g)
+diff --git a/Source/PluginEditor.h b/Source/PluginEditor.h
+index 7d175d3..e9e6af5 100644
+--- a/Source/PluginEditor.h
++++ b/Source/PluginEditor.h
+@@ -55,9 +55,12 @@ private:
+     // This reference is provided as a quick way for your editor to
+     // access the processor object that created it.
+     GrrnlrrAudioProcessor& processor;
++    // the look of JUCE 4, which GRNLR was made with (black text on its white background)
++    LookAndFeel_V3 lookAndFeel;
+     
+     // GUI
+     TextButton openButton;
++    std::unique_ptr<FileChooser> chooser;
+ 
+     // Position:
+     ScopedPointer<ParameterSlider> positionSlider;
+diff --git a/Source/PluginProcessor.cpp b/Source/PluginProcessor.cpp
+index 0356ddf..da52a02 100644
+--- a/Source/PluginProcessor.cpp
++++ b/Source/PluginProcessor.cpp
+@@ -162,7 +162,7 @@ void GrrnlrrAudioProcessor::checkForRestoredPath()
+     path = restoredPath;
+     if(path.isNotEmpty()){
+         LOG("restoredPath: " << path);
+-        swapVariables(chosenPath, path);
++        std::swap(chosenPath, path);
+         restoredPath = "";
+     }
+ }
+@@ -170,7 +170,7 @@ void GrrnlrrAudioProcessor::checkForRestoredPath()
+ void GrrnlrrAudioProcessor::checkForPathToOpen()
+ {
+     String pathToOpen;
+-    swapVariables(pathToOpen, chosenPath);
++    std::swap(pathToOpen, chosenPath);
+     
+     if(pathToOpen.isNotEmpty()){
+         LOG("pathToOpen: " << pathToOpen);
+@@ -396,7 +396,7 @@ void GrrnlrrAudioProcessor::setStateInformation (const void* data, int sizeInByt
+     LOG("Load Settings: ");
+     
+     // This getXmlFromBinary() helper function retrieves our XML from the binary blob..
+-    ScopedPointer<XmlElement> xmlState (getXmlFromBinary (data, sizeInBytes));
++    std::unique_ptr<XmlElement> xmlState (getXmlFromBinary (data, sizeInBytes));
+     
+     if (xmlState != nullptr)
+     {

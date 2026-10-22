@@ -1,0 +1,15 @@
+diff --git a/VASTvaporizer/Source/Plugin/VASTAudioProcessor.cpp b/VASTvaporizer/Source/Plugin/VASTAudioProcessor.cpp
+index bd021e1..b395264 100644
+--- a/VASTvaporizer/Source/Plugin/VASTAudioProcessor.cpp
++++ b/VASTvaporizer/Source/Plugin/VASTAudioProcessor.cpp
+@@ -1801,6 +1801,10 @@ String VASTAudioProcessor::getVSTPath() {
+ 	return "";
+ 
+ #elif JUCE_LINUX
++	// A VST3's binary is in Contents/<arch>-linux; its data can come with it, in Contents/Resources.
++	File bundled = File::getSpecialLocation(File::currentExecutableFile).getParentDirectory().getParentDirectory().getChildFile("Resources");
++	if (bundled.getChildFile("Tables").isDirectory())
++		return bundled.getFullPathName();
+ 	String dataPath = CMAKE_INSTALL_FULL_DATAROOTDIR "/Vaporizer2";
+ 	if (File(dataPath).exists()) {
+ 		return dataPath;

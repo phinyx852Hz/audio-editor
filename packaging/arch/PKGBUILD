@@ -7,19 +7,19 @@ arch=('x86_64')
 url="https://github.com/phinyx852Hz/audio-editor"
 license=('AGPL-3.0-only' 'GPL-3.0-only' 'GPL-2.0-or-later' 'LGPL-3.0-or-later' 'BSD-3-Clause' 'Apache-2.0' 'OFL-1.1' 'LicenseRef-Nyquist')
 # ffmpeg encodes and decodes the compressed formats, taglib writes their tags
-# libsndfile is for Nyquist and the stock plugins; cairo, libglvnd and the X libraries for the stock plugins
+# libsndfile is for Nyquist and the stock plugins; cairo, libglvnd and the X libraries (xcb-util-wm for OctaSine), fftw (Vaporizer2) and curl (Overtonium) for the stock plugins
 depends=('qt6-base' 'qt6-wayland' 'alsa-lib' 'libpipewire' 'freetype2' 'fontconfig'
          'cairo' 'libsndfile' 'libglvnd' 'libx11' 'libxrandr' 'libxcursor' 'libxext' 'libxi'
-         'ffmpeg' 'taglib')
+         'ffmpeg' 'taglib' 'xcb-util-wm' 'fftw' 'curl')
 optdepends=('pipewire-jack: JACK output through PipeWire (recommended; jack2 also works)'
             'realtime-privileges: realtime scheduling for audio threads'
             "xorg-xwayland: show plugins' own windows on Wayland"
             'lsp-plugins: a large free set of mastering plugins (LV2/VST3/CLAP)'
             'yabridge: Windows VST3 and CLAP plugins through Wine')
 # X11 headers are for JUCE (juceaide and plugin windows); ladspa.h and clap for plugin hosting;
-# clang builds the ZL Audio stock plugins
+# clang builds the ZL Audio stock plugins; python and wget build Cardinal and rust CA-72 and OctaSine (stock instruments)
 makedepends=('git' 'cmake' 'ninja' 'ladspa' 'clap' 'libx11' 'libxrandr'
-             'libxinerama' 'libxcursor' 'libxcomposite' 'libxext' 'mesa' 'clang')
+             'libxinerama' 'libxcursor' 'libxcomposite' 'libxext' 'mesa' 'clang' 'python' 'rust' 'xcb-util-wm' 'wget')
 provides=('phinyx')
 conflicts=('phinyx')
 source=("git+${url}.git")

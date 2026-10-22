@@ -86,6 +86,7 @@ target_sources(${APP_ID} PRIVATE
     Source/engine/PluginInstrument.cpp
     Source/engine/PluginEffect.cpp
     Source/engine/StockFrame.cpp
+    Source/engine/InstrumentFrame.cpp
     Source/engine/StockPlugins.cpp
     Source/engine/VampHost.cpp
     Source/engine/X11Windows.cpp
@@ -119,6 +120,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/FindPanel.cpp
     Source/ui/MidSideDialog.cpp
     Source/ui/SamplerSection.cpp
+    Source/ui/InstrumentsSection.cpp
     Source/ui/SamplerWindow.cpp
     Source/ui/SlicerWindow.cpp
     Source/ui/MixerWindow.cpp

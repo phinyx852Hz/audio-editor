@@ -18,6 +18,8 @@ void StockFrame::setColours (const PluginFrameColours& c)
     ++colourGeneration;
 }
 
+const PluginFrameColours& StockFrame::currentColours() { return colours; }
+
 //==============================================================================
 // A potentiometer like the Device Chain card's: a 270 degree arc filled up to
 // the value, dragged up and down (200 px for the whole range, Shift ten times

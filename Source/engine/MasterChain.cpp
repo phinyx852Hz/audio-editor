@@ -148,6 +148,21 @@ void MasterChain::loadStockPlugins()
             xml->writeTo (stockListFile());
 }
 
+std::string MasterChain::stockInstrumentId (const char* key) const
+{
+    const auto* wanted = stock::instrument (key);
+    for (const auto& d : stockList.getTypes())
+        if (wanted != nullptr && d.isInstrument && stock::find (d) == wanted)
+            return d.createIdentifierString().toStdString();
+    return {};
+}
+
+const stock::Info* MasterChain::stockInfo (const std::string& pluginId) const
+{
+    const auto d = stockList.getTypeForIdentifierString (pluginId);
+    return d != nullptr ? stock::find (*d) : nullptr;
+}
+
 std::unique_ptr<juce::PluginDescription> MasterChain::findDescription (const std::string& pluginId) const
 {
     for (const auto& d : builtin::descriptions())

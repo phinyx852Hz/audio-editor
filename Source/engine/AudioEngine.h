@@ -188,6 +188,8 @@ public:
 
     // Instrument plugins for the mixer's tracks (PluginInstrument.cpp): MIDI in, stereo out.
     std::vector<PluginInfo> knownInstruments() const;
+    // A stock instrument's plugin id, by its key ("granular", see StockPlugins.h); empty when it was not built.
+    std::string stockInstrumentId (const char* key) const;
     // Message thread. Null with `error` when it could not be started.
     std::shared_ptr<mixer::Instrument> loadInstrumentPlugin (const std::string& pluginId, double sampleRate, std::string& error);
     static std::string instrumentPluginId (const mixer::Instrument&);   // empty for the built-in ones

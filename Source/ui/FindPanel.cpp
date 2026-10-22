@@ -64,6 +64,7 @@ namespace
             case FindItem::Kind::process: return QObject::tr ("Processes");
             case FindItem::Kind::effect:  return QObject::tr ("Effects");
             case FindItem::Kind::plugin:  return QObject::tr ("Plugins");
+            case FindItem::Kind::instrument: return QObject::tr ("Instruments");
             case FindItem::Kind::visual:  return QObject::tr ("Visualizations");
             case FindItem::Kind::file:    return QObject::tr ("Files");
         }
@@ -367,6 +368,7 @@ void FindPanel::buildSidebar()
     entry (tr ("Processes"), Section::processes);
     entry (tr ("Effects"), Section::effects);
     entry (tr ("Plugins"), Section::plugins);
+    entry (tr ("Instruments"), Section::instruments);
     entry (tr ("Visualizations"), Section::visuals);
     entry (tr ("Files"), Section::files);
 
@@ -441,6 +443,7 @@ void FindPanel::refilter()
             case Section::processes: return item.kind == FindItem::Kind::process;
             case Section::effects:   return item.kind == FindItem::Kind::effect;
             case Section::plugins:   return item.kind == FindItem::Kind::plugin;
+            case Section::instruments: return item.kind == FindItem::Kind::instrument;
             case Section::visuals:   return item.kind == FindItem::Kind::visual;
             case Section::files:     return item.kind == FindItem::Kind::file;
             case Section::place:     return item.kind == FindItem::Kind::file
@@ -590,7 +593,7 @@ void FindPanel::activate (QTreeWidgetItem* row)
     }
 
     // Processes act on the editor, so it gets the keyboard back first.
-    if (item->kind != FindItem::Kind::plugin)
+    if (item->kind != FindItem::Kind::plugin && item->kind != FindItem::Kind::instrument)
         homeWidget->setFocus (Qt::OtherFocusReason);
     if (item->activate)
         item->activate();
