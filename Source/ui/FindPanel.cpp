@@ -123,11 +123,11 @@ QString FindPanel::colourName (int index)
 QColor FindPanel::colour (int index)
 {
     // The named colours (silver C0C0C0, violet 8F00FF, indigo 4B0082, azure 007FFF, emerald
-    // 50C878, gold FFD700, saffron FF9933, ruby E0115F), violet and indigo lifted so they
+    // 50C878, gold FFD700, saffron FF9933, ruby 9B111E), violet and indigo lifted so they
     // read on a dark theme.
     static const QColor colours[numColours] { QColor (0xc0, 0xc0, 0xc0), QColor (0xa0, 0x40, 0xff), QColor (0x6a, 0x3d, 0xd8),
                                               QColor (0x00, 0x7f, 0xff), QColor (0x50, 0xc8, 0x78), QColor (0xff, 0xd7, 0x00),
-                                              QColor (0xff, 0x99, 0x33), QColor (0xe0, 0x11, 0x5f) };
+                                              QColor (0xff, 0x99, 0x33), QColor (0x9b, 0x11, 0x1e) };
     return index >= 0 && index < numColours ? colours[index] : QColor();
 }
 
