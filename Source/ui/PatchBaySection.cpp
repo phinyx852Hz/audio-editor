@@ -69,6 +69,7 @@ namespace
 void MainWindow::registerPatchBayCommands()
 {
     patchBay = std::make_unique<PatchBay> (*samplerEngine, *slicerEngine, mixerEngine.get());
+    trackerConnectLinks();   // the Tracker's linked instruments play through it
     auto* action = commands.add (QStringLiteral ("mixer.patchbay"), tr ("Mixer"), tr ("&Patchbay"), { QKeySequence (Qt::Key_F4) },
                                  [this] { showPatchBay(); });
     action->setStatusTip (tr ("Patch the editor, Sampler, Slicer, mixer tracks, synths and FX buses into each other on an 8x8 grid"));

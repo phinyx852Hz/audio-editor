@@ -128,6 +128,7 @@ void TrackerEngine::newSong (int channels)
     }
     filePath.clear();
     resetChannels();
+    clearLinks();
 }
 
 std::string TrackerEngine::makeEditable()
@@ -800,7 +801,7 @@ void TrackerEngine::previewNote (int channel, int note, int instrument, double s
     std::lock_guard lock (liveLock);
     if (live == nullptr || live->halted())
     {
-        live = std::make_unique<Player> (*module, sampleRate);
+        live = std::make_unique<Player> (*module, sampleRate, &linked, &sink);
         live->start (false, 0, 0, -1, true);
     }
     live->playNote (std::clamp (channel, 0, std::max (0, numChannels() - 1)), note, instrument);
@@ -813,4 +814,54 @@ void TrackerEngine::releaseNote (int channel, int instrument)
     std::lock_guard lock (liveLock);
     if (live != nullptr)
         live->playNote (std::clamp (channel, 0, std::max (0, numChannels() - 1)), keyOff, instrument);
+}
+
+//==============================================================================
+void TrackerEngine::setLinkSink (LinkSink* s) { sink = s; }
+
+std::string TrackerEngine::setLink (int instrument, int slot)
+{
+    if (instrument < 1 || instrument > numInstruments || slot < 0 || slot > numSlots)
+        return "Pick an instrument from 01 to 80 and a slot from 1 to 12.";
+    if (slot > 0 && ! hasSample (instrument))
+    {
+        // A short silence: MilkyPlay plays notes only of instruments with a sample.
+        AudioData::Builder silence (1, 8363.0);
+        const std::vector<float> zeros (32, 0.0f);
+        const float* channel = zeros.data();
+        silence.append (&channel, (int) zeros.size());
+        // loadSample names an unnamed instrument after its sample.
+        if (auto error = loadSample (instrument, *silence.finish(), "Retro Sampler " + std::to_string (slot)); ! error.empty())
+            return error;
+    }
+    linked[(size_t) instrument].store (slot);
+    return {};
+}
+
+int TrackerEngine::link (int instrument) const
+{
+    return instrument >= 1 && instrument <= numInstruments ? linked[(size_t) instrument].load() : 0;
+}
+
+bool TrackerEngine::hasLinks() const
+{
+    for (int i = 1; i <= numInstruments; ++i)
+        if (linked[(size_t) i].load() > 0)
+            return true;
+    return false;
+}
+
+std::vector<std::pair<int, int>> TrackerEngine::links() const
+{
+    std::vector<std::pair<int, int>> out;
+    for (int i = 1; i <= numInstruments; ++i)
+        if (const auto s = linked[(size_t) i].load(); s > 0)
+            out.emplace_back (i, s);
+    return out;
+}
+
+void TrackerEngine::clearLinks()
+{
+    for (auto& l : linked)
+        l.store (0);
 }

@@ -150,6 +150,23 @@ namespace
             guard ([&] { plugin->setStateInformation (block.getData(), (int) block.getSize()); });
         }
 
+        bool setParameter (const std::string& name, float value) override
+        {
+            const auto wanted = juce::String (name);
+            bool found = false;
+            guard ([&]
+            {
+                for (auto* p : plugin->getParameters())
+                    if (p->getName (256).equalsIgnoreCase (wanted))
+                    {
+                        p->setValueNotifyingHost (std::clamp (value, 0.0f, 1.0f));
+                        found = true;
+                        return;
+                    }
+            });
+            return found;
+        }
+
     private:
         template <typename Fn>
         bool guard (Fn&& fn)

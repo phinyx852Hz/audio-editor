@@ -106,6 +106,9 @@ namespace patchbay
         EffectPtr effect (int bus) const;
         // A MIDI keyboard plays a synth (status with its channel). Any thread.
         void liveMidi (int synthIndex, uint8_t status, uint8_t data1, uint8_t data2);
+        // A timed message for a synth (the Tracker's linked instruments): `offset` frames
+        // after the start of the next render(), which may lie beyond it. Any thread.
+        void scheduleMidi (int synthIndex, int offset, uint8_t status, uint8_t data1, uint8_t data2);
         void panic();   // every synth silent, every effect reset
 
         // The loudest sample out of a node since the last call (linear). Any thread.
@@ -163,6 +166,9 @@ namespace patchbay
 
         std::mutex liveLock;
         std::array<std::vector<mixer::NoteEvent>, maxSynths> liveQueue, liveTaken;
+        std::array<std::vector<mixer::NoteEvent>, maxSynths> timedQueue, timedTaken;   // offsets from the render() start
+        std::vector<mixer::NoteEvent> chunkEvents;
+        int chunkStart = 0;                // where the chunk being rendered starts in the render() call
         std::atomic<bool> panicPending { false };
     };
 }

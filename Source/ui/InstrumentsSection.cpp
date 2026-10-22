@@ -41,22 +41,23 @@ void MainWindow::registerInstrumentCommands()
     }
 }
 
-// Plays the instrument as a patchbay synth (the one it already is, or the first free one)
-// and opens its window, or brings it to the front.
-void MainWindow::openInstrument (const char* key)
+// The patchbay synth playing a stock instrument: the one it already is, or with `load`
+// the first free one, started here. -1 when there is none; `why` then says why, and
+// `failed` is set when the instrument is there but would not start.
+int MainWindow::instrumentSynth (const char* key, bool load, QString* why, bool* failed)
 {
     const auto* info = stock::instrument (key);
     if (info == nullptr)
-        return;
+        return -1;
     const auto name = QStringLiteral ("%1 (%2)").arg (tr (info->function), QString::fromUtf8 (info->original));
     const auto id = engine.stockInstrumentId (key);
     if (id.empty())
     {
-        statusBar()->showMessage (tr ("%1 was not built with this copy of %2").arg (name, QStringLiteral (APP_DISPLAY_NAME)), 6000);
-        return;
+        if (why != nullptr)
+            *why = tr ("%1 was not built with this copy of %2").arg (name, QStringLiteral (APP_DISPLAY_NAME));
+        return -1;
     }
 
-    playInstruments();
     int slot = -1, free = -1;
     for (int i = 0; i < patchbay::maxSynths; ++i)
     {
@@ -66,27 +67,53 @@ void MainWindow::openInstrument (const char* key)
         else if (slot < 0 && AudioEngine::instrumentPluginId (*s) == id)
             slot = i;
     }
+    if (slot >= 0 || ! load)
+        return slot;
+    if (free < 0)
+    {
+        if (why != nullptr)
+            *why = tr ("All %1 patchbay synths are in use: clear one in the Patchbay (F4) first").arg (patchbay::maxSynths);
+        return -1;
+    }
+    playInstruments();
+    std::string error;
+    QApplication::setOverrideCursor (Qt::WaitCursor);
+    auto made = engine.loadInstrumentPlugin (id, patchBay->sampleRate(), error);
+    QApplication::restoreOverrideCursor();
+    if (made == nullptr)
+    {
+        if (why != nullptr)
+            *why = tr ("%1 could not be started: %2").arg (name, QString::fromStdString (error));
+        if (failed != nullptr)
+            *failed = true;
+        return -1;
+    }
+    patchBay->setSynth (free, made);
+    if (patchBayWin != nullptr)
+        patchBayWin->refill();
+    patchBaySave.start();
+    return free;
+}
+
+// Plays the instrument as a patchbay synth (the one it already is, or the first free one)
+// and opens its window, or brings it to the front.
+void MainWindow::openInstrument (const char* key)
+{
+    const auto* info = stock::instrument (key);
+    if (info == nullptr)
+        return;
+    const auto name = QStringLiteral ("%1 (%2)").arg (tr (info->function), QString::fromUtf8 (info->original));
+    playInstruments();
+    QString why;
+    bool failed = false;
+    const auto slot = instrumentSynth (key, true, &why, &failed);
     if (slot < 0)
     {
-        if (free < 0)
-        {
-            statusBar()->showMessage (tr ("All %1 patchbay synths are in use: clear one in the Patchbay (F4) first").arg (patchbay::maxSynths), 6000);
-            return;
-        }
-        std::string error;
-        QApplication::setOverrideCursor (Qt::WaitCursor);
-        auto made = engine.loadInstrumentPlugin (id, patchBay->sampleRate(), error);
-        QApplication::restoreOverrideCursor();
-        if (made == nullptr)
-        {
-            QMessageBox::warning (this, name, tr ("%1 could not be started: %2").arg (name, QString::fromStdString (error)));
-            return;
-        }
-        slot = free;
-        patchBay->setSynth (slot, made);
-        if (patchBayWin != nullptr)
-            patchBayWin->refill();
-        patchBaySave.start();
+        if (failed)
+            QMessageBox::warning (this, name, why);
+        else
+            statusBar()->showMessage (why, 6000);
+        return;
     }
 
     patchSynth = slot;

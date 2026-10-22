@@ -123,6 +123,8 @@ Q_SIGNALS:
     void playPatternRequested();
     void stopRequested();
     void recordRequested (bool multiChannel);
+    void linkRequested (int instrument, int slot);   // slot 0: the instrument's own sample
+    void retroSamplerRequested();                    // show the Retro Sampler's window
     void notePreview (int channel, int note, int instrument);
     void noteRelease (int channel, int instrument);
     void closed();
@@ -142,6 +144,7 @@ private:
     void orderDelete();
     void orderChangePattern (int by);
     void renameInstrument();
+    void fillLinkMenu (class QMenu*);
 
     TrackerEngine& engine;
     QLabel* title;

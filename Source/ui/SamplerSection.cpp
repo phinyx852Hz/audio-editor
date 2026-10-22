@@ -182,7 +182,11 @@ void MainWindow::playInstruments()
     if (std::abs (patchBay->sampleRate() - rate) > 0.5)
         patchBay->prepare (rate);
     if (! engine.hasInstrument())
-        engine.setInstrument ([p = patchBay.get()] (float* left, float* right, int frames) { p->render (left, right, frames); });
+        engine.setInstrument ([this, p = patchBay.get()] (float* left, float* right, int frames)
+        {
+            p->render (left, right, frames);
+            trackerPatchRendered();
+        });
 }
 
 void MainWindow::showSampler()
