@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The Performance menu: records PHINYX's own window to an MP4 (H.265 and AAC, with the
 // cameras and a track for each sound) and streams it live, like OBS but for PHINYX alone.
-// The clip launcher will join it here.
+// The clip launcher (docs/clip-launcher.md) opens from here: it is the mixer's, in its upper area.
 #include "MainWindow.h"
+#include "MixerWindow.h"
 #include "PerformanceDialog.h"
 #include "../performance/Recorder.h"
 
@@ -42,6 +43,19 @@ void MainWindow::registerPerformanceCommands()
     };
 
     performance = std::make_unique<perf::Recorder> (engine);
+
+    // F5 brings up the mixer with the clip launcher in front, and F5 again goes back to the editor.
+    add ("performance.launcher", tr ("Clip &Launcher"), { KS (Qt::Key_F5) }, [this]
+    {
+        if (mixerWin != nullptr && mixerWin->isVisible() && mixerWin->launcherShown())
+        {
+            mixerWin->close();
+            return;
+        }
+        showMixer();
+        mixerWin->showLauncher (true);
+    })->setStatusTip (tr ("A grid of clips to play live, tracks across and scenes down, with the rack on the left and the mixer below; "
+                          "Enter on a sound in the Selector puts it in the next slot of its colour"));
 
     add ("performance.record", tr ("&Record Video"), { KS (Qt::CTRL | Qt::Key_F12) }, [this] { toggleVideoRecording(); })
         ->setStatusTip (tr ("Record PHINYX's window, the cameras and the sound to an MP4 (H.265 and AAC); again to stop"));

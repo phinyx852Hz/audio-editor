@@ -1604,6 +1604,161 @@ namespace
         check (copy.settings().wave == mixer::SynthSettings::square && near (copy.settings().cutoff, 1234.0, 1.0e-9), "synth: settings saved and restored");
     }
 
+    // The clip launcher: launches on the quantise, loops, one-shots, stops, scenes and the timeline hand-back.
+    void testLauncher()
+    {
+        const double rate = 48000.0;
+        mixer::Engine m;
+        m.prepare (rate);
+        m.setNumTracks (2);
+        m.tempo = 120.0;            // a beat is 24000 frames
+        m.launchQuantise = 1.0;
+
+        auto dcOf = [&] (float level, int frames)
+        {
+            AudioData::Builder b (1, rate);
+            std::vector<float> v ((size_t) frames, level);
+            const float* one[1] = { v.data() };
+            b.append (one, frames);
+            return mixer::makeAudioClip (*b.finish(), "dc.wav");
+        };
+        auto slotOf = [] (mixer::AudioClipPtr a, bool loop = true, double quantise = -1.0)
+        {
+            auto s = std::make_shared<mixer::Slot>();
+            s->clip = mixer::makeClip (std::move (a), 0);
+            s->loop = loop;
+            s->quantise = quantise;
+            return mixer::SlotPtr (s);
+        };
+        // Renders in blocks of 256, as a sound card would; returns the left side.
+        auto run = [&] (int frames)
+        {
+            std::vector<float> out ((size_t) frames), l (256), r (256);
+            for (int done = 0; done < frames; done += 256)
+            {
+                const auto n = std::min (256, frames - done);
+                std::fill (l.begin(), l.end(), 0.0f);
+                std::fill (r.begin(), r.end(), 0.0f);
+                m.render (l.data(), r.data(), n);
+                std::copy (l.begin(), l.begin() + n, out.begin() + done);
+            }
+            return out;
+        };
+        const auto centre = 0.70710678f;   // a mono clip, centred: equal power
+
+        m.setSlot (0, 0, slotOf (dcOf (0.5f, 12000)));
+        m.setSlot (0, 1, slotOf (dcOf (0.25f, 6000)));
+        check (m.slot (0, 0) != nullptr && m.slot (0, 2) == nullptr, "launcher: slots set and empty");
+
+        // Stopped: a launch starts the transport and plays at once.
+        m.launch (0, 0);
+        check (m.isPlaying(), "launcher: a launch starts the transport");
+        auto out = run (30000);
+        auto info = m.launchInfo (0);
+        check (info.playing == 0 && ! info.timeline, "launcher: the slot plays and the track leaves its timeline");
+        check (near (out[500], 0.5f * centre, 1.0e-4) && near (out[12500], 0.5f * centre, 1.0e-4) && near (out[24500], 0.5f * centre, 1.0e-4),
+               "launcher: the clip loops");
+        check (info.passes == 2 && m.launchClock() == 30000, "launcher: passes counted on the launch clock");
+        check (m.length() == 0 && m.isPlaying(), "launcher: the transport keeps going past the end of an empty timeline");
+
+        // Another slot waits for the next beat (48000) and starts on that very frame.
+        m.launch (0, 1);
+        out = run (18000 - 200);   // to 47800
+        check (m.launchInfo (0).queued == 1 && m.launchInfo (0).playing == 0, "launcher: the launch waits for the quantise");
+        out = run (1000);          // 47800 .. 48800
+        check (near (out[100], 0.5f * centre, 1.0e-4) && near (out[600], 0.25f * centre, 1.0e-4), "launcher: the switch is on the beat");
+        check (m.launchInfo (0).playing == 1 && m.launchInfo (0).queued == -1, "launcher: the waiting slot plays");
+
+        // Stop at the next beat (72000): silent, and still off the timeline.
+        m.stopTrack (0);
+        out = run (72000 - 48800 + 500);
+        check (std::abs (out.back()) < 1.0e-6f && m.launchInfo (0).playing == -1 && ! m.launchInfo (0).timeline, "launcher: a stop at the quantise");
+        check (! m.isPlaying(), "launcher: with nothing launched and no timeline, the transport stops");
+
+        // A clip that plays once stops the track at its end; its own quantise of 0 launches at once.
+        m.setSlot (1, 0, slotOf (dcOf (0.5f, 5000), false, 0.0));
+        m.launch (1, 0);
+        out = run (4000);
+        check (m.launchInfo (1).playing == 0, "launcher: a one-shot plays");
+        out = run (2000);
+        check (m.launchInfo (1).playing == -1 && std::abs (out.back()) < 1.0e-6f, "launcher: a one-shot stops at its end");
+
+        // Back to the timeline: the track's own clips are heard again.
+        m.stop();
+        run (256);
+        m.setClips (0, { mixer::makeClip (dcOf (0.125f, 96000), 0) });
+        m.setPosition (0);
+        m.play();
+        out = run (2000);
+        check (std::abs (out[1000]) < 1.0e-6f, "launcher: a launched track ignores its timeline");
+        m.backToTimeline (0);
+        out = run (2000);
+        check (near (out[1000], 0.125f * centre, 1.0e-4) && m.launchInfo (0).timeline, "launcher: back to the timeline");
+        m.stop();
+        run (256);
+
+        // A scene launches every track's slot in it; a track with none stops.
+        m.setSlot (1, 1, slotOf (dcOf (0.5f, 12000)));
+        m.setPosition (0);
+        m.launchScene (1);
+        run (1000);
+        check (m.launchInfo (0).playing == 1 && m.launchInfo (1).playing == 1, "launcher: a scene launches each track's slot");
+        m.launchScene (0);   // track 0 has a slot there, track 1 a one-shot
+        run (24000);
+        check (m.launchInfo (0).playing == 0, "launcher: the next scene on the beat");
+        m.stopAll();
+        run (24000);
+        check (m.launchInfo (0).playing == -1 && m.launchInfo (1).playing == -1, "launcher: stop all");
+        m.stop();
+        run (256);
+
+        // Emptying the playing slot stops it.
+        m.launch (0, 0);
+        run (512);
+        m.setSlot (0, 0, nullptr);
+        run (512);
+        check (m.launchInfo (0).playing == -1, "launcher: an emptied slot stops");
+        m.stop();
+        run (256);
+
+        // A looping MIDI clip: each pass plays its note, and nothing is left sounding.
+        {
+            mixer::Engine e;
+            e.prepare (rate);
+            e.setNumTracks (1);
+            e.tempo = 120.0;
+            e.launchQuantise = 1.0;
+            auto probe = std::make_shared<ProbeInstrument>();
+            e.setInstrument (0, probe);
+            auto midi = std::make_shared<mixer::MidiClip>();
+            midi->events = { { 0, 0x90, 60, 100 }, { 6000, 0x80, 60, 0 }, { 9000, 0x90, 64, 90 } };   // the last note held to the end
+            midi->length = 10000;
+            auto s = std::make_shared<mixer::Slot>();
+            s->clip = mixer::makeClip (mixer::MidiClipPtr (midi), 0);
+            e.setSlot (0, 0, s);
+            e.launch (0, 0);
+            std::vector<float> l (256), r (256);
+            for (int done = 0; done < 25000; done += 250)
+                e.render (l.data(), r.data(), 250);
+            int ons = 0, offs = 0;
+            for (const auto& [at, ev] : probe->heard)
+            {
+                ons += (ev.status & 0xF0) == 0x90 && ev.data2 > 0 ? 1 : 0;
+                offs += (ev.status & 0xF0) == 0x80 ? 1 : 0;
+            }
+            check (ons == 5, "launcher: a MIDI clip plays its notes on each pass");
+            check (offs == 4 && probe->sounding == 1, "launcher: a pass lets go of its notes at its end");
+            bool onTime = false;
+            for (const auto& [at, ev] : probe->heard)
+                onTime = onTime || ((ev.status & 0xF0) == 0x90 && ev.data1 == 60 && at == 20000);
+            check (onTime, "launcher: the third pass starts on its frame");
+            e.stopTrack (0);
+            for (int done = 0; done < 30000; done += 250)
+                e.render (l.data(), r.data(), 250);
+            check (probe->sounding == 0, "launcher: a stop lets go of the notes");
+        }
+    }
+
     void testSlicer()
     {
         // Push layout: bottom-left 4x4 is bank A, pad 1 at the bottom left; every note round-trips.
@@ -2811,6 +2966,7 @@ int main()
     testSampler();
     testMidiFile();
     testMixer();
+    testLauncher();
     testPatchBay();
     testSpatialStudio();
 

@@ -169,6 +169,8 @@ namespace mixer
         events.reserve (1024);
         liveQueue.reserve (256);
         liveTaken.reserve (256);
+        launchQueue.reserve (64);
+        launchTaken.reserve (64);
     }
 
     Engine::~Engine() = default;
@@ -253,7 +255,8 @@ namespace mixer
         if (! isLooping() && length() > 0 && pos.load() >= length())
             pos = 0;
         stopPending = false;
-        playing = true;
+        if (! playing.exchange (true))
+            clockReset = true;
     }
 
     void Engine::stop()
@@ -268,6 +271,210 @@ namespace mixer
     {
         loopStart = std::max<Frame> (0, start);
         loopEnd = end;
+    }
+
+    //==========================================================================
+    void Engine::setSlot (int track, int scene, SlotPtr s)
+    {
+        if (track < 0 || track >= maxTracks || scene < 0 || scene >= maxScenes)
+            return;
+        const std::lock_guard<std::mutex> l (lock);
+        auto& t = lanes[(size_t) track];
+        std::swap (t.slots[(size_t) scene], s);
+        // A playing or waiting slot plays what it holds now; emptied, it stops.
+        if (t.playingScene == scene)
+        {
+            t.playing = t.slots[(size_t) scene];
+            if (t.playing == nullptr)
+                t.playingScene = -1;
+            t.launchChanged = true;
+        }
+        if (t.queuedScene == scene)
+        {
+            t.queued = t.slots[(size_t) scene];
+            if (t.queued == nullptr)
+                t.queuedScene = -1;
+        }
+    }   // the old slot is freed here, after the lock
+
+    SlotPtr Engine::slot (int track, int scene) const
+    {
+        if (track < 0 || track >= maxTracks || scene < 0 || scene >= maxScenes)
+            return nullptr;
+        const std::lock_guard<std::mutex> l (lock);
+        return lanes[(size_t) track].slots[(size_t) scene];
+    }
+
+    void Engine::launch (int track, int scene)
+    {
+        if (track < 0 || track >= maxTracks)
+            return;
+        const bool now = scene >= 0 && ! playing.load();
+        {
+            const std::lock_guard<std::mutex> l (liveLock);
+            if (launchQueue.size() < 256)
+                launchQueue.push_back ({ track, scene, now, false });
+        }
+        if (now)
+            play();
+    }
+
+    void Engine::launchScene (int scene)
+    {
+        if (scene < 0 || scene >= maxScenes)
+            return;
+        const bool now = ! playing.load();
+        {
+            const std::lock_guard<std::mutex> l (liveLock);
+            for (int i = 0; i < tracks.load(); ++i)
+                launchQueue.push_back ({ i, scene, now, false });
+        }
+        if (now)
+            play();
+    }
+
+    void Engine::stopAll()
+    {
+        const std::lock_guard<std::mutex> l (liveLock);
+        for (int i = 0; i < maxTracks; ++i)
+            launchQueue.push_back ({ i, -1, false, false });
+    }
+
+    void Engine::backToTimeline (int track)
+    {
+        const std::lock_guard<std::mutex> l (liveLock);
+        for (int i = 0; i < maxTracks; ++i)
+            if (track < 0 || i == track)
+                launchQueue.push_back ({ i, -1, false, true });
+    }
+
+    LaunchInfo Engine::launchInfo (int track) const
+    {
+        LaunchInfo info;
+        if (track < 0 || track >= maxTracks)
+            return info;
+        const auto& s = launchShared[(size_t) track];
+        info.playing = s.playing.load();
+        info.queued = s.queued.load();
+        info.passes = s.passes.load();
+        info.progress = s.progress.load();
+        info.timeline = s.timeline.load();
+        return info;
+    }
+
+    Frame Engine::quantiseFrom (double beats) const
+    {
+        const auto now = clock.load();
+        const auto bpm = std::clamp (tempo.load(), 20.0, 999.0);
+        const auto step = beats * 60.0 / bpm * rate.load();
+        if (! (step >= 1.0))
+            return now;
+        const auto k = std::ceil ((double) now / step - 1.0e-9);
+        return std::max (now, (Frame) std::llround (k * step));
+    }
+
+    void Engine::takeLaunches (bool play)
+    {
+        const auto now = clock.load();
+        for (const auto& r : launchTaken)
+        {
+            auto& t = lanes[(size_t) r.track];
+            if (r.toTimeline)
+            {
+                t.timeline = true;
+                t.playing = t.queued = nullptr;
+                t.playingScene = t.queuedScene = -1;
+                t.launchChanged = true;
+                continue;
+            }
+            const auto s = r.scene >= 0 && r.scene < maxScenes ? t.slots[(size_t) r.scene] : nullptr;
+            if (s == nullptr)
+            {
+                // A stop, or a scene with nothing for this track: only if something plays or waits.
+                if (t.playing == nullptr && t.queuedScene == -1)
+                    continue;
+                t.queued = nullptr;
+                t.queuedScene = stopQueued;
+                t.queuedAt = play ? quantiseFrom (launchQuantise.load()) : now;
+                continue;
+            }
+            t.queued = s;
+            t.queuedScene = r.scene;
+            t.queuedAt = r.now || ! play ? now : quantiseFrom (s->quantise < 0.0 ? launchQuantise.load() : s->quantise);
+        }
+        launchTaken.clear();
+
+        // What is due now starts (or stops) on this very frame.
+        for (auto& t : lanes)
+        {
+            if (t.queuedScene == -1 || t.queuedAt > now)
+                continue;
+            if (t.queuedScene == stopQueued)
+            {
+                t.playing = nullptr;
+                t.playingScene = -1;
+            }
+            else
+            {
+                t.playing = t.queued;
+                t.playingScene = t.queuedScene;
+                t.launchedAt = now;
+                t.timeline = false;
+            }
+            t.queued = nullptr;
+            t.queuedScene = -1;
+            t.launchChanged = true;
+        }
+    }
+
+    void Engine::placePasses (Track& t, Frame at)
+    {
+        for (auto& c : t.passClips)
+            c = Clip();
+        if (t.playing == nullptr || t.playing->clip.length <= 0)
+            return;
+        const auto& c = t.playing->clip;
+        const auto pass = std::max<Frame> (0, at - t.launchedAt) / c.length;
+        for (auto k = pass; k <= pass + 1; ++k)
+        {
+            if (k > 0 && ! t.playing->loop)
+                break;
+            auto& p = t.passClips[(size_t) (k % 2)];
+            p = c;
+            p.start = t.launchedAt + k * c.length;
+        }
+    }
+
+    void Engine::endPasses (int frames)
+    {
+        const auto now = clock.load();
+        for (int i = 0; i < maxTracks; ++i)
+        {
+            auto& t = lanes[(size_t) i];
+            auto& shared = launchShared[(size_t) i];
+            if (t.playing != nullptr && ! t.playing->loop && now >= t.launchedAt + t.playing->clip.length)
+            {
+                t.playing = nullptr;   // played once: the track stops
+                t.playingScene = -1;
+                t.launchChanged = true;
+            }
+            const auto length = t.playing != nullptr ? std::max<Frame> (1, t.playing->clip.length) : 1;
+            const auto since = std::max<Frame> (0, now - t.launchedAt);
+            shared.playing.store (t.playingScene, std::memory_order_relaxed);
+            shared.queued.store (t.queuedScene, std::memory_order_relaxed);
+            shared.passes.store (t.playing != nullptr ? (int) (since / length) : 0, std::memory_order_relaxed);
+            shared.progress.store (t.playing != nullptr ? (float) (since % length) / (float) length : 0.0f, std::memory_order_relaxed);
+            shared.timeline.store (t.timeline, std::memory_order_relaxed);
+        }
+        (void) frames;
+    }
+
+    bool Engine::launcherBusy() const
+    {
+        for (int i = 0; i < tracks.load(); ++i)
+            if (lanes[(size_t) i].playing != nullptr || lanes[(size_t) i].queuedScene != -1)
+                return true;
+        return false;
     }
 
     Frame Engine::trackEndLocked (int i) const
@@ -367,6 +574,18 @@ namespace mixer
             {
                 liveTaken.insert (liveTaken.end(), liveQueue.begin(), liveQueue.end());
                 liveQueue.clear();
+                launchTaken.insert (launchTaken.end(), launchQueue.begin(), launchQueue.end());
+                launchQueue.clear();
+            }
+        }
+        // The transport starts: so does the launch clock, with whatever was launched meanwhile.
+        if (clockReset.exchange (false))
+        {
+            clock = 0;
+            for (auto& t : lanes)
+            {
+                t.launchedAt = 0;
+                t.queuedAt = std::min<Frame> (t.queuedAt, 0);
             }
         }
 
@@ -380,7 +599,16 @@ namespace mixer
             const bool looping = le > ls;
             if (play && looping && at < le)
                 n = (int) std::min<Frame> (n, le - at);
+            // Launches start on their frame: the block ends where the next one is due.
+            takeLaunches (play);
+            if (play)
+                for (int i = 0; i < maxTracks; ++i)
+                    if (const auto& t = lanes[(size_t) i]; t.queuedScene != -1)
+                        n = (int) std::min<Frame> (n, std::max<Frame> (1, t.queuedAt - clock.load()));
             renderBlock (outL.data(), outR.data(), n, at, play, true, done);
+            if (play)
+                clock += n;
+            endPasses (n);
             for (int k = 0; k < n; ++k)
             {
                 left[done + k] += outL[(size_t) k];
@@ -393,7 +621,7 @@ namespace mixer
                 auto next = at + n;
                 if (looping && next >= le)
                     next = ls;   // the next block sees the jump
-                else if (! looping && next >= lengthLocked())
+                else if (! looping && next >= lengthLocked() && ! launcherBusy())
                 {
                     playing = false;
                     stopPending = true;
@@ -422,6 +650,14 @@ namespace mixer
         const bool stopping = stopPending.exchange (false);
         const bool panicking = panicPending.exchange (false);
         expected = play ? at + frames : at;
+        if (stopping && withLive)
+            for (auto& t : lanes)
+            {
+                if (t.playing != nullptr || t.queuedScene != -1)
+                    t.launchChanged = true;
+                t.playing = t.queued = nullptr;
+                t.playingScene = t.queuedScene = -1;
+            }
 
         bool anySolo = false;
         for (int i = 0; i < count; ++i)
@@ -449,13 +685,24 @@ namespace mixer
                     t.instrument->reset();
             }
 
+            // A launched track plays its launcher clip's passes, placed on the launch clock;
+            // a mixdown always plays the timeline.
+            const bool launched = withLive && ! t.timeline;
+            if (launched)
+                placePasses (t, clock.load());
+            const auto& clips = launched ? t.passClips : t.clips;
+            auto& cursors = launched ? t.passCursors : t.cursors;
+            const auto base = launched ? clock.load() : at;
+            const bool trackJumped = (launched ? false : jumped) || t.launchChanged;
+            t.launchChanged = false;
+
             // MIDI from the clips: let go of what they held when the transport stops, jumps or loses channels.
-            const bool playMidi = play && std::any_of (t.clips.begin(), t.clips.end(), [] (const Clip& c) { return c.isMidi(); });
+            const bool playMidi = play && std::any_of (clips.begin(), clips.end(), [] (const Clip& c) { return c.isMidi(); });
             const auto channels = s.channels.load();
-            if (t.wasPlayingMidi && (jumped || ! playMidi || stopping || channels != t.lastChannels))
+            if ((t.wasPlayingMidi || launched) && (trackJumped || ! playMidi || stopping || channels != t.lastChannels))
                 releaseHeld (t, events);
-            if (jumped || ! playMidi)
-                t.relocate = true;
+            if (trackJumped || ! playMidi || launched)
+                t.relocate = true;   // the passes are found again each block
             t.wasPlayingMidi = playMidi;
             t.lastChannels = channels;
             if (stopping && t.instrument != nullptr)
@@ -464,19 +711,19 @@ namespace mixer
             if (playMidi)
             {
                 const auto transpose = s.transpose.load();
-                for (size_t ci = 0; ci < t.clips.size(); ++ci)
+                for (size_t ci = 0; ci < clips.size(); ++ci)
                 {
-                    const auto& c = t.clips[ci];
+                    const auto& c = clips[ci];
                     if (! c.isMidi())
                         continue;
                     // The clip's own frames: where the block starts in the file.
-                    const auto local = at - c.start + c.offset;
+                    const auto local = base - c.start + c.offset;
                     const auto& placed = c.midi->events;
-                    auto& cursor = t.cursors[ci];
+                    auto& cursor = cursors[ci];
                     if (t.relocate)
                         cursor = (size_t) (std::lower_bound (placed.begin(), placed.end(), std::max (local, c.offset),
                                                              [] (const MidiClip::Placed& e, Frame f) { return e.frame < f; }) - placed.begin());
-                    if (c.start >= at + frames || c.end() <= at)
+                    if (c.start >= base + frames || c.end() <= base)
                         continue;
                     const auto stopAt = std::min (local + frames, c.offset + c.length);
                     while (! c.muted && cursor < placed.size() && placed[cursor].frame < stopAt)
@@ -513,8 +760,8 @@ namespace mixer
                         events.push_back ({ offset, e.status, e.data1, e.data2 });
                     }
                     // A clip that ends (or is trimmed) in this block lets go of its notes there.
-                    if (c.end() > at && c.end() <= at + frames)
-                        releaseHeld (t, events, (int) std::min<Frame> (frames - 1, c.end() - at), (int) ci);
+                    if (c.end() > base && c.end() <= base + frames)
+                        releaseHeld (t, events, (int) std::min<Frame> (frames - 1, c.end() - base), (int) ci);
                 }
                 t.relocate = false;
             }
@@ -537,11 +784,11 @@ namespace mixer
             std::fill (monoBuf.begin(), monoBuf.begin() + frames, 0.0f);
             bool hasMono = false;
             if (play)
-                for (const auto& c : t.clips)
+                for (const auto& c : clips)
                 {
-                    if (c.audio == nullptr || c.muted || c.start >= at + frames || c.end() <= at)
+                    if (c.audio == nullptr || c.muted || c.start >= base + frames || c.end() <= base)
                         continue;
-                    const auto from = std::max (at, c.start), to = std::min (at + frames, c.end());
+                    const auto from = std::max (base, c.start), to = std::min (base + frames, c.end());
                     const auto fade = std::max<Frame> (1, std::min<Frame> (96, c.length / 4));
                     const auto& a = *c.audio;
                     const auto last = a.length() - 1;
@@ -551,7 +798,7 @@ namespace mixer
                         const auto src = (size_t) (c.reversed ? last - forward : forward);
                         const auto edge = std::min (f - c.start, c.end() - 1 - f);
                         const auto g = edge < fade ? (float) (edge + 1) / (float) (fade + 1) : 1.0f;
-                        const auto k = (size_t) (f - at);
+                        const auto k = (size_t) (f - base);
                         if (a.mono)
                             monoBuf[k] += a.left[src] * g;
                         else
