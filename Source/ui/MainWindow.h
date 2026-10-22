@@ -304,7 +304,25 @@ private:
     void warpToggle (Frame source);
     void stepTransient (bool forward);
     void nudgeWarpMarker (int direction, bool fine);
-    void quantizeDialog();
+    // The Quantize panel (QuantizeSection.cpp, QuantizePanel.h): hitpoints, quantizing
+    // with grooves, and the warp algorithm, docked or popped out.
+    void buildQuantizePanel();
+    void registerQuantizeCommands();
+    void updateQuantizePanel();
+    std::vector<Frame> findHits (const AudioData&) const;   // with the panel's detection and filter
+    void detectHitpoints();
+    void quantizeNow (bool replaceLast);
+    void warpMarkersFromHits();
+    void sliceAtHits();
+    void grooveFromHits();
+    void resetWarp();
+    void setWarpMode (int);
+    std::vector<std::pair<Frame, Frame>> hitsInRange();    // (source, where it is now) of the hits in the selection or file
+    class QuantizePanel* quantizeWidget = nullptr;
+    DockablePanel* quantizePanel = nullptr;
+    QTimer* detectTimer = nullptr;
+    QTimer* requantizeTimer = nullptr;
+    struct { AudioDataPtr result; int position = -1; } lastQuantize;   // what Auto Apply replaces
     bool warpEditing = false;
     std::shared_ptr<const WarpEdit> warpDraft;               // hits found, no marker placed yet
     std::shared_ptr<timestretch::SegmentCache> warpCache;

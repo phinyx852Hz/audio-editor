@@ -41,6 +41,7 @@
 #include "../engine/VampHost.h"
 #include "MasterPanel.h"
 #include "Panels.h"
+#include "QuantizePanel.h"
 #include "RecordDialog.h"
 #include "ReferencePanel.h"
 #include "Theme.h"
@@ -808,7 +809,7 @@ void MainWindow::buildMenus()
         { tr ("Spat&ial"),   { "spatial.binaural", "process.midSide", "process.stereoize", "-", "spatial.layout", "-", "spatial.studio", "-", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.fumaToAmbix", "spatial.ambixToFuma", "-", "view.ambiScene", "analyze.imagingView" } },
         { tr ("&Warp"),      { "warp.showGrid", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "-", "warp.detectGrid", "warp.autoDetect", "warp.setTempo", "warp.downbeat", "warp.halve", "warp.double", "-",
                                "warp.edit", "warp.previousHit", "warp.nextHit", "warp.toggleMarker", "warp.nudgeEarlier", "warp.nudgeLater", "-",
-                               "warp.quantize", "warp.stretch", "warp.halfSpeed", "warp.doubleSpeed", "-", "warp.exportLoop" } },
+                               "warp.quantizePanel", "warp.quantize", "warp.markersFromHits", "warp.sliceAtHits", "warp.resetWarp", "-", "warp.stretch", "warp.halfSpeed", "warp.doubleSpeed", "-", "warp.exportLoop" } },
         { tr ("&Markers"),   { "marker.add", "marker.addRegion", "-", "marker.next", "marker.previous", "-", "marker.exportSlices", "warp.exportLoop", "marker.exportLabels", "-", "view.markers" } },
         { tr ("Al&bum"),   { "album.new", "album.addSongs", "-", "album.previousSong", "album.nextSong", "-",
                                "album.moveEarlier", "album.moveLater", "album.longerPause", "album.shorterPause", "-",
@@ -1030,11 +1031,12 @@ void MainWindow::buildPanels()
     ambiSceneView->setFocusPolicy (Qt::StrongFocus);
     ambiScenePanel = new DockablePanel (*this, QStringLiteral ("ambiScenePanel"), tr ("Ambisonic Scene"), ambiSceneView, Qt::RightDockWidgetArea);
     panels = { masterPanel, chainPanel, metersPanel, markerPanel, historyPanel, diagnosticsPanel, findPanel, referencesPanel, ambiScenePanel };
+    buildQuantizePanel();
 
     new DockCornerDrag (*this);   // drag where three or four panels meet to resize both ways
     focusFollowsMouse = new FocusFollowsMouse (this);
     focusFollowsMouse->setAreas ({ waveform, chainRow, masterWidget, markerList, historyList, diagnostics, findWidget, referencePanel, ambiSceneView,
-                                   metersPanel->content() });
+                                   metersPanel->content(), (QWidget*) quantizeWidget });
     qApp->installEventFilter (focusFollowsMouse);
 }
 

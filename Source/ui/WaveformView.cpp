@@ -429,8 +429,8 @@ Frame WaveformView::snapToGrid (Frame f) const
 Frame WaveformView::warpSnap (double x, bool free) const
 {
     auto f = std::clamp<Frame> (xToFrame (x), 0, length());
-    if (! free && grid.isSet() && data)
-        f = (Frame) std::llround (grid.snap ((double) f / data->sampleRate(), 0.25) * data->sampleRate());
+    if (! free && grid.isSet() && data && warpSnapDivision > 0.0)
+        f = (Frame) std::llround (grid.snap ((double) f / data->sampleRate(), warpSnapDivision) * data->sampleRate());
     return std::clamp<Frame> (f, 0, length());
 }
 
@@ -480,6 +480,33 @@ void WaveformView::drawWarp (QPainter& g)
             g.drawLine (QPointF (frameToX (at->target), 0), QPointF (frameToX (at->target), height()));
         }
     }
+}
+
+void WaveformView::drawStretch (QPainter& g)
+{
+    if (stretchTo < 0 || selEnd <= selStart)
+        return;
+    const auto& theme = Theme::current();
+    const auto accent = theme.color (QStringLiteral ("accent"));
+    auto fill = accent;
+    fill.setAlphaF (0.15f);
+    const QRectF ghost (QPointF (frameToX (selStart), 0.0), QPointF (frameToX (stretchTo), height()));
+    g.fillRect (ghost, fill);
+    g.setPen (QPen (accent, 2.0, Qt::DashLine));
+    g.drawLine (QPointF (frameToX (stretchTo), 0.0), QPointF (frameToX (stretchTo), height()));
+    const auto ratio = (double) (stretchTo - selStart) / (double) (selEnd - selStart);
+    const auto text = tr ("%1 % (%2 s)").arg (ratio * 100.0, 0, 'f', 1).arg ((double) (stretchTo - selStart) / data->sampleRate(), 0, 'f', 3);
+    const QFontMetricsF fm (font());
+    const auto w = fm.horizontalAdvance (text) + 12.0;
+    const auto x = std::clamp (frameToX (stretchTo) + 8.0, 4.0, width() - w - 4.0);
+    auto panel = theme.color (QStringLiteral ("window"));
+    panel.setAlphaF (0.85f);
+    g.setPen (Qt::NoPen);
+    g.setBrush (panel);
+    g.drawRoundedRect (QRectF (x, 24, w, fm.height() + 6), 4, 4);
+    g.setPen (theme.color (QStringLiteral ("windowText")));
+    g.drawText (QRectF (x, 24, w, fm.height() + 6), Qt::AlignCenter, text);
+    g.setBrush (Qt::NoBrush);
 }
 
 void WaveformView::clear()
@@ -831,6 +858,7 @@ void WaveformView::paintEvent (QPaintEvent*)
         }
 
         drawWarp (g);
+        drawStretch (g);
         drawFades (g);
         if (spectral)
             drawReadout (g, laneHeight);
@@ -1146,6 +1174,16 @@ void WaveformView::mousePressEvent (QMouseEvent* e)
             return;
         }
 
+    // Ctrl+Alt on the end of the selection: drag it to stretch or shrink the selection.
+    if (! drawing() && selEnd > selStart && (e->modifiers() & Qt::ControlModifier) && (e->modifiers() & Qt::AltModifier)
+        && std::abs (e->position().x() - frameToX (selEnd)) <= 6.0)
+    {
+        stretchTo = selEnd;
+        QWidget::setCursor (Qt::SizeHorCursor);
+        update();
+        return;
+    }
+
     if (const auto hit = warpHitAt (e->position()); hit && ! drawing())
     {
         warpDrag = hit;
@@ -1261,6 +1299,14 @@ void WaveformView::mouseMoveEvent (QMouseEvent* e)
         }
         return;
     }
+    if (stretchTo >= 0)
+    {
+        // Snapped to the grid when snapping is on; at least a hundredth of the selection long.
+        const auto least = selStart + std::max<Frame> (1, (selEnd - selStart) / 100);
+        stretchTo = std::max (least, snapToGrid (xToFrame (e->position().x())));
+        update();
+        return;
+    }
     if (warpDrag)
     {
         warpDragTo = warpSnap (e->position().x(), e->modifiers() & Qt::AltModifier);
@@ -1367,6 +1413,16 @@ void WaveformView::mouseReleaseEvent (QMouseEvent* e)
         else if (! moving)
             Q_EMIT cursorRequested (press);
         moving = false;
+        return;
+    }
+    if (stretchTo >= 0)
+    {
+        const auto to = stretchTo;
+        stretchTo = -1;
+        QWidget::setCursor (Qt::ArrowCursor);
+        update();
+        if (to != selEnd)
+            Q_EMIT stretchDragged (selStart, selEnd, to);
         return;
     }
     if (warpDrag)
