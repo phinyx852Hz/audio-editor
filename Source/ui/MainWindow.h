@@ -18,6 +18,7 @@
 #include "../engine/Export.h"
 #include "WaveformView.h"
 
+#include <QElapsedTimer>
 #include <QFutureWatcher>
 #include <QHash>
 #include <QMainWindow>
@@ -45,6 +46,7 @@ namespace sampler { class Engine; }
 namespace slicer { class Engine; }
 namespace mixer { class Engine; }
 namespace patchbay { class PatchBay; }
+namespace perf { class Recorder; }
 
 class MainWindow final : public QMainWindow
 {
@@ -311,6 +313,24 @@ private:
     void trackerPreview (int channel, int note, int instrument);
     bool trackerConfirmDiscard();   // false when the user cancels
     std::unique_ptr<class TrackerEngine> tracker;
+
+    // The Performance menu (PerformanceSection.cpp, Source/performance): records PHINYX's
+    // window, cameras and sound to MP4 and streams them live.
+    void registerPerformanceCommands();
+    void toggleVideoRecording();
+    void toggleStreaming();
+    void performanceSettings();
+    void capturePerformanceFrame();
+    void startPerformanceCapture();
+    void stopPerformanceCaptureIfIdle();
+    void updatePerformanceStatus();
+    QWidget* performanceTarget (bool follow);
+    std::unique_ptr<perf::Recorder> performance;
+    QTimer performanceTimer;
+    QElapsedTimer performanceStatusClock;
+    class QLabel* performanceBadge = nullptr;
+    QPointer<QWidget> performanceWindow;
+    bool performanceFollow = true;
 
     // The Sampler (SamplerSection.cpp): its engine plays through engine.setInstrument, its
     // window pops out, and MIDI inputs play it. It remembers which tab and range it came
