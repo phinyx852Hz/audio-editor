@@ -53,6 +53,7 @@ target_sources(${APP_ID} PRIVATE
     Source/mixer/MidiFile.cpp
     Source/mixer/Instruments.cpp
     Source/mixer/MixerEngine.cpp
+    Source/patchbay/PatchBay.cpp
     Source/core/Ixml.cpp
     Source/core/Metadata.cpp
     Source/core/MiniXml.cpp
@@ -82,6 +83,7 @@ target_sources(${APP_ID} PRIVATE
     Source/engine/TagIO.cpp
     Source/engine/MasterChain.cpp
     Source/engine/PluginInstrument.cpp
+    Source/engine/PluginEffect.cpp
     Source/engine/StockFrame.cpp
     Source/engine/StockPlugins.cpp
     Source/engine/VampHost.cpp
@@ -120,6 +122,8 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/SlicerWindow.cpp
     Source/ui/MixerWindow.cpp
     Source/ui/MixerSection.cpp
+    Source/ui/PatchBayWindow.cpp
+    Source/ui/PatchBaySection.cpp
     Source/ui/Audition.cpp
     Source/ui/Goniometer.cpp
     Source/ui/NyquistUi.cpp
@@ -289,6 +293,7 @@ if(PHINYX_BUILD_TESTS)
         Source/mixer/MidiFile.cpp
         Source/mixer/Instruments.cpp
         Source/mixer/MixerEngine.cpp
+        Source/patchbay/PatchBay.cpp
         Source/core/Ixml.cpp
         Source/core/Metadata.cpp
         Source/core/MiniXml.cpp

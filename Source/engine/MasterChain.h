@@ -29,6 +29,9 @@ public:
     // An instrument for a mixer track: stereo out, MIDI in, prepared; nullptr with `error` if that failed.
     std::unique_ptr<juce::AudioPluginInstance> createInstrument (const std::string& pluginId, double sampleRate, int maxBlock,
                                                                  juce::String& error) const;
+    // An effect for a patchbay FX bus: stereo in and out, prepared; nullptr with `error` if that failed.
+    std::unique_ptr<juce::AudioPluginInstance> createEffect (const std::string& pluginId, double sampleRate, int maxBlock,
+                                                             juce::String& error) const;
     void setPluginEnabled (const std::string& pluginId, bool);
     std::vector<std::string> skippedFiles() const;
     void retrySkipped (const std::string& file);

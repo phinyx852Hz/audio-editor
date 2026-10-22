@@ -35,6 +35,7 @@ struct MeterBlock
 
 namespace codec { struct Format; }
 namespace mixer { class Instrument; }
+namespace patchbay { class Effect; }
 
 struct SaveOptions
 {
@@ -179,6 +180,9 @@ public:
     // Message thread. Null with `error` when it could not be started.
     std::shared_ptr<mixer::Instrument> loadInstrumentPlugin (const std::string& pluginId, double sampleRate, std::string& error);
     static std::string instrumentPluginId (const mixer::Instrument&);   // empty for the built-in ones
+    // An effect plugin (or a built-in or stock effect from knownPlugins) for a patchbay FX bus
+    // (PluginEffect.cpp): stereo in and out. Message thread. Null with `error` when it could not be started.
+    std::shared_ptr<patchbay::Effect> loadEffectPlugin (const std::string& pluginId, double sampleRate, std::string& error);
 
     //==========================================================================
     // Master Section: slots of plugins applied to everything played and rendered,

@@ -66,6 +66,20 @@ namespace mixer
         std::atomic<uint32_t> channels { 0xFFFF };   // MIDI channels of the clip that play, a bit each
     };
 
+    // The patchbay (patchbay/PatchBay.h) routes the tracks while it is on. It says in
+    // which order to play them, adds what is patched into a track (before trim, pan and
+    // fader), and takes each track's sound, which then goes where it is patched instead
+    // of into the mixer's own sum. Called on the audio thread, never during a mix down.
+    class Patch
+    {
+    public:
+        virtual ~Patch() = default;
+        virtual int trackAt (int k) const = 0;   // the k-th track to play: 0..maxTracks-1, each once
+        // `offset`: where these frames start in the block the patchbay asked the mixer for.
+        virtual void trackInput (int track, int offset, float* left, float* right, int frames) = 0;   // adds
+        virtual void trackOutput (int track, int offset, const float* left, const float* right, int frames) = 0;
+    };
+
     struct Meter
     {
         float peak[2] {};   // linear, since the last take
@@ -115,6 +129,13 @@ namespace mixer
 
         Meter takeMeter (int index);   // a track (0..7) or the master (8), after the fader
 
+        // With a patch, render() adds nothing itself: the tracks go to the patch, which
+        // does the master (masterDb) and its meter (meterMaster). Null: the usual sum.
+        void setPatch (Patch* p) { patch = p; }
+        void meterMaster (const float* left, const float* right, int frames) { meter (masterIndex, left, right, frames); }
+        // How many frames the next block may have: up to `wanted`, ending at the loop end.
+        int nextBlock (int wanted) const;
+
         // Audio thread: adds the mix to left and right.
         void render (float* left, float* right, int frames);
 
@@ -146,7 +167,7 @@ namespace mixer
         };
 
         // One block of up to `block` frames at `at`; the lock must be held.
-        void renderBlock (float* left, float* right, int frames, Frame at, bool play, bool withLive);
+        void renderBlock (float* left, float* right, int frames, Frame at, bool play, bool withLive, int blockOffset = 0);
         Frame lengthLocked() const;
         void releaseHeld (Track&, std::vector<NoteEvent>&);
         void meter (int index, const float* left, const float* right, int frames);
@@ -164,6 +185,7 @@ namespace mixer
         std::atomic<Frame> loopStart { 0 }, loopEnd { 0 };
         float masterGain = 1.0f;
 
+        std::atomic<Patch*> patch { nullptr };
         std::atomic<int> armed { 0 };
         std::mutex liveLock;
         std::vector<NoteEvent> liveQueue, liveTaken;

@@ -4,11 +4,13 @@
 // that play them.
 #include "MainWindow.h"
 #include "MixerWindow.h"
+#include "PatchBayWindow.h"
 #include "SamplerWindow.h"
 #include "SlicerWindow.h"
 #include "Settings.h"
 #include "../engine/MidiInputs.h"
 #include "../mixer/MixerEngine.h"
+#include "../patchbay/PatchBay.h"
 #include "../sampler/SamplerEngine.h"
 #include "../sampler/SlicerEngine.h"
 
@@ -53,6 +55,8 @@ void MainWindow::registerSamplerCommands()
     {
         samplerEngine->panic();
         slicerEngine->panic();
+        if (patchBay != nullptr)
+            patchBay->panic();
         statusBar()->showMessage (tr ("All notes off"), 2000);
     });
 
@@ -61,6 +65,19 @@ void MainWindow::registerSamplerCommands()
     {
         // No instrument window open: MIDI plays nothing.
         const auto target = midiTarget.load (std::memory_order_relaxed);
+        // A patchbay synth: everything, on the channel it came on.
+        if (target == 3)
+        {
+            if (auto* p = patchBay.get())
+            {
+                const auto st = (uint8_t) (status | std::clamp (channel - 1, 0, 15));
+                if (status == 0xE0)
+                    p->liveMidi (patchSynth.load(), st, (uint8_t) (a & 0x7F), (uint8_t) ((a >> 7) & 0x7F));
+                else
+                    p->liveMidi (patchSynth.load(), st, (uint8_t) a, (uint8_t) b);
+            }
+            return;
+        }
         // The Mixer: everything goes to its armed track, on the channel it came on.
         if (target == 2)
         {
@@ -119,17 +136,15 @@ void MainWindow::registerSamplerCommands()
     connect (&slicerFollowTimer, &QTimer::timeout, this, [this] { sendToSlicer (true); });
 }
 
-// Both instruments play through the engine together while either window is open.
+// Everything live plays through the patchbay, which routes it to the engine, while any
+// of its windows is open (or the patchbay holds anything of its own).
 void MainWindow::playInstruments()
 {
+    const auto rate = engine.deviceSampleRate() > 0.0 ? engine.deviceSampleRate() : 48000.0;
+    if (std::abs (patchBay->sampleRate() - rate) > 0.5)
+        patchBay->prepare (rate);
     if (! engine.hasInstrument())
-        engine.setInstrument ([e = samplerEngine.get(), s = slicerEngine.get(), m = mixerEngine.get()] (float* left, float* right, int frames)
-        {
-            e->render (left, right, frames);
-            s->render (left, right, frames);
-            if (m != nullptr)
-                m->render (left, right, frames);
-        });
+        engine.setInstrument ([p = patchBay.get()] (float* left, float* right, int frames) { p->render (left, right, frames); });
 }
 
 void MainWindow::showSampler()
@@ -229,8 +244,9 @@ void MainWindow::instrumentClosed()
     const bool sampler = samplerWin != nullptr && samplerWin->isVisible();
     const bool slices = slicerWin != nullptr && slicerWin->isVisible();
     const bool mixing = mixerWin != nullptr && mixerWin->isVisible();
-    midiTarget = sampler ? 0 : (slices ? 1 : (mixing ? 2 : -1));
-    if (! sampler && ! slices && ! mixing)
+    const bool patching = patchBayWin != nullptr && patchBayWin->isVisible();
+    midiTarget = sampler ? 0 : (slices ? 1 : (mixing ? 2 : (patching ? 3 : -1)));
+    if (! sampler && ! slices && ! mixing && ! patchBayInUse())
         engine.setInstrument ({});
 }
 
@@ -350,7 +366,7 @@ void MainWindow::openMidiInputs()
 
 void MainWindow::updateMidiStatus()
 {
-    if (samplerWin == nullptr && slicerWin == nullptr && mixerWin == nullptr)
+    if (samplerWin == nullptr && slicerWin == nullptr && mixerWin == nullptr && patchBayWin == nullptr)
         return;
     QStringList names;
     const auto open = midiInputs->opened();
@@ -364,6 +380,8 @@ void MainWindow::updateMidiStatus()
         slicerWin->setMidiStatus (text);
     if (mixerWin != nullptr)
         mixerWin->setMidiStatus (text);
+    if (patchBayWin != nullptr)
+        patchBayWin->setMidiStatus (text);
 }
 
 void MainWindow::midiInputsDialog()

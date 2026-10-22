@@ -14,6 +14,7 @@
 #include <tuple>
 
 class AudioEngine;
+class QDialog;
 class QCheckBox;
 class QDoubleSpinBox;
 class QLabel;
@@ -23,6 +24,10 @@ class MixerStrip;
 
 // A level meter for a strip: peak and RMS for both sides, with a peak hold and a
 // clip light (click to clear it).
+// The built-in Synth's settings (also used by the patchbay's synths), applied as they change.
+// `changed` runs after each change. Deletes itself when closed.
+QDialog* synthDialog (mixer::InstrumentPtr synth, const QString& title, QWidget* parent, std::function<void()> changed);
+
 class LevelMeter final : public QWidget
 {
 public:
@@ -77,6 +82,7 @@ public:
     void autosave();      // the mix as it is, kept in the config folder and opened again next time
     void restoreAutosave();
     QString mixName() const;
+    QString trackName (int track) const;   // what its strip says (the patchbay shows it)
 
     void addTrack();
     void removeTrack();

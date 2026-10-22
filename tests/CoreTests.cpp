@@ -8,6 +8,7 @@
 #include "../Source/sampler/SlicerEngine.h"
 #include "../Source/mixer/MidiFile.h"
 #include "../Source/mixer/MixerEngine.h"
+#include "../Source/patchbay/PatchBay.h"
 #include "../Source/core/Ixml.h"
 #include "../Source/core/Metadata.h"
 #include "../Source/core/RiffChunks.h"
@@ -2345,6 +2346,116 @@ namespace
         }
     }
 
+    // An FX bus effect for the tests: doubles what goes through.
+    struct DoubleEffect final : patchbay::Effect
+    {
+        std::string name() const override { return "Double"; }
+        void prepare (double, int) override {}
+        void process (float* left, float* right, int frames) override
+        {
+            for (int i = 0; i < frames; ++i)
+            {
+                left[i] *= 2.0f;
+                right[i] *= 2.0f;
+            }
+        }
+    };
+
+    void testPatchBay()
+    {
+        using namespace patchbay;
+        const double rate = 48000.0;
+        sampler::Engine samplerEngine;
+        slicer::Engine slicerEngine;
+        samplerEngine.prepare (rate);
+        slicerEngine.prepare (rate);
+        mixer::Engine m;
+        m.prepare (rate);
+        m.setNumTracks (2);
+        PatchBay bay (samplerEngine, slicerEngine, &m);
+        bay.prepare (rate);
+
+        std::vector<float> l (512), r (512);
+        auto render = [&] (float in)
+        {
+            std::fill (l.begin(), l.end(), in);
+            std::fill (r.begin(), r.end(), in);
+            bay.render (l.data(), r.data(), 512);
+        };
+
+        check (bay.isDefault(), "patchbay: starts with every source where it is heard without one");
+        render (0.25f);
+        check (near (l[300], 0.25, 1.0e-6) && near (r[300], 0.25, 1.0e-6), "patchbay: the editor reaches the Main Out unchanged");
+
+        check (bay.check (node::fxBus, node::fxBus) == Refusal::self, "patchbay: nothing is patched into itself");
+        check (bay.check (node::mainOut, node::fxBus) == Refusal::noPort, "patchbay: the Main Out has no output");
+        check (bay.check (node::fxBus, node::sampler) == Refusal::noPort, "patchbay: the Sampler has no input");
+        check (bay.connect (node::track, node::fxBus) == Refusal::none, "patchbay: a track into an FX bus");
+        check (bay.connect (node::fxBus, node::track + 1) == Refusal::none, "patchbay: an FX bus into another track");
+        check (bay.check (node::track + 1, node::track) == Refusal::loop, "patchbay: a patch that would feed back is refused");
+        check (bay.connect (node::track + 1, node::track) == Refusal::loop && ! bay.linked (node::track + 1, node::track), "patchbay: a refused patch is not made");
+        check (bay.check (node::track + 1, node::mixBus) == Refusal::none, "patchbay: the rest stays open");
+
+        // Editor -> FX bus (doubling, -6 dB on the way in) -> Main Out, and nothing else heard.
+        bay.resetLinks();
+        bay.setEffect (0, std::make_shared<DoubleEffect>());
+        bay.disconnect (node::editor, node::mainOut);
+        bay.connect (node::editor, node::fxBus, -6.0206f);
+        render (0.25f);
+        render (0.25f);
+        check (near (l[300], 0.25, 1.0e-4) && near (r[300], 0.25, 1.0e-4), "patchbay: a patch's gain and the FX bus's effect");
+        check (! bay.isDefault(), "patchbay: knows when it has been changed");
+        bay.setGainDb (node::editor, node::fxBus, 0.0f);
+        render (0.25f);
+        render (0.25f);
+        check (near (l[300], 0.5, 1.0e-4), "patchbay: a gain changes without patching again");
+
+        // Ordering: the editor into track 2, track 2 into the FX bus, the FX bus into track 1,
+        // track 1 to the Main Out: track 2 has to play before track 1, in the same block.
+        bay.setLinks ({ { node::editor, node::track + 1 }, { node::track + 1, node::fxBus }, { node::fxBus, node::track },
+                        { node::track, node::mainOut } });
+        render (0.25f);   // new patches fade in over a block
+        render (0.25f);
+        render (0.5f);
+        check (near (l[0], 1.0, 1.0e-4) && near (l[511], 1.0, 1.0e-4) && near (r[300], 1.0, 1.0e-4),
+               "patchbay: tracks play in the order of their patches, with no block of delay");
+        m.strip (0).faderDb = -6.0206f;
+        render (0.25f);
+        render (0.25f);
+        check (near (l[300], 0.25, 1.0e-4), "patchbay: a patched track goes through its fader");
+        m.strip (0).faderDb = 0.0f;
+        m.strip (0).mute = true;
+        render (0.25f);
+        render (0.25f);
+        check (std::abs (l[300]) < 1.0e-6, "patchbay: and its mute");
+        m.strip (0).mute = false;
+
+        // A track's own audio, routed away from the Mix Bus, is heard only where it is patched.
+        AudioData::Builder b (1, rate);
+        std::vector<float> half (48000, 0.5f);
+        const float* one[1] = { half.data() };
+        b.append (one, 48000);
+        m.setAudio (0, mixer::makeAudioClip (*b.finish(), "dc.wav"));
+        bay.resetLinks();
+        bay.disconnect (node::editor, node::mainOut);
+        m.play();
+        render (0.0f);
+        render (0.0f);
+        check (near (l[300], 0.5 * std::sqrt (0.5), 1.0e-4), "patchbay: by default a track goes through the Mix Bus to the Main Out");
+        m.masterDb = -6.0206f;
+        render (0.0f);
+        render (0.0f);
+        check (near (l[300], 0.25 * std::sqrt (0.5), 1.0e-4), "patchbay: the Mix Bus follows the mixer's master fader");
+        m.masterDb = 0.0f;
+        bay.disconnect (node::track, node::mixBus);
+        bay.connect (node::track, node::fxBus);
+        render (0.0f);
+        render (0.0f);
+        check (near (l[300], std::sqrt (0.5), 1.0e-4), "patchbay: a track sent to an FX bus instead of the Mix Bus");
+        check (bay.takePeak (node::track) > 0.3f && bay.takePeak (node::track) == 0.0f, "patchbay: peaks are taken and reset");
+        m.stop();
+    }
+
 int main()
 {
     testStorage();
@@ -2375,6 +2486,7 @@ int main()
     testSampler();
     testMidiFile();
     testMixer();
+    testPatchBay();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");
