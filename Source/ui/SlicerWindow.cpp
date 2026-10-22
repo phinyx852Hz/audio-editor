@@ -8,6 +8,11 @@
 #include <QCheckBox>
 #include <QApplication>
 #include <QHideEvent>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
+#include <QTimer>
+#include <QUrl>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
@@ -137,7 +142,7 @@ void SliceView::paintEvent (QPaintEvent*)
     if (sample == nullptr)
     {
         g.setPen (theme.color (QStringLiteral ("placeholderText")));
-        g.drawText (rect(), Qt::AlignCenter, tr ("Send a sound here from the editor: Sample > Send to Slicer (F8)"));
+        g.drawText (rect(), Qt::AlignCenter, tr ("Send a sound here from the editor: Sample > Send to Slicer (F8), or drag a file here from Find"));
         return;
     }
     const auto mid = height() / 2.0;
@@ -320,6 +325,7 @@ SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
     : QWidget (parent), engine (e)
 {
     setFocusPolicy (Qt::StrongFocus);   // docked, it takes the playing keys when shown or clicked
+    setAcceptDrops (true);
     setWindowTitle (tr ("Slicer"));
     setObjectName (QStringLiteral ("SlicerWindow"));
     kit = engine.kit();
@@ -860,6 +866,21 @@ void SlicerWindow::keyReleaseEvent (QKeyEvent* e)
             return;
         }
     QWidget::keyReleaseEvent (e);
+}
+
+void SlicerWindow::dragEnterEvent (QDragEnterEvent* e)
+{
+    if (e->mimeData()->hasUrls() && e->mimeData()->urls().first().isLocalFile())
+        e->acceptProposedAction();
+}
+
+void SlicerWindow::dropEvent (QDropEvent* e)
+{
+    if (! e->mimeData()->hasUrls() || ! e->mimeData()->urls().first().isLocalFile())
+        return;
+    e->acceptProposedAction();
+    const auto path = e->mimeData()->urls().first().toLocalFile();
+    QTimer::singleShot (0, this, [this, path] { Q_EMIT fileDropped (path); });
 }
 
 void SlicerWindow::releaseKeys()

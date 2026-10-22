@@ -33,6 +33,7 @@ public:
 
 Q_SIGNALS:
     void addRequested();
+    void filesDropped (const QStringList& paths);   // dragged here from Find or a file manager
     void removeRequested (int row);
     void chosen (int row);              // selection moved
     void hearRequested (int row);       // Enter or double-click: hear it, or go back to your audio
@@ -42,6 +43,8 @@ Q_SIGNALS:
 
 protected:
     bool eventFilter (QObject*, QEvent*) override;
+    void dragEnterEvent (class QDragEnterEvent*) override;
+    void dropEvent (class QDropEvent*) override;
 
 private:
     QListWidget* list;

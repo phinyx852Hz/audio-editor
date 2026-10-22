@@ -122,6 +122,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/SlicerWindow.cpp
     Source/ui/MixerWindow.cpp
     Source/ui/MixerSection.cpp
+    Source/ui/PanelNavigation.cpp
     Source/ui/PatchBayWindow.cpp
     Source/ui/PatchBaySection.cpp
     Source/ui/Audition.cpp

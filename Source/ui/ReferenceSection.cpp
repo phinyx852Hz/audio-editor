@@ -42,6 +42,7 @@ void MainWindow::buildReferences()
     referenceBadge->hide();
 
     connect (referencePanel, &ReferencePanel::addRequested, this, [this] { addReferences(); });
+    connect (referencePanel, &ReferencePanel::filesDropped, this, &MainWindow::addReferenceFiles);
     connect (referencePanel, &ReferencePanel::removeRequested, this, [this] (int row) { removeReference (row); });
     connect (referencePanel, &ReferencePanel::chosen, this, [this] (int row)
     {
@@ -156,6 +157,12 @@ void MainWindow::addReferences()
     const auto paths = QFileDialog::getOpenFileNames (this, tr ("Add Reference Tracks"), start,
                                                       tr ("Audio files (%1)").arg (patterns.join (QLatin1Char (' '))));
     waveform->setFocus();
+    addReferenceFiles (paths);
+}
+
+// Also files dropped on the References panel.
+void MainWindow::addReferenceFiles (const QStringList& paths)
+{
     if (paths.isEmpty())
         return;
 
