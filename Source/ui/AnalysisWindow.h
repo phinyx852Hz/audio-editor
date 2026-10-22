@@ -12,7 +12,18 @@ class QMenu;
 class QPushButton;
 class QSplitter;
 
-namespace analysis { struct State; class Card; }
+class AudioData;
+class QLabel;
+
+namespace analysis
+{
+    struct State;
+    class Card;
+
+    // The whole of a file measured at once, as a text report (loudness against the
+    // target, amplitude statistics, stereo, RMS histogram, average spectrum).
+    QString fileReport (const AudioData&, const QString& path, int targetIndex);
+}
 
 // Analysis Meters (Analyze > Analysis Meters Window, Ctrl+Alt+A): one window
 // with everything there is to know about what PHINYX plays, as Adobe Audition's
@@ -33,6 +44,8 @@ namespace analysis { struct State; class Card; }
 // Each meter is a card that can be hidden (Meters menu) and the splitters
 // between them moved; both are remembered. Keys: Space plays or stops, R
 // resets, F freezes, 1-8 take or clear a spectrum hold, F11 full screen, Esc closes.
+// Drop audio files on it for a full report of each (AnalysisReport), measured from
+// the file itself rather than from what plays.
 class AnalysisWindow final : public QWidget
 {
     Q_OBJECT
@@ -52,6 +65,10 @@ Q_SIGNALS:
 protected:
     void keyPressEvent (class QKeyEvent*) override;
     void closeEvent (class QCloseEvent*) override;
+    void dragEnterEvent (class QDragEnterEvent*) override;
+    void dragLeaveEvent (class QDragLeaveEvent*) override;
+    void dropEvent (class QDropEvent*) override;
+    void resizeEvent (class QResizeEvent*) override;
 
 private:
     void setFrozen (bool);
@@ -59,6 +76,8 @@ private:
     void saveLayout() const;
     void restoreLayout();
     void updateStatus();
+    void analyseFile (const QString& path);
+    void showMessage (const QString&);
 
     std::unique_ptr<analysis::State> state;
     std::vector<analysis::Card*> cards;
@@ -74,4 +93,6 @@ private:
     bool frozen = false;
     int messageTicks = 0;
     QElapsedTimer clock;
+    QLabel* dropHint = nullptr;
+    int measuring = 0;   // files being read and measured for a report
 };
