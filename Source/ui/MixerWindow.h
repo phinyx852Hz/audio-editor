@@ -5,6 +5,7 @@
 #include "../mixer/MixerEngine.h"
 
 #include <QColor>
+#include <QJsonObject>
 #include <QPointer>
 #include <QTimer>
 #include <QWidget>
@@ -79,6 +80,12 @@ public:
     {
         std::function<std::pair<sampler::SamplePtr, sampler::Settings>()> samplerSound;
         std::function<std::pair<sampler::SamplePtr, slicer::Kit>()> slicerSound;
+        // The rest of a project (.phi) besides the mix: the patchbay and the view. What
+        // projectState gives is written into the file; setProjectState gets the file's
+        // whole object when one is opened; resetProject runs for a new project.
+        std::function<QJsonObject()> projectState;
+        std::function<void (const QJsonObject&)> setProjectState;
+        std::function<void()> resetProject;
     };
 
     MixerWindow (mixer::Engine&, AudioEngine&, Hooks, QWidget* parent);
@@ -86,17 +93,24 @@ public:
 
     void setMidiStatus (const QString&);
 
-    // Mix files (.phinyxmix, JSON): the tracks, their files and settings, instruments included.
+    // Project files (.phi, JSON, docs/project.md): the mix (the tracks, their files and
+    // settings, instruments included) and what the hooks add, the patchbay and the view.
+    // A mix file from before (.phinyxmix) is the same without those, and still opens.
+    static inline const QString projectSuffix = QStringLiteral ("phi");
+    static bool isProjectFile (const QString& path);   // .phi or .phinyxmix
     bool newMix();   // false when the user keeps the mix they have
     // A new mix of 8 tracks named and coloured from the bottom of a Selector set up:
     // the last name and colour on track 1 (DR, BA, PR... for Live Performance).
     void newMixFromSet (const QString& setName, const QStringList& names, const QList<QColor>& colours);
     void openMix();
+    bool openMixFile (const QString& path);   // asks first when the mix has unsaved changes
     bool saveMix (bool saveAs);
     bool loadMix (const QString& path, QString& error);
     bool writeMix (const QString& path, QString& error);
     void autosave();      // the mix as it is, kept in the config folder and opened again next time
     void restoreAutosave();
+    static QString autosavePath();   // last.phi in the config folder
+    void projectChanged() { changed(); }   // the patchbay, say: the project differs from its file
     QString mixName() const;
     QString trackName (int track) const;   // what its strip says (the patchbay shows it)
 
@@ -206,6 +220,7 @@ private:
     QString path;                    // the mix file; empty: not saved yet
     bool modified = false;
     bool restoring = false;
+    bool opening = false;            // inside loadMix: its newMix() keeps the patchbay
     std::vector<Snapshot> undoStack, redoStack;
     uint32_t nextClipId = 1;
     std::map<QString, std::weak_ptr<const mixer::AudioClip>> audioCache;
