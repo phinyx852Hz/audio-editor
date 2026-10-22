@@ -91,32 +91,40 @@ namespace
         return found;
     }
 
-    // The Selector's sets: one per activity, each with a name for every colour.
-    const char* const setNames[] { QT_TR_NOOP ("Live Performance"), QT_TR_NOOP ("Mixing"), QT_TR_NOOP ("Mastering"),
-                                   QT_TR_NOOP ("Podcast"), QT_TR_NOOP ("Chakra") };
+    // The Selector's sets: Favorites, the neutral default, then one per activity,
+    // each with a name for every colour. The ids are kept in find.json.
+    const char* const setIds[] { "favorites", "live", "mixing", "mastering", "podcast", "chakra" };
+    const char* const setNames[] { QT_TR_NOOP ("Favorites"), QT_TR_NOOP ("Live Performance"), QT_TR_NOOP ("Mixing"),
+                                   QT_TR_NOOP ("Mastering"), QT_TR_NOOP ("Podcast"), QT_TR_NOOP ("Chakra") };
     constexpr int defaultSets = (int) std::size (setNames);
+    constexpr int liveSet = 1;
 
     // Live Performance names its colours after the parts of a set, top to bottom;
-    // the other sets keep the colour names until they are given theirs.
+    // the other sets go by the colour names until they are given theirs.
+    QString setId (int set)
+    {
+        return set < defaultSets ? QString::fromLatin1 (setIds[set]) : QStringLiteral ("set%1").arg (set + 1);
+    }
+
     QString defaultMarkName (int set, int index)
     {
         static const QStringList live { "FX", "PD", "ARP", "VOX", "LD", "PR", "BA", "DR" };
-        return set == 0 ? live.value (index) : FindPanel::colourName (index);
+        return set == liveSet ? live.value (index) : FindPanel::colourName (index);
     }
 }
 
 QString FindPanel::colourName (int index)
 {
-    static const QStringList names { QObject::tr ("Silver"), QObject::tr ("Violet"), QObject::tr ("Indigo"), QObject::tr ("Blue"),
-                                     QObject::tr ("Green"), QObject::tr ("Yellow"), QObject::tr ("Orange"), QObject::tr ("Fire Engine Red") };
+    static const QStringList names { QObject::tr ("Silver"), QObject::tr ("Violet"), QObject::tr ("Indigo"), QObject::tr ("Forest"),
+                                     QObject::tr ("Emerald"), QObject::tr ("Gold"), QObject::tr ("Saffron"), QObject::tr ("Ruby") };
     return names.value (index);
 }
 
 QColor FindPanel::colour (int index)
 {
     static const QColor colours[numColours] { QColor (0xc4, 0xc8, 0xd0), QColor (0xb0, 0x5c, 0xf0), QColor (0x5c, 0x5c, 0xe0),
-                                              QColor (0x3d, 0x8e, 0xf0), QColor (0x3d, 0xd6, 0x8c), QColor (0xf2, 0xd7, 0x3a),
-                                              QColor (0xf5, 0x8b, 0x2b), QColor (0xe2, 0x26, 0x2f) };
+                                              QColor (0x2f, 0x9e, 0x44), QColor (0x50, 0xd8, 0x90), QColor (0xe0, 0xb8, 0x30),
+                                              QColor (0xff, 0x93, 0x2e), QColor (0xe0, 0x11, 0x5f) };
     return index >= 0 && index < numColours ? colours[index] : QColor();
 }
 
@@ -807,13 +815,19 @@ void FindPanel::loadSelector()
 
     if (root.contains (QStringLiteral ("sets")))
     {
+        // Sets saved before Favorites came first carry no id and are in the activities' order.
         const auto list = root.value (QStringLiteral ("sets")).toArray();
-        if (list.size() > defaultSets)
-            sets.resize ((size_t) list.size());
         for (int i = 0; i < list.size(); ++i)
         {
             const auto o = list[i].toObject();
-            auto& set = sets[(size_t) i];
+            const auto id = o.value (QStringLiteral ("id")).toString (i + 1 < defaultSets ? QString::fromLatin1 (setIds[i + 1]) : QString());
+            int index = numSets();
+            for (int k = 0; k < numSets(); ++k)
+                if (id == setId (k))
+                    index = k;
+            if (index >= numSets())
+                sets.resize ((size_t) index + 1);
+            auto& set = sets[(size_t) index];
             set.name = o.value (QStringLiteral ("name")).toString();
             for (const auto& n : o.value (QStringLiteral ("names")).toArray())
                 set.names.push_back (n.toString());
@@ -822,15 +836,18 @@ void FindPanel::loadSelector()
                 if (const auto mask = it.value().toInt() & ((1 << numColours) - 1); mask != 0)
                     set.marks.insert (it.key(), mask);
         }
-        setIndex = std::clamp (root.value (QStringLiteral ("set")).toInt(), 0, numSets() - 1);
+        setIndex = liveSet;   // where the older sets were
+        for (int i = 0; i < numSets(); ++i)
+            if (root.value (QStringLiteral ("setId")).toString() == setId (i))
+                setIndex = i;
         return;
     }
 
     // Before the Selector: seven collections (Favorites in red, Orange, Yellow, Green,
-    // Blue, Purple, Gray). Each goes to the same colour of Live Performance, keeping
+    // Blue, Purple, Gray). Each goes to the nearest colour of Favorites, keeping
     // the names given to it.
-    constexpr int oldToNew[] { 7, 6, 5, 4, 3, 1, 0 };
-    auto& live = sets[0];
+    constexpr int oldToNew[] { 7, 6, 5, 4, 2, 1, 0 };   // blue goes to Indigo
+    auto& live = sets[0];   // Favorites
     const auto oldNames = root.value (QStringLiteral ("collectionNames")).toArray();
     for (int i = 0; i < oldNames.size() && i < (int) std::size (oldToNew); ++i)
         if (const auto name = oldNames[i].toString().trimmed(); ! name.isEmpty())
@@ -859,7 +876,8 @@ void FindPanel::saveSelector() const
         QJsonObject m;
         for (auto it = set.marks.begin(); it != set.marks.end(); ++it)
             m.insert (it.key(), it.value());
-        list.push_back (QJsonObject { { QStringLiteral ("name"), set.name },
+        list.push_back (QJsonObject { { QStringLiteral ("id"), setId ((int) list.size()) },
+                                      { QStringLiteral ("name"), set.name },
                                       { QStringLiteral ("names"), QJsonArray::fromStringList (set.names) },
                                       { QStringLiteral ("marks"), m } });
     }
@@ -868,7 +886,7 @@ void FindPanel::saveSelector() const
     QFile file (storePath());
     if (file.open (QIODevice::WriteOnly | QIODevice::Truncate))
         file.write (QJsonDocument (QJsonObject { { QStringLiteral ("places"), QJsonArray::fromStringList (places) },
-                                                 { QStringLiteral ("set"), setIndex },
+                                                 { QStringLiteral ("setId"), setId (setIndex) },
                                                  { QStringLiteral ("sets"), list } }).toJson());
 }
 

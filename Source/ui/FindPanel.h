@@ -32,8 +32,8 @@ struct FindItem
 
 // The browser on the left: one search field that finds anything, a sidebar with
 // the Selector (eight colours of favourites), categories and places, and the results.
-// The Selector has sets of the eight, one per activity (Live Performance, Mixing,
-// Mastering, Podcast, Chakra), each with its own names and its own favourites; the
+// The Selector has sets of the eight: Favorites (the colour names, the default) and one
+// per activity (Live Performance, Mixing, Mastering, Podcast, Chakra), each with its own names and its own favourites; the
 // set chosen above the sidebar is the one shown and marked, and the mixer can start
 // a mix from it (its tracks are the set's colours and names, bottom up).
 // Files and places are browsed one folder at a time until something is typed:
@@ -64,7 +64,7 @@ public:
     bool searchIsReady() const;  // the search has the keyboard with nothing to keep: empty or all selected
     void reload();               // collects the items again and refilters
 
-    // The Selector, top to bottom: Silver, Violet, Indigo, Blue, Green, Yellow, Orange, Fire engine red.
+    // The Selector, top to bottom: Silver, Violet, Indigo, Forest, Emerald, Gold, Saffron, Ruby.
     static constexpr int numColours = 8;
     static QString colourName (int index);
     static QColor colour (int index);
