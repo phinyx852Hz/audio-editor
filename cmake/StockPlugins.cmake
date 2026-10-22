@@ -179,6 +179,8 @@ else()
     endforeach()
 endif()
 
+include(${CMAKE_CURRENT_LIST_DIR}/Instruments.cmake)
+
 foreach(t IN LISTS stock_targets)
     add_dependencies(${t} ${APP_ID})
 endforeach()

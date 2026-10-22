@@ -13,10 +13,10 @@ class QTreeWidget;
 class QTreeWidgetItem;
 
 // Something the Find panel can list: a process (any command), an effect, a
-// plugin, a visualization or an audio file. `key` identifies it for the Selector's colours.
+// plugin, an instrument (a stock sampler or synth), a visualization or an audio file. `key` identifies it for the Selector's colours.
 struct FindItem
 {
-    enum class Kind { process, effect, plugin, visual, file };
+    enum class Kind { process, effect, plugin, instrument, visual, file };
 
     Kind kind = Kind::process;
     QString key;          // "command:file.open", "plugin:<id>", "file:<path>"
@@ -80,7 +80,7 @@ protected:
     void showEvent (QShowEvent*) override;
 
 private:
-    enum class Section { colour, all, processes, effects, plugins, visuals, files, place, addPlace };
+    enum class Section { colour, all, processes, effects, plugins, instruments, visuals, files, place, addPlace };
 
     void buildSidebar();
     void refilter();

@@ -35,6 +35,7 @@
 #include "MetadataEditor.h"
 #include "../core/Repair.h"
 #include "../engine/BuiltinEffects.h"
+#include "../engine/StockPlugins.h"
 #include "../engine/VampHost.h"
 #include "MasterPanel.h"
 #include "Panels.h"
@@ -516,6 +517,7 @@ void MainWindow::registerCommands()
     registerVisualizerCommands();
     registerTrackerCommands();
     registerSamplerCommands();
+    registerInstrumentCommands();
     registerMixerCommands();
     registerPatchBayCommands();
     registerReferenceCommands();
@@ -802,7 +804,11 @@ void MainWindow::buildMenus()
                                "view.opacityUp", "view.opacityDown", "view.opacityFull" } },
         { tr ("Mi&xer"),     { "mixer.window", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
                                "mixer.playStop", "mixer.mixdown" } },
-        { tr ("S&ample"),    { "sample.send", "sample.window", "sample.refresh", "-", "slice.send", "slice.window", "slice.refresh", "-", "sample.midiInputs", "sample.panic" } },
+        { tr ("S&ample"),    { "sample.send", "sample.window", "sample.refresh", "-", "slice.send", "slice.window", "slice.refresh", "-",
+                               "instrument.granular", "instrument.retroSampler", "-", "sample.midiInputs", "sample.panic" } },
+        { tr ("S&ynth"),     { "instrument.wavetable", "instrument.modular", "instrument.additive", "-",
+                               "instrument.subtractive1", "instrument.subtractive2", "instrument.fm", "-",
+                               "sample.midiInputs", "sample.panic" } },
         { tr ("Trac&ker"),   { "tracker.window", "tracker.new", "tracker.open", "tracker.save", "tracker.saveAs", "tracker.loadSample", "-", "tracker.playSong", "tracker.playPattern", "tracker.stop", "-",
                                "tracker.recordStereo", "tracker.recordMulti", "-", "tracker.resetTracks", "tracker.about" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "-", "options.keymap", "options.theme", "options.waveformColors" } },
@@ -1050,7 +1056,8 @@ QList<FindItem> MainWindow::findItems()
         if (c.id == QStringLiteral ("view.find") || c.action == nullptr)
             continue;
         FindItem item;
-        item.kind = c.id.startsWith (QStringLiteral ("nyquist.")) ? FindItem::Kind::effect : FindItem::Kind::process;
+        item.kind = c.id.startsWith (QStringLiteral ("nyquist.")) ? FindItem::Kind::effect
+                  : c.id.startsWith (QStringLiteral ("instrument.")) ? FindItem::Kind::instrument : FindItem::Kind::process;
         item.key = QStringLiteral ("command:") + c.id;
         item.name = c.name();
         item.detail = c.shortcutText();
@@ -1066,6 +1073,15 @@ QList<FindItem> MainWindow::findItems()
             item.detail = item.group;
             item.searchText += tr (" visualizer visualization");
             item.preview = [this, mode] { if (visualizerShowing()) setVisualMode (mode, false); };
+        }
+        if (item.kind == FindItem::Kind::instrument)
+        {
+            // Named by what it does; found by its own name and maker too.
+            const auto* info = stock::instrument (c.id.mid (11).toLatin1().constData());
+            item.name = info != nullptr ? tr (info->function) : c.name();
+            item.detail = info != nullptr ? QString::fromUtf8 (info->original) : QString();
+            item.group = c.category == tr ("Sample") ? tr ("Samplers") : tr ("Synths");
+            item.searchText += tr (" instrument");
         }
         item.enabled = c.action->isEnabled();
         item.activate = [this, id = c.id]

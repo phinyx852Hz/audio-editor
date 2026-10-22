@@ -31,6 +31,7 @@ public:
     ~StockFrame() override;
 
     static void setColours (const PluginFrameColours&);
+    static const PluginFrameColours& currentColours();   // the theme's, for InstrumentFrame too
 
     void paint (juce::Graphics&) override;
     void resized() override;

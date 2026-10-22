@@ -2,6 +2,7 @@
 #pragma once
 
 #include "AudioEngine.h"
+#include "StockPlugins.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -26,6 +27,8 @@ public:
     std::vector<PluginInfo> knownPlugins() const;    // enabled only
     std::vector<PluginInfo> allPlugins() const;     // effects, enabled or not
     std::vector<PluginInfo> instruments() const;    // instrument plugins, enabled only (the mixer's tracks)
+    std::string stockInstrumentId (const char* key) const;   // a stock instrument's plugin id; empty when it was not built
+    const stock::Info* stockInfo (const std::string& pluginId) const;   // nullptr when not a stock plugin
     // An instrument for a mixer track: stereo out, MIDI in, prepared; nullptr with `error` if that failed.
     std::unique_ptr<juce::AudioPluginInstance> createInstrument (const std::string& pluginId, double sampleRate, int maxBlock,
                                                                  juce::String& error) const;

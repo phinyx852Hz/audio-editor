@@ -31,8 +31,42 @@ namespace stock
               { "Input Gain", "Output Ceiling", "Release", "Lookahead" }, "", "ZL Audio", "VST3" },
             { "ZL Splitter.vst3", "ZL Splitter by ZL Audio (zsliu98)", "AGPL-3.0", "https://github.com/ZL-Audio/ZLSplitter",
               { "Split Type", "Mix" }, "", "ZL Audio", "VST3" },
+
+            // Instruments (cmake/Instruments.cmake). Samplers first, then synths, in menu order.
+            { .file = "GRNLR.vst3", .credit = "GRNLR by Raffael Seyfried", .licence = "GPL-3.0-or-later",
+              .url = "https://github.com/passivist/GRNLR", .format = "VST3",
+              .role = Role::sampler, .key = "granular", .function = "Granular", .original = "GRNLR" },
+            { .file = "Ami Sampler.vst3", .credit = "Ami Sampler by Finley Baker (_astriid_)", .licence = "GPL-3.0",
+              .url = "https://github.com/astriiddev/Ami-Sampler-VST", .format = "VST3",
+              .role = Role::sampler, .key = "retroSampler", .function = "Retro Sampler", .original = "Ami" },
+            { .file = "VASTvaporizer2.vst3", .credit = "Vaporizer2 by VAST Dynamics", .licence = "GPL-3.0",
+              .url = "https://github.com/VASTDynamics/Vaporizer2", .format = "VST3",
+              .role = Role::synth, .key = "wavetable", .function = "Wavetable", .original = "Vaporizer2" },
+            { .file = "Cardinal.clap/CardinalSynth.clap", .credit = "Cardinal by DISTRHO, with VCV Fundamental", .licence = "GPL-3.0-or-later",
+              .url = "https://github.com/DISTRHO/Cardinal", .format = "CLAP",
+              .role = Role::synth, .key = "modular", .function = "Modular", .original = "Cardinal" },
+            { .file = "Overtonium.vst3", .credit = "Overtonium by Benjamin Dehli", .licence = "AGPL-3.0",
+              .url = "https://github.com/benjamindehli/overtonium", .format = "VST3",
+              .role = Role::synth, .key = "additive", .function = "Additive", .original = "Overtonium" },
+            { .file = "CA-72.clap", .credit = "CA-72 by Idle Foundry", .licence = "GPL-3.0-or-later",
+              .url = "https://github.com/idlefoundry/ca-72", .format = "CLAP",
+              .role = Role::synth, .key = "subtractive1", .function = "Subtractive1 mono", .original = "CA-72" },
+            { .file = "Helm.vst3", .credit = "Helm by Matt Tytel", .licence = "GPL-3.0",
+              .url = "https://github.com/amilajack/helm", .format = "VST3",
+              .role = Role::synth, .key = "subtractive2", .function = "Subtractive2 poly", .original = "Helm" },
+            { .file = "octasine.clap", .credit = "OctaSine by Joakim Frostegård", .licence = "AGPL-3.0",
+              .url = "https://github.com/greatest-ape/OctaSine", .format = "CLAP",
+              .role = Role::synth, .key = "fm", .function = "FM", .original = "OctaSine" },
         };
         return list;
+    }
+
+    const Info* instrument (const char* key)
+    {
+        for (const auto& i : all())
+            if (i.key != nullptr && juce::String (i.key) == key)
+                return &i;
+        return nullptr;
     }
 
     juce::File folder()
@@ -78,8 +112,9 @@ namespace stock
     const Info* find (const juce::PluginDescription& d)
     {
         const auto file = juce::File::createFileWithoutCheckingPath (d.fileOrIdentifier);
+        const auto dir = folder();
         for (const auto& i : all())
-            if (d.pluginFormatName == i.format && file.getFileName() == i.file && file.getParentDirectory() == folder())
+            if (d.pluginFormatName == i.format && dir != juce::File() && file == dir.getChildFile (i.file))
                 return &i;
 
         return nullptr;

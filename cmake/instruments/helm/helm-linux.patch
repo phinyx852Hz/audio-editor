@@ -1,0 +1,16 @@
+diff --git a/src/common/load_save.cpp b/src/common/load_save.cpp
+index 5bcf6ce..c217b21 100644
+--- a/src/common/load_save.cpp
++++ b/src/common/load_save.cpp
+@@ -704,6 +704,11 @@ File LoadSave::getFactoryBankDirectory() {
+ #endif
+   File patch_dir = File("");
+ #ifdef LINUX
++  // A VST3's binary is in Contents/<arch>-linux; its patches can come with it, in Contents/Resources.
++  File bundled = File::getSpecialLocation(File::currentExecutableFile)
++      .getParentDirectory().getParentDirectory().getChildFile("Resources/patches");
++  if (bundled.isDirectory())
++    return bundled;
+   patch_dir = File(LINUX_FACTORY_PATCH_DIRECTORY);
+ #elif defined(__APPLE__)
+ #if JUCE_MAJOR_VERSION >= 6

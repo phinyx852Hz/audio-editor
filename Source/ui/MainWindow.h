@@ -369,6 +369,9 @@ private:
     // buses, heard through engine.setInstrument in place of the plain sum. F4 pops it out.
     // Declared after the mixer's engine, so it lets go of the mixer first.
     void registerPatchBayCommands();
+    // The stock instruments (InstrumentsSection.cpp): Sample and Synth menus, Find's Instruments.
+    void registerInstrumentCommands();
+    void openInstrument (const char* key);
     class PatchBayWindow* patchBayWindow();
     void showPatchBay();
     void restorePatchBay();

@@ -12,6 +12,7 @@
 #include <QStandardPaths>
 
 #include <cstdio>
+#include <cstdlib>
 #include <exception>
 
 namespace
@@ -47,8 +48,10 @@ namespace
 int main (int argc, char* argv[])
 {
     // A copy started to look inside one plugin file, away from the editor (see MasterChain).
+    // It leaves without running static destructors: some plugins (Cardinal) crash in theirs
+    // at exit, which would read as a failed scan although the list was written.
     if (argc == 5 && std::string (argv[1]) == MasterChain::scanOption)
-        return MasterChain::scanInThisProcess (argv[2], argv[3], juce::File (argv[4]));
+        std::_Exit (MasterChain::scanInThisProcess (argv[2], argv[3], juce::File (argv[4])));
 
     Application app (argc, argv);
     QApplication::setApplicationName (QStringLiteral (APP_ID));

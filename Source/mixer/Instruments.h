@@ -39,6 +39,7 @@ namespace mixer
         virtual void reset() = 0;        // silent at once (locate, mix down)
         virtual bool hasWindow() const { return false; }   // a plugin's own editor
         virtual void showWindow() {}
+        virtual void openWindow() {}   // shows the editor, or brings it to the front when it is open
         // Saved in a mix: the settings (a plugin's own state, the Synth's settings).
         virtual std::string state() const { return {}; }
         virtual void setState (const std::string&) {}

@@ -2,6 +2,7 @@
 // Instrument plugins (VST3, LV2, CLAP) on the mixer's tracks: the track's MIDI goes
 // in, stereo comes out. Made through AudioEngine::loadInstrumentPlugin.
 #include "AudioEngine.h"
+#include "InstrumentFrame.h"
 #include "MasterChain.h"
 #include "PluginWindow.h"
 #include "../mixer/Instruments.h"
@@ -13,8 +14,8 @@ namespace
     class PluginInstrument final : public mixer::Instrument
     {
     public:
-        PluginInstrument (std::unique_ptr<juce::AudioPluginInstance> p, std::string id)
-            : plugin (std::move (p)), pluginId (std::move (id)), title (plugin->getName().toStdString())
+        PluginInstrument (std::unique_ptr<juce::AudioPluginInstance> p, std::string id, const stock::Info* s)
+            : plugin (std::move (p)), pluginId (std::move (id)), title (plugin->getName().toStdString()), stockInfo (s)
         {
             editor = plugin->hasEditor();
         }
@@ -91,6 +92,14 @@ namespace
             return editor && ! failed.load() && display != nullptr && *display != 0 && ! x11::connectionLost();
         }
 
+        void openWindow() override
+        {
+            if (window != nullptr)
+                window->toFront (true);
+            else
+                showWindow();
+        }
+
         void showWindow() override
         {
             if (! hasWindow())
@@ -106,7 +115,11 @@ namespace
                 auto* view = plugin->createEditorAndMakeActive();
                 if (view == nullptr)
                     return;
-                window = std::make_unique<PluginWindow> (view, view->isResizable(), juce::String (title) + " - " APP_DISPLAY_NAME,
+                // A stock instrument keeps its own view, with PHINYX's opacity bar below it.
+                juce::Component* content = view;
+                if (stockInfo != nullptr && stockInfo->role != stock::Role::effect)
+                    content = new InstrumentFrame (view, *stockInfo);
+                window = std::make_unique<PluginWindow> (content, content != view || view->isResizable(), juce::String (title) + " - " APP_DISPLAY_NAME,
                     [this] { juce::MessageManager::callAsync ([w = juce::Component::SafePointer<PluginWindow> (window.get()), this]
                     {
                         if (w != nullptr)
@@ -154,6 +167,7 @@ namespace
 
         std::unique_ptr<juce::AudioPluginInstance> plugin;
         std::string pluginId, title;
+        const stock::Info* stockInfo = nullptr;   // a stock instrument's, for its window
         bool editor = false;
         std::atomic<bool> failed { false };
         std::atomic<int> pendingOff { 0 };   // 1 let go, 2 silence
@@ -173,7 +187,7 @@ std::shared_ptr<mixer::Instrument> AudioEngine::loadInstrumentPlugin (const std:
         error = why.isEmpty() ? std::string ("the instrument could not be started") : why.toStdString();
         return nullptr;
     }
-    return std::make_shared<PluginInstrument> (std::move (instance), pluginId);
+    return std::make_shared<PluginInstrument> (std::move (instance), pluginId, masterChain().stockInfo (pluginId));
 }
 
 std::string AudioEngine::instrumentPluginId (const mixer::Instrument& instrument)
@@ -182,5 +196,7 @@ std::string AudioEngine::instrumentPluginId (const mixer::Instrument& instrument
         return {};
     return static_cast<const PluginInstrument&> (instrument).id();
 }
+
+std::string AudioEngine::stockInstrumentId (const char* key) const { return const_cast<AudioEngine*> (this)->masterChain().stockInstrumentId (key); }
 
 std::vector<PluginInfo> AudioEngine::knownInstruments() const { return const_cast<AudioEngine*> (this)->masterChain().instruments(); }
