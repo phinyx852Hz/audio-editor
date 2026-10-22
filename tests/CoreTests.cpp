@@ -24,6 +24,7 @@
 #include "../Source/core/TimeStretch.h"
 #include "../Source/core/Binaural.h"
 #include "../Source/core/Ambisonics.h"
+#include "../Source/core/SpatialStudio.h"
 
 #include <algorithm>
 #include <cmath>
@@ -2160,6 +2161,189 @@ namespace
         check (binaural::render (*mono, 0, mono->length(), settings, error) == nullptr && ! error.empty(), "a missing HRTF file is reported");
     }
 
+    void testSpatialStudio()
+    {
+        const double rate = 48000.0;
+        const auto makeNoise = [rate] (int channels, Frame length)
+        {
+            std::mt19937 rng (5);
+            std::uniform_real_distribution<float> u (-0.5f, 0.5f);
+            AudioData::Builder b (channels, rate);
+            std::vector<std::vector<float>> block ((size_t) channels, std::vector<float> ((size_t) length));
+            for (auto& c : block)
+                for (auto& x : c)
+                    x = u (rng);
+            std::vector<const float*> ptrs;
+            for (auto& c : block)
+                ptrs.push_back (c.data());
+            b.append (ptrs.data(), (int) length);
+            return b.finish();
+        };
+        const auto channelEnergy = [] (const AudioData& d, int channel, Frame start, Frame end)
+        {
+            std::vector<std::vector<float>> all ((size_t) d.numChannels(), std::vector<float> ((size_t) (end - start)));
+            std::vector<float*> ptrs;
+            for (auto& c : all)
+                ptrs.push_back (c.data());
+            d.read (start, (int) (end - start), ptrs.data());
+            double e = 0.0;
+            for (auto x : all[(size_t) channel])
+                e += (double) x * x;
+            return e;
+        };
+
+        // Distance: within the centre the sound turns omni; beyond it, 1.5 dB a unit.
+        double omni = 0.0, directional = 0.0;
+        studio::distanceGains (0.05, 10.0, omni, directional);
+        check (near (omni, 1.0, 1e-9) && near (directional, 0.25, 1e-9), "studio: inside the centre the directional part fades");
+        studio::distanceGains (1.0, 10.0, omni, directional);
+        check (near (20.0 * std::log10 (omni), -13.5, 1e-6), "studio: radius 1 at range 10 is 13.5 dB down");
+
+        // A mono source panner at 90 degrees: first-order Y is minus W (Y points left).
+        const auto mono = makeNoise (1, 24000);
+        studio::Scene scene;
+        scene.order = 1;
+        scene.tailSeconds = 0.5;
+        auto panner = studio::makeDevice (studio::Kind::sourcePanner);
+        panner.set ("stereo", 0);
+        panner.set ("azimuth", 90.0);
+        scene.chain.push_back (panner);
+        auto result = studio::render (*mono, 0, scene);
+        check (result.scene != nullptr && result.scene->numChannels() == 4 && result.scene->length() == 24000 + 24000,
+               "studio: a first-order scene, the tail added");
+        if (result.scene != nullptr)
+        {
+            const double w = channelEnergy (*result.scene, 0, 1000, 20000), y = channelEnergy (*result.scene, 1, 1000, 20000),
+                         x = channelEnergy (*result.scene, 3, 1000, 20000);
+            check (w > 0.0 && near (y / w, 1.0, 1e-3) && x / w < 1e-6, "studio: the source panner places a sound on the right");
+            check (! result.motion.frames.empty() && result.motion.at (0.2, 0) != nullptr && near (result.motion.at (0.2, 0)->front().azimuth, 90.0, 1e-3),
+                   "studio: the heads-up display sees where the sound is");
+        }
+
+        // HOA Transform: a yaw of -90 brings it back to the front.
+        auto turn = studio::makeDevice (studio::Kind::hoaTransform);
+        turn.set ("yaw", -90.0);
+        scene.chain.push_back (turn);
+        result = studio::render (*mono, 0, scene);
+        if (result.scene != nullptr)
+        {
+            const double w = channelEnergy (*result.scene, 0, 1000, 20000), y = channelEnergy (*result.scene, 1, 1000, 20000),
+                         x = channelEnergy (*result.scene, 3, 1000, 20000);
+            check (y / w < 1e-6 && near (x / w, 1.0, 1e-3), "studio: the HOA Transform turns the scene");
+        }
+
+        // The Spatial Slicer keeps a sound inside its slice and takes one outside away.
+        const auto slice = [&] (double sliceAzimuth)
+        {
+            studio::Scene s;
+            s.order = 3;
+            s.tailSeconds = 0.0;
+            auto pan = studio::makeDevice (studio::Kind::sourcePanner);
+            pan.set ("stereo", 0);
+            s.chain.push_back (pan);
+            auto slicer = studio::makeDevice (studio::Kind::spatialSlicer);
+            slicer.set ("timed", 0);
+            slicer.set ("azimuth", sliceAzimuth);
+            s.chain.push_back (slicer);
+            const auto r = studio::render (*mono, 0, s);
+            return r.scene != nullptr ? channelEnergy (*r.scene, 0, 2000, 20000) : -1.0;
+        };
+        const double inside = slice (0.0), outside = slice (180.0);
+        check (inside > 0.0 && outside < inside * 0.05, "studio: the Spatial Slicer cuts away what is outside its slice");
+
+        // The Multi-Delay: a click comes back after the delay time, from the side.
+        std::vector<float> clicks (48000, 0.0f);
+        clicks[1000] = 1.0f;
+        AudioData::Builder cb (1, rate);
+        const float* cp = clicks.data();
+        cb.append (&cp, (int) clicks.size());
+        const auto click = cb.finish();
+        studio::Scene delayScene;
+        delayScene.order = 1;
+        delayScene.tailSeconds = 0.0;
+        auto delay = studio::makeDevice (studio::Kind::multiDelay);
+        delay.set ("time", 100.0);
+        delay.set ("voices", 1);
+        delay.set ("feedback", 0);
+        delay.set ("spread", 90.0);
+        delayScene.chain.push_back (delay);
+        result = studio::render (*click, 0, delayScene);
+        if (result.scene != nullptr)
+        {
+            const double echo = channelEnergy (*result.scene, 0, 1000 + 4800 - 4, 1000 + 4800 + 4);
+            const double before = channelEnergy (*result.scene, 0, 0, 1000 + 4800 - 8);
+            const double y = channelEnergy (*result.scene, 1, 1000 + 4800 - 4, 1000 + 4800 + 4);
+            check (echo > 0.1 && before < 1e-9 && near (y / echo, 1.0, 1e-2), "studio: the Multi-Delay echoes 100 ms later, to the right");
+        }
+
+        // Every device renders a stereo file, the same each time, without blowing up.
+        const auto stereo = makeNoise (2, 12000);
+        studio::Scene all;
+        all.order = 3;
+        all.tailSeconds = 0.3;
+        for (const auto& d : studio::devices())
+            all.chain.push_back (studio::makeDevice (d.kind));
+        const auto first = studio::render (*stereo, 0, all), second = studio::render (*stereo, 0, all);
+        bool finite = first.scene != nullptr && second.scene != nullptr && first.scene->numChannels() == 16;
+        if (finite)
+        {
+            for (int c = 0; c < 16 && finite; ++c)
+            {
+                const auto a = channelEnergy (*first.scene, c, 0, first.scene->length()), b = channelEnergy (*second.scene, c, 0, second.scene->length());
+                finite = std::isfinite (a) && a < 1e9 && a == b;
+            }
+        }
+        check (finite, "studio: every device together renders, the same both times (" + first.error + ")");
+
+        // The rack survives a trip through JSON.
+        all.bpm = 98.5;
+        all.master.decoder = "7.1.4";
+        all.chain[1].set ("azimuth", -42.5);
+        all.chain[1].enabled = false;
+        all.chain.back().files["W"] = "/tmp/ir \"hall\".wav";
+        studio::Scene back;
+        check (studio::fromJson (studio::toJson (all), back) && back.chain.size() == all.chain.size() && near (back.bpm, 98.5, 1e-9)
+                   && back.master.decoder == "7.1.4" && near (back.chain[1].get ("azimuth"), -42.5, 1e-9) && ! back.chain[1].enabled
+                   && back.chain.back().files["W"] == "/tmp/ir \"hall\".wav",
+               "studio: a rack saved as JSON loads back the same");
+        check (! studio::fromJson ("{not json", back), "studio: bad JSON is refused");
+
+        // The master bus: stereo speakers hear a source on the left on the left.
+        studio::Scene leftScene;
+        leftScene.order = 3;
+        leftScene.tailSeconds = 0.0;
+        auto leftPan = studio::makeDevice (studio::Kind::sourcePanner);
+        leftPan.set ("stereo", 0);
+        leftPan.set ("azimuth", -60.0);
+        leftScene.chain.push_back (leftPan);
+        leftScene.master.decoder = "Stereo";
+        const auto heard = studio::render (*mono, 0, leftScene);
+        std::string error;
+        const auto speakers = heard.scene != nullptr ? studio::decode (*heard.scene, leftScene.master, error) : nullptr;
+        check (speakers != nullptr && speakers->numChannels() == 2
+                   && channelEnergy (*speakers, 0, 0, 20000) > 4.0 * channelEnergy (*speakers, 1, 0, 20000),
+               "studio: the stereo decoder puts a left source on the left");
+        check (studio::decodedLayout (leftScene.master, 3) == "Stereo" && studio::decodedLayout ({ 0.0, "AmbiX", {} }, 2) == "Ambisonics (2nd order)",
+               "studio: decoded layouts are named");
+
+        // B-Format Input reads a FuMa file into AmbiX.
+        ambi::EncodeSettings enc;
+        enc.order = 1;
+        enc.azimuth = 90.0;
+        const auto ambix = ambi::encode (*mono, enc);
+        const auto fuma = ambi::mix (*ambix, ambi::ambixToFuma (1));
+        studio::Scene bf;
+        bf.order = 1;
+        bf.tailSeconds = 0.0;
+        auto input = studio::makeDevice (studio::Kind::bformatInput);
+        input.set ("format", 1);
+        bf.chain.push_back (input);
+        const auto restored = studio::render (*fuma, 1, bf);
+        check (restored.scene != nullptr && near (channelEnergy (*restored.scene, 0, 0, 20000), channelEnergy (*ambix, 0, 0, 20000), 1e-3)
+                   && near (channelEnergy (*restored.scene, 1, 0, 20000), channelEnergy (*ambix, 1, 0, 20000), 1e-3),
+               "studio: B-Format Input turns FuMa into AmbiX");
+    }
+
     void testAmbisonics()
     {
         const auto near = [] (double a, double b, double tolerance = 1e-6) { return std::abs (a - b) <= tolerance; };
@@ -2628,6 +2812,7 @@ int main()
     testMidiFile();
     testMixer();
     testPatchBay();
+    testSpatialStudio();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");

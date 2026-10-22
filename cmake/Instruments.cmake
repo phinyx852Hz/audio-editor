@@ -78,17 +78,17 @@ phinyx_juce_instrument(AmiSampler https://github.com/astriiddev/Ami-Sampler-VST.
     PATCH ${CMAKE_COMMAND} -E copy ${instruments_dir}/ami/CMakeLists.txt <SOURCE_DIR>/
         COMMAND ${CMAKE_COMMAND} -DPATCH=${instruments_dir}/ami/ami-juce8.patch -P ${CMAKE_CURRENT_LIST_DIR}/ApplyPatch.cmake)
 
-# Wavetable: Vaporizer2, with its own JUCE. Its wavetables, noises and presets go
-# into the bundle's Resources folder, where the patch makes it look on Linux.
+# Wavetable: Vaporizer2, with its own JUCE. A starter set of its wavetables and presets
+# (vaporizer2-starter.txt, about 28 MB of the library's 1 GB) and its noises go into the
+# bundle's Resources folder, where the patch makes it look on Linux.
 phinyx_juce_instrument(Vaporizer2 https://github.com/VASTDynamics/Vaporizer2.git 1c56c4be304255f1c397dad725ea784f15a55ef5
     VASTvaporizer2_artefacts/Release/VST3/VASTvaporizer2.vst3
     LICENCES LICENSE
     PATCH ${CMAKE_COMMAND} -DPATCH=${instruments_dir}/vaporizer2-bundle-data.patch -P ${CMAKE_CURRENT_LIST_DIR}/ApplyPatch.cmake)
 ExternalProject_Add_Step(stock_Vaporizer2 data
     COMMAND ${CMAKE_COMMAND} -E make_directory "${PHINYX_STOCK_DIR}/VASTvaporizer2.vst3/Contents/Resources"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory <SOURCE_DIR>/VASTvaporizer/Noises "${PHINYX_STOCK_DIR}/VASTvaporizer2.vst3/Contents/Resources/Noises"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory <SOURCE_DIR>/VASTvaporizer/Tables "${PHINYX_STOCK_DIR}/VASTvaporizer2.vst3/Contents/Resources/Tables"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory <SOURCE_DIR>/VASTvaporizer/Presets "${PHINYX_STOCK_DIR}/VASTvaporizer2.vst3/Contents/Resources/Presets"
+    COMMAND ${CMAKE_COMMAND} -DSRC=<SOURCE_DIR>/VASTvaporizer "-DDEST=${PHINYX_STOCK_DIR}/VASTvaporizer2.vst3/Contents/Resources"
+        -DLIST=${instruments_dir}/vaporizer2-starter.txt -P ${instruments_dir}/CopyListed.cmake
     DEPENDEES install)
 
 # Additive: Overtonium, with the JUCE it pins
@@ -149,7 +149,9 @@ if(PHINYX_CARGO)
         ${stock_one_at_a_time}
         CONFIGURE_COMMAND ""
         BUILD_COMMAND ${PHINYX_CARGO} xtask bundle ca72-plugin --profile bundle
+        # Its bundle profile keeps debug information (55 MB); stripped it is 15 MB.
         INSTALL_COMMAND ${CMAKE_COMMAND} -E copy <SOURCE_DIR>/target/bundled/CA-72.clap ${PHINYX_STOCK_DIR}/
+            COMMAND ${CMAKE_STRIP} --strip-unneeded ${PHINYX_STOCK_DIR}/CA-72.clap
             ${stock_licence_commands})
 
     phinyx_stock_licence(OctaSine LICENSE)

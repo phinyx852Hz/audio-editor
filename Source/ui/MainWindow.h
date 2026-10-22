@@ -18,6 +18,7 @@
 #include "../engine/Export.h"
 #include "WaveformView.h"
 
+#include <QElapsedTimer>
 #include <QFutureWatcher>
 #include <QHash>
 #include <QMainWindow>
@@ -47,6 +48,7 @@ namespace sampler { class Engine; }
 namespace slicer { class Engine; }
 namespace mixer { class Engine; }
 namespace patchbay { class PatchBay; }
+namespace perf { class Recorder; }
 
 class MainWindow final : public QMainWindow
 {
@@ -121,6 +123,7 @@ private:
     void ambiEncode();                  // Spatial > Encode to Ambisonics
     void ambiRotate();                  // Spatial > Rotate / Mirror
     void ambiDecode();                  // Spatial > Decode Ambisonics
+    void ambiStudio();                  // Spatial > Ambisonic Studio (E4L's devices, in a floating panel)
     void ambiConvertFuma (bool toFuma);
     int ambisonicOrderOrHint (const QString& what);   // the file's order, or 0 with a hint
     void feedAmbiScene();
@@ -340,6 +343,24 @@ private:
     bool trackerConfirmDiscard();   // false when the user cancels
     std::unique_ptr<class TrackerEngine> tracker;
 
+    // The Performance menu (PerformanceSection.cpp, Source/performance): records PHINYX's
+    // window, cameras and sound to MP4 and streams them live.
+    void registerPerformanceCommands();
+    void toggleVideoRecording();
+    void toggleStreaming();
+    void performanceSettings();
+    void capturePerformanceFrame();
+    void startPerformanceCapture();
+    void stopPerformanceCaptureIfIdle();
+    void updatePerformanceStatus();
+    QWidget* performanceTarget (bool follow);
+    std::unique_ptr<perf::Recorder> performance;
+    QTimer performanceTimer;
+    QElapsedTimer performanceStatusClock;
+    class QLabel* performanceBadge = nullptr;
+    QPointer<QWidget> performanceWindow;
+    bool performanceFollow = true;
+
     // The Sampler (SamplerSection.cpp): its engine plays through engine.setInstrument, its
     // window pops out, and MIDI inputs play it. It remembers which tab and range it came
     // from, so edits there can follow it.
@@ -439,6 +460,10 @@ private:
     class TrackerWindow* trackerWin = nullptr;
     class AnalysisWindow* analysisWindow();   // Analysis Meters, made when first opened
     class AnalysisWindow* analysisWin = nullptr;
+    void feedAnalysisAmbisonics();
+    const class AudioData* ambiFedData = nullptr;   // what the Ambisonics card last got
+    Frame ambiFedAt = -1;
+    int ambiFedOrder = 0;
     class VisualizerWindow* visualizerWindow();
     void setVisualMode (int index, bool openIfHidden);
     void toggleVisualizerBehind();
@@ -455,6 +480,10 @@ private:
     void downloadMilkDropPresets();
     class VisualizerWindow* visualizer = nullptr;
     class VisualizerView* visualBackdrop = nullptr;
+    // A web page behind PHINYX instead (VisualizerSection.cpp, WebBackdrop.h); only with Qt WebEngine.
+    void toggleWebBackdrop();
+    bool chooseWebAddress (bool reload);   // false when cancelled
+    class WebBackdrop* webBackdrop = nullptr;
     int visualMode = 0;
     double opacityBeforeBackdrop = 0.0;
     void updateAnalysisCommandStates();
@@ -553,6 +582,7 @@ private:
     FindPanel* findWidget = nullptr;
     class Goniometer* goniometer = nullptr;
     class AmbiScene* ambiSceneView = nullptr;
+    class AmbiStudio* ambiStudioWindow = nullptr;
     DockablePanel* ambiScenePanel = nullptr;
     std::vector<float> scopeLeft, scopeRight;   // goniometer samples, reused every frame
     DockablePanel* findPanel = nullptr;

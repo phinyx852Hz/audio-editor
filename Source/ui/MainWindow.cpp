@@ -13,10 +13,12 @@
 #include "Visualizer.h"
 #include "TrackerWindow.h"
 #include "../tracker/TrackerEngine.h"
+#include "../performance/Recorder.h"
 #if PHINYX_HAVE_PROJECTM
  #include "MilkDrop.h"
 #endif
 #include "AnalysisWindow.h"
+#include "AmbiVisualizer.h"
 #include "Goniometer.h"
 #include "AmbiScene.h"
 #include "../core/Ambisonics.h"
@@ -243,6 +245,7 @@ MainWindow::MainWindow (AudioEngine& e)
         if (analysisWin != nullptr && analysisWin->isVisible())
         {
             analysisWin->addSamples (scopeLeft, scopeRight, engine.deviceSampleRate());
+            feedAnalysisAmbisonics();
             analysisWin->tick();
         }
         feedAmbiScene();
@@ -284,6 +287,8 @@ MainWindow::MainWindow (AudioEngine& e)
 
 MainWindow::~MainWindow()
 {
+    performanceTimer.stop();
+    performance = nullptr;       // closes a recording or stream while the engine still plays
     loadWatcher.waitForFinished();
     engine.setLiveSource ({});   // the Tracker goes before the engine
     engine.setInstrument ({});   // and the Sampler, Slicer and Mixer
@@ -371,6 +376,8 @@ void MainWindow::registerCommands()
     commands.action (QStringLiteral ("spatial.binaural"))->setStatusTip (tr ("Place the sound around your head for headphones: HRTF, 3D, spatial audio, immersive"));
     add ("spatial.layout", Category::spatial, tr ("Channel &Layout..."), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_L) }, [this] { chooseChannelLayout(); });
     commands.action (QStringLiteral ("spatial.layout"))->setStatusTip (tr ("What the channels are: 5.1, 5.2 two subwoofers, 7.2.4, 9.1.6, quad, ambisonics, surround, Atmos-style beds"));
+    add ("spatial.studio", Category::spatial, tr ("Ambisonic &Studio..."), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_H) }, [this] { ambiStudio(); });
+    commands.action (QStringLiteral ("spatial.studio"))->setStatusTip (tr ("Envelop for Live (E4L) style rack: source, stereo, quad, multi panners, spinner, spatial delays, AuraVerb, B-format convolution reverb, HOA transform, slicer, master bus decoder"));
     add ("spatial.encode", Category::spatial, tr ("&Encode to Ambisonics..."), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_E) }, [this] { ambiEncode(); });
     commands.action (QStringLiteral ("spatial.encode"))->setStatusTip (tr ("Place a mono or stereo sound in an ambisonic scene: AmbiX, B-format, 360, VR, spatial audio"));
     add ("spatial.rotate", Category::spatial, tr ("&Rotate / Mirror Scene..."), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_Y) }, [this] { ambiRotate(); });
@@ -525,6 +532,7 @@ void MainWindow::registerCommands()
     registerWarpCommands();
     registerVisualizerCommands();
     registerTrackerCommands();
+    registerPerformanceCommands();
     registerSamplerCommands();
     registerInstrumentCommands();
     registerMixerCommands();
@@ -799,7 +807,7 @@ void MainWindow::buildMenus()
                                "repair.brushSmaller", "repair.brushLarger", "repair.addHarmonics", "-",
                                "repair.frequencyRange", "repair.allFrequencies", "-", "view.spectral" } },
         { tr ("Effe&ct"),    { "effect.repeat", "-", "@nyquist.generate", "-", "@nyquist.effect" } },
-        { tr ("Spat&ial"),   { "spatial.binaural", "process.midSide", "process.stereoize", "-", "spatial.layout", "-", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.fumaToAmbix", "spatial.ambixToFuma", "-", "view.ambiScene", "analyze.imagingView" } },
+        { tr ("Spat&ial"),   { "spatial.binaural", "process.midSide", "process.stereoize", "-", "spatial.layout", "-", "spatial.studio", "-", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.fumaToAmbix", "spatial.ambixToFuma", "-", "view.ambiScene", "analyze.imagingView" } },
         { tr ("&Warp"),      { "warp.showGrid", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "-", "warp.detectGrid", "warp.autoDetect", "warp.setTempo", "warp.downbeat", "warp.halve", "warp.double", "-",
                                "warp.edit", "warp.previousHit", "warp.nextHit", "warp.toggleMarker", "warp.nudgeEarlier", "warp.nudgeLater", "-",
                                "warp.quantize", "warp.stretch", "warp.halfSpeed", "warp.doubleSpeed", "-", "warp.exportLoop" } },
@@ -818,7 +826,7 @@ void MainWindow::buildMenus()
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
         { tr ("Visuali&zer"), { "view.visualizer", "view.visualizerFullScreen", "view.visualizerBehind", "-",
                                "view.visualizerNext", "view.visualizerPrevious", "view.visualizerChoose", "-",
-                               "@visual.artistic", "@visual.science", "-", "@visual.milkdrop", "@visual.rain", "-",
+                               "@visual.artistic", "@visual.science", "-", "@visual.milkdrop", "@visual.rain", "@visual.web", "-",
                                "view.opacityUp", "view.opacityDown", "view.opacityFull" } },
         { tr ("Mi&xer"),     { "mixer.window", "mixer.dock", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
                                "mixer.playStop", "mixer.mixdown" } },
@@ -829,6 +837,7 @@ void MainWindow::buildMenus()
                                "sample.midiInputs", "sample.panic" } },
         { tr ("Trac&ker"),   { "tracker.window", "tracker.new", "tracker.open", "tracker.save", "tracker.saveAs", "tracker.loadSample", "-", "tracker.playSong", "tracker.playPattern", "tracker.stop", "-",
                                "tracker.recordStereo", "tracker.recordMulti", "-", "tracker.resetTracks", "tracker.about" } },
+        { tr ("Performan&ce"), { "performance.record", "performance.stream", "-", "performance.settings", "performance.folder" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "-", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
     };
@@ -1255,7 +1264,7 @@ void MainWindow::updateCommandStates()
     for (const auto* id : { "file.save", "file.saveAs", "file.export", "file.metadata", "edit.insertSilence", "edit.copyToNew", "select.all", "select.none",
                             "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
                             "select.toStart", "select.toEnd", "process.gain", "process.normalize",
-                            "process.reverse", "process.invert", "process.dcOffset", "process.stereoize", "process.midSide", "process.convert", "spatial.binaural", "spatial.layout", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.fumaToAmbix", "spatial.ambixToFuma",
+                            "process.reverse", "process.invert", "process.dcOffset", "process.stereoize", "process.midSide", "process.convert", "spatial.binaural", "spatial.layout", "spatial.studio", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.fumaToAmbix", "spatial.ambixToFuma",
                             "repair.findSimilar", "repair.addHarmonics",
                             "repair.spectralGain", "repair.frequencyRange", "repair.allFrequencies", "repair.learnNoise",
                             "repair.noiseReduction", "repair.declick", "repair.declip", "repair.dehum", "repair.deess",
@@ -1293,7 +1302,7 @@ void MainWindow::updateCommandStates()
     if (doc.isAlbum())
         for (const auto* id : { "edit.cut", "edit.paste", "edit.delete", "edit.trim", "edit.insertSilence", "file.metadata",
                                 "process.gain", "process.normalize", "process.fadeIn", "process.fadeOut", "process.reverse",
-                                "process.invert", "process.dcOffset", "process.stereoize", "process.midSide", "process.convert", "spatial.binaural", "spatial.layout", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.fumaToAmbix", "spatial.ambixToFuma",
+                                "process.invert", "process.dcOffset", "process.stereoize", "process.midSide", "process.convert", "spatial.binaural", "spatial.layout", "spatial.studio", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.fumaToAmbix", "spatial.ambixToFuma",
                                 "repair.autoHeal", "repair.spectralGain", "repair.noiseReduction", "repair.declick",
                                 "repair.declip", "repair.dehum", "repair.deess", "repair.addHarmonics", "repair.correctPitch",
                                 "marker.add", "marker.addRegion" })
@@ -3741,4 +3750,39 @@ AnalysisWindow* MainWindow::analysisWindow()
         });
     }
     return analysisWin;
+}
+
+// The Analysis window's Ambisonics card: the file's own channels around what is heard (all
+// of them, past the 16 the engine plays), or around the cursor when stopped. Read again only
+// when that place or the audio changes.
+void MainWindow::feedAnalysisAmbisonics()
+{
+    const auto d = data();
+    if (! analysisWin->wantsAmbisonics())
+        return;
+    const auto& layout = doc.current().layout;
+    const int order = d == nullptr ? 0
+                                   : AmbiVisualizer::orderFor (d->numChannels(), dsp::ambisonicOrder (layout),
+                                                               layout.rfind ("Ambisonics", 0) == 0, analysisWin->assumesAmbisonics());
+    const auto at = engine.isPlaying() ? engine.heardPositionFrames() : cursor;
+    if (order <= 0)
+    {
+        if (ambiFedOrder != 0)
+            analysisWin->addAmbisonics ({}, 0);
+        ambiFedOrder = 0;
+        ambiFedData = nullptr;
+        return;
+    }
+    if (d.get() == ambiFedData && at == ambiFedAt && order == ambiFedOrder)
+        return;
+    ambiFedData = d.get();
+    ambiFedAt = at;
+    ambiFedOrder = order;
+    constexpr int frames = 2048;
+    std::vector<std::vector<float>> channels ((size_t) d->numChannels(), std::vector<float> (frames));
+    std::vector<float*> pointers;
+    for (auto& c : channels)
+        pointers.push_back (c.data());
+    d->read (std::max<Frame> (0, at - frames / 2), frames, pointers.data());
+    analysisWin->addAmbisonics (channels, order);
 }
