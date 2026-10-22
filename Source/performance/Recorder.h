@@ -32,7 +32,7 @@ namespace perf
 {
     struct InputChoice
     {
-        CaptureSource source;
+        CaptureSource source;          // an input (microphone), or an application such as a web browser (found by its name)
         double gainDb = 0.0;
         bool ownTrack = true;          // also on a track of its own in the recording
     };
@@ -156,6 +156,8 @@ namespace perf
         std::vector<Track> tracks;      // 0: the mix; then PHINYX's own channels; then each input
         std::vector<std::unique_ptr<AudioCapture>> inputs;
         std::vector<int> inputTrack;    // track of each input, or -1
+        std::unique_ptr<AudioCapture> finder;   // follows PipeWire's applications, when one is recorded
+        std::chrono::steady_clock::time_point lastLookup;
         int programChannels = 2;
         int programTrack = -1;
         struct Resampler;
