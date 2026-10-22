@@ -2,7 +2,6 @@
 #include "FindPanel.h"
 
 #include <QApplication>
-#include <QComboBox>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -15,6 +14,7 @@
 #include <QJsonObject>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QMenu>
 #include <QLineEdit>
 #include <QMap>
 #include <QPainter>
@@ -157,8 +157,7 @@ QSize FindPanel::sizeHint() const
 static const FindItem* itemOf (QTreeWidgetItem* row);
 
 FindPanel::FindPanel (QWidget* home, QWidget* parent)
-    : QWidget (parent), homeWidget (home), search (new QLineEdit (this)), sidebar (new QTreeWidget (this)), results (new QTreeWidget (this)),
-      setBox (new QComboBox (this))
+    : QWidget (parent), homeWidget (home), search (new QLineEdit (this)), sidebar (new QTreeWidget (this)), results (new QTreeWidget (this))
 {
     setAccessibleName (tr ("Find"));
     search->setPlaceholderText (tr ("Search everything (Ctrl+F)"));
@@ -185,10 +184,7 @@ FindPanel::FindPanel (QWidget* home, QWidget* parent)
     results->setAccessibleDescription (tr ("Enter runs or loads the selection, 1 to 8 toggle a Selector colour, 0 clears the colours."));
     results->installEventFilter (this);
 
-    // The Selector's set above the sidebar.
-    setBox->setAccessibleName (tr ("Selector set"));
-    setBox->setToolTip (tr ("The Selector set: each activity has its own eight names and favourites (F2 renames the set)"));
-    setBox->installEventFilter (this);
+    // "Selector" above the sidebar; a right-click on it or on a colour picks the set.
     auto* side = new QWidget (this);
     auto* sideLayout = new QVBoxLayout (side);
     sideLayout->setContentsMargins (0, 0, 0, 0);
@@ -196,8 +192,10 @@ FindPanel::FindPanel (QWidget* home, QWidget* parent)
     auto* selectorLabel = new QLabel (tr ("Selector"), side);
     selectorLabel->setForegroundRole (QPalette::PlaceholderText);
     selectorLabel->setContentsMargins (4, 2, 0, 0);
+    selectorLabel->setToolTip (tr ("Right-click to choose a set: Favorites, Live Performance, Mixing, Mastering, Podcast or Chakra"));
+    selectorLabel->setContextMenuPolicy (Qt::CustomContextMenu);
+    connect (selectorLabel, &QLabel::customContextMenuRequested, this, [this, selectorLabel] (const QPoint& at) { selectorMenu (selectorLabel, at); });
     sideLayout->addWidget (selectorLabel);
-    sideLayout->addWidget (setBox);
     sideLayout->addWidget (sidebar, 1);
 
     auto* split = new QSplitter (Qt::Horizontal, this);
@@ -216,17 +214,24 @@ FindPanel::FindPanel (QWidget* home, QWidget* parent)
     layout->addWidget (split, 1);
 
     // Tab goes from the search to the set and the sidebar, then the results (as Down and Right do).
-    setTabOrder (search, setBox);
-    setTabOrder (setBox, sidebar);
+    setTabOrder (search, sidebar);
     setTabOrder (sidebar, results);
     results->setIndentation (12);
 
     loadSelector();
-    for (int i = 0; i < numSets(); ++i)
-        setBox->addItem (setName (i));
-    setBox->setCurrentIndex (setIndex);
     buildSidebar();
-    connect (setBox, &QComboBox::activated, this, &FindPanel::chooseSet);
+    sidebar->setContextMenuPolicy (Qt::CustomContextMenu);
+    connect (sidebar, &QTreeWidget::customContextMenuRequested, this, [this] (const QPoint& at)
+    {
+        auto* item = sidebar->itemAt (at);
+        if (item == nullptr && at == QPoint())   // the menu key
+            item = sidebar->currentItem();
+        if (item != nullptr && static_cast<Section> (item->data (0, sectionRole).toInt()) == Section::colour)
+        {
+            sidebar->setCurrentItem (item);
+            selectorMenu (sidebar->viewport(), item != nullptr ? sidebar->visualItemRect (item).bottomLeft() : at);
+        }
+    });
 
     connect (search, &QLineEdit::textChanged, this, &FindPanel::refilter);
     connect (sidebar, &QTreeWidget::currentItemChanged, this, [this] (QTreeWidgetItem* item)
@@ -898,11 +903,26 @@ void FindPanel::chooseSet (int set)
     if (set < 0 || set >= numSets())
         return;
     setIndex = set;
-    if (setBox->currentIndex() != set)
-        setBox->setCurrentIndex (set);
     saveSelector();
     buildSidebar();
     refilter();
+}
+
+void FindPanel::selectorMenu (QWidget* on, const QPoint& at)
+{
+    QMenu menu (this);
+    menu.addSection (tr ("Selector Set"));
+    for (int i = 0; i < numSets(); ++i)
+    {
+        auto* action = menu.addAction (setName (i), this, [this, i] { chooseSet (i); });
+        action->setCheckable (true);
+        action->setChecked (i == setIndex);
+    }
+    menu.addSeparator();
+    if (auto* item = sidebar->currentItem(); item != nullptr && static_cast<Section> (item->data (0, sectionRole).toInt()) == Section::colour)
+        menu.addAction (tr ("Rename %1").arg (item->text (0)), this, [this, item] { sidebar->editItem (item); })->setShortcut (Qt::Key_F2);
+    menu.addAction (tr ("Rename Set \u201c%1\u201d...").arg (setName (setIndex)), this, &FindPanel::renameSet);
+    menu.exec (on->mapToGlobal (at));
 }
 
 void FindPanel::renameSet()
@@ -913,7 +933,6 @@ void FindPanel::renameSet()
     if (! ok)
         return;
     sets[(size_t) setIndex].name = name == tr (setNames[std::min (setIndex, defaultSets - 1)]) ? QString() : name;
-    setBox->setItemText (setIndex, setName (setIndex));
     saveSelector();
 }
 
@@ -960,12 +979,7 @@ bool FindPanel::eventFilter (QObject* watched, QEvent* e)
         return true;
     }
 
-    // F2 renames the set on its box, and anywhere else the colour chosen in the sidebar.
-    if (plain && k->key() == Qt::Key_F2 && watched == setBox)
-    {
-        renameSet();
-        return true;
-    }
+    // F2 renames the colour chosen in the sidebar.
     if (plain && k->key() == Qt::Key_F2)
     {
         auto* item = sidebar->currentItem();

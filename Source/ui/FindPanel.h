@@ -8,7 +8,6 @@
 #include <functional>
 #include <vector>
 
-class QComboBox;
 class QLineEdit;
 class QTreeWidget;
 class QTreeWidgetItem;
@@ -34,7 +33,7 @@ struct FindItem
 // the Selector (eight colours of favourites), categories and places, and the results.
 // The Selector has sets of the eight: Favorites (the colour names, the default) and one
 // per activity (Live Performance, Mixing, Mastering, Podcast, Chakra), each with its own names and its own favourites; the
-// set chosen above the sidebar is the one shown and marked, and the mixer can start
+// set chosen with a right-click on the Selector is the one shown and marked, and the mixer can start
 // a mix from it (its tracks are the set's colours and names, bottom up).
 // Files and places are browsed one folder at a time until something is typed:
 // Enter or Right opens a folder, Left or Backspace goes up.
@@ -42,7 +41,7 @@ struct FindItem
 // again or K stops. Keyboard: typing searches everything, Up/Down and Page Up/Down
 // move through the results, Enter runs or loads the selection, Tab moves between search,
 // sidebar and results, 1 to 8 toggle a colour on the selected result (0 clears
-// them), F2 or a double-click renames a colour (F2 on the set's box renames the set), Escape clears the search or goes
+// them), F2 or a double-click renames a colour (the right-click menu also renames the set), Escape clears the search or goes
 // back to the editor.
 class FindPanel final : public QWidget
 {
@@ -101,6 +100,7 @@ private:
     void saveSelector() const;
     void chooseSet (int set);
     void renameSet();
+    void selectorMenu (QWidget* on, const QPoint& at);   // the sets, and renaming
     QHash<QString, int>& marks() { return sets[(size_t) setIndex].marks; }
     const QHash<QString, int>& marks() const { return sets[(size_t) setIndex].marks; }
 
@@ -126,5 +126,4 @@ private:
     };
     std::vector<Set> sets;
     int setIndex = 0;
-    QComboBox* setBox;
 };
