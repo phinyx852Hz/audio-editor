@@ -152,7 +152,12 @@ target_sources(${APP_ID} PRIVATE
     Source/tracker/TrackerEngine.cpp
     Source/tracker/TrackerEdit.cpp
     Source/ui/BinauralDialog.cpp
-    Source/ui/SpatialSection.cpp)
+    Source/ui/SpatialSection.cpp
+    Source/performance/MediaWriter.cpp
+    Source/performance/Cameras.cpp
+    Source/performance/Recorder.cpp
+    Source/ui/PerformanceDialog.cpp
+    Source/ui/PerformanceSection.cpp)
 
 # CLAP plugin hosting needs only the CLAP headers: a local checkout, the
 # system's (clap/clap.h, e.g. the clap package), or the pinned release.
@@ -202,9 +207,11 @@ else()
     message(STATUS "libpipewire-0.3 not found: building without recording")
 endif()
 
-# Export and import of compressed formats (FFmpeg) and their tags (TagLib).
+# Export and import of compressed formats (FFmpeg) and their tags (TagLib). The Performance
+# menu's video recording and streaming also use FFmpeg: libswscale for the picture and
+# libavdevice for cameras.
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavcodec libavformat libavutil libswresample)
+pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavcodec libavformat libavutil libswresample libswscale libavdevice)
 pkg_check_modules(TAGLIB REQUIRED IMPORTED_TARGET taglib>=1.12)
 target_link_libraries(${APP_ID} PRIVATE PkgConfig::FFMPEG PkgConfig::TAGLIB)
 
@@ -324,4 +331,11 @@ if(PHINYX_BUILD_TESTS)
     target_compile_definitions(phinyx-core-tests PRIVATE PHINYX_DEFAULT_HRTF="${PHINYX_DEFAULT_HRTF}")
     target_compile_definitions(phinyx-core-tests PRIVATE PHINYX_SHARE_SOURCE_DIR="${CMAKE_SOURCE_DIR}/share")
     add_test(NAME core COMMAND phinyx-core-tests)
+
+    # The video writer: an MP4 with H.265 (or H.264) and several AAC tracks, read back.
+    add_executable(phinyx-performance-tests
+        tests/PerformanceTests.cpp
+        Source/performance/MediaWriter.cpp)
+    target_link_libraries(phinyx-performance-tests PRIVATE PkgConfig::FFMPEG)
+    add_test(NAME performance COMMAND phinyx-performance-tests)
 endif()

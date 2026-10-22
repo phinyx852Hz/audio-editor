@@ -13,6 +13,7 @@
 #include "Visualizer.h"
 #include "TrackerWindow.h"
 #include "../tracker/TrackerEngine.h"
+#include "../performance/Recorder.h"
 #if PHINYX_HAVE_PROJECTM
  #include "MilkDrop.h"
 #endif
@@ -285,6 +286,8 @@ MainWindow::MainWindow (AudioEngine& e)
 
 MainWindow::~MainWindow()
 {
+    performanceTimer.stop();
+    performance = nullptr;       // closes a recording or stream while the engine still plays
     loadWatcher.waitForFinished();
     engine.setLiveSource ({});   // the Tracker goes before the engine
     engine.setInstrument ({});   // and the Sampler, Slicer and Mixer
@@ -526,6 +529,7 @@ void MainWindow::registerCommands()
     registerWarpCommands();
     registerVisualizerCommands();
     registerTrackerCommands();
+    registerPerformanceCommands();
     registerSamplerCommands();
     registerMixerCommands();
     registerPatchBayCommands();
@@ -825,6 +829,7 @@ void MainWindow::buildMenus()
         { tr ("S&ample"),    { "sample.send", "sample.window", "sample.refresh", "-", "slice.send", "slice.window", "slice.refresh", "-", "sample.midiInputs", "sample.panic" } },
         { tr ("Trac&ker"),   { "tracker.window", "tracker.new", "tracker.open", "tracker.save", "tracker.saveAs", "tracker.loadSample", "-", "tracker.playSong", "tracker.playPattern", "tracker.stop", "-",
                                "tracker.recordStereo", "tracker.recordMulti", "-", "tracker.resetTracks", "tracker.about" } },
+        { tr ("Performan&ce"), { "performance.record", "performance.stream", "-", "performance.settings", "performance.folder" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "-", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
     };
