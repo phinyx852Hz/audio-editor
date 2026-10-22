@@ -3,6 +3,7 @@
 // with the Sampler and Slicer through the engine's instrument slot, played from the
 // MIDI inputs, and mixed down into a new tab of the editor.
 #include "MainWindow.h"
+#include "FindPanel.h"
 #include "MixerWindow.h"
 #include "../mixer/MixerEngine.h"
 #include "../sampler/SamplerEngine.h"
@@ -32,6 +33,19 @@ void MainWindow::registerMixerCommands()
     add ("mixer.window", tr ("&Mixer"), { KS (Qt::Key_F3) }, [this] { showMixer(); })
         ->setStatusTip (tr ("The 8-track mixer: each track plays an audio file, a MIDI file through an instrument, or both"));
     add ("mixer.new", tr ("&New Mix"), {}, [this] { showMixer(); mixerWin->newMix(); });
+    add ("mixer.newFromSet", tr ("New Mix from &Selector Set"), {}, [this]
+    {
+        showMixer();
+        QStringList names;
+        QList<QColor> colours;
+        const auto set = findWidget->currentSet();
+        for (int c = 0; c < FindPanel::numColours; ++c)
+        {
+            names.push_back (findWidget->markName (set, c));
+            colours.push_back (FindPanel::colour (c));
+        }
+        mixerWin->newMixFromSet (findWidget->setName (set), names, colours);
+    })->setStatusTip (tr ("A new mix of 8 tracks with the names and colours of the set chosen in the Find panel's Selector, from the bottom up"));
     add ("mixer.open", tr ("&Open Mix..."), {}, [this] { showMixer(); mixerWin->openMix(); });
     add ("mixer.save", tr ("&Save Mix"), {}, [this] { showMixer(); mixerWin->saveMix (false); });
     add ("mixer.saveAs", tr ("Save Mix &As..."), {}, [this] { showMixer(); mixerWin->saveMix (true); });

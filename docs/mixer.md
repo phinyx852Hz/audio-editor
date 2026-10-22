@@ -282,6 +282,9 @@ Every control has a screen-reader name and announces its value.
   panels. Faders are taller, with dB marks (+6 to −60 and −∞) on the left, and meters have dBFS
   marks on the right; trim and pan use the editor's `Potentiometer` knob
   (`Source/ui/Potentiometer.h`, shared with the plugin chain).
+- Mix from a Selector set (2026-10-22): Mixer > New Mix from Selector Set makes 8 tracks named
+  and coloured from the Find panel's Selector set, from the bottom up (Live Performance: DR, BA,
+  PR, LD, VOX, ARP, PD, FX), so each track matches the favourites of its colour.
 - Tests: the MIDI reader (tempo map, ordering, damaged files) and the engine (pan law, fader,
   polarity, mute and solo, sample-accurate MIDI, transpose, channels, notes let go on a jump,
   the keyboard, meters, mixdown, serial clips, reversed audio and MIDI) and the Synth.

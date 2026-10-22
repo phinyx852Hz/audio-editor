@@ -82,7 +82,10 @@ public:
     void setMidiStatus (const QString&);
 
     // Mix files (.phinyxmix, JSON): the tracks, their files and settings, instruments included.
-    void newMix();
+    bool newMix();   // false when the user keeps the mix they have
+    // A new mix of 8 tracks named and coloured from the bottom of a Selector set up:
+    // the last name and colour on track 1 (DR, BA, PR... for Live Performance).
+    void newMixFromSet (const QString& setName, const QStringList& names, const QList<QColor>& colours);
     void openMix();
     bool saveMix (bool saveAs);
     bool loadMix (const QString& path, QString& error);

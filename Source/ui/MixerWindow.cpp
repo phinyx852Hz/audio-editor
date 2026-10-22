@@ -3198,11 +3198,11 @@ void MixerWindow::closeEvent (QCloseEvent* e)
 }
 
 //==============================================================================
-void MixerWindow::newMix()
+bool MixerWindow::newMix()
 {
     if (modified && ! path.isEmpty()
         && QMessageBox::question (this, tr ("New Mix"), tr ("Start a new mix? Changes to %1 that were not saved are lost.").arg (mixName())) != QMessageBox::Yes)
-        return;
+        return false;
     engine.stop();
     engine.setPosition (0);
     restoring = true;
@@ -3239,6 +3239,23 @@ void MixerWindow::newMix()
     rebuildStrips();
     select (0);
     updateTitle();
+    return true;
+}
+
+void MixerWindow::newMixFromSet (const QString& setName, const QStringList& names, const QList<QColor>& colours)
+{
+    if (! newMix())
+        return;
+    const auto count = std::min ((int) std::min (names.size(), colours.size()), mixer::maxTracks);
+    for (int i = 0; i < count; ++i)
+    {
+        info[(size_t) i].name = names[count - 1 - i];
+        info[(size_t) i].colour = colours[count - 1 - i];
+    }
+    engine.setNumTracks (std::max (count, 1));
+    rebuildStrips();
+    select (0);
+    status->setText (tr ("A new mix from the %1 set").arg (setName));
 }
 
 void MixerWindow::openMix()
