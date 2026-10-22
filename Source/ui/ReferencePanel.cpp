@@ -2,6 +2,11 @@
 #include "ReferencePanel.h"
 
 #include <QCheckBox>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
+#include <QTimer>
+#include <QUrl>
 #include <QDoubleSpinBox>
 #include <QHBoxLayout>
 #include <QKeyEvent>
@@ -12,6 +17,7 @@
 
 ReferencePanel::ReferencePanel (QWidget* parent) : QWidget (parent)
 {
+    setAcceptDrops (true);
     auto* layout = new QVBoxLayout (this);
     layout->setContentsMargins (6, 6, 6, 6);
 
@@ -111,4 +117,22 @@ bool ReferencePanel::eventFilter (QObject* o, QEvent* e)
         }
     }
     return QWidget::eventFilter (o, e);
+}
+
+void ReferencePanel::dragEnterEvent (QDragEnterEvent* e)
+{
+    if (e->mimeData()->hasUrls())
+        e->acceptProposedAction();
+}
+
+void ReferencePanel::dropEvent (QDropEvent* e)
+{
+    QStringList paths;
+    for (const auto& url : e->mimeData()->urls())
+        if (url.isLocalFile())
+            paths << url.toLocalFile();
+    if (paths.isEmpty())
+        return;
+    e->acceptProposedAction();
+    QTimer::singleShot (0, this, [this, paths] { Q_EMIT filesDropped (paths); });
 }

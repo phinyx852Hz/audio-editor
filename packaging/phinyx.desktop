@@ -7,5 +7,5 @@ Exec=phinyx %F
 Icon=audio-x-generic
 Terminal=false
 Categories=AudioVideo;Audio;AudioVideoEditing;
-MimeType=audio/x-wav;audio/wav;audio/flac;audio/x-aiff;audio/mpeg;audio/ogg;
+MimeType=audio/x-wav;audio/wav;audio/flac;audio/x-aiff;audio/mpeg;audio/ogg;application/x-phinyx-project;
 StartupWMClass=phinyx

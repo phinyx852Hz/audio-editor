@@ -21,6 +21,8 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QPushButton>
+#include <QScrollArea>
+#include <QMessageBox>
 #include <QStatusBar>
 #include <QVBoxLayout>
 #include <QtConcurrent>
@@ -40,18 +42,18 @@ void MainWindow::registerSamplerCommands()
     slicerEngine = std::make_unique<slicer::Engine>();
     midiInputs = std::make_unique<MidiInputs>();
 
-    add ("sample.send", tr ("&Send to Sampler"), { KS (Qt::Key_F7) }, [this] { sendToSampler (false); })
-        ->setStatusTip (tr ("Play the selection (or the whole file) across the keyboard in the Sampler; later edits follow it"));
-    add ("sample.window", tr ("Sampler &Window"), { KS (Qt::SHIFT | Qt::Key_F7) }, [this] { showSampler(); });
+    add ("sample.send", tr ("&Send to Simplest"), { KS (Qt::Key_F7) }, [this] { sendToSampler (false); })
+        ->setStatusTip (tr ("Play the selection (or the whole file) across the keyboard in Simplest; later edits follow it"));
+    add ("sample.window", tr ("&Simplest"), { KS (Qt::SHIFT | Qt::Key_F7) }, [this] { showSampler(); });
     add ("sample.refresh", tr ("&Refresh from Editor"), { KS (Qt::CTRL | Qt::Key_F7) }, [this] { sendToSampler (true); })
-        ->setStatusTip (tr ("Take the sound the Sampler came from again, keeping its start, end and loop"));
+        ->setStatusTip (tr ("Take the sound Simplest came from again, keeping its start, end and loop"));
     add ("slice.send", tr ("Send to Sli&cer"), { KS (Qt::Key_F8) }, [this] { sendToSlicer (false); })
         ->setStatusTip (tr ("Cut the selection (or the whole file) into slices on 64 pads in the Slicer; later edits follow it"));
     add ("slice.window", tr ("Slicer W&indow"), { KS (Qt::SHIFT | Qt::Key_F8) }, [this] { showSlicer(); });
     add ("slice.refresh", tr ("Re&fresh Slicer from Editor"), { KS (Qt::CTRL | Qt::Key_F8) }, [this] { sendToSlicer (true); })
         ->setStatusTip (tr ("Take the sound the Slicer came from again, keeping its slices"));
     add ("sample.midiInputs", tr ("&MIDI Inputs..."), {}, [this] { midiInputsDialog(); })
-        ->setStatusTip (tr ("Choose the MIDI keyboards and controllers (Push, pads) that play the Sampler"));
+        ->setStatusTip (tr ("Choose the MIDI keyboards and controllers (Push, pads) that play Simplest"));
     add ("sample.panic", tr ("All Notes &Off"), { KS (Qt::SHIFT | Qt::Key_Escape) }, [this]
     {
         samplerEngine->panic();
@@ -136,23 +138,38 @@ void MainWindow::registerSamplerCommands()
     slicerFollowTimer.setInterval (300);
     connect (&slicerFollowTimer, &QTimer::timeout, this, [this] { sendToSlicer (true); });
 
-    // Both are panels like Find and the meters: docked on the left under Find (taking its
-    // place when it is closed), the Slicer under the Sampler; drag them anywhere, or pop
-    // them out into windows of their own (View > Pop Out / Dock Panel, Ctrl+Alt+P).
+    // Both are panels like Find and the meters: Simplest along the bottom above the device chain,
+    // the Slicer on the left under Find (taking its place when it is closed); drag them anywhere,
+    // or pop them out into windows of their own (View > Pop Out / Dock Panel, Ctrl+Alt+P). Each
+    // scrolls inside its dock rather than pushing past the panels next to it. Further samplers
+    // and synths of the Sample menu open as floating windows.
+    auto scrolling = [this] (QWidget* content)
+    {
+        auto* area = new QScrollArea (this);
+        area->setWidget (content);
+        area->setWidgetResizable (true);
+        area->setFrameShape (QFrame::NoFrame);
+        area->setFocusProxy (content);   // showing the panel gives the instrument the playing keys
+        area->viewport()->setAutoFillBackground (false);
+        content->setAutoFillBackground (false);
+        return area;
+    };
     samplerWin = new SamplerWindow (*samplerEngine, this);
     connect (samplerWin, &SamplerWindow::refreshRequested, this, [this] { sendToSampler (true); });
     connect (samplerWin, &SamplerWindow::midiInputsRequested, this, [this] { midiInputsDialog(); });
     connect (samplerWin, &SamplerWindow::activated, this, [this] { midiTarget = 0; });
     connect (samplerWin, &SamplerWindow::closed, this, [this] { instrumentClosed(); });
-    samplerPanel = new DockablePanel (*this, QStringLiteral ("samplerPanel"), tr ("Sampler"), samplerWin, Qt::LeftDockWidgetArea);
+    connect (samplerWin, &SamplerWindow::fileDropped, this, &MainWindow::loadSamplerFile);
+    samplerPanel = new DockablePanel (*this, QStringLiteral ("samplerPanel"), tr ("Simplest"), scrolling (samplerWin), Qt::BottomDockWidgetArea);
     slicerWin = new SlicerWindow (*slicerEngine, this);
     connect (slicerWin, &SlicerWindow::refreshRequested, this, [this] { sendToSlicer (true); });
     connect (slicerWin, &SlicerWindow::midiInputsRequested, this, [this] { midiInputsDialog(); });
     connect (slicerWin, &SlicerWindow::activated, this, [this] { midiTarget = 1; });
     connect (slicerWin, &SlicerWindow::closed, this, [this] { instrumentClosed(); });
-    slicerPanel = new DockablePanel (*this, QStringLiteral ("slicerPanel"), tr ("Slicer"), slicerWin, Qt::LeftDockWidgetArea);
-    splitDockWidget (findPanel->dock(), samplerPanel->dock(), Qt::Vertical);
-    splitDockWidget (samplerPanel->dock(), slicerPanel->dock(), Qt::Vertical);
+    connect (slicerWin, &SlicerWindow::fileDropped, this, &MainWindow::loadSlicerFile);
+    slicerPanel = new DockablePanel (*this, QStringLiteral ("slicerPanel"), tr ("Slicer"), scrolling (slicerWin), Qt::LeftDockWidgetArea);
+    splitDockWidget (samplerPanel->dock(), chainPanel->dock(), Qt::Vertical);   // the chain goes under Simplest
+    splitDockWidget (findPanel->dock(), slicerPanel->dock(), Qt::Vertical);
     panels << samplerPanel << slicerPanel;
     updateMidiStatus();
 }
@@ -185,14 +202,14 @@ void MainWindow::sendToSampler (bool keepMarkers)
         if (samplerTab != activeTab || samplerPath != doc.path() || data() == nullptr)
         {
             if (! samplerFollowTimer.isActive())
-                statusBar()->showMessage (tr ("The Sampler's sound came from another tab; switch to it to refresh"), 4000);
+                statusBar()->showMessage (tr ("Simplest's sound came from another tab; switch to it to refresh"), 4000);
             return;
         }
     }
     const auto d = data();
     if (d == nullptr || doc.isAlbum())
     {
-        statusBar()->showMessage (tr ("Open a file first, then send it (or a selection) to the Sampler with F7"), 5000);
+        statusBar()->showMessage (tr ("Open a file first, then send it (or a selection) to Simplest with F7"), 5000);
         return;
     }
     if (! keepMarkers)
@@ -226,7 +243,7 @@ void MainWindow::sendToSampler (bool keepMarkers)
         if (*result == nullptr || samplerWin == nullptr)
             return;
         samplerWin->setSample (*result, rate, name, keepMarkers);
-        statusBar()->showMessage (keepMarkers ? tr ("Sampler updated") : tr ("In the Sampler: play it with A to K or a MIDI keyboard"), 4000);
+        statusBar()->showMessage (keepMarkers ? tr ("Simplest updated") : tr ("In Simplest: play it with A to K or a MIDI keyboard"), 4000);
     });
     samplerLoad.setFuture (QtConcurrent::run ([d, from, to, rate, result]
     {
@@ -234,6 +251,82 @@ void MainWindow::sendToSampler (bool keepMarkers)
         if (std::abs (part->sampleRate() - rate) > 0.5)
             part = dsp::resample (*part, rate);
         *result = sampler::makeSample (*part);
+    }));
+}
+
+// A file dropped on Simplest (from Find or a file manager): the whole sound, loaded and
+// resampled aside. It came from no tab, so edits in the editor do not follow it.
+void MainWindow::loadSamplerFile (const QString& path)
+{
+    const auto rate = engine.deviceSampleRate() > 0.0 ? engine.deviceSampleRate() : 48000.0;
+    samplerTab = -1;
+    samplerPath.clear();
+    samplerSource = nullptr;
+    showSampler();
+    samplerEngine->prepare (rate);
+    playInstruments();
+    struct Loaded { sampler::SamplePtr sample; std::string error; };
+    auto result = std::make_shared<Loaded>();
+    samplerLoad.waitForFinished();
+    disconnect (&samplerLoad, nullptr, this, nullptr);
+    connect (&samplerLoad, &QFutureWatcher<void>::finished, this, [this, result, rate, path]
+    {
+        if (result->sample == nullptr)
+        {
+            QMessageBox::warning (this, tr ("Simplest"), tr ("%1 could not be read: %2").arg (QFileInfo (path).fileName(), QString::fromStdString (result->error)));
+            return;
+        }
+        samplerWin->setSample (result->sample, rate, QFileInfo (path).completeBaseName(), false);
+        statusBar()->showMessage (tr ("In Simplest: play it with A to K or a MIDI keyboard"), 4000);
+    });
+    samplerLoad.setFuture (QtConcurrent::run ([path, rate, result]
+    {
+        std::vector<Marker> markers;
+        Tags tags;
+        auto loaded = AudioEngine::loadFile (path.toStdString(), markers, tags, result->error);
+        if (loaded == nullptr)
+            return;
+        if (std::abs (loaded->sampleRate() - rate) > 0.5)
+            loaded = dsp::resample (*loaded, rate);
+        result->sample = sampler::makeSample (*loaded);
+    }));
+}
+
+// As loadSamplerFile, for the Slicer: cut into 16 equal slices to start with.
+void MainWindow::loadSlicerFile (const QString& path)
+{
+    const auto rate = engine.deviceSampleRate() > 0.0 ? engine.deviceSampleRate() : 48000.0;
+    slicerTab = -1;
+    slicerPath.clear();
+    slicerSource = nullptr;
+    showSlicer();
+    slicerEngine->prepare (rate);
+    playInstruments();
+    struct Loaded { sampler::SamplePtr sample; AudioDataPtr audio; std::string error; };
+    auto result = std::make_shared<Loaded>();
+    slicerLoad.waitForFinished();
+    disconnect (&slicerLoad, nullptr, this, nullptr);
+    connect (&slicerLoad, &QFutureWatcher<void>::finished, this, [this, result, rate, path]
+    {
+        if (result->sample == nullptr)
+        {
+            QMessageBox::warning (this, tr ("Slicer"), tr ("%1 could not be read: %2").arg (QFileInfo (path).fileName(), QString::fromStdString (result->error)));
+            return;
+        }
+        slicerWin->setSample (result->sample, result->audio, rate, QFileInfo (path).completeBaseName(), false, BeatGrid {}, {});
+        statusBar()->showMessage (tr ("In the Slicer: play the pads with Z X C V, A S D F, Q W E R, 1 2 3 4 or Push"), 4000);
+    });
+    slicerLoad.setFuture (QtConcurrent::run ([path, rate, result]
+    {
+        std::vector<Marker> markers;
+        Tags tags;
+        auto loaded = AudioEngine::loadFile (path.toStdString(), markers, tags, result->error);
+        if (loaded == nullptr)
+            return;
+        if (std::abs (loaded->sampleRate() - rate) > 0.5)
+            loaded = dsp::resample (*loaded, rate);
+        result->sample = sampler::makeSample (*loaded);
+        result->audio = loaded;
     }));
 }
 
@@ -395,7 +488,7 @@ void MainWindow::midiInputsDialog()
     QDialog dialog (parent);
     dialog.setWindowTitle (tr ("MIDI Inputs"));
     auto* layout = new QVBoxLayout (&dialog);
-    auto* about = new QLabel (tr ("Ticked keyboards and controllers play the Sampler or the Slicer, whichever you used last. Ableton Push: use its User mode, "
+    auto* about = new QLabel (tr ("Ticked keyboards and controllers play Simplest or the Slicer, whichever you used last. Ableton Push: use its User mode, "
                                   "or its own MIDI port when Live is not running; its 64 pads send notes 36 to 99."), &dialog);
     about->setWordWrap (true);
     layout->addWidget (about);

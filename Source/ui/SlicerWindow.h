@@ -121,12 +121,15 @@ Q_SIGNALS:
     void midiInputsRequested();
     void activated();
     void closed();
+    void fileDropped (const QString& path);   // an audio file dragged here from Find or a file manager
 
 protected:
     void keyPressEvent (class QKeyEvent*) override;
     void keyReleaseEvent (class QKeyEvent*) override;
     bool event (QEvent*) override;
     bool eventFilter (QObject*, QEvent*) override;
+    void dragEnterEvent (class QDragEnterEvent*) override;
+    void dropEvent (class QDropEvent*) override;
     void hideEvent (class QHideEvent*) override;
 
 private:
