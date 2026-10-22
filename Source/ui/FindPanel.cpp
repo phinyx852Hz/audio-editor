@@ -8,10 +8,13 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QHeaderView>
+#include <QInputDialog>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QKeyEvent>
+#include <QLabel>
+#include <QMenu>
 #include <QLineEdit>
 #include <QMap>
 #include <QPainter>
@@ -87,27 +90,61 @@ namespace
         }
         return found;
     }
+
+    // The Selector's sets: Favorites, the neutral default, then one per activity,
+    // each with a name for every colour. The ids are kept in find.json.
+    const char* const setIds[] { "favorites", "live", "mixing", "mastering", "podcast", "chakra" };
+    const char* const setNames[] { QT_TR_NOOP ("Favorites"), QT_TR_NOOP ("Live Performance"), QT_TR_NOOP ("Mixing"),
+                                   QT_TR_NOOP ("Mastering"), QT_TR_NOOP ("Podcast"), QT_TR_NOOP ("Chakra") };
+    constexpr int defaultSets = (int) std::size (setNames);
+    constexpr int liveSet = 1;
+
+    // Live Performance names its colours after the parts of a set, top to bottom;
+    // the other sets go by the colour names until they are given theirs.
+    QString setId (int set)
+    {
+        return set < defaultSets ? QString::fromLatin1 (setIds[set]) : QStringLiteral ("set%1").arg (set + 1);
+    }
+
+    QString defaultMarkName (int set, int index)
+    {
+        static const QStringList live { "FX", "PD", "ARP", "VOX", "LD", "PR", "BA", "DR" };
+        return set == liveSet ? live.value (index) : FindPanel::colourName (index);
+    }
 }
 
 QString FindPanel::colourName (int index)
 {
-    static const QStringList names { QObject::tr ("Favorites"), QObject::tr ("Orange"), QObject::tr ("Yellow"), QObject::tr ("Green"),
-                                     QObject::tr ("Blue"), QObject::tr ("Purple"), QObject::tr ("Gray") };
+    static const QStringList names { QObject::tr ("Silver"), QObject::tr ("Violet"), QObject::tr ("Indigo"), QObject::tr ("Azure"),
+                                     QObject::tr ("Emerald"), QObject::tr ("Gold"), QObject::tr ("Saffron"), QObject::tr ("Ruby") };
     return names.value (index);
 }
 
 QColor FindPanel::colour (int index)
 {
-    static const QColor colours[numColours] { QColor (0xf0, 0x3e, 0x3e), QColor (0xf5, 0x9b, 0x2b), QColor (0xf2, 0xd7, 0x3a),
-                                              QColor (0x3d, 0xd6, 0x8c), QColor (0x3d, 0x8e, 0xf0), QColor (0xa8, 0x6c, 0xf0),
-                                              QColor (0x8c, 0x8c, 0x8c) };
+    // The named colours (silver C0C0C0, violet 8F00FF, indigo 4B0082, azure 007FFF, emerald
+    // 50C878, gold FFD700, saffron FF9933, ruby 9B111E), violet and indigo lifted so they
+    // read on a dark theme.
+    static const QColor colours[numColours] { QColor (0xc0, 0xc0, 0xc0), QColor (0xa0, 0x40, 0xff), QColor (0x6a, 0x3d, 0xd8),
+                                              QColor (0x00, 0x7f, 0xff), QColor (0x50, 0xc8, 0x78), QColor (0xff, 0xd7, 0x00),
+                                              QColor (0xff, 0x99, 0x33), QColor (0x9b, 0x11, 0x1e) };
     return index >= 0 && index < numColours ? colours[index] : QColor();
 }
 
-QString FindPanel::collectionName (int index) const
+QString FindPanel::setName (int set) const
 {
-    const auto name = collectionNames.value (index).trimmed();
-    return name.isEmpty() ? colourName (index) : name;
+    if (set < 0 || set >= numSets())
+        return {};
+    const auto name = sets[(size_t) set].name.trimmed();
+    return ! name.isEmpty() ? name : set < defaultSets ? tr (setNames[set]) : tr ("Set %1").arg (set + 1);
+}
+
+QString FindPanel::markName (int set, int index) const
+{
+    if (set < 0 || set >= numSets())
+        return {};
+    const auto name = sets[(size_t) set].names.value (index).trimmed();
+    return name.isEmpty() ? defaultMarkName (set, index) : name;
 }
 
 //==============================================================================
@@ -138,17 +175,31 @@ FindPanel::FindPanel (QWidget* home, QWidget* parent)
     results->setColumnCount (3);
     results->setHeaderLabels ({ tr ("Name"), QString(), QString() });
     results->setUniformRowHeights (true);
-    results->setIconSize (QSize (44, 10));
+    results->setIconSize (QSize (52, 10));
     results->header()->setStretchLastSection (false);
     results->header()->setSectionResizeMode (0, QHeaderView::Stretch);
     results->header()->setSectionResizeMode (1, QHeaderView::ResizeToContents);   // colour dots
     results->header()->setSectionResizeMode (2, QHeaderView::ResizeToContents);
     results->setAccessibleName (tr ("Results"));
-    results->setAccessibleDescription (tr ("Enter runs or loads the selection, 1 to 7 toggle a colour, 0 clears the colours."));
+    results->setAccessibleDescription (tr ("Enter runs or loads the selection, 1 to 8 toggle a Selector colour, 0 clears the colours."));
     results->installEventFilter (this);
 
+    // "Selector" above the sidebar; a right-click on it or on a colour picks the set.
+    auto* side = new QWidget (this);
+    auto* sideLayout = new QVBoxLayout (side);
+    sideLayout->setContentsMargins (0, 0, 0, 0);
+    sideLayout->setSpacing (2);
+    auto* selectorLabel = new QLabel (tr ("Selector"), side);
+    selectorLabel->setForegroundRole (QPalette::PlaceholderText);
+    selectorLabel->setContentsMargins (4, 2, 0, 0);
+    selectorLabel->setToolTip (tr ("Right-click to choose a set: Favorites, Live Performance, Mixing, Mastering, Podcast or Chakra"));
+    selectorLabel->setContextMenuPolicy (Qt::CustomContextMenu);
+    connect (selectorLabel, &QLabel::customContextMenuRequested, this, [this, selectorLabel] (const QPoint& at) { selectorMenu (selectorLabel, at); });
+    sideLayout->addWidget (selectorLabel);
+    sideLayout->addWidget (sidebar, 1);
+
     auto* split = new QSplitter (Qt::Horizontal, this);
-    split->addWidget (sidebar);
+    split->addWidget (side);
     split->addWidget (results);
     split->setStretchFactor (0, 0);
     split->setStretchFactor (1, 1);
@@ -162,13 +213,25 @@ FindPanel::FindPanel (QWidget* home, QWidget* parent)
     layout->addWidget (search);
     layout->addWidget (split, 1);
 
-    // Tab goes from the search to the sidebar, then the results (as Down and Right do).
+    // Tab goes from the search to the set and the sidebar, then the results (as Down and Right do).
     setTabOrder (search, sidebar);
     setTabOrder (sidebar, results);
     results->setIndentation (12);
 
-    loadCollections();
+    loadSelector();
     buildSidebar();
+    sidebar->setContextMenuPolicy (Qt::CustomContextMenu);
+    connect (sidebar, &QTreeWidget::customContextMenuRequested, this, [this] (const QPoint& at)
+    {
+        auto* item = sidebar->itemAt (at);
+        if (item == nullptr && at == QPoint())   // the menu key
+            item = sidebar->currentItem();
+        if (item != nullptr && static_cast<Section> (item->data (0, sectionRole).toInt()) == Section::colour)
+        {
+            sidebar->setCurrentItem (item);
+            selectorMenu (sidebar->viewport(), item != nullptr ? sidebar->visualItemRect (item).bottomLeft() : at);
+        }
+    });
 
     connect (search, &QLineEdit::textChanged, this, &FindPanel::refilter);
     connect (sidebar, &QTreeWidget::currentItemChanged, this, [this] (QTreeWidgetItem* item)
@@ -212,14 +275,15 @@ FindPanel::FindPanel (QWidget* home, QWidget* parent)
         if (static_cast<Section> (item->data (0, sectionRole).toInt()) != Section::colour)
             return;
 
-        // An empty name goes back to the colour's own name.
+        // An empty name goes back to the default.
         const auto c = item->data (0, colourRole).toInt();
-        while (collectionNames.size() < numColours)
-            collectionNames.push_back ({});
-        collectionNames[c] = item->text (0).trimmed() == colourName (c) ? QString() : item->text (0).trimmed();
-        saveCollections();
+        auto& names = sets[(size_t) setIndex].names;
+        while (names.size() < numColours)
+            names.push_back ({});
+        names[c] = item->text (0).trimmed() == defaultMarkName (setIndex, c) ? QString() : item->text (0).trimmed();
+        saveSelector();
         const QSignalBlocker blocker (sidebar);
-        item->setText (0, collectionName (c));
+        item->setText (0, markName (setIndex, c));
     });
     connect (&fileScan, &QFutureWatcher<QList<FindItem>>::finished, this, [this]
     {
@@ -281,14 +345,13 @@ void FindPanel::buildSidebar()
         return e;
     };
 
-    heading (tr ("Collections"));
     for (int c = 0; c < numColours; ++c)
     {
         QPixmap square (10, 10);
         square.fill (colour (c));
-        auto* e = entry (collectionName (c), Section::colour);
+        auto* e = entry (markName (setIndex, c), Section::colour);
         e->setFlags (e->flags() | Qt::ItemIsEditable);
-        e->setToolTip (0, tr ("F2 renames this collection"));
+        e->setToolTip (0, tr ("%1 (key %2): F2 or a double-click renames it").arg (colourName (c)).arg (c + 1));
         e->setIcon (0, QIcon (square));
         e->setData (0, colourRole, c);
     }
@@ -332,7 +395,7 @@ QIcon FindPanel::dots (int mask) const
     if (auto it = cache.find (mask); it != cache.end())
         return *it;
 
-    QPixmap pixmap (44, 10);
+    QPixmap pixmap (52, 10);
     pixmap.fill (Qt::transparent);
     QPainter g (&pixmap);
     g.setRenderHint (QPainter::Antialiasing);
@@ -368,7 +431,7 @@ void FindPanel::refilter()
     {
         switch (section)
         {
-            case Section::colour:    return (collections.value (item.key) & (1 << current->data (0, colourRole).toInt())) != 0;
+            case Section::colour:    return (marks().value (item.key) & (1 << current->data (0, colourRole).toInt())) != 0;
             case Section::processes: return item.kind == FindItem::Kind::process;
             case Section::effects:   return item.kind == FindItem::Kind::effect;
             case Section::plugins:   return item.kind == FindItem::Kind::plugin;
@@ -451,7 +514,7 @@ void FindPanel::refilter()
             auto* row = new QTreeWidgetItem (header, { item->name, QString(), item->detail });
             row->setData (0, indexRole, 0);
             row->setData (0, itemRole, QVariant::fromValue (static_cast<const void*> (item)));
-            if (const auto mask = collections.value (item->key); mask != 0)
+            if (const auto mask = marks().value (item->key); mask != 0)
                 row->setIcon (1, dots (mask));
             row->setToolTip (0, item->kind == FindItem::Kind::file ? item->key.mid (5) : item->name);
             if (! item->enabled)
@@ -466,7 +529,7 @@ void FindPanel::refilter()
     {
         const auto where = current != nullptr ? current->text (0) : tr ("All");
         auto* note = new QTreeWidgetItem (results, { section == Section::colour && words.isEmpty()
-            ? tr ("Empty: press 1 to 7 on a result to add it")
+            ? tr ("Empty: press %1 on a result to add it").arg (current->data (0, colourRole).toInt() + 1)
             : tr ("Nothing found in %1").arg (where) });
         note->setData (0, indexRole, -1);
         note->setFlags (Qt::ItemIsEnabled);
@@ -533,14 +596,14 @@ void FindPanel::toggleColour (QTreeWidgetItem* row, int c)
     if (item == nullptr)
         return;
 
-    auto mask = collections.value (item->key);
+    auto mask = marks().value (item->key);
     mask = c < 0 ? 0 : mask ^ (1 << c);
     if (mask == 0)
-        collections.remove (item->key);
+        marks().remove (item->key);
     else
-        collections.insert (item->key, mask);
+        marks().insert (item->key, mask);
     row->setIcon (1, mask != 0 ? dots (mask) : QIcon());
-    saveCollections();
+    saveSelector();
 }
 
 //==============================================================================
@@ -645,7 +708,7 @@ void FindPanel::listFolder (const QString& select)
         auto* row = new QTreeWidgetItem (results, { item.name, QString(), item.detail });
         row->setData (0, indexRole, 0);
         row->setData (0, itemRole, QVariant::fromValue (static_cast<const void*> (&item)));
-        if (const auto mask = collections.value (item.key); mask != 0)
+        if (const auto mask = marks().value (item.key); mask != 0)
             row->setIcon (1, dots (mask));
         row->setToolTip (0, item.key.mid (5));
         if (item.key.mid (5) == keep)
@@ -727,7 +790,7 @@ void FindPanel::addPlace()
         return;
 
     places.push_back (folder);
-    saveCollections();
+    saveSelector();
     buildSidebar();
     filesStale = true;
     scanFiles();
@@ -741,8 +804,9 @@ void FindPanel::scanFiles()
     fileScan.setFuture (QtConcurrent::run (scanPlaces, places));
 }
 
-void FindPanel::loadCollections()
+void FindPanel::loadSelector()
 {
+    sets.assign ((size_t) defaultSets, {});
     QFile file (storePath());
     if (! file.open (QIODevice::ReadOnly))
     {
@@ -756,26 +820,120 @@ void FindPanel::loadCollections()
     const auto root = QJsonDocument::fromJson (file.readAll()).object();
     for (const auto& p : root.value (QStringLiteral ("places")).toArray())
         places.push_back (p.toString());
-    for (const auto& n : root.value (QStringLiteral ("collectionNames")).toArray())
-        collectionNames.push_back (n.toString());
+
+    if (root.contains (QStringLiteral ("sets")))
+    {
+        // Sets saved before Favorites came first carry no id and are in the activities' order.
+        const auto list = root.value (QStringLiteral ("sets")).toArray();
+        for (int i = 0; i < list.size(); ++i)
+        {
+            const auto o = list[i].toObject();
+            const auto id = o.value (QStringLiteral ("id")).toString (i + 1 < defaultSets ? QString::fromLatin1 (setIds[i + 1]) : QString());
+            int index = numSets();
+            for (int k = 0; k < numSets(); ++k)
+                if (id == setId (k))
+                    index = k;
+            if (index >= numSets())
+                sets.resize ((size_t) index + 1);
+            auto& set = sets[(size_t) index];
+            set.name = o.value (QStringLiteral ("name")).toString();
+            for (const auto& n : o.value (QStringLiteral ("names")).toArray())
+                set.names.push_back (n.toString());
+            const auto m = o.value (QStringLiteral ("marks")).toObject();
+            for (auto it = m.begin(); it != m.end(); ++it)
+                if (const auto mask = it.value().toInt() & ((1 << numColours) - 1); mask != 0)
+                    set.marks.insert (it.key(), mask);
+        }
+        setIndex = liveSet;   // where the older sets were
+        for (int i = 0; i < numSets(); ++i)
+            if (root.value (QStringLiteral ("setId")).toString() == setId (i))
+                setIndex = i;
+        return;
+    }
+
+    // Before the Selector: seven collections (Favorites in red, Orange, Yellow, Green,
+    // Blue, Purple, Gray). Each goes to the nearest colour of Favorites, keeping
+    // the names given to it.
+    constexpr int oldToNew[] { 7, 6, 5, 4, 3, 1, 0 };
+    auto& live = sets[0];   // Favorites
+    const auto oldNames = root.value (QStringLiteral ("collectionNames")).toArray();
+    for (int i = 0; i < oldNames.size() && i < (int) std::size (oldToNew); ++i)
+        if (const auto name = oldNames[i].toString().trimmed(); ! name.isEmpty())
+        {
+            while (live.names.size() < numColours)
+                live.names.push_back ({});
+            live.names[oldToNew[i]] = name;
+        }
     const auto colours = root.value (QStringLiteral ("colours")).toObject();
     for (auto it = colours.begin(); it != colours.end(); ++it)
-        if (const auto mask = it.value().toInt(); mask != 0)
-            collections.insert (it.key(), mask);
+    {
+        int mask = 0;
+        for (int i = 0; i < (int) std::size (oldToNew); ++i)
+            if (it.value().toInt() & (1 << i))
+                mask |= 1 << oldToNew[i];
+        if (mask != 0)
+            live.marks.insert (it.key(), mask);
+    }
 }
 
-void FindPanel::saveCollections() const
+void FindPanel::saveSelector() const
 {
-    QJsonObject colours;
-    for (auto it = collections.begin(); it != collections.end(); ++it)
-        colours.insert (it.key(), it.value());
+    QJsonArray list;
+    for (const auto& set : sets)
+    {
+        QJsonObject m;
+        for (auto it = set.marks.begin(); it != set.marks.end(); ++it)
+            m.insert (it.key(), it.value());
+        list.push_back (QJsonObject { { QStringLiteral ("id"), setId ((int) list.size()) },
+                                      { QStringLiteral ("name"), set.name },
+                                      { QStringLiteral ("names"), QJsonArray::fromStringList (set.names) },
+                                      { QStringLiteral ("marks"), m } });
+    }
 
     QDir().mkpath (QFileInfo (storePath()).absolutePath());
     QFile file (storePath());
     if (file.open (QIODevice::WriteOnly | QIODevice::Truncate))
         file.write (QJsonDocument (QJsonObject { { QStringLiteral ("places"), QJsonArray::fromStringList (places) },
-                                                 { QStringLiteral ("collectionNames"), QJsonArray::fromStringList (collectionNames) },
-                                                 { QStringLiteral ("colours"), colours } }).toJson());
+                                                 { QStringLiteral ("setId"), setId (setIndex) },
+                                                 { QStringLiteral ("sets"), list } }).toJson());
+}
+
+void FindPanel::chooseSet (int set)
+{
+    if (set < 0 || set >= numSets())
+        return;
+    setIndex = set;
+    saveSelector();
+    buildSidebar();
+    refilter();
+}
+
+void FindPanel::selectorMenu (QWidget* on, const QPoint& at)
+{
+    QMenu menu (this);
+    menu.addSection (tr ("Selector Set"));
+    for (int i = 0; i < numSets(); ++i)
+    {
+        auto* action = menu.addAction (setName (i), this, [this, i] { chooseSet (i); });
+        action->setCheckable (true);
+        action->setChecked (i == setIndex);
+    }
+    menu.addSeparator();
+    if (auto* item = sidebar->currentItem(); item != nullptr && static_cast<Section> (item->data (0, sectionRole).toInt()) == Section::colour)
+        menu.addAction (tr ("Rename %1").arg (item->text (0)), this, [this, item] { sidebar->editItem (item); })->setShortcut (Qt::Key_F2);
+    menu.addAction (tr ("Rename Set \u201c%1\u201d...").arg (setName (setIndex)), this, &FindPanel::renameSet);
+    menu.exec (on->mapToGlobal (at));
+}
+
+void FindPanel::renameSet()
+{
+    bool ok = false;
+    const auto name = QInputDialog::getText (this, tr ("Rename Set"), tr ("Name of this Selector set (empty for the default):"),
+                                             QLineEdit::Normal, setName (setIndex), &ok).trimmed();
+    if (! ok)
+        return;
+    sets[(size_t) setIndex].name = name == tr (setNames[std::min (setIndex, defaultSets - 1)]) ? QString() : name;
+    saveSelector();
 }
 
 //==============================================================================
@@ -821,7 +979,7 @@ bool FindPanel::eventFilter (QObject* watched, QEvent* e)
         return true;
     }
 
-    // F2 anywhere in the panel renames the collection chosen in the sidebar.
+    // F2 renames the colour chosen in the sidebar.
     if (plain && k->key() == Qt::Key_F2)
     {
         auto* item = sidebar->currentItem();
@@ -832,7 +990,7 @@ bool FindPanel::eventFilter (QObject* watched, QEvent* e)
         }
         else
             QToolTip::showText (sidebar->mapToGlobal (QPoint (8, 8)),
-                                tr ("Choose a colour collection, then press F2 to rename it"), sidebar);
+                                tr ("Choose a Selector colour, then press F2 to rename it"), sidebar);
         return true;
     }
 
@@ -852,7 +1010,7 @@ bool FindPanel::eventFilter (QObject* watched, QEvent* e)
             case Qt::Key_Down:
                 if (! plain)
                     return false;
-                // Down from an empty search goes to the collections and sections;
+                // Down from an empty search goes to the Selector and sections;
                 // after typing it goes to what was found.
                 if (search->text().isEmpty())
                 {
@@ -929,7 +1087,7 @@ bool FindPanel::eventFilter (QObject* watched, QEvent* e)
         if (current == nullptr || current == firstSelectable (tree) || tree->itemAbove (current) == nullptr)
         {
             // Back up from the sidebar without choosing: the search goes back to
-            // where it was (usually All), not the collection passed through.
+            // where it was (usually All), not the colour passed through.
             if (watched == sidebar && rowBeforeDown >= 0 && rowBeforeDown < sidebar->topLevelItemCount())
                 sidebar->setCurrentItem (sidebar->topLevelItem (rowBeforeDown));
             rowBeforeDown = -1;

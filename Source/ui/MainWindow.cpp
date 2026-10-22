@@ -16,6 +16,7 @@
 #if PHINYX_HAVE_PROJECTM
  #include "MilkDrop.h"
 #endif
+#include "AnalysisWindow.h"
 #include "Goniometer.h"
 #include "AmbiScene.h"
 #include "../core/Ambisonics.h"
@@ -232,6 +233,11 @@ MainWindow::MainWindow (AudioEngine& e)
             goniometer->setSampleRate (engine.deviceSampleRate());
             goniometer->addSamples (scopeLeft, scopeRight);
         }
+        if (analysisWin != nullptr && analysisWin->isVisible())
+        {
+            analysisWin->addSamples (scopeLeft, scopeRight, engine.deviceSampleRate());
+            analysisWin->tick();
+        }
         feedAmbiScene();
         feedVisualizers();
         if (trackerWin != nullptr && trackerWin->isVisible())
@@ -446,7 +452,25 @@ void MainWindow::registerCommands()
         statusBar()->showMessage (tr ("Imaging: %1").arg (Goniometer::viewName (goniometer->view())), 3000);
     });
     add ("analyze.resetMeters", Category::analyze, tr ("&Reset Meters"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_R) },
-         [this] { meterPanel->reset(); goniometer->reset(); });
+         [this]
+    {
+        meterPanel->reset();
+        goniometer->reset();
+        if (analysisWin != nullptr)
+            analysisWin->reset();
+    });
+    add ("analyze.window", Category::analyze, tr ("Analysis &Meters Window"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_A) }, [this]
+    {
+        auto* w = analysisWindow();
+        if (w->isVisible() && w->isActiveWindow())
+            w->close();
+        else
+        {
+            w->show();
+            w->raise();
+            w->activateWindow();
+        }
+    })->setStatusTip (tr ("Every meter in one window: loudness and its history, levels, spectrum, spectrogram, imaging, phase and amplitude statistics"));
 
     add ("view.master", Category::master, tr ("&Master Section"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_E) },
          [this] { masterPanel->toggle(); lastPanel = masterPanel; });
@@ -764,19 +788,19 @@ void MainWindow::buildMenus()
                                "album.moveEarlier", "album.moveLater", "album.longerPause", "album.shorterPause", "-",
                                "album.songProperties", "album.openSong", "album.removeSong", "-",
                                "album.properties", "album.twoTracks", "album.export" } },
-        { tr ("A&nalyze"),   { "analyze.loudness", "-", "analyze.beats", "analyze.onsets", "analyze.tempoKey", "analyze.vamp", "-", "view.meters", "analyze.imagingView", "analyze.resetMeters", "-", "view.spectral", "-", "@nyquist.analyze" } },
+        { tr ("A&nalyze"),   { "analyze.loudness", "-", "analyze.beats", "analyze.onsets", "analyze.tempoKey", "analyze.vamp", "-", "analyze.window", "view.meters", "analyze.imagingView", "analyze.resetMeters", "-", "view.spectral", "-", "@nyquist.analyze" } },
         { tr ("Too&ls"),     { "tools.macroRecord", "tools.macroApply", "tools.macros", "-", "tools.batch", "-", "tools.managePlugins", "-", "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan", "-", "tools.resetConfig" } },
         { tr ("Ma&ster"),    { "view.master", "view.chain", "master.addPlugin", "master.bypass", "-", "master.render", "master.renderNew", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
-                               "view.overview", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "-",
+                               "view.overview", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "analyze.window", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
         { tr ("Visuali&zer"), { "view.visualizer", "view.visualizerFullScreen", "view.visualizerBehind", "-",
                                "view.visualizerNext", "view.visualizerPrevious", "view.visualizerChoose", "-",
                                "@visual.artistic", "@visual.science", "-", "@visual.milkdrop", "@visual.rain", "-",
                                "view.opacityUp", "view.opacityDown", "view.opacityFull" } },
-        { tr ("Mi&xer"),     { "mixer.window", "mixer.patchbay", "-", "mixer.new", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
+        { tr ("Mi&xer"),     { "mixer.window", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
                                "mixer.playStop", "mixer.mixdown" } },
         { tr ("S&ample"),    { "sample.send", "sample.window", "sample.refresh", "-", "slice.send", "slice.window", "slice.refresh", "-", "sample.midiInputs", "sample.panic" } },
         { tr ("Trac&ker"),   { "tracker.window", "tracker.new", "tracker.open", "tracker.save", "tracker.saveAs", "tracker.loadSample", "-", "tracker.playSong", "tracker.playPattern", "tracker.stop", "-",
@@ -1320,7 +1344,11 @@ void MainWindow::updateTabBar()
     for (int i = 0; i < (int) tabs.size(); ++i)
     {
         const auto& d = i == activeTab ? doc : tabs[(size_t) i].doc;
-        tabBar->setTabText (i, tabName (d));
+        const auto& state = tabs[(size_t) i];
+        auto text = tabName (d);
+        if (state.mixerClip != 0 && d.isOpen() && d.path().empty())
+            text = state.mixerName + (d.isModified() ? QStringLiteral (" *") : QString());
+        tabBar->setTabText (i, text);
         tabBar->setTabToolTip (i, QString::fromStdString (d.path()));
     }
 
@@ -3698,4 +3726,19 @@ void MainWindow::showBatch()
     batchWindow->show();
     batchWindow->raise();
     batchWindow->activateWindow();
+}
+
+AnalysisWindow* MainWindow::analysisWindow()
+{
+    if (analysisWin == nullptr)
+    {
+        analysisWin = new AnalysisWindow (this);
+        connect (analysisWin, &AnalysisWindow::playStopRequested, this, [this] { togglePlayback(); });
+        connect (analysisWin, &AnalysisWindow::closed, this, [this]
+        {
+            activateWindow();
+            waveform->setFocus();
+        });
+    }
+    return analysisWin;
 }
