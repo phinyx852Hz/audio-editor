@@ -122,6 +122,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/MixerSection.cpp
     Source/ui/Audition.cpp
     Source/ui/Goniometer.cpp
+    Source/ui/AnalysisWindow.cpp
     Source/ui/NyquistUi.cpp
     Source/ui/WaveformView.cpp
     Source/ui/SpectrogramDialog.cpp
