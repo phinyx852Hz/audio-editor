@@ -23,6 +23,10 @@
 #include <QStandardPaths>
 #include <QToolTip>
 #include <QTreeWidget>
+#include <QDrag>
+#include <QMimeData>
+#include <QMouseEvent>
+#include <QUrl>
 #include <QVBoxLayout>
 #include <QtConcurrent>
 
@@ -184,6 +188,8 @@ FindPanel::FindPanel (QWidget* home, QWidget* parent)
     results->setAccessibleName (tr ("Results"));
     results->setAccessibleDescription (tr ("Enter runs or loads the selection, 1 to 8 toggle a Selector colour, 0 clears the colours."));
     results->installEventFilter (this);
+    results->viewport()->installEventFilter (this);   // files drag out onto Simplest, the Slicer, the mixer...
+    setAcceptDrops (true);   // and dropping them back here does nothing (rather than opening them)
 
     // "Selector" above the sidebar; a right-click on it or on a colour picks the set.
     auto* side = new QWidget (this);
@@ -763,6 +769,23 @@ bool FindPanel::atTopOfPlace() const
         && browseFolder == current->data (0, placeRole).toString();
 }
 
+void FindPanel::dragFiles (QTreeWidgetItem* pressed)
+{
+    // The pressed file, with the other selected files when it is one of them.
+    QList<QUrl> urls;
+    const auto selected = results->selectedItems();
+    for (auto* row : selected.contains (pressed) ? selected : QList<QTreeWidgetItem*> { pressed })
+        if (const auto* item = itemOf (row); item != nullptr && item->kind == FindItem::Kind::file)
+            urls << QUrl::fromLocalFile (item->key.mid (5));   // "file:<path>"
+    if (urls.isEmpty())
+        return;
+    auto* mime = new QMimeData;
+    mime->setUrls (urls);
+    auto* drag = new QDrag (results);
+    drag->setMimeData (mime);
+    drag->exec (Qt::CopyAction, Qt::CopyAction);
+}
+
 void FindPanel::startAudition (QTreeWidgetItem* row)
 {
     const auto* item = itemOf (row);
@@ -942,6 +965,32 @@ void FindPanel::renameSet()
 //==============================================================================
 bool FindPanel::eventFilter (QObject* watched, QEvent* e)
 {
+    if (watched == results->viewport())
+    {
+        auto* m = static_cast<QMouseEvent*> (e);
+        if (e->type() == QEvent::MouseButtonPress && m->button() == Qt::LeftButton)
+        {
+            pressedAt = m->position().toPoint();
+            mayDrag = true;
+        }
+        else if (e->type() == QEvent::MouseButtonRelease)
+            mayDrag = false;
+        else if (e->type() == QEvent::MouseMove && mayDrag)
+        {
+            if ((m->buttons() & Qt::LeftButton) == 0)
+                mayDrag = false;
+            else if ((m->position().toPoint() - pressedAt).manhattanLength() >= QApplication::startDragDistance())
+            {
+                mayDrag = false;
+                if (const auto* item = itemOf (results->itemAt (pressedAt)); item != nullptr && item->kind == FindItem::Kind::file)
+                {
+                    dragFiles (results->itemAt (pressedAt));
+                    return true;
+                }
+            }
+        }
+        return QWidget::eventFilter (watched, e);
+    }
     if (e->type() != QEvent::ShortcutOverride && e->type() != QEvent::KeyPress)
         return QWidget::eventFilter (watched, e);
 

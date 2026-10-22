@@ -54,6 +54,7 @@
 #include <QSlider>
 #include <QWidgetAction>
 #include <QStandardPaths>
+#include <QStackedWidget>
 #include <QFileDialog>
 #include <QDirIterator>
 #include <QFileInfo>
@@ -154,7 +155,11 @@ MainWindow::MainWindow (AudioEngine& e)
     editorLayout->addWidget (albumView);
     editorLayout->addWidget (waveform, 1);
     editorLayout->addWidget (infoStrip);
-    setCentralWidget (editor);
+    // The editor shares its place with the mixer (MixerSection.cpp).
+    editorPage = editor;
+    centralStack = new QStackedWidget (this);
+    centralStack->addWidget (editor);
+    setCentralWidget (centralStack);
     statusBar()->addWidget (new QWidget (this), 1);   // messages show on the left; the details are under the editor
     statusBar()->addPermanentWidget (new QLabel (tr ("Opacity"), this));
     statusBar()->addPermanentWidget (makeOpacitySlider (this));
@@ -177,6 +182,7 @@ MainWindow::MainWindow (AudioEngine& e)
         waveform->setFocus();
     });
     restoreLayout();
+    buildNavigation();
 
     connect (waveform, &WaveformView::cursorRequested, this, [this] (Frame f) { setCursor (waveform->snapToGrid (f)); });
     connect (waveform, &WaveformView::selectionMoved, this, &MainWindow::moveSelection);
@@ -308,7 +314,8 @@ void MainWindow::registerCommands()
     add ("file.saveAs", Category::file, tr ("Save &As..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_S) }, [this] { saveAs(); });
     add ("file.export", Category::file, tr ("&Export..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_X) }, [this] { exportAudio(); });
     add ("file.metadata", Category::file, tr ("&Metadata..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_M) }, [this] { editMetadata(); });
-    add ("file.close", Category::file, tr ("&Close"), { KS (Qt::CTRL | Qt::Key_W) }, [this] { closeFile(); });
+    // Closes what has the keyboard: a panel, the mixer, or else the file.
+    add ("file.close", Category::file, tr ("&Close"), { KS (Qt::CTRL | Qt::Key_W), KS (Qt::META | Qt::Key_W) }, [this] { closeFocused(); });
     add ("file.nextTab", Category::file, tr ("Ne&xt Tab"), { KS (Qt::CTRL | Qt::Key_Tab), KS (Qt::CTRL | Qt::Key_PageDown) },
          [this] { if (tabs.size() > 1) tabBar->setCurrentIndex ((activeTab + 1) % (int) tabs.size()); });
     add ("file.previousTab", Category::file, tr ("Pre&vious Tab"),
@@ -634,7 +641,9 @@ void MainWindow::registerCommands()
          [this] { metersPanel->toggle(); lastPanel = metersPanel; });
     add ("view.popOut", Category::view, tr ("&Pop Out / Dock Panel"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_P) }, [this]
     {
-        if (auto* p = focusedOrLastPanel())
+        if (auto* f = QApplication::focusWidget(); mixerWin != nullptr && f != nullptr && (f == mixerWin || mixerWin->isAncestorOf (f)))
+            placeMixer (! mixerDocked());
+        else if (auto* p = focusedOrLastPanel())
             p->setPoppedOut (! p->isPoppedOut());
         else
             statusBar()->showMessage (tr ("Open a panel first, for example the meters with Ctrl+Shift+L"), 5000);
@@ -722,12 +731,19 @@ void MainWindow::registerCommands()
 
     add ("view.focusWaveform", Category::view, tr ("Focus &Waveform"), { KS (Qt::CTRL | Qt::Key_F6) }, [this]
     {
+        showEditorPage();
         activateWindow();
         waveform->setFocus();
     });
     // F6 and Shift+F6 go round the waveform and every panel that is showing.
     add ("view.nextPanel", Category::view, tr ("&Next Panel"), { KS (Qt::Key_F6) }, [this] { focusPanel (1); });
     add ("view.previousPanel", Category::view, tr ("Pre&vious Panel"), { KS (Qt::SHIFT | Qt::Key_F6) }, [this] { focusPanel (-1); });
+    commands.action (QStringLiteral ("view.nextPanel"))->setStatusTip (tr ("Hold F6 and press an arrow key to go to the panel that way"));
+    add ("view.fullScreen", Category::view, tr ("F&ull Screen"), { KS (Qt::META | Qt::Key_F) }, [this]
+    {
+        auto* f = QApplication::focusWidget();
+        toggleFullScreen (f != nullptr ? f->window() : this);
+    });
 
     add ("options.separateOutputs", Category::options, tr ("Play Surround on &Separate Outputs"), {}, [this]
     {
@@ -796,13 +812,13 @@ void MainWindow::buildMenus()
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
-                               "view.overview", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "analyze.window", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "-",
+                               "view.overview", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "analyze.window", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "view.fullScreen", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
         { tr ("Visuali&zer"), { "view.visualizer", "view.visualizerFullScreen", "view.visualizerBehind", "-",
                                "view.visualizerNext", "view.visualizerPrevious", "view.visualizerChoose", "-",
                                "@visual.artistic", "@visual.science", "-", "@visual.milkdrop", "@visual.rain", "-",
                                "view.opacityUp", "view.opacityDown", "view.opacityFull" } },
-        { tr ("Mi&xer"),     { "mixer.window", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
+        { tr ("Mi&xer"),     { "mixer.window", "mixer.dock", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
                                "mixer.playStop", "mixer.mixdown" } },
         { tr ("S&ample"),    { "sample.send", "sample.window", "sample.refresh", "-", "slice.send", "slice.window", "slice.refresh", "-",
                                "instrument.granular", "instrument.retroSampler", "-", "sample.midiInputs", "sample.panic" } },
@@ -872,11 +888,7 @@ void MainWindow::focusPanel (int direction)
 {
     // The waveform, then every panel in the order they usually sit: below, right, left. A closed
     // panel is opened while F6 is on it and closed again when F6 moves on.
-    struct Stop { QWidget* widget; DockablePanel* panel; };
-    const std::vector<Stop> stops { { waveform, nullptr }, { chainRow, chainPanel }, { masterWidget, masterPanel },
-                                    { metersPanel->content(), metersPanel }, { markerList, markerPanel },
-                                    { historyList, historyPanel }, { diagnostics, diagnosticsPanel },
-                                    { referencePanel, referencesPanel }, { ambiSceneView, ambiScenePanel }, { findWidget, findPanel } };
+    const auto stops = panelStops();
     const int count = (int) stops.size();
 
     // Where the keyboard is now; if it is somewhere F6 cannot tell (a panel that takes no keys), where F6 last went.
@@ -884,53 +896,13 @@ void MainWindow::focusPanel (int direction)
     auto* focus = QApplication::focusWidget();
     int at = -1;
     if (focus == nullptr || focus != cycleFrom)
-        for (int i = 0; i < count && at < 0; ++i)
-            if (stops[(size_t) i].panel != nullptr ? stops[(size_t) i].panel->containsFocus() : waveform->hasFocus())
-                at = i;
+        at = stopWithFocus (stops);
     if (at < 0)
         at = std::clamp (panelStop, 0, count - 1);
     cycleFrom = focus;
 
     panelStop = (at + direction + count) % count;
-    const auto& next = stops[(size_t) panelStop];
-
-    if (openedByCycle != nullptr && openedByCycle != next.panel)
-    {
-        if (openedByCycle->isShown())
-            openedByCycle->hide();
-        openedByCycle = nullptr;
-    }
-
-    if (next.panel != nullptr)
-    {
-        if (! next.panel->isShown())
-            openedByCycle = next.panel;
-        next.panel->show (true);
-        // The panel itself, or else the first thing in it that takes the keyboard.
-        auto* target = next.widget;
-        if (target != nullptr && target->focusPolicy() == Qt::NoFocus)
-        {
-            const auto children = target->findChildren<QWidget*>();
-            const auto it = std::find_if (children.begin(), children.end(), [] (QWidget* c)
-                                          { return (c->focusPolicy() & Qt::TabFocus) != 0 && c->isEnabled(); });
-            target = it != children.end() ? *it : nullptr;
-        }
-        if (target != nullptr)
-            QTimer::singleShot (0, target, [target]
-            {
-                if (target->isVisible())
-                {
-                    target->window()->activateWindow();
-                    target->setFocus (Qt::TabFocusReason);
-                }
-            });
-    }
-    else
-    {
-        activateWindow();
-        waveform->setFocus (Qt::TabFocusReason);
-    }
-    statusBar()->showMessage (next.panel != nullptr ? next.panel->dock()->windowTitle() : tr ("Waveform"), 1500);
+    focusStop (stops[(size_t) panelStop]);
 }
 
 void MainWindow::changeOpacity (double value, bool announce)
@@ -1278,7 +1250,7 @@ void MainWindow::updateCommandStates()
     const bool open = doc.isOpen() && ! loading;
     const bool sel = open && hasSelection();
 
-    for (const auto* id : { "file.save", "file.saveAs", "file.export", "file.metadata", "file.close", "edit.insertSilence", "edit.copyToNew", "select.all", "select.none",
+    for (const auto* id : { "file.save", "file.saveAs", "file.export", "file.metadata", "edit.insertSilence", "edit.copyToNew", "select.all", "select.none",
                             "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
                             "select.toStart", "select.toEnd", "process.gain", "process.normalize",
                             "process.reverse", "process.invert", "process.dcOffset", "process.stereoize", "process.midSide", "process.convert", "spatial.binaural", "spatial.layout", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.fumaToAmbix", "spatial.ambixToFuma",

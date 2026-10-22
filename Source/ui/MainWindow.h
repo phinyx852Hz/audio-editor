@@ -34,6 +34,8 @@ class MasterPanel;
 class MeterPanel;
 class Album;
 class AlbumView;
+class QDragEnterEvent;
+class QDropEvent;
 class QLabel;
 class QListWidget;
 class QSlider;
@@ -59,6 +61,8 @@ public:
 protected:
     void closeEvent (QCloseEvent*) override;
     void changeEvent (QEvent*) override;
+    void dragEnterEvent (QDragEnterEvent*) override;   // files dropped on the editor open
+    void dropEvent (QDropEvent*) override;
 
 private:
     void sendThemeToPluginFrames();
@@ -129,6 +133,21 @@ private:
     int panelStop = 0;                         // where F6 last went, when the focus cannot tell
     DockablePanel* openedByCycle = nullptr;    // a closed panel F6 opened; it closes again when F6 moves on
     QPointer<QWidget> cycleFrom;               // the keyboard focus when F6 last moved on
+
+    // Panel navigation (PanelNavigation.cpp): Ctrl+W or Super+W closes only what has the
+    // keyboard, F6 held with an arrow key moves to the panel that way, Super+F full screen.
+    struct PanelStop { QWidget* widget; DockablePanel* panel; };
+    std::vector<PanelStop> panelStops() const;   // the waveform (or the mixer in its place), then every panel
+    int stopWithFocus (const std::vector<PanelStop>&) const;   // -1 when the keyboard is elsewhere
+    void focusStop (const PanelStop&);
+    void focusDirection (int arrowKey);
+    void closeFocused();
+    void toggleFullScreen (QWidget* window);
+    bool isPanelWindow (const QWidget*) const;   // a panel popped out into a window of its own
+    bool navigationKey (QObject*, QEvent*);     // the application-wide filter for the keys above
+    void buildNavigation();
+    void openDropped (const QStringList& paths);
+    bool f6Held = false, f6Moved = false;
     void resetConfiguration();
 public:
     // After the window is gone: clears the settings if Reset Configuration asked to; true if it did (then restart).
@@ -319,6 +338,8 @@ private:
     void sendToSampler (bool keepMarkers);
     void showSampler();
     void samplerFollow();
+    void loadSamplerFile (const QString& path);   // a file dropped on Simplest
+    void loadSlicerFile (const QString& path);    // a file dropped on the Slicer
     void midiInputsDialog();
     void openMidiInputs();
     void updateMidiStatus();
@@ -363,6 +384,17 @@ private:
     void mixDownToEditor();
     std::unique_ptr<mixer::Engine> mixerEngine;
     class MixerWindow* mixerWin = nullptr;
+
+    // The mixer takes the editor's place (centralStack) unless it was undocked
+    // (mixer/undocked; a project file can set it with placeMixer before showMixer).
+public:
+    bool mixerDocked() const;
+    void placeMixer (bool docked);   // in the editor's place or in a window of its own, showing
+private:
+    void showEditorPage();            // the editor back in front; a docked mixer steps aside
+    class QStackedWidget* centralStack = nullptr;
+    QWidget* editorPage = nullptr;
+    bool mixerFullFromDock = false;   // Super+F took the docked mixer full screen; again puts it back
 
     // The patchbay (PatchBaySection.cpp, docs/patchbay.md): one routing graph for the
     // editor's playback, the Sampler, the Slicer, the mixer's tracks, its synths and FX
@@ -436,6 +468,7 @@ private:
     void buildReferences();
     void registerReferenceCommands();
     void addReferences();
+    void addReferenceFiles (const QStringList& paths);
     void removeReference (int row);
     bool loadReference (int row);
     bool matchLoudness();                    // measures your audio as heard, once per version of it
@@ -518,7 +551,7 @@ private:
     class FocusFollowsMouse* focusFollowsMouse = nullptr;
     DockablePanel* lastPanel = nullptr;
     QByteArray defaultLayout;
-    static constexpr int layoutVersion = 2;  // 2: device chain row at the bottom
+    static constexpr int layoutVersion = 3;  // 2: device chain row at the bottom, 3: Simplest above it, the Slicer left
 
     Frame cursor = 0, selStart = 0, selEnd = 0, selAnchor = 0;
     Frame playStart = 0;        // where the last Play began; Stop returns here

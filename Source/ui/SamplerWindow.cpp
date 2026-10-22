@@ -5,6 +5,11 @@
 #include <QCheckBox>
 #include <QApplication>
 #include <QHideEvent>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
+#include <QResizeEvent>
+#include <QUrl>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
@@ -120,7 +125,7 @@ void SampleView::paintEvent (QPaintEvent*)
     if (sample == nullptr)
     {
         g.setPen (theme.color (QStringLiteral ("placeholderText")));
-        g.drawText (rect(), Qt::AlignCenter, tr ("Send a sound here from the editor: Sample > Send to Sampler (F7)"));
+        g.drawText (rect(), Qt::AlignCenter, tr ("Send a sound here from the editor: Sample > Send to Simplest (F7), or drag a file here from Find"));
         return;
     }
     const auto mid = height() / 2.0;
@@ -327,7 +332,7 @@ SamplerWindow::SamplerWindow (sampler::Engine& e, QWidget* parent)
     : QWidget (parent), engine (e)
 {
     setFocusPolicy (Qt::StrongFocus);   // docked, it takes the playing keys when shown or clicked
-    setWindowTitle (tr ("Sampler"));
+    setWindowTitle (tr ("Simplest"));
     setObjectName (QStringLiteral ("SamplerWindow"));
     settings = engine.settings();
 
@@ -351,7 +356,7 @@ SamplerWindow::SamplerWindow (sampler::Engine& e, QWidget* parent)
     snapBox->setToolTip (tr ("Markers land where the wave crosses zero, so starts and loops do not click"));
     followBox = new QCheckBox (tr ("&Follow editor"), this);
     followBox->setChecked (true);
-    followBox->setToolTip (tr ("Edits you make to this sound in the editor reach the Sampler straight away"));
+    followBox->setToolTip (tr ("Edits you make to this sound in the editor reach Simplest straight away"));
     auto* refresh = new QPushButton (tr ("&Refresh"), this);
     refresh->setToolTip (tr ("Take the sound from the editor again"));
     auto* midi = new QPushButton (tr ("&MIDI Inputs..."), this);
@@ -448,18 +453,25 @@ SamplerWindow::SamplerWindow (sampler::Engine& e, QWidget* parent)
     midiStatus->setAlignment (Qt::AlignLeft | Qt::AlignVCenter);
     midiStatus->setWordWrap (true);
 
-    auto* layout = new QVBoxLayout (this);
-    layout->addWidget (title);
-    layout->addLayout (top);
-    layout->addWidget (view, 1);
-    layout->addLayout (controls);
-    layout->addWidget (envelopeRow);
-    layout->addWidget (fadeRow);
-    layout->addWidget (piano);
+    // The sound on one side and its controls on the other along the bottom of the window;
+    // one above the other in a narrow dock or window (see resizeEvent).
+    auto* soundSide = new QVBoxLayout;
+    soundSide->addWidget (title);
+    soundSide->addLayout (top);
+    soundSide->addWidget (view, 1);
+    auto* controlSide = new QVBoxLayout;
+    controlSide->addLayout (controls);
+    controlSide->addWidget (envelopeRow);
+    controlSide->addWidget (fadeRow);
+    controlSide->addWidget (piano);
     piano->hide();   // the computer keyboard and MIDI play it; the piano stays for later
-    layout->addWidget (status);
-    layout->addWidget (midiStatus);
-    layout->addStretch (0);
+    controlSide->addWidget (status);
+    controlSide->addWidget (midiStatus);
+    controlSide->addStretch (0);
+    columns = new QBoxLayout (QBoxLayout::TopToBottom, this);
+    columns->addLayout (soundSide, 1);
+    columns->addLayout (controlSide, 0);
+    setAcceptDrops (true);
 
     toControls();
     for (auto* w : findChildren<QWidget*>())
@@ -512,7 +524,7 @@ void SamplerWindow::setSample (sampler::SamplePtr s, double r, const QString& n,
     engine.setSettings (settings);
     view->setSample (s, rate);
     title->setText (tr ("%1   %2 s").arg (name).arg ((double) length / rate, 0, 'f', 3));
-    setWindowTitle (tr ("Sampler: %1").arg (name));
+    setWindowTitle (tr ("Simplest: %1").arg (name));
     toControls();
 }
 
@@ -675,6 +687,32 @@ void SamplerWindow::keyReleaseEvent (QKeyEvent* e)
             return;
         }
     QWidget::keyReleaseEvent (e);
+}
+
+void SamplerWindow::resizeEvent (QResizeEvent* e)
+{
+    // Some room either way, so it does not flip back and forth at one width.
+    const auto direction = columns->direction();
+    if (direction == QBoxLayout::TopToBottom && width() >= 980)
+        columns->setDirection (QBoxLayout::LeftToRight);
+    else if (direction == QBoxLayout::LeftToRight && width() < 900)
+        columns->setDirection (QBoxLayout::TopToBottom);
+    QWidget::resizeEvent (e);
+}
+
+void SamplerWindow::dragEnterEvent (QDragEnterEvent* e)
+{
+    if (e->mimeData()->hasUrls() && e->mimeData()->urls().first().isLocalFile())
+        e->acceptProposedAction();
+}
+
+void SamplerWindow::dropEvent (QDropEvent* e)
+{
+    if (! e->mimeData()->hasUrls() || ! e->mimeData()->urls().first().isLocalFile())
+        return;
+    e->acceptProposedAction();
+    const auto path = e->mimeData()->urls().first().toLocalFile();
+    QTimer::singleShot (0, this, [this, path] { Q_EMIT fileDropped (path); });
 }
 
 void SamplerWindow::releaseKeys()

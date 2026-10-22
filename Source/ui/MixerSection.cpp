@@ -5,15 +5,18 @@
 #include "MainWindow.h"
 #include "FindPanel.h"
 #include "MixerWindow.h"
+#include "Settings.h"
 #include "../mixer/MixerEngine.h"
 #include "../sampler/SamplerEngine.h"
 #include "../sampler/SlicerEngine.h"
 
+#include <QApplication>
 #include <QEventLoop>
 #include <QFutureWatcher>
 #include <QMessageBox>
 #include <QProgressDialog>
 #include <QScreen>
+#include <QStackedWidget>
 #include <QStatusBar>
 #include <QtConcurrent>
 
@@ -30,8 +33,18 @@ void MainWindow::registerMixerCommands()
 
     mixerEngine = std::make_unique<mixer::Engine>();
 
-    add ("mixer.window", tr ("&Mixer"), { KS (Qt::Key_F3) }, [this] { showMixer(); })
-        ->setStatusTip (tr ("The 8-track mixer: each track plays an audio file, a MIDI file through an instrument, or both"));
+    // F3 opens the mixer in the editor's place, and F3 again (or Ctrl+W) closes it; the mix
+    // stays as it was left, so the next F3 comes back to it.
+    add ("mixer.window", tr ("&Mixer"), { KS (Qt::Key_F3) }, [this]
+    {
+        const bool inFront = mixerWin != nullptr && mixerWin->isVisible() && (! mixerDocked() || centralStack->currentWidget() == mixerWin);
+        if (inFront)
+            mixerWin->close();
+        else
+            showMixer();
+    })->setStatusTip (tr ("The 8-track mixer: each track plays an audio file, a MIDI file through an instrument, or both"));
+    add ("mixer.dock", tr ("&Undock / Dock Mixer"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_F3) }, [this] { placeMixer (! mixerDocked()); })
+        ->setStatusTip (tr ("The mixer in the editor's place, or in a window of its own (also Ctrl+Alt+P from the mixer)"));
     add ("mixer.new", tr ("&New Project"), {}, [this] { showMixer(); mixerWin->newMix(); });
     add ("mixer.newFromSet", tr ("New Project from &Selector Set"), {}, [this]
     {
@@ -84,8 +97,23 @@ MixerWindow* MainWindow::mixerWindow()
         {
             mixerEngine->panic();
             instrumentClosed();
+            if (mixerWin->isFullScreen())
+            {
+                mixerWin->showNormal();
+                if (mixerFullFromDock)
+                    placeMixer (true);
+            }
+            mixerFullFromDock = false;
+            showEditorPage();
             activateWindow();
             waveform->setFocus();
+        });
+        // In the editor's place, the mixer has the keyboard only while it has the focus.
+        connect (qApp, &QApplication::focusChanged, mixerWin, [this] (QWidget* old, QWidget* now)
+        {
+            const auto in = [this] (QWidget* w) { return w != nullptr && (w == mixerWin || mixerWin->isAncestorOf (w)); };
+            if (mixerDocked() && in (now) && ! in (old))
+                midiTarget = 2;
         });
         mixerWin->restoreAutosave();
         updateMidiStatus();
@@ -99,12 +127,22 @@ void MainWindow::showMixer()
     returnMixerEdits();
     midiTarget = 2;
     playInstruments();
+    if (! appSettings().value (QStringLiteral ("mixer/undocked"), false).toBool())
+    {
+        placeMixer (true);
+        return;
+    }
+    if (mixerDocked())
+    {
+        placeMixer (false);
+        return;
+    }
     // Over the editor, between the panels on either side of it; tall enough for the strips
     // even when the editor is short, but on the screen.
-    if (auto* centre = centralWidget(); centre != nullptr && isVisible())
+    if (isVisible())
     {
-        const auto topLeft = centre->mapToGlobal (QPoint (0, 0));
-        QRect area (topLeft, centre->size());
+        const auto topLeft = centralStack->mapToGlobal (QPoint (0, 0));
+        QRect area (topLeft, centralStack->size());
         area.adjust (4, 4, -4, -4);
         const auto screenArea = screen() != nullptr ? screen()->availableGeometry() : area;
         area.setHeight (std::min (std::max (area.height(), 700), screenArea.height()));
@@ -126,6 +164,7 @@ void MainWindow::editMixerClip (int track, quint32 clip)
     if (data == nullptr)
         return;
     mixerWin->hide();
+    showEditorPage();
     const auto options = saveOptions;
     newTab();
     Tags tags;
@@ -170,6 +209,52 @@ void MainWindow::returnMixerEdits()
         doc.markSaved();   // it lives on in the mixer now
         closeTab();
     }
+}
+
+bool MainWindow::mixerDocked() const
+{
+    return mixerWin != nullptr && centralStack != nullptr && mixerWin->parentWidget() == centralStack;
+}
+
+void MainWindow::showEditorPage()
+{
+    if (centralStack->currentWidget() != editorPage)
+        centralStack->setCurrentWidget (editorPage);
+}
+
+// The mixer in the editor's place (the editor steps behind it, the panels stay around it),
+// or in a window of its own over the editor. Either way it shows, with the keyboard.
+void MainWindow::placeMixer (bool docked)
+{
+    auto* w = mixerWindow();
+    appSettings().setValue (QStringLiteral ("mixer/undocked"), ! docked);
+    if (docked)
+    {
+        if (! mixerDocked())
+        {
+            if (w->isFullScreen())
+                w->showNormal();
+            centralStack->addWidget (w);   // no longer a window of its own
+        }
+        centralStack->setCurrentWidget (w);
+        w->show();
+        activateWindow();
+        w->setFocus();
+        midiTarget = 2;
+        return;
+    }
+    if (mixerDocked())
+    {
+        const QRect area (centralStack->mapToGlobal (QPoint (0, 0)), centralStack->size());
+        centralStack->removeWidget (w);
+        showEditorPage();
+        w->setParent (this, Qt::Window);
+        w->setGeometry (area.adjusted (4, 4, -4, -4));
+    }
+    w->show();
+    w->raise();
+    w->activateWindow();
+    w->setFocus();
 }
 
 void MainWindow::mixDownToEditor()

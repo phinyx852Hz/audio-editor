@@ -3199,7 +3199,8 @@ void MixerWindow::keyPressEvent (QKeyEvent* e)
 
 void MixerWindow::changeEvent (QEvent* e)
 {
-    if (e->type() == QEvent::ActivationChange && isActiveWindow())
+    // In the editor's place it is not a window: the main window tells it has the keyboard.
+    if (e->type() == QEvent::ActivationChange && isWindow() && isActiveWindow())
         Q_EMIT activated();
     QWidget::changeEvent (e);
 }
