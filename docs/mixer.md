@@ -9,16 +9,20 @@ See "Built so far" at the end.
 file or a MIDI file, but there will be no MIDI editor. It can play back MIDI on a file or audio
 on a file, or both on the same file, like Reaper or Bitwig or Tracktion."
 
-So there are no audio tracks and MIDI tracks, only tracks. Each track has three slots, all
-optional and all heard together:
-- **Audio file**: played as it is, from its start offset.
-- **MIDI file** (.mid, types 0 and 1): played, never edited, into the track's instrument; transpose
-  (channel 10, the drums, stays) and which of its 16 channels play.
-- **Instrument**: what turns MIDI into sound, from the MIDI file and from the MIDI keyboard when the
+So there are no audio tracks and MIDI tracks, only tracks. A track is a timeline of clips plus
+an instrument (owner, later the same day: "I thought it would be serial", as in Reaper and
+Tracktion):
+- **Clips**: any number, each an audio file or a MIDI file (.mid, types 0 and 1), placed one
+  after another or overlapping, each trimmed to the part heard and mutable on its own. Audio clips
+  play as they are; MIDI clips play, never edited, into the track's instrument, with the track's
+  transpose (channel 10, the drums, stays) and choice of its 16 channels.
+- **Instrument**: what turns MIDI into sound, from the MIDI clips and from the MIDI keyboard when the
   track is armed: the built-in Synth (with General MIDI drums), the track's own Sampler or Slicer,
   or a VST3, LV2 or CLAP instrument plugin.
-This replaces the single "Source" (stem, live input or instrument) below: a stem is the audio
-slot, an instrument is the instrument slot, and a live input will be a fourth slot.
+Files go on with the mouse (dragged from the browser or the file manager onto a row) or the
+keyboard (Enter in the browser puts the file on the selected track at the playhead).
+This replaces the single "Source" (stem, live input or instrument) below: a stem is an audio
+clip, an instrument is the instrument, and a live input will record into new clips.
 
 ## What it is
 
@@ -191,6 +195,12 @@ More templates can be added in the same way; each is a small file.
 | 0 | Reset the focused control |
 | M / S / R | Mute, solo, record |
 | T | Step the thumbnail display |
+| V | Show or hide the tracks across time above the strips |
+| Ctrl+B | Show or hide the file browser |
+| F6, Tab | Next section: browser, tracks, strips (Shift: back) |
+| Ctrl+Z, Ctrl+Shift+Z | Undo, redo clip edits |
+| B | Bounce in place: the track's sound (MIDI through its instrument, and its audio) becomes its audio |
+| Shift+B | Bounce to a new track and mute this one (not when all 8 tracks are in use) |
 
 Every control has a screen-reader name and announces its value.
 
@@ -236,9 +246,48 @@ Every control has a screen-reader name and announces its value.
   in `~/.config/phinyx/mixer/`. The mixer is heard through the engine's instrument slot with
   the Sampler and Slicer, so it sounds on top of the editor; MIDI goes to the mixer while its
   window was used last.
+- Bounce (`B`, `Shift+B`, or the strip's right-click menu): `Engine::mixdown` with one track
+  renders it alone, from the start of the mix to its own end plus the instrument's tail, after
+  trim and polarity but before fader and pan, whatever mute and solo say. The WAV (32-bit float)
+  goes in `<mix> Bounces/` beside the mix (`~/Music/PHINYX Bounces/` until it is saved).
+  In place, the WAV becomes the track's audio, the MIDI file is turned off but kept with the
+  instrument, and trim and polarity reset since they are in the WAV. To a new track, the new
+  track takes the fader, pan and colour and the original is muted; with 8 tracks it says to
+  bounce in place or remove a track.
+- The tracks across time (`TrackLanes` in `MixerWindow.cpp`): above the strips, in a splitter,
+  one horizontal row per track in its colour, with each clip's waveform (peaks per 256
+  frames, made once per file) or MIDI notes, overlapping clips stacked in layers; a clip that
+  is muted or silenced by its track's mute or another track's solo is drawn grey, and so are
+  notes on channels turned off. Bars from the tempo box, the loop, the
+  playhead; click or drag to move it, `Ctrl`+wheel zooms around the pointer, the wheel scrolls,
+  a double-click on the ruler fits the mix, and while zoomed in the view follows the playhead.
+  Envelope lanes (docs: automation design) will fold out under these rows.
+- Clips (step 1b): `mixer::Clip` (an audio or MIDI file, its start, offset into the file,
+  length and mute) in `Engine::setClips`; MIDI clips keep a cursor each, notes are owned by the
+  clip that played them and let go at its end; audio clips get a 2 ms fade at each edge; stereo
+  clips and the instrument are balanced, mono clips panned with equal power. The window's
+  `TrackLanes` draws, drags (move, Ctrl copy, between tracks, grid snap), trims, splits,
+  duplicates, mutes and deletes them, with undo; `FileBrowser` (a `QFileSystemModel` of folders,
+  audio and MIDI files) places files at the playhead; F6 and Tab go round browser, rows and
+  strips. Mix files are version 2 (`clips` per track, in seconds); version 1 files open as one
+  clip per file.
+- Reverse, clip editing and the strip (2026-10-22): `Clip::reversed` plays audio backwards
+  (offset and length count in the reversed file, so trims stay on the part you hear) and a MIDI
+  clip through `reverseMidi` (each note mirrored, set-up events at the start kept first); `R`
+  in the rows reverses the selected clips and `R` on a strip still arms it. A double-click on an
+  audio clip hands the part you hear to a new editor tab (named after the clip) and hides the
+  mixer, which keeps playing; `F3` saves a changed tab as a 32-bit WAV in `<mix> Edits/`
+  (`~/Music/PHINYX Edits/` until the mix is saved), puts it on the clip with undo, closes the tab
+  and shows the mixer. The window opens over the editor's central area, between its side
+  panels. Faders are taller, with dB marks (+6 to −60 and −∞) on the left, and meters have dBFS
+  marks on the right; trim and pan use the editor's `Potentiometer` knob
+  (`Source/ui/Potentiometer.h`, shared with the plugin chain).
+- Mix from a Selector set (2026-10-22): Mixer > New Mix from Selector Set makes 8 tracks named
+  and coloured from the Find panel's Selector set, from the bottom up (Live Performance: DR, BA,
+  PR, LD, VOX, ARP, PD, FX), so each track matches the favourites of its colour.
 - Tests: the MIDI reader (tempo map, ordering, damaged files) and the engine (pan law, fader,
   polarity, mute and solo, sample-accurate MIDI, transpose, channels, notes let go on a jump,
-  the keyboard, meters, mixdown) and the Synth.
+  the keyboard, meters, mixdown, serial clips, reversed audio and MIDI) and the Synth.
 
 Next: Pre (cuts, track delay), inserts, the A and B returns, thumbnails, live inputs and
 recording, templates, the spatial panner. The Sampler and Slicer windows of the Sample menu

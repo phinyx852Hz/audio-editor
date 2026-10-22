@@ -1343,7 +1343,8 @@ namespace
         const float* one[1] = { half.data() };
         b.append (one, 4800);
         const auto dc = b.finish();
-        m.setAudio (0, mixer::makeAudioClip (*dc, "dc.wav"));
+        const auto dcClip = mixer::makeAudioClip (*dc, "dc.wav");
+        m.setClips (0, { mixer::makeClip (dcClip, 0) });
         check (m.length() == 4800, "mixer: length from the clips");
 
         std::vector<float> l (512), r (512);
@@ -1393,9 +1394,9 @@ namespace
         std::string error;
         auto song = midifile::parse (w.bytes.data(), w.bytes.size(), error);
         auto probe = std::make_shared<ProbeInstrument>();
-        m.setMidi (1, mixer::placeMidi (song, "song.mid", rate, 0.0));
+        const auto songClip = mixer::placeMidi (song, "song.mid", rate, 0.0);
         m.setInstrument (1, probe);
-        m.setAudio (1, mixer::makeAudioClip (*dc, "dc.wav"));
+        m.setClips (1, { mixer::makeClip (songClip, 0), mixer::makeClip (dcClip, 0) });   // overlapping: both heard
         m.strip (1).transpose = 12;
         m.strip (1).channels = 0xFFFF & ~(1u << 1);   // channel 2 left out
         m.setPosition (0);
@@ -1440,7 +1441,6 @@ namespace
         check (meterTrack.peak[0] > 0.1f && meterMaster.peak[0] > 0.1f && m.takeMeter (1).peak[0] == 0.0f, "mixer: meters, taken once");
 
         // Mixdown: the whole mix from the start, audio and instrument both heard.
-        m.strip (1).audioOn = true;
         auto mix = m.mixdown (2.0, error);
         check (mix != nullptr && mix->numChannels() == 2 && mix->length() >= 53000 && mix->length() <= 53000 + 96000,
                "mixer: mixdown covers the clips and stops after the tail");
@@ -1453,6 +1453,115 @@ namespace
             check (near (a[0], audioOnly, 1.0e-3), "mixer: mixdown sums the tracks");
             mix->read (6000, 1, pa);
             check (near (a[0], 0.25f, 1.0e-3), "mixer: mixdown plays the MIDI clip into the instrument");
+        }
+
+        // Bounce: one track alone, before its fader and pan, whatever mute and solo say.
+        m.strip (0).mute = true;
+        m.strip (0).faderDb = -12.0f;
+        m.strip (0).pan = -1.0f;
+        m.strip (1).solo = true;
+        auto bounced = m.mixdown (2.0, error, nullptr, nullptr, 0);
+        check (bounced != nullptr && bounced->length() >= 4800 && bounced->length() < 53000,
+               "mixer: a bounce ends with its own track");
+        if (bounced != nullptr && bounced->length() > 100)
+        {
+            float a[1], c[1];
+            float* pa[2] = { a, c };
+            bounced->read (100, 1, pa);
+            check (near (a[0], 0.5f, 1.0e-3) && near (c[0], 0.5f, 1.0e-3), "mixer: a bounce is the track alone, pre-fader, unpanned");
+        }
+        m.strip (0).mute = false;
+        m.strip (0).faderDb = 0.0f;
+        m.strip (0).pan = 0.0f;
+        m.strip (1).solo = false;
+        auto again = m.mixdown (2.0, error);
+        check (again != nullptr && again->length() >= 53000, "mixer: after a bounce the mixdown is the whole mix again");
+
+        // Clips one after another on one track: audio, then a trimmed MIDI clip, then audio again.
+        {
+            mixer::Engine t;
+            t.prepare (rate);
+            t.setNumTracks (1);
+            auto p2 = std::make_shared<ProbeInstrument>();
+            t.setInstrument (0, p2);
+            auto midiPart = mixer::makeClip (songClip, 10000);
+            midiPart.offset = 4000;    // C4 (at 5000 in the file) starts 1000 frames in, at 11000
+            midiPart.length = 20000;   // cut before its note-off at 29000: let go at 30000
+            auto second = mixer::makeClip (dcClip, 40000);
+            t.setClips (0, { second, mixer::makeClip (dcClip, 0), midiPart });
+            const auto list = t.clips (0);
+            check (list.size() == 3 && list[0].start == 0 && list[1].start == 10000 && list[2].start == 40000, "mixer: a track's clips are kept in order");
+            check (t.length() == 44800 && t.trackEnd (0) == 44800, "mixer: the track ends with its last clip");
+            std::vector<float> a (480), b (480);
+            std::vector<float> heardL;
+            t.play();
+            for (int i = 0; i < 100; ++i)
+            {
+                std::fill (a.begin(), a.end(), 0.0f);
+                std::fill (b.begin(), b.end(), 0.0f);
+                t.render (a.data(), b.data(), 480);
+                heardL.insert (heardL.end(), a.begin(), a.end());
+            }
+            const auto c4 = std::find_if (p2->heard.begin(), p2->heard.end(), [] (const auto& h) { return h.second.status == 0x90 && h.second.data1 == 60; });
+            const auto c4off = std::find_if (p2->heard.begin(), p2->heard.end(), [] (const auto& h) { return (h.second.status & 0xF0) == 0x80 && h.second.data1 == 60; });
+            check (c4 != p2->heard.end() && c4->first == 11000, "mixer: a MIDI clip plays from its trimmed start at its place");
+            check (c4off != p2->heard.end() && c4off->first == 30000, "mixer: a MIDI clip cut short lets go of its notes at its end");
+            check (near (heardL[100], 0.5 * std::sqrt (0.5), 1.0e-4) && std::abs (heardL[7000]) < 1.0e-6 && near (heardL[40100], 0.5 * std::sqrt (0.5), 1.0e-4),
+                   "mixer: audio clips play at their places, silence between");
+            check (std::abs (heardL[0]) < 0.1f, "mixer: a clip fades in over its first frames");
+
+            // Jumping back before a clip that already played plays it again.
+            p2->heard.clear();
+            t.setPosition (10500);
+            t.play();
+            for (int i = 0; i < 4; ++i)
+                t.render (a.data(), b.data(), 480);
+            check (! p2->heard.empty() && p2->heard[0].second.data1 == 60, "mixer: after a jump back a clip plays again");
+
+            // A muted clip is silent.
+            t.setInstrument (0, nullptr);
+            auto muted = t.clips (0);
+            muted[0].muted = true;
+            t.setClips (0, muted);
+            t.setPosition (0);
+            t.play();
+            std::fill (a.begin(), a.end(), 0.0f);
+            t.render (a.data(), b.data(), 480);
+            check (std::abs (a[200]) < 1.0e-6, "mixer: a muted clip is silent");
+        }
+
+        // Reversed: an audio clip plays from its end; a MIDI file's notes run backwards.
+        {
+            mixer::Engine t;
+            t.prepare (rate);
+            t.setNumTracks (1);
+            AudioData::Builder rb (1, rate);
+            std::vector<float> ramp (1000);
+            for (size_t k = 0; k < ramp.size(); ++k)
+                ramp[k] = (float) k / 1000.0f;
+            const float* rp[1] = { ramp.data() };
+            rb.append (rp, 1000);
+            auto clip = mixer::makeClip (mixer::makeAudioClip (*rb.finish(), "ramp.wav"), 0);
+            clip.reversed = true;
+            clip.offset = 100;    // in the reversed file: frames 899 down to 0 play
+            clip.length = 900;
+            t.setClips (0, { clip });
+            std::vector<float> a (512, 0.0f), b (512, 0.0f);
+            t.play();
+            t.render (a.data(), b.data(), 512);
+            check (near (a[200] / std::sqrt (0.5), (899 - 200) / 1000.0, 1.0e-4), "mixer: a reversed audio clip plays backwards from its trimmed start");
+
+            mixer::MidiClip m;
+            m.length = 1000;
+            m.events = { { 0, 0xC0, 5, 0 }, { 100, 0x90, 60, 90 }, { 300, 0x80, 60, 0 }, { 500, 0x90, 64, 70 }, { 900, 0x80, 64, 0 } };
+            const auto r = mixer::reverseMidi (m);
+            const bool order = r->events.size() == 5 && r->events[0].status == 0xC0 && r->events[0].frame == 0
+                               && r->events[1].frame == 100 && r->events[1].status == 0x90 && r->events[1].data1 == 64 && r->events[1].data2 == 70
+                               && r->events[2].frame == 500 && r->events[2].status == 0x80 && r->events[2].data1 == 64
+                               && r->events[3].frame == 700 && r->events[3].status == 0x90 && r->events[3].data1 == 60 && r->events[4].frame == 900;
+            check (order, "mixer: a reversed MIDI file plays its notes backwards, each as long and as loud");
+            const auto twice = mixer::reverseMidi (*r);
+            check (twice->events.size() == 5 && twice->events[1].frame == 100 && twice->events[1].data1 == 60, "mixer: reversing a MIDI file twice gives it back");
         }
 
         // The built-in Synth: a note sounds and dies after its release; a drum rings out by itself.

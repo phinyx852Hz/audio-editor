@@ -3,6 +3,7 @@
 // with the Sampler and Slicer through the engine's instrument slot, played from the
 // MIDI inputs, and mixed down into a new tab of the editor.
 #include "MainWindow.h"
+#include "FindPanel.h"
 #include "MixerWindow.h"
 #include "../mixer/MixerEngine.h"
 #include "../sampler/SamplerEngine.h"
@@ -12,6 +13,7 @@
 #include <QFutureWatcher>
 #include <QMessageBox>
 #include <QProgressDialog>
+#include <QScreen>
 #include <QStatusBar>
 #include <QtConcurrent>
 
@@ -31,6 +33,19 @@ void MainWindow::registerMixerCommands()
     add ("mixer.window", tr ("&Mixer"), { KS (Qt::Key_F3) }, [this] { showMixer(); })
         ->setStatusTip (tr ("The 8-track mixer: each track plays an audio file, a MIDI file through an instrument, or both"));
     add ("mixer.new", tr ("&New Mix"), {}, [this] { showMixer(); mixerWin->newMix(); });
+    add ("mixer.newFromSet", tr ("New Mix from &Selector Set"), {}, [this]
+    {
+        showMixer();
+        QStringList names;
+        QList<QColor> colours;
+        const auto set = findWidget->currentSet();
+        for (int c = 0; c < FindPanel::numColours; ++c)
+        {
+            names.push_back (findWidget->markName (set, c));
+            colours.push_back (FindPanel::colour (c));
+        }
+        mixerWin->newMixFromSet (findWidget->setName (set), names, colours);
+    })->setStatusTip (tr ("A new mix of 8 tracks with the names and colours of the set chosen in the Find panel's Selector, from the bottom up"));
     add ("mixer.open", tr ("&Open Mix..."), {}, [this] { showMixer(); mixerWin->openMix(); });
     add ("mixer.save", tr ("&Save Mix"), {}, [this] { showMixer(); mixerWin->saveMix (false); });
     add ("mixer.saveAs", tr ("Save Mix &As..."), {}, [this] { showMixer(); mixerWin->saveMix (true); });
@@ -59,6 +74,7 @@ MixerWindow* MainWindow::mixerWindow()
         connect (mixerWin, &MixerWindow::midiInputsRequested, this, [this] { midiInputsDialog(); });
         connect (mixerWin, &MixerWindow::activated, this, [this] { midiTarget = 2; });
         connect (mixerWin, &MixerWindow::playStarted, this, [this] { playInstruments(); });
+        connect (mixerWin, &MixerWindow::editClipRequested, this, [this] (int track, quint32 clip) { editMixerClip (track, clip); });
         connect (mixerWin, &MixerWindow::closed, this, [this]
         {
             mixerEngine->panic();
@@ -75,12 +91,80 @@ MixerWindow* MainWindow::mixerWindow()
 void MainWindow::showMixer()
 {
     auto* w = mixerWindow();
+    returnMixerEdits();
     midiTarget = 2;
     playInstruments();
+    // Over the editor, between the panels on either side of it; tall enough for the strips
+    // even when the editor is short, but on the screen.
+    if (auto* centre = centralWidget(); centre != nullptr && isVisible())
+    {
+        const auto topLeft = centre->mapToGlobal (QPoint (0, 0));
+        QRect area (topLeft, centre->size());
+        area.adjust (4, 4, -4, -4);
+        const auto screenArea = screen() != nullptr ? screen()->availableGeometry() : area;
+        area.setHeight (std::min (std::max (area.height(), 700), screenArea.height()));
+        if (area.bottom() > screenArea.bottom())
+            area.moveBottom (screenArea.bottom());
+        w->setGeometry (area);
+    }
     w->show();
     w->raise();
     w->activateWindow();
     w->setFocus();
+}
+
+// A clip from the mixer in a tab of its own; the mixer steps aside but keeps going.
+void MainWindow::editMixerClip (int track, quint32 clip)
+{
+    QString name;
+    auto data = mixerWin->clipAudio (track, clip, name);
+    if (data == nullptr)
+        return;
+    mixerWin->hide();
+    const auto options = saveOptions;
+    newTab();
+    Tags tags;
+    tags[tag::title] = name.toStdString();
+    doc.reset (std::move (data), {}, {}, std::move (tags));
+    saveOptions = options;
+    tabs[(size_t) activeTab].mixerTrack = track;
+    tabs[(size_t) activeTab].mixerClip = clip;
+    tabs[(size_t) activeTab].mixerName = name;
+    refreshFromDocument (false);
+    activateWindow();
+    raise();
+    waveform->setFocus();
+    statusBar()->showMessage (tr ("Editing %1 from the mixer: F3 puts it back on the track and brings the mixer back").arg (name), 10000);
+}
+
+// The tabs opened from the mixer go back to it: an edited sound replaces its clip, and the tab closes.
+void MainWindow::returnMixerEdits()
+{
+    for (;;)
+    {
+        int index = -1;
+        for (int i = 0; i < (int) tabs.size() && index < 0; ++i)
+            if (tabs[(size_t) i].mixerClip != 0)
+                index = i;
+        if (index < 0)
+            return;
+        switchToTab (index);
+        const auto track = tabs[(size_t) index].mixerTrack;
+        const auto clip = tabs[(size_t) index].mixerClip;
+        const auto name = tabs[(size_t) index].mixerName;
+        tabs[(size_t) index].mixerClip = 0;
+        if (doc.isOpen() && doc.isModified() && doc.current().data != nullptr)
+        {
+            QString error;
+            if (! mixerWin->replaceClipAudio (track, clip, *doc.current().data, name, error))
+            {
+                QMessageBox::warning (this, tr ("Mixer"), error + tr ("\nThe tab stays open so the edit is not lost."));
+                continue;
+            }
+        }
+        doc.markSaved();   // it lives on in the mixer now
+        closeTab();
+    }
 }
 
 void MainWindow::mixDownToEditor()

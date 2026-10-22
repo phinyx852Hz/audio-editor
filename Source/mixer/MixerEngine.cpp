@@ -95,10 +95,76 @@ namespace mixer
         return clip;
     }
 
+    MidiClipPtr reverseMidi (const MidiClip& in)
+    {
+        auto out = std::make_shared<MidiClip> (in);
+        out->events.clear();
+        out->events.reserve (in.events.size());
+        const auto length = in.length;
+        std::array<std::array<std::vector<size_t>, 128>, 16> open;
+        auto mirror = [length] (Frame f) { return std::max<Frame> (0, length - f); };
+        for (size_t i = 0; i < in.events.size(); ++i)
+        {
+            const auto& e = in.events[i];
+            const auto type = e.status & 0xF0, ch = e.status & 0x0F;
+            if (type == 0x90 && e.data2 > 0)
+                open[(size_t) ch][e.data1 & 0x7F].push_back (i);
+            else if (type == 0x80 || type == 0x90)
+            {
+                auto& stack = open[(size_t) ch][e.data1 & 0x7F];
+                if (stack.empty())
+                    continue;
+                const auto& on = in.events[stack.back()];
+                stack.pop_back();
+                out->events.push_back ({ mirror (e.frame), (uint8_t) (0x90 | ch), e.data1, on.data2 });
+                out->events.push_back ({ mirror (on.frame), (uint8_t) (0x80 | ch), e.data1, 0 });
+            }
+            else
+                out->events.push_back ({ e.frame == 0 ? 0 : mirror (e.frame), e.status, e.data1, e.data2 });
+        }
+        // Notes still held at the end of the file start at the start.
+        for (int ch = 0; ch < 16; ++ch)
+            for (int n = 0; n < 128; ++n)
+                for (const auto i : open[(size_t) ch][(size_t) n])
+                {
+                    out->events.push_back ({ 0, (uint8_t) (0x90 | ch), (uint8_t) n, in.events[i].data2 });
+                    out->events.push_back ({ mirror (in.events[i].frame), (uint8_t) (0x80 | ch), (uint8_t) n, 0 });
+                }
+        // In time; at the same frame the set-up first, then note-offs, then note-ons.
+        auto rank = [] (const MidiClip::Placed& e)
+        {
+            const auto type = e.status & 0xF0;
+            return type == 0x90 ? 2 : type == 0x80 ? 1 : 0;
+        };
+        std::stable_sort (out->events.begin(), out->events.end(), [&] (const MidiClip::Placed& a, const MidiClip::Placed& b)
+        {
+            return a.frame != b.frame ? a.frame < b.frame : rank (a) < rank (b);
+        });
+        return out;
+    }
+
+    Clip makeClip (AudioClipPtr audio, Frame start)
+    {
+        Clip c;
+        c.audio = std::move (audio);
+        c.start = std::max<Frame> (0, start);
+        c.length = c.sourceLength();
+        return c;
+    }
+
+    Clip makeClip (MidiClipPtr midi, Frame start)
+    {
+        Clip c;
+        c.midi = std::move (midi);
+        c.start = std::max<Frame> (0, start);
+        c.length = c.sourceLength();
+        return c;
+    }
+
     //==========================================================================
     Engine::Engine()
     {
-        for (auto* v : { &mixL, &mixR, &trackL, &trackR, &instL, &instR, &outL, &outR })
+        for (auto* v : { &mixL, &mixR, &trackL, &trackR, &instL, &instR, &monoBuf, &outL, &outR })
             v->resize (block);
         events.reserve (1024);
         liveQueue.reserve (256);
@@ -132,26 +198,36 @@ namespace mixer
         tracks = n;
     }
 
-    void Engine::setAudio (int index, AudioClipPtr clip)
+    void Engine::setClips (int index, Clips list)
     {
         if (index < 0 || index >= maxTracks)
             return;
-        const std::lock_guard<std::mutex> l (lock);
-        std::swap (lanes[(size_t) index].audio, clip);
-    }   // the old clip is freed here, after the lock
-
-    void Engine::setMidi (int index, MidiClipPtr clip)
-    {
-        if (index < 0 || index >= maxTracks)
-            return;
+        list.erase (std::remove_if (list.begin(), list.end(), [] (const Clip& c) { return (c.audio == nullptr) == (c.midi == nullptr) || c.length <= 0; }),
+                    list.end());
+        for (auto& c : list)
+        {
+            c.start = std::max<Frame> (0, c.start);
+            c.offset = std::clamp<Frame> (c.offset, 0, c.sourceLength());
+            c.length = std::clamp<Frame> (c.length, 0, c.sourceLength() - c.offset);
+        }
+        std::stable_sort (list.begin(), list.end(), [] (const Clip& a, const Clip& b) { return a.start < b.start; });
+        std::vector<size_t> cursors (list.size(), 0);
         const std::lock_guard<std::mutex> l (lock);
         auto& t = lanes[(size_t) index];
-        std::swap (t.midi, clip);
+        const bool hadMidi = std::any_of (t.clips.begin(), t.clips.end(), [] (const Clip& c) { return c.isMidi(); });
+        std::swap (t.clips, list);
+        std::swap (t.cursors, cursors);
         t.relocate = true;
-        // Notes the old clip left sounding are let go.
-        if (t.instrument != nullptr)
+        // Notes the old clips left sounding are let go.
+        if (hadMidi && t.instrument != nullptr)
             t.instrument->releaseAll();
         t.held = {};
+    }   // the old clips are freed here, after the lock
+
+    Clips Engine::clips (int index) const
+    {
+        const std::lock_guard<std::mutex> l (lock);
+        return lanes[(size_t) index].clips;
     }
 
     void Engine::setInstrument (int index, InstrumentPtr instrument)
@@ -164,18 +240,6 @@ namespace mixer
         auto& t = lanes[(size_t) index];
         std::swap (t.instrument, instrument);
         t.held = {};
-    }
-
-    AudioClipPtr Engine::audio (int index) const
-    {
-        const std::lock_guard<std::mutex> l (lock);
-        return lanes[(size_t) index].audio;
-    }
-
-    MidiClipPtr Engine::midi (int index) const
-    {
-        const std::lock_guard<std::mutex> l (lock);
-        return lanes[(size_t) index].midi;
     }
 
     InstrumentPtr Engine::instrument (int index) const
@@ -206,19 +270,27 @@ namespace mixer
         loopEnd = end;
     }
 
+    Frame Engine::trackEndLocked (int i) const
+    {
+        Frame end = 0;
+        for (const auto& c : lanes[(size_t) i].clips)
+            end = std::max (end, c.end());
+        return end;
+    }
+
+    Frame Engine::trackEnd (int i) const
+    {
+        if (i < 0 || i >= maxTracks)
+            return 0;
+        const std::lock_guard<std::mutex> l (lock);
+        return trackEndLocked (i);
+    }
+
     Frame Engine::lengthLocked() const
     {
         Frame end = 0;
-        const auto r = rate.load();
         for (int i = 0; i < tracks.load(); ++i)
-        {
-            const auto& t = lanes[(size_t) i];
-            const auto& s = strips[(size_t) i];
-            if (t.audio != nullptr)
-                end = std::max (end, (Frame) std::llround (s.audioOffset.load() * r) + t.audio->length());
-            if (t.midi != nullptr)
-                end = std::max (end, (Frame) std::llround (s.midiOffset.load() * r) + t.midi->length);
-        }
+            end = std::max (end, trackEndLocked (i));
         return end;
     }
 
@@ -272,13 +344,13 @@ namespace mixer
         }
     }
 
-    void Engine::releaseHeld (Track& t, std::vector<NoteEvent>& out)
+    void Engine::releaseHeld (Track& t, std::vector<NoteEvent>& out, int offset, int clip)
     {
         for (int c = 0; c < 16; ++c)
             for (int n = 0; n < 128; ++n)
-                if (auto& h = t.held[(size_t) c][(size_t) n]; h != 0)
+                if (auto& h = t.held[(size_t) c][(size_t) n]; h != 0 && (clip < 0 || t.owner[(size_t) c][(size_t) n] == clip))
                 {
-                    out.push_back ({ 0, (uint8_t) (0x80 | c), (uint8_t) (h - 1), 0 });
+                    out.push_back ({ offset, (uint8_t) (0x80 | c), (uint8_t) (h - 1), 0 });
                     h = 0;
                 }
     }
@@ -335,7 +407,6 @@ namespace mixer
 
     void Engine::renderBlock (float* left, float* right, int frames, Frame at, bool play, bool withLive)
     {
-        const auto r = rate.load();
         const auto count = tracks.load();
         const bool jumped = at != expected;
         const bool stopping = stopPending.exchange (false);
@@ -352,6 +423,8 @@ namespace mixer
 
         for (int i = 0; i < count; ++i)
         {
+            if (only >= 0 && i != only)
+                continue;   // a bounce: this track alone
             auto& t = lanes[(size_t) i];
             auto& s = strips[(size_t) i];
             events.clear();
@@ -363,8 +436,8 @@ namespace mixer
                     t.instrument->reset();
             }
 
-            // MIDI from the clip: let go of what it held when it stops, jumps or loses channels.
-            const bool playMidi = play && s.midiOn.load() && t.midi != nullptr;
+            // MIDI from the clips: let go of what they held when the transport stops, jumps or loses channels.
+            const bool playMidi = play && std::any_of (t.clips.begin(), t.clips.end(), [] (const Clip& c) { return c.isMidi(); });
             const auto channels = s.channels.load();
             if (t.wasPlayingMidi && (jumped || ! playMidi || stopping || channels != t.lastChannels))
                 releaseHeld (t, events);
@@ -377,43 +450,60 @@ namespace mixer
 
             if (playMidi)
             {
-                const auto local = at - (Frame) std::llround (s.midiOffset.load() * r);
-                const auto& placed = t.midi->events;
-                if (t.relocate)
-                {
-                    t.cursor = (size_t) (std::lower_bound (placed.begin(), placed.end(), local,
-                                                           [] (const MidiClip::Placed& e, Frame f) { return e.frame < f; }) - placed.begin());
-                    t.relocate = false;
-                }
                 const auto transpose = s.transpose.load();
-                while (t.cursor < placed.size() && placed[t.cursor].frame < local + frames)
+                for (size_t ci = 0; ci < t.clips.size(); ++ci)
                 {
-                    const auto& e = placed[t.cursor++];
-                    const auto ch = e.status & 0x0F;
-                    const auto offset = (int) std::max<Frame> (0, e.frame - local);
-                    const auto kind = e.status & 0xF0;
-                    if (kind == 0x80)
+                    const auto& c = t.clips[ci];
+                    if (! c.isMidi())
+                        continue;
+                    // The clip's own frames: where the block starts in the file.
+                    const auto local = at - c.start + c.offset;
+                    const auto& placed = c.midi->events;
+                    auto& cursor = t.cursors[ci];
+                    if (t.relocate)
+                        cursor = (size_t) (std::lower_bound (placed.begin(), placed.end(), std::max (local, c.offset),
+                                                             [] (const MidiClip::Placed& e, Frame f) { return e.frame < f; }) - placed.begin());
+                    if (c.start >= at + frames || c.end() <= at)
+                        continue;
+                    const auto stopAt = std::min (local + frames, c.offset + c.length);
+                    while (! c.muted && cursor < placed.size() && placed[cursor].frame < stopAt)
                     {
-                        auto& h = t.held[(size_t) ch][e.data1];
-                        if (h != 0)
-                            events.push_back ({ offset, e.status, (uint8_t) (h - 1), e.data2 });
-                        h = 0;
-                        continue;
+                        const auto& e = placed[cursor++];
+                        if (e.frame < c.offset)
+                            continue;
+                        const auto ch = e.status & 0x0F;
+                        const auto offset = (int) std::max<Frame> (0, e.frame - local);
+                        const auto kind = e.status & 0xF0;
+                        if (kind == 0x80)
+                        {
+                            auto& h = t.held[(size_t) ch][e.data1];
+                            if (h != 0 && t.owner[(size_t) ch][e.data1] == ci)
+                            {
+                                events.push_back ({ offset, e.status, (uint8_t) (h - 1), e.data2 });
+                                h = 0;
+                            }
+                            continue;
+                        }
+                        if ((channels & (1u << ch)) == 0)
+                            continue;
+                        if (kind == 0x90)
+                        {
+                            const auto note = std::clamp (e.data1 + (ch == 9 ? 0 : transpose), 0, 127);
+                            auto& h = t.held[(size_t) ch][e.data1];
+                            if (h != 0)
+                                events.push_back ({ offset, (uint8_t) (0x80 | ch), (uint8_t) (h - 1), 0 });   // the same note again
+                            h = (uint8_t) (note + 1);
+                            t.owner[(size_t) ch][e.data1] = (uint16_t) ci;
+                            events.push_back ({ offset, e.status, (uint8_t) note, e.data2 });
+                            continue;
+                        }
+                        events.push_back ({ offset, e.status, e.data1, e.data2 });
                     }
-                    if ((channels & (1u << ch)) == 0)
-                        continue;
-                    if (kind == 0x90)
-                    {
-                        const auto note = std::clamp (e.data1 + (ch == 9 ? 0 : transpose), 0, 127);
-                        auto& h = t.held[(size_t) ch][e.data1];
-                        if (h != 0)
-                            events.push_back ({ offset, (uint8_t) (0x80 | ch), (uint8_t) (h - 1), 0 });   // the same note again
-                        h = (uint8_t) (note + 1);
-                        events.push_back ({ offset, e.status, (uint8_t) note, e.data2 });
-                        continue;
-                    }
-                    events.push_back ({ offset, e.status, e.data1, e.data2 });
+                    // A clip that ends (or is trimmed) in this block lets go of its notes there.
+                    if (c.end() > at && c.end() <= at + frames)
+                        releaseHeld (t, events, (int) std::min<Frame> (frames - 1, c.end() - at), (int) ci);
                 }
+                t.relocate = false;
             }
 
             // The keyboard plays the armed track at the start of the block.
@@ -421,67 +511,82 @@ namespace mixer
                 events.insert (events.begin(), liveTaken.begin(), liveTaken.end());
             std::stable_sort (events.begin(), events.end(), [] (const NoteEvent& a, const NoteEvent& b) { return a.offset < b.offset; });
 
-            // The audio clip.
-            std::fill (trackL.begin(), trackL.begin() + frames, 0.0f);
-            std::fill (trackR.begin(), trackR.begin() + frames, 0.0f);
-            bool mono = false, hasAudio = false;
-            if (play && s.audioOn.load() && t.audio != nullptr)
-            {
-                const auto local = at - (Frame) std::llround (s.audioOffset.load() * r);
-                const auto len = t.audio->length();
-                const auto from = std::max<Frame> (local, 0), to = std::min<Frame> (local + frames, len);
-                if (to > from)
-                {
-                    std::copy (t.audio->left.begin() + from, t.audio->left.begin() + to, trackL.begin() + (from - local));
-                    std::copy (t.audio->right.begin() + from, t.audio->right.begin() + to, trackR.begin() + (from - local));
-                    hasAudio = true;
-                }
-                mono = t.audio->mono;
-            }
-
             std::fill (instL.begin(), instL.begin() + frames, 0.0f);
             std::fill (instR.begin(), instR.begin() + frames, 0.0f);
             if (t.instrument != nullptr)
                 t.instrument->process (events.data(), (int) events.size(), instL.data(), instR.data(), frames);
 
+            // The audio clips: stereo ones join the instrument (both are balanced), mono ones
+            // go apart to be panned with equal power. A short fade at each edge keeps a
+            // trimmed clip from clicking.
+            std::fill (monoBuf.begin(), monoBuf.begin() + frames, 0.0f);
+            bool hasMono = false;
+            if (play)
+                for (const auto& c : t.clips)
+                {
+                    if (c.audio == nullptr || c.muted || c.start >= at + frames || c.end() <= at)
+                        continue;
+                    const auto from = std::max (at, c.start), to = std::min (at + frames, c.end());
+                    const auto fade = std::max<Frame> (1, std::min<Frame> (96, c.length / 4));
+                    const auto& a = *c.audio;
+                    const auto last = a.length() - 1;
+                    for (auto f = from; f < to; ++f)
+                    {
+                        const auto forward = f - c.start + c.offset;
+                        const auto src = (size_t) (c.reversed ? last - forward : forward);
+                        const auto edge = std::min (f - c.start, c.end() - 1 - f);
+                        const auto g = edge < fade ? (float) (edge + 1) / (float) (fade + 1) : 1.0f;
+                        const auto k = (size_t) (f - at);
+                        if (a.mono)
+                            monoBuf[k] += a.left[src] * g;
+                        else
+                        {
+                            instL[k] += a.left[src] * g;
+                            instR[k] += a.right[src] * g;
+                        }
+                    }
+                    hasMono = hasMono || a.mono;
+                }
+
             // Trim, polarity, pan, fader, mute and solo, as one gain a side for each source.
-            const bool audible = ! s.mute.load() && (! anySolo || s.solo.load());
-            const auto level = audible ? dbToGain (s.trimDb.load()) * dbToGain (s.faderDb.load()) : 0.0f;
-            const auto pan = std::clamp (s.pan.load(), -1.0f, 1.0f);
+            // A bounce takes the track before its fader and pan (trim and polarity included),
+            // whatever mute and solo say; a mono file is then on both sides at full level.
+            const bool bouncing = only >= 0;
+            const bool audible = bouncing || (! s.mute.load() && (! anySolo || s.solo.load()));
+            const auto level = audible ? dbToGain (s.trimDb.load()) * (bouncing ? 1.0f : dbToGain (s.faderDb.load())) : 0.0f;
+            const auto pan = bouncing ? 0.0f : std::clamp (s.pan.load(), -1.0f, 1.0f);
             const auto signL = s.invertLeft.load() ? -1.0f : 1.0f, signR = s.invertRight.load() ? -1.0f : 1.0f;
             const auto balanceL = std::min (1.0f, 1.0f - pan), balanceR = std::min (1.0f, 1.0f + pan);
             const auto angle = (pan + 1.0f) * 0.25f * 3.14159265f;
-            const auto audioL = level * signL * (mono ? std::cos (angle) : balanceL);
-            const auto audioR = level * signR * (mono ? std::sin (angle) : balanceR);
-            const auto instGainL = level * signL * balanceL, instGainR = level * signR * balanceR;
+            const auto monoL = level * signL * (bouncing ? 1.0f : std::cos (angle));
+            const auto monoR = level * signR * (bouncing ? 1.0f : std::sin (angle));
+            const auto gainL = level * signL * balanceL, gainR = level * signR * balanceR;
 
             // After a jump there is nothing to ramp from: the new place starts at its level.
             if (jumped)
             {
-                t.audioL = audioL;
-                t.audioR = audioR;
-                t.gainL = instGainL;
-                t.gainR = instGainR;
+                t.monoL = monoL;
+                t.monoR = monoR;
+                t.gainL = gainL;
+                t.gainR = gainR;
             }
 
             // The track's own sum, for its meter, then into the mix.
             auto* sumL = trackL.data();
             auto* sumR = trackR.data();
-            if (hasAudio)
+            std::fill (sumL, sumL + frames, 0.0f);
+            std::fill (sumR, sumR + frames, 0.0f);
+            addRamped (sumL, instL.data(), frames, t.gainL, gainL);
+            addRamped (sumR, instR.data(), frames, t.gainR, gainR);
+            if (hasMono)
             {
-                for (int k = 0; k < frames; ++k)
-                {
-                    const auto step = (float) (k + 1) / (float) frames;
-                    sumL[k] *= t.audioL + (audioL - t.audioL) * step;
-                    sumR[k] *= t.audioR + (audioR - t.audioR) * step;
-                }
+                addRamped (sumL, monoBuf.data(), frames, t.monoL, monoL);
+                addRamped (sumR, monoBuf.data(), frames, t.monoR, monoR);
             }
-            addRamped (sumL, instL.data(), frames, t.gainL, instGainL);
-            addRamped (sumR, instR.data(), frames, t.gainR, instGainR);
-            t.audioL = audioL;
-            t.audioR = audioR;
-            t.gainL = instGainL;
-            t.gainR = instGainR;
+            t.monoL = monoL;
+            t.monoR = monoR;
+            t.gainL = gainL;
+            t.gainR = gainR;
 
             if (withLive)
                 meter (i, sumL, sumR, frames);
@@ -492,7 +597,7 @@ namespace mixer
             }
         }
 
-        const auto master = dbToGain (masterDb.load());
+        const auto master = only >= 0 ? 1.0f : dbToGain (masterDb.load());
         if (jumped)
             masterGain = master;
         for (int k = 0; k < frames; ++k)
@@ -506,14 +611,17 @@ namespace mixer
             meter (masterIndex, left, right, frames);
     }
 
-    AudioDataPtr Engine::mixdown (double tailSeconds, std::string& error, std::atomic<float>* progress, const std::atomic<bool>* cancel)
+    AudioDataPtr Engine::mixdown (double tailSeconds, std::string& error, std::atomic<float>* progress, const std::atomic<bool>* cancel,
+                                  int onlyTrack)
     {
         const std::lock_guard<std::mutex> l (lock);
         const auto r = rate.load();
-        const auto end = lengthLocked();
+        only = onlyTrack >= 0 && onlyTrack < tracks.load() ? onlyTrack : -1;
+        const auto end = only >= 0 ? trackEndLocked (only) : lengthLocked();
         if (end <= 0)
         {
-            error = "There is nothing on the tracks to mix down.";
+            error = only >= 0 ? "There is nothing on the track to bounce." : "There is nothing on the tracks to mix down.";
+            only = -1;
             return nullptr;
         }
         for (auto& t : lanes)
@@ -565,6 +673,7 @@ namespace mixer
             t.relocate = true;
         }
         expected = -1;
+        only = -1;
         for (auto& m : meters)
             for (int c = 0; c < 2; ++c)
             {

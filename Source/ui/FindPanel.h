@@ -6,13 +6,14 @@
 #include <QStringList>
 #include <QWidget>
 #include <functional>
+#include <vector>
 
 class QLineEdit;
 class QTreeWidget;
 class QTreeWidgetItem;
 
 // Something the Find panel can list: a process (any command), an effect, a
-// plugin, a visualization or an audio file. `key` identifies it for the colour collections.
+// plugin, a visualization or an audio file. `key` identifies it for the Selector's colours.
 struct FindItem
 {
     enum class Kind { process, effect, plugin, visual, file };
@@ -28,15 +29,19 @@ struct FindItem
     std::function<void()> preview;   // run when the row is selected, for browsing (visualizations)
 };
 
-// Ableton-style browser on the left: one search field that finds anything,
-// a sidebar of colour collections, categories and places, and the results.
+// The browser on the left: one search field that finds anything, a sidebar with
+// the Selector (eight colours of favourites), categories and places, and the results.
+// The Selector has sets of the eight: Favorites (the colour names, the default) and one
+// per activity (Live Performance, Mixing, Mastering, Podcast, Chakra), each with its own names and its own favourites; the
+// set chosen with a right-click on the Selector is the one shown and marked, and the mixer can start
+// a mix from it (its tracks are the set's colours and names, bottom up).
 // Files and places are browsed one folder at a time until something is typed:
 // Enter or Right opens a folder, Left or Backspace goes up.
 // Moving onto a file with the keys, or clicking it, auditions it; clicking it
 // again or K stops. Keyboard: typing searches everything, Up/Down and Page Up/Down
 // move through the results, Enter runs or loads the selection, Tab moves between search,
-// sidebar and results, 1 to 7 toggle a colour on the selected result (0 clears
-// them), F2 renames the selected collection, Escape clears the search or goes
+// sidebar and results, 1 to 8 toggle a colour on the selected result (0 clears
+// them), F2 or a double-click renames a colour (the right-click menu also renames the set), Escape clears the search or goes
 // back to the editor.
 class FindPanel final : public QWidget
 {
@@ -58,10 +63,14 @@ public:
     bool searchIsReady() const;  // the search has the keyboard with nothing to keep: empty or all selected
     void reload();               // collects the items again and refilters
 
-    static constexpr int numColours = 7;
-    static QString colourName (int index);   // the default name
-    QString collectionName (int index) const; // the user's name for it (F2 renames), or the default
+    // The Selector, top to bottom: Silver, Violet, Indigo, Azure, Emerald, Gold, Saffron, Ruby.
+    static constexpr int numColours = 8;
+    static QString colourName (int index);
     static QColor colour (int index);
+    int numSets() const { return (int) sets.size(); }
+    int currentSet() const { return setIndex; }
+    QString setName (int set) const;                // the user's name for it, or the default
+    QString markName (int set, int index) const;    // a colour's name in a set (F2 renames)
 
 Q_SIGNALS:
     void openRequested (const QString& path);
@@ -87,8 +96,13 @@ private:
     void startAudition (QTreeWidgetItem*);
     void endAudition();
     QIcon dots (int mask) const;
-    void loadCollections();
-    void saveCollections() const;
+    void loadSelector();
+    void saveSelector() const;
+    void chooseSet (int set);
+    void renameSet();
+    void selectorMenu (QWidget* on, const QPoint& at);   // the sets, and renaming
+    QHash<QString, int>& marks() { return sets[(size_t) setIndex].marks; }
+    const QHash<QString, int>& marks() const { return sets[(size_t) setIndex].marks; }
 
     QWidget* homeWidget;
     QLineEdit* search;
@@ -104,6 +118,12 @@ private:
     QString auditioning;            // the file being auditioned
     QFutureWatcher<QList<FindItem>> fileScan;
     bool filesStale = true;
-    QHash<QString, int> collections;   // item key -> bit mask of colours
-    QStringList collectionNames;       // renamed collections; empty entries keep the default name
+    struct Set
+    {
+        QString name;                // empty: the default name
+        QStringList names;           // per colour; empty entries keep the default
+        QHash<QString, int> marks;   // item key -> bit mask of colours
+    };
+    std::vector<Set> sets;
+    int setIndex = 0;
 };

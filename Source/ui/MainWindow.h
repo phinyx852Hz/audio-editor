@@ -355,6 +355,8 @@ private:
     void registerMixerCommands();
     class MixerWindow* mixerWindow();
     void showMixer();
+    void editMixerClip (int track, quint32 clip);
+    void returnMixerEdits();
     void mixDownToEditor();
     std::unique_ptr<mixer::Engine> mixerEngine;
     class MixerWindow* mixerWin = nullptr;
@@ -522,6 +524,10 @@ private:
         SaveOptions saveOptions;
         QString optionsConfirmedFor;
         std::pair<double, double> view { 0.0, 0.0 };
+        // Opened from the mixer (a clip double-clicked): F3 puts it back on that clip.
+        int mixerTrack = -1;
+        quint32 mixerClip = 0;
+        QString mixerName;
     };
 
     void newTab();
