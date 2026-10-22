@@ -115,7 +115,7 @@ ExternalProject_Add_Step(stock_Helm patches
 # as CLAPs; the synth one is used.
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_FOUND)
-    phinyx_stock_licence(Cardinal LICENSE docs/LICENSES.md plugins/Fundamental/LICENSE.md)
+    phinyx_stock_licence(Cardinal LICENSE docs/LICENSES.md plugins/Fundamental/LICENSE)
     ExternalProject_Add(stock_Cardinal
         GIT_REPOSITORY https://github.com/DISTRHO/Cardinal.git
         GIT_TAG 0a530b73273afc914ec71a78e9165cd28c53b599
