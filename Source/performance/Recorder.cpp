@@ -273,7 +273,13 @@ std::string Recorder::startSession (const Settings& s)
     {
         auto capture = std::make_unique<AudioCapture>();
         const auto channels = std::clamp (choice.source.channels, 1, 2);
-        if (auto error = capture->start (choice.source, outputRate, channels); ! error.empty())
+        if (choice.source.kind == CaptureSource::Kind::application)
+        {
+            // An application (a web browser...) is found by its name, and only has sound while it
+            // plays: the audio thread connects to it when it appears and again whenever it comes back.
+            // Until then its track is silent (stereo, AudioCapture's default).
+        }
+        else if (auto error = capture->start (choice.source, outputRate, channels); ! error.empty())
         {
             inputs.clear();
             return "Cannot record " + choice.source.name + ": " + error;
@@ -282,6 +288,14 @@ std::string Recorder::startSession (const Settings& s)
         if (choice.ownTrack)
             tracks.push_back ({ choice.source.name, capture->numChannels() });
         inputs.push_back (std::move (capture));
+    }
+
+    finder = nullptr;
+    lastLookup = {};
+    if (std::any_of (s.inputs.begin(), s.inputs.end(), [] (const InputChoice& c) { return c.source.kind == CaptureSource::Kind::application; }))
+    {
+        finder = std::make_unique<AudioCapture>();
+        finder->connect();
     }
 
     cameras.clear();
@@ -316,6 +330,7 @@ void Recorder::stopSessionIfIdle()
         audio.join();
     engine.stopProgramCapture();
     inputs.clear();
+    finder = nullptr;
     cameras.clear();
     canvases.clear();
     window = {};
@@ -700,6 +715,27 @@ void Recorder::pumpAudio()
     }
     if (made <= 0)
         return;
+
+    // Applications come and go (a browser has a stream only while it plays): look for them again each second.
+    if (finder != nullptr && now - lastLookup > std::chrono::seconds (1))
+    {
+        lastLookup = now;
+        std::vector<CaptureSource> playing;
+        for (size_t i = 0; i < inputs.size() && i < session.inputs.size(); ++i)
+        {
+            const auto& wanted = session.inputs[i].source;
+            if (wanted.kind != CaptureSource::Kind::application || (inputs[i]->isRunning() && inputs[i]->streamError().empty()))
+                continue;
+            if (playing.empty())
+                playing = finder->sources();
+            const auto found = std::find_if (playing.begin(), playing.end(), [&] (const CaptureSource& c)
+                                             { return c.kind == CaptureSource::Kind::application && c.name == wanted.name; });
+            if (found != playing.end())
+                inputs[i]->start (*found, outputRate, 2);
+            else if (inputs[i]->isRunning())
+                inputs[i]->stop();
+        }
+    }
 
     // Each input gives as many frames as PHINYX did, padded or trimmed to keep in step.
     std::vector<std::vector<float>> inputAudio (inputs.size());

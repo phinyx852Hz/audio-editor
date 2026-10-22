@@ -53,6 +53,20 @@ namespace
         return holder;
     }
 
+    // Applications are known by name: their PipeWire serial changes each time they start playing.
+    bool sameSource (const CaptureSource& a, const CaptureSource& b)
+    {
+        if (a.kind == CaptureSource::Kind::application || b.kind == CaptureSource::Kind::application)
+            return a.kind == b.kind && a.name == b.name;
+        return a == b;
+    }
+
+    // PHINYX's own sound is already the main track; recording it again would double it.
+    bool isPhinyx (const CaptureSource& s)
+    {
+        return QString::fromStdString (s.name).contains (QLatin1String (APP_ID), Qt::CaseInsensitive);
+    }
+
     QCheckBox* checkIn (QTableWidget* table, int row, int column)
     {
         auto* w = table->cellWidget (row, column);
@@ -97,7 +111,7 @@ perf::Settings loadSettings()
     {
         q.setArrayIndex (i);
         perf::InputChoice c;
-        c.source.kind = CaptureSource::Kind::input;
+        c.source.kind = q.value (QStringLiteral ("application"), false).toBool() ? CaptureSource::Kind::application : CaptureSource::Kind::input;
         c.source.target = q.value (QStringLiteral ("target")).toString().toStdString();
         c.source.name = q.value (QStringLiteral ("name")).toString().toStdString();
         c.source.channels = q.value (QStringLiteral ("channels"), 2).toInt();
@@ -165,6 +179,7 @@ void saveSettings (const perf::Settings& s)
         const auto& c = s.inputs[(size_t) i];
         q.setArrayIndex (i);
         q.setValue (QStringLiteral ("target"), QString::fromStdString (c.source.target));
+        q.setValue (QStringLiteral ("application"), c.source.kind == CaptureSource::Kind::application);
         q.setValue (QStringLiteral ("name"), QString::fromStdString (c.source.name));
         q.setValue (QStringLiteral ("channels"), c.source.channels);
         q.setValue (QStringLiteral ("gainDb"), c.gainDb);
@@ -354,7 +369,7 @@ QWidget* PerformanceDialog::buildSound()
     tracksNote->setWordWrap (true);
     layout->addWidget (tracksNote);
 
-    auto* inputsLabel = new QLabel (tr ("Microphones and other &inputs in the mix:"), page);
+    auto* inputsLabel = new QLabel (tr ("&Inputs in the mix: microphones, and applications such as a web browser (heard whenever they play):"), page);
     layout->addWidget (inputsLabel);
     inputTable = new QTableWidget (0, 4, page);
     inputsLabel->setBuddy (inputTable);
@@ -387,23 +402,28 @@ void PerformanceDialog::refreshInputs()
     // Keep what was ticked while the list changes under it.
     const auto chosen = inputTable->rowCount() == 0 ? initial.inputs : chosenInputs();
 
+    // Inputs, then applications (each once, by name: a browser can play several streams).
     inputSources.clear();
     for (const auto& s : capture.sources())
-        if (s.kind == CaptureSource::Kind::input)
+        if (s.kind == CaptureSource::Kind::input
+            || (s.kind == CaptureSource::Kind::application && ! isPhinyx (s)
+                && std::none_of (inputSources.begin(), inputSources.end(), [&] (const CaptureSource& o) { return sameSource (o, s); })))
             inputSources.push_back (s);
-    // A remembered input that is not plugged in now stays listed, so it is not forgotten.
+    // A remembered input that is not plugged in, or an application not playing now, stays listed so it is not forgotten.
     for (const auto& c : chosen)
-        if (std::none_of (inputSources.begin(), inputSources.end(), [&] (const CaptureSource& s) { return s == c.source; }))
+        if (std::none_of (inputSources.begin(), inputSources.end(), [&] (const CaptureSource& s) { return sameSource (s, c.source); }))
             inputSources.push_back (c.source);
+    std::stable_partition (inputSources.begin(), inputSources.end(), [] (const CaptureSource& s) { return s.kind == CaptureSource::Kind::input; });
 
     inputTable->setRowCount ((int) inputSources.size());
     for (int row = 0; row < (int) inputSources.size(); ++row)
     {
         const auto& s = inputSources[(size_t) row];
-        const auto it = std::find_if (chosen.begin(), chosen.end(), [&] (const perf::InputChoice& c) { return c.source == s; });
+        const auto it = std::find_if (chosen.begin(), chosen.end(), [&] (const perf::InputChoice& c) { return sameSource (c.source, s); });
         QCheckBox* box = nullptr;
         inputTable->setCellWidget (row, 0, cellCheck (it != chosen.end(), tr ("Use %1").arg (QString::fromStdString (s.name)), &box));
-        auto* name = new QTableWidgetItem (QString::fromStdString (s.name));
+        auto* name = new QTableWidgetItem (s.kind == CaptureSource::Kind::application ? tr ("%1 (application)").arg (QString::fromStdString (s.name))
+                                                                                     : QString::fromStdString (s.name));
         name->setFlags (Qt::ItemIsEnabled);
         inputTable->setItem (row, 1, name);
         auto* gain = new QDoubleSpinBox;
