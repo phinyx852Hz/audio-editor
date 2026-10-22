@@ -127,10 +127,17 @@ namespace
         upwards = plane == 0 ? u.x : u.z;
     }
 
-    // 7.1.4 without the LFE (the scene has no low-frequency channel), in PHINYX's channel order.
-    const struct { const char* name; double azimuth, elevation; } speakerLayout[] {
-        { "L", -30, 0 }, { "R", 30, 0 }, { "C", 0, 0 }, { "Lss", -90, 0 }, { "Rss", 90, 0 }, { "Lrs", -135, 0 }, { "Rrs", 135, 0 },
-        { "Ltf", -45, 45 }, { "Rtf", 45, 45 }, { "Ltr", -135, 45 }, { "Rtr", 135, 45 } };
+    // A peak that holds for 1.5 s, then falls 12 dB a second.
+    void holdPeak (double level, double& peak, double& hold, double dt)
+    {
+        if (level >= peak)
+        {
+            peak = level;
+            hold = 1.5;
+        }
+        else if ((hold -= dt) < 0.0)
+            peak = std::max (level, peak - 12.0 * dt);
+    }
 }
 
 //==============================================================================
@@ -143,7 +150,6 @@ AmbiVisualizer::AmbiVisualizer (QWidget* parent) : QWidget (parent)
 
     target.assign ((size_t) (rows * cols), (float) silent);
     shown = target;
-    speakerPeak.fill (silent);
     for (int p = 0; p < 3; ++p)
     {
         planeAngle[(size_t) p].resize ((size_t) (rows * cols));
@@ -175,6 +181,7 @@ AmbiVisualizer::AmbiVisualizer (QWidget* parent) : QWidget (parent)
     cameraElevation = std::clamp (settings.value (key ("cameraElevation"), 28.0).toDouble(), -89.0, 89.0);
     cameraZoom = std::clamp (settings.value (key ("cameraZoom"), 1.0).toDouble(), 0.6, 4.0);
     heading = settings.value (key ("heading"), 0.0).toDouble();
+    setSpeakerLayout (settings.value (key ("speakers"), QStringLiteral ("7.1.4")).toString());
 }
 
 void AmbiVisualizer::saveSettings() const
@@ -191,6 +198,35 @@ void AmbiVisualizer::saveSettings() const
     settings.setValue (key ("cameraElevation"), cameraElevation);
     settings.setValue (key ("cameraZoom"), cameraZoom);
     settings.setValue (key ("heading"), heading);
+    settings.setValue (key ("speakers"), layoutName);
+}
+
+QStringList AmbiVisualizer::speakerLayouts()
+{
+    return { QStringLiteral ("Stereo"), QStringLiteral ("Quad"), QStringLiteral ("5.1"), QStringLiteral ("7.1"), QStringLiteral ("7.1.2"),
+             QStringLiteral ("7.1.4"), QStringLiteral ("7.1.8"), QStringLiteral ("9.1.6") };
+}
+
+void AmbiVisualizer::setSpeakerLayout (const QString& name)
+{
+    layoutName = speakerLayouts().contains (name) ? name : QStringLiteral ("7.1.4");
+    speakers.clear();
+    if (layoutName == QStringLiteral ("7.1.8"))
+    {
+        // 7.1 with eight above: front, middle and back pairs, and a front and back centre.
+        speakers = { { "L", -30, 0 }, { "R", 30, 0 }, { "C", 0, 0 }, { "Lb", -150, 0 }, { "Rb", 150, 0 }, { "Ls", -90, 0 }, { "Rs", 90, 0 },
+                     { "Ltf", -45, 45 }, { "Rtf", 45, 45 }, { "Ltm", -90, 45 }, { "Rtm", 90, 45 }, { "Ltb", -135, 45 }, { "Rtb", 135, 45 },
+                     { "Tfc", 0, 45 }, { "Tbc", 180, 45 } };
+    }
+    else
+        for (const auto& s : ambi::layout (layoutName.toStdString()))
+            if (! s.lfe)
+                speakers.push_back ({ QString::fromStdString (s.name), s.azimuth, s.elevation });
+    speakerPeak.assign (speakers.size(), silent);
+    speakerHold.assign (speakers.size(), 0.0);
+    scopeTrace.fill (Qt::transparent);
+    saveSettings();
+    update();
 }
 
 int AmbiVisualizer::orderFor (int channels, int layoutOrder, bool layoutIsAmbisonic, bool assumeAny)
@@ -216,6 +252,7 @@ QString AmbiVisualizer::viewName (View v)
         case View::energy:    return tr ("Energy");
         case View::scope:     return tr ("Scope");
         case View::speakers:  return tr ("Speakers");
+        case View::channels:  return tr ("Channels");
     }
     return {};
 }
@@ -258,7 +295,9 @@ void AmbiVisualizer::reset()
 {
     std::fill (shown.begin(), shown.end(), (float) silent);
     smoothedTop = silent;
-    speakerPeak.fill (silent);
+    std::fill (speakerPeak.begin(), speakerPeak.end(), silent);
+    std::fill (channelShown.begin(), channelShown.end(), (float) silent);
+    std::fill (channelPeak.begin(), channelPeak.end(), silent);
     scopeTrace.fill (Qt::transparent);
     update();
 }
@@ -319,6 +358,7 @@ void AmbiVisualizer::analyse (const std::vector<std::vector<float>>& channels, i
             channelCount = 0;
             hasSignal = false;
             std::fill (target.begin(), target.end(), (float) silent);
+            channelTarget.clear();
             update();
         }
         return;
@@ -360,6 +400,12 @@ void AmbiVisualizer::analyse (const std::vector<std::vector<float>>& channels, i
             covariance[i * k + j] *= scale;
             covariance[j * k + i] = covariance[i * k + j];
         }
+    channelTarget.resize (k);
+    for (size_t i = 0; i < k; ++i)
+    {
+        const double p = covariance[i * k + i];
+        channelTarget[i] = p > 1.0e-20 ? (float) (10.0 * std::log10 (p)) : (float) silent;
+    }
 
     // The beams' powers, a row of the grid at a time, spread over the cores for the high orders.
     std::vector<int> gridRows ((size_t) rows);
@@ -437,19 +483,20 @@ void AmbiVisualizer::step (double dt)
     const auto a = 1.0 - std::exp (-dt / (2.0 * release[responseIndex] / 3.0));
     shownEnergy = plus (shownEnergy, scaled (plus (e, scaled (shownEnergy, -1.0)), a));
     shownDiffuseness += ((order > 0 ? diffuseness : 1.0) - shownDiffuseness) * a;
-    for (int i = 0; i < numSpeakers; ++i)
+    for (size_t i = 0; i < speakers.size(); ++i)
+        holdPeak (levelAt (speakers[i].azimuth + heading, speakers[i].elevation), speakerPeak[i], speakerHold[i], dt);
+    if (channelShown.size() != channelTarget.size())
     {
-        const auto& s = speakerLayout[i];
-        const auto level = levelAt (s.azimuth + heading, s.elevation);
-        auto& peak = speakerPeak[(size_t) i];
-        auto& hold = speakerHold[(size_t) i];
-        if (level >= peak)
-        {
-            peak = level;
-            hold = 1.5;   // seconds, then it falls
-        }
-        else if ((hold -= dt) < 0.0)
-            peak = std::max (level, peak - 12.0 * dt);
+        channelShown.assign (channelTarget.size(), (float) silent);
+        channelPeak.assign (channelTarget.size(), silent);
+        channelHold.assign (channelTarget.size(), 0.0);
+    }
+    for (size_t k = 0; k < channelShown.size(); ++k)
+    {
+        const auto t = order > 0 ? channelTarget[k] : (float) silent;
+        auto& v = channelShown[k];
+        v += (float) ((t - v) * (t > v ? up : down));
+        holdPeak (v, channelPeak[k], channelHold[k], dt);
     }
     if (current == View::scope)
         emitScope (dt);
@@ -589,6 +636,7 @@ void AmbiVisualizer::paintEvent (QPaintEvent*)
         case View::energy:   paintEnergy (g); break;
         case View::scope:    paintScope (g); break;
         case View::speakers: paintSpeakers (g); break;
+        case View::channels: paintChannels (g); break;
     }
     paintReadout (g, QRectF (rect()).adjusted (8, plotArea().bottom() + 2, -8, -2));
     if (order == 0)
@@ -1225,10 +1273,10 @@ void AmbiVisualizer::paintScope (QPainter& g)
         g.drawImage (plot.topLeft(), scopeTrace);
 
     // 7.1.4: the bed on the horizon, the four heights at 45 degrees.
-    for (const auto& s : speakerLayout)
+    for (const auto& s : speakers)
     {
         const auto a = (s.azimuth - heading) * toRadians;
-        const auto reach = s.elevation > 0 && showHeight ? horizonRing * 0.5 : horizonRing;
+        const auto reach = s.elevation > 0 && showHeight ? horizonRing * (1.0 - s.elevation / 90.0) : horizonRing;
         const QPointF p (centre.x() + std::sin (a) * reach * radius, centre.y() - std::cos (a) * reach * radius);
         g.setPen (QPen (faded (color ("windowText"), s.elevation > 0 ? 0.45 : 0.7), 1.0));
         g.setBrush (Theme::withOpacity (color ("meterBackground")));
@@ -1243,25 +1291,21 @@ void AmbiVisualizer::paintScope (QPainter& g)
     g.drawText (QRectF (centre.x() - 50, centre.y() + radius * horizonRing + 1, 100, fh), Qt::AlignCenter, azimuthText (heading + 180).toUpper());
     g.drawText (QRectF (centre.x() - radius * horizonRing - 52, centre.y() - fh, 50, fh), Qt::AlignRight | Qt::AlignVCenter, azimuthText (heading - 90));
     g.drawText (QRectF (centre.x() + radius * horizonRing + 2, centre.y() - fh, 50, fh), Qt::AlignLeft | Qt::AlignVCenter, azimuthText (heading + 90));
-    g.drawText (QRectF (plot.right() - 90, plot.top(), 90, fh), Qt::AlignRight | Qt::AlignTop, showHeight ? tr ("height: on") : tr ("height: off"));
+    g.drawText (QRectF (plot.right() - 120, plot.top(), 120, fh), Qt::AlignRight | Qt::AlignTop,
+                (showHeight ? tr ("height: on") : tr ("height: off")) + QStringLiteral ("  ·  ") + layoutName);
 }
 
-// Kaizen's meter: a bar for each speaker of 7.1.4 (the level of a beam pointing at it),
-// the peak held above it, and the energy around the listener with the speakers marked.
-void AmbiVisualizer::paintSpeakers (QPainter& g)
+// Bars on a dB scale, each with its peak held above it; a gap goes before a new group.
+void AmbiVisualizer::paintBars (QPainter& g, const QRectF& area, const std::vector<Bar>& bars, bool labelEach, bool valueEach)
 {
     const Palette palette;
-    const auto plot = plotArea();
-    const bool beside = plot.width() > plot.height() * 1.2;
-    const auto bars = beside ? QRectF (plot.left() + 4, plot.top() + 4, plot.width() * 0.6 - 8, plot.height() - 8)
-                             : QRectF (plot.left() + 4, plot.top() + 4, plot.width() - 8, plot.height() * 0.5 - 8);
-    const auto radial = beside ? QRectF (bars.right() + 8, plot.top(), plot.right() - bars.right() - 8, plot.height())
-                               : QRectF (plot.left(), bars.bottom() + 8, plot.width(), plot.bottom() - bars.bottom() - 8);
-
     g.setFont (smaller (font(), 0.7));
     const auto fh = g.fontMetrics().height();
-    const auto track = bars.adjusted (24, fh + 2, 0, -fh - 2);
-    const auto pitch = track.width() / numSpeakers;
+    const auto track = area.adjusted (24, valueEach ? fh + 2 : 2, 0, -fh - 2);
+    const auto gaps = (double) std::count_if (bars.begin(), bars.end(), [] (const Bar& b) { return b.gapBefore; });
+    // Bars no wider than a meter needs; a few of them sit in the middle.
+    const auto pitch = std::min (56.0, track.width() / std::max (1.0, bars.size() + gaps * 0.5));
+    const auto gap = std::min (pitch * 0.5, 12.0);
     const auto low = floorDb();
     for (int i = 0; i <= 4; ++i)
     {
@@ -1269,44 +1313,71 @@ void AmbiVisualizer::paintSpeakers (QPainter& g)
         g.setPen (QPen (faded (color ("windowText"), i == 0 ? 0.2 : 0.08), 0.8));
         g.drawLine (QPointF (track.left(), y), QPointF (track.right(), y));
         g.setPen (faded (color ("placeholderText"), 0.9));
-        g.drawText (QRectF (bars.left(), y - fh / 2.0, 22, fh), Qt::AlignRight | Qt::AlignVCenter, QString::number (std::lround (low + rangeDb * i / 4.0)));
+        g.drawText (QRectF (area.left(), y - fh / 2.0, 22, fh), Qt::AlignRight | Qt::AlignVCenter, QString::number (std::lround (low + rangeDb * i / 4.0)));
     }
-    for (int i = 0; i < numSpeakers; ++i)
+    QLinearGradient fill (0, track.bottom(), 0, track.top());
+    for (int k = 0; k <= 6; ++k)
+        fill.setColorAt (k / 6.0, palette.colour (std::max (0.2, k / 6.0)));
+
+    barRects.clear();
+    auto x = track.left() + std::max (0.0, (track.width() - pitch * (double) bars.size() - gap * gaps) / 2.0);
+    for (const auto& b : bars)
     {
-        const auto& s = speakerLayout[i];
-        const auto level = levelAt (s.azimuth + heading, s.elevation);
-        const auto t = std::clamp ((level - low) / rangeDb, 0.0, 1.0);
-        const QRectF column (track.left() + pitch * i + pitch * 0.12, track.top(), pitch * 0.76, track.height());
-        // A gap between the bed and the heights, as the reference groups them.
-        const auto x = column.left() + (i >= 7 ? pitch * 0.1 : 0.0);
-        const QRectF bar (x, column.top(), column.width() - (i >= 7 ? pitch * 0.1 : 0.0), column.height());
+        if (b.gapBefore)
+            x += gap;
+        const auto inset = std::min (pitch * 0.12, 3.0);
+        const QRectF bar (x + inset, track.top(), std::max (1.0, pitch - 2 * inset), track.height());
+        x += pitch;
+        barRects.push_back (bar);
+        const auto t = std::clamp ((b.level - low) / rangeDb, 0.0, 1.0);
         g.setPen (Qt::NoPen);
         g.setBrush (mix (color ("meterBackground"), color ("mid"), 0.18));
         g.drawRect (bar);
-        QLinearGradient fill (bar.bottomLeft(), bar.topLeft());
-        for (int k = 0; k <= 6; ++k)
-            fill.setColorAt (k / 6.0, palette.colour (std::max (0.2, k / 6.0)));
         g.setBrush (fill);
         g.drawRect (QRectF (bar.left(), bar.bottom() - bar.height() * t, bar.width(), bar.height() * t));
-        const auto peak = std::clamp ((speakerPeak[(size_t) i] - low) / rangeDb, 0.0, 1.0);
+        const auto peak = std::clamp ((b.peak - low) / rangeDb, 0.0, 1.0);
         if (peak > 0.0)
         {
             g.setPen (QPen (color ("meterPeakHold"), 1.4));
             const auto y = bar.bottom() - bar.height() * peak;
             g.drawLine (QPointF (bar.left(), y), QPointF (bar.right(), y));
         }
-        g.setPen (color ("placeholderText"));
-        g.drawText (QRectF (bar.center().x() - pitch / 2, bars.top(), pitch, fh), Qt::AlignCenter,
-                    speakerPeak[(size_t) i] <= -150.0 || speakerPeak[(size_t) i] < low ? QStringLiteral ("-") : QString::number (speakerPeak[(size_t) i], 'f', 1));
-        g.setPen (color ("windowText"));
-        g.drawText (QRectF (bar.center().x() - pitch / 2, track.bottom() + 2, pitch, fh), Qt::AlignCenter, QString::fromLatin1 (s.name));
+        if (valueEach)
+        {
+            g.setPen (color ("placeholderText"));
+            g.drawText (QRectF (bar.center().x() - pitch, area.top(), 2 * pitch, fh), Qt::AlignCenter,
+                        b.peak < low ? QStringLiteral ("-") : QString::number (b.peak, 'f', 1));
+        }
+        if (labelEach)
+        {
+            g.setPen (color ("windowText"));
+            g.drawText (QRectF (bar.center().x() - pitch, track.bottom() + 2, 2 * pitch, fh), Qt::AlignCenter, b.label);
+        }
     }
+}
 
-    // The energy around the listener, with the speakers as markers pointing in.
-    const auto [centre, radius] = paintPolar (g, radial, 0, tr ("Surround"), { tr ("R"), tr ("front"), tr ("L"), tr ("rear") }, false);
+// Kaizen's meter: a bar for each speaker of the layout (the level of a beam pointing at it),
+// the peak held above it, and the energy around the listener with the speakers marked.
+void AmbiVisualizer::paintSpeakers (QPainter& g)
+{
+    const auto plot = plotArea();
+    const bool beside = plot.width() > plot.height() * 1.2;
+    const auto area = beside ? QRectF (plot.left() + 4, plot.top() + 4, plot.width() * 0.6 - 8, plot.height() - 8)
+                             : QRectF (plot.left() + 4, plot.top() + 4, plot.width() - 8, plot.height() * 0.5 - 8);
+    const auto radial = beside ? QRectF (area.right() + 8, plot.top(), plot.right() - area.right() - 8, plot.height())
+                               : QRectF (plot.left(), area.bottom() + 8, plot.width(), plot.bottom() - area.bottom() - 8);
+
+    // The bed, then the speakers above it, apart as the reference groups them.
+    std::vector<Bar> bars;
+    for (size_t i = 0; i < speakers.size(); ++i)
+        bars.push_back ({ speakers[i].name, levelAt (speakers[i].azimuth + heading, speakers[i].elevation), speakerPeak[i],
+                          i > 0 && speakers[i].elevation > 0 && speakers[i - 1].elevation <= 0 });
+    paintBars (g, area, bars, true, true);
+
+    const auto [centre, radius] = paintPolar (g, radial, 0, tr ("Surround %1").arg (layoutName), { tr ("R"), tr ("front"), tr ("L"), tr ("rear") }, false);
     if (radius <= 0.0)
         return;
-    for (const auto& s : speakerLayout)
+    for (const auto& s : speakers)
     {
         const auto a = (s.azimuth - heading) * toRadians;
         const auto reach = s.elevation > 0 ? radius * 0.62 : radius * 1.06;
@@ -1324,6 +1395,39 @@ void AmbiVisualizer::paintSpeakers (QPainter& g)
     }
 }
 
+// Every ambisonic channel as a bar, in ACN order, a group for each order (W; Y Z X; ...).
+void AmbiVisualizer::paintChannels (QPainter& g)
+{
+    const auto plot = plotArea().adjusted (4, 4, -4, -2);
+    std::vector<Bar> bars;
+    for (size_t k = 0; k < channelShown.size(); ++k)
+    {
+        const auto l = (int) std::floor (std::sqrt ((double) k) + 1.0e-9);
+        bars.push_back ({ k < 16 ? QString::fromStdString (ambi::channelName ((int) k)) : QString::number (k), channelShown[k], channelPeak[k],
+                          k > 0 && (size_t) (l * l) == k });
+    }
+    g.setFont (smaller (font(), 0.7));
+    const auto fh = g.fontMetrics().height();
+    const auto pitch = (plot.width() - 24) / std::max<size_t> (1, bars.size() + (size_t) std::max (0, order) / 2);
+    const bool labelEach = pitch >= g.fontMetrics().horizontalAdvance (QStringLiteral ("000")) + 2;
+    paintBars (g, plot.adjusted (0, 0, 0, labelEach ? 0 : -fh), bars, labelEach, pitch >= 30);
+    if (! labelEach && ! barRects.empty())
+    {
+        // Too narrow to name each: the order under each group.
+        g.setPen (color ("windowText"));
+        for (int l = 0; l <= order; ++l)
+        {
+            const auto first = (size_t) (l * l), last = std::min (barRects.size(), (size_t) ((l + 1) * (l + 1))) - 1;
+            if (first >= barRects.size())
+                break;
+            const auto middle = (barRects[first].left() + barRects[last].right()) / 2.0;
+            const auto wide = std::max (barRects[last].right() - barRects[first].left(), 18.0);
+            const QRectF under (middle - wide / 2.0, plot.bottom() - fh, wide, fh);
+            g.drawText (under, Qt::AlignCenter, QString::number (l));
+        }
+    }
+}
+
 void AmbiVisualizer::paintReadout (QPainter& g, const QRectF& area)
 {
     g.setFont (smaller (font(), 0.8));
@@ -1336,7 +1440,14 @@ void AmbiVisualizer::paintReadout (QPainter& g, const QRectF& area)
         parts << (order < fileOrderShown ? tr ("%1 order of %2").arg (name).arg (fileOrderShown) : tr ("%1 order").arg (name));
 
         double az, el;
-        if (hover.x() >= 0.0 && directionAt (hover, az, el))
+        const auto bar = std::find_if (barRects.begin(), barRects.end(), [this] (const QRectF& r) { return r.adjusted (-1, 0, 1, 0).contains (hover); });
+        if (current == View::channels && hover.x() >= 0.0 && bar != barRects.end() && (size_t) (bar - barRects.begin()) < channelShown.size())
+        {
+            const auto k = (size_t) (bar - barRects.begin());
+            parts << tr ("here: ACN %1 (%2, order %3), %4, peak %5").arg (k).arg (QString::fromStdString (ambi::channelName ((int) k)))
+                         .arg ((int) std::floor (std::sqrt ((double) k) + 1.0e-9)).arg (dbText (channelShown[k]), dbText (channelPeak[k]));
+        }
+        else if (hover.x() >= 0.0 && directionAt (hover, az, el))
             parts << tr ("here: %1, %2, %3").arg (azimuthText (az), elevationText (el), dbText (levelAt (az, el)));
         else if (hasSignal)
         {

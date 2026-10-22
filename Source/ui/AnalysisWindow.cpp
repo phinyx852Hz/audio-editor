@@ -2230,7 +2230,7 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
         for (int v = 0; v < AmbiVisualizer::numViews; ++v)
             names << AmbiVisualizer::viewName (static_cast<AmbiVisualizer::View> (v));
         auto* views = smallCombo (ambiCard, names, (int) ambisonics->view(),
-                                  tr ("Sphere, Four Views, Panorama, Head, Energy, Scope or Speakers (V for the next)"));
+                                  tr ("Sphere, Four Views, Panorama, Head, Energy, Scope, Speakers or Channels (V for the next)"));
         connect (views, &QComboBox::currentIndexChanged, ambisonics, [this] (int i) { ambisonics->setView (static_cast<AmbiVisualizer::View> (i)); });
         ambisonics->viewChanged = [views] (AmbiVisualizer::View v) { const QSignalBlocker quiet (views); views->setCurrentIndex ((int) v); };
         ambiCard->addControl (views);
@@ -2266,6 +2266,9 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
         for (int o = 1; o <= AmbiVisualizer::maxOrder; ++o)
             orders << (o == AmbiVisualizer::maxOrder ? tr ("All of the File's (up to 10th)") : tr ("Up to Order %1").arg (o));
         radio (tr ("Order Shown"), orders, ambisonics->orderLimit() - 1, [this] (int i) { ambisonics->setOrderLimit (i + 1); });
+        const auto layouts = AmbiVisualizer::speakerLayouts();
+        radio (tr ("Speaker Layout"), layouts, (int) layouts.indexOf (ambisonics->speakerLayout()),
+               [this, layouts] (int i) { ambisonics->setSpeakerLayout (layouts.value (i)); });
         auto* height = menu->addAction (tr ("Height in Scope"));
         height->setCheckable (true);
         height->setChecked (ambisonics->height());
