@@ -359,6 +359,8 @@ private:
     std::unique_ptr<mixer::Engine> mixerEngine;
     class MixerWindow* mixerWin = nullptr;
     class TrackerWindow* trackerWin = nullptr;
+    class AnalysisWindow* analysisWindow();   // Analysis Meters, made when first opened
+    class AnalysisWindow* analysisWin = nullptr;
     class VisualizerWindow* visualizerWindow();
     void setVisualMode (int index, bool openIfHidden);
     void toggleVisualizerBehind();
