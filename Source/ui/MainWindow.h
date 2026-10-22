@@ -328,6 +328,15 @@ private:
     bool trackerSave (bool saveAs);
     void trackerLoadSample (int instrument);
     void trackerPreview (int channel, int note, int instrument);
+    // Linked instruments: the Tracker playing the Retro Sampler (Ami), slot by slot.
+    void trackerLink (int instrument, int slot);
+    int trackerAmi (bool load, QString* why = nullptr);   // Ami's patchbay synth, or -1
+    void trackerLiveSource();
+    void trackerPatchRendered();   // audio thread
+    void trackerConnectLinks();
+    void trackerSaveLinks (const QString& path);
+    void trackerLoadLinks (const QString& path);
+    std::shared_ptr<class TrackerLink> trackerLinks;
     bool trackerConfirmDiscard();   // false when the user cancels
     std::unique_ptr<class TrackerEngine> tracker;
 
@@ -404,6 +413,7 @@ private:
     // The stock instruments (InstrumentsSection.cpp): Sample and Synth menus, Find's Instruments.
     void registerInstrumentCommands();
     void openInstrument (const char* key);
+    int instrumentSynth (const char* key, bool load, QString* why = nullptr, bool* failed = nullptr);
     class PatchBayWindow* patchBayWindow();
     void showPatchBay();
     void restorePatchBay();

@@ -43,6 +43,9 @@ namespace mixer
         // Saved in a mix: the settings (a plugin's own state, the Synth's settings).
         virtual std::string state() const { return {}; }
         virtual void setState (const std::string&) {}
+        // A plugin's parameter by its name ("Sample MIDI Chan3"), set to a value from 0 to 1.
+        // False when there is no such parameter. UI thread.
+        virtual bool setParameter (const std::string&, float) { return false; }
     };
     using InstrumentPtr = std::shared_ptr<Instrument>;
 

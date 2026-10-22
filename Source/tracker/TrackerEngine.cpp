@@ -33,6 +33,7 @@ std::string TrackerEngine::load (const std::string& path)
     }
     filePath = path;
     resetChannels();
+    clearLinks();
     return {};
 }
 
@@ -122,7 +123,7 @@ void TrackerEngine::playSong (int order, int row, double sampleRate)
 {
     if (module == nullptr)
         return;
-    auto p = std::make_unique<Player> (*module, sampleRate);
+    auto p = std::make_unique<Player> (*module, sampleRate, &linked, &sink);
     p->start (true, order, row, -1);
     std::lock_guard lock (liveLock);
     live = std::move (p);
@@ -133,7 +134,7 @@ void TrackerEngine::playPattern (int patternIndex, int row, double sampleRate)
 {
     if (module == nullptr)
         return;
-    auto p = std::make_unique<Player> (*module, sampleRate);
+    auto p = std::make_unique<Player> (*module, sampleRate, &linked, &sink);
     p->start (true, 0, row, patternIndex);
     std::lock_guard lock (liveLock);
     live = std::move (p);
@@ -254,7 +255,7 @@ int TrackerEngine::tracksInUse() const
 
 //==============================================================================
 AudioDataPtr TrackerEngine::record (double sampleRate, bool multiChannel, std::string& error,
-                                    std::atomic<float>* progress, const std::atomic<bool>* cancel) const
+                                    std::atomic<float>* progress, const std::atomic<bool>* cancel, LinkRenderer* linkedSound) const
 {
     if (module == nullptr)
     {
@@ -293,9 +294,15 @@ AudioDataPtr TrackerEngine::record (double sampleRate, bool multiChannel, std::s
     std::vector<std::vector<float>> out (passes.size() * 2);
     constexpr int block = 4096;
     std::vector<float> l (block), r (block);
+    Player::Notes notes, due;
     for (size_t p = 0; p < passes.size(); ++p)
     {
-        Player player (*module, sampleRate);
+        // The linked instruments' notes, collected as the player makes them, are played
+        // by the renderer block by block; the ones the player made ahead wait for theirs.
+        notes.clear();
+        if (linkedSound != nullptr)
+            linkedSound->reset();
+        Player player (*module, sampleRate, linkedSound != nullptr ? &linked : nullptr, nullptr, &notes);
         player.start (false, 0, 0, -1);
         for (int c = 0; c < channels; ++c)
             player.mute (c, ! passes[p][(size_t) c]);
@@ -310,6 +317,20 @@ AudioDataPtr TrackerEngine::record (double sampleRate, bool multiChannel, std::s
                 return nullptr;
             }
             player.pull (l.data(), r.data(), block);
+            if (linkedSound != nullptr)
+            {
+                due.clear();
+                Player::Notes later;
+                for (auto n : notes)
+                {
+                    if (n[0] < block)
+                        due.push_back (n);
+                    else
+                        later.push_back ({ n[0] - block, n[1], n[2], n[3] });
+                }
+                notes.swap (later);
+                linkedSound->render (due, l.data(), r.data(), block);
+            }
             left.insert (left.end(), l.begin(), l.end());
             right.insert (right.end(), r.begin(), r.end());
             if (progress != nullptr)
@@ -317,6 +338,28 @@ AudioDataPtr TrackerEngine::record (double sampleRate, bool multiChannel, std::s
                 int order = 0, row = 0;
                 player.position (order, row);
                 progress->store (((float) p + std::clamp ((float) order / (float) orders, 0.0f, 1.0f)) / (float) passes.size());
+            }
+        }
+
+        // The linked instruments let go and ring out (their release), up to 3 seconds.
+        if (linkedSound != nullptr)
+        {
+            player.releaseLinked();
+            for (auto& n : notes)
+                n[0] = 0;
+            for (int tail = 0; tail < (int) (sampleRate * 3.0) / block; ++tail)
+            {
+                std::fill (l.begin(), l.end(), 0.0f);
+                std::fill (r.begin(), r.end(), 0.0f);
+                linkedSound->render (notes, l.data(), r.data(), block);
+                notes.clear();
+                left.insert (left.end(), l.begin(), l.end());
+                right.insert (right.end(), r.begin(), r.end());
+                float peak = 0.0f;
+                for (int i = 0; i < block; ++i)
+                    peak = std::max ({ peak, std::abs (l[(size_t) i]), std::abs (r[(size_t) i]) });
+                if (peak < 1.0e-5f)
+                    break;
             }
         }
     }

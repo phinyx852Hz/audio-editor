@@ -287,6 +287,8 @@ MainWindow::~MainWindow()
     loadWatcher.waitForFinished();
     engine.setLiveSource ({});   // the Tracker goes before the engine
     engine.setInstrument ({});   // and the Sampler, Slicer and Mixer
+    if (tracker != nullptr)
+        tracker->setLinkSink (nullptr);   // its linked notes go to the patchbay
     delete patchBayWin;
     patchBayWin = nullptr;
     patchBay = nullptr;          // its synths and effects, and it lets go of the mixer

@@ -220,6 +220,11 @@ PlayerSTD::PlayerSTD(mp_uint32 frequency,
 	smpoffs = NULL;
 	attick	= NULL;	
 
+	externalNotes = NULL;
+	externalFrame = -1;
+	memset(externalNote, 0, sizeof(externalNote));
+	memset(externalIns, 0, sizeof(externalIns));
+
 	// fill in some default values, don't know if this is necessary
 	tickSpeed		= 6;				// our tickspeed
 	bpm				= 125;				// BPM speed
@@ -304,7 +309,17 @@ void PlayerSTD::timerHandler(mp_sint32 currentBeatPacket)
 		if (statusEventListener)
 			statusEventListener->playerTickStarted(*this, *module);
 
+		externalFrame = currentBeatPacket * (mp_sint32)getBeatPacketSize();
 		tickhandler();
+
+		// PHINYX: external notes end where the key goes up or the volume reaches zero
+		if (externalNotes)
+		{
+			for (mp_sint32 chn = 0; chn < numChannels && chn < MAX_EXTERNAL_CHANNELS; chn++)
+				if (externalNote[chn] && (!chninfo[chn].keyon || chninfo[chn].vol <= 0))
+					externalRelease(chn);
+		}
+		externalFrame = -1;
 
 		if (statusEventListener)
 			statusEventListener->playerTickEnded(*this, *module);
@@ -603,8 +618,40 @@ mp_sint32 PlayerSTD::getfinalperiod(mp_sint32 c,mp_sint32 p)
 	else return (p+envVib);
 }
 
+void PlayerSTD::externalRelease(mp_sint32 chn)
+{
+	if (chn < 0 || chn >= MAX_EXTERNAL_CHANNELS || !externalNote[chn])
+		return;
+	if (externalNotes)
+		externalNotes->noteOff(externalFrame, chn, externalIns[chn], externalNote[chn]);
+	externalNote[chn] = externalIns[chn] = 0;
+}
+
+void PlayerSTD::releaseExternalNotes()
+{
+	for (mp_sint32 chn = 0; chn < MAX_EXTERNAL_CHANNELS; chn++)
+		externalRelease(chn);
+}
+
 void PlayerSTD::playInstrument(mp_sint32 chn, TModuleChannel* chnInf, bool bNoRestart/* = false*/)
 {
+	// PHINYX: an external instrument gets the note; its sample stays silent
+	if (externalNotes && chnInf->ins && externalNotes->plays(chnInf->ins))
+	{
+		if (!bNoRestart && chn < MAX_EXTERNAL_CHANNELS)
+		{
+			externalRelease(chn);
+			if (chnInf->vol > 0 && chnInf->note >= 1 && chnInf->note <= 120)
+			{
+				externalNotes->noteOn(externalFrame, chn, chnInf->ins, chnInf->note, chnInf->vol);
+				externalNote[chn] = chnInf->note;
+				externalIns[chn] = chnInf->ins;
+			}
+		}
+		stopSample(chn);
+		return;
+	}
+
 	if (chnInf->ins && chnInf->ins <= module->header.insnum) {
 		if (module->instr[chnInf->ins-1].samp && chnInf->smp != -1)
 		{

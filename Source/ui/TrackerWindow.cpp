@@ -952,8 +952,19 @@ TrackerWindow::TrackerWindow (TrackerEngine& e, QWidget* parent) : QWidget (pare
     auto* instrumentButtons = new QHBoxLayout;
     auto* loadButton = smallButton (tr ("Load Sample..."), tr ("Load an audio file into this instrument (Ctrl+L)"));
     auto* renameButton = smallButton (tr ("Rename..."), tr ("Rename this instrument (F2)"));
+    // Linked instruments: notes of this instrument play a Retro Sampler (Ami) slot.
+    auto* linkButton = smallButton (tr ("Retro Sampler"), tr ("Play this instrument through a slot of the Retro Sampler (Ami)"));
+    auto* linkMenu = new QMenu (linkButton);
+    connect (linkMenu, &QMenu::aboutToShow, this, [this, linkMenu]
+    {
+        linkMenu->clear();
+        fillLinkMenu (linkMenu);
+    });
+    linkButton->setMenu (linkMenu);
+    linkButton->setPopupMode (QToolButton::InstantPopup);
     instrumentButtons->addWidget (loadButton);
     instrumentButtons->addWidget (renameButton);
+    instrumentButtons->addWidget (linkButton);
     instrumentButtons->addStretch (1);
     instrumentLayout->addLayout (instrumentButtons);
     connect (loadButton, &QToolButton::clicked, this, [this] { Q_EMIT loadSampleRequested (currentInstrument()); });
@@ -977,6 +988,18 @@ TrackerWindow::TrackerWindow (TrackerEngine& e, QWidget* parent) : QWidget (pare
             pattern->setInstrument (row + 1);
     });
     connect (instruments, &QListWidget::itemActivated, this, [this] { Q_EMIT loadSampleRequested (currentInstrument()); });
+    instruments->setContextMenuPolicy (Qt::CustomContextMenu);
+    connect (instruments, &QListWidget::customContextMenuRequested, this, [this] (const QPoint& at)
+    {
+        if (auto* item = instruments->itemAt (at))
+            instruments->setCurrentItem (item);
+        QMenu menu (this);
+        menu.addAction (tr ("Load Sample..."), this, [this] { Q_EMIT loadSampleRequested (currentInstrument()); });
+        menu.addAction (tr ("Rename..."), this, [this] { renameInstrument(); });
+        menu.addSeparator();
+        fillLinkMenu (&menu);
+        menu.exec (instruments->viewport()->mapToGlobal (at));
+    });
     connect (pattern, &PatternView::orderStep, this, [this] (int step)
     {
         const int next = std::clamp (pattern->order() + step, 0, std::max (0, engine.numOrders() - 1));
@@ -1051,9 +1074,42 @@ void TrackerWindow::fillInstruments()
     instruments->clear();
     const auto names = engine.instrumentNames();
     for (size_t i = 0; i < names.size(); ++i)
-        instruments->addItem (QStringLiteral ("%1 %2 %3").arg (hex2 ((int) i + 1), engine.hasSample ((int) i + 1) ? QStringLiteral ("●") : QStringLiteral (" "),
-                                                               QString::fromStdString (names[i])));
+    {
+        const auto instrument = (int) i + 1;
+        auto text = QStringLiteral ("%1 %2 %3").arg (hex2 (instrument), engine.hasSample (instrument) ? QStringLiteral ("●") : QStringLiteral (" "),
+                                                     QString::fromStdString (names[i]));
+        auto* item = new QListWidgetItem (instruments);
+        if (const auto slot = engine.link (instrument); slot > 0)
+        {
+            text += QStringLiteral ("  [AMI %1]").arg (slot);
+            item->setForeground (Theme::current().color (QStringLiteral ("region")));
+            item->setToolTip (tr ("Plays through slot %1 of the Retro Sampler (Ami), MIDI channel %1").arg (slot));
+        }
+        item->setText (text);
+    }
     instruments->setCurrentRow (std::clamp (row < 0 ? pattern->instrument() - 1 : row, 0, std::max (0, instruments->count() - 1)));
+}
+
+// Link the current instrument to a Retro Sampler slot, play its own sample again, or show the sampler.
+void TrackerWindow::fillLinkMenu (QMenu* menu)
+{
+    const auto instrument = currentInstrument();
+    const auto current = engine.link (instrument);
+    auto* slots = menu->addMenu (tr ("Play Through Retro Sampler Slot"));
+    for (int slot = 1; slot <= TrackerEngine::numSlots; ++slot)
+    {
+        auto* a = slots->addAction (tr ("Slot %1").arg (slot), this, [this, instrument, slot]
+        {
+            // Linking may add a silent sample, which needs an editable (XM) song.
+            if (engine.hasSample (instrument) || ensureEditable())
+                Q_EMIT linkRequested (instrument, slot);
+        });
+        a->setCheckable (true);
+        a->setChecked (slot == current);
+    }
+    auto* own = menu->addAction (tr ("Play Its Own Sample"), this, [this, instrument] { Q_EMIT linkRequested (instrument, 0); });
+    own->setEnabled (current > 0);
+    menu->addAction (tr ("Show Retro Sampler"), this, [this] { Q_EMIT retroSamplerRequested(); });
 }
 
 void TrackerWindow::syncSettings()

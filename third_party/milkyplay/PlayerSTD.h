@@ -55,6 +55,22 @@ public:
 		virtual void patternEndReached(PlayerSTD& player, XModule& module, mp_sint32& newOrderIndex) { }
 	};
 
+	// PHINYX: instruments played by something outside the player (the Tracker's
+	// instruments linked to a sampler plugin). Their notes go here instead of starting
+	// a sample: a note-on when the sample would start (new notes, note delay, retrigger),
+	// a note-off at the end of the tick where the channel's key goes up or its volume
+	// reaches zero (key off, note cut), or when a new note replaces it. frame is where
+	// in the mixer buffer being filled the tick falls, or -1 outside the mixer (notes
+	// played by hand).
+	struct ExternalNotes
+	{
+		virtual ~ExternalNotes() { }
+
+		virtual bool plays(mp_sint32 ins) = 0;
+		virtual void noteOn(mp_sint32 frame, mp_sint32 chn, mp_sint32 ins, mp_sint32 note, mp_sint32 vol) = 0;	// note 1..120, vol 1..255
+		virtual void noteOff(mp_sint32 frame, mp_sint32 chn, mp_sint32 ins, mp_sint32 note) = 0;
+	};
+
 private:
 	enum
 	{
@@ -252,6 +268,14 @@ private:
 	static const mp_uint32	logtab[];
 	
 	StatusEventListener* statusEventListener;
+	
+	// PHINYX: external notes, and the one sounding on each channel (0: none)
+	enum { MAX_EXTERNAL_CHANNELS = 256 };
+	ExternalNotes*	externalNotes;
+	mp_sint32		externalFrame;
+	mp_sint32		externalNote[MAX_EXTERNAL_CHANNELS];
+	mp_sint32		externalIns[MAX_EXTERNAL_CHANNELS];
+	void			externalRelease(mp_sint32 chn);
 	
 	TModuleChannel*	chninfo;				// our channel information
 	mp_sint32		lastNumAllocatedChannels;
@@ -475,6 +499,10 @@ public:
 	virtual void	playNote(mp_ubyte chn, mp_sint32 note, mp_sint32 ins, mp_sint32 vol = -1);
 							 
 	virtual void	setPanning(mp_ubyte chn, mp_ubyte pan) { chninfo[chn].pan = pan; }
+
+	// PHINYX
+	void			setExternalNotes(ExternalNotes* notes) { externalNotes = notes; }
+	void			releaseExternalNotes();		// a note-off for every external note sounding
 
 #ifdef MILKYTRACKER
 	friend class PlayerController;

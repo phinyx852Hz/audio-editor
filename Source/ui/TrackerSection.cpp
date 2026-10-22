@@ -5,16 +5,82 @@
 #include "Settings.h"
 #include "TrackerWindow.h"
 #include "WaveformView.h"
+#include "PatchBayWindow.h"
+#include "../engine/StockPlugins.h"
+#include "../patchbay/PatchBay.h"
 #include "../tracker/TrackerEngine.h"
 
 #include <QEventLoop>
 #include <QFileDialog>
+#include <QFile>
 #include <QFileInfo>
 #include <QFutureWatcher>
 #include <QMessageBox>
 #include <QProgressDialog>
 #include <QStatusBar>
 #include <QtConcurrent>
+
+// The Retro Sampler (Ami) as the patchbay plays it; its slot N listens on MIDI channel N.
+static constexpr const char* retroSampler = "retroSampler";
+
+// The Tracker's linked instruments play the Retro Sampler in the patchbay. Their notes
+// are timed by the Tracker on the audio thread, counted from the start of the Tracker's
+// render call; the patchbay renders after the Tracker in the same audio block, so the
+// frames the Tracker has rendered since the patchbay last did are added. The Tracker's
+// own sound goes through the Master Section and the patchbay's does not, so the notes
+// are also delayed by its latency, and the two stay in step.
+class TrackerLink final : public TrackerEngine::LinkSink
+{
+public:
+    TrackerLink (patchbay::PatchBay& b, AudioEngine& e) : bay (b), engine (e) {}
+
+    std::atomic<int> synth { -1 };   // the Retro Sampler's patchbay synth, or -1
+
+    void linkedNote (int offset, int channel, int note, int velocity) override
+    {
+        const auto s = synth.load();
+        if (s < 0)
+            return;
+        const auto status = (uint8_t) ((velocity > 0 ? 0x90 : 0x80) | ((channel - 1) & 0x0F));
+        bay.scheduleMidi (s, base.load() + offset + engine.listeningLatency(), status, (uint8_t) note, (uint8_t) velocity);
+    }
+
+    // Audio thread.
+    void trackerRendering() { base = sincePatch.load(); }
+    void trackerRendered (int frames) { sincePatch += frames; }
+    void patchRendered() { sincePatch = 0; }
+
+private:
+    patchbay::PatchBay& bay;
+    AudioEngine& engine;
+    std::atomic<int> base { 0 }, sincePatch { 0 };
+};
+
+// Plays the linked instruments' notes through another Retro Sampler, made from the live
+// one's state, while the Tracker records the song.
+namespace
+{
+    class LinkRecorder final : public TrackerEngine::LinkRenderer
+    {
+    public:
+        explicit LinkRecorder (mixer::InstrumentPtr i) : ami (std::move (i)) {}
+
+        void reset() override { ami->reset(); }
+
+        void render (const std::vector<std::array<int, 4>>& notes, float* left, float* right, int frames) override
+        {
+            events.clear();
+            for (const auto& n : notes)
+                events.push_back ({ std::clamp (n[0], 0, frames - 1),
+                                    (uint8_t) ((n[3] > 0 ? 0x90 : 0x80) | ((n[1] - 1) & 0x0F)), (uint8_t) n[2], (uint8_t) n[3] });
+            ami->process (events.data(), (int) events.size(), left, right, frames);
+        }
+
+    private:
+        mixer::InstrumentPtr ami;
+        std::vector<mixer::NoteEvent> events;
+    };
+}
 
 void MainWindow::registerTrackerCommands()
 {
@@ -89,6 +155,8 @@ TrackerWindow* MainWindow::trackerWindow()
         connect (trackerWin, &TrackerWindow::playPatternRequested, this, [this] { trackerPlay (true); });
         connect (trackerWin, &TrackerWindow::stopRequested, this, [this] { trackerStop(); });
         connect (trackerWin, &TrackerWindow::recordRequested, this, [this] (bool multi) { trackerRecord (multi); });
+        connect (trackerWin, &TrackerWindow::linkRequested, this, [this] (int instrument, int slot) { trackerLink (instrument, slot); });
+        connect (trackerWin, &TrackerWindow::retroSamplerRequested, this, [this] { openInstrument (retroSampler); });
         connect (trackerWin, &TrackerWindow::closed, this, [this]
         {
             trackerStop();
@@ -116,6 +184,7 @@ void MainWindow::openModule()
         QMessageBox::warning (w, tr ("Open Module"), QString::fromStdString (error));
         return;
     }
+    trackerLoadLinks (path);
     w->moduleChanged();
     w->show();
     w->raise();
@@ -138,7 +207,7 @@ void MainWindow::trackerPlay (bool patternOnly)
         tracker->playPattern (tracker->patternAt (view->order()), view->row(), rate);
     else
         tracker->playSong (view->order(), view->row(), rate);
-    engine.setLiveSource ([t = tracker.get()] (float* left, float* right, int frames) { t->render (left, right, frames); });
+    trackerLiveSource();
     w->refresh();
 }
 
@@ -180,10 +249,36 @@ void MainWindow::trackerRecord (bool multiChannel)
     QTimer poll;
     connect (&poll, &QTimer::timeout, this, [&] { dialog.setValue ((int) (progress->load() * 1000.0f)); });
     poll.start (50);
-    watcher.setFuture (QtConcurrent::run ([t = tracker.get(), rate, multiChannel, progress, cancel]
+    // The linked instruments are recorded through a copy of the Retro Sampler as it is now.
+    std::shared_ptr<LinkRecorder> linked;
+    if (tracker->hasLinks())
+    {
+        QString why;
+        if (const auto s = trackerAmi (false, &why); s >= 0)
+        {
+            std::string error;
+            const auto live = patchBay->synth (s);
+            if (auto copy = engine.loadInstrumentPlugin (AudioEngine::instrumentPluginId (*live), rate, error))
+            {
+                copy->setState (live->state());
+                copy->prepare (rate, 4096);
+                linked = std::make_shared<LinkRecorder> (std::move (copy));
+            }
+            else
+                why = QString::fromStdString (error);
+        }
+        if (linked == nullptr
+            && QMessageBox::question (w, tr ("Record to Editor"),
+                                      tr ("The instruments linked to the Retro Sampler can't be recorded (%1). Record the song without them?")
+                                          .arg (why.isEmpty() ? tr ("it is not open") : why))
+                   != QMessageBox::Yes)
+            return;
+    }
+
+    watcher.setFuture (QtConcurrent::run ([t = tracker.get(), rate, multiChannel, progress, cancel, linked]
     {
         Result r;
-        r.data = t->record (rate, multiChannel, r.error, progress.get(), cancel.get());
+        r.data = t->record (rate, multiChannel, r.error, progress.get(), cancel.get(), linked.get());
         return r;
     }));
     loop.exec();
@@ -276,6 +371,7 @@ bool MainWindow::trackerSave (bool saveAs)
         QMessageBox::warning (w, tr ("Save Song"), QString::fromStdString (error));
         return false;
     }
+    trackerSaveLinks (path);
     w->songChanged();
     statusBar()->showMessage (tr ("Saved the song to %1").arg (path), 5000);
     return true;
@@ -322,7 +418,132 @@ void MainWindow::trackerLoadSample (int instrument)
 void MainWindow::trackerPreview (int channel, int note, int instrument)
 {
     const auto rate = engine.deviceSampleRate() > 0.0 ? engine.deviceSampleRate() : 48000.0;
+    if (tracker->link (instrument) > 0)
+        trackerAmi (false);   // where the note goes
     tracker->previewNote (channel, note, instrument, rate);
     if (! engine.hasLiveSource())
-        engine.setLiveSource ([t = tracker.get()] (float* left, float* right, int frames) { t->render (left, right, frames); });
+        trackerLiveSource();
+}
+
+//==============================================================================
+// Linked instruments
+
+void MainWindow::trackerConnectLinks()
+{
+    trackerLinks = std::make_shared<TrackerLink> (*patchBay, engine);
+    tracker->setLinkSink (trackerLinks.get());
+}
+
+void MainWindow::trackerPatchRendered()
+{
+    if (trackerLinks != nullptr)
+        trackerLinks->patchRendered();
+}
+
+// The Tracker as the engine's live source, counting what it renders for its linked notes.
+void MainWindow::trackerLiveSource()
+{
+    if (tracker->hasLinks())
+        trackerAmi (false);   // the patchbay plays the Retro Sampler
+    engine.setLiveSource ([t = tracker.get(), l = trackerLinks.get()] (float* left, float* right, int frames)
+    {
+        l->trackerRendering();
+        t->render (left, right, frames);
+        l->trackerRendered (frames);
+    });
+}
+
+int MainWindow::trackerAmi (bool load, QString* why)
+{
+    const auto s = instrumentSynth (retroSampler, load, why);
+    trackerLinks->synth = s;
+    if (s >= 0)
+        playInstruments();
+    return s;
+}
+
+// Links an instrument to a Retro Sampler slot (0: its own sample again). Each slot is
+// set to listen on its own MIDI channel, so slots never play each other's notes.
+void MainWindow::trackerLink (int instrument, int slot)
+{
+    auto* w = trackerWindow();
+    if (slot > 0)
+    {
+        QString why;
+        const auto s = trackerAmi (true, &why);
+        if (s < 0)
+        {
+            QMessageBox::warning (w, tr ("Retro Sampler"), why);
+            return;
+        }
+        // Every slot on its own channel: a slot left on Omni (its default) would play the
+        // other slots' notes too.
+        for (int n = 1; n <= TrackerEngine::numSlots; ++n)
+            patchBay->synth (s)->setParameter ("Sample MIDI Chan" + std::to_string (n - 1), (float) n / 16.0f);
+    }
+    if (const auto error = tracker->setLink (instrument, slot); ! error.empty())
+    {
+        QMessageBox::warning (w, tr ("Retro Sampler"), QString::fromStdString (error));
+        return;
+    }
+    w->songChanged();
+    statusBar()->showMessage (slot > 0 ? tr ("Instrument %1 plays through slot %2 of the Retro Sampler (MIDI channel %2)").arg (instrument).arg (slot)
+                                       : tr ("Instrument %1 plays its own sample again").arg (instrument), 6000);
+}
+
+// The links, and the Retro Sampler's state, are kept next to the song as song.xm.ami
+// (XM has no place for them): a line "link <instrument> <slot>" per linked instrument
+// and "state <base64>", the sampler's own saved state with its samples.
+void MainWindow::trackerSaveLinks (const QString& path)
+{
+    const auto side = path + QStringLiteral (".ami");
+    const auto links = tracker->links();
+    if (links.empty())
+    {
+        QFile::remove (side);   // made by us for this song: its links are gone
+        return;
+    }
+    QFile file (side);
+    if (! file.open (QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+    {
+        statusBar()->showMessage (tr ("The Retro Sampler links could not be saved to %1").arg (side), 8000);
+        return;
+    }
+    QByteArray text ("PHINYX Tracker links 1\n");
+    for (const auto& [instrument, slot] : links)
+        text += QStringLiteral ("link %1 %2\n").arg (instrument).arg (slot).toUtf8();
+    if (const auto s = trackerAmi (false); s >= 0)
+        text += "state " + QByteArray::fromStdString (patchBay->synth (s)->state()) + "\n";
+    file.write (text);
+}
+
+void MainWindow::trackerLoadLinks (const QString& path)
+{
+    QFile file (path + QStringLiteral (".ami"));
+    if (! file.open (QIODevice::ReadOnly | QIODevice::Text))
+        return;
+    std::vector<std::pair<int, int>> links;
+    std::string state;
+    while (! file.atEnd())
+    {
+        const auto line = file.readLine().trimmed();
+        const auto words = line.split (' ');
+        if (words.size() == 3 && words[0] == "link")
+            links.emplace_back (words[1].toInt(), words[2].toInt());
+        else if (words.size() == 2 && words[0] == "state")
+            state = words[1].toStdString();
+    }
+    if (links.empty())
+        return;
+    QString why;
+    const auto s = trackerAmi (true, &why);
+    if (s < 0)
+    {
+        statusBar()->showMessage (tr ("The song's Retro Sampler instruments can't play: %1").arg (why), 8000);
+        return;
+    }
+    if (! state.empty())
+        patchBay->synth (s)->setState (state);
+    for (const auto& [instrument, slot] : links)
+        tracker->setLink (instrument, slot);
 }

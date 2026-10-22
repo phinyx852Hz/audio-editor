@@ -2563,6 +2563,38 @@ namespace
         check (near (l[300], std::sqrt (0.5), 1.0e-4), "patchbay: a track sent to an FX bus instead of the Mix Bus");
         check (bay.takePeak (node::track) > 0.3f && bay.takePeak (node::track) == 0.0f, "patchbay: peaks are taken and reset");
         m.stop();
+
+        // Timed messages (the Tracker's linked instruments) reach a synth at their frame,
+        // across the patchbay's chunks and into later render calls.
+        struct Recorder final : mixer::Instrument
+        {
+            Kind kind() const override { return Kind::plugin; }
+            std::string name() const override { return "Recorder"; }
+            void prepare (double, int) override {}
+            void process (const mixer::NoteEvent* events, int numEvents, float*, float*, int frames) override
+            {
+                for (int i = 0; i < numEvents; ++i)
+                    heard.emplace_back (at + events[i].offset, events[i].data1);
+                at += frames;
+            }
+            void releaseAll() override {}
+            void reset() override {}
+            long at = 0;
+            std::vector<std::pair<long, int>> heard;
+        };
+        auto recorder = std::make_shared<Recorder>();
+        bay.setSynth (1, recorder);
+        render (0.0f);
+        const auto start = recorder->at;
+        bay.scheduleMidi (1, 700, 0x80, 62, 0);
+        bay.scheduleMidi (1, 10, 0x90, 60, 100);
+        bay.scheduleMidi (1, 300, 0x90, 61, 100);
+        render (0.0f);
+        render (0.0f);
+        check (recorder->heard.size() == 3 && recorder->heard[0] == std::make_pair (start + 10, 60)
+                   && recorder->heard[1] == std::make_pair (start + 300, 61) && recorder->heard[2] == std::make_pair (start + 700, 62),
+               "patchbay: timed messages play at their frame, in later chunks and render calls too");
+        bay.setSynth (1, nullptr);
     }
 
 int main()

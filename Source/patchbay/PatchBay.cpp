@@ -100,6 +100,10 @@ namespace patchbay
             q.reserve (256);
         for (auto& q : liveTaken)
             q.reserve (256);
+        for (auto* qs : { &timedQueue, &timedTaken })
+            for (auto& q : *qs)
+                q.reserve (1024);
+        chunkEvents.reserve (2048);
         setLinks (defaultLinks());
         if (mix != nullptr)
             mix->setPatch (this);
@@ -306,6 +310,16 @@ namespace patchbay
             q.push_back ({ 0, status, data1, data2 });
     }
 
+    void PatchBay::scheduleMidi (int index, int offset, uint8_t status, uint8_t data1, uint8_t data2)
+    {
+        if (index < 0 || index >= maxSynths)
+            return;
+        const std::lock_guard<std::mutex> l (liveLock);
+        auto& q = timedQueue[(size_t) index];
+        if (q.size() < 1024)
+            q.push_back ({ std::max (0, offset), status, data1, data2 });
+    }
+
     void PatchBay::panic() { panicPending = true; }
 
     float PatchBay::takePeak (int n)
@@ -435,9 +449,26 @@ namespace patchbay
                 const auto i = (size_t) indexOf (n);
                 if (auto& s = plan->synths[i])
                 {
-                    auto& events = liveTaken[i];
+                    // What was played live, then the timed messages that fall in this chunk.
+                    auto& events = chunkEvents;
+                    events.assign (liveTaken[i].begin(), liveTaken[i].end());
+                    liveTaken[i].clear();
+                    auto& timed = timedTaken[i];
+                    size_t kept = 0;
+                    for (size_t k = 0; k < timed.size(); ++k)
+                    {
+                        auto e = timed[k];
+                        if (e.offset < chunkStart + chunk)
+                        {
+                            e.offset = std::max (0, e.offset - chunkStart);
+                            events.push_back (e);
+                        }
+                        else
+                            timed[kept++] = e;
+                    }
+                    timed.resize (kept);
+                    std::stable_sort (events.begin(), events.end(), [] (const mixer::NoteEvent& a, const mixer::NoteEvent& b) { return a.offset < b.offset; });
                     s->process (events.data(), (int) events.size(), left, right, chunk);
-                    events.clear();
                 }
                 break;
             }
@@ -488,6 +519,9 @@ namespace patchbay
                 {
                     liveTaken[i].insert (liveTaken[i].end(), liveQueue[i].begin(), liveQueue[i].end());
                     liveQueue[i].clear();
+                    if (timedTaken[i].size() < 2048)
+                        timedTaken[i].insert (timedTaken[i].end(), timedQueue[i].begin(), timedQueue[i].end());
+                    timedQueue[i].clear();
                 }
         }
         if (panicPending.exchange (false))
@@ -495,6 +529,8 @@ namespace patchbay
             for (auto& s : plan->synths)
                 if (s != nullptr)
                     s->reset();
+            for (auto& timed : timedTaken)
+                timed.clear();
             for (auto& fx : plan->effects)
                 if (fx != nullptr)
                     fx->reset();
@@ -506,9 +542,14 @@ namespace patchbay
             auto n = std::min (block, frames - at);
             if (mix != nullptr)
                 n = mix->nextBlock (n);   // the mixer plays it in one piece
+            chunkStart = at;
             renderChunk (left + at, right + at, n);
             at += n;
         }
+        // Timed messages for later: counted from the next render()'s start.
+        for (auto& timed : timedTaken)
+            for (auto& e : timed)
+                e.offset = std::max (0, e.offset - frames);
     }
 
     void PatchBay::renderChunk (float* left, float* right, int frames)
@@ -541,6 +582,9 @@ namespace patchbay
             ensure (n);
         for (auto& events : liveTaken)
             events.clear();   // a synth slot left empty
+        for (size_t i = 0; i < timedTaken.size(); ++i)
+            if (plan->synths[i] == nullptr)
+                timedTaken[i].clear();
 
         std::copy (bufL (node::mainOut), bufL (node::mainOut) + frames, left);
         std::copy (bufR (node::mainOut), bufR (node::mainOut) + frames, right);

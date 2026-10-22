@@ -39,6 +39,9 @@ Changes for PHINYX:
   offering only MilkyPlay's null driver.
 - Added `version.h`, which MilkyTracker generates at build time.
 - MilkyTracker's `CMakeLists.txt` is replaced by `cmake/MilkyPlay.cmake`.
+- `PlayerSTD` can hand an instrument's notes to something outside the player
+  (`PlayerSTD::ExternalNotes`) instead of starting its sample: the Tracker's
+  instruments linked to the Retro Sampler. Marked `PHINYX` in the source.
 
 `Source/tracker/PatternText.cpp` adapts the effect conversions and names from
 MilkyTracker's `tracker/PatternTools.cpp` (Copyright 2009 Peter Barth,

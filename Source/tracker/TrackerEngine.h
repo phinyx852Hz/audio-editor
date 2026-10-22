@@ -3,6 +3,7 @@
 
 #include "../core/AudioData.h"
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <functional>
@@ -22,6 +23,7 @@ class TrackerEngine
 {
 public:
     static constexpr int numTracks = 8;   // the mixer's tracks; a recording has up to 8 stereo pairs
+    struct LinkRenderer;                  // below, with the linked instruments
 
     TrackerEngine();
     ~TrackerEngine();
@@ -67,8 +69,10 @@ public:
 
     // Records the whole song (as it plays, muting and soloing included) at a sample
     // rate: stereo, or one stereo pair per track in use. Call from a worker thread.
+    // With a renderer, the linked instruments are recorded with it.
     AudioDataPtr record (double sampleRate, bool multiChannel, std::string& error,
-                         std::atomic<float>* progress = nullptr, const std::atomic<bool>* cancel = nullptr) const;
+                         std::atomic<float>* progress = nullptr, const std::atomic<bool>* cancel = nullptr,
+                         LinkRenderer* linked = nullptr) const;
 
     //==========================================================================
     // Editing, adapted from MilkyTracker's ModuleEditor and PatternEditor (TrackerEdit.cpp).
@@ -139,6 +143,42 @@ public:
     void previewNote (int channel, int note, int instrument, double sampleRate);
     void releaseNote (int channel, int instrument);
 
+    //==========================================================================
+    // Linked instruments: an instrument can play through one of the Retro Sampler's
+    // (Ami's) slots instead of its own sample. Its notes become MIDI notes on the slot's
+    // MIDI channel (slot 3: channel 3), C-4 as MIDI note 60, the volume as velocity,
+    // timed to the tick; key off and note cut let go. Everything else on the channel
+    // (effects, other instruments) plays as before.
+    static constexpr int numSlots = 12;
+
+    // Where the notes go. Live, from the audio thread inside render(), `offset` counts
+    // frames from the start of that render() call and can run past its end (the player
+    // works ahead); notes typed in come from the UI thread with offset 0.
+    struct LinkSink
+    {
+        virtual ~LinkSink() = default;
+        virtual void linkedNote (int offset, int midiChannel, int note, int velocity) = 0;   // velocity 0: note-off
+    };
+    void setLinkSink (LinkSink*);   // the live player's; null: linked notes go nowhere
+
+    // slot 1..numSlots, or 0 to play the instrument's own sample again. An instrument
+    // with no sample gets a short silent one, so MilkyPlay plays its notes (and an XM
+    // saved from here still has the notes' instrument).
+    std::string setLink (int instrument, int slot);   // an error, or empty
+    int link (int instrument) const;
+    bool hasLinks() const;
+    std::vector<std::pair<int, int>> links() const;   // (instrument, slot)
+    void clearLinks();
+
+    // Renders what the linked instruments play for record(): another Ami, say.
+    struct LinkRenderer
+    {
+        virtual ~LinkRenderer() = default;
+        virtual void reset() = 0;   // before each pass: silent, notes off
+        // Plays the notes (offsets within this block, in order) and adds the sound to left and right.
+        virtual void render (const std::vector<std::array<int, 4>>& notes, float* left, float* right, int frames) = 0;   // offset, channel, note, velocity
+    };
+
 private:
     class Player;
     void applyMutes();
@@ -169,4 +209,6 @@ private:
     mutable std::mutex liveLock;   // the audio thread only tries it, and plays silence when busy
     std::vector<bool> muted, soloed;
     std::vector<int> tracks;
+    std::array<std::atomic<int>, numInstruments + 1> linked {};   // by instrument: the slot, or 0
+    std::atomic<LinkSink*> sink { nullptr };
 };
