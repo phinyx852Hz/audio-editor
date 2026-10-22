@@ -370,6 +370,8 @@ void MainWindow::registerCommands()
     commands.action (QStringLiteral ("spatial.binaural"))->setStatusTip (tr ("Place the sound around your head for headphones: HRTF, 3D, spatial audio, immersive"));
     add ("spatial.layout", Category::spatial, tr ("Channel &Layout..."), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_L) }, [this] { chooseChannelLayout(); });
     commands.action (QStringLiteral ("spatial.layout"))->setStatusTip (tr ("What the channels are: 5.1, 5.2 two subwoofers, 7.2.4, 9.1.6, quad, ambisonics, surround, Atmos-style beds"));
+    add ("spatial.studio", Category::spatial, tr ("Ambisonic &Studio..."), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_H) }, [this] { ambiStudio(); });
+    commands.action (QStringLiteral ("spatial.studio"))->setStatusTip (tr ("Envelop for Live (E4L) style rack: source, stereo, quad, multi panners, spinner, spatial delays, AuraVerb, B-format convolution reverb, HOA transform, slicer, master bus decoder"));
     add ("spatial.encode", Category::spatial, tr ("&Encode to Ambisonics..."), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_E) }, [this] { ambiEncode(); });
     commands.action (QStringLiteral ("spatial.encode"))->setStatusTip (tr ("Place a mono or stereo sound in an ambisonic scene: AmbiX, B-format, 360, VR, spatial audio"));
     add ("spatial.rotate", Category::spatial, tr ("&Rotate / Mirror Scene..."), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_Y) }, [this] { ambiRotate(); });
@@ -797,7 +799,7 @@ void MainWindow::buildMenus()
                                "repair.brushSmaller", "repair.brushLarger", "repair.addHarmonics", "-",
                                "repair.frequencyRange", "repair.allFrequencies", "-", "view.spectral" } },
         { tr ("Effe&ct"),    { "effect.repeat", "-", "@nyquist.generate", "-", "@nyquist.effect" } },
-        { tr ("Spat&ial"),   { "spatial.binaural", "process.midSide", "process.stereoize", "-", "spatial.layout", "-", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.fumaToAmbix", "spatial.ambixToFuma", "-", "view.ambiScene", "analyze.imagingView" } },
+        { tr ("Spat&ial"),   { "spatial.binaural", "process.midSide", "process.stereoize", "-", "spatial.layout", "-", "spatial.studio", "-", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.fumaToAmbix", "spatial.ambixToFuma", "-", "view.ambiScene", "analyze.imagingView" } },
         { tr ("&Warp"),      { "warp.showGrid", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "-", "warp.detectGrid", "warp.autoDetect", "warp.setTempo", "warp.downbeat", "warp.halve", "warp.double", "-",
                                "warp.edit", "warp.previousHit", "warp.nextHit", "warp.toggleMarker", "warp.nudgeEarlier", "warp.nudgeLater", "-",
                                "warp.quantize", "warp.stretch", "warp.halfSpeed", "warp.doubleSpeed", "-", "warp.exportLoop" } },
@@ -1239,7 +1241,7 @@ void MainWindow::updateCommandStates()
     for (const auto* id : { "file.save", "file.saveAs", "file.export", "file.metadata", "edit.insertSilence", "edit.copyToNew", "select.all", "select.none",
                             "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
                             "select.toStart", "select.toEnd", "process.gain", "process.normalize",
-                            "process.reverse", "process.invert", "process.dcOffset", "process.stereoize", "process.midSide", "process.convert", "spatial.binaural", "spatial.layout", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.fumaToAmbix", "spatial.ambixToFuma",
+                            "process.reverse", "process.invert", "process.dcOffset", "process.stereoize", "process.midSide", "process.convert", "spatial.binaural", "spatial.layout", "spatial.studio", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.fumaToAmbix", "spatial.ambixToFuma",
                             "repair.findSimilar", "repair.addHarmonics",
                             "repair.spectralGain", "repair.frequencyRange", "repair.allFrequencies", "repair.learnNoise",
                             "repair.noiseReduction", "repair.declick", "repair.declip", "repair.dehum", "repair.deess",
@@ -1277,7 +1279,7 @@ void MainWindow::updateCommandStates()
     if (doc.isAlbum())
         for (const auto* id : { "edit.cut", "edit.paste", "edit.delete", "edit.trim", "edit.insertSilence", "file.metadata",
                                 "process.gain", "process.normalize", "process.fadeIn", "process.fadeOut", "process.reverse",
-                                "process.invert", "process.dcOffset", "process.stereoize", "process.midSide", "process.convert", "spatial.binaural", "spatial.layout", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.fumaToAmbix", "spatial.ambixToFuma",
+                                "process.invert", "process.dcOffset", "process.stereoize", "process.midSide", "process.convert", "spatial.binaural", "spatial.layout", "spatial.studio", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.fumaToAmbix", "spatial.ambixToFuma",
                                 "repair.autoHeal", "repair.spectralGain", "repair.noiseReduction", "repair.declick",
                                 "repair.declip", "repair.dehum", "repair.deess", "repair.addHarmonics", "repair.correctPitch",
                                 "marker.add", "marker.addRegion" })

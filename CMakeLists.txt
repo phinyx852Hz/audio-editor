@@ -70,6 +70,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/TimeStretch.cpp
     Source/core/Binaural.cpp
     Source/core/Ambisonics.cpp
+    Source/core/SpatialStudio.cpp
     Source/core/Nyquist.cpp
     Source/core/Album.cpp
     Source/engine/AudioCapture.cpp
@@ -141,6 +142,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/ToolsSection.cpp
     Source/ui/AmbiDialogs.cpp
     Source/ui/AmbiScene.cpp
+    Source/ui/AmbiStudio.cpp
     Source/ui/Visualizer.cpp
     Source/ui/VisualizerSection.cpp
     Source/ui/TrackerSection.cpp
@@ -315,6 +317,7 @@ if(PHINYX_BUILD_TESTS)
         Source/core/TimeStretch.cpp
     Source/core/Binaural.cpp
     Source/core/Ambisonics.cpp
+    Source/core/SpatialStudio.cpp
         Source/core/Nyquist.cpp
         Source/core/Album.cpp)
     target_link_libraries(phinyx-core-tests PRIVATE phinyx_nyquist phinyx_rubberband phinyx_mysofa)
