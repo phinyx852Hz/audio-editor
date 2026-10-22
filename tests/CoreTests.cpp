@@ -1530,6 +1530,40 @@ namespace
             check (std::abs (a[200]) < 1.0e-6, "mixer: a muted clip is silent");
         }
 
+        // Reversed: an audio clip plays from its end; a MIDI file's notes run backwards.
+        {
+            mixer::Engine t;
+            t.prepare (rate);
+            t.setNumTracks (1);
+            AudioData::Builder rb (1, rate);
+            std::vector<float> ramp (1000);
+            for (size_t k = 0; k < ramp.size(); ++k)
+                ramp[k] = (float) k / 1000.0f;
+            const float* rp[1] = { ramp.data() };
+            rb.append (rp, 1000);
+            auto clip = mixer::makeClip (mixer::makeAudioClip (*rb.finish(), "ramp.wav"), 0);
+            clip.reversed = true;
+            clip.offset = 100;    // in the reversed file: frames 899 down to 0 play
+            clip.length = 900;
+            t.setClips (0, { clip });
+            std::vector<float> a (512, 0.0f), b (512, 0.0f);
+            t.play();
+            t.render (a.data(), b.data(), 512);
+            check (near (a[200] / std::sqrt (0.5), (899 - 200) / 1000.0, 1.0e-4), "mixer: a reversed audio clip plays backwards from its trimmed start");
+
+            mixer::MidiClip m;
+            m.length = 1000;
+            m.events = { { 0, 0xC0, 5, 0 }, { 100, 0x90, 60, 90 }, { 300, 0x80, 60, 0 }, { 500, 0x90, 64, 70 }, { 900, 0x80, 64, 0 } };
+            const auto r = mixer::reverseMidi (m);
+            const bool order = r->events.size() == 5 && r->events[0].status == 0xC0 && r->events[0].frame == 0
+                               && r->events[1].frame == 100 && r->events[1].status == 0x90 && r->events[1].data1 == 64 && r->events[1].data2 == 70
+                               && r->events[2].frame == 500 && r->events[2].status == 0x80 && r->events[2].data1 == 64
+                               && r->events[3].frame == 700 && r->events[3].status == 0x90 && r->events[3].data1 == 60 && r->events[4].frame == 900;
+            check (order, "mixer: a reversed MIDI file plays its notes backwards, each as long and as loud");
+            const auto twice = mixer::reverseMidi (*r);
+            check (twice->events.size() == 5 && twice->events[1].frame == 100 && twice->events[1].data1 == 60, "mixer: reversing a MIDI file twice gives it back");
+        }
+
         // The built-in Synth: a note sounds and dies after its release; a drum rings out by itself.
         mixer::Synth synth;
         synth.prepare (rate, 256);

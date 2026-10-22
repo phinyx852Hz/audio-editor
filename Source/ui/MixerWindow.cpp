@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MixerWindow.h"
+#include "Potentiometer.h"
 #include "SamplerWindow.h"
 #include "Settings.h"
 #include "SlicerWindow.h"
@@ -80,6 +81,118 @@ namespace
             return 0;
         return std::clamp ((int) std::lround (std::pow (std::pow (10.0, db / 20.0) / 2.0, 0.25) * faderSteps), 0, faderSteps);
     }
+
+    // A channel fader: a long throw with the dB marks of its travel on the left (boost above
+    // 0 dB, cut below), a cap to grab, dragged up and down (Shift ten times finer), a
+    // double-click back to 0 dB.
+    class Fader final : public QSlider
+    {
+    public:
+        explicit Fader (QWidget* parent) : QSlider (Qt::Vertical, parent)
+        {
+            setRange (0, faderSteps);
+            setFocusPolicy (Qt::NoFocus);
+            setMinimumSize (60, 150);
+            setSizePolicy (QSizePolicy::Fixed, QSizePolicy::Expanding);
+        }
+
+        QSize sizeHint() const override { return { 60, 240 }; }
+
+    protected:
+        static constexpr double capWidth = 28.0, capHeight = 16.0, labels = 24.0;
+
+        double grooveX() const { return labels + 6.0 + capWidth / 2.0; }
+        double top() const { return capHeight / 2.0 + 3.0; }
+        double bottom() const { return height() - capHeight / 2.0 - 3.0; }
+        double yOf (int v) const { return top() + (1.0 - (double) v / faderSteps) * (bottom() - top()); }
+
+        void paintEvent (QPaintEvent*) override
+        {
+            QPainter g (this);
+            g.setRenderHint (QPainter::Antialiasing);
+            const auto pal = palette();
+            const auto x = grooveX();
+            auto f = font();
+            f.setPointSizeF (std::max (6.5, f.pointSizeF() * 0.78));
+            g.setFont (f);
+
+            // The scale: boost above 0 dB, cut below; labels kept apart.
+            auto ink = pal.color (QPalette::WindowText);
+            ink.setAlpha (150);
+            double lastY = -100.0;
+            for (const auto db : { 6.0, 3.0, 0.0, -3.0, -6.0, -10.0, -15.0, -20.0, -30.0, -40.0, -60.0, -100.0 })
+            {
+                const auto y = yOf (faderPosition (db));
+                if (std::abs (y - lastY) < 10.0 && db > -100.0)
+                    continue;
+                lastY = y;
+                const bool unity = std::abs (db) < 0.01;
+                g.setPen (unity ? pal.color (QPalette::Highlight) : ink);
+                g.drawLine (QPointF (labels + 1.0, y), QPointF (labels + 5.0, y));
+                const auto text = db <= -96.0 ? QStringLiteral ("-∞") : db > 0.0 ? QStringLiteral ("+%1").arg (db) : QString::number (db);
+                g.drawText (QRectF (0.0, y - 7.0, labels - 1.0, 14.0), Qt::AlignRight | Qt::AlignVCenter, text);
+            }
+
+            // The groove, filled up to the cap.
+            const auto capY = yOf (value());
+            g.setPen (Qt::NoPen);
+            g.setBrush (pal.color (QPalette::Mid));
+            g.drawRoundedRect (QRectF (x - 2.5, top(), 5.0, bottom() - top()), 2.0, 2.0);
+            auto fill = pal.color (isEnabled() ? QPalette::Highlight : QPalette::Mid);
+            fill.setAlpha (170);
+            g.setBrush (fill);
+            g.drawRoundedRect (QRectF (x - 2.5, capY, 5.0, bottom() - capY), 2.0, 2.0);
+
+            // The cap, with a line across where it reads.
+            const QRectF cap (x - capWidth / 2.0, capY - capHeight / 2.0, capWidth, capHeight);
+            g.setBrush (pal.color (QPalette::Button));
+            g.setPen (QPen (isSliderDown() ? pal.color (QPalette::Highlight) : pal.color (QPalette::Mid), 1.0));
+            g.drawRoundedRect (cap, 3.0, 3.0);
+            g.setPen (QPen (pal.color (QPalette::WindowText), 1.5));
+            g.drawLine (QPointF (cap.left() + 4.0, capY), QPointF (cap.right() - 4.0, capY));
+        }
+
+        void mousePressEvent (QMouseEvent* e) override
+        {
+            if (e->button() != Qt::LeftButton)
+                return QSlider::mousePressEvent (e);
+            // Off the cap, it jumps there first; then it follows the mouse.
+            const auto y = e->position().y();
+            if (std::abs (y - yOf (value())) > capHeight / 2.0 + 2.0)
+                setValue ((int) std::lround ((1.0 - (y - top()) / std::max (1.0, bottom() - top())) * faderSteps));
+            dragY = y;
+            dragStart = value();
+            setSliderDown (true);
+            update();
+            e->accept();
+        }
+
+        void mouseMoveEvent (QMouseEvent* e) override
+        {
+            if (! isSliderDown())
+                return;
+            const auto perPixel = faderSteps / std::max (1.0, bottom() - top()) * ((e->modifiers() & Qt::ShiftModifier) != 0 ? 0.1 : 1.0);
+            setValue ((int) std::lround (dragStart + (dragY - e->position().y()) * perPixel));
+            e->accept();
+        }
+
+        void mouseReleaseEvent (QMouseEvent* e) override
+        {
+            setSliderDown (false);
+            update();
+            e->accept();
+        }
+
+        void mouseDoubleClickEvent (QMouseEvent* e) override
+        {
+            setValue (faderPosition (0.0));
+            e->accept();
+        }
+
+    private:
+        double dragY = 0.0;
+        int dragStart = 0;
+    };
 
     QString dbText (double db)
     {
@@ -280,8 +393,9 @@ void LevelMeter::paintEvent (QPaintEvent*)
     QPainter g (this);
     const auto& theme = Theme::current();
     const auto light = 5;
-    g.fillRect (rect(), theme.color (QStringLiteral ("meterBackground")));
-    g.fillRect (QRect (0, 0, width(), light - 1), clipped ? theme.color (QStringLiteral ("meterHigh")) : theme.color (QStringLiteral ("mid")));
+    const auto bars = width() - (scale ? scaleWidth : 0);
+    g.fillRect (QRect (0, 0, bars, height()), theme.color (QStringLiteral ("meterBackground")));
+    g.fillRect (QRect (0, 0, bars, light - 1), clipped ? theme.color (QStringLiteral ("meterHigh")) : theme.color (QStringLiteral ("mid")));
     const auto top = light, height = std::max (1, this->height() - light);
     // -60 dB at the bottom, 0 dB at the top.
     auto yFor = [&] (float level)
@@ -289,7 +403,29 @@ void LevelMeter::paintEvent (QPaintEvent*)
         const auto db = level <= 1.0e-6f ? -60.0 : std::clamp (20.0 * std::log10 (level), -60.0, 0.0);
         return top + (int) std::lround ((1.0 - (db + 60.0) / 60.0) * height);
     };
-    const auto half = width() / 2;
+    const auto half = bars / 2;
+
+    // dBFS beside the bars, labels kept apart.
+    if (scale)
+    {
+        auto f = font();
+        f.setPointSizeF (std::max (6.5, f.pointSizeF() * 0.78));
+        g.setFont (f);
+        auto ink = palette().color (QPalette::WindowText);
+        ink.setAlpha (150);
+        int lastY = -100;
+        for (const auto db : { 0, -3, -6, -9, -12, -18, -24, -30, -40, -50, -60 })
+        {
+            const auto y = top + (int) std::lround ((1.0 - (db + 60.0) / 60.0) * height);
+            if (y - lastY < 10)
+                continue;
+            lastY = y;
+            g.setPen (db == 0 ? theme.color (QStringLiteral ("meterHigh")) : ink);
+            g.drawLine (bars + 1, y, bars + 4, y);
+            g.drawText (QRect (bars + 6, y - 7, scaleWidth - 6, 14), Qt::AlignLeft | Qt::AlignVCenter, QString::number (db));
+        }
+    }
+
     for (int c = 0; c < 2; ++c)
     {
         const auto x = c * half, w = half - 1;
@@ -386,10 +522,11 @@ public:
         layout->addLayout (midiOptions);
 
         // Pre: trim and polarity.
-        trimDial = new QDial (this);
+        trimDial = new Potentiometer (this);
         trimDial->setRange (-240, 240);
         trimDial->setFixedSize (40, 40);
         trimDial->setFocusPolicy (Qt::NoFocus);
+        static_cast<Potentiometer*> (trimDial)->setOrigin (0);
         trimDial->setToolTip (MixerWindow::tr ("Trim, ±24 dB, before everything else (double-click: 0 dB)"));
         trimLabel = new QLabel (this);
         invertL = smallButton (QStringLiteral ("ØL"), MixerWindow::tr ("Flip the left side's polarity"), true);
@@ -405,10 +542,11 @@ public:
         pre->addLayout (polarity);
         layout->addLayout (pre);
 
-        panDial = new QDial (this);
+        panDial = new Potentiometer (this);
         panDial->setRange (-100, 100);
         panDial->setFixedSize (40, 40);
         panDial->setFocusPolicy (Qt::NoFocus);
+        static_cast<Potentiometer*> (panDial)->setOrigin (0);
         panDial->setToolTip (MixerWindow::tr ("Pan ([ and ]): equal power for a mono file, balance for stereo and instruments (double-click: centre)"));
         panLabel = new QLabel (this);
         auto* panColumn = new QVBoxLayout;
@@ -423,11 +561,10 @@ public:
         ms->addWidget (soloButton);
         layout->addLayout (ms);
 
-        fader = new QSlider (Qt::Vertical, this);
-        fader->setRange (0, faderSteps);
-        fader->setFocusPolicy (Qt::NoFocus);
+        fader = new Fader (this);
         fader->setToolTip (MixerWindow::tr ("Fader, -∞ to +6 dB (Up and Down, Shift for finer steps; 0 resets; double-click the value to type one)"));
         meter = new LevelMeter (this);
+        meter->setScale (true);
         auto* faderRow = new QHBoxLayout;
         faderRow->addStretch (1);
         faderRow->addWidget (fader);
@@ -1022,7 +1159,21 @@ protected:
         {
             fit = true;
             update();
+            return;
         }
+        // An audio clip opens in the editor; the mixer steps aside until F3.
+        const auto hit = clipAt (e->position());
+        if (hit.id == 0)
+            return;
+        for (const auto& c : window.engine.clips (hit.track))
+            if (c.id == hit.id)
+            {
+                if (c.audio != nullptr)
+                    Q_EMIT window.editClipRequested (hit.track, hit.id);
+                else
+                    window.status->setText (MixerWindow::tr ("MIDI clips are not edited; R plays one backwards."));
+            }
+        drag = Drag::none;
     }
 
     void wheelEvent (QWheelEvent* e) override
@@ -1115,6 +1266,11 @@ protected:
             muteSelected();
             return;
         }
+        if (mods == Qt::NoModifier && key == Qt::Key_R && ! selection.empty())
+        {
+            reverseSelected();
+            return;
+        }
         e->ignore();   // the window's keys: tracks, mute, solo, play...
     }
 
@@ -1132,6 +1288,7 @@ protected:
             if (selection.count (hit.id) == 0)
                 selection = { hit.id };
             update();
+            menu.addAction (MixerWindow::tr ("&Reverse (R)"), this, [this] { reverseSelected(); });
             menu.addAction (MixerWindow::tr ("&Mute or Unmute (Shift+M)"), this, [this] { muteSelected(); });
             menu.addAction (MixerWindow::tr ("&Split at the Playhead (Ctrl+E)"), this, [this] { split(); });
             menu.addAction (MixerWindow::tr ("D&uplicate (Ctrl+D)"), this, [this] { duplicate(); });
@@ -1505,6 +1662,31 @@ private:
         }
     }
 
+    // Backwards, or forwards again: the same part of the sound, played the other way.
+    void reverseSelected()
+    {
+        window.remember();
+        int count = 0;
+        for (int t = 0; t < window.engine.numTracks(); ++t)
+        {
+            auto list = window.engine.clips (t);
+            bool any = false;
+            for (auto& c : list)
+                if (selection.count (c.id) != 0)
+                {
+                    c.offset = c.sourceLength() - c.offset - c.length;
+                    c.reversed = ! c.reversed;
+                    if (c.midi != nullptr)
+                        c.midi = mixer::reverseMidi (*c.midi);
+                    any = true;
+                    ++count;
+                }
+            if (any)
+                window.editClips (t, std::move (list));
+        }
+        window.status->setText (MixerWindow::tr ("Reversed %n clip(s) (R again turns them back)", nullptr, count));
+    }
+
     // At the playhead: the selected clips, or with none selected every clip of the track there.
     void split()
     {
@@ -1661,6 +1843,8 @@ private:
             g.fillRect (title, band);
             const auto source = c.audio != nullptr ? c.audio->path : c.midi->path;
             auto name = QFileInfo (QString::fromStdString (source)).completeBaseName();
+            if (c.reversed)
+                name = QStringLiteral ("◀ ") + name;
             if (c.muted)
                 name = MixerWindow::tr ("%1 (muted)").arg (name);
             g.setPen (palette().color (QPalette::Base));
@@ -1686,8 +1870,16 @@ private:
             for (int x = from; x < to; ++x)
             {
                 // The file's frames under this pixel.
-                const auto f0 = (double) c.offset + (start + (x - headerWidth) * framesPerPixel - (double) c.start);
-                const auto f1 = f0 + framesPerPixel;
+                auto f0 = (double) c.offset + (start + (x - headerWidth) * framesPerPixel - (double) c.start);
+                auto f1 = f0 + framesPerPixel;
+                if (c.reversed)
+                {
+                    // The same frames, counted from the file's end.
+                    const auto n = (double) c.sourceLength();
+                    const auto a0 = n - f1, a1 = n - f0;
+                    f0 = a0;
+                    f1 = a1;
+                }
                 auto a = (size_t) std::max (0.0, std::floor (f0 / peakBlock));
                 if (a >= p.peaks.size())
                     break;
@@ -2064,11 +2256,10 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     auto* masterNote = new QLabel (tr ("No plugins: mastering\nis the editor's job"), masterStrip);
     masterNote->setAlignment (Qt::AlignCenter);
     masterNote->setEnabled (false);
-    masterFader = new QSlider (Qt::Vertical, masterStrip);
-    masterFader->setRange (0, faderSteps);
-    masterFader->setFocusPolicy (Qt::NoFocus);
+    masterFader = new Fader (masterStrip);
     masterFader->setToolTip (tr ("The master out (9 selects it; Up and Down move it)"));
     masterMeter = new LevelMeter (masterStrip);
+    masterMeter->setScale (true);
     masterValue = new QLabel (masterStrip);
     masterValue->setAlignment (Qt::AlignCenter);
     masterPeak = new QLabel (masterStrip);
@@ -2509,6 +2700,8 @@ bool MixerWindow::loadMidi (int track, const QString& file, QString& error, mixe
         tempoBox->setValue (song->fileBpm());
     }
     place.midi = mixer::placeMidi (song, file.toStdString(), rate(), followTempoBox->isChecked() ? tempoBox->value() : 0.0);
+    if (place.reversed)
+        place.midi = mixer::reverseMidi (*place.midi);
     if (place.length <= 0)
         place.length = place.midi->length;
     const auto length = place.length;
@@ -2554,6 +2747,8 @@ void MixerWindow::placeAllMidi()
                 const auto before = std::max<Frame> (1, c.midi->length);
                 const bool whole = c.offset == 0 && c.length == c.midi->length;
                 c.midi = mixer::placeMidi (c.midi->song, c.midi->path, rate(), bpm);
+                if (c.reversed)
+                    c.midi = mixer::reverseMidi (*c.midi);
                 const auto ratio = (double) c.midi->length / (double) before;
                 c.offset = whole ? 0 : (Frame) std::llround ((double) c.offset * ratio);
                 c.length = whole ? c.midi->length : (Frame) std::llround ((double) c.length * ratio);
@@ -3108,7 +3303,7 @@ bool MixerWindow::writeMix (const QString& file, QString& error)
             clips.append (QJsonObject {
                 { "kind", c.isMidi() ? "midi" : "audio" }, { "file", storedPath (QString::fromStdString (source), base) },
                 { "start", (double) c.start / rate() }, { "offset", (double) c.offset / rate() }, { "length", (double) c.length / rate() },
-                { "muted", c.muted },
+                { "muted", c.muted }, { "reversed", c.reversed },
             });
         }
         o.insert ("clips", clips);
@@ -3304,6 +3499,7 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
                 place.offset = frames (c.value ("offset").toDouble());
                 place.length = std::max<Frame> (1, frames (c.value ("length").toDouble()));
                 place.muted = c.value ("muted").toBool();
+                place.reversed = c.value ("reversed").toBool();
                 addClipFrom (c.value ("kind").toString(), c.value ("file").toString(), place);
             }
         else
@@ -3534,5 +3730,83 @@ void MixerWindow::cycleFocus (bool forward)
 bool MixerWindow::focusNextPrevChild (bool next)
 {
     cycleFocus (next);
+    return true;
+}
+
+//==============================================================================
+// A clip edited in the editor: what it sounds like now, and the edit put back.
+AudioDataPtr MixerWindow::clipAudio (int track, uint32_t id, QString& name) const
+{
+    if (track < 0 || track >= engine.numTracks())
+        return nullptr;
+    for (const auto& c : engine.clips (track))
+    {
+        if (c.id != id || c.audio == nullptr)
+            continue;
+        // The part heard, the way it plays.
+        const auto& a = *c.audio;
+        std::vector<float> left ((size_t) c.length), right ((size_t) c.length);
+        for (Frame k = 0; k < c.length; ++k)
+        {
+            const auto forward = c.offset + k;
+            const auto src = (size_t) (c.reversed ? a.length() - 1 - forward : forward);
+            left[(size_t) k] = a.left[src];
+            right[(size_t) k] = a.right[src];
+        }
+        AudioData::Builder b (a.mono ? 1 : 2, rate());
+        const float* ptrs[2] = { left.data(), right.data() };
+        b.append (ptrs, (int) c.length);
+        name = tr ("Track %1 %2").arg (track + 1).arg (QFileInfo (QString::fromStdString (a.path)).completeBaseName());
+        return b.finish();
+    }
+    return nullptr;
+}
+
+bool MixerWindow::replaceClipAudio (int track, uint32_t id, const AudioData& edited, const QString& name, QString& error)
+{
+    if (track < 0 || track >= engine.numTracks())
+        return false;
+    auto list = engine.clips (track);
+    auto it = std::find_if (list.begin(), list.end(), [id] (const mixer::Clip& c) { return c.id == id; });
+    if (it == list.end())
+    {
+        error = tr ("The clip is no longer on track %1.").arg (track + 1);
+        return false;
+    }
+
+    // Saved beside the mix (in the Music folder until it is saved), the original left as it was.
+    const auto base = path.isEmpty() ? QDir (QStandardPaths::writableLocation (QStandardPaths::MusicLocation)).filePath (tr ("PHINYX Edits"))
+                                     : QFileInfo (path).absoluteDir().filePath (QFileInfo (path).completeBaseName() + tr (" Edits"));
+    QDir().mkpath (base);
+    auto stem = name;
+    stem.replace (QRegularExpression (QStringLiteral ("[/\\\\:*?\"<>|]")), QStringLiteral ("_"));
+    auto file = QDir (base).filePath (stem + QStringLiteral (".wav"));
+    for (int n = 2; QFileInfo::exists (file); ++n)
+        file = QDir (base).filePath (QStringLiteral ("%1 %2.wav").arg (stem).arg (n));
+    SaveOptions options;
+    options.bitDepth = 32;
+    std::string why;
+    const AudioData* sound = &edited;
+    AudioDataPtr resampled;
+    if (std::abs (edited.sampleRate() - rate()) > 0.5)
+    {
+        resampled = dsp::resample (edited, rate());
+        sound = resampled.get();
+    }
+    if (! AudioEngine::saveFile (file.toStdString(), *sound, {}, {}, options, why))
+    {
+        error = tr ("The edit could not be saved to %1: %2").arg (file, QString::fromStdString (why));
+        return false;
+    }
+
+    remember();
+    const auto clip = mixer::makeAudioClip (*sound, file.toStdString());
+    audioCache[file] = clip;
+    it->audio = clip;
+    it->offset = 0;
+    it->length = clip->length();
+    it->reversed = false;   // the edit is the clip as it played
+    editClips (track, std::move (list));
+    status->setText (tr ("The edit is on track %1 (%2); Ctrl+Z puts the clip back as it was").arg (track + 1).arg (file));
     return true;
 }

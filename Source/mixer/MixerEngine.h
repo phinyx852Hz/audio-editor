@@ -62,12 +62,19 @@ namespace mixer
         Frame offset = 0;    // into the file: what is trimmed off the front
         Frame length = 0;    // heard from there
         bool muted = false;
+        // Played backwards: offset and length then count in the reversed file. An audio clip
+        // is read backwards here; a MIDI clip's file is given reversed (reverseMidi).
+        bool reversed = false;
         uint32_t id = 0;     // for the UI, to know a clip again after edits; not used here
         Frame end() const { return start + length; }
         Frame sourceLength() const { return audio != nullptr ? audio->length() : midi != nullptr ? midi->length : 0; }
         bool isMidi() const { return midi != nullptr; }
     };
     using Clips = std::vector<Clip>;
+
+    // The MIDI file backwards: each note keeps its length and velocity, ending where it began
+    // mirrored; the set-up at the very start (programs, controllers) stays at the start.
+    MidiClipPtr reverseMidi (const MidiClip&);
     Clip makeClip (AudioClipPtr, Frame start);   // the whole file
     Clip makeClip (MidiClipPtr, Frame start);
 

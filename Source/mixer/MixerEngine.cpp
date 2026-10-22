@@ -95,6 +95,54 @@ namespace mixer
         return clip;
     }
 
+    MidiClipPtr reverseMidi (const MidiClip& in)
+    {
+        auto out = std::make_shared<MidiClip> (in);
+        out->events.clear();
+        out->events.reserve (in.events.size());
+        const auto length = in.length;
+        std::array<std::array<std::vector<size_t>, 128>, 16> open;
+        auto mirror = [length] (Frame f) { return std::max<Frame> (0, length - f); };
+        for (size_t i = 0; i < in.events.size(); ++i)
+        {
+            const auto& e = in.events[i];
+            const auto type = e.status & 0xF0, ch = e.status & 0x0F;
+            if (type == 0x90 && e.data2 > 0)
+                open[(size_t) ch][e.data1 & 0x7F].push_back (i);
+            else if (type == 0x80 || type == 0x90)
+            {
+                auto& stack = open[(size_t) ch][e.data1 & 0x7F];
+                if (stack.empty())
+                    continue;
+                const auto& on = in.events[stack.back()];
+                stack.pop_back();
+                out->events.push_back ({ mirror (e.frame), (uint8_t) (0x90 | ch), e.data1, on.data2 });
+                out->events.push_back ({ mirror (on.frame), (uint8_t) (0x80 | ch), e.data1, 0 });
+            }
+            else
+                out->events.push_back ({ e.frame == 0 ? 0 : mirror (e.frame), e.status, e.data1, e.data2 });
+        }
+        // Notes still held at the end of the file start at the start.
+        for (int ch = 0; ch < 16; ++ch)
+            for (int n = 0; n < 128; ++n)
+                for (const auto i : open[(size_t) ch][(size_t) n])
+                {
+                    out->events.push_back ({ 0, (uint8_t) (0x90 | ch), (uint8_t) n, in.events[i].data2 });
+                    out->events.push_back ({ mirror (in.events[i].frame), (uint8_t) (0x80 | ch), (uint8_t) n, 0 });
+                }
+        // In time; at the same frame the set-up first, then note-offs, then note-ons.
+        auto rank = [] (const MidiClip::Placed& e)
+        {
+            const auto type = e.status & 0xF0;
+            return type == 0x90 ? 2 : type == 0x80 ? 1 : 0;
+        };
+        std::stable_sort (out->events.begin(), out->events.end(), [&] (const MidiClip::Placed& a, const MidiClip::Placed& b)
+        {
+            return a.frame != b.frame ? a.frame < b.frame : rank (a) < rank (b);
+        });
+        return out;
+    }
+
     Clip makeClip (AudioClipPtr audio, Frame start)
     {
         Clip c;
@@ -359,7 +407,6 @@ namespace mixer
 
     void Engine::renderBlock (float* left, float* right, int frames, Frame at, bool play, bool withLive)
     {
-        const auto r = rate.load();
         const auto count = tracks.load();
         const bool jumped = at != expected;
         const bool stopping = stopPending.exchange (false);
@@ -482,9 +529,11 @@ namespace mixer
                     const auto from = std::max (at, c.start), to = std::min (at + frames, c.end());
                     const auto fade = std::max<Frame> (1, std::min<Frame> (96, c.length / 4));
                     const auto& a = *c.audio;
+                    const auto last = a.length() - 1;
                     for (auto f = from; f < to; ++f)
                     {
-                        const auto src = (size_t) (f - c.start + c.offset);
+                        const auto forward = f - c.start + c.offset;
+                        const auto src = (size_t) (c.reversed ? last - forward : forward);
                         const auto edge = std::min (f - c.start, c.end() - 1 - f);
                         const auto g = edge < fade ? (float) (edge + 1) / (float) (fade + 1) : 1.0f;
                         const auto k = (size_t) (f - at);

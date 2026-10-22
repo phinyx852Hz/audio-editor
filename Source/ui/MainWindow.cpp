@@ -1314,7 +1314,11 @@ void MainWindow::updateTabBar()
     for (int i = 0; i < (int) tabs.size(); ++i)
     {
         const auto& d = i == activeTab ? doc : tabs[(size_t) i].doc;
-        tabBar->setTabText (i, tabName (d));
+        const auto& state = tabs[(size_t) i];
+        auto text = tabName (d);
+        if (state.mixerClip != 0 && d.isOpen() && d.path().empty())
+            text = state.mixerName + (d.isModified() ? QStringLiteral (" *") : QString());
+        tabBar->setTabText (i, text);
         tabBar->setTabToolTip (i, QString::fromStdString (d.path()));
     }
 

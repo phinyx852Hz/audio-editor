@@ -36,8 +36,9 @@ public:
     void setLevels (const mixer::Meter&, double seconds);   // seconds since the last call
     float highestPeak() const { return highest; }
     void clear();
-    QSize sizeHint() const override { return { 18, 160 }; }
-    QSize minimumSizeHint() const override { return { 14, 60 }; }
+    void setScale (bool on) { scale = on; updateGeometry(); update(); }   // dBFS marks to the right
+    QSize sizeHint() const override { return { 18 + (scale ? scaleWidth : 0), 160 }; }
+    QSize minimumSizeHint() const override { return { 14 + (scale ? scaleWidth : 0), 60 }; }
 
 protected:
     void paintEvent (class QPaintEvent*) override;
@@ -47,7 +48,9 @@ private:
     float peak[2] {}, rms[2] {}, hold[2] {};
     double holdAge[2] {};
     bool clipped = false;
+    bool scale = false;
     float highest = 0.0f;
+    static constexpr int scaleWidth = 24;
 };
 
 // The mixer (docs/mixer.md): up to 8 tracks and the master out, in its own window.
@@ -93,12 +96,18 @@ public:
     void togglePlay();
     void toStart();
 
+    // A clip opened in the editor (double-click): its sound as it plays, and the edit
+    // put back, saved as a WAV beside the mix (the original file is left alone).
+    AudioDataPtr clipAudio (int track, uint32_t clip, QString& name) const;
+    bool replaceClipAudio (int track, uint32_t clip, const AudioData& edited, const QString& name, QString& error);
+
 Q_SIGNALS:
     void mixdownRequested();
     void midiInputsRequested();
     void activated();
     void closed();
     void playStarted();   // so the main window makes sure the mixer is heard
+    void editClipRequested (int track, quint32 clip);
 
 protected:
     void keyPressEvent (class QKeyEvent*) override;

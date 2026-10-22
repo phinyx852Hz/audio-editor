@@ -271,9 +271,20 @@ Every control has a screen-reader name and announces its value.
   audio and MIDI files) places files at the playhead; F6 and Tab go round browser, rows and
   strips. Mix files are version 2 (`clips` per track, in seconds); version 1 files open as one
   clip per file.
+- Reverse, clip editing and the strip (2026-10-22): `Clip::reversed` plays audio backwards
+  (offset and length count in the reversed file, so trims stay on the part you hear) and a MIDI
+  clip through `reverseMidi` (each note mirrored, set-up events at the start kept first); `R`
+  in the rows reverses the selected clips and `R` on a strip still arms it. A double-click on an
+  audio clip hands the part you hear to a new editor tab (named after the clip) and hides the
+  mixer, which keeps playing; `F3` saves a changed tab as a 32-bit WAV in `<mix> Edits/`
+  (`~/Music/PHINYX Edits/` until the mix is saved), puts it on the clip with undo, closes the tab
+  and shows the mixer. The window opens over the editor's central area, between its side
+  panels. Faders are taller, with dB marks (+6 to −60 and −∞) on the left, and meters have dBFS
+  marks on the right; trim and pan use the editor's `Potentiometer` knob
+  (`Source/ui/Potentiometer.h`, shared with the plugin chain).
 - Tests: the MIDI reader (tempo map, ordering, damaged files) and the engine (pan law, fader,
   polarity, mute and solo, sample-accurate MIDI, transpose, channels, notes let go on a jump,
-  the keyboard, meters, mixdown) and the Synth.
+  the keyboard, meters, mixdown, serial clips, reversed audio and MIDI) and the Synth.
 
 Next: Pre (cuts, track delay), inserts, the A and B returns, thumbnails, live inputs and
 recording, templates, the spatial panner. The Sampler and Slicer windows of the Sample menu
