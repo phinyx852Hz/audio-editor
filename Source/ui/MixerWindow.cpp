@@ -870,6 +870,84 @@ public:
 };
 
 //==============================================================================
+QDialog* synthDialog (mixer::InstrumentPtr inst, const QString& title, QWidget* parent, std::function<void()> changed)
+{
+    auto& synth = static_cast<mixer::Synth&> (*inst);
+    auto* d = new QDialog (parent);
+    d->setAttribute (Qt::WA_DeleteOnClose);
+    d->setWindowTitle (QObject::tr ("Synth: %1").arg (title));
+    auto* form = new QFormLayout (d);
+    const auto s = synth.settings();
+    auto* wave = new QComboBox (d);
+    wave->addItems ({ QObject::tr ("Sine"), QObject::tr ("Triangle"), QObject::tr ("Saw"), QObject::tr ("Square") });
+    wave->setCurrentIndex (s.wave);
+    auto seconds = [d] (double v, double max)
+    {
+        auto* b = new QDoubleSpinBox (d);
+        b->setRange (0.0, max);
+        b->setDecimals (3);
+        b->setSingleStep (0.01);
+        b->setSuffix (QObject::tr (" s"));
+        b->setValue (v);
+        return b;
+    };
+    auto* attack = seconds (s.attack, 10.0);
+    auto* decay = seconds (s.decay, 10.0);
+    auto* sustain = new QSpinBox (d);
+    sustain->setRange (0, 100);
+    sustain->setSuffix (QObject::tr (" %"));
+    sustain->setValue ((int) std::lround (s.sustain * 100.0));
+    auto* release = seconds (s.release, 20.0);
+    auto* cutoff = new QSpinBox (d);
+    cutoff->setRange (40, 20000);
+    cutoff->setSingleStep (100);
+    cutoff->setSuffix (QObject::tr (" Hz"));
+    cutoff->setValue ((int) s.cutoff);
+    auto* gain = new QDoubleSpinBox (d);
+    gain->setRange (-48.0, 12.0);
+    gain->setSuffix (QObject::tr (" dB"));
+    gain->setValue (s.gainDb);
+    auto* voices = new QSpinBox (d);
+    voices->setRange (1, mixer::Synth::maxVoices);
+    voices->setValue (s.voices);
+    auto* drums = new QCheckBox (QObject::tr ("Channel 10 plays General MIDI drums"), d);
+    drums->setChecked (s.drums);
+    form->addRow (QObject::tr ("&Wave"), wave);
+    form->addRow (QObject::tr ("&Attack"), attack);
+    form->addRow (QObject::tr ("&Decay"), decay);
+    form->addRow (QObject::tr ("&Sustain"), sustain);
+    form->addRow (QObject::tr ("&Release"), release);
+    form->addRow (QObject::tr ("&Low-pass"), cutoff);
+    form->addRow (QObject::tr ("&Gain"), gain);
+    form->addRow (QObject::tr ("&Voices"), voices);
+    form->addRow (drums);
+    auto apply = [=, &synth]
+    {
+        mixer::SynthSettings n;
+        n.wave = wave->currentIndex();
+        n.attack = attack->value();
+        n.decay = decay->value();
+        n.sustain = sustain->value() / 100.0;
+        n.release = release->value();
+        n.cutoff = cutoff->value();
+        n.gainDb = gain->value();
+        n.voices = voices->value();
+        n.drums = drums->isChecked();
+        synth.setSettings (n);
+        changed();
+    };
+    // The dialog keeps the instrument alive while it is open.
+    auto keep = std::make_shared<mixer::InstrumentPtr> (inst);
+    QObject::connect (d, &QObject::destroyed, d, [keep] { keep->reset(); });
+    QObject::connect (wave, &QComboBox::currentIndexChanged, d, apply);
+    for (auto* b : { attack, decay, release, gain })
+        QObject::connect (b, &QDoubleSpinBox::valueChanged, d, apply);
+    for (auto* b : { sustain, cutoff, voices })
+        QObject::connect (b, &QSpinBox::valueChanged, d, apply);
+    QObject::connect (drums, &QCheckBox::toggled, d, apply);
+    return d;
+}
+
 //==============================================================================
 // The tracks across time, one horizontal row each, holding the track's clips: audio
 // clips show their waveform, MIDI clips their notes. Clips are dragged with the mouse
@@ -2942,79 +3020,7 @@ void MixerWindow::editInstrument (int track)
         }
         case mixer::Instrument::Kind::synth:
         {
-            auto& synth = static_cast<mixer::Synth&> (*inst);
-            auto* d = new QDialog (this);
-            d->setAttribute (Qt::WA_DeleteOnClose);
-            d->setWindowTitle (tr ("Synth: %1").arg (title));
-            auto* form = new QFormLayout (d);
-            const auto s = synth.settings();
-            auto* wave = new QComboBox (d);
-            wave->addItems ({ tr ("Sine"), tr ("Triangle"), tr ("Saw"), tr ("Square") });
-            wave->setCurrentIndex (s.wave);
-            auto seconds = [d] (double v, double max)
-            {
-                auto* b = new QDoubleSpinBox (d);
-                b->setRange (0.0, max);
-                b->setDecimals (3);
-                b->setSingleStep (0.01);
-                b->setSuffix (tr (" s"));
-                b->setValue (v);
-                return b;
-            };
-            auto* attack = seconds (s.attack, 10.0);
-            auto* decay = seconds (s.decay, 10.0);
-            auto* sustain = new QSpinBox (d);
-            sustain->setRange (0, 100);
-            sustain->setSuffix (tr (" %"));
-            sustain->setValue ((int) std::lround (s.sustain * 100.0));
-            auto* release = seconds (s.release, 20.0);
-            auto* cutoff = new QSpinBox (d);
-            cutoff->setRange (40, 20000);
-            cutoff->setSingleStep (100);
-            cutoff->setSuffix (tr (" Hz"));
-            cutoff->setValue ((int) s.cutoff);
-            auto* gain = new QDoubleSpinBox (d);
-            gain->setRange (-48.0, 12.0);
-            gain->setSuffix (tr (" dB"));
-            gain->setValue (s.gainDb);
-            auto* voices = new QSpinBox (d);
-            voices->setRange (1, mixer::Synth::maxVoices);
-            voices->setValue (s.voices);
-            auto* drums = new QCheckBox (tr ("Channel 10 plays General MIDI drums"), d);
-            drums->setChecked (s.drums);
-            form->addRow (tr ("&Wave"), wave);
-            form->addRow (tr ("&Attack"), attack);
-            form->addRow (tr ("&Decay"), decay);
-            form->addRow (tr ("&Sustain"), sustain);
-            form->addRow (tr ("&Release"), release);
-            form->addRow (tr ("&Low-pass"), cutoff);
-            form->addRow (tr ("&Gain"), gain);
-            form->addRow (tr ("&Voices"), voices);
-            form->addRow (drums);
-            auto apply = [=, &synth, this]
-            {
-                mixer::SynthSettings n;
-                n.wave = wave->currentIndex();
-                n.attack = attack->value();
-                n.decay = decay->value();
-                n.sustain = sustain->value() / 100.0;
-                n.release = release->value();
-                n.cutoff = cutoff->value();
-                n.gainDb = gain->value();
-                n.voices = voices->value();
-                n.drums = drums->isChecked();
-                synth.setSettings (n);
-                changed();
-            };
-            // The dialog keeps the instrument alive while it is open.
-            auto keep = std::make_shared<mixer::InstrumentPtr> (inst);
-            connect (d, &QObject::destroyed, this, [keep] { keep->reset(); });
-            connect (wave, &QComboBox::currentIndexChanged, d, apply);
-            for (auto* b : { attack, decay, release, gain })
-                connect (b, &QDoubleSpinBox::valueChanged, d, apply);
-            for (auto* b : { sustain, cutoff, voices })
-                connect (b, &QSpinBox::valueChanged, d, apply);
-            connect (drums, &QCheckBox::toggled, d, apply);
+            auto* d = synthDialog (inst, title, this, [this] { changed(); });
             t.editor = d;
             break;
         }
@@ -3044,6 +3050,11 @@ void MixerWindow::changed()
         return;
     modified = true;
     updateTitle();
+}
+
+QString MixerWindow::trackName (int track) const
+{
+    return track >= 0 && track < mixer::maxTracks ? info[(size_t) track].name : QString();
 }
 
 QString MixerWindow::mixName() const

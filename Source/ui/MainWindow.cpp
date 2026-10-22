@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MainWindow.h"
 #include "MixerWindow.h"
+#include "PatchBayWindow.h"
+#include "../patchbay/PatchBay.h"
 #include "SamplerWindow.h"
 #include "SlicerWindow.h"
 #include "../engine/MidiInputs.h"
@@ -278,6 +280,9 @@ MainWindow::~MainWindow()
     loadWatcher.waitForFinished();
     engine.setLiveSource ({});   // the Tracker goes before the engine
     engine.setInstrument ({});   // and the Sampler, Slicer and Mixer
+    delete patchBayWin;
+    patchBayWin = nullptr;
+    patchBay = nullptr;          // its synths and effects, and it lets go of the mixer
     delete mixerWin;             // before the mixer's engine and its instruments
     mixerWin = nullptr;
     midiInputs = nullptr;
@@ -512,6 +517,7 @@ void MainWindow::registerCommands()
     registerTrackerCommands();
     registerSamplerCommands();
     registerMixerCommands();
+    registerPatchBayCommands();
     registerReferenceCommands();
     registerMacroCommands();
     add ("tools.managePlugins", Category::tools, tr ("Manage &Plug-ins..."), {}, [this] { managePlugins(); });
@@ -794,7 +800,7 @@ void MainWindow::buildMenus()
                                "view.visualizerNext", "view.visualizerPrevious", "view.visualizerChoose", "-",
                                "@visual.artistic", "@visual.science", "-", "@visual.milkdrop", "@visual.rain", "-",
                                "view.opacityUp", "view.opacityDown", "view.opacityFull" } },
-        { tr ("Mi&xer"),     { "mixer.window", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
+        { tr ("Mi&xer"),     { "mixer.window", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
                                "mixer.playStop", "mixer.mixdown" } },
         { tr ("S&ample"),    { "sample.send", "sample.window", "sample.refresh", "-", "slice.send", "slice.window", "slice.refresh", "-", "sample.midiInputs", "sample.panic" } },
         { tr ("Trac&ker"),   { "tracker.window", "tracker.new", "tracker.open", "tracker.save", "tracker.saveAs", "tracker.loadSample", "-", "tracker.playSong", "tracker.playPattern", "tracker.stop", "-",
@@ -3425,6 +3431,7 @@ void MainWindow::closeEvent (QCloseEvent* e)
     engine.stop();
     if (mixerWin != nullptr)
         mixerWin->autosave();
+    savePatchBay();
     commands.save();
     saveLayout();
     autosaveTimer.stop();

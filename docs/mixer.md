@@ -292,3 +292,8 @@ Every control has a screen-reader name and announces its value.
 Next: Pre (cuts, track delay), inserts, the A and B returns, thumbnails, live inputs and
 recording, templates, the spatial panner. The Sampler and Slicer windows of the Sample menu
 could dock into the mixer as track 1 (the other thread's docking work).
+
+Patchbay (2026-10-22, docs/patchbay.md): while the patchbay plays (it always does live), the
+engine hands each track's sound to it instead of summing it, takes what is patched into each
+track before trim, pan and fader, and plays the tracks in the patchbay's order. The master fader
+is the patchbay's Mix Bus. Mix Down still renders the mixer's own sum.

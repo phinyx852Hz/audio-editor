@@ -421,6 +421,36 @@ void MasterChain::applyLayout (juce::AudioPluginInstance& p, int n) const
     trySetLayout (p, juce::AudioChannelSet::stereo());
 }
 
+std::unique_ptr<juce::AudioPluginInstance> MasterChain::createEffect (const std::string& pluginId, double sampleRate, int maxBlock,
+                                                                      juce::String& error) const
+{
+    const auto d = findDescription (pluginId);
+    if (d == nullptr)
+    {
+        error = "this effect is not in the plugin list; scan for plugins again";
+        return nullptr;
+    }
+    std::unique_ptr<juce::AudioPluginInstance> instance;
+    try
+    {
+        instance = builtin::isBuiltin (*d) ? builtin::create (*d) : formats.createPluginInstance (*d, sampleRate, maxBlock, error);
+        if (instance == nullptr)
+        {
+            if (error.isEmpty())
+                error = "this effect is not part of this version";
+            return nullptr;
+        }
+        instance->disableNonMainBuses();
+        trySetLayout (*instance, juce::AudioChannelSet::stereo());
+        preparePlugin (*instance, sampleRate, maxBlock);
+        return instance;
+    }
+    catch (const std::exception& e) { error = e.what(); }
+    catch (...)                      { error = "an unknown error"; }
+    (void) instance.release();   // it threw: deleting it would call into it again
+    return nullptr;
+}
+
 std::unique_ptr<juce::AudioPluginInstance> MasterChain::createInstrument (const std::string& pluginId, double sampleRate, int maxBlock,
                                                                           juce::String& error) const
 {

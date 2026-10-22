@@ -380,7 +380,7 @@ namespace mixer
             const bool looping = le > ls;
             if (play && looping && at < le)
                 n = (int) std::min<Frame> (n, le - at);
-            renderBlock (outL.data(), outR.data(), n, at, play, true);
+            renderBlock (outL.data(), outR.data(), n, at, play, true, done);
             for (int k = 0; k < n; ++k)
             {
                 left[done + k] += outL[(size_t) k];
@@ -405,8 +405,18 @@ namespace mixer
         }
     }
 
-    void Engine::renderBlock (float* left, float* right, int frames, Frame at, bool play, bool withLive)
+    int Engine::nextBlock (int wanted) const
     {
+        const auto at = pos.load();
+        const auto ls = loopStart.load(), le = loopEnd.load();
+        if (playing.load() && le > ls && at < le)
+            return (int) std::max<Frame> (1, std::min<Frame> (wanted, le - at));
+        return wanted;
+    }
+
+    void Engine::renderBlock (float* left, float* right, int frames, Frame at, bool play, bool withLive, int blockOffset)
+    {
+        auto* routed = withLive ? patch.load() : nullptr;
         const auto count = tracks.load();
         const bool jumped = at != expected;
         const bool stopping = stopPending.exchange (false);
@@ -421,8 +431,11 @@ namespace mixer
         std::fill (mixR.begin(), mixR.begin() + frames, 0.0f);
         const auto armedTrack = armed.load();
 
-        for (int i = 0; i < count; ++i)
+        for (int slot = 0; slot < (routed != nullptr ? maxTracks : count); ++slot)
         {
+            const auto i = routed != nullptr ? routed->trackAt (slot) : slot;
+            if (i < 0 || i >= count)
+                continue;
             if (only >= 0 && i != only)
                 continue;   // a bounce: this track alone
             auto& t = lanes[(size_t) i];
@@ -515,6 +528,8 @@ namespace mixer
             std::fill (instR.begin(), instR.begin() + frames, 0.0f);
             if (t.instrument != nullptr)
                 t.instrument->process (events.data(), (int) events.size(), instL.data(), instR.data(), frames);
+            if (routed != nullptr)
+                routed->trackInput (i, blockOffset, instL.data(), instR.data(), frames);   // through the strip like the instrument
 
             // The audio clips: stereo ones join the instrument (both are balanced), mono ones
             // go apart to be panned with equal power. A short fade at each edge keeps a
@@ -590,11 +605,22 @@ namespace mixer
 
             if (withLive)
                 meter (i, sumL, sumR, frames);
+            if (routed != nullptr)
+            {
+                routed->trackOutput (i, blockOffset, sumL, sumR, frames);
+                continue;
+            }
             for (int k = 0; k < frames; ++k)
             {
                 mixL[(size_t) k] += sumL[k];
                 mixR[(size_t) k] += sumR[k];
             }
+        }
+        if (routed != nullptr)
+        {
+            std::fill (left, left + frames, 0.0f);   // the patch has the tracks, and does the master
+            std::fill (right, right + frames, 0.0f);
+            return;
         }
 
         const auto master = only >= 0 ? 1.0f : dbToGain (masterDb.load());

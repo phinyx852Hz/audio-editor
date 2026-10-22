@@ -44,6 +44,7 @@ namespace timestretch { class SegmentCache; }
 namespace sampler { class Engine; }
 namespace slicer { class Engine; }
 namespace mixer { class Engine; }
+namespace patchbay { class PatchBay; }
 
 class MainWindow final : public QMainWindow
 {
@@ -348,7 +349,7 @@ private:
     AudioDataPtr slicerSource;
     QTimer slicerFollowTimer;
     QFutureWatcher<void> slicerLoad;
-    std::atomic<int> midiTarget { -1 };   // 2: the Mixer's armed track
+    std::atomic<int> midiTarget { -1 };   // 2: the Mixer's armed track, 3: a patchbay synth
 
     // The Mixer (MixerSection.cpp, docs/mixer.md): 8 tracks, each with an audio file,
     // a MIDI file and an instrument; heard through engine.setInstrument with the Sampler.
@@ -360,6 +361,21 @@ private:
     void mixDownToEditor();
     std::unique_ptr<mixer::Engine> mixerEngine;
     class MixerWindow* mixerWin = nullptr;
+
+    // The patchbay (PatchBaySection.cpp, docs/patchbay.md): one routing graph for the
+    // editor's playback, the Sampler, the Slicer, the mixer's tracks, its synths and FX
+    // buses, heard through engine.setInstrument in place of the plain sum. F4 pops it out.
+    // Declared after the mixer's engine, so it lets go of the mixer first.
+    void registerPatchBayCommands();
+    class PatchBayWindow* patchBayWindow();
+    void showPatchBay();
+    void restorePatchBay();
+    void savePatchBay();
+    bool patchBayInUse() const;   // its window is open, or it holds patches, synths or effects of its own
+    std::unique_ptr<patchbay::PatchBay> patchBay;
+    class PatchBayWindow* patchBayWin = nullptr;
+    std::atomic<int> patchSynth { 0 };   // the synth the MIDI keyboard plays (midiTarget 3)
+    QTimer patchBaySave;
     class TrackerWindow* trackerWin = nullptr;
     class AnalysisWindow* analysisWindow();   // Analysis Meters, made when first opened
     class AnalysisWindow* analysisWin = nullptr;
