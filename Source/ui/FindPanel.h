@@ -64,7 +64,7 @@ public:
     bool searchIsReady() const;  // the search has the keyboard with nothing to keep: empty or all selected
     void reload();               // collects the items again and refilters
 
-    // The Selector, top to bottom: Silver, Violet, Indigo, Forest, Emerald, Gold, Saffron, Ruby.
+    // The Selector, top to bottom: Silver, Violet, Indigo, Azure, Emerald, Gold, Saffron, Ruby.
     static constexpr int numColours = 8;
     static QString colourName (int index);
     static QColor colour (int index);

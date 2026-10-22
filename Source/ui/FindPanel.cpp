@@ -115,16 +115,19 @@ namespace
 
 QString FindPanel::colourName (int index)
 {
-    static const QStringList names { QObject::tr ("Silver"), QObject::tr ("Violet"), QObject::tr ("Indigo"), QObject::tr ("Forest"),
+    static const QStringList names { QObject::tr ("Silver"), QObject::tr ("Violet"), QObject::tr ("Indigo"), QObject::tr ("Azure"),
                                      QObject::tr ("Emerald"), QObject::tr ("Gold"), QObject::tr ("Saffron"), QObject::tr ("Ruby") };
     return names.value (index);
 }
 
 QColor FindPanel::colour (int index)
 {
-    static const QColor colours[numColours] { QColor (0xc4, 0xc8, 0xd0), QColor (0xb0, 0x5c, 0xf0), QColor (0x5c, 0x5c, 0xe0),
-                                              QColor (0x2f, 0x9e, 0x44), QColor (0x50, 0xd8, 0x90), QColor (0xe0, 0xb8, 0x30),
-                                              QColor (0xff, 0x93, 0x2e), QColor (0xe0, 0x11, 0x5f) };
+    // The named colours (silver C0C0C0, violet 8F00FF, indigo 4B0082, azure 007FFF, emerald
+    // 50C878, gold FFD700, saffron FF9933, ruby E0115F), violet and indigo lifted so they
+    // read on a dark theme.
+    static const QColor colours[numColours] { QColor (0xc0, 0xc0, 0xc0), QColor (0xa0, 0x40, 0xff), QColor (0x6a, 0x3d, 0xd8),
+                                              QColor (0x00, 0x7f, 0xff), QColor (0x50, 0xc8, 0x78), QColor (0xff, 0xd7, 0x00),
+                                              QColor (0xff, 0x99, 0x33), QColor (0xe0, 0x11, 0x5f) };
     return index >= 0 && index < numColours ? colours[index] : QColor();
 }
 
@@ -846,7 +849,7 @@ void FindPanel::loadSelector()
     // Before the Selector: seven collections (Favorites in red, Orange, Yellow, Green,
     // Blue, Purple, Gray). Each goes to the nearest colour of Favorites, keeping
     // the names given to it.
-    constexpr int oldToNew[] { 7, 6, 5, 4, 2, 1, 0 };   // blue goes to Indigo
+    constexpr int oldToNew[] { 7, 6, 5, 4, 3, 1, 0 };
     auto& live = sets[0];   // Favorites
     const auto oldNames = root.value (QStringLiteral ("collectionNames")).toArray();
     for (int i = 0; i < oldNames.size() && i < (int) std::size (oldToNew); ++i)
