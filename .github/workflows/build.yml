@@ -12,7 +12,7 @@ jobs:
       - name: Install dependencies
         # freetype/fontconfig/X11 headers are only needed to build JUCE's juceaide helper at configure time
         run: |
-          pacman -Syu --noconfirm --needed git cmake ninja qt6-base qt6-wayland alsa-lib libpipewire pipewire-jack \
+          pacman -Syu --noconfirm --needed git cmake ninja qt6-base qt6-wayland qt6-webengine alsa-lib libpipewire pipewire-jack \
             ladspa clap freetype2 fontconfig libx11 libxrandr libxinerama libxcursor libxcomposite libxext mesa \
             cairo libsndfile clang libxi ffmpeg taglib
       - uses: actions/checkout@v4

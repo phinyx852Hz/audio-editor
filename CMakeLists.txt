@@ -264,6 +264,22 @@ if(PHINYX_HAVE_PROJECTM)
 endif()
 install(FILES "${PHINYX_DEFAULT_HRTF}" DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/hrtf")
 
+# A web page behind PHINYX (Visualizer > Web Page) needs Qt WebEngine, a built-in Chromium of a
+# few hundred MB. It is built when Qt WebEngine is installed (qt6-webengine), unless turned off.
+option(PHINYX_WEB_BACKDROP "Build the web page backdrop when Qt WebEngine is installed" ON)
+set(PHINYX_HAVE_WEB 0)
+if(PHINYX_WEB_BACKDROP)
+    find_package(Qt6 QUIET COMPONENTS WebEngineWidgets)
+    if(Qt6WebEngineWidgets_FOUND)
+        set(PHINYX_HAVE_WEB 1)
+        target_sources(${APP_ID} PRIVATE Source/ui/WebBackdrop.cpp)
+        target_link_libraries(${APP_ID} PRIVATE Qt6::WebEngineWidgets)
+    else()
+        message(STATUS "Qt WebEngine not found: building without the web page backdrop")
+    endif()
+endif()
+target_compile_definitions(${APP_ID} PRIVATE PHINYX_WEB_BACKDROP=${PHINYX_HAVE_WEB})
+
 # MilkyPlay (cmake/MilkyPlay.cmake): MilkyTracker's module player, for the Tracker.
 include(cmake/MilkyPlay.cmake)
 target_link_libraries(${APP_ID} PRIVATE phinyx_milkyplay)

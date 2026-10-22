@@ -822,7 +822,7 @@ void MainWindow::buildMenus()
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
         { tr ("Visuali&zer"), { "view.visualizer", "view.visualizerFullScreen", "view.visualizerBehind", "-",
                                "view.visualizerNext", "view.visualizerPrevious", "view.visualizerChoose", "-",
-                               "@visual.artistic", "@visual.science", "-", "@visual.milkdrop", "@visual.rain", "-",
+                               "@visual.artistic", "@visual.science", "-", "@visual.milkdrop", "@visual.rain", "@visual.web", "-",
                                "view.opacityUp", "view.opacityDown", "view.opacityFull" } },
         { tr ("Mi&xer"),     { "mixer.window", "mixer.dock", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
                                "mixer.playStop", "mixer.mixdown" } },

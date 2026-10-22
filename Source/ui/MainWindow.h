@@ -467,6 +467,10 @@ private:
     void downloadMilkDropPresets();
     class VisualizerWindow* visualizer = nullptr;
     class VisualizerView* visualBackdrop = nullptr;
+    // A web page behind PHINYX instead (VisualizerSection.cpp, WebBackdrop.h); only with Qt WebEngine.
+    void toggleWebBackdrop();
+    bool chooseWebAddress (bool reload);   // false when cancelled
+    class WebBackdrop* webBackdrop = nullptr;
     int visualMode = 0;
     double opacityBeforeBackdrop = 0.0;
     void updateAnalysisCommandStates();
