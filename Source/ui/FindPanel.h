@@ -57,6 +57,10 @@ public:
     // Plays a file without opening it, and stops it.
     std::function<void (const QString& path)> audition;
     std::function<void()> stopAudition;
+    // Takes a file chosen with Enter or a double-click before it is opened: the clip launcher
+    // puts it in a slot. `colour` is the Selector colour it was found under (the colour shown,
+    // else its first mark), -1 for none. False: not taken, the file opens.
+    std::function<bool (const QString& path, int colour)> sendFile;
     void auditionEnded();   // the file played to its end or something else took the sound
 
     void focusSearch();          // selects the search text, ready to type over

@@ -29,6 +29,7 @@
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QFrame>
+#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QJsonArray>
@@ -646,25 +647,18 @@ public:
 
     mixer::Strip& strip() { return window.engine.strip (index); }
 
-    // Everything shown, from the engine and the window's track info.
-    void refresh()
+    // The instrument list (built-ins, then the instrument plugins found by the scan) with the
+    // track's instrument chosen; also the launcher's rack.
+    static mixer::InstrumentPtr fillInstruments (QComboBox* box, MixerWindow& window, int index)
     {
-        updating = true;
-        auto& s = strip();
-        const auto& info = window.info[(size_t) index];
-        colourBar->setStyleSheet (QStringLiteral ("background: %1;").arg (info.colour.name()));
-        if (nameEdit->text() != info.name)
-            nameEdit->setText (info.name);
-
-        // The instrument list: built-ins, then the instrument plugins found by the scan.
         const auto plugins = window.audio.knownInstruments();
-        if (instrumentBox->count() != firstPlugin + (int) plugins.size())
+        if (box->count() != firstPlugin + (int) plugins.size())
         {
-            instrumentBox->clear();
-            instrumentBox->addItems ({ MixerWindow::tr ("No instrument"), MixerWindow::tr ("Synth"), MixerWindow::tr ("Sampler"), MixerWindow::tr ("Slicer") });
+            box->clear();
+            box->addItems ({ MixerWindow::tr ("No instrument"), MixerWindow::tr ("Synth"), MixerWindow::tr ("Sampler"), MixerWindow::tr ("Slicer") });
             for (const auto& p : plugins)
-                instrumentBox->addItem (QString::fromStdString (p.name) + QStringLiteral (" (") + QString::fromStdString (p.format) + QStringLiteral (")"),
-                                        QString::fromStdString (p.id));
+                box->addItem (QString::fromStdString (p.name) + QStringLiteral (" (") + QString::fromStdString (p.format) + QStringLiteral (")"),
+                              QString::fromStdString (p.id));
         }
         const auto inst = window.engine.instrument (index);
         int choice = noInstrument;
@@ -676,16 +670,40 @@ public:
                 case mixer::Instrument::Kind::slicer:  choice = slicerChoice; break;
                 case mixer::Instrument::Kind::plugin:
                 {
-                    choice = instrumentBox->findData (QString::fromStdString (AudioEngine::instrumentPluginId (*inst)));
+                    choice = box->findData (QString::fromStdString (AudioEngine::instrumentPluginId (*inst)));
                     if (choice < 0)
                     {
-                        instrumentBox->addItem (QString::fromStdString (inst->name()), QString::fromStdString (AudioEngine::instrumentPluginId (*inst)));
-                        choice = instrumentBox->count() - 1;
+                        box->addItem (QString::fromStdString (inst->name()), QString::fromStdString (AudioEngine::instrumentPluginId (*inst)));
+                        choice = box->count() - 1;
                     }
                     break;
                 }
             }
-        instrumentBox->setCurrentIndex (choice);
+        box->setCurrentIndex (choice);
+        return inst;
+    }
+
+    // The launcher's strips: name, pan, mute and solo, fader and meter. The rest is in the rack.
+    void setCompact (bool on)
+    {
+        for (QWidget* w : std::initializer_list<QWidget*> { instrumentBox, editButton, transposeBox, channelsButton, armButton,
+                                                             trimDial, trimLabel, invertL, invertR })
+            w->setVisible (! on);
+        setMinimumWidth (on ? 96 : 128);
+        setMaximumWidth (on ? 150 : 170);
+    }
+
+    // Everything shown, from the engine and the window's track info.
+    void refresh()
+    {
+        updating = true;
+        auto& s = strip();
+        const auto& info = window.info[(size_t) index];
+        colourBar->setStyleSheet (QStringLiteral ("background: %1;").arg (info.colour.name()));
+        if (nameEdit->text() != info.name)
+            nameEdit->setText (info.name);
+
+        const auto inst = fillInstruments (instrumentBox, window, index);
         editButton->setEnabled (inst != nullptr && (inst->kind() != mixer::Instrument::Kind::plugin || inst->hasWindow()));
 
         transposeBox->setValue (s.transpose.load());
@@ -724,7 +742,7 @@ public:
         number->setFont (f);
     }
 
-    void channelMenu()
+    void channelMenu (QPoint at = {})
     {
         QMenu menu (this);
         uint16_t used = 0;
@@ -757,7 +775,7 @@ public:
                 window.changed();
             });
         }
-        menu.exec (channelsButton->mapToGlobal (QPoint (0, channelsButton->height())));
+        menu.exec (at.isNull() ? channelsButton->mapToGlobal (QPoint (0, channelsButton->height())) : at);
     }
 
 protected:
@@ -2231,7 +2249,10 @@ private:
             return;
         }
         const auto track = window.selected < mixer::masterIndex ? window.selected : 0;
-        window.addFiles (track, { file }, window.engine.position(), movePlayhead);
+        if (window.launcherShown())
+            window.sendToLauncher (file, {}, {});   // the selected track's next empty slot
+        else
+            window.addFiles (track, { file }, window.engine.position(), movePlayhead);
     }
 
     MixerWindow& window;
@@ -2245,6 +2266,708 @@ private:
     QStringList favourites;
 };
 
+//==============================================================================
+// The clip launcher (docs/clip-launcher.md): a grid of slots, tracks across and scenes
+// down, with each scene's launch button on the right and a stop button under each track.
+namespace
+{
+    // Launch quantise choices, in beats of 4/4.
+    constexpr double quantiseBeats[] { 0.0, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0 };
+    constexpr int numQuantise = (int) std::size (quantiseBeats);
+
+    QString quantiseName (int index)
+    {
+        switch (index)
+        {
+            case 0:  return MixerWindow::tr ("Off");
+            case 1:  return MixerWindow::tr ("1/16");
+            case 2:  return MixerWindow::tr ("1/8");
+            case 3:  return MixerWindow::tr ("1/4");
+            case 4:  return MixerWindow::tr ("1/2");
+            case 5:  return MixerWindow::tr ("1 Bar");
+            default: return MixerWindow::tr ("%1 Bars").arg ((int) (quantiseBeats[std::clamp (index, 0, numQuantise - 1)] / 4.0));
+        }
+    }
+
+    int quantiseIndex (double beats)
+    {
+        int best = 0;
+        for (int i = 1; i < numQuantise; ++i)
+            if (std::abs (quantiseBeats[i] - beats) < std::abs (quantiseBeats[best] - beats))
+                best = i;
+        return best;
+    }
+
+    QColor inkOn (const QColor& c) { return c.lightnessF() > 0.55 ? QColor (17, 17, 17) : QColor (244, 244, 244); }
+}
+
+class ClipGrid final : public QWidget
+{
+public:
+    explicit ClipGrid (MixerWindow& w) : QWidget (&w), window (w)
+    {
+        setAcceptDrops (true);
+        setFocusPolicy (Qt::NoFocus);
+        setSizePolicy (QSizePolicy::Expanding, QSizePolicy::Expanding);
+        updateMinimum();
+    }
+
+    QSize sizeHint() const override { return { 900, headerHeight + stopHeight + window.numScenes * 30 + 2 * margin }; }
+    void updateMinimum() { setMinimumHeight (headerHeight + stopHeight + window.numScenes * minRow + 2 * margin); }
+
+protected:
+    void paintEvent (QPaintEvent*) override
+    {
+        QPainter p (this);
+        p.setRenderHint (QPainter::Antialiasing);
+        const auto& theme = Theme::current();
+        const auto base = theme.color (QStringLiteral ("base")), mid = theme.color (QStringLiteral ("mid"));
+        const auto text = theme.color (QStringLiteral ("text")), highlight = theme.color (QStringLiteral ("highlight"));
+        const auto button = theme.color (QStringLiteral ("button")), go = theme.color (QStringLiteral ("meterLow"));
+        const auto disabled = theme.color (QStringLiteral ("disabledText"));
+        p.fillRect (rect(), base);
+        const bool blink = (QDateTime::currentMSecsSinceEpoch() / 250) % 2 == 0;
+        const auto tracks = window.engine.numTracks();
+        auto bold = font();
+        bold.setBold (true);
+        auto small = font();
+        small.setPointSizeF (std::max (6.0, small.pointSizeF() * 0.85));
+
+        auto triangle = [&p] (const QRectF& r, const QColor& c)
+        {
+            const auto s = std::min (r.height(), r.width()) * 0.42;
+            const auto centre = r.center();
+            const QPointF points[] { { centre.x() - s * 0.5, centre.y() - s * 0.6 }, { centre.x() - s * 0.5, centre.y() + s * 0.6 }, { centre.x() + s * 0.6, centre.y() } };
+            p.setPen (Qt::NoPen);
+            p.setBrush (c);
+            p.drawPolygon (points, 3);
+        };
+        auto square = [&p] (const QRectF& r, const QColor& c)
+        {
+            const auto s = std::min (r.height(), r.width()) * 0.34;
+            p.setPen (Qt::NoPen);
+            p.setBrush (c);
+            p.drawRect (QRectF (r.center().x() - s * 0.5, r.center().y() - s * 0.5, s, s));
+        };
+
+        for (int t = 0; t < tracks; ++t)
+        {
+            const auto& info = window.info[(size_t) t];
+            const auto launch = window.engine.launchInfo (t);
+            const auto head = headerRect (t);
+            p.setPen (Qt::NoPen);
+            p.setBrush (info.colour);
+            p.drawRoundedRect (head, 3, 3);
+            p.setFont (bold);
+            p.setPen (inkOn (info.colour));
+            const auto label = QStringLiteral ("%1 %2").arg (t + 1).arg (info.name);
+            p.drawText (head.adjusted (6, 0, -24, 0), Qt::AlignVCenter | Qt::AlignLeft,
+                        p.fontMetrics().elidedText (label, Qt::ElideRight, head.width() - 30));
+            if (! launch.timeline)
+                p.drawText (backRect (t), Qt::AlignCenter, QStringLiteral ("⟲"));   // click: back to the timeline
+            if (t == window.selected)
+            {
+                p.setBrush (highlight);
+                p.drawRect (QRect (head.left(), head.bottom() + 1, head.width(), 2));
+            }
+
+            for (int s = 0; s < window.numScenes; ++s)
+            {
+                const auto r = slotRect (t, s);
+                const auto& slot = window.slots[(size_t) t][(size_t) s];
+                const bool playing = launch.playing == s, queued = launch.queued == s;
+                if (slot != nullptr)
+                {
+                    auto fill = info.colour;
+                    if (queued && blink)
+                        fill = fill.lighter (150);
+                    p.setPen (playing ? QPen (go, 2) : Qt::NoPen);
+                    p.setBrush (fill);
+                    p.drawRoundedRect (QRectF (r).adjusted (0.5, 0.5, -0.5, -0.5), 3, 3);
+                    const auto ink = inkOn (fill);
+                    const QRectF play (r.left(), r.top(), playWidth, r.height());
+                    if (playing)
+                        triangle (play, go.darker (110));
+                    else
+                        triangle (play, ink);
+                    p.setFont (font());
+                    p.setPen (ink);
+                    auto name = window.slotName (t, s);
+                    if (! slot->loop)
+                        name = QStringLiteral ("→ ") + name;   // plays once
+                    QString right;
+                    if (playing && launch.passes > 0)
+                        right = QStringLiteral ("×%1").arg (launch.passes + 1);
+                    const auto rightWidth = right.isEmpty() ? 0 : p.fontMetrics().horizontalAdvance (right) + 6;
+                    p.drawText (r.adjusted (playWidth, 0, -4 - rightWidth, 0), Qt::AlignVCenter | Qt::AlignLeft,
+                                p.fontMetrics().elidedText (name, Qt::ElideRight, r.width() - playWidth - 6 - rightWidth));
+                    if (! right.isEmpty())
+                        p.drawText (r.adjusted (0, 0, -4, 0), Qt::AlignVCenter | Qt::AlignRight, right);
+                    if (playing)
+                    {
+                        p.setPen (Qt::NoPen);
+                        p.setBrush (go);
+                        p.drawRect (QRectF (r.left() + 2, r.bottom() - 3, (r.width() - 4) * (double) launch.progress, 3));
+                    }
+                }
+                else
+                {
+                    p.setPen (QPen (mid, 1, Qt::DashLine));
+                    p.setBrush (Qt::NoBrush);
+                    p.drawRoundedRect (QRectF (r).adjusted (0.5, 0.5, -0.5, -0.5), 3, 3);
+                    if (window.loadingSlots.count ({ t, s }) != 0)
+                    {
+                        p.setPen (disabled);
+                        p.setFont (small);
+                        p.drawText (r, Qt::AlignCenter, MixerWindow::tr ("Loading..."));
+                    }
+                    else if (launch.playing >= 0)
+                        square (QRectF (r.left(), r.top(), playWidth, r.height()), mid);   // a scene launched here stops the track
+                }
+                if (t == window.selected && s == window.cursorScene)
+                {
+                    p.setPen (QPen (highlight, 2));
+                    p.setBrush (Qt::NoBrush);
+                    p.drawRoundedRect (QRectF (r).adjusted (-1.5, -1.5, 1.5, 1.5), 4, 4);
+                }
+            }
+
+            const auto stop = stopRect (t);
+            const bool stopping = launch.queued == mixer::stopQueued;
+            p.setPen (QPen (mid, 1));
+            p.setBrush (stopping && blink ? mid : button);
+            p.drawRoundedRect (QRectF (stop).adjusted (0.5, 0.5, -0.5, -0.5), 3, 3);
+            square (stop, launch.playing >= 0 ? text : disabled);
+        }
+
+        // The scenes, and Stop All.
+        p.setFont (bold);
+        p.setPen (text);
+        p.drawText (sceneHeaderRect(), Qt::AlignCenter, MixerWindow::tr ("Scenes"));
+        for (int s = 0; s < window.numScenes; ++s)
+        {
+            const auto r = sceneRect (s);
+            p.setPen (s == window.cursorScene ? QPen (highlight, 2) : QPen (mid, 1));
+            p.setBrush (button);
+            p.drawRoundedRect (QRectF (r).adjusted (0.5, 0.5, -0.5, -0.5), 3, 3);
+            triangle (QRectF (r.left(), r.top(), playWidth, r.height()), go);
+            p.setFont (font());
+            p.setPen (text);
+            p.drawText (r.adjusted (playWidth, 0, -4, 0), Qt::AlignVCenter | Qt::AlignLeft,
+                        p.fontMetrics().elidedText (window.sceneName (s), Qt::ElideRight, r.width() - playWidth - 4));
+        }
+        const auto all = stopAllRect();
+        p.setPen (QPen (mid, 1));
+        p.setBrush (button);
+        p.drawRoundedRect (QRectF (all).adjusted (0.5, 0.5, -0.5, -0.5), 3, 3);
+        square (QRectF (all.left(), all.top(), playWidth, all.height()), text);
+        p.setPen (text);
+        p.drawText (all.adjusted (playWidth, 0, -4, 0), Qt::AlignVCenter | Qt::AlignLeft, MixerWindow::tr ("Stop All"));
+    }
+
+    void mousePressEvent (QMouseEvent* e) override
+    {
+        const auto hit = hitAt (e->position().toPoint());
+        if (e->button() == Qt::RightButton)
+            return;   // the context menu
+        switch (hit.kind)
+        {
+            case Hit::header: window.select (hit.track); window.moveCursor (hit.track, window.cursorScene); break;
+            case Hit::back: window.engine.backToTimeline (hit.track); break;
+            case Hit::slotCell:
+                window.moveCursor (hit.track, hit.scene);
+                break;
+            case Hit::play:
+                window.moveCursor (hit.track, hit.scene);
+                window.launchSlot (hit.track, hit.scene);
+                break;
+            case Hit::sceneCell:
+                window.moveCursor (window.selected < mixer::masterIndex ? window.selected : 0, hit.scene);
+                if (e->position().x() < sceneRect (hit.scene).left() + playWidth)
+                    launchScene (hit.scene);
+                break;
+            case Hit::stop: window.engine.stopTrack (hit.track); break;
+            case Hit::stopAll: window.engine.stopAll(); break;
+            case Hit::none: break;
+        }
+        window.setFocus();
+        update();
+    }
+
+    void mouseDoubleClickEvent (QMouseEvent* e) override
+    {
+        const auto hit = hitAt (e->position().toPoint());
+        if (hit.kind == Hit::slotCell)
+        {
+            if (window.slots[(size_t) hit.track][(size_t) hit.scene] != nullptr)
+                window.launchSlot (hit.track, hit.scene);
+            else
+                chooseFile (hit.track, hit.scene);
+        }
+        else if (hit.kind == Hit::sceneCell && e->position().x() >= sceneRect (hit.scene).left() + playWidth)
+            window.renameScene (hit.scene);
+        update();
+    }
+
+    void contextMenuEvent (QContextMenuEvent* e) override
+    {
+        const auto hit = hitAt (e->pos());
+        QMenu menu (this);
+        if (hit.kind == Hit::sceneCell)
+        {
+            menu.addAction (MixerWindow::tr ("&Launch Scene (Shift+Enter)"), this, [this, s = hit.scene] { launchScene (s); });
+            menu.addAction (MixerWindow::tr ("&Rename Scene..."), this, [this, s = hit.scene] { window.renameScene (s); });
+            menu.exec (e->globalPos());
+            return;
+        }
+        if (hit.kind != Hit::slotCell && hit.kind != Hit::play)
+            return;
+        const auto t = hit.track, s = hit.scene;
+        window.moveCursor (t, s);
+        const auto slot = window.slots[(size_t) t][(size_t) s];
+        if (slot != nullptr)
+        {
+            menu.addAction (MixerWindow::tr ("&Launch (Enter)"), this, [this, t, s] { window.launchSlot (t, s); });
+            menu.addAction (MixerWindow::tr ("&Stop the Track (.)"), this, [this, t] { window.engine.stopTrack (t); });
+            menu.addSeparator();
+            auto* loop = menu.addAction (MixerWindow::tr ("L&oop"), this, [this, t, s] (bool on) { window.editSlot (t, s, [on] (mixer::Slot& x) { x.loop = on; }); });
+            loop->setCheckable (true);
+            loop->setChecked (slot->loop);
+            auto* reverse = menu.addAction (MixerWindow::tr ("&Reverse"), this, [this, t, s] (bool on)
+            {
+                window.editSlot (t, s, [on] (mixer::Slot& x)
+                {
+                    if (x.clip.reversed == on)
+                        return;
+                    x.clip.reversed = on;
+                    if (x.clip.midi != nullptr)
+                        x.clip.midi = mixer::reverseMidi (*x.clip.midi);
+                });
+            });
+            reverse->setCheckable (true);
+            reverse->setChecked (slot->clip.reversed);
+            auto* quantise = menu.addMenu (MixerWindow::tr ("Launch &Quantise"));
+            auto* global = quantise->addAction (MixerWindow::tr ("The Launcher's"), this, [this, t, s] { window.editSlot (t, s, [] (mixer::Slot& x) { x.quantise = -1.0; }); });
+            global->setCheckable (true);
+            global->setChecked (slot->quantise < 0.0);
+            for (int q = 0; q < numQuantise; ++q)
+            {
+                auto* a = quantise->addAction (quantiseName (q), this, [this, t, s, q] { window.editSlot (t, s, [q] (mixer::Slot& x) { x.quantise = quantiseBeats[q]; }); });
+                a->setCheckable (true);
+                a->setChecked (slot->quantise >= 0.0 && quantiseIndex (slot->quantise) == q);
+            }
+            menu.addSeparator();
+        }
+        menu.addAction (MixerWindow::tr ("Choose &File..."), this, [this, t, s] { chooseFile (t, s); });
+        menu.addAction (MixerWindow::tr ("&Empty the Slot (Delete)"), this, [this, t, s] { window.clearSlot (t, s); })->setEnabled (slot != nullptr);
+        menu.exec (e->globalPos());
+    }
+
+    void dragEnterEvent (QDragEnterEvent* e) override
+    {
+        if (e->mimeData()->hasUrls())
+            e->acceptProposedAction();
+    }
+
+    void dragMoveEvent (QDragMoveEvent* e) override
+    {
+        const auto hit = hitAt (e->position().toPoint());
+        if (hit.kind == Hit::slotCell || hit.kind == Hit::play)
+            e->acceptProposedAction();
+        else
+            e->ignore();
+    }
+
+    // The first file into the slot it is dropped on, the others into the empty slots below.
+    void dropEvent (QDropEvent* e) override
+    {
+        const auto hit = hitAt (e->position().toPoint());
+        if (hit.kind != Hit::slotCell && hit.kind != Hit::play)
+            return;
+        auto scene = hit.scene;
+        for (const auto& url : e->mimeData()->urls())
+        {
+            if (! url.isLocalFile() || ! QFileInfo (url.toLocalFile()).isFile())
+                continue;
+            if (scene < 0)
+                break;
+            window.loadSlot (hit.track, scene, url.toLocalFile());
+            scene = window.firstEmptyScene (hit.track);
+            if (scene < 0 && window.numScenes < mixer::maxScenes)
+                scene = window.numScenes;
+        }
+        window.moveCursor (hit.track, hit.scene);
+        e->acceptProposedAction();
+    }
+
+private:
+    struct Hit
+    {
+        enum Kind { none, header, back, slotCell, play, sceneCell, stop, stopAll } kind = none;
+        int track = -1, scene = -1;
+    };
+
+    static constexpr int margin = 4, headerHeight = 24, stopHeight = 24, sceneWidth = 130, minRow = 20, playWidth = 20;
+
+    int columnWidth() const { return std::max (40, (width() - 2 * margin - sceneWidth) / std::max (1, window.engine.numTracks())); }
+    int rowHeight() const
+    {
+        return std::clamp ((height() - 2 * margin - headerHeight - stopHeight) / std::max (1, window.numScenes), minRow, 40);
+    }
+    QRect headerRect (int t) const { return { margin + t * columnWidth() + 1, margin, columnWidth() - 2, headerHeight - 3 }; }
+    QRect backRect (int t) const { const auto h = headerRect (t); return { h.right() - 22, h.top(), 22, h.height() }; }
+    QRect slotRect (int t, int s) const
+    {
+        return QRect (margin + t * columnWidth(), margin + headerHeight + s * rowHeight(), columnWidth(), rowHeight()).adjusted (2, 2, -2, -2);
+    }
+    QRect stopRect (int t) const
+    {
+        return QRect (margin + t * columnWidth(), margin + headerHeight + window.numScenes * rowHeight(), columnWidth(), stopHeight).adjusted (2, 3, -2, -1);
+    }
+    int sceneLeft() const { return margin + window.engine.numTracks() * columnWidth(); }
+    QRect sceneHeaderRect() const { return { sceneLeft(), margin, sceneWidth, headerHeight - 3 }; }
+    QRect sceneRect (int s) const { return QRect (sceneLeft(), margin + headerHeight + s * rowHeight(), sceneWidth, rowHeight()).adjusted (4, 2, -2, -2); }
+    QRect stopAllRect() const
+    {
+        return QRect (sceneLeft(), margin + headerHeight + window.numScenes * rowHeight(), sceneWidth, stopHeight).adjusted (4, 3, -2, -1);
+    }
+
+    Hit hitAt (QPoint at) const
+    {
+        Hit hit;
+        for (int t = 0; t < window.engine.numTracks(); ++t)
+        {
+            if (backRect (t).contains (at) && ! window.engine.launchInfo (t).timeline)
+                return { Hit::back, t, -1 };
+            if (headerRect (t).contains (at))
+                return { Hit::header, t, -1 };
+            if (stopRect (t).contains (at))
+                return { Hit::stop, t, -1 };
+            for (int s = 0; s < window.numScenes; ++s)
+                if (const auto r = slotRect (t, s); r.contains (at))
+                    return { at.x() < r.left() + playWidth && window.slots[(size_t) t][(size_t) s] != nullptr ? Hit::play : Hit::slotCell, t, s };
+        }
+        for (int s = 0; s < window.numScenes; ++s)
+            if (sceneRect (s).contains (at))
+                return { Hit::sceneCell, -1, s };
+        if (stopAllRect().contains (at))
+            hit.kind = Hit::stopAll;
+        return hit;
+    }
+
+    void launchScene (int scene)
+    {
+        const bool wasPlaying = window.engine.isPlaying();
+        window.engine.launchScene (scene);
+        if (! wasPlaying)
+            Q_EMIT window.playStarted();
+    }
+
+    void chooseFile (int t, int s)
+    {
+        const auto file = QFileDialog::getOpenFileName (this, MixerWindow::tr ("File for %1, %2").arg (window.trackName (t), window.sceneName (s)), window.folder(),
+                                                        MixerWindow::tr ("Audio and MIDI files (*.wav *.flac *.aif *.aiff *.mp3 *.ogg *.opus *.m4a *.mid *.midi);;All files (*)"));
+        if (! file.isEmpty())
+            window.loadSlot (t, s, file);
+        window.setFocus();
+    }
+
+    MixerWindow& window;
+};
+
+// The selected track's devices, on the launcher's left: its instrument, the track's own
+// settings, and the clip in the slot under the cursor.
+class LauncherRack final : public QFrame
+{
+public:
+    explicit LauncherRack (MixerWindow& w) : QFrame (&w), window (w)
+    {
+        setFrameShape (QFrame::StyledPanel);
+        setMinimumWidth (210);
+        setMaximumWidth (280);
+        setFocusPolicy (Qt::NoFocus);
+        auto* layout = new QVBoxLayout (this);
+        layout->setContentsMargins (6, 6, 6, 6);
+        layout->setSpacing (6);
+
+        colourBar = new QFrame (this);
+        colourBar->setFixedHeight (5);
+        title = new QLabel (this);
+        auto bold = title->font();
+        bold.setBold (true);
+        title->setFont (bold);
+        layout->addWidget (colourBar);
+        layout->addWidget (title);
+
+        auto noFocus = [] (QWidget* widget) { widget->setFocusPolicy (Qt::NoFocus); return widget; };
+        auto button = [this, &noFocus] (const QString& text, const QString& tip, bool checkable)
+        {
+            auto* b = new QPushButton (text, this);
+            noFocus (b);
+            b->setCheckable (checkable);
+            b->setToolTip (tip);
+            return b;
+        };
+
+        // The instrument.
+        instrumentGroup = new QGroupBox (MixerWindow::tr ("Instrument"), this);
+        auto* instrumentLayout = new QVBoxLayout (instrumentGroup);
+        instrumentBox = new QComboBox (instrumentGroup);
+        noFocus (instrumentBox);
+        instrumentBox->setToolTip (MixerWindow::tr ("What the track's MIDI clips and the MIDI keyboard play"));
+        editButton = button (MixerWindow::tr ("Edit"), MixerWindow::tr ("Open the instrument's window (E)"), false);
+        armButton = button (MixerWindow::tr ("● Keys"), MixerWindow::tr ("The MIDI keyboard plays this track's instrument (R)"), true);
+        auto* instrumentRow = new QHBoxLayout;
+        instrumentRow->addWidget (editButton);
+        instrumentRow->addWidget (armButton);
+        instrumentLayout->addWidget (instrumentBox);
+        instrumentLayout->addLayout (instrumentRow);
+        layout->addWidget (instrumentGroup);
+
+        // The track.
+        trackGroup = new QGroupBox (MixerWindow::tr ("Track"), this);
+        auto* form = new QFormLayout (trackGroup);
+        trimBox = new QDoubleSpinBox (trackGroup);
+        trimBox->setRange (-24.0, 24.0);
+        trimBox->setSingleStep (0.5);
+        trimBox->setDecimals (1);
+        trimBox->setSuffix (MixerWindow::tr (" dB"));
+        trimBox->setToolTip (MixerWindow::tr ("Trim, before everything else"));
+        transposeBox = new QSpinBox (trackGroup);
+        transposeBox->setRange (-48, 48);
+        transposeBox->setSuffix (MixerWindow::tr (" st"));
+        transposeBox->setToolTip (MixerWindow::tr ("Transpose the MIDI clips (channel 10, the drums, stays)"));
+        channelsButton = button (MixerWindow::tr ("Channels..."), MixerWindow::tr ("Which of the MIDI clips' channels play"), false);
+        invertL = button (QStringLiteral ("ØL"), MixerWindow::tr ("Flip the left side's polarity"), true);
+        invertR = button (QStringLiteral ("ØR"), MixerWindow::tr ("Flip the right side's polarity"), true);
+        auto* polarity = new QHBoxLayout;
+        polarity->addWidget (invertL);
+        polarity->addWidget (invertR);
+        followLabel = new QLabel (trackGroup);
+        followLabel->setWordWrap (true);
+        backButton = button (MixerWindow::tr ("Back to Timeline (T)"), MixerWindow::tr ("The track plays its timeline clips again; Shift+T does it for every track"), false);
+        form->addRow (MixerWindow::tr ("Trim"), trimBox);
+        form->addRow (MixerWindow::tr ("Transpose"), transposeBox);
+        form->addRow (MixerWindow::tr ("MIDI"), channelsButton);
+        form->addRow (MixerWindow::tr ("Polarity"), polarity);
+        form->addRow (followLabel);
+        form->addRow (backButton);
+        layout->addWidget (trackGroup);
+
+        // The clip under the cursor.
+        clipGroup = new QGroupBox (MixerWindow::tr ("Clip"), this);
+        auto* clipLayout = new QFormLayout (clipGroup);
+        clipName = new QLabel (clipGroup);
+        clipName->setWordWrap (true);
+        loopBox = new QCheckBox (MixerWindow::tr ("Loop"), clipGroup);
+        noFocus (loopBox);
+        loopBox->setToolTip (MixerWindow::tr ("Go round until stopped; off, it plays once and the track stops"));
+        reverseBox = new QCheckBox (MixerWindow::tr ("Reverse"), clipGroup);
+        noFocus (reverseBox);
+        quantiseBox = new QComboBox (clipGroup);
+        noFocus (quantiseBox);
+        quantiseBox->addItem (MixerWindow::tr ("The launcher's"));
+        for (int q = 0; q < numQuantise; ++q)
+            quantiseBox->addItem (quantiseName (q));
+        quantiseBox->setToolTip (MixerWindow::tr ("When a launch of this clip starts: the launcher's quantise, or its own"));
+        chooseButton = button (MixerWindow::tr ("File..."), MixerWindow::tr ("Put a file in this slot (or drop one on it)"), false);
+        clearButton = button (MixerWindow::tr ("Empty"), MixerWindow::tr ("Empty the slot (Delete)"), false);
+        auto* fileRow = new QHBoxLayout;
+        fileRow->addWidget (chooseButton);
+        fileRow->addWidget (clearButton);
+        clipLayout->addRow (clipName);
+        clipLayout->addRow (loopBox);
+        clipLayout->addRow (reverseBox);
+        clipLayout->addRow (MixerWindow::tr ("Quantise"), quantiseBox);
+        clipLayout->addRow (fileRow);
+        layout->addWidget (clipGroup);
+        layout->addStretch (1);
+
+        auto track = [this] { return window.selected < mixer::masterIndex ? window.selected : -1; };
+        auto stripChanged = [this] (int t)
+        {
+            window.strips[(size_t) t]->refresh();
+            window.changed();
+        };
+        QObject::connect (instrumentBox, &QComboBox::activated, this, [this, track] (int choice)
+        {
+            if (const auto t = track(); t >= 0)
+            {
+                window.setInstrumentKind (t, std::min (choice, (int) firstPlugin), instrumentBox->itemData (choice).toString());
+                window.strips[(size_t) t]->refresh();
+                refresh();
+            }
+            window.setFocus();
+        });
+        QObject::connect (editButton, &QPushButton::clicked, this, [this, track] { if (track() >= 0) window.editInstrument (track()); });
+        QObject::connect (armButton, &QPushButton::clicked, this, [this, track]
+        {
+            if (track() >= 0)
+                window.arm (track());
+            refresh();
+        });
+        QObject::connect (trimBox, &QDoubleSpinBox::valueChanged, this, [this, track, stripChanged] (double v)
+        {
+            if (updating || track() < 0)
+                return;
+            window.engine.strip (track()).trimDb = (float) v;
+            stripChanged (track());
+        });
+        QObject::connect (transposeBox, &QSpinBox::valueChanged, this, [this, track, stripChanged] (int v)
+        {
+            if (updating || track() < 0)
+                return;
+            window.engine.strip (track()).transpose = v;
+            stripChanged (track());
+        });
+        for (auto* box : std::initializer_list<QAbstractSpinBox*> { trimBox, transposeBox })
+            QObject::connect (box, &QAbstractSpinBox::editingFinished, &window, [this] { window.setFocus(); });
+        QObject::connect (channelsButton, &QPushButton::clicked, this, [this, track]
+        {
+            if (track() >= 0)
+                window.strips[(size_t) track()]->channelMenu (channelsButton->mapToGlobal (QPoint (0, channelsButton->height())));
+        });
+        QObject::connect (invertL, &QPushButton::toggled, this, [this, track, stripChanged] (bool on)
+        {
+            if (! updating && track() >= 0)
+            {
+                window.engine.strip (track()).invertLeft = on;
+                stripChanged (track());
+            }
+        });
+        QObject::connect (invertR, &QPushButton::toggled, this, [this, track, stripChanged] (bool on)
+        {
+            if (! updating && track() >= 0)
+            {
+                window.engine.strip (track()).invertRight = on;
+                stripChanged (track());
+            }
+        });
+        QObject::connect (backButton, &QPushButton::clicked, this, [this, track] { if (track() >= 0) window.engine.backToTimeline (track()); });
+        QObject::connect (loopBox, &QCheckBox::toggled, this, [this, track] (bool on)
+        {
+            if (! updating && track() >= 0)
+                window.editSlot (track(), window.cursorScene, [on] (mixer::Slot& x) { x.loop = on; });
+        });
+        QObject::connect (reverseBox, &QCheckBox::toggled, this, [this, track] (bool on)
+        {
+            if (updating || track() < 0)
+                return;
+            window.editSlot (track(), window.cursorScene, [on] (mixer::Slot& x)
+            {
+                if (x.clip.reversed == on)
+                    return;
+                x.clip.reversed = on;
+                if (x.clip.midi != nullptr)
+                    x.clip.midi = mixer::reverseMidi (*x.clip.midi);
+            });
+        });
+        QObject::connect (quantiseBox, &QComboBox::activated, this, [this, track] (int choice)
+        {
+            if (track() >= 0)
+                window.editSlot (track(), window.cursorScene, [choice] (mixer::Slot& x) { x.quantise = choice == 0 ? -1.0 : quantiseBeats[choice - 1]; });
+            window.setFocus();
+        });
+        QObject::connect (chooseButton, &QPushButton::clicked, this, [this, track]
+        {
+            if (track() < 0)
+                return;
+            const auto file = QFileDialog::getOpenFileName (this, MixerWindow::tr ("File for %1, %2").arg (window.trackName (track()), window.sceneName (window.cursorScene)),
+                                                            window.folder(),
+                                                            MixerWindow::tr ("Audio and MIDI files (*.wav *.flac *.aif *.aiff *.mp3 *.ogg *.opus *.m4a *.mid *.midi);;All files (*)"));
+            if (! file.isEmpty())
+                window.loadSlot (track(), window.cursorScene, file);
+            window.setFocus();
+        });
+        QObject::connect (clearButton, &QPushButton::clicked, this, [this, track] { if (track() >= 0) window.clearSlot (track(), window.cursorScene); });
+    }
+
+    // Everything shown, for the selected track and the slot under the cursor.
+    void refresh()
+    {
+        updating = true;
+        const auto t = window.selected < mixer::masterIndex ? window.selected : -1;
+        for (auto* group : { instrumentGroup, trackGroup, clipGroup })
+            group->setEnabled (t >= 0);
+        if (t < 0)
+        {
+            title->setText (MixerWindow::tr ("Master"));
+            colourBar->setStyleSheet ({});
+            clipName->setText ({});
+            updating = false;
+            return;
+        }
+        const auto& info = window.info[(size_t) t];
+        colourBar->setStyleSheet (QStringLiteral ("background: %1;").arg (info.colour.name()));
+        title->setText (QStringLiteral ("%1  %2").arg (t + 1).arg (info.name));
+        const auto inst = MixerStrip::fillInstruments (instrumentBox, window, t);
+        editButton->setEnabled (inst != nullptr && (inst->kind() != mixer::Instrument::Kind::plugin || inst->hasWindow()));
+        armButton->setChecked (window.engine.liveTrack() == t);
+        const auto& s = window.engine.strip (t);
+        trimBox->setValue (s.trimDb.load());
+        transposeBox->setValue (s.transpose.load());
+        invertL->setChecked (s.invertLeft.load());
+        invertR->setChecked (s.invertRight.load());
+
+        const auto& slot = window.slots[(size_t) t][(size_t) window.cursorScene];
+        clipGroup->setTitle (MixerWindow::tr ("Clip: %1").arg (window.sceneName (window.cursorScene)));
+        for (auto* widget : std::initializer_list<QWidget*> { loopBox, reverseBox, quantiseBox, clearButton })
+            widget->setEnabled (slot != nullptr);
+        if (slot != nullptr)
+        {
+            const auto& c = slot->clip;
+            clipName->setText (MixerWindow::tr ("%1\n%2, %3 s").arg (window.slotName (t, window.cursorScene))
+                                   .arg (c.isMidi() ? MixerWindow::tr ("MIDI") : MixerWindow::tr ("audio"))
+                                   .arg ((double) c.length / window.rate(), 0, 'f', 2));
+            loopBox->setChecked (slot->loop);
+            reverseBox->setChecked (c.reversed);
+            quantiseBox->setCurrentIndex (slot->quantise < 0.0 ? 0 : quantiseIndex (slot->quantise) + 1);
+        }
+        else
+            clipName->setText (MixerWindow::tr ("An empty slot: drop a file on it, double-click it, or press Enter on a sound in the Find panel's Selector."));
+        tick();
+        updating = false;
+    }
+
+    void tick()
+    {
+        const auto t = window.selected < mixer::masterIndex ? window.selected : -1;
+        if (t < 0)
+            return;
+        const auto launch = window.engine.launchInfo (t);
+        followLabel->setText (launch.timeline ? MixerWindow::tr ("Plays its timeline clips.")
+                              : launch.playing >= 0 ? MixerWindow::tr ("Plays %1 from the launcher.").arg (window.sceneName (launch.playing))
+                                                    : MixerWindow::tr ("Stopped in the launcher; its timeline is not heard."));
+        backButton->setEnabled (! launch.timeline);
+    }
+
+private:
+    MixerWindow& window;
+    bool updating = false;
+    QFrame* colourBar;
+    QLabel* title;
+    QGroupBox* instrumentGroup;
+    QComboBox* instrumentBox;
+    QPushButton* editButton;
+    QPushButton* armButton;
+    QGroupBox* trackGroup;
+    QDoubleSpinBox* trimBox;
+    QSpinBox* transposeBox;
+    QPushButton* channelsButton;
+    QPushButton* invertL;
+    QPushButton* invertR;
+    QLabel* followLabel;
+    QPushButton* backButton;
+    QGroupBox* clipGroup;
+    QLabel* clipName;
+    QCheckBox* loopBox;
+    QCheckBox* reverseBox;
+    QComboBox* quantiseBox;
+    QPushButton* chooseButton;
+    QPushButton* clearButton;
+};
+
+//==============================================================================
 MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* parent)
     : QWidget (parent, Qt::Window), engine (e), audio (a), hooks (std::move (h))
 {
@@ -2286,6 +3009,19 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     followTempoBox = new QCheckBox (tr ("MIDI follows tempo"), this);
     followTempoBox->setFocusPolicy (Qt::NoFocus);
     followTempoBox->setToolTip (tr ("Play the MIDI files at the mix's tempo instead of their own tempo maps"));
+    launcherButton = button (tr ("Launcher"), tr ("The clip launcher in place of the tracks across time (Performance > Clip Launcher, F5; V goes back)"));
+    launcherButton->setCheckable (true);
+    quantiseBox = new QComboBox (this);
+    quantiseBox->setFocusPolicy (Qt::NoFocus);
+    for (int q = 0; q < numQuantise; ++q)
+        quantiseBox->addItem (tr ("Quantise %1").arg (quantiseName (q)));
+    quantiseBox->setCurrentIndex (quantiseIndex (4.0));
+    quantiseBox->setToolTip (tr ("When a launch starts: at once, or on the next beat division or bar (a clip can have its own)"));
+    scenesBox = new QSpinBox (this);
+    scenesBox->setRange (1, mixer::maxScenes);
+    scenesBox->setValue (numScenes);
+    scenesBox->setPrefix (tr ("Scenes "));
+    scenesBox->setToolTip (tr ("How many scenes (rows) the launcher has"));
     auto* addButton = button (tr ("+ Track"), tr ("Add a track, up to 8 (Ctrl+T)"));
     auto* removeButton = button (tr ("− Track"), tr ("Remove the last track (Ctrl+Shift+T)"));
     auto* openButton = button (tr ("Open..."), tr ("Open a project (Ctrl+O): the mix, the patchbay and the view"));
@@ -2301,6 +3037,9 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     top->addWidget (positionLabel);
     top->addWidget (tempoBox);
     top->addWidget (followTempoBox);
+    top->addWidget (launcherButton);
+    top->addWidget (quantiseBox);
+    top->addWidget (scenesBox);
     top->addStretch (1);
     top->addWidget (addButton);
     top->addWidget (removeButton);
@@ -2369,14 +3108,37 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
 
     // The tracks across time above the strips, as in a DAW's arrangement.
     lanes = new TrackLanes (*this);
+    // Or the clip launcher in their place: the rack, then the grid.
+    rack = new LauncherRack (*this);
+    grid = new ClipGrid (*this);
+    launcherArea = new QWidget (this);
+    auto* launcherRow = new QHBoxLayout (launcherArea);
+    launcherRow->setContentsMargins (0, 0, 0, 0);
+    auto* rackScroll = new QScrollArea (launcherArea);
+    rackScroll->setWidget (rack);
+    rackScroll->setWidgetResizable (true);
+    rackScroll->setFrameShape (QFrame::NoFrame);
+    rackScroll->setFocusPolicy (Qt::NoFocus);
+    rackScroll->setHorizontalScrollBarPolicy (Qt::ScrollBarAlwaysOff);
+    rackScroll->setMinimumWidth (rack->minimumWidth() + 16);
+    rackScroll->setMaximumWidth (rack->maximumWidth() + 16);
+    launcherRow->addWidget (rackScroll);
+    launcherRow->addWidget (grid, 1);
+    launcherArea->hide();
+    upperArea = new QWidget (this);
+    auto* upperLayout = new QVBoxLayout (upperArea);
+    upperLayout->setContentsMargins (0, 0, 0, 0);
+    upperLayout->addWidget (lanes);
+    upperLayout->addWidget (launcherArea);
     splitter = new QSplitter (Qt::Vertical, this);
     splitter->setChildrenCollapsible (false);
-    splitter->addWidget (lanes);
+    splitter->addWidget (upperArea);
     splitter->addWidget (mixArea);
     splitter->setStretchFactor (0, 2);
     splitter->setStretchFactor (1, 3);
     splitter->restoreState (appSettings().value (QStringLiteral ("mixer/splitter")).toByteArray());
     lanes->setVisible (appSettings().value (QStringLiteral ("mixer/lanes"), true).toBool());
+    updateUpperArea();
 
     // The file browser on the left of it all.
     browser = new FileBrowser (*this);
@@ -2425,6 +3187,25 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     });
     connect (tempoBox, &QDoubleSpinBox::editingFinished, this, [this] { setFocus(); });
     connect (followTempoBox, &QCheckBox::toggled, this, [this] { placeAllMidi(); changed(); });
+    connect (tempoBox, &QDoubleSpinBox::valueChanged, this, [this] (double bpm) { engine.tempo = bpm; });
+    connect (launcherButton, &QPushButton::toggled, this, [this] (bool on) { showLauncher (on); });
+    connect (quantiseBox, &QComboBox::activated, this, [this] (int q)
+    {
+        engine.launchQuantise = quantiseBeats[q];
+        changed();
+        setFocus();
+    });
+    connect (scenesBox, &QSpinBox::valueChanged, this, [this] (int n)
+    {
+        if (n != numScenes)
+        {
+            setScenes (n);
+            changed();
+        }
+    });
+    connect (scenesBox, &QSpinBox::editingFinished, this, [this] { setFocus(); });
+    engine.tempo = tempoBox->value();
+    engine.launchQuantise = quantiseBeats[quantiseBox->currentIndex()];
     connect (addButton, &QPushButton::clicked, this, [this] { addTrack(); });
     connect (removeButton, &QPushButton::clicked, this, [this] { removeTrack(); });
     connect (openButton, &QPushButton::clicked, this, [this] { openMix(); });
@@ -2446,6 +3227,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
 
     rebuildStrips();
     select (0);
+    showLauncher (false);
     restoring = false;
     resize (1180, 860);
     status->setText (tr ("Each track can hold an audio file and a MIDI file together. The MIDI file plays the track's instrument; "
@@ -2473,6 +3255,8 @@ void MixerWindow::rebuildStrips()
     }
     if (selected < mixer::masterIndex && selected >= count)
         select (count - 1);
+    if (grid != nullptr)
+        grid->update();
     refreshTransport();
 }
 
@@ -2487,6 +3271,10 @@ void MixerWindow::select (int index)
         lanes->update();
     if (browser != nullptr)
         browser->showHint();
+    if (rack != nullptr)
+        rack->refresh();
+    if (grid != nullptr)
+        grid->update();
     masterStrip->setStyleSheet (selected == mixer::masterIndex
                                     ? QStringLiteral ("QFrame#masterStrip { border: 2px solid %1; }").arg (Theme::current().color (QStringLiteral ("highlight")).name())
                                     : QString());
@@ -2506,6 +3294,11 @@ void MixerWindow::tick()
     {
         lanes->follow();
         lanes->update();
+    }
+    if (launcherArea->isVisible())
+    {
+        grid->update();
+        rack->tick();
     }
 }
 
@@ -2704,31 +3497,17 @@ void MixerWindow::stamp (mixer::Clips& list)
             c.id = nextClipId++;
 }
 
-void MixerWindow::loadAudio (int track, const QString& file, mixer::Clip place, std::function<void (Frame)> then)
+void MixerWindow::decodeAudio (int track, const QString& file, std::function<void (mixer::AudioClipPtr)> done)
 {
     auto& t = info[(size_t) track];
     const auto generation = t.generation;
     const auto r = rate();
     appSettings().setValue (QStringLiteral ("mixer/folder"), QFileInfo (file).absolutePath());
 
-    // A file already on a track at this rate is shared rather than read again. One
-    // that a project being opened put there is not a change to it, however late it lands.
-    auto finish = [this, track, file, place, then, fromFile = restoring] (mixer::AudioClipPtr clip) mutable
-    {
-        audioCache[file] = clip;
-        place.audio = clip;
-        if (place.length <= 0)
-            place.length = clip->length();
-        const auto keep = std::exchange (restoring, restoring || fromFile);
-        addClip (track, place);
-        restoring = keep;
-        status->setText (tr ("%1 is on track %2 at %3").arg (QFileInfo (file).fileName()).arg (track + 1).arg (timeText ((double) place.start / rate())));
-        if (then)
-            then (place.end());
-    };
+    // A file already on a track at this rate is shared rather than read again.
     if (auto cached = audioCache[file].lock(); cached != nullptr)
     {
-        finish (cached);
+        done (cached);
         return;
     }
 
@@ -2736,7 +3515,7 @@ void MixerWindow::loadAudio (int track, const QString& file, mixer::Clip place, 
     lanes->update();
     status->setText (tr ("Loading %1...").arg (QFileInfo (file).fileName()));
     QPointer<MixerWindow> self (this);
-    (void) QtConcurrent::run ([self, track, generation, file, r, finish]() mutable
+    (void) QtConcurrent::run ([self, track, generation, file, r, done]() mutable
     {
         std::vector<Marker> markers;
         Tags tags;
@@ -2749,7 +3528,7 @@ void MixerWindow::loadAudio (int track, const QString& file, mixer::Clip place, 
                 loaded = dsp::resample (*loaded, r);
             clip = mixer::makeAudioClip (*loaded, file.toStdString());
         }
-        QMetaObject::invokeMethod (qApp, [self, track, generation, file, clip, error, finish]() mutable
+        QMetaObject::invokeMethod (qApp, [self, track, generation, file, clip, error, done]() mutable
         {
             if (self == nullptr || self->info[(size_t) track].generation != generation)
                 return;
@@ -2759,10 +3538,31 @@ void MixerWindow::loadAudio (int track, const QString& file, mixer::Clip place, 
             {
                 self->status->setText (tr ("%1 could not be read: %2").arg (QFileInfo (file).fileName(), QString::fromStdString (error)));
                 self->lanes->update();
+                done (nullptr);
                 return;
             }
-            finish (clip);
+            self->audioCache[file] = clip;
+            done (clip);
         }, Qt::QueuedConnection);
+    });
+}
+
+void MixerWindow::loadAudio (int track, const QString& file, mixer::Clip place, std::function<void (Frame)> then)
+{
+    // One that a project being opened put there is not a change to it, however late it lands.
+    decodeAudio (track, file, [this, track, file, place, then, fromFile = restoring] (mixer::AudioClipPtr clip) mutable
+    {
+        if (clip == nullptr)
+            return;
+        place.audio = clip;
+        if (place.length <= 0)
+            place.length = clip->length();
+        const auto keep = std::exchange (restoring, restoring || fromFile);
+        addClip (track, place);
+        restoring = keep;
+        status->setText (tr ("%1 is on track %2 at %3").arg (QFileInfo (file).fileName()).arg (track + 1).arg (timeText ((double) place.start / rate())));
+        if (then)
+            then (place.end());
     });
 }
 
@@ -2844,6 +3644,7 @@ void MixerWindow::placeAllMidi()
         if (any)
             engine.setClips (i, std::move (list));
     }
+    placeLauncherMidi();
     if (loopButton->isChecked())
         engine.setLoop (0, engine.length());
     lanes->update();
@@ -3079,6 +3880,8 @@ void MixerWindow::updateTitle()
 //==============================================================================
 void MixerWindow::keyPressEvent (QKeyEvent* e)
 {
+    if (launcherShown() && launcherKey (e))
+        return;
     const auto key = e->key();
     const auto mods = e->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier);
     const bool shift = mods == Qt::ShiftModifier;
@@ -3256,6 +4059,19 @@ bool MixerWindow::newMix()
         ++t.generation;
         t.busy = 0;
     }
+    for (int t = 0; t < mixer::maxTracks; ++t)
+        for (int sc = 0; sc < mixer::maxScenes; ++sc)
+        {
+            engine.setSlot (t, sc, nullptr);
+            slots[(size_t) t][(size_t) sc] = nullptr;
+        }
+    engine.backToTimeline (-1);
+    loadingSlots.clear();
+    sceneNames = {};
+    cursorScene = 0;
+    setScenes (8);
+    engine.launchQuantise = 4.0;
+    quantiseBox->setCurrentIndex (quantiseIndex (4.0));
     undoStack.clear();
     redoStack.clear();
     lanes->clearSelection();
@@ -3423,9 +4239,29 @@ bool MixerWindow::writeMix (const QString& file, QString& error)
         }
         tracks.append (o);
     }
+    // The launcher's slots, in seconds like the clips.
+    QJsonArray slotList;
+    for (int t = 0; t < engine.numTracks(); ++t)
+        for (int sc = 0; sc < mixer::maxScenes; ++sc)
+            if (const auto& slot = slots[(size_t) t][(size_t) sc]; slot != nullptr)
+            {
+                const auto& c = slot->clip;
+                const auto source = c.audio != nullptr ? c.audio->path : c.midi->path;
+                slotList.append (QJsonObject {
+                    { "track", t }, { "scene", sc }, { "kind", c.isMidi() ? "midi" : "audio" }, { "file", storedPath (QString::fromStdString (source), base) },
+                    { "offset", (double) c.offset / rate() }, { "length", (double) c.length / rate() }, { "reversed", c.reversed },
+                    { "loop", slot->loop }, { "quantise", slot->quantise },
+                });
+            }
+    QJsonArray names;
+    for (const auto& name : sceneNames)
+        names.append (name);
+    const QJsonObject launcher {
+        { "scenes", numScenes }, { "quantise", engine.launchQuantise.load() }, { "sceneNames", names }, { "slots", slotList }, { "shown", launcherShown() },
+    };
     QJsonObject root {
-        { "phinyxProject", 1 }, { "phinyxMix", 2 }, { "tempo", tempoBox->value() }, { "midiFollowsTempo", followTempoBox->isChecked() },
-        { "master", engine.masterDb.load() }, { "armed", engine.liveTrack() }, { "tracks", tracks },
+        { "phinyxProject", 1 }, { "phinyxMix", 3 }, { "tempo", tempoBox->value() }, { "midiFollowsTempo", followTempoBox->isChecked() },
+        { "master", engine.masterDb.load() }, { "armed", engine.liveTrack() }, { "tracks", tracks }, { "launcher", launcher },
     };
     if (hooks.projectState)
     {
@@ -3593,6 +4429,40 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
             addClipFrom (QStringLiteral ("audio"), audioFile, audioPlace);
         }
     }
+    engine.tempo = tempoBox->value();
+
+    // The launcher (version 3 on).
+    const auto launcher = root.value ("launcher").toObject();
+    if (! launcher.isEmpty())
+    {
+        setScenes (launcher.value ("scenes").toInt (8));
+        engine.launchQuantise = std::max (0.0, launcher.value ("quantise").toDouble (4.0));
+        quantiseBox->setCurrentIndex (quantiseIndex (engine.launchQuantise.load()));
+        const auto names = launcher.value ("sceneNames").toArray();
+        for (int sc = 0; sc < std::min ((int) names.size(), mixer::maxScenes); ++sc)
+            sceneNames[(size_t) sc] = names[sc].toString();
+        const auto r = rate();
+        for (const auto& value : launcher.value ("slots").toArray())
+        {
+            const auto o = value.toObject();
+            const auto t = o.value ("track").toInt (-1), sc = o.value ("scene").toInt (-1);
+            if (t < 0 || t >= engine.numTracks() || sc < 0 || sc >= mixer::maxScenes)
+                continue;
+            const auto source = resolvedPath (o.value ("file").toString(), base);
+            if (! QFileInfo::exists (source))
+            {
+                problems << tr ("%1, %2: %3 is missing").arg (trackName (t), sceneName (sc), source);
+                continue;
+            }
+            mixer::Slot like;
+            like.loop = o.value ("loop").toBool (true);
+            like.quantise = o.value ("quantise").toDouble (-1.0);
+            like.clip.offset = (Frame) std::llround (o.value ("offset").toDouble() * r);
+            like.clip.length = (Frame) std::llround (o.value ("length").toDouble() * r);
+            like.clip.reversed = o.value ("reversed").toBool();
+            loadSlot (t, sc, source, like);
+        }
+    }
     engine.masterDb = (float) root.value ("master").toDouble();
     masterFader->setValue (faderPosition (engine.masterDb.load()));
     engine.setLiveTrack (root.value ("armed").toInt (0));
@@ -3604,6 +4474,8 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
     (void) keepPath;
     rebuildStrips();
     select (0);
+    if (launcher.contains (QStringLiteral ("shown")))
+        showLauncher (launcher.value ("shown").toBool());
     updateTitle();
     if (QFileInfo (file).absoluteFilePath() != QFileInfo (autosavePath()).absoluteFilePath())   // the config folder is no place to look for files
         appSettings().setValue (QStringLiteral ("mixer/folder"), base.absolutePath());
@@ -3766,16 +4638,27 @@ void MixerWindow::bounce (int track, bool inPlace)
 
 void MixerWindow::toggleLanes()
 {
-    lanes->setVisible (! lanes->isVisible());
-    appSettings().setValue (QStringLiteral ("mixer/lanes"), lanes->isVisible());
-    status->setText (lanes->isVisible() ? tr ("The tracks across time are shown above the strips (V hides them).")
-                                        : tr ("The tracks across time are hidden (V shows them)."));
+    // From the launcher, V goes back to the tracks across time.
+    const bool show = launcherShown() || lanes->isHidden();
+    if (launcherShown())
+        showLauncher (false);
+    lanes->setVisible (show);
+    updateUpperArea();
+    appSettings().setValue (QStringLiteral ("mixer/lanes"), show);
+    status->setText (show ? tr ("The tracks across time are shown above the strips (V hides them).")
+                          : tr ("The tracks across time are hidden (V shows them)."));
+}
+
+void MixerWindow::updateUpperArea()
+{
+    upperArea->setVisible (! lanes->isHidden() || ! launcherArea->isHidden());
 }
 
 void MixerWindow::toggleBrowser()
 {
-    browser->setVisible (! browser->isVisible());
-    appSettings().setValue (QStringLiteral ("mixer/browser"), browser->isVisible());
+    browser->setVisible (browser->isHidden());
+    if (! launcherShown())
+        appSettings().setValue (QStringLiteral ("mixer/browser"), ! browser->isHidden());
     if (browser->isVisible())
         browser->view()->setFocus();
     else
@@ -3889,4 +4772,327 @@ bool MixerWindow::replaceClipAudio (int track, uint32_t id, const AudioData& edi
     editClips (track, std::move (list));
     status->setText (tr ("The edit is on track %1 (%2); Ctrl+Z puts the clip back as it was").arg (track + 1).arg (file));
     return true;
+}
+
+//==============================================================================
+// The clip launcher.
+void MixerWindow::showLauncher (bool on)
+{
+    launcherArea->setVisible (on);
+    if (on)
+        lanes->hide();
+    else
+        lanes->setVisible (appSettings().value (QStringLiteral ("mixer/lanes"), true).toBool());
+    updateUpperArea();
+    // The rack takes the browser's place on the left; Ctrl+B still brings it back.
+    browser->setVisible (! on && appSettings().value (QStringLiteral ("mixer/browser"), true).toBool());
+    for (auto* strip : strips)
+        strip->setCompact (on);
+    for (auto* w : std::initializer_list<QWidget*> { quantiseBox, scenesBox })
+        w->setVisible (on);
+    {
+        const QSignalBlocker block (launcherButton);
+        launcherButton->setChecked (on);
+    }
+    rack->refresh();
+    grid->update();
+    if (on)
+        status->setText (tr ("The clip launcher: Enter on a sound in the Selector puts it in its colour's next slot. Arrows move, Enter launches, "
+                             "Shift+Enter launches the scene, . stops the track, T goes back to its timeline, V shows the tracks across time."));
+}
+
+bool MixerWindow::launcherShown() const { return launcherArea != nullptr && ! launcherArea->isHidden(); }
+
+QString MixerWindow::sceneName (int scene) const
+{
+    if (scene < 0 || scene >= mixer::maxScenes)
+        return {};
+    return sceneNames[(size_t) scene].isEmpty() ? tr ("Scene %1").arg (scene + 1) : sceneNames[(size_t) scene];
+}
+
+QString MixerWindow::slotName (int track, int scene) const
+{
+    const auto& slot = slots[(size_t) track][(size_t) scene];
+    if (slot == nullptr)
+        return {};
+    const auto& c = slot->clip;
+    return QFileInfo (QString::fromStdString (c.audio != nullptr ? c.audio->path : c.midi->path)).completeBaseName();
+}
+
+int MixerWindow::firstEmptyScene (int track) const
+{
+    for (int s = 0; s < numScenes; ++s)
+        if (slots[(size_t) track][(size_t) s] == nullptr && loadingSlots.count ({ track, s }) == 0)
+            return s;
+    return -1;
+}
+
+void MixerWindow::setScenes (int count)
+{
+    numScenes = std::clamp (count, 1, mixer::maxScenes);
+    cursorScene = std::min (cursorScene, numScenes - 1);
+    {
+        const QSignalBlocker block (scenesBox);
+        scenesBox->setValue (numScenes);
+    }
+    grid->updateMinimum();
+    grid->update();
+    rack->refresh();
+}
+
+void MixerWindow::moveCursor (int track, int scene)
+{
+    if (track >= 0 && track < engine.numTracks() && track != selected)
+        select (track);
+    cursorScene = std::clamp (scene, 0, numScenes - 1);
+    grid->update();
+    rack->refresh();
+}
+
+void MixerWindow::launchSlot (int track, int scene)
+{
+    if (track < 0 || track >= engine.numTracks())
+        return;
+    const bool wasPlaying = engine.isPlaying();
+    if (slots[(size_t) track][(size_t) scene] != nullptr)
+        engine.launch (track, scene);
+    else
+        engine.stopTrack (track);
+    if (! wasPlaying && engine.isPlaying())
+        Q_EMIT playStarted();
+    grid->update();
+}
+
+void MixerWindow::renameScene (int scene)
+{
+    bool ok = false;
+    const auto name = QInputDialog::getText (this, tr ("Rename Scene"), tr ("Name (empty for \"Scene %1\"):").arg (scene + 1), QLineEdit::Normal,
+                                             sceneNames[(size_t) scene], &ok);
+    if (ok)
+    {
+        sceneNames[(size_t) scene] = name.trimmed();
+        grid->update();
+        rack->refresh();
+        changed();
+    }
+    setFocus();
+}
+
+mixer::MidiClipPtr MixerWindow::launcherMidi (midifile::SongPtr song, const std::string& file) const
+{
+    const auto bpm = followTempoBox->isChecked() ? tempoBox->value() : 0.0;
+    auto placed = mixer::placeMidi (song, file, rate(), bpm);
+    if (placed == nullptr)
+        return nullptr;
+    // A loop goes round in whole bars: its length is rounded up to the bar at the tempo it plays at.
+    const auto playBpm = bpm > 0.0 ? bpm : song->fileBpm() > 0.0 ? song->fileBpm() : tempoBox->value();
+    const auto bar = 4.0 * 60.0 / playBpm * rate();
+    const auto bars = std::max (1.0, std::ceil ((double) placed->length / bar - 0.01));
+    auto whole = std::make_shared<mixer::MidiClip> (*placed);
+    whole->length = std::max (placed->length, (Frame) std::llround (bars * bar));
+    return whole;
+}
+
+void MixerWindow::loadSlot (int track, int scene, const QString& file, mixer::Slot like)
+{
+    if (track < 0 || track >= engine.numTracks() || scene < 0 || scene >= mixer::maxScenes)
+        return;
+    if (scene >= numScenes)
+        setScenes (scene + 1);
+    const bool fromFile = restoring;   // a project being opened: not a change to it
+    auto place = [this, track, scene, like, fromFile, name = QFileInfo (file).fileName()] (mixer::Clip clip)
+    {
+        loadingSlots.erase ({ track, scene });
+        auto slot = std::make_shared<mixer::Slot> (like);
+        const auto source = clip.sourceLength();
+        clip.offset = std::clamp<Frame> (like.clip.offset, 0, std::max<Frame> (0, source - 1));
+        clip.length = like.clip.length > 0 ? std::min (like.clip.length, source - clip.offset) : source - clip.offset;
+        clip.reversed = like.clip.reversed;
+        slot->clip = clip;
+        slots[(size_t) track][(size_t) scene] = slot;
+        engine.setSlot (track, scene, slot);
+        if (! fromFile)
+            changed();
+        grid->update();
+        rack->refresh();
+        status->setText (tr ("%1 is in %2, %3").arg (name, trackName (track), sceneName (scene)));
+    };
+    if (isMidiFile (file))
+    {
+        std::string why;
+        auto song = midifile::read (file.toStdString(), why);
+        if (song == nullptr)
+        {
+            status->setText (tr ("%1 could not be read: %2").arg (QFileInfo (file).fileName(), QString::fromStdString (why)));
+            return;
+        }
+        appSettings().setValue (QStringLiteral ("mixer/folder"), QFileInfo (file).absolutePath());
+        auto midi = launcherMidi (song, file.toStdString());
+        if (like.clip.reversed)
+            midi = mixer::reverseMidi (*midi);
+        place (mixer::makeClip (midi, 0));
+        // A MIDI file needs something to play it: the Synth until another instrument is chosen.
+        if (engine.instrument (track) == nullptr && ! restoring)
+        {
+            setInstrumentKind (track, synthChoice, {});
+            strips[(size_t) track]->refresh();
+            rack->refresh();
+        }
+        return;
+    }
+    loadingSlots.insert ({ track, scene });
+    grid->update();
+    QPointer<MixerWindow> self (this);
+    decodeAudio (track, file, [self, track, scene, place] (mixer::AudioClipPtr sound)
+    {
+        if (self == nullptr)
+            return;
+        if (sound == nullptr)
+        {
+            self->loadingSlots.erase ({ track, scene });
+            self->grid->update();
+            return;
+        }
+        place (mixer::makeClip (sound, 0));
+    });
+}
+
+void MixerWindow::editSlot (int track, int scene, const std::function<void (mixer::Slot&)>& edit)
+{
+    const auto& current = slots[(size_t) track][(size_t) scene];
+    if (current == nullptr)
+        return;
+    auto slot = std::make_shared<mixer::Slot> (*current);
+    edit (*slot);
+    slots[(size_t) track][(size_t) scene] = slot;
+    engine.setSlot (track, scene, slot);
+    changed();
+    grid->update();
+    rack->refresh();
+}
+
+void MixerWindow::clearSlot (int track, int scene)
+{
+    if (slots[(size_t) track][(size_t) scene] == nullptr)
+        return;
+    slots[(size_t) track][(size_t) scene] = nullptr;
+    engine.setSlot (track, scene, nullptr);
+    changed();
+    grid->update();
+    rack->refresh();
+}
+
+void MixerWindow::placeLauncherMidi()
+{
+    for (int t = 0; t < mixer::maxTracks; ++t)
+        for (int sc = 0; sc < mixer::maxScenes; ++sc)
+        {
+            const auto& slot = slots[(size_t) t][(size_t) sc];
+            if (slot == nullptr || slot->clip.midi == nullptr || slot->clip.midi->song == nullptr)
+                continue;
+            auto copy = std::make_shared<mixer::Slot> (*slot);
+            auto& c = copy->clip;
+            const bool whole = c.offset == 0 && c.length == c.midi->length;
+            const auto before = std::max<Frame> (1, c.midi->length);
+            c.midi = launcherMidi (c.midi->song, c.midi->path);
+            if (c.reversed)
+                c.midi = mixer::reverseMidi (*c.midi);
+            const auto ratio = (double) c.midi->length / (double) before;
+            c.offset = whole ? 0 : (Frame) std::llround ((double) c.offset * ratio);
+            c.length = whole ? c.midi->length : std::min (c.midi->length - c.offset, (Frame) std::llround ((double) c.length * ratio));
+            slots[(size_t) t][(size_t) sc] = copy;
+            engine.setSlot (t, sc, copy);
+        }
+    grid->update();
+}
+
+void MixerWindow::sendToLauncher (const QString& file, const QString& trackName, const QColor& colour)
+{
+    // The track with the Selector colour's name, else with its colour, else the selected one.
+    int track = -1;
+    for (int t = 0; t < engine.numTracks() && track < 0 && ! trackName.isEmpty(); ++t)
+        if (info[(size_t) t].name.trimmed().compare (trackName.trimmed(), Qt::CaseInsensitive) == 0)
+            track = t;
+    for (int t = 0; t < engine.numTracks() && track < 0 && colour.isValid(); ++t)
+        if (info[(size_t) t].colour.rgb() == colour.rgb())
+            track = t;
+    if (track < 0)
+        track = selected < mixer::masterIndex ? selected : 0;
+
+    auto scene = firstEmptyScene (track);
+    if (scene < 0)
+    {
+        if (numScenes >= mixer::maxScenes)
+        {
+            status->setText (tr ("%1 is full: all %2 scenes have a clip. Empty a slot (Delete) first.").arg (this->trackName (track)).arg (mixer::maxScenes));
+            return;
+        }
+        scene = numScenes;   // a scene more
+    }
+    loadSlot (track, scene, file);
+    moveCursor (track, scene);   // the strip and the rack follow
+}
+
+bool MixerWindow::launcherKey (QKeyEvent* e)
+{
+    const auto key = e->key();
+    const auto mods = e->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier);
+    const bool plain = mods == Qt::NoModifier, shift = mods == Qt::ShiftModifier;
+    const bool ctrl = mods == Qt::ControlModifier || mods == (Qt::ControlModifier | Qt::ShiftModifier);
+    const auto track = selected < mixer::masterIndex ? selected : engine.numTracks() - 1;
+    auto nudgeFader = [&] (double step)
+    {
+        auto& s = engine.strip (track);
+        const auto from = s.faderDb.load() <= -96.0f ? -60.0 : (double) s.faderDb.load();
+        s.faderDb = (float) std::clamp (from + step, -96.0, 6.0);
+        strips[(size_t) track]->refresh();
+        changed();
+    };
+    const bool fine = (mods & Qt::ShiftModifier) != 0;
+    switch (key)
+    {
+        case Qt::Key_Left:  if (plain) { moveCursor (std::max (0, track - 1), cursorScene); return true; } break;
+        case Qt::Key_Right: if (plain) { moveCursor (std::min (engine.numTracks() - 1, track + 1), cursorScene); return true; } break;
+        case Qt::Key_Up:
+            if (plain) { moveCursor (track, cursorScene - 1); return true; }
+            if (ctrl) { nudgeFader (fine ? 0.1 : 1.0); return true; }
+            break;
+        case Qt::Key_Down:
+            if (plain) { moveCursor (track, cursorScene + 1); return true; }
+            if (ctrl) { nudgeFader (fine ? -0.1 : -1.0); return true; }
+            break;
+        case Qt::Key_Return:
+        case Qt::Key_Enter:
+            if (plain)
+            {
+                launchSlot (track, cursorScene);
+                return true;
+            }
+            if (shift)
+            {
+                const bool wasPlaying = engine.isPlaying();
+                engine.launchScene (cursorScene);
+                if (! wasPlaying)
+                    Q_EMIT playStarted();
+                return true;
+            }
+            break;
+        case Qt::Key_Period:
+            if (plain) { engine.stopTrack (track); return true; }
+            if (shift) { engine.stopAll(); return true; }
+            break;
+        case Qt::Key_Greater:   // Shift+. on many keyboards
+            engine.stopAll();
+            return true;
+        case Qt::Key_Delete:
+        case Qt::Key_Backspace:
+            if (plain) { clearSlot (track, cursorScene); return true; }
+            break;
+        case Qt::Key_T:
+            if (plain) { engine.backToTimeline (track); return true; }
+            if (shift) { engine.backToTimeline (-1); return true; }
+            break;
+        default: break;
+    }
+    return false;
 }

@@ -12,6 +12,7 @@
 
 #include <array>
 #include <map>
+#include <set>
 #include <memory>
 #include <vector>
 #include <functional>
@@ -28,6 +29,10 @@ class MixerStrip;
 class QSplitter;
 class TrackLanes;
 class FileBrowser;
+class ClipGrid;
+class LauncherRack;
+class QComboBox;
+class QSpinBox;
 
 // A level meter for a strip: peak and RMS for both sides, with a peak hold and a
 // clip light (click to clear it).
@@ -70,6 +75,9 @@ private:
 // L loops, V shows the tracks across time, Ctrl+B the browser, B bounces in place and
 // Shift+B to a new track, Ctrl+Z undoes clip edits, Ctrl+T adds a track and
 // Ctrl+Shift+T removes the last.
+// The clip launcher (docs/clip-launcher.md, Performance > Clip Launcher) takes the place of
+// the tracks across time: a grid of slots, tracks across and scenes down, with the rack of
+// the selected track on its left and the strips made compact below.
 class MixerWindow final : public QWidget
 {
     Q_OBJECT
@@ -116,6 +124,13 @@ public:
 
     void addTrack();
     void removeTrack();
+
+    // The clip launcher in the upper area, or the tracks across time.
+    void showLauncher (bool on);
+    bool launcherShown() const;
+    // A file chosen in the Find panel's Selector: into the first empty slot of the track with
+    // that name (else that colour, else the selected track), and the mixer follows it there.
+    void sendToLauncher (const QString& path, const QString& trackName, const QColor& colour);
     void togglePlay();
     void toStart();
 
@@ -142,6 +157,8 @@ private:
     friend class MixerStrip;
     friend class TrackLanes;
     friend class FileBrowser;
+    friend class ClipGrid;
+    friend class LauncherRack;
 
     // What the window keeps about a track besides the engine's settings.
     struct TrackInfo
@@ -163,6 +180,8 @@ private:
     void placeFiles (int track, QStringList paths, Frame at, bool movePlayhead);
     void stamp (mixer::Clips&);      // ids for new clips
     void loadAudio (int track, const QString& path, mixer::Clip place, std::function<void (Frame end)> then = {});
+    // The file read (or shared, when already loaded) at the mixer's rate; null when unreadable.
+    void decodeAudio (int track, const QString& path, std::function<void (mixer::AudioClipPtr)> done);
     bool loadMidi (int track, const QString& path, QString& error, mixer::Clip place, Frame* end = nullptr);
     void addClip (int track, mixer::Clip);
     void editClips (int track, mixer::Clips);   // no undo step: call remember() first
@@ -181,11 +200,28 @@ private:
     void takeInstrumentSound (int track);                         // from the Sample menu's
     void arm (int track);
     void toggleLanes();              // the tracks across time, above the strips (V)
+    void updateUpperArea();
     void toggleBrowser();            // the file browser on the left (Ctrl+B)
     void cycleFocus (bool forward);  // F6, Tab: the browser, the tracks, the strips
     // Renders the track (MIDI through its instrument, and its audio) to a WAV: in place
     // it becomes the track's audio, else it goes on a new track and this one is muted.
     void bounce (int track, bool inPlace);
+    // The launcher.
+    // A file into a slot, played as `like` says (its loop and quantise; its clip's offset,
+    // length and reversal, a length of 0 for the whole file).
+    void loadSlot (int track, int scene, const QString& path, mixer::Slot like = {});
+    mixer::MidiClipPtr launcherMidi (midifile::SongPtr, const std::string& path) const;   // whole bars long
+    QString sceneName (int scene) const;
+    void editSlot (int track, int scene, const std::function<void (mixer::Slot&)>& edit);
+    void clearSlot (int track, int scene);
+    int firstEmptyScene (int track) const;   // -1: none among the scenes shown
+    void setScenes (int count);
+    void moveCursor (int track, int scene);
+    void launchSlot (int track, int scene);
+    void renameScene (int scene);
+    void placeLauncherMidi();          // the MIDI slots again, after a tempo change
+    bool launcherKey (class QKeyEvent*);   // the grid's keys, while it is shown
+    QString slotName (int track, int scene) const;
     void changed();                  // the mix differs from its file
     void updateTitle();
     double rate() const;
@@ -199,6 +235,18 @@ private:
     QWidget* stripArea;
     TrackLanes* lanes = nullptr;
     FileBrowser* browser = nullptr;
+    ClipGrid* grid = nullptr;
+    LauncherRack* rack = nullptr;
+    QWidget* launcherArea = nullptr;
+    QWidget* upperArea = nullptr;      // the tracks across time or the launcher, above the strips
+    std::array<std::array<mixer::SlotPtr, mixer::maxScenes>, mixer::maxTracks> slots {};   // as given to the engine
+    QPushButton* launcherButton = nullptr;
+    QComboBox* quantiseBox = nullptr;
+    QSpinBox* scenesBox = nullptr;
+    int numScenes = 8;
+    int cursorScene = 0;
+    std::array<QString, mixer::maxScenes> sceneNames;   // empty: "Scene n"
+    std::set<std::pair<int, int>> loadingSlots;        // track and scene of files still loading
     QSplitter* splitter;
     QSplitter* sideSplitter;
     QHBoxLayout* stripRow;
