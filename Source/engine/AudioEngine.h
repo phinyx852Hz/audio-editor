@@ -7,6 +7,7 @@
 #include "../core/Metadata.h"
 #include "TagIO.h"
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <functional>
@@ -69,6 +70,66 @@ struct MasterSlotInfo
     std::vector<int> mainParameters;   // a stock plugin's main controls (its frame's footer), by parameter index
     bool failed = false;      // the plugin stopped working (it threw, or its bridge went away); it is skipped until reloaded
     std::string failure;      // what it said, e.g. "write: Broken pipe"
+    bool prism = false;       // a Prism: rays of plugins of its own, opened in the Prism editor
+};
+
+// A place in the Master Section: a slot, then a (ray, device) step into each Prism on the way.
+// {2} is the plugin in slot 3; {2, {{1, 0}}} the first device in the second ray of the Prism there.
+struct ChainPath
+{
+    int slot = -1;
+    std::vector<std::pair<int, int>> steps;
+
+    ChainPath inside (int ray, int device) const { auto p = *this; p.steps.push_back ({ ray, device }); return p; }
+    ChainPath outer() const { auto p = *this; if (! p.steps.empty()) p.steps.pop_back(); return p; }
+    bool topLevel() const { return steps.empty(); }
+    bool operator== (const ChainPath&) const = default;
+};
+
+// A Prism divides the signal among its rays (each a row of plugins, a Prism among them
+// if wanted), then joins them again. Eight macro knobs each turn any number of the
+// parameters inside it, over a range of their own, and can follow a MIDI controller.
+struct PrismMapping
+{
+    int ray = 0, device = 0, parameter = 0;
+    std::string deviceName, parameterName;
+    float low = 0.0f, high = 1.0f;   // the parameter's normalised value at the macro's start and end
+};
+
+struct PrismMacroInfo
+{
+    std::string name, valueText;
+    float value = 0.0f;
+    int controller = -1;      // MIDI CC it follows, -1 for none
+    int channel = 0;          // 1..16, 0 for any
+    std::vector<PrismMapping> mappings;
+};
+
+struct PrismRayInfo
+{
+    std::string name;         // as shown: its own name, or what the split gives it ("Low", "Side")
+    bool named = false;       // named by the user
+    double gainDb = 0.0;
+    bool muted = false, soloed = false;
+    bool heard = true;        // the split feeds it (Mid/Side feeds two rays, Bands up to four)
+    int latencySamples = 0;
+    std::vector<MasterSlotInfo> devices;
+};
+
+struct PrismInfo
+{
+    static constexpr int numMacros = 8;
+    static constexpr int maxRays = 8;
+    enum Split { parallel, bands, midSide, leftRight };
+
+    bool valid = false;
+    std::uint64_t uid = 0;    // the same for as long as this Prism exists, wherever it moves
+    std::string name;
+    int split = parallel;
+    std::array<double, 3> crossoverHz {};
+    std::vector<PrismRayInfo> rays;
+    std::array<PrismMacroInfo, numMacros> macros;
+    int latencySamples = 0;
 };
 
 // Theme colours for the frame stock plugins open in, as 0xAARRGGBB.
@@ -236,6 +297,50 @@ public:
     bool pluginWindowsLost() const;   // the window manager force-closed one; the rest need a restart
     void showPluginWindow (int slot);
     void setPluginFrameColours (const PluginFrameColours&);   // call again when the theme changes
+
+    // Any device in the chain, inside Prisms too (see ChainPath); a path with no steps is a slot.
+    MasterSlotInfo chainDevice (const ChainPath&) const;
+    std::vector<PluginParameterInfo> chainParameters (const ChainPath&) const;
+    PluginParameterInfo chainParameter (const ChainPath&, int index) const;
+    void setChainParameter (const ChainPath&, int index, float normalisedValue);
+    bool setChainParameterText (const ChainPath&, int index, const std::string& text);
+    void setChainBypassed (const ChainPath&, bool);
+    std::string reloadChainDevice (const ChainPath&);
+    void removeChainDevice (const ChainPath&);
+    bool canShowChainWindow (const ChainPath&) const;
+    void showChainWindow (const ChainPath&);
+    float takeChainPeak (const ChainPath&);
+
+    // Prisms (`prism` is the Prism's own path). A Prism is loaded like a plugin ("Prism", under Built-in).
+    PrismInfo prismInfo (const ChainPath& prism) const;
+    std::string prismAddDevice (const ChainPath& prism, int ray, int index, const std::string& pluginId);
+    void prismMoveDevice (const ChainPath& prism, int fromRay, int from, int toRay, int to);
+    int prismAddRay (const ChainPath& prism);   // the new ray, or -1 when there are PrismInfo::maxRays
+    void prismRemoveRay (const ChainPath& prism, int ray);
+    void prismSetRayGain (const ChainPath& prism, int ray, double db);
+    void prismSetRayMuted (const ChainPath& prism, int ray, bool);
+    void prismSetRaySoloed (const ChainPath& prism, int ray, bool);
+    void prismRenameRay (const ChainPath& prism, int ray, const std::string&);   // empty: named by the split again
+    void prismRename (const ChainPath& prism, const std::string&);
+    void prismSetSplit (const ChainPath& prism, int split);   // PrismInfo::Split; adds the rays it needs
+    float prismTakeRayPeak (const ChainPath& prism, int ray);
+    // Puts devices [first, last] of a ray into a new Prism in their place, or a one-ray Prism's devices back.
+    std::string prismGroup (const ChainPath& prism, int ray, int first, int last);
+    std::string prismUngroup (const ChainPath& device);
+    std::string groupMasterSlots (int first, int last);
+    std::string ungroupMasterSlot (int slot);
+    // Macros: their values are the Prism's parameters 0 to 7.
+    void prismRenameMacro (const ChainPath& prism, int macro, const std::string&);
+    // Maps a parameter of a device in one of the Prism's rays to a macro (normalised low and high ends).
+    std::string prismMap (const ChainPath& prism, int macro, int ray, int device, int parameter, float low = 0.0f, float high = 1.0f);
+    void prismUnmap (const ChainPath& prism, int macro, int mapping);
+    void prismSetMappingRange (const ChainPath& prism, int macro, int mapping, float low, float high);
+    // MIDI learn: the next controller moved is followed by this macro (macro -1 stops waiting).
+    void prismLearnController (const ChainPath& prism, int macro);
+    bool prismLearning (const ChainPath& prism, int macro) const;
+    void prismForgetController (const ChainPath& prism, int macro);
+    // A MIDI controller moved (call on the message thread). True when a macro waiting to learn took it.
+    bool midiController (int channel, int number, int value);
 
     void saveMasterSection() const;
     std::string restoreMasterSection();  // returns problems, empty when all went well

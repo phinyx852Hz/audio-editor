@@ -1018,6 +1018,12 @@ void MainWindow::buildPanels()
         masterWidget->choosePlugin (slot);
         return ! engine.masterSlot (slot).empty;
     };
+    chainRow->pickPlugin = [this]
+    {
+        PluginBrowser browser (engine.knownPlugins(), this);
+        browser.setWindowTitle (tr ("Choose a Plugin for the Prism"));
+        return browser.exec() == QDialog::Accepted ? browser.selectedId() : std::string();
+    };
     connect (chainRow, &ChainRow::chainChanged, this, [this]
     {
         masterWidget->refresh();

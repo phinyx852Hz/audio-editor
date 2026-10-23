@@ -79,6 +79,7 @@ class ParameterDialog final : public QDialog
 
 public:
     ParameterDialog (AudioEngine&, int slot, QWidget* parent);
+    ParameterDialog (AudioEngine&, ChainPath, QWidget* parent);   // a device anywhere, inside Prisms too
 
 protected:
     void keyPressEvent (QKeyEvent*) override;
@@ -89,7 +90,7 @@ private:
     void applyFilter();
 
     AudioEngine& engine;
-    int slot;
+    ChainPath path;
     std::string pluginId;
     QLineEdit* filter;
     QWidget* rowsHost;

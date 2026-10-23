@@ -5,6 +5,7 @@
 #include "../core/RiffChunks.h"
 #include "Codec.h"
 #include "MasterChain.h"
+#include "Prism.h"
 #include "StockFrame.h"
 #include "X11Windows.h"
 
@@ -1074,6 +1075,64 @@ bool AudioEngine::canShowPluginWindow (int slot) const               { return im
 bool AudioEngine::pluginWindowsLost() const                          { return x11::connectionLost(); }
 void AudioEngine::showPluginWindow (int slot)                        { impl->master.showWindow (slot); }
 void AudioEngine::setPluginFrameColours (const PluginFrameColours& c) { StockFrame::setColours (c); }
+MasterSlotInfo AudioEngine::chainDevice (const ChainPath& p) const                      { return impl->master.info (p); }
+std::vector<PluginParameterInfo> AudioEngine::chainParameters (const ChainPath& p) const { return impl->master.parameters (p); }
+PluginParameterInfo AudioEngine::chainParameter (const ChainPath& p, int i) const       { return impl->master.parameter (p, i); }
+void AudioEngine::setChainParameter (const ChainPath& p, int i, float v)                 { impl->master.setParameter (p, i, v); }
+bool AudioEngine::setChainParameterText (const ChainPath& p, int i, const std::string& t) { return impl->master.setParameterFromText (p, i, t); }
+void AudioEngine::setChainBypassed (const ChainPath& p, bool b)                          { impl->master.setBypassed (p, b); }
+std::string AudioEngine::reloadChainDevice (const ChainPath& p)                          { return impl->master.reload (p); }
+void AudioEngine::removeChainDevice (const ChainPath& p)                                 { impl->master.remove (p); }
+bool AudioEngine::canShowChainWindow (const ChainPath& p) const                          { return impl->master.canShowWindow (p); }
+void AudioEngine::showChainWindow (const ChainPath& p)                                   { impl->master.showWindow (p); }
+float AudioEngine::takeChainPeak (const ChainPath& p)                                    { return impl->master.takePeak (p); }
+
+PrismInfo AudioEngine::prismInfo (const ChainPath& p) const { return impl->master.prismInfo (p); }
+std::string AudioEngine::prismAddDevice (const ChainPath& p, int ray, int index, const std::string& id) { return impl->master.prismAdd (p, ray, index, id); }
+float AudioEngine::prismTakeRayPeak (const ChainPath& p, int ray)  { return impl->master.takeRayPeak (p, ray); }
+std::string AudioEngine::groupMasterSlots (int first, int last)     { return impl->master.group (first, last); }
+std::string AudioEngine::ungroupMasterSlot (int slot)               { return impl->master.ungroup (slot); }
+bool AudioEngine::midiController (int channel, int number, int value) { return impl->master.controller (channel, number, value); }
+void AudioEngine::prismLearnController (const ChainPath& p, int macro)  { impl->master.learnController (p, macro); }
+bool AudioEngine::prismLearning (const ChainPath& p, int macro) const   { return impl->master.learning (p, macro); }
+
+// The rest act on the Prism at the path, when there is one.
+#define PHINYX_WITH_PRISM(path, body) if (auto* prism = impl->master.prismAt (path)) { body; }
+void AudioEngine::prismMoveDevice (const ChainPath& p, int fr, int f, int tr, int t) { PHINYX_WITH_PRISM (p, prism->moveDevice (fr, f, tr, t)) }
+int AudioEngine::prismAddRay (const ChainPath& p)                   { PHINYX_WITH_PRISM (p, return prism->addRay()) return -1; }
+void AudioEngine::prismRemoveRay (const ChainPath& p, int ray)      { PHINYX_WITH_PRISM (p, prism->removeRay (ray)) }
+void AudioEngine::prismSetRayGain (const ChainPath& p, int ray, double db) { PHINYX_WITH_PRISM (p, prism->setRayGain (ray, db)) }
+void AudioEngine::prismSetRayMuted (const ChainPath& p, int ray, bool b)   { PHINYX_WITH_PRISM (p, prism->setRayMuted (ray, b)) }
+void AudioEngine::prismSetRaySoloed (const ChainPath& p, int ray, bool b)  { PHINYX_WITH_PRISM (p, prism->setRaySoloed (ray, b)) }
+void AudioEngine::prismRenameRay (const ChainPath& p, int ray, const std::string& n) { PHINYX_WITH_PRISM (p, prism->renameRay (ray, n)) }
+void AudioEngine::prismRename (const ChainPath& p, const std::string& n) { PHINYX_WITH_PRISM (p, prism->rename (juce::String (n).trim().isEmpty() ? juce::String ("Prism") : juce::String (n).trim())) }
+void AudioEngine::prismSetSplit (const ChainPath& p, int split)
+{
+    PHINYX_WITH_PRISM (p, prism->setSplit ((PrismInfo::Split) std::clamp (split, 0, 3)))
+}
+std::string AudioEngine::prismGroup (const ChainPath& p, int ray, int first, int last) { PHINYX_WITH_PRISM (p, return prism->group (ray, first, last)) return "There is no Prism here."; }
+std::string AudioEngine::prismUngroup (const ChainPath& device)
+{
+    if (device.topLevel())
+        return ungroupMasterSlot (device.slot);
+    const auto [ray, index] = device.steps.back();
+    PHINYX_WITH_PRISM (device.outer(), return prism->ungroup (ray, index))
+    return "There is no Prism here.";
+}
+void AudioEngine::prismRenameMacro (const ChainPath& p, int m, const std::string& n) { PHINYX_WITH_PRISM (p, prism->renameMacro (m, n)) }
+std::string AudioEngine::prismMap (const ChainPath& p, int m, int ray, int device, int parameter, float low, float high)
+{
+    PHINYX_WITH_PRISM (p, return prism->map (m, ray, device, parameter, low, high))
+    return "There is no Prism here.";
+}
+void AudioEngine::prismUnmap (const ChainPath& p, int m, int mapping) { PHINYX_WITH_PRISM (p, prism->unmap (m, mapping)) }
+void AudioEngine::prismSetMappingRange (const ChainPath& p, int m, int mapping, float low, float high)
+{
+    PHINYX_WITH_PRISM (p, prism->setMappingRange (m, mapping, low, high); prism->applyMacrosNow())
+}
+void AudioEngine::prismForgetController (const ChainPath& p, int m) { PHINYX_WITH_PRISM (p, prism->setController (m, -1, 0)) }
+#undef PHINYX_WITH_PRISM
+
 void AudioEngine::saveMasterSection() const                          { impl->master.save(); }
 std::string AudioEngine::restoreMasterSection()                      { return impl->master.restore(); }
 

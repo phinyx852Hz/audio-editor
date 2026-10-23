@@ -72,6 +72,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/Binaural.cpp
     Source/core/Ambisonics.cpp
     Source/core/SpatialStudio.cpp
+    Source/core/PrismSplit.cpp
     Source/core/Nyquist.cpp
     Source/core/Album.cpp
     Source/engine/AudioCapture.cpp
@@ -84,6 +85,7 @@ target_sources(${APP_ID} PRIVATE
     Source/engine/Batch.cpp
     Source/engine/TagIO.cpp
     Source/engine/MasterChain.cpp
+    Source/engine/Prism.cpp
     Source/engine/PluginInstrument.cpp
     Source/engine/PluginEffect.cpp
     Source/engine/StockFrame.cpp
@@ -107,6 +109,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/AlbumFile.cpp
     Source/ui/AlbumView.cpp
     Source/ui/ChainRow.cpp
+    Source/ui/PrismEditor.cpp
     Source/ui/DesktopShortcuts.cpp
     Source/ui/MasterPanel.cpp
     Source/ui/Panels.cpp
@@ -352,6 +355,7 @@ if(PHI_BUILD_TESTS)
     Source/core/Binaural.cpp
     Source/core/Ambisonics.cpp
     Source/core/SpatialStudio.cpp
+        Source/core/PrismSplit.cpp
         Source/core/Nyquist.cpp
         Source/core/Album.cpp)
     target_link_libraries(phi-core-tests PRIVATE phi_nyquist phi_rubberband phi_mysofa)

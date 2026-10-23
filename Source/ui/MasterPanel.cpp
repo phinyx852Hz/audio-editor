@@ -424,11 +424,13 @@ namespace
     }
 }
 
-ParameterDialog::ParameterDialog (AudioEngine& e, int s, QWidget* parent)
-    : QDialog (parent), engine (e), slot (s), pluginId (e.masterSlot (s).pluginId),
+ParameterDialog::ParameterDialog (AudioEngine& e, int s, QWidget* parent) : ParameterDialog (e, ChainPath { s, {} }, parent) {}
+
+ParameterDialog::ParameterDialog (AudioEngine& e, ChainPath p, QWidget* parent)
+    : QDialog (parent), engine (e), path (std::move (p)), pluginId (e.chainDevice (path).pluginId),
       filter (new QLineEdit (this)), rowsHost (new QWidget)
 {
-    const auto info = engine.masterSlot (slot);
+    const auto info = engine.chainDevice (path);
     setWindowTitle (tr ("%1 - Parameters").arg (QString::fromStdString (info.name)));
     resize (520, 560);
 
@@ -441,7 +443,7 @@ ParameterDialog::ParameterDialog (AudioEngine& e, int s, QWidget* parent)
 
     auto* windowButton = new QPushButton (tr ("Plugin &Window"), this);
     windowButton->setAutoDefault (false);
-    windowButton->setEnabled (engine.canShowPluginWindow (slot));
+    windowButton->setEnabled (engine.canShowChainWindow (path));
     auto* closeButtons = new QDialogButtonBox (QDialogButtonBox::Close, this);
     closeButtons->addButton (windowButton, QDialogButtonBox::ActionRole);
 
@@ -452,7 +454,7 @@ ParameterDialog::ParameterDialog (AudioEngine& e, int s, QWidget* parent)
 
     connect (filter, &QLineEdit::textChanged, this, &ParameterDialog::applyFilter);
     connect (closeButtons, &QDialogButtonBox::rejected, this, &QDialog::close);
-    connect (windowButton, &QPushButton::clicked, this, [this] { engine.showPluginWindow (slot); });
+    connect (windowButton, &QPushButton::clicked, this, [this] { engine.showChainWindow (path); });
 
     rebuild();
 
@@ -469,7 +471,7 @@ void ParameterDialog::rebuild()
     auto* grid = new QFormLayout (rowsHost);
     grid->setFieldGrowthPolicy (QFormLayout::AllNonFixedFieldsGrow);
 
-    const auto params = engine.masterSlotParameters (slot);
+    const auto params = engine.chainParameters (path);
     for (int i = 0; i < (int) params.size(); ++i)
     {
         const auto& p = params[(size_t) i];
@@ -497,7 +499,7 @@ void ParameterDialog::rebuild()
 
         connect (slider, &QSlider::valueChanged, this, [this, i, steps] (int v)
         {
-            engine.setMasterSlotParameter (slot, i, (float) v / (float) steps);
+            engine.setChainParameter (path, i, (float) v / (float) steps);
             syncFromPlugin();
         });
 
@@ -512,13 +514,13 @@ void ParameterDialog::rebuild()
 void ParameterDialog::syncFromPlugin()
 {
     // The slot changed under us (removed, replaced or moved): this dialog no longer applies.
-    if (engine.masterSlot (slot).pluginId != pluginId)
+    if (engine.chainDevice (path).pluginId != pluginId)
     {
         close();
         return;
     }
 
-    const auto params = engine.masterSlotParameters (slot);
+    const auto params = engine.chainParameters (path);
     for (size_t i = 0; i < rows.size() && i < params.size(); ++i)
     {
         const auto text = QString::fromStdString (params[i].valueText);
