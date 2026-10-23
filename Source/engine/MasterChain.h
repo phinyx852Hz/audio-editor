@@ -8,10 +8,12 @@
 
 #include <array>
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <mutex>
 
 class PluginWindow;
+class PrismProcessor;
 
 // Plugin hosting for the Master Section. Internal to the engine; the UI talks
 // to it through AudioEngine.
@@ -82,6 +84,34 @@ public:
     bool canShowWindow (int slot) const;
     void showWindow (int slot);
 
+    // The same for any place in the chain, inside Prisms too.
+    MasterSlotInfo info (const ChainPath&) const;
+    std::vector<PluginParameterInfo> parameters (const ChainPath&) const;
+    PluginParameterInfo parameter (const ChainPath&, int index) const;
+    void setParameter (const ChainPath&, int index, float value);
+    bool setParameterFromText (const ChainPath&, int index, const std::string& text);
+    void setBypassed (const ChainPath&, bool);
+    std::string reload (const ChainPath&);
+    void remove (const ChainPath&);
+    bool canShowWindow (const ChainPath&) const;
+    void showWindow (const ChainPath&);
+    float takePeak (const ChainPath&);
+
+    // Prisms. `path` is the Prism itself.
+    PrismInfo prismInfo (const ChainPath&) const;
+    PrismProcessor* prismAt (const ChainPath&) const;   // nullptr when there is none there
+    std::string prismAdd (const ChainPath&, int ray, int index, const std::string& pluginId);
+    float takeRayPeak (const ChainPath&, int ray);
+    // The plugins in slots [first, last] go into a new Prism in the first one's slot, still running;
+    // ungrouping puts a one-ray Prism's plugins back in the chain in its place.
+    std::string group (int first, int last);
+    std::string ungroup (int slot);
+    // A MIDI controller moved: Prism macros that follow it turn, or one waiting to learn takes it.
+    // True when it was learned.
+    bool controller (int channel, int number, int value);
+    void learnController (const ChainPath& prism, int macro);   // macro -1 stops waiting
+    bool learning (const ChainPath& prism, int macro) const;
+
     void save() const;
     std::string restore();
 
@@ -147,7 +177,23 @@ private:
     // Creates, restores and prepares a plugin; nullptr with `error` if that failed or threw.
     std::unique_ptr<juce::AudioPluginInstance> start (const juce::PluginDescription&, const juce::MemoryBlock* state,
                                                       bool& editor, juce::String& error) const;
-    bool setParameterFromTextUnguarded (int slot, int index, const std::string& text);
+    static bool setParameterFromTextUnguarded (juce::AudioPluginInstance&, int index, const std::string& text);
+    static PluginParameterInfo describe (juce::AudioProcessorParameter&);
+
+    // Where a path leads: the plugin there (nullptr when it failed), and the Prism holding it.
+    struct Place
+    {
+        juce::AudioPluginInstance* plugin = nullptr;
+        PrismProcessor* owner = nullptr;   // nullptr for a slot of the chain itself
+        int slot = -1, ray = -1, device = -1;
+        bool exists = false;
+    };
+    Place locate (const ChainPath&) const;
+    // Runs a call into the plugin there; false (and it marked failed) if it threw.
+    bool call (const Place&, const std::function<void (juce::AudioPluginInstance&)>&) const;
+    std::unique_ptr<juce::AudioPluginInstance> makePrism() const;
+    ChainPath learnPath;
+    int learnMacro = -1;
     void openWindow (int slot);   // empties a slot; a failed plugin and its window are let go without being deleted
 
     static void addExtraFormats (juce::AudioPluginFormatManager&);   // formats JUCE does not have: CLAP
