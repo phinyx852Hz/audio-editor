@@ -13,6 +13,7 @@
 
 #include <QApplication>
 #include <QFileInfo>
+#include <QInputDialog>
 #include <QMessageBox>
 #include <QStatusBar>
 
@@ -129,6 +130,28 @@ void MainWindow::openInstrument (const char* key)
         return;
     const auto name = QStringLiteral ("%1 (%2)").arg (tr (info->function), QString::fromUtf8 (info->original));
     playInstruments();
+
+    // Every patchbay synth is taken by another instrument: offer to swap one out
+    // rather than only saying so in the status bar.
+    bool full = instrumentSynth (key, false) < 0;
+    for (int i = 0; i < patchbay::maxSynths && full; ++i)
+        full = patchBay->synth (i) != nullptr;
+    if (full)
+    {
+        QStringList taken;
+        for (int i = 0; i < patchbay::maxSynths; ++i)
+            taken << tr ("Synth %1: %2").arg (i + 1).arg (QString::fromStdString (patchBay->synth (i)->name()));
+        bool ok = false;
+        const auto pick = QInputDialog::getItem (this, name, tr ("All %1 patchbay synths are in use. Replace one with %2?")
+                                                     .arg (patchbay::maxSynths).arg (name),
+                                                 taken, 0, false, &ok);
+        if (! ok)
+            return;
+        patchBay->setSynth (taken.indexOf (pick), nullptr);
+        if (patchBayWin != nullptr)
+            patchBayWin->refill();
+    }
+
     QString why;
     bool failed = false;
     const auto slot = instrumentSynth (key, true, &why, &failed);
