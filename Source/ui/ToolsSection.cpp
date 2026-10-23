@@ -209,7 +209,7 @@ void moveOldSettings()
     // plugin list, themes, HRTF sets, recovery files and the rest move over, once.
     for (const auto location : { QStandardPaths::GenericConfigLocation, QStandardPaths::GenericDataLocation, QStandardPaths::GenericCacheLocation })
     {
-        const QDir base (QStandardPaths::writableLocation (location));
+        QDir base (QStandardPaths::writableLocation (location));
         if (base.exists (QStringLiteral ("phinyx")) && ! base.exists (QStringLiteral (APP_ID)))
             base.rename (QStringLiteral ("phinyx"), QStringLiteral (APP_ID));
     }
