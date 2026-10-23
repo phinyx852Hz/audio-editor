@@ -255,7 +255,7 @@ void MasterPanel::scanPlugins()
         for (const auto& f : engine.pluginSearchFolders())
             folders << QString::fromStdString (f);
         QMessageBox::information (this, tr ("Scan Plugins"),
-                                  tr ("No plugin files were found. PHINYX looks in:\n%1").arg (folders.join (QLatin1Char ('\n'))));
+                                  tr ("No plugin files were found. PHI looks in:\n%1").arg (folders.join (QLatin1Char ('\n'))));
     }
 }
 
@@ -322,7 +322,7 @@ bool MasterPanel::eventFilter (QObject* watched, QEvent* e)
                 engine.showPluginWindow (slot);
             else if (! info.empty)
                 Q_EMIT message (engine.pluginWindowsLost()
-                                    ? tr ("Plugin windows were force-closed by the window manager; restart PHINYX to open them again (Enter edits parameters meanwhile)")
+                                    ? tr ("Plugin windows were force-closed by the window manager; restart PHI to open them again (Enter edits parameters meanwhile)")
                                 : info.hasEditor ? tr ("Plugin windows need XWayland or X11; use Enter for the parameter editor")
                                                  : tr ("This plugin has no window of its own; use Enter for the parameter editor"));
             return true;

@@ -8,13 +8,14 @@
 #include "../engine/MidiInputs.h"
 #include "../sampler/SamplerEngine.h"
 #include "../sampler/SlicerEngine.h"
+#include "Brand.h"
 #include "Settings.h"
 #include "FindPanel.h"
 #include "Visualizer.h"
 #include "TrackerWindow.h"
 #include "../tracker/TrackerEngine.h"
 #include "../performance/Recorder.h"
-#if PHINYX_HAVE_PROJECTM
+#if PHI_HAVE_PROJECTM
  #include "MilkDrop.h"
 #endif
 #include "AnalysisWindow.h"
@@ -127,7 +128,7 @@ namespace
 MainWindow::MainWindow (AudioEngine& e)
     : engine (e), waveform (new WaveformView (this)), infoStrip (new InfoStrip (this))
 {
-    setWindowTitle (QStringLiteral (APP_DISPLAY_NAME));
+    setWindowTitle (QStringLiteral (APP_BRAND_NAME));
     resize (1100, 620);
     Theme::makeTranslucent (this);
     sendThemeToPluginFrames();
@@ -168,7 +169,7 @@ MainWindow::MainWindow (AudioEngine& e)
     statusBar()->addWidget (new QWidget (this), 1);   // messages show on the left; the details are under the editor
     cpuLabel = new QLabel (this);
     cpuLabel->setContentsMargins (0, 0, 12, 0);
-    cpuLabel->setToolTip (tr ("CPU: what PHINYX uses of the processor, all its threads together (100% is one core, as top shows it).\n"
+    cpuLabel->setToolTip (tr ("CPU: what PHI uses of the processor, all its threads together (100% is one core, as top shows it).\n"
                               "Audio: how much of each audio block's time the sound takes to make; near 100% it drops out."));
     statusBar()->addPermanentWidget (cpuLabel);
     connect (&cpuTimer, &QTimer::timeout, this, &MainWindow::updateCpuMeter);
@@ -611,7 +612,7 @@ void MainWindow::registerCommands()
             cpuTimer.stop();
     });
     commands.action (QStringLiteral ("view.cpuMeter"))->setCheckable (true);
-    commands.action (QStringLiteral ("view.cpuMeter"))->setStatusTip (tr ("Show PHINYX's processor use and the audio load in the status bar"));
+    commands.action (QStringLiteral ("view.cpuMeter"))->setStatusTip (tr ("Show PHI's processor use and the audio load in the status bar"));
     commands.action (QStringLiteral ("view.cpuMeter"))->setChecked (! appSettings().value (QStringLiteral ("view/cpuMeter"), true).toBool());
     commands.action (QStringLiteral ("view.cpuMeter"))->trigger();   // shows it (or not) as last time
     add ("view.levelColors", Category::view, tr ("Colour Waveform by &Level"), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_W) }, [this]
@@ -812,7 +813,7 @@ void MainWindow::registerCommands()
     add ("help.about", Category::help, tr ("&About " APP_DISPLAY_NAME), {}, [this]
     {
         QMessageBox::about (this, tr ("About " APP_DISPLAY_NAME),
-            tr ("<b>" APP_DISPLAY_NAME " " APP_VERSION "</b><p>Audio editor and mastering suite for Linux.</p>"
+            tr ("<b>" APP_BRAND_NAME " " APP_VERSION "</b><p>Audio editor and mastering suite for Linux.</p>"
                 "<p>Free software under the GNU Affero General Public License v3.</p>"
                 "<p>Press Ctrl+Shift+P or F1 to search every command and shortcut.</p>"));
     });
@@ -1156,7 +1157,7 @@ QList<FindItem> MainWindow::findItems()
         list.push_back (item);
     }
 
-#if PHINYX_HAVE_PROJECTM
+#if PHI_HAVE_PROJECTM
     // MilkDrop presets, by category, browsable like the views.
     for (const auto& folder : MilkDrop::presetFolders())
     {
@@ -1430,7 +1431,7 @@ void MainWindow::updateTitle()
 
     if (! doc.isOpen())
     {
-        setWindowTitle (QStringLiteral (APP_DISPLAY_NAME));
+        setWindowTitle (QStringLiteral (APP_BRAND_NAME));
         return;
     }
 
@@ -2113,7 +2114,7 @@ void MainWindow::warnAboutDesktopShortcuts()
                 clashes << QStringLiteral ("%1 (%2)").arg (key.toString (QKeySequence::NativeText), c.name());
 
     if (! clashes.isEmpty())
-        statusBar()->showMessage (tr ("Your desktop already uses %n PHINYX shortcut(s): %1. Change them in Options > Keyboard Shortcuts.",
+        statusBar()->showMessage (tr ("Your desktop already uses %n PHI shortcut(s): %1. Change them in Options > Keyboard Shortcuts.",
                                       nullptr, (int) clashes.size()).arg (clashes.join (QStringLiteral (", "))), 15000);
 }
 
@@ -2830,7 +2831,7 @@ void MainWindow::noiseReduction()
     if (! noiseProfile.isValid() || std::abs (noiseProfile.sampleRate - d->sampleRate()) > 0.5)
     {
         QMessageBox::information (this, tr ("Noise Reduction"),
-                                  tr ("First teach PHINYX what the noise sounds like:\n\n"
+                                  tr ("First teach PHI what the noise sounds like:\n\n"
                                       "1. Select a part with only the noise (hiss, hum, room tone), at least a quarter of a second.\n"
                                       "2. Press %1 (Repair > Learn Noise Profile).\n"
                                       "3. Select what to clean, or nothing for the whole file, and open Noise Reduction again.")
@@ -3597,7 +3598,7 @@ void MainWindow::fillNyquistMenus()
     if (generateMenu != nullptr)
     {
         generateMenu->clear();
-        // PHINYX's own generators first, then the Nyquist ones.
+        // PHI's own generators first, then the Nyquist ones.
         generateMenu->addAction (commands.action (QStringLiteral ("generate.tone")));
         generateMenu->addAction (commands.action (QStringLiteral ("generate.noise")));
         generateMenu->addSeparator();

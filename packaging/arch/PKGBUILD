@@ -1,8 +1,8 @@
 # Maintainer: phinyx852Hz
-pkgname=phinyx-git
+pkgname=phi-git
 pkgver=0.2.0
 pkgrel=1
-pkgdesc="PHINYX: keyboard-first audio editor and mastering suite for Linux"
+pkgdesc="Φ PHI: keyboard-first audio editor and mastering suite for Linux"
 arch=('x86_64')
 url="https://github.com/phinyx852Hz/audio-editor"
 license=('AGPL-3.0-only' 'GPL-3.0-only' 'GPL-2.0-or-later' 'LGPL-3.0-or-later' 'BSD-3-Clause' 'Apache-2.0' 'OFL-1.1' 'LicenseRef-Nyquist')
@@ -11,7 +11,8 @@ license=('AGPL-3.0-only' 'GPL-3.0-only' 'GPL-2.0-or-later' 'LGPL-3.0-or-later' '
 depends=('qt6-base' 'qt6-wayland' 'alsa-lib' 'libpipewire' 'freetype2' 'fontconfig'
          'cairo' 'libsndfile' 'libglvnd' 'libx11' 'libxrandr' 'libxcursor' 'libxext' 'libxi'
          'ffmpeg' 'taglib' 'xcb-util-wm' 'fftw' 'curl')
-optdepends=('pipewire-jack: JACK output through PipeWire (recommended; jack2 also works)'
+optdepends=('qt6-svg: the Φ logo on the windows'
+            'pipewire-jack: JACK output through PipeWire (recommended; jack2 also works)'
             'realtime-privileges: realtime scheduling for audio threads'
             "xorg-xwayland: show plugins' own windows on Wayland"
             'lsp-plugins: a large free set of mastering plugins (LV2/VST3/CLAP)'
@@ -20,8 +21,9 @@ optdepends=('pipewire-jack: JACK output through PipeWire (recommended; jack2 als
 # clang builds the ZL Audio stock plugins; python and wget build Cardinal and rust CA-72 and OctaSine (stock instruments)
 makedepends=('git' 'cmake' 'ninja' 'ladspa' 'clap' 'libx11' 'libxrandr'
              'libxinerama' 'libxcursor' 'libxcomposite' 'libxext' 'mesa' 'clang' 'python' 'rust' 'xcb-util-wm' 'wget')
-provides=('phinyx')
-conflicts=('phinyx')
+provides=('phi')
+conflicts=('phi' 'phinyx-git')
+replaces=('phinyx-git')   # the name before PHI
 source=("git+${url}.git")
 sha256sums=('SKIP')
 

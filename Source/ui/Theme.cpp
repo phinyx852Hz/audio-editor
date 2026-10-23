@@ -20,6 +20,15 @@
 
 namespace
 {
+    // The built-in themes were "PHINYX Dark" and "PHINYX Light" before the rename
+    // to PHI; a remembered choice or a theme's base by those names still finds them.
+    QString renamed (const QString& themeName)
+    {
+        if (themeName.startsWith (QLatin1String ("PHINYX "), Qt::CaseInsensitive))
+            return QStringLiteral ("PHI ") + themeName.mid (7);
+        return themeName;
+    }
+
     // Accepts #RGB, #RRGGBB, #RRGGBBAA (CSS order, alpha last) and colour names.
     QColor parseColor (const QString& text)
     {
@@ -80,7 +89,7 @@ QStringList Theme::colorKeys()
 QVector<Theme> Theme::builtIns()
 {
     return {
-        makeTheme (QStringLiteral ("PHINYX Dark"), true, {
+        makeTheme (QStringLiteral ("PHI Dark"), true, {
             { "window", "#1e2128" }, { "windowText", "#dddddd" }, { "base", "#15171c" }, { "alternateBase", "#23262e" },
             { "text", "#dddddd" }, { "placeholderText", "#808080" }, { "button", "#2a2e37" }, { "buttonText", "#dddddd" },
             { "highlight", "#4fc3f7" }, { "highlightedText", "#000000" }, { "accent", "#ffb74d" }, { "mid", "#3a3f4a" },
@@ -93,7 +102,7 @@ QVector<Theme> Theme::builtIns()
             { "levelLoud", "#eab308" }, { "levelHot", "#f97316" }, { "levelPeak", "#ef4444" } },
             { "#000000", "#140a3c", "#3b0f70", "#8c2981", "#de4968", "#fe9f6d", "#fcfdbf" }),
 
-        makeTheme (QStringLiteral ("PHINYX Light"), false, {
+        makeTheme (QStringLiteral ("PHI Light"), false, {
             { "window", "#eceff4" }, { "windowText", "#1f2329" }, { "base", "#ffffff" }, { "alternateBase", "#f3f5f8" },
             { "text", "#1f2329" }, { "placeholderText", "#7a7f88" }, { "button", "#e2e6ed" }, { "buttonText", "#1f2329" },
             { "highlight", "#1e88e5" }, { "highlightedText", "#ffffff" }, { "accent", "#e65100" }, { "mid", "#c5cad3" },
@@ -144,7 +153,7 @@ bool Theme::loadFile (const QString& path, Theme& out, QString& error)
     }
 
     // Start from the named built-in so a theme only lists what it changes.
-    const auto baseName = root.value (QStringLiteral ("base")).toString (QStringLiteral ("PHINYX Dark"));
+    const auto baseName = renamed (root.value (QStringLiteral ("base")).toString (QStringLiteral ("PHI Dark")));
     const auto bases = builtIns();
     auto base = bases.first();
     for (const auto& b : bases)
@@ -305,7 +314,7 @@ void Theme::apply (const Theme& chosen)
 QString Theme::savedName()
 {
     QSettings settings (settingsPath(), QSettings::IniFormat);
-    return settings.value (QStringLiteral ("appearance/theme")).toString();
+    return renamed (settings.value (QStringLiteral ("appearance/theme")).toString());
 }
 
 void Theme::saveName (const QString& name)

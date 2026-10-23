@@ -115,7 +115,7 @@ namespace
                 auto* view = plugin->createEditorAndMakeActive();
                 if (view == nullptr)
                     return;
-                // A stock instrument keeps its own view, with PHINYX's opacity bar below it.
+                // A stock instrument keeps its own view, with PHI's opacity bar below it.
                 juce::Component* content = view;
                 if (stockInfo != nullptr && stockInfo->role != stock::Role::effect)
                     content = new InstrumentFrame (view, *stockInfo);

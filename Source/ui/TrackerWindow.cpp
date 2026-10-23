@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The Tracker window: MilkyTracker's module player (MilkyPlay) and its way of editing
-// patterns, in PHINYX. The keyboard follows MilkyTracker's FastTracker 2 mode.
+// patterns, in PHI. The keyboard follows MilkyTracker's FastTracker 2 mode.
 #include "TrackerWindow.h"
 
 #include "../tracker/PatternText.h"
@@ -775,7 +775,7 @@ TrackerWindow::TrackerWindow (TrackerEngine& e, QWidget* parent) : QWidget (pare
 {
     setWindowTitle (tr ("Tracker1"));
     setAccessibleName (tr ("Tracker1"));
-    Theme::makeTranslucent (this);   // the same theme and window opacity as the rest of PHINYX
+    Theme::makeTranslucent (this);   // the same theme and window opacity as the rest of PHI
     resize (1180, 720);
 
     auto* layout = new QVBoxLayout (this);

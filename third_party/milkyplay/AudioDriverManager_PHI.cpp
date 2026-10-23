@@ -1,7 +1,7 @@
 /*
- *  AudioDriverManager for PHINYX: replaces MilkyPlay's AudioDriverManager.cpp.
- *  PHINYX plays the mix through its own audio engine, so the only driver here
- *  is the null one, which PHINYX advances itself.
+ *  AudioDriverManager for PHI: replaces MilkyPlay's AudioDriverManager.cpp.
+ *  PHI plays the mix through its own audio engine, so the only driver here
+ *  is the null one, which PHI advances itself.
  *
  *  Same New-BSD licence as the rest of MilkyPlay.
  */

@@ -37,10 +37,10 @@ namespace nyquistui
         // The share folder: next to the installed binary, else the source tree.
         QString shareFolder()
         {
-            const auto installed = QDir (QCoreApplication::applicationDirPath()).absoluteFilePath (QStringLiteral (PHINYX_SHARE_RELATIVE));
+            const auto installed = QDir (QCoreApplication::applicationDirPath()).absoluteFilePath (QStringLiteral (PHI_SHARE_RELATIVE));
             if (QFileInfo::exists (installed + QStringLiteral ("/nyquist/init.lsp")))
                 return QDir::cleanPath (installed);
-            return QStringLiteral (PHINYX_SHARE_SOURCE_DIR);
+            return QStringLiteral (PHI_SHARE_SOURCE_DIR);
         }
 
         QString settingsKey (const QString& key, const QString& var)

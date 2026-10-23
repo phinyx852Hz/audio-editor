@@ -26,7 +26,7 @@ namespace analysis
 }
 
 // Analysis Meters (Analyze > Analysis Meters Window, Ctrl+Alt+A): one window
-// with everything there is to know about what PHINYX plays, as Adobe Audition's
+// with everything there is to know about what PHI plays, as Adobe Audition's
 // Analysis workspace has it, drawn more like a mastering meter suite:
 // - Loudness (BS.1770 / EBU R128): momentary, short-term and integrated on a
 //   gauge around a target (Streaming -14, Apple -16, EBU -23, ATSC -24, Club -9),

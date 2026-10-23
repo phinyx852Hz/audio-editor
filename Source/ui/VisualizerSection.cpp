@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The Visualizer (View menu): its window, full screen, and behind the PHINYX window.
+// The Visualizer (View menu): its window, full screen, and behind the PHI window.
 #include "MainWindow.h"
 #include "Settings.h"
 #include "Theme.h"
 #include "Visualizer.h"
 #include "WaveformView.h"
 
-#if PHINYX_HAVE_PROJECTM
+#if PHI_HAVE_PROJECTM
  #include "MilkDrop.h"
 #endif
-#if PHINYX_WEB_BACKDROP
+#if PHI_WEB_BACKDROP
  #include "WebBackdrop.h"
  #include <QUrl>
 #endif
@@ -72,22 +72,22 @@ void MainWindow::registerVisualizerCommands()
         }
         w->toggleFullScreen();
     })->setStatusTip (tr ("The visualizer on the whole screen; Esc goes back"));
-    auto* behind = add ("view.visualizerBehind", tr ("Visualizer &Behind PHINYX"), { KS (Qt::CTRL | Qt::Key_F11) }, [this] { toggleVisualizerBehind(); });
+    auto* behind = add ("view.visualizerBehind", tr ("Visualizer &Behind PHI"), { KS (Qt::CTRL | Qt::Key_F11) }, [this] { toggleVisualizerBehind(); });
     behind->setCheckable (true);
-    behind->setStatusTip (tr ("The visualizer as the background of the whole PHINYX window, seen through it as far as the window opacity allows"));
-#if PHINYX_WEB_BACKDROP
-    auto* web = add ("view.webBehind", tr ("&Web Page Behind PHINYX"), {}, [this] { toggleWebBackdrop(); });
+    behind->setStatusTip (tr ("The visualizer as the background of the whole PHI window, seen through it as far as the window opacity allows"));
+#if PHI_WEB_BACKDROP
+    auto* web = add ("view.webBehind", tr ("&Web Page Behind PHI"), {}, [this] { toggleWebBackdrop(); });
     web->setCheckable (true);
-    web->setStatusTip (tr ("A web page as the background of the whole PHINYX window, like the visualizer behind it, and in the video when recording"));
+    web->setStatusTip (tr ("A web page as the background of the whole PHI window, like the visualizer behind it, and in the video when recording"));
     add ("view.webAddress", tr ("Web Page &Address..."), {}, [this] { chooseWebAddress (true); })
-        ->setStatusTip (tr ("Which web page is behind PHINYX"));
+        ->setStatusTip (tr ("Which web page is behind PHI"));
     add ("view.webInteract", tr ("&Use the Web Page"), {}, [this]
     {
         if (webBackdrop == nullptr || ! webBackdrop->isVisible())
             toggleWebBackdrop();
         if (webBackdrop != nullptr && webBackdrop->isVisible())
             webBackdrop->setInteractive (true);
-    })->setStatusTip (tr ("Brings the web page in front to click and type in it (log in, start a video); Esc puts it back behind PHINYX"));
+    })->setStatusTip (tr ("Brings the web page in front to click and type in it (log in, start a video); Esc puts it back behind PHI"));
     auto* webSound = add ("view.webSound", tr ("Web Page &Sound"), {}, [this]
     {
         const auto on = commands.action (QStringLiteral ("view.webSound"))->isChecked();
@@ -97,7 +97,7 @@ void MainWindow::registerVisualizerCommands()
     });
     webSound->setCheckable (true);
     webSound->setChecked (appSettings().value (QStringLiteral ("visualizer/webSound"), false).toBool());
-    webSound->setStatusTip (tr ("Lets the web page play its sound (through the desktop, not through PHINYX's Master Section)"));
+    webSound->setStatusTip (tr ("Lets the web page play its sound (through the desktop, not through PHI's Master Section)"));
 #endif
     add ("view.visualizerNext", tr ("&Next Visualization"), { KS (Qt::ALT | Qt::Key_F11) }, [this] { setVisualMode (visualMode + 1, true); });
     add ("view.visualizerPrevious", tr ("&Previous Visualization"), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_F11) },
@@ -117,7 +117,7 @@ void MainWindow::registerVisualizerCommands()
             waveform->setFocus();
     });
 
-    // Digital Rain's tempo, for when keys can't reach the view (behind PHINYX).
+    // Digital Rain's tempo, for when keys can't reach the view (behind PHI).
     add ("view.rainTempo", tr ("Digital &Rain Tempo..."), {}, [this]
     {
         const auto tagged = fileTempo();
@@ -150,7 +150,7 @@ void MainWindow::registerVisualizerCommands()
     follow->setChecked (appSettings().value (QStringLiteral ("visualizer/rainFollowsFile"), false).toBool());
     follow->setStatusTip (tr ("Digital Rain takes its tempo from the open file's BPM tag (Analyze > Tempo and Key writes one)"));
 
-#if PHINYX_HAVE_PROJECTM
+#if PHI_HAVE_PROJECTM
     // MilkDrop presets: these act on the visualizer showing (the window first), switching it to MilkDrop.
     add ("view.milkdropNext", tr ("Next &MilkDrop Preset"), { KS (Qt::ALT | Qt::Key_F12) }, [this]
     {
@@ -240,11 +240,11 @@ void MainWindow::toggleVisualizerBehind()
         if (opacityBeforeBackdrop > 0.0)
             changeOpacity (opacityBeforeBackdrop, false);
         opacityBeforeBackdrop = 0.0;
-        statusBar()->showMessage (tr ("Visualizer behind PHINYX off"), 3000);
+        statusBar()->showMessage (tr ("Visualizer behind PHI off"), 3000);
         return;
     }
 
-#if PHINYX_WEB_BACKDROP
+#if PHI_WEB_BACKDROP
     if (webBackdrop != nullptr && webBackdrop->isVisible())
         toggleWebBackdrop();   // one background at a time
 #endif
@@ -263,7 +263,7 @@ void MainWindow::toggleVisualizerBehind()
         opacityBeforeBackdrop = Theme::opacity();
         changeOpacity (0.55, false);
     }
-    statusBar()->showMessage (tr ("Visualizer behind PHINYX: Ctrl+Alt+- and Ctrl+Alt+= (or the Opacity slider) show more or less of it; Alt+F11 changes the view"), 8000);
+    statusBar()->showMessage (tr ("Visualizer behind PHI: Ctrl+Alt+- and Ctrl+Alt+= (or the Opacity slider) show more or less of it; Alt+F11 changes the view"), 8000);
 }
 
 void MainWindow::addVisualizerSubmenu (QMenu* menu, const QString& which)
@@ -286,7 +286,7 @@ void MainWindow::addVisualizerSubmenu (QMenu* menu, const QString& which)
             }
         syncVisualModeActions();
     }
-#if PHINYX_HAVE_PROJECTM
+#if PHI_HAVE_PROJECTM
     else if (which == QStringLiteral ("milkdrop"))
     {
         auto* sub = menu->addMenu (tr ("&MilkDrop"));
@@ -297,7 +297,7 @@ void MainWindow::addVisualizerSubmenu (QMenu* menu, const QString& which)
                 sub->addAction (commands.action (QString::fromLatin1 (id)));
     }
 #endif
-#if PHINYX_WEB_BACKDROP
+#if PHI_WEB_BACKDROP
     else if (which == QStringLiteral ("web"))
     {
         auto* sub = menu->addMenu (tr ("&Web Page"));
@@ -326,7 +326,7 @@ bool MainWindow::visualizerShowing() const
 
 void MainWindow::showMilkDropPreset (const QString& path)
 {
-#if PHINYX_HAVE_PROJECTM
+#if PHI_HAVE_PROJECTM
     auto* view = showMilkDrop();
     auto* milk = view != nullptr ? view->milkDrop() : nullptr;
     if (milk == nullptr)
@@ -382,7 +382,7 @@ void MainWindow::feedVisualizers()
         }
 }
 
-#if PHINYX_HAVE_PROJECTM
+#if PHI_HAVE_PROJECTM
 namespace
 {
     // Up, Down, Page Up and Page Down in a search box move through its list.
@@ -408,7 +408,7 @@ namespace
     };
 }
 
-// The visualizer that is showing (the window first, else the one behind PHINYX), switched to MilkDrop.
+// The visualizer that is showing (the window first, else the one behind PHI), switched to MilkDrop.
 // If none is showing, the window opens.
 VisualizerView* MainWindow::showMilkDrop()
 {
@@ -565,9 +565,9 @@ void MainWindow::downloadMilkDropPresets()
 }
 #endif
 
-#if PHINYX_WEB_BACKDROP
+#if PHI_WEB_BACKDROP
 //==============================================================================
-// A web page behind PHINYX (WebBackdrop.h), built with Qt WebEngine.
+// A web page behind PHI (WebBackdrop.h), built with Qt WebEngine.
 void MainWindow::toggleWebBackdrop()
 {
     auto* action = commands.action (QStringLiteral ("view.webBehind"));
@@ -580,7 +580,7 @@ void MainWindow::toggleWebBackdrop()
         if (opacityBeforeBackdrop > 0.0)
             changeOpacity (opacityBeforeBackdrop, false);
         opacityBeforeBackdrop = 0.0;
-        statusBar()->showMessage (tr ("Web page behind PHINYX off"), 3000);
+        statusBar()->showMessage (tr ("Web page behind PHI off"), 3000);
         return;
     }
 
@@ -613,14 +613,14 @@ void MainWindow::toggleWebBackdrop()
         opacityBeforeBackdrop = Theme::opacity();
         changeOpacity (0.55, false);
     }
-    statusBar()->showMessage (tr ("Web page behind PHINYX: the Opacity slider shows more or less of it; Visualizer > Web Page > Use the Web Page to click in it"), 8000);
+    statusBar()->showMessage (tr ("Web page behind PHI: the Opacity slider shows more or less of it; Visualizer > Web Page > Use the Web Page to click in it"), 8000);
 }
 
 bool MainWindow::chooseWebAddress (bool reload)
 {
     bool ok = false;
     const auto current = appSettings().value (QStringLiteral ("visualizer/webUrl")).toString();
-    const auto text = QInputDialog::getText (this, tr ("Web Page Behind PHINYX"), tr ("Web page address:"), QLineEdit::Normal,
+    const auto text = QInputDialog::getText (this, tr ("Web Page Behind PHI"), tr ("Web page address:"), QLineEdit::Normal,
                                              current.isEmpty() ? QStringLiteral ("https://") : current, &ok).trimmed();
     const auto url = QUrl::fromUserInput (text);
     if (! ok || text.isEmpty() || ! url.isValid())

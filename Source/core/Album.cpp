@@ -259,7 +259,7 @@ std::string Album::cueSheet (const std::string& audioFileName) const
     else if (ext == "aif" || ext == "aiff")
         type = "AIFF";
 
-    std::string cue = "REM COMMENT \"PHINYX\"\n";
+    std::string cue = "REM COMMENT \"PHI\"\n";
     if (const auto catalog = tagOf (tags, tag::catalog); ! catalog.empty())
         cue += "CATALOG " + catalog + "\n";
     if (const auto artist = tagOf (tags, tag::artist); ! artist.empty())

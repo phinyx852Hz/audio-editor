@@ -7,7 +7,7 @@
 # Nyquist effects; PortAudio is replaced by a stub (third_party/nyquist-shim).
 
 set(nyq "${CMAKE_SOURCE_DIR}/third_party/libnyquist")
-add_library(phinyx_nyquist STATIC
+add_library(phi_nyquist STATIC
     ${nyq}/nyx.c
     ${nyq}/nyquist/cmt/cext.c
     ${nyq}/nyquist/cmt/cleanup.c
@@ -218,7 +218,7 @@ add_library(phinyx_nyquist STATIC
     ${nyq}/nyquist/xlisp/xlsym.c
     ${nyq}/nyquist/xlisp/xlsys.c
 )
-target_include_directories(phinyx_nyquist
+target_include_directories(phi_nyquist
     PRIVATE
         ${CMAKE_SOURCE_DIR}/third_party/nyquist-shim
         ${nyq}/nyquist/cmt
@@ -231,17 +231,17 @@ target_include_directories(phinyx_nyquist
         ${nyq}/nyquist/xlisp
         ${nyq}/nyquist/sys/unix
 )
-# Public headers count as system headers, so PHINYX's warnings skip them.
-target_include_directories(phinyx_nyquist SYSTEM PUBLIC
+# Public headers count as system headers, so PHI's warnings skip them.
+target_include_directories(phi_nyquist SYSTEM PUBLIC
     ${nyq}
     ${nyq}/nyquist/xlisp)
-target_compile_definitions(phinyx_nyquist PUBLIC USE_NYQUIST=1 PRIVATE CMTSTUFF EXT)
+target_compile_definitions(phi_nyquist PUBLIC USE_NYQUIST=1 PRIVATE CMTSTUFF EXT)
 # Third-party C from the 1990s: build it as it is, quietly.
-target_compile_options(phinyx_nyquist PRIVATE -w)
-set_target_properties(phinyx_nyquist PROPERTIES POSITION_INDEPENDENT_CODE ON CXX_STANDARD 17)
+target_compile_options(phi_nyquist PRIVATE -w)
+set_target_properties(phi_nyquist PROPERTIES POSITION_INDEPENDENT_CODE ON CXX_STANDARD 17)
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(PHINYX_SNDFILE REQUIRED IMPORTED_TARGET sndfile)
-target_link_libraries(phinyx_nyquist PRIVATE PkgConfig::PHINYX_SNDFILE)
+pkg_check_modules(PHI_SNDFILE REQUIRED IMPORTED_TARGET sndfile)
+target_link_libraries(phi_nyquist PRIVATE PkgConfig::PHI_SNDFILE)
 
 install(DIRECTORY "${CMAKE_SOURCE_DIR}/share/nyquist/" DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/nyquist")
 install(DIRECTORY "${CMAKE_SOURCE_DIR}/share/nyquist-plug-ins/" DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/nyquist-plug-ins")

@@ -26,7 +26,7 @@
 
 namespace
 {
-    const QString slotMime = QStringLiteral ("application/x-phinyx-chain-slot");
+    const QString slotMime = QStringLiteral ("application/x-phi-chain-slot");
     constexpr int dialResolution = 1000;
     constexpr int maxKnobs = 4;
 
@@ -1051,7 +1051,7 @@ void ChainRow::showWindow (int slot)
         engine.showPluginWindow (slot);
     else if (! info.empty)
         Q_EMIT message (engine.pluginWindowsLost()
-                            ? tr ("Plugin windows were force-closed by the window manager; restart PHINYX to open them again (Enter edits parameters meanwhile)")
+                            ? tr ("Plugin windows were force-closed by the window manager; restart PHI to open them again (Enter edits parameters meanwhile)")
                         : info.hasEditor ? tr ("Plugin windows need XWayland or X11; use Enter for the parameter editor")
                                          : tr ("This plugin has no window of its own; use Enter for the parameter editor"));
 }

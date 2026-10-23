@@ -144,7 +144,7 @@ bool parse (const std::string& xml, Packet& packet, std::string& error)
     std::map<std::string, std::string> declared;
     collectNamespaces (root, declared);
 
-    // A property's prefix as PHINYX names it: the known prefix for its URI, else the file's.
+    // A property's prefix as PHI names it: the known prefix for its URI, else the file's.
     const auto canonical = [&] (const std::string& filePrefix)
     {
         const auto it = declared.find (filePrefix);

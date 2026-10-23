@@ -64,7 +64,7 @@ private:
     void updateHeader();
 
     QFile file;
-    std::shared_ptr<QLockFile> lock;   // tells other PHINYX windows this file is still being written
+    std::shared_ptr<QLockFile> lock;   // tells other PHI windows this file is still being written
     int channels = 2;
     qint64 dataBytes = 0, lastHeaderBytes = 0, bytesPerSecond = 192000;
     bool full = false;

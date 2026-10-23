@@ -102,7 +102,7 @@ void MasterChain::setConfigFolder (const juce::File& folder)
 void MasterChain::loadStockPlugins()
 {
     // Remembered from the last start; a stock file that is new or changed
-    // (PHINYX was updated) is looked at again.
+    // (PHI was updated) is looked at again.
     if (auto xml = juce::XmlDocument::parse (stockListFile()))
         stockList.recreateFromXml (*xml);
 
@@ -871,7 +871,7 @@ void MasterChain::openWindow (int index)
     if (editor == nullptr)
         return;
 
-    // Stock plugins open in the PHINYX frame.
+    // Stock plugins open in the PHI frame.
     juce::Component* content = editor;
     const auto& description = slots[(size_t) index].description;
     if (const auto* info = stock::find (description))
@@ -972,7 +972,7 @@ void MasterChain::save() const
     if (configFolder == juce::File())
         return;
 
-    juce::XmlElement root ("PHINYX_MASTER_SECTION");
+    juce::XmlElement root ("PHINYX_MASTER_SECTION");   // named before the rename to PHI, kept so saved chains still load
     root.setAttribute ("gainDb", gainDecibels);
     root.setAttribute ("bypassed", (bool) allBypassed);
     root.setAttribute ("ditherBits", finalBits.load());

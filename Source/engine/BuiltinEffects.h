@@ -6,7 +6,7 @@
 #include <memory>
 #include <vector>
 
-// Effects that ship with PHINYX and load into the Master Section like plugins.
+// Effects that ship with PHI and load into the Master Section like plugins.
 // They have no window of their own; their knobs appear on the slot's card.
 namespace builtin
 {

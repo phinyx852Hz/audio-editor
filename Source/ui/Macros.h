@@ -14,7 +14,7 @@ class QDialog;
 // step keeps the settings its windows were OK'd with (every spin box, list,
 // tick box, slider and text field, in order), so a step runs with exactly
 // those settings and its windows do not appear, unless the step is set to
-// ask. Stored one per file as JSON in $XDG_CONFIG_HOME/phinyx/macros.
+// ask. Stored one per file as JSON in $XDG_CONFIG_HOME/phi/macros.
 namespace macro
 {
     struct Step

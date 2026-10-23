@@ -61,8 +61,8 @@ namespace
         return a == b;
     }
 
-    // PHINYX's own sound is already the main track; recording it again would double it.
-    bool isPhinyx (const CaptureSource& s)
+    // PHI's own sound is already the main track; recording it again would double it.
+    bool isPhi (const CaptureSource& s)
     {
         return QString::fromStdString (s.name).contains (QLatin1String (APP_ID), Qt::CaseInsensitive);
     }
@@ -312,16 +312,16 @@ QWidget* PerformanceDialog::buildRecording()
     folderLabel->setBuddy (folder);
     form->addRow (folderLabel, folderRow);
 
-    followWindow = new QCheckBox (tr ("Follow the PHINYX &window in front (Mixer, Tracker, Analysis...)"), page);
+    followWindow = new QCheckBox (tr ("Follow the PHI &window in front (Mixer, Tracker, Analysis...)"), page);
     followWindow->setChecked (initial.followWindow);
     form->addRow (QString(), followWindow);
-    crashSafe = new QCheckBox (tr ("Crash-safe MP4 (fragmented: stays playable if PHINYX stops suddenly; a few older editors cannot open it)"), page);
+    crashSafe = new QCheckBox (tr ("Crash-safe MP4 (fragmented: stays playable if PHI stops suddenly; a few older editors cannot open it)"), page);
     crashSafe->setChecked (initial.fragmented);
     form->addRow (QString(), crashSafe);
 
-    auto* about = new QLabel (tr ("<p>Records only PHINYX: its main window, or the PHINYX window in front when that is "
+    auto* about = new QLabel (tr ("<p>Records only PHI: its main window, or the PHI window in front when that is "
                                   "ticked above. A full-screen Visualizer (F11) is always followed. No other window or "
-                                  "screen is ever recorded, and Wayland asks nothing, since PHINYX draws the picture itself.</p>"
+                                  "screen is ever recorded, and Wayland asks nothing, since PHI draws the picture itself.</p>"
                                   "<p>Video is H.265 (HEVC) in an MP4, with AAC sound. FFmpeg %1.</p>")
                               .arg (QString::fromStdString (perf::ffmpegVersion())), page);
     about->setWordWrap (true);
@@ -360,12 +360,12 @@ QWidget* PerformanceDialog::buildSound()
     audioRate->setCurrentIndex (std::max (0, audioRate->findData (initial.audioKbps)));
     form->addRow (tr ("&AAC quality:"), audioRate);
 
-    programTrack = new QCheckBox (tr ("Also put PHINYX's sound on a &track of its own, in all its channels (5.1, 7.1, Ambisonics)"), page);
+    programTrack = new QCheckBox (tr ("Also put PHI's sound on a &track of its own, in all its channels (5.1, 7.1, Ambisonics)"), page);
     programTrack->setChecked (initial.programTrack);
     form->addRow (QString(), programTrack);
 
-    auto* tracksNote = new QLabel (tr ("The first track is the mix (PHINYX folded to stereo, plus the inputs below): players and "
-                                       "streams use it. The other tracks are for editing afterwards, in Resolve, Premiere or PHINYX."), page);
+    auto* tracksNote = new QLabel (tr ("The first track is the mix (PHI folded to stereo, plus the inputs below): players and "
+                                       "streams use it. The other tracks are for editing afterwards, in Resolve, Premiere or PHI."), page);
     tracksNote->setWordWrap (true);
     layout->addWidget (tracksNote);
 
@@ -406,7 +406,7 @@ void PerformanceDialog::refreshInputs()
     inputSources.clear();
     for (const auto& s : capture.sources())
         if (s.kind == CaptureSource::Kind::input
-            || (s.kind == CaptureSource::Kind::application && ! isPhinyx (s)
+            || (s.kind == CaptureSource::Kind::application && ! isPhi (s)
                 && std::none_of (inputSources.begin(), inputSources.end(), [&] (const CaptureSource& o) { return sameSource (o, s); })))
             inputSources.push_back (s);
     // A remembered input that is not plugged in, or an application not playing now, stays listed so it is not forgotten.
@@ -445,7 +445,7 @@ QWidget* PerformanceDialog::buildCameras()
 {
     auto* page = new QWidget;
     auto* layout = new QVBoxLayout (page);
-    auto* note = new QLabel (tr ("Cameras go on top of PHINYX in the corner you choose. Tick Own track to also keep each one "
+    auto* note = new QLabel (tr ("Cameras go on top of PHI in the corner you choose. Tick Own track to also keep each one "
                                  "whole on a video track of its own in the MP4, for multicam editing (the stream has only the picture)."), page);
     note->setWordWrap (true);
     layout->addWidget (note);
@@ -579,7 +579,7 @@ QWidget* PerformanceDialog::buildStreaming()
 
     auto* note = new QLabel (tr ("<p>The stream shows the same picture as the recording, with the mix track as its sound. "
                                  "Get the stream key from the service's dashboard (YouTube Studio, Twitch Creator Dashboard). "
-                                 "It is kept in PHINYX's settings file, %1.</p>")
+                                 "It is kept in PHI's settings file, %1.</p>")
                              .arg (appSettings().fileName().toHtmlEscaped()), page);
     note->setWordWrap (true);
     form->addRow (note);

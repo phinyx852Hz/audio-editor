@@ -354,7 +354,7 @@ namespace nyquist
         }
 
         //======================================================================
-        // Lisp functions PHINYX adds, as Audacity does: (_ "text") and friends
+        // Lisp functions PHI adds, as Audacity does: (_ "text") and friends
         // return their text (no translations yet), and AUD-DO reports that
         // Audacity's scripting commands are not available.
         LVAL lispGettext()
@@ -381,7 +381,7 @@ namespace nyquist
         {
             xlgastring();
             xllastarg();
-            return cons (cvstring ("AUD-DO (Audacity scripting) is not available in PHINYX"), NIL);
+            return cons (cvstring ("AUD-DO (Audacity scripting) is not available in PHI"), NIL);
         }
 
         void registerFunctions()
@@ -525,7 +525,7 @@ namespace nyquist
             p += "(putprop '*AUDACITY* \"en\" 'LANGUAGE)\n";
             p += "(setf *DECIMAL-SEPARATOR* #\\.)\n";
             p += "(putprop '*SYSTEM-DIR* \"" + escape (runtimeFolder) + "\" 'BASE)\n";
-            p += "(putprop '*SYSTEM-DIR* \"" + escape (home() + "/.local/share/phinyx") + "\" 'DATA)\n";
+            p += "(putprop '*SYSTEM-DIR* \"" + escape (home() + "/.local/share/phi") + "\" 'DATA)\n";
             p += "(putprop '*SYSTEM-DIR* \"\" 'HELP)\n";
             p += "(putprop '*SYSTEM-DIR* \"/tmp\" 'TEMP)\n";
             p += "(putprop '*SYSTEM-DIR* \"/tmp\" 'SYS-TEMP)\n";
@@ -821,7 +821,7 @@ namespace nyquist
 
         const std::pair<const char*, std::string> keys[] {
             { "*home*", home() }, { "~", home() }, { "*default*", documents() },
-            { "*export*", documents() }, { "*save*", documents() }, { "*config*", home() + "/.config/phinyx" },
+            { "*export*", documents() }, { "*save*", documents() }, { "*config*", home() + "/.config/phi" },
         };
         auto lookup = [&] (const std::string& k) -> const std::string*
         {

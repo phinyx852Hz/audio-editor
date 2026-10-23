@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-// Something PHINYX can record from, like an OBS audio source.
+// Something PHI can record from, like an OBS audio source.
 struct CaptureSource
 {
     enum class Kind { desktop, input, application };

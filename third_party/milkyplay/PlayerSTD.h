@@ -55,7 +55,7 @@ public:
 		virtual void patternEndReached(PlayerSTD& player, XModule& module, mp_sint32& newOrderIndex) { }
 	};
 
-	// PHINYX: instruments played by something outside the player (the Tracker's
+	// PHI: instruments played by something outside the player (the Tracker's
 	// instruments linked to a sampler plugin). Their notes go here instead of starting
 	// a sample: a note-on when the sample would start (new notes, note delay, retrigger),
 	// a note-off at the end of the tick where the channel's key goes up or its volume
@@ -269,7 +269,7 @@ private:
 	
 	StatusEventListener* statusEventListener;
 	
-	// PHINYX: external notes, and the one sounding on each channel (0: none)
+	// PHI: external notes, and the one sounding on each channel (0: none)
 	enum { MAX_EXTERNAL_CHANNELS = 256 };
 	ExternalNotes*	externalNotes;
 	mp_sint32		externalFrame;
@@ -500,7 +500,7 @@ public:
 							 
 	virtual void	setPanning(mp_ubyte chn, mp_ubyte pan) { chninfo[chn].pan = pan; }
 
-	// PHINYX
+	// PHI
 	void			setExternalNotes(ExternalNotes* notes) { externalNotes = notes; }
 	void			releaseExternalNotes();		// a note-off for every external note sounding
 

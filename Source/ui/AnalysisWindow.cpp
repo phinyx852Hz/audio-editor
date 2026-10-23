@@ -635,7 +635,7 @@ namespace analysis
         s.setFft (13, 1);
         s.accumulate = true;
 
-        // Mono is heard on both sides; more channels are folded down to stereo as PHINYX plays them.
+        // Mono is heard on both sides; more channels are folded down to stereo as PHI plays them.
         const auto fold = channels > 2 ? dsp::stereoDownmix (channels) : std::array<std::vector<float>, 2> {};
         const int block = s.fftSize();
         std::vector<std::vector<float>> buffers ((size_t) channels, std::vector<float> ((size_t) block));
@@ -689,7 +689,7 @@ namespace analysis
         };
 
         const QFileInfo info (path);
-        const QString title = QObject::tr ("PHINYX analysis report");
+        const QString title = QObject::tr ("PHI analysis report");
         out << title << QString (title.size(), QLatin1Char ('='));
         line (QObject::tr ("File"), info.fileName());
         line (QObject::tr ("Folder"), QDir::toNativeSeparators (info.absolutePath()));
@@ -700,7 +700,7 @@ namespace analysis
             line (QObject::tr ("File size"), QStringLiteral ("%1 MB").arg (info.size() / 1048576.0, 0, 'f', 2));
         line (QObject::tr ("Measured"), QDateTime::currentDateTime().toString (QStringLiteral ("yyyy-MM-dd hh:mm")));
         if (channels > 2)
-            out << QString() << QObject::tr ("  Loudness counts every channel; the rest is of the stereo fold-down, as PHINYX plays it.");
+            out << QString() << QObject::tr ("  Loudness counts every channel; the rest is of the stereo fold-down, as PHI plays it.");
         if (channels == 1)
             out << QString() << QObject::tr ("  Mono: Left and Right below are the same channel.");
 
@@ -817,7 +817,7 @@ namespace analysis
                        + bandDb (pr).rightJustified (12)
                        + (pl * pr > 1.0e-24 ? signedNumber (std::clamp (re / std::sqrt (pl * pr), -1.0, 1.0), 2) : QStringLiteral ("-")).rightJustified (14);
         }
-        out << QString() << QObject::tr ("Measured by PHINYX from the file itself, without the Master Section.");
+        out << QString() << QObject::tr ("Measured by PHI from the file itself, without the Master Section.");
         return out.join (QLatin1Char ('\n')) + QLatin1Char ('\n');
     }
 
@@ -1986,7 +1986,7 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
     setWindowTitle (tr ("Analysis Meters"));
     setObjectName (QStringLiteral ("AnalysisWindow"));
     setFocusPolicy (Qt::StrongFocus);
-    Theme::makeTranslucent (this);   // the same theme and window opacity as the rest of PHINYX
+    Theme::makeTranslucent (this);   // the same theme and window opacity as the rest of PHI
     auto settings = appSettings();
 
     // The bar along the top: target, reset, freeze, which meters, and what is measured.

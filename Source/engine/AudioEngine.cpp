@@ -491,7 +491,7 @@ namespace
     // Section, meters) works on the file's own channels; this sends them to the
     // outputs, one each when there are enough, or folded down to stereo.
     // Something played live in place of the file, such as the Tracker: stereo at the
-    // device's rate, after the Master Section (it is mixed, not mastered, in PHINYX).
+    // device's rate, after the Master Section (it is mixed, not mastered, in PHI).
     class LiveSource final : public juce::AudioSource
     {
     public:
@@ -1288,7 +1288,7 @@ bool AudioEngine::saveFile (const std::string& path, const AudioData& data, cons
 
     // Write to a temporary file first so a failed save never destroys the original.
     // It keeps the extension, so the tag writers know the type.
-    const auto temp = file.getSiblingFile ("." + file.getFileNameWithoutExtension() + ".phinyx-tmp" + ext);
+    const auto temp = file.getSiblingFile ("." + file.getFileNameWithoutExtension() + ".phi-tmp" + ext);
     temp.deleteFile();
     const auto tempPath = temp.getFullPathName().toStdString();
 

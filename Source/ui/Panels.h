@@ -22,7 +22,7 @@ class QStackedWidget;
 // Window shortcuts such as Space, arrows and Delete would otherwise steal keys
 // from panels. A panel keeps its navigation keys (plus any extra keys it
 // handles itself), and Escape returns focus to the home widget.
-// Focus follows the mouse inside PHINYX, like Hyprland does between windows:
+// Focus follows the mouse inside PHI, like Hyprland does between windows:
 // pointing at the waveform, the device chain or a panel gives it the keyboard.
 // Only moves focus between these areas, never out of a text field or dialog.
 class FocusFollowsMouse final : public QObject

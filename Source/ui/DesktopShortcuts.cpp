@@ -38,7 +38,7 @@ namespace
             return lower.toUpper();
         if (lower.size() <= 3 && lower.startsWith (QLatin1Char ('f')) && lower.mid (1).toInt() > 0)
             return lower.toUpper();  // F1..F24
-        return {};  // media keys, keycodes and the like never clash with PHINYX
+        return {};  // media keys, keycodes and the like never clash with PHI
     }
 
     QMap<QKeySequence, QString> readHyprland()

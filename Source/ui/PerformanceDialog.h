@@ -16,7 +16,7 @@ class QSpinBox;
 class QTableWidget;
 
 // The Performance menu's settings: the recording (resolution, frame rate, encoder, quality,
-// folder), the sound (AAC rate, PHINYX's own channels, microphones), the cameras and the
+// folder), the sound (AAC rate, PHI's own channels, microphones), the cameras and the
 // live stream. Kept in settings.ini under [performance].
 namespace perfui
 {

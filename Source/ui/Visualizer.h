@@ -13,7 +13,7 @@
 class QComboBox;
 class MilkDrop;
 
-// The Visualizer: draws what PHINYX plays (after the Master Section), in one of
+// The Visualizer: draws what PHI plays (after the Master Section), in one of
 // several views, artistic or scientific. MainWindow feeds it the scope samples
 // and calls tick() on its timer. Keys: Left/Right (or Page Up/Down) change the
 // view; the window adds F11 for full screen and Esc to leave it.
@@ -32,7 +32,7 @@ public:
     static const std::vector<Mode>& modes();
     static int modeIndex (const QString& id);   // -1 when unknown
 
-    // `backdrop`: drawn behind the PHINYX window, so it takes no mouse or keys.
+    // `backdrop`: drawn behind the PHI window, so it takes no mouse or keys.
     VisualizerView (QWidget* parent, bool backdrop);
     ~VisualizerView() override;
 

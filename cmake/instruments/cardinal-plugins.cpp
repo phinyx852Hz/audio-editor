@@ -1,5 +1,5 @@
 /*
- * Cardinal's list of built-in plugins, cut down for PHINYX to the foundational
+ * Cardinal's list of built-in plugins, cut down for PHI to the foundational
  * modules: Cardinal's own host modules (audio, CV, MIDI, parameters, time) and
  * VCV Fundamental (oscillators, filter, amplifiers, envelope, LFOs, noise,
  * mixers, sequencer, scope, utilities). Their code and panels are

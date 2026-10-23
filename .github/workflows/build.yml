@@ -27,9 +27,9 @@ jobs:
         run: ctest --test-dir build --output-on-failure
       - uses: actions/upload-artifact@v4
         with:
-          name: phinyx-arch
+          name: phi-arch
           path: |
-            build/phinyx_artefacts/Release/phinyx
+            build/phi_artefacts/Release/phi
             build/stock
 
   ubuntu:

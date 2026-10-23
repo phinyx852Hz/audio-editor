@@ -205,7 +205,16 @@ bool MainWindow::finishReset()
 //==============================================================================
 void moveOldSettings()
 {
-    QSettings old;   // Qt's default place, which only earlier versions wrote to
+    // Before PHI it was PHINYX, with its folders named phinyx: the settings,
+    // plugin list, themes, HRTF sets, recovery files and the rest move over, once.
+    for (const auto location : { QStandardPaths::GenericConfigLocation, QStandardPaths::GenericDataLocation, QStandardPaths::GenericCacheLocation })
+    {
+        const QDir base (QStandardPaths::writableLocation (location));
+        if (base.exists (QStringLiteral ("phinyx")) && ! base.exists (QStringLiteral (APP_ID)))
+            base.rename (QStringLiteral ("phinyx"), QStringLiteral (APP_ID));
+    }
+
+    QSettings old (QStringLiteral ("Unknown Organization"), QStringLiteral ("phinyx"));   // Qt's default place, which only earlier versions wrote to
     if (! QFile::exists (old.fileName()))
         return;
     auto settings = appSettings();

@@ -1,6 +1,6 @@
 # Audio quantizing
 
-PHINYX has no MIDI editor, so timing is fixed on the audio itself, the way Cubase
+PHI has no MIDI editor, so timing is fixed on the audio itself, the way Cubase
 (AudioWarp, Hitpoints, the Quantize Panel) and Ableton Live (warp markers, Quantize,
 warp modes) do it. Everything lives in the **Quantize panel** (Warp > Quantize Panel,
 `Shift+Q`). Like the other panels it docks at the side of the editor or pops out into
@@ -77,5 +77,5 @@ quantize re-renders from the original audio, so nothing is ever stretched twice,
 
 Changing the algorithm re-renders what is already warped.
 
-All of this is PHINYX's own code, apart from Rubber Band (GPL-2.0-or-later), which
+All of this is PHI's own code, apart from Rubber Band (GPL-2.0-or-later), which
 the phase vocoder modes use.

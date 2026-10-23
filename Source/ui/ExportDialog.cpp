@@ -656,7 +656,7 @@ void ExportDialog::loadPreset()
     for (const auto& key : settings.childKeys())
         names << QUrl::fromPercentEncoding (key.toUtf8());
     settings.endGroup();
-    // Presets that come with PHINYX.
+    // Presets that come with PHI.
     const QStringList builtIn { tr ("Streaming: WAV master, MP3 320 and AAC 256 at -14 LUFS"), tr ("CD: 16-bit 44.1 kHz WAV"),
                                 tr ("Podcast: MP3 128 at -16 LUFS"), tr ("Broadcast: 24-bit 48 kHz BWF at -23 LUFS") };
     bool ok = false;

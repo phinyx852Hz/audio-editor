@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "engine/AudioEngine.h"
 #include "engine/MasterChain.h"
+#include "ui/Brand.h"
 #include "ui/MainWindow.h"
 #include "ui/Settings.h"
 #include "ui/Theme.h"
@@ -8,6 +9,7 @@
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QDir>
+#include <QIcon>
 #include <QProcess>
 #include <QStandardPaths>
 
@@ -18,7 +20,7 @@
 namespace
 {
     // A plugin or its bridge (yabridge, for example) can throw from any call
-    // PHINYX makes into it. The Master Section catches those itself; this is the
+    // PHI makes into it. The Master Section catches those itself; this is the
     // last net for the rest, so a stray exception in an event is logged instead
     // of ending the program with unsaved work.
     class Application final : public QApplication
@@ -53,15 +55,16 @@ int main (int argc, char* argv[])
     if (argc == 5 && std::string (argv[1]) == MasterChain::scanOption)
         std::_Exit (MasterChain::scanInThisProcess (argv[2], argv[3], juce::File (argv[4])));
 
-#if PHINYX_WEB_BACKDROP
+#if PHI_WEB_BACKDROP
     QCoreApplication::setAttribute (Qt::AA_ShareOpenGLContexts);   // Qt WebEngine asks for it before the application starts
 #endif
     Application app (argc, argv);
     QApplication::setApplicationName (QStringLiteral (APP_ID));
     moveOldSettings();
     QApplication::setApplicationDisplayName (QStringLiteral (APP_DISPLAY_NAME));
+    QApplication::setWindowIcon (QIcon (QStringLiteral (APP_ICON)));
     QApplication::setApplicationVersion (QStringLiteral (APP_VERSION));
-    // Wayland app-id, used by Hyprland window rules (class:^(phinyx)$).
+    // Wayland app-id, used by Hyprland window rules (class:^(phi)$).
     QGuiApplication::setDesktopFileName (QStringLiteral (APP_ID));
 
     // Use the remembered theme, falling back to the default when it has gone away.
@@ -73,7 +76,7 @@ int main (int argc, char* argv[])
     Theme::apply (theme);
 
     QCommandLineParser parser;
-    parser.setApplicationDescription (QStringLiteral (APP_DISPLAY_NAME " audio editor and mastering suite"));
+    parser.setApplicationDescription (QStringLiteral (APP_BRAND_NAME " audio editor and mastering suite"));
     parser.addHelpOption();
     parser.addVersionOption();
     parser.addPositionalArgument (QStringLiteral ("file"), QStringLiteral ("Audio file to open."));

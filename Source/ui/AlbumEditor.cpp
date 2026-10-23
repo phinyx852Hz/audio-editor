@@ -267,7 +267,7 @@ bool MainWindow::saveAlbumAs()
             p += QStringLiteral (".") + albumfile::extension;
         return p;
     };
-    auto path = QFileDialog::getSaveFileName (this, tr ("Save Album As"), withExtension (suggested), tr ("PHINYX album (*.phalbum)"));
+    auto path = QFileDialog::getSaveFileName (this, tr ("Save Album As"), withExtension (suggested), tr ("PHI album (*.phalbum)"));
     if (path.isEmpty())
         return false;
     path = withExtension (path);
