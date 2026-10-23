@@ -213,7 +213,9 @@ void MainWindow::sendToSampler (bool keepMarkers)
     const auto d = data();
     if (d == nullptr || doc.isAlbum())
     {
-        statusBar()->showMessage (tr ("Open a file first, then send it (or a selection) to Simplest with F7"), 5000);
+        // Nothing to send: open it empty, ready for a sound dropped on it.
+        showSampler();
+        statusBar()->showMessage (tr ("Drop an audio file on Simplest, or open one and send it (or a selection) with F7"), 5000);
         return;
     }
     if (! keepMarkers)
@@ -377,7 +379,8 @@ void MainWindow::sendToSlicer (bool keepSlices)
     const auto d = data();
     if (d == nullptr || doc.isAlbum())
     {
-        statusBar()->showMessage (tr ("Open a file first, then send it (or a selection) to the Slicer with F8"), 5000);
+        showSlicer();
+        statusBar()->showMessage (tr ("Drop an audio file on the Slicer, or open one and send it (or a selection) with F8"), 5000);
         return;
     }
     if (! keepSlices)
