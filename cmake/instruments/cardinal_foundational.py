@@ -15,8 +15,8 @@ shutil.copyfile(sys.argv[1], "plugins/plugins.cpp")
 MARK = "# PHINYX: foundational modules only (cmake/instruments/cardinal_foundational.py)\n"
 with open("plugins/Makefile") as f:
     lines = f.readlines()
-if lines and lines[0] == MARK:
-    sys.exit(0)
+# Run again on a folder it already cut down, it leaves the module lists alone.
+cut_down = bool(lines) and lines[0] == MARK
 
 # Source, binary and resource lists name every module collection: keep the lines
 # of the two kept collections (and the lists' plain wildcards), less the
@@ -44,8 +44,9 @@ for line in lines:
         line = "\t@true\n"
     out.append(line)
 
-with open("plugins/Makefile", "w") as f:
-    f.writelines(out)
+if not cut_down:
+    with open("plugins/Makefile", "w") as f:
+        f.writelines(out)
 
 # Surge XT's libraries are built and linked only for its modules.
 with open("deps/Makefile") as f:
@@ -56,3 +57,27 @@ with open("src/Makefile.cardinal.mk") as f:
     lines = f.readlines()
 with open("src/Makefile.cardinal.mk", "w") as f:
     f.writelines("# " + l if l.startswith("RACK_EXTRA_LIBS += $(SURGE_DEP_PATH)") else l for l in lines)
+
+# A CLAP's bundle path is the .clap file itself, so Cardinal looks for its
+# resources in "CardinalSynth.clap/resources" and, not finding them, in its
+# source folder or /usr/local/share/cardinal. Look next to the .clap file too,
+# where they are installed.
+with open("src/CardinalCommon.cpp") as f:
+    common = f.read()
+anchor = """                asset::systemDir = resourcePath;
+                asset::bundlePath = system::join(asset::systemDir, "PluginManifests");
+            }
+"""
+fix = """
+            // PHINYX: resources next to the .clap file (cardinal_foundational.py)
+            if (! system::exists(asset::bundlePath))
+            {
+                asset::systemDir = system::join(system::getDirectory(bundlePath), "resources");
+                asset::bundlePath = system::join(asset::systemDir, "PluginManifests");
+            }
+"""
+if fix not in common:
+    if anchor not in common:
+        sys.exit("cardinal_foundational.py: CardinalCommon.cpp has changed, the resource path fix needs updating")
+    with open("src/CardinalCommon.cpp", "w") as f:
+        f.write(common.replace(anchor, anchor + fix, 1))
