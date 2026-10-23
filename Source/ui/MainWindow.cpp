@@ -838,7 +838,7 @@ void MainWindow::buildMenus()
         { tr ("S&ynth"),     { "instrument.wavetable", "instrument.modular", "instrument.additive", "-",
                                "instrument.subtractive1", "instrument.subtractive2", "instrument.fm", "-",
                                "sample.midiInputs", "sample.panic" } },
-        { tr ("Trac&ker"),   { "tracker.window", "tracker.new", "tracker.open", "tracker.save", "tracker.saveAs", "tracker.loadSample", "-", "tracker.playSong", "tracker.playPattern", "tracker.stop", "-",
+        { tr ("Trac&ker"),   { "tracker.window", "tracker.furnace", "-", "tracker.new", "tracker.open", "tracker.save", "tracker.saveAs", "tracker.loadSample", "-", "tracker.playSong", "tracker.playPattern", "tracker.stop", "-",
                                "tracker.recordStereo", "tracker.recordMulti", "-", "tracker.resetTracks", "tracker.about" } },
         { tr ("Performan&ce"), { "performance.launcher", "-", "performance.record", "performance.stream", "-", "performance.settings", "performance.folder" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "-", "options.keymap", "options.theme", "options.waveformColors" } },

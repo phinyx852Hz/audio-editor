@@ -16,9 +16,12 @@
 #include <QFileInfo>
 #include <QFutureWatcher>
 #include <QMessageBox>
+#include <QProcess>
 #include <QProgressDialog>
 #include <QStatusBar>
 #include <QtConcurrent>
+
+#include <signal.h>
 
 // The Retro Sampler (Ami) as the patchbay plays it; its slot N listens on MIDI channel N.
 static constexpr const char* retroSampler = "retroSampler";
@@ -95,14 +98,16 @@ void MainWindow::registerTrackerCommands()
 
     tracker = std::make_unique<TrackerEngine>();
 
-    add ("tracker.window", tr ("&Tracker"), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_K) }, [this]
+    add ("tracker.window", tr ("Tracker&1 (MilkyTracker)"), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_K) }, [this]
     {
         auto* w = trackerWindow();
         w->show();
         w->raise();
         w->activateWindow();
         w->patternView()->setFocus();
-    })->setStatusTip (tr ("The Tracker, from MilkyTracker: play XM, MOD, IT and S3M modules and record them into the editor"));
+    })->setStatusTip (tr ("Tracker1, from MilkyTracker: play XM, MOD, IT and S3M modules and record them into the editor"));
+    add ("tracker.furnace", tr ("Tracker&2 (Furnace)"), {}, [this] { openFurnace(); })
+        ->setStatusTip (tr ("Tracker2, Furnace: the chiptune tracker for over 80 sound chips, in its own window and look, with an opacity bar"));
     add ("tracker.new", tr ("&New Song"), {}, [this] { trackerNew(); })
         ->setStatusTip (tr ("Start a new, empty XM song in the Tracker: 8 channels and one pattern of 64 rows"));
     add ("tracker.open", tr ("&Open Module..."), {}, [this] { openModule(); })
@@ -129,15 +134,54 @@ void MainWindow::registerTrackerCommands()
         }
         statusBar()->showMessage (tr ("The module's channels are spread evenly over tracks 1 to %1").arg (std::min (tracker->numChannels(), (int) TrackerEngine::numTracks)), 4000);
     });
-    add ("tracker.about", tr ("About the Tracker..."), {}, [this]
+    add ("tracker.about", tr ("About the Trackers..."), {}, [this]
     {
-        QMessageBox::about (this, tr ("About the Tracker"),
-                            tr ("<p>The Tracker is built on <b>MilkyTracker</b> (milkytracker.org, github.com/milkytracker/MilkyTracker): "
+        QMessageBox::about (this, tr ("About the Trackers"),
+                            tr ("<p>Tracker1 is built on <b>MilkyTracker</b> (milkytracker.org, github.com/milkytracker/MilkyTracker): "
                                 "its player library MilkyPlay plays the modules, and its pattern display and its module and pattern editors are followed here.</p>"
                                 "<p>MilkyTracker is by Peter \"pailes\" Barth and its contributors (Christopher O'Neill, Dale Whinham, "
                                 "Julian Harnath and many others). MilkyPlay is under the New BSD licence and MilkyTracker under the "
-                                "GNU GPL version 3 or later; PHINYX uses both with thanks, under the GNU AGPL version 3.</p>"));
+                                "GNU GPL version 3 or later; PHINYX uses both with thanks, under the GNU AGPL version 3.</p>"
+                                "<p>Tracker2 is <b>Furnace</b> (tildearrow.org/furnace, github.com/tildearrow/furnace) by tildearrow "
+                                "and its contributors, under the GNU GPL version 2 or later. It runs as its own program, built by PHINYX "
+                                "from its source with an opacity bar added along the bottom of its window.</p>"));
     });
+}
+
+// Tracker2 is Furnace, run as a program of its own in its own window: built from
+// source into the stock folder (cmake/Trackers.cmake), with an opacity bar added along
+// the bottom that it keeps in its own settings. It plays through the desktop's sound
+// (PipeWire, JACK or ALSA), not through PHINYX, and stays open if PHINYX closes.
+void MainWindow::openFurnace()
+{
+    if (furnacePid > 0 && ::kill ((pid_t) furnacePid, 0) == 0)
+    {
+        statusBar()->showMessage (tr ("Tracker2 (Furnace) is already open"), 4000);
+        return;
+    }
+    const auto stockFolder = stock::folder();
+    const auto program = stockFolder.isDirectory()
+        ? QString::fromStdString (stockFolder.getChildFile ("Furnace/bin/furnace").getFullPathName().toStdString())
+        : QString();
+    if (program.isEmpty() || ! QFileInfo (program).isExecutable())
+    {
+        QMessageBox::warning (this, tr ("Tracker2 (Furnace)"),
+                              tr ("Furnace isn't installed with this PHINYX. It is built with the stock instruments "
+                                  "(PHINYX_STOCK_INSTRUMENTS), which need SDL2's build tools."));
+        return;
+    }
+    QProcess process;
+    process.setProgram (program);
+    auto environment = QProcessEnvironment::systemEnvironment();
+    // On X11 (XWayland under Wayland), where a window's opacity can be set, like the
+    // instruments' windows, and with PHINYX's window class for window manager rules.
+    environment.insert (QStringLiteral ("SDL_VIDEODRIVER"), QStringLiteral ("x11"));
+    environment.insert (QStringLiteral ("SDL_VIDEO_X11_WMCLASS"), QStringLiteral ("phinyx"));
+    process.setProcessEnvironment (environment);
+    process.setStandardOutputFile (QProcess::nullDevice());
+    process.setStandardErrorFile (QProcess::nullDevice());
+    if (! process.startDetached (&furnacePid))
+        QMessageBox::warning (this, tr ("Tracker2 (Furnace)"), tr ("Furnace could not be started: %1").arg (process.errorString()));
 }
 
 TrackerWindow* MainWindow::trackerWindow()

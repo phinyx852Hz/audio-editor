@@ -773,8 +773,8 @@ void PatternView::wheelEvent (QWheelEvent* e)
 //==============================================================================
 TrackerWindow::TrackerWindow (TrackerEngine& e, QWidget* parent) : QWidget (parent, Qt::Window), engine (e)
 {
-    setWindowTitle (tr ("Tracker"));
-    setAccessibleName (tr ("Tracker"));
+    setWindowTitle (tr ("Tracker1"));
+    setAccessibleName (tr ("Tracker1"));
     Theme::makeTranslucent (this);   // the same theme and window opacity as the rest of PHINYX
     resize (1180, 720);
 
@@ -1140,7 +1140,7 @@ void TrackerWindow::moduleChanged()
     if (! engine.isLoaded())
     {
         title->setText (tr ("No song"));
-        setWindowTitle (tr ("Tracker"));
+        setWindowTitle (tr ("Tracker1"));
         status->setText (tr ("Ctrl+N starts a new song and Ctrl+O opens a module. Space plays the song, Enter the pattern, "
                              "Shift+Space turns on editing."));
         return;
@@ -1163,7 +1163,7 @@ void TrackerWindow::songChanged()
         name = QFileInfo (QString::fromStdString (engine.path())).fileName();
     const auto shown = name.isEmpty() ? tr ("(untitled)") : name;
     title->setText (tr ("%1   %2, %3 channels").arg (shown, QString::fromStdString (engine.formatName())).arg (engine.numChannels()));
-    setWindowTitle (tr ("Tracker: %1%2").arg (engine.isModified() ? QStringLiteral ("*") : QString(), shown));
+    setWindowTitle (tr ("Tracker1: %1%2").arg (engine.isModified() ? QStringLiteral ("*") : QString(), shown));
     pattern->update();
 }
 
