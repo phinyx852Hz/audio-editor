@@ -185,6 +185,11 @@ FindPanel::FindPanel (QWidget* home, QWidget* parent)
     results->header()->setSectionResizeMode (0, QHeaderView::Stretch);
     results->header()->setSectionResizeMode (1, QHeaderView::ResizeToContents);   // colour dots
     results->header()->setSectionResizeMode (2, QHeaderView::ResizeToContents);
+    // The dots column takes no room until something has a colour, and the type sits right
+    // after the name, so names get all the width there is.
+    results->header()->setMinimumSectionSize (4);
+    // Long names lose their middle, so "Loop-1" and "Loop-7" stay told apart.
+    results->setTextElideMode (Qt::ElideMiddle);
     results->setAccessibleName (tr ("Results"));
     results->setAccessibleDescription (tr ("Enter runs or loads the selection, 1 to 8 toggle a Selector colour, 0 clears the colours."));
     results->installEventFilter (this);
