@@ -18,8 +18,9 @@
 # ship with PHINYX. Left out on purpose: Ami's sample packs (their rights are not
 # clear) and every Cardinal module collection but its own host modules and VCV
 # Fundamental, whose panels are GPL-3.0-or-later or CC0 (others carry
-# non-commercial or permission-only artwork). Cardinal's knobs and jacks still
-# come from VCV Rack's component library, which is CC-BY-NC-4.0.
+# non-commercial or permission-only artwork). VCV Rack's component library (the
+# knobs, jacks, switches, screws, plugs and rails that Cardinal draws), which is
+# CC-BY-NC-4.0, is redrawn by PHINYX before the build (cardinal-skin/phinyx_skin.py).
 #
 # Credits are in Source/engine/StockPlugins.cpp and README.md. Each needs what
 # its own build needs: JUCE's Linux headers for the JUCE ones (as PHINYX),
@@ -117,7 +118,7 @@ find_package(Python3 COMPONENTS Interpreter)
 # Cardinal's build downloads jansson, libarchive, libsamplerate and zstd with wget.
 find_program(WGET_EXECUTABLE wget)
 if(Python3_FOUND AND WGET_EXECUTABLE)
-    phinyx_stock_licence(Cardinal LICENSE docs/LICENSES.md plugins/Fundamental/LICENSE)
+    phinyx_stock_licence(Cardinal LICENSE docs/LICENSES.md plugins/Fundamental/LICENSE PHINYX-ARTWORK.md)
     ExternalProject_Add(stock_Cardinal
         GIT_REPOSITORY https://github.com/DISTRHO/Cardinal.git
         GIT_TAG 0a530b73273afc914ec71a78e9165cd28c53b599
@@ -126,6 +127,7 @@ if(Python3_FOUND AND WGET_EXECUTABLE)
         BUILD_IN_SOURCE TRUE
         UPDATE_COMMAND ""
         PATCH_COMMAND ${Python3_EXECUTABLE} -I ${instruments_dir}/cardinal_foundational.py ${instruments_dir}/cardinal-plugins.cpp
+            COMMAND ${Python3_EXECUTABLE} -I ${instruments_dir}/cardinal-skin/phinyx_skin.py
         ${stock_one_at_a_time}
         CONFIGURE_COMMAND ""
         # Carla first and on one job: its jackbridge.a and jackbridge.min.a rules run make in
