@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Getting around the panels with the keyboard: F6 and Shift+F6 go round them, F6 held with
-// an arrow key goes to the one that way (as in a tiling window manager), Ctrl+W or Super+W
+// Getting around the panels with the keyboard: Alt tapped, F6 and Shift+F6 (or whatever keys
+// Next and Previous Panel are given) go round them, Alt or the Next Panel key held with an
+// arrow key goes to the one that way (as in a tiling window manager), Ctrl+W or Super+W
 // closes only what has the keyboard, and Super+F takes a window full screen. Files dragged
 // from the Find panel (or a file manager) onto the editor open there.
 #include "MainWindow.h"
@@ -274,6 +275,10 @@ void MainWindow::toggleFullScreen (QWidget* w)
 bool MainWindow::navigationKey (QObject* o, QEvent* e)
 {
     const auto type = e->type();
+    // Alt tapped on its own goes to the next panel; a click or leaving the window in between
+    // (Alt+Tab to another app) means it was not a tap.
+    if (type == QEvent::MouseButtonPress || type == QEvent::Wheel || type == QEvent::WindowDeactivate)
+        altArmed = false;
     if ((type != QEvent::ShortcutOverride && type != QEvent::KeyPress && type != QEvent::KeyRelease) || ! o->isWidgetType())
         return false;
     auto* k = static_cast<QKeyEvent*> (e);
@@ -328,41 +333,78 @@ bool MainWindow::navigationKey (QObject* o, QEvent* e)
     if (! ours)
         return false;
 
-    // F6 goes round on its release, unless an arrow was pressed while it was held.
-    const auto* next = commands.action (QStringLiteral ("view.nextPanel"));
-    const auto* previous = commands.action (QStringLiteral ("view.previousPanel"));
-    const bool f6 = key == Qt::Key_F6 && mods == Qt::NoModifier && next->shortcuts().contains (QKeySequence (Qt::Key_F6));
-    const bool shiftF6 = key == Qt::Key_F6 && mods == Qt::ShiftModifier && previous->shortcuts().contains (QKeySequence (Qt::SHIFT | Qt::Key_F6));
-    if (f6)
+    // Alt, under the left hand: tapped on its own it goes to the next panel, held with an
+    // arrow it goes to the panel that way. Alt with any other key (menus, Ctrl+Alt+arrows)
+    // is left alone.
+    if (key == Qt::Key_Alt)
     {
         if (type == QEvent::ShortcutOverride)
             e->accept();
         else if (type == QEvent::KeyPress && ! k->isAutoRepeat())
         {
-            f6Held = true;
-            f6Moved = false;
+            altArmed = true;
+            altMoved = false;
         }
-        else if (type == QEvent::KeyRelease && ! k->isAutoRepeat() && f6Held)
+        else if (type == QEvent::KeyRelease && ! k->isAutoRepeat())
         {
-            f6Held = false;
-            if (! f6Moved)
+            if (altArmed && ! altMoved)
                 focusPanel (1);
+            altArmed = false;
         }
         return true;
     }
-    if (f6Held && isArrow (key) && type != QEvent::KeyRelease)
+    if (isArrow (key) && mods == Qt::AltModifier && type != QEvent::KeyRelease)
     {
         if (type == QEvent::ShortcutOverride)
             e->accept();
         else
         {
-            f6Moved = true;
+            altMoved = true;
             focusDirection (key);
         }
         return true;
     }
-    // Shift+F6 here too, so the mixer in the editor's place does not take it for its own.
-    if (shiftF6 && type != QEvent::KeyRelease)
+    if (type == QEvent::ShortcutOverride || type == QEvent::KeyPress)
+        altArmed = false;   // a shortcut can take the key before its KeyPress arrives
+
+    // The Next Panel key (F6 unless rebound in Keyboard Shortcuts) goes round on its release,
+    // unless an arrow was pressed while it was held.
+    const auto* next = commands.action (QStringLiteral ("view.nextPanel"));
+    const auto* previous = commands.action (QStringLiteral ("view.previousPanel"));
+    const auto pressedKeys = QKeySequence (k->keyCombination());
+    const bool nextKey = ! isArrow (key) && next->shortcuts().contains (pressedKeys);
+    const bool previousKey = ! isArrow (key) && previous->shortcuts().contains (pressedKeys);
+    if (nextKey || (type == QEvent::KeyRelease && panelKeyHeld && key == panelKey))
+    {
+        if (type == QEvent::ShortcutOverride)
+            e->accept();
+        else if (type == QEvent::KeyPress && ! k->isAutoRepeat())
+        {
+            panelKeyHeld = true;
+            panelKey = key;
+            panelKeyMoved = false;
+        }
+        else if (type == QEvent::KeyRelease && ! k->isAutoRepeat() && panelKeyHeld)
+        {
+            panelKeyHeld = false;
+            if (! panelKeyMoved)
+                focusPanel (1);
+        }
+        return true;
+    }
+    if (panelKeyHeld && isArrow (key) && type != QEvent::KeyRelease)
+    {
+        if (type == QEvent::ShortcutOverride)
+            e->accept();
+        else
+        {
+            panelKeyMoved = true;
+            focusDirection (key);
+        }
+        return true;
+    }
+    // Previous Panel here too, so the mixer in the editor's place does not take it for its own.
+    if (previousKey && type != QEvent::KeyRelease)
     {
         if (type == QEvent::ShortcutOverride)
             e->accept();
@@ -370,8 +412,6 @@ bool MainWindow::navigationKey (QObject* o, QEvent* e)
             focusPanel (-1);
         return true;
     }
-    if (type == QEvent::KeyRelease && key == Qt::Key_F6)
-        f6Held = false;
 
     // The mixer in the editor's place keeps its own keys, as it did in its own window: only
     // the window's commands for closing, docking, full screen, the panels and the menus get past it.

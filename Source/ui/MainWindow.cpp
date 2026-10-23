@@ -748,10 +748,10 @@ void MainWindow::registerCommands()
         activateWindow();
         waveform->setFocus();
     });
-    // F6 and Shift+F6 go round the waveform and every panel that is showing.
+    // F6 and Shift+F6 (and Alt tapped) go round the waveform and every panel that is showing.
     add ("view.nextPanel", Category::view, tr ("&Next Panel"), { KS (Qt::Key_F6) }, [this] { focusPanel (1); });
     add ("view.previousPanel", Category::view, tr ("Pre&vious Panel"), { KS (Qt::SHIFT | Qt::Key_F6) }, [this] { focusPanel (-1); });
-    commands.action (QStringLiteral ("view.nextPanel"))->setStatusTip (tr ("Hold F6 and press an arrow key to go to the panel that way"));
+    commands.action (QStringLiteral ("view.nextPanel"))->setStatusTip (tr ("Or tap Alt. Hold Alt (or this key) and press an arrow key to go to the panel that way"));
     add ("view.fullScreen", Category::view, tr ("F&ull Screen"), { KS (Qt::META | Qt::Key_F) }, [this]
     {
         auto* f = QApplication::focusWidget();
