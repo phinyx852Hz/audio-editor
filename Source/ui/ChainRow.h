@@ -73,7 +73,7 @@ public:
     int numKnobs() const { return (int) knobs.size(); }
     int parameterOf (int knob) const;       // the plugin parameter a knob turns, or -1
 
-    static QString prismDeviceMime() { return QStringLiteral ("application/x-phinyx-prism-device"); }
+    static QString prismDeviceMime() { return QStringLiteral ("application/x-phi-prism-device"); }
     static QString prismSummary (const PrismInfo&);   // "Prism  Bands  150 / 1.5k"
 
     void setSelected (bool selected, bool rowFocused, int knob);

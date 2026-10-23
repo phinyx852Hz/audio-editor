@@ -28,7 +28,7 @@ class PluginWindow;
 class PrismProcessor final : public juce::AudioPluginInstance
 {
 public:
-    static constexpr const char* identifier = "phinyx:prism";
+    static constexpr const char* identifier = "phinyx:prism";   // phinyx: like the other built-ins, from before the rename to PHI
     static constexpr int numMacros = PrismInfo::numMacros;
     static constexpr int maxDevices = 16;   // per ray
     static constexpr int splitParameter = numMacros, firstCrossover = numMacros + 1;

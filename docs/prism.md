@@ -1,11 +1,11 @@
 # Prisms
 
-Status: step 1 built (2026-10-23). Owner's ask (2026-10-23): "racks for PHINYX ... maybe racks
+Status: step 1 built (2026-10-23). Owner's ask (2026-10-23): "racks for PHINYX [now PHI] ... maybe racks
 could be nested in the Device Chain, but always pop out as a floating window when editing it.
 When done editing it, it returns docked. We'd still have the 8 knob controls that Ableton uses.
 Same key commands for grouping FX, MIDI mapping the knobs. Potentiometers in most cases." The
 owner named them Prisms. The workflow follows Ableton's racks (free to copy); the names, look and
-layout are PHINYX's own.
+layout are PHI's own.
 
 ![A Prism popped out of its card, split into mid and side](screenshots/prism-editor.png)
 
