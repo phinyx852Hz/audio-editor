@@ -3,7 +3,8 @@
 # PHINYX artwork for Cardinal. Draws a PHINYX version of every file in VCV
 # Rack's component library (knobs, jacks, switches, buttons, lights, sliders,
 # screws, cable plugs, rails), whose own artwork is CC-BY-NC-4.0, over the
-# originals before Cardinal is built. Run in Cardinal's source folder:
+# originals before Cardinal is built, and gives the cables PHINYX's colours.
+# Run in Cardinal's source folder:
 #   python3 phinyx_skin.py
 #
 # Everything is plain SVG that Rack's renderer (nanosvg) draws: paths, solid
@@ -353,8 +354,29 @@ not apply to this build.
 """
 
 
+# The Selector's eight colours (FindPanel::colour), in its order: silver,
+# violet, indigo, azure, emerald, gold, saffron and ruby. New cables take them
+# in turn.
+CABLE_COLOURS = ["#c0c0c0", "#a040ff", "#6a3dd8", "#007fff", "#50c878", "#ffd700", "#ff9933", "#9b111e"]
+
+
+def cable_colours(path):
+    with open(path) as f:
+        source = f.read()
+    block = re.compile(r"(\n[ \t]*)(?://[^\n]*\n[ \t]*)?settings::cableColors = \{.*?\};", re.S)
+    if not block.search(source):
+        sys.exit(f"phinyx_skin.py: no cable colour list in {path}")
+    def ours(m):
+        pad = m.group(1)
+        colours = "".join(f'{pad}    color::fromHexString("{c}"),' for c in CABLE_COLOURS)
+        return f"{pad}// PHINYX: the Selector's colours (phinyx_skin.py){pad}settings::cableColors = {{{colours}{pad}}};"
+    with open(path, "w") as f:
+        f.write(block.sub(ours, source, count=1))
+
+
 def main():
     count = component_library("src/Rack/res/ComponentLibrary")
+    cable_colours("src/CardinalCommon.cpp")
     with open("PHINYX-ARTWORK.md", "w") as f:
         f.write(ARTWORK_NOTE)
     print(f"phinyx_skin.py: drew {count} component library files")
