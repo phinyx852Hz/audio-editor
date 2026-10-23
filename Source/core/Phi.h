@@ -1,0 +1,208 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+#pragma once
+
+// The signal side of the Φ effects: built-in effects of PHI whose times,
+// frequencies, levels and patterns all come from the golden ratio φ and the
+// Fibonacci numbers. Plain C++, so the core tests can check them; the effects
+// themselves are in engine/PhiEffects.cpp. No allocation after prepare().
+#include <array>
+#include <cstdint>
+#include <vector>
+
+namespace phi
+{
+    inline constexpr double ratio = 1.6180339887498949;     // φ = (1 + √5) / 2
+    inline constexpr double inverse = 0.6180339887498949;   // 1 / φ = φ - 1
+
+    // φⁿ for any whole n (φ⁻¹, φ⁻², ...).
+    double power (int n);
+    // The nth Fibonacci number: 0, 1, 1, 2, 3, 5, 8... (n up to 92 fits).
+    std::uint64_t fibonacci (int n);
+
+    // The golden sequence: frac (seed + n / φ). Each value lands in the
+    // biggest gap the earlier ones left, so a run of them is spread more
+    // evenly than random numbers, yet never repeats. 0 <= value < 1.
+    double golden (std::int64_t n, double seed = 0.0);
+
+    // A Sturmian rhythm: step n is a hit when ceil ((n + 1) d - shift) differs
+    // from ceil (n d - shift). With d = 1/φ this is the Fibonacci word
+    // (1 1 0 1 1 0 1 0 1 1 0 1 1 0 1 0 ...): a pattern that never repeats but
+    // never clumps, with hits on a share d of the steps and one on step 0.
+    bool hit (std::int64_t step, double density, double shift = 0.0);
+
+    // The densities Φ Rhythm offers: 1/φ (61.8 %), 1/φ² (38.2 %), 1/φ³ (23.6 %), 1/φ⁴ (14.6 %).
+    inline constexpr int numDensities = 4;
+    double density (int index);
+
+    //==========================================================================
+    // Φ EQ: a Super Low shelf at 80 Hz, ten bells at 80 Hz × φⁿ (n = 1..10:
+    // 129 Hz to 9.8 kHz) and a Super High shelf at 80 Hz × φ¹¹ (15.9 kHz).
+    // Neighbouring bands are φ apart, and each bell is as wide as that step:
+    // Q = φ^1.5 (2.06).
+    class Eq
+    {
+    public:
+        static constexpr int numBands = 12;   // Super Low, 10 bells, Super High
+        static constexpr double baseHz = 80.0;
+        static double bandHz (int band);      // band 0 is Super Low, 11 Super High
+
+        void prepare (double sampleRate, int numChannels);
+        // Gains in dB per band; recalculates only the bands that changed.
+        void set (const std::array<double, numBands>& gainsDb);
+        void reset();
+        void process (float* const* channels, int numChannels, int numFrames);
+        // The response at `hz`, in dB (for tests and drawing).
+        double responseDb (double hz) const;
+
+    private:
+        struct Biquad { double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0; };
+        void design (int band);
+
+        double rate = 48000.0;
+        std::array<Biquad, numBands> coefs {};
+        std::array<double, numBands> gains {};
+        std::vector<std::array<std::array<double, 2>, numBands>> state;   // per channel and band: z1, z2
+    };
+
+    //==========================================================================
+    // Φ Echo: taps at time × φ⁰, φ¹, φ²..., each 1/φ (or `decay`) quieter than
+    // the one before, panned around the stereo field by the golden angle so no
+    // two land in the same place. Feedback sends the last tap back in.
+    class Echo
+    {
+    public:
+        static constexpr int maxTaps = 6;
+        static constexpr double maxTimeSeconds = 0.6;
+        static constexpr double maxSpanSeconds = 6.7;   // maxTime × φ⁵, the last tap at most
+
+        struct Settings
+        {
+            double timeMs = 250.0;   // the first tap
+            int taps = 5;
+            double decay = inverse;  // the level of each tap against the one before
+            double spread = 1.0;     // 0 = all taps centred, 1 = golden-angle panning
+            double feedback = 0.0;   // 0..0.9
+            double mix = 0.35;
+        };
+
+        static double tapSeconds (const Settings&, int tap);
+
+        void prepare (double sampleRate, int numChannels);
+        void set (const Settings&);
+        void reset();
+        void process (float* const* channels, int numChannels, int numFrames);
+
+    private:
+        double rate = 48000.0;
+        Settings settings;
+        std::vector<float> ring;   // the mid of the input, and the feedback
+        int channels = 2;
+        size_t pos = 0;
+        std::array<size_t, maxTaps> delays {};
+        std::array<float, maxTaps> gainL {}, gainR {};
+        float smoothedMix = 0.35f;
+    };
+
+    //==========================================================================
+    // Φ Space: a reverb from eight delay lines whose lengths step by √φ, so no
+    // two of them share a period and the tail stays smooth instead of ringing.
+    // A feedback delay network (Hadamard mixing) with damping in the loop.
+    class Space
+    {
+    public:
+        static constexpr int numLines = 8;
+
+        struct Settings
+        {
+            double size = 0.5;        // 0..1: the shortest line runs from 7 ms to 34 ms
+            double decaySeconds = 2.0; // RT60
+            double damping = 0.4;     // 0..1, how quickly the highs die
+            double preDelayMs = 13.0;
+            double mix = 0.25;
+        };
+
+        void prepare (double sampleRate);
+        void set (const Settings&);
+        void reset();
+        void process (float* const* channels, int numChannels, int numFrames);
+        int lineLength (int line) const { return lengths[(size_t) line]; }
+
+    private:
+        double rate = 48000.0;
+        Settings settings;
+        std::array<std::vector<float>, numLines> lines;
+        std::array<int, numLines> lengths {}, positions {};
+        std::array<double, numLines> feedback {}, lowpass {};
+        std::vector<float> pre;
+        int prePos = 0, preLength = 1;
+        double dampCoef = 0.0;
+        float smoothedMix = 0.25f;
+    };
+
+    //==========================================================================
+    // Φ Drift: movement that never repeats. Three LFOs run at rate, rate × φ and
+    // rate × φ², so their sum never comes back to the same shape. Chorus moves
+    // a short delay with it (left and right a golden angle apart); Tremolo
+    // moves the level; Pan moves the image.
+    class Drift
+    {
+    public:
+        enum class Mode { chorus, tremolo, pan };
+        static constexpr double maxDelayMs = 30.0;
+
+        struct Settings
+        {
+            Mode mode = Mode::chorus;
+            double rateHz = 0.618;
+            double depth = 0.5;   // 0..1
+            double mix = 0.5;     // chorus only; tremolo and pan are fully wet
+        };
+
+        // The modulation at time `seconds` for a rate, from -1 to 1, offset by `phase` turns.
+        static double lfo (double seconds, double rateHz, double phase);
+
+        void prepare (double sampleRate, int numChannels);
+        void set (const Settings&);
+        void reset();
+        void process (float* const* channels, int numChannels, int numFrames);
+
+    private:
+        double rate = 48000.0;
+        Settings settings;
+        std::vector<std::vector<float>> ring;
+        size_t pos = 0;
+        double time = 0.0;
+    };
+
+    //==========================================================================
+    // Φ Rhythm: a gate that opens on the hits of a golden rhythm (hit() above)
+    // at a step length set by tempo and division, with a short ramp so it does
+    // not click. Depth is how far a closed step is turned down.
+    class Rhythm
+    {
+    public:
+        struct Settings
+        {
+            double bpm = 120.0;
+            int stepsPerBeat = 4;     // 2 = eighths, 4 = sixteenths, 8 = thirty-seconds
+            int densityIndex = 0;     // see density()
+            double shift = 0.0;       // 0..1, rotates the pattern
+            double depth = 1.0;       // 0..1
+            double smoothMs = 3.0;
+        };
+
+        void prepare (double sampleRate);
+        void set (const Settings&);
+        void reset();                  // back to step 0
+        // When the host knows where it is (in beats), the pattern follows it.
+        void setPosition (double beats);
+        void process (float* const* channels, int numChannels, int numFrames);
+        std::int64_t currentStep() const;
+
+    private:
+        double rate = 48000.0;
+        Settings settings;
+        double beats = 0.0;
+        float gain = 1.0f, smoothCoef = 0.0f;
+    };
+}

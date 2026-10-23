@@ -27,6 +27,7 @@
 #include "../Source/core/Ambisonics.h"
 #include "../Source/core/SpatialStudio.h"
 #include "../Source/core/PrismSplit.h"
+#include "../Source/core/Phi.h"
 
 #include <algorithm>
 #include <cmath>
@@ -3203,6 +3204,192 @@ namespace
         }
     }
 
+    // The Φ effects' core: golden numbers, rhythms and the four processors.
+    void testPhi()
+    {
+        check (near (phi::ratio * phi::inverse, 1.0, 1.0e-12) && near (phi::ratio - 1.0, phi::inverse, 1.0e-12), "phi times its inverse is 1");
+        check (phi::fibonacci (0) == 0 && phi::fibonacci (10) == 55 && phi::fibonacci (20) == 6765, "fibonacci numbers");
+        check (near ((double) phi::fibonacci (31) / (double) phi::fibonacci (30), phi::ratio, 1.0e-12), "fibonacci ratios approach phi");
+
+        // The golden sequence spreads 89 values so every gap is one of at most three sizes.
+        {
+            std::vector<double> v;
+            for (int n = 0; n < 89; ++n)
+                v.push_back (phi::golden (n));
+            std::sort (v.begin(), v.end());
+            double smallest = 1.0, largest = 0.0;
+            for (size_t i = 1; i < v.size(); ++i)
+            {
+                smallest = std::min (smallest, v[i] - v[i - 1]);
+                largest = std::max (largest, v[i] - v[i - 1]);
+            }
+            check (smallest > 0.0 && largest / smallest < phi::ratio * phi::ratio + 1.0e-6, "golden sequence is evenly spread");
+        }
+
+        // The Fibonacci word: hits on 1/φ of the steps, starting on step 0, never periodic.
+        {
+            const std::string word = "1101101011011010";
+            std::string got;
+            for (int n = 0; n < (int) word.size(); ++n)
+                got += phi::hit (n, phi::density (0)) ? '1' : '0';
+            check (got == word, "phi rhythm is the Fibonacci word, got " + got);
+            for (int d = 0; d < phi::numDensities; ++d)
+            {
+                const int steps = 10000;
+                int hits = 0;
+                for (int n = 0; n < steps; ++n)
+                    hits += phi::hit (n, phi::density (d)) ? 1 : 0;
+                check (std::abs (hits - steps * phi::density (d)) <= 1.0, "phi rhythm density " + std::to_string (d));
+            }
+            bool periodic = false;
+            for (int period = 1; period <= 64 && ! periodic; ++period)
+            {
+                bool same = true;
+                for (int n = 0; n < 2000 && same; ++n)
+                    same = phi::hit (n, phi::density (0)) == phi::hit (n + period, phi::density (0));
+                periodic = same;
+            }
+            check (! periodic, "phi rhythm never repeats");
+        }
+
+        const double rate = 48000.0;
+        auto sine = [rate] (double hz, int frames)
+        {
+            std::vector<float> s ((size_t) frames);
+            for (int i = 0; i < frames; ++i)
+                s[(size_t) i] = (float) (0.5 * std::sin (2.0 * M_PI * hz * i / rate));
+            return s;
+        };
+        auto rmsDb = [] (const std::vector<float>& s, size_t from)
+        {
+            double sum = 0.0;
+            for (size_t i = from; i < s.size(); ++i)
+                sum += (double) s[i] * s[i];
+            return 10.0 * std::log10 (sum / (double) (s.size() - from));
+        };
+
+        // Φ EQ: bands φ apart from 80 Hz; a boost lands on its band, and flat is untouched.
+        {
+            check (near (phi::Eq::bandHz (0), 80.0, 1.0e-9) && near (phi::Eq::bandHz (11), 15920.4, 0.1)
+                   && near (phi::Eq::bandHz (5) / phi::Eq::bandHz (4), phi::ratio, 1.0e-9), "phi EQ bands are golden steps from 80 Hz");
+            phi::Eq eq;
+            eq.prepare (rate, 1);
+            auto flat = sine (1000.0, 4800);
+            const auto original = flat;
+            float* io[] { flat.data() };
+            eq.process (io, 1, 4800);
+            check (flat == original, "flat phi EQ leaves the sound alone");
+
+            std::array<double, phi::Eq::numBands> gains {};
+            gains[5] = 6.0;
+            eq.set (gains);
+            check (near (eq.responseDb (phi::Eq::bandHz (5)), 6.0, 0.05), "phi EQ bell reaches its gain");
+            check (std::abs (eq.responseDb (phi::Eq::bandHz (2))) < 0.6, "phi EQ bell leaves bands three steps away nearly alone");
+            auto tone = sine (phi::Eq::bandHz (5), 24000);
+            const auto before = rmsDb (tone, 12000);
+            float* t[] { tone.data() };
+            eq.process (t, 1, 24000);
+            check (near (rmsDb (tone, 12000) - before, 6.0, 0.1), "phi EQ boosts its band by 6 dB");
+        }
+
+        // Φ Echo: an impulse comes back at t, tφ, tφ²..., each 1/φ quieter.
+        {
+            phi::Echo echo;
+            phi::Echo::Settings s;
+            s.timeMs = 100.0;
+            s.taps = 4;
+            s.spread = 0.0;
+            s.mix = 1.0;
+            echo.prepare (rate, 1);
+            echo.set (s);
+            const int frames = (int) (rate * 0.5);
+            std::vector<float> x ((size_t) frames, 0.0f);
+            x[0] = 1.0f;
+            float* io[] { x.data() };
+            echo.process (io, 1, frames);
+            bool ok = true;
+            for (int t = 0; t < 4; ++t)
+            {
+                const auto at = (size_t) std::lround (phi::Echo::tapSeconds (s, t) * rate);
+                ok = ok && near (x[at], std::pow (phi::inverse, t), 0.01);
+            }
+            check (ok, "phi echo taps at golden times with golden decay");
+        }
+
+        // Φ Space: the lines never share a period, and the tail dies away.
+        {
+            phi::Space space;
+            space.prepare (rate);
+            phi::Space::Settings s;
+            s.decaySeconds = 1.0;
+            s.mix = 1.0;
+            space.set (s);
+            bool distinct = true;
+            for (int a = 0; a < phi::Space::numLines; ++a)
+                for (int b = a + 1; b < phi::Space::numLines; ++b)
+                    distinct = distinct && space.lineLength (a) != space.lineLength (b);
+            check (distinct, "phi space lines all differ");
+
+            const int frames = (int) (rate * 3.0);
+            std::vector<float> l ((size_t) frames, 0.0f), r ((size_t) frames, 0.0f);
+            l[0] = r[0] = 1.0f;
+            float* io[] { l.data(), r.data() };
+            space.process (io, 2, frames);
+            double early = 0.0, late = 0.0;
+            bool finite = true;
+            for (int i = 0; i < frames; ++i)
+            {
+                finite = finite && std::isfinite (l[(size_t) i]) && std::isfinite (r[(size_t) i]);
+                const auto power = (double) l[(size_t) i] * l[(size_t) i];
+                if (i < (int) (rate * 0.5))
+                    early += power;
+                else if (i >= (int) (rate * 2.0))
+                    late += power;
+            }
+            check (finite && early > 0.0 && late < early * 1.0e-4, "phi space decays");
+        }
+
+        // Φ Drift stays within its depth; tremolo never goes above unity.
+        {
+            double lowest = 1.0, highest = -1.0;
+            for (int i = 0; i < 100000; ++i)
+            {
+                const auto v = phi::Drift::lfo (i * 0.001, 0.618, 0.0);
+                lowest = std::min (lowest, v);
+                highest = std::max (highest, v);
+            }
+            check (lowest >= -1.0 && highest <= 1.0 && highest - lowest > 1.0, "phi drift LFO spans its range");
+            phi::Drift drift;
+            drift.prepare (rate, 1);
+            drift.set ({ phi::Drift::Mode::tremolo, 2.0, 1.0, 1.0 });
+            std::vector<float> ones (48000, 1.0f);
+            float* io[] { ones.data() };
+            drift.process (io, 1, 48000);
+            check (*std::max_element (ones.begin(), ones.end()) <= 1.0f && *std::min_element (ones.begin(), ones.end()) >= 0.0f,
+                   "phi tremolo stays between silence and unity");
+        }
+
+        // Φ Rhythm: open on hits, closed between them.
+        {
+            phi::Rhythm gate;
+            gate.prepare (rate);
+            phi::Rhythm::Settings s;
+            s.bpm = 120.0;           // a sixteenth is 6000 samples
+            s.smoothMs = 0.5;
+            gate.set (s);
+            std::vector<float> ones (6000 * 16, 1.0f);
+            float* io[] { ones.data() };
+            gate.process (io, 1, (int) ones.size());
+            bool ok = true;
+            for (int step = 0; step < 16; ++step)
+            {
+                const auto v = ones[(size_t) step * 6000 + 5000];
+                ok = ok && near (v, phi::hit (step, phi::density (0)) ? 1.0f : 0.0f, 0.01);
+            }
+            check (ok, "phi rhythm gate follows the pattern");
+        }
+    }
+
 int main()
 {
     testStorage();
@@ -3237,6 +3424,7 @@ int main()
     testPatchBay();
     testSpatialStudio();
     testPrismSplit();
+    testPhi();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");
