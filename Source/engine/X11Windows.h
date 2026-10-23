@@ -11,10 +11,6 @@ namespace x11
     // (Hyprland's class:^(phinyx)$) apply to it like the main window.
     void setWindowClass (void* nativeWindowHandle);
 
-    // Marks a window as a dialog, so tiling window managers (Hyprland) float it
-    // like a traditional plugin window. Call it before the window is shown.
-    void setFloating (void* nativeWindowHandle);
-
     // Sets a window's opacity, 0 to 1 (_NET_WM_WINDOW_OPACITY), for compositors
     // that honour it; JUCE's own setAlpha does nothing for a window on Linux.
     void setOpacity (void* nativeWindowHandle, double opacity);
