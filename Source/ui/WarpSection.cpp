@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The Warp menu: the beat grid (tempo, downbeat, bars over the waveform) and
 // stretching to a tempo with Rubber Band (core/TimeStretch.h). Warp markers,
-// quantizing and loop export build on these.
+// quantizing (QuantizeSection.cpp) and loop export build on these.
 #include "MainWindow.h"
 
+#include "QuantizePanel.h"
 #include "Settings.h"
 #include "TimeRuler.h"
 #include "TransportBar.h"
@@ -177,8 +178,8 @@ void MainWindow::registerWarpCommands()
     add ("warp.nudgeLater", tr ("Nudge Warp Marker &Later"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_Right) }, [this] { nudgeWarpMarker (1, false); });
     add ("warp.nudgeEarlierFine", tr ("Nudge Warp Marker 1 ms Earlier"), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_Left) }, [this] { nudgeWarpMarker (-1, true); });
     add ("warp.nudgeLaterFine", tr ("Nudge Warp Marker 1 ms Later"), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_Right) }, [this] { nudgeWarpMarker (1, true); });
-    add ("warp.quantize", tr ("&Quantize..."), { KS (Qt::Key_Q) }, [this] { quantizeDialog(); })
-        ->setStatusTip (tr ("Move the hits towards the beat grid, by stretching the audio between them"));
+    add ("warp.quantize", tr ("&Quantize"), { KS (Qt::Key_Q) }, [this] { quantizeNow (false); })
+        ->setStatusTip (tr ("Move the hits towards the beat grid, by stretching the audio between them, with the Quantize panel's settings (Shift+Q)"));
     connect (waveform, &WaveformView::warpMoved, this, [this] (Frame source, Frame target, int marker, bool reanchor)
     {
         warpMove (source, target, marker, reanchor);
@@ -192,6 +193,7 @@ void MainWindow::registerWarpCommands()
         ->setStatusTip (tr ("Make the selection or the whole file half as long (double speed), keeping the pitch; press again for a quarter..."));
     add ("warp.exportLoop", tr ("Export &Loop..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_L) }, [this] { exportLoop(); })
         ->setStatusTip (tr ("Save whole bars as a WAV loop with its tempo and loop points, for samplers and DAWs"));
+    registerQuantizeCommands();
 }
 
 void MainWindow::updateWarpCommandStates()
@@ -203,12 +205,15 @@ void MainWindow::updateWarpCommandStates()
     for (const auto* a : { "warp.halve", "warp.double", "warp.exportLoop" })
         commands.action (QString::fromLatin1 (a))->setEnabled (grid);
     commands.action (QStringLiteral ("warp.edit"))->setEnabled (open);
-    commands.action (QStringLiteral ("warp.quantize"))->setEnabled (open);
+    for (const auto* a : { "warp.quantize", "warp.markersFromHits", "warp.sliceAtHits" })
+        commands.action (QString::fromLatin1 (a))->setEnabled (open);
+    commands.action (QStringLiteral ("warp.resetWarp"))->setEnabled (open && currentWarp() != nullptr && ! currentWarp()->markers.empty());
     if (! open && warpEditing)
         setWarpEditing (false);
     for (const auto* a : { "warp.previousHit", "warp.nextHit", "warp.toggleMarker", "warp.nudgeEarlier", "warp.nudgeLater",
                            "warp.nudgeEarlierFine", "warp.nudgeLaterFine" })
         commands.action (QString::fromLatin1 (a))->setEnabled (open && warpEditing);
+    updateQuantizePanel();
 }
 
 void MainWindow::refreshGrid()
@@ -219,7 +224,19 @@ void MainWindow::refreshGrid()
                      : commands.action (QStringLiteral ("view.rulerBoth"))->isChecked() ? TimeRuler::Mode::both : TimeRuler::Mode::time;
     timeRuler->setGrid (grid, ruler);
     transportBar->setTempo (grid.isSet() ? grid.bpm : 0.0);
+    // Any other edit of the audio ends the warp; editing goes on with the hits of the audio as it is now.
+    if (warpEditing && doc.isOpen() && ! doc.isAlbum() && data() != nullptr && currentWarp() == nullptr)
+    {
+        auto draft = std::make_shared<WarpEdit>();
+        draft->source = data();
+        draft->mode = quantizeWidget != nullptr ? quantizeWidget->mode()
+                                                : appSettings().value (QStringLiteral ("warp/mode"), (int) timestretch::Mode::fullMix).toInt();
+        draft->transients = findHits (*draft->source);
+        warpDraft = std::move (draft);
+    }
     waveform->setWarp (currentWarp(), warpEditing);
+    waveform->setWarpSnap (quantizeWidget != nullptr ? quantizeWidget->snapDivision() : 0.25);
+    updateQuantizePanel();
 }
 
 std::shared_ptr<const WarpEdit> MainWindow::currentWarp() const
@@ -241,7 +258,7 @@ void MainWindow::setWarpEditing (bool on)
         auto draft = std::make_shared<WarpEdit>();
         draft->source = d;
         draft->mode = appSettings().value (QStringLiteral ("warp/mode"), (int) timestretch::Mode::fullMix).toInt();
-        draft->transients = timestretch::transients (*d, appSettings().value (QStringLiteral ("warp/sensitivity"), 0.5).toDouble());
+        draft->transients = findHits (*d);
         warpDraft = std::move (draft);
     }
     warpEditing = on;
@@ -273,7 +290,7 @@ void MainWindow::applyWarp (const QString& description, std::shared_ptr<WarpEdit
         const auto ran = runWithProgress (tr ("Warp"), [&] (std::atomic<float>& progress, const std::atomic<bool>& cancel)
         {
             result = timestretch::render (source, 0, source.length(), source.length(), anchors, (timestretch::Mode) next->mode,
-                                          error, &progress, &cancel, warpCache.get());
+                                          error, &progress, &cancel, warpCache.get(), next->transients);
         });
         if (! ran || result == nullptr)
         {
@@ -434,107 +451,6 @@ void MainWindow::nudgeWarpMarker (int direction, bool fine)
         moved += direction * (Frame) (0.01 * rate);
     warpMove (source, std::clamp<Frame> (moved, 0, w->source->length()), marker, false);
     setCursor (currentWarp() != nullptr ? currentWarp()->toTarget (source) : moved);
-}
-
-void MainWindow::quantizeDialog()
-{
-    const auto d = data();
-    if (d == nullptr || refuseAlbumEdit())
-        return;
-    const auto title = tr ("Quantize");
-    const auto& grid = doc.current().grid;
-    if (! grid.isSet())
-    {
-        QMessageBox::information (this, title, tr ("Quantizing needs the beat grid. Use Warp > Detect Beat Grid, or set the tempo with Ctrl+Shift+J."));
-        return;
-    }
-    if (! warpEditing)
-        setWarpEditing (true);
-    const auto w = currentWarp();
-    if (w == nullptr)
-        return;
-
-    QDialog dialog (this);
-    dialog.setWindowTitle (title);
-    auto* form = new QFormLayout (&dialog);
-    auto* division = new QComboBox (&dialog);
-    const std::pair<QString, double> divisions[] { { tr ("1/4 (quarter notes)"), 1.0 }, { tr ("1/8"), 0.5 }, { tr ("1/16"), 0.25 },
-                                                   { tr ("1/32"), 0.125 }, { tr ("1/8 triplets"), 1.0 / 3.0 }, { tr ("1/16 triplets"), 1.0 / 6.0 } };
-    for (const auto& [name, value] : divisions)
-        division->addItem (name, value);
-    division->setCurrentIndex (appSettings().value (QStringLiteral ("warp/quantizeDivision"), 2).toInt());
-    auto percent = [&dialog] (const QString& key, int fallback)
-    {
-        auto* box = new QSpinBox (&dialog);
-        box->setRange (0, 100);
-        box->setSuffix (QStringLiteral (" %"));
-        box->setValue (appSettings().value (key, fallback).toInt());
-        return box;
-    };
-    auto* strength = percent (QStringLiteral ("warp/quantizeStrength"), 100);
-    auto* swing = percent (QStringLiteral ("warp/quantizeSwing"), 0);
-    auto* leave = percent (QStringLiteral ("warp/quantizeLeaveWithin"), 0);
-    auto* reach = percent (QStringLiteral ("warp/quantizeReach"), 100);
-    auto* mode = new QComboBox (&dialog);
-    for (const auto m : timestretch::modes())
-        mode->addItem (tr (timestretch::modeName (m)), (int) m);
-    mode->setCurrentIndex (std::max (0, mode->findData (w->mode)));
-    form->addRow (tr ("&Grid:"), division);
-    form->addRow (tr ("&Strength:"), strength);
-    form->addRow (tr ("S&wing:"), swing);
-    form->addRow (tr ("&Leave within:"), leave);
-    form->addRow (tr ("&Reach:"), reach);
-    form->addRow (tr ("&Mode:"), mode);
-    auto* hint = new QLabel (tr ("Strength 100 % puts every hit on the grid, good for loops; 50 to 80 % tightens a performance and keeps its feel. "
-                                 "Leave within: hits this close to their line (as a share of one step) stay put. Reach: only hits this close move."),
-                             &dialog);
-    hint->setWordWrap (true);
-    form->addRow (hint);
-    auto* buttons = new QDialogButtonBox (QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    buttons->button (QDialogButtonBox::Ok)->setText (tr ("Quantize"));
-    form->addRow (buttons);
-    connect (buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect (buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    division->setFocus();
-    if (dialog.exec() != QDialog::Accepted)
-    {
-        waveform->setFocus();
-        return;
-    }
-    appSettings().setValue (QStringLiteral ("warp/quantizeDivision"), division->currentIndex());
-    appSettings().setValue (QStringLiteral ("warp/quantizeStrength"), strength->value());
-    appSettings().setValue (QStringLiteral ("warp/quantizeSwing"), swing->value());
-    appSettings().setValue (QStringLiteral ("warp/quantizeLeaveWithin"), leave->value());
-    appSettings().setValue (QStringLiteral ("warp/quantizeReach"), reach->value());
-    appSettings().setValue (QStringLiteral ("warp/mode"), mode->currentData().toInt());
-
-    timestretch::Quantize q;
-    q.division = division->currentData().toDouble();
-    q.strength = strength->value() / 100.0;
-    q.swing = swing->value() / 100.0;
-    q.leaveWithin = leave->value() / 100.0;
-    q.reach = reach->value() / 100.0;
-    // In the selection (or the whole file), placed from the original performance.
-    const auto [s, e] = processRange();
-    const auto from = w->toSource (s), to = w->toSource (e);
-    const auto rate = d->sampleRate();
-    auto next = std::make_shared<WarpEdit> (*w);
-    next->mode = mode->currentData().toInt();
-    std::vector<WarpEdit::Marker> kept;
-    for (const auto& m : w->markers)
-        if (m.source < from || m.source >= to)
-            kept.push_back (m);
-    // The grid is on the result's timeline; hits are placed as if the source were unwarped.
-    for (const auto& [source, target] : timestretch::quantize (w->transients, grid, rate, q, from, to))
-        kept.push_back ({ source, target });
-    std::sort (kept.begin(), kept.end(), [] (const WarpEdit::Marker& a, const WarpEdit::Marker& b) { return a.source < b.source; });
-    next->markers.clear();
-    const auto gap = (Frame) (0.001 * rate);
-    for (const auto& m : kept)
-        if (next->markers.empty() || (m.source > next->markers.back().source + gap && m.target > next->markers.back().target + gap))
-            next->markers.push_back (m);
-    applyWarp (tr ("Quantize %1").arg (division->currentText()), std::move (next));
-    statusBar()->showMessage (tr ("Quantized to %1 at %2 %; Ctrl+Z undoes it").arg (division->currentText()).arg (strength->value()), 6000);
 }
 
 void MainWindow::applyGrid (const QString& description, BeatGrid grid)

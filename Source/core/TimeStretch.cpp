@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 //==============================================================================
 Frame WarpEdit::toTarget (Frame f) const
@@ -270,7 +271,7 @@ BeatGrid beatgrid::align (const AudioData& audio, BeatGrid grid, bool chooseBar1
     return grid;
 }
 
-std::vector<Frame> timestretch::transients (const AudioData& audio, double sensitivity)
+std::vector<Frame> timestretch::transients (const AudioData& audio, double sensitivity, double minGapMs)
 {
     std::vector<Frame> out;
     const auto hop = std::max<Frame> (1, (Frame) (0.001 * audio.sampleRate()));
@@ -291,9 +292,9 @@ std::vector<Frame> timestretch::transients (const AudioData& audio, double sensi
     const auto riseAt = [&] (size_t h) { return h >= 5 ? std::max (0.0f, smooth[h] - smooth[h - 5]) : 0.0f; };
 
     // A hit: the level rises this much in 5 ms (16 dB at 0 sensitivity to 5 dB at 1),
-    // above -55 dB, and is the biggest rise within 50 ms.
+    // above -55 dB, and is the biggest rise within the gap (50 ms unless asked otherwise).
     const auto threshold = (float) (16.0 - 11.0 * std::clamp (sensitivity, 0.0, 1.0));
-    const size_t gap = 50;
+    const auto gap = (size_t) std::clamp (minGapMs, 5.0, 2000.0);
     for (size_t h = 5; h < level.size(); ++h)
     {
         const auto r = riseAt (h);
@@ -318,30 +319,10 @@ std::vector<Frame> timestretch::transients (const AudioData& audio, double sensi
 std::vector<std::pair<Frame, Frame>> timestretch::quantize (const std::vector<Frame>& hits, const BeatGrid& grid, double rate,
                                                             const Quantize& q, Frame from, Frame to)
 {
-    std::vector<std::pair<Frame, Frame>> out;
-    if (! grid.isSet() || q.division <= 0.0 || rate <= 0.0)
-        return out;
-    const auto gap = (Frame) (0.001 * rate);
-    for (const auto hit : hits)
-    {
-        if (hit < from || hit >= to)
-            continue;
-        const auto beat = grid.beatAt ((double) hit / rate);
-        const auto step = std::round (beat / q.division);
-        auto line = step * q.division;
-        if ((long long) std::llround (std::abs (step)) % 2 == 1)
-            line += std::clamp (q.swing, 0.0, 1.0) * q.division / 3.0;
-        const auto distance = std::abs (line - beat) / q.division;   // in steps; at most about half
-        if (distance <= q.leaveWithin / 2.0 || distance > q.reach / 2.0 + 1e-9)
-            continue;
-        const auto target = (Frame) std::llround (grid.secondsAt (beat + (line - beat) * std::clamp (q.strength, 0.0, 1.0)) * rate);
-        if (target == hit)
-            continue;
-        if (! out.empty() && (target <= out.back().second + gap || hit <= out.back().first + gap))
-            continue;
-        out.push_back ({ hit, target });
-    }
-    return out;
+    std::vector<audioquantize::Hit> at;
+    for (const auto h : hits)
+        at.push_back ({ h, h });
+    return audioquantize::place (at, grid, rate, q, from, to);
 }
 
 //==============================================================================
@@ -354,13 +335,36 @@ const char* timestretch::modeName (Mode m)
         case Mode::fullMix:      return "Full Mix";
         case Mode::fullMixVoice: return "Full Mix + Voice";
         case Mode::varispeed:    return "Varispeed";
+        case Mode::beats:        return "Beats";
+        case Mode::beatsNoLoop:  return "Beats, No Loop";
+        case Mode::texture:      return "Texture";
+        case Mode::smooth:       return "Smooth";
+    }
+    return "";
+}
+
+const char* timestretch::modeDescription (Mode m)
+{
+    switch (m)
+    {
+        case Mode::drums:        return "Phase vocoder with short windows: hits stay sharp. Drum loops and percussion.";
+        case Mode::melody:       return "High-quality pitch: single voices, bass and lead instruments.";
+        case Mode::fullMix:      return "The all-rounder for whole songs and mixed material.";
+        case Mode::fullMixVoice: return "Full Mix that keeps formants, so voices keep their character.";
+        case Mode::varispeed:    return "Like tape: speed and pitch change together. No artefacts.";
+        case Mode::beats:        return "No stretching: cut at every hit, each piece starts on its new place; "
+                                        "longer gaps loop the piece's tail. Hits stay exactly as recorded.";
+        case Mode::beatsNoLoop:  return "As Beats, but a piece moved apart rings out and falls silent instead of looping.";
+        case Mode::texture:      return "Overlapping grains, slightly scattered: pads, drones, noise and ambience.";
+        case Mode::smooth:       return "A soft phase vocoder with long windows for sustained sounds without sharp hits.";
     }
     return "";
 }
 
 std::vector<timestretch::Mode> timestretch::modes()
 {
-    return { Mode::fullMix, Mode::fullMixVoice, Mode::drums, Mode::melody, Mode::varispeed };
+    return { Mode::fullMix, Mode::fullMixVoice, Mode::drums, Mode::beats, Mode::beatsNoLoop, Mode::melody,
+             Mode::texture, Mode::smooth, Mode::varispeed };
 }
 
 namespace
@@ -435,8 +439,13 @@ namespace
         case Mode::drums:        options |= RB::OptionWindowShort; break;
         case Mode::melody:       options |= RB::OptionPitchHighQuality; break;
         case Mode::fullMixVoice: options |= RB::OptionFormantPreserved; break;
+        case Mode::smooth:       options = RB::OptionProcessOffline | RB::OptionEngineFaster | RB::OptionChannelsTogether
+                                         | RB::OptionTransientsSmooth | RB::OptionWindowLong; break;
         case Mode::fullMix:
-        case Mode::varispeed:    break;
+        case Mode::varispeed:
+        case Mode::beats:
+        case Mode::beatsNoLoop:
+        case Mode::texture:      break;
     }
     const auto channels = audio.numChannels();
     const auto rate = audio.sampleRate();
@@ -518,6 +527,171 @@ namespace
 }
 }
 
+namespace
+{
+    // Where a frame of the range lands in the result, and back, along the anchors.
+    double mapThrough (const std::vector<Anchor>& points, double f, bool forward)
+    {
+        for (size_t i = 1; i < points.size(); ++i)
+        {
+            const auto a = forward ? points[i - 1].source : points[i - 1].target, b = forward ? points[i].source : points[i].target;
+            const auto x = forward ? points[i - 1].target : points[i - 1].source, y = forward ? points[i].target : points[i].source;
+            if (f < (double) b || i + 1 == points.size())
+                return (double) x + (f - (double) a) * (double) (y - x) / (double) std::max<Frame> (1, b - a);
+        }
+        return f;
+    }
+
+    AudioDataPtr fromChannels (std::vector<std::vector<float>>& result, double rate)
+    {
+        AudioData::Builder out ((int) result.size(), rate);
+        const auto length = result.empty() ? Frame (0) : (Frame) result[0].size();
+        for (Frame done = 0; done < length; done += 65536)
+        {
+            const auto n = (int) std::min<Frame> (65536, length - done);
+            std::vector<const float*> at;
+            for (auto& c : result)
+                at.push_back (c.data() + done);
+            out.append (at.data(), n);
+        }
+        return out.finish();
+    }
+
+    // Beats: the range cut at the anchors and hits; each piece copied, unstretched, to
+    // where its start lands. A piece given more room loops its second half (crossfaded)
+    // or, with `loop` off, rings out and fades; one given less is cut with a short fade.
+    AudioDataPtr beatsRender (const AudioData& audio, Frame start, const std::vector<Anchor>& points, std::vector<Frame> hits,
+                              bool loop, std::string& error, std::atomic<float>* progress, const std::atomic<bool>* cancel)
+    {
+        const auto channels = audio.numChannels();
+        const auto rate = audio.sampleRate();
+        const auto length = points.back().source, resultLength = points.back().target;
+        if (hits.empty())
+            hits = timestretch::transients (*audio.slice (start, start + length));
+        // The cuts: every anchor, and the hits not within 5 ms of one.
+        std::vector<Frame> cuts;
+        for (const auto& p : points)
+            cuts.push_back (p.source);
+        const auto near = (Frame) (0.005 * rate);
+        for (const auto h : hits)
+            if (h > near && h < length - near)
+            {
+                const auto it = std::lower_bound (cuts.begin(), cuts.end(), h);
+                if ((it == cuts.end() || *it - h > near) && (it == cuts.begin() || h - *(it - 1) > near))
+                    cuts.insert (it, h);
+            }
+        std::vector<std::vector<float>> result ((size_t) channels, std::vector<float> ((size_t) resultLength, 0.0f));
+        std::vector<std::vector<float>> piece ((size_t) channels);
+        std::vector<float*> ptrs ((size_t) channels);
+        const auto fade = std::max<Frame> (2, (Frame) (0.003 * rate));
+        for (size_t i = 1; i < cuts.size(); ++i)
+        {
+            const auto a = cuts[i - 1], b = cuts[i];
+            const auto ta = std::clamp<Frame> ((Frame) std::llround (mapThrough (points, (double) a, true)), 0, resultLength);
+            const auto tb = std::clamp<Frame> ((Frame) std::llround (mapThrough (points, (double) b, true)), ta, resultLength);
+            const auto inLength = b - a, outLength = tb - ta;
+            if (outLength <= 0 || inLength <= 0)
+                continue;
+            for (int c = 0; c < channels; ++c)
+            {
+                piece[(size_t) c].assign ((size_t) inLength, 0.0f);
+                ptrs[(size_t) c] = piece[(size_t) c].data();
+            }
+            audio.read (start + a, (int) inLength, ptrs.data());
+            auto put = [&] (Frame t, Frame from, float gain)
+            {
+                for (int c = 0; c < channels; ++c)
+                    result[(size_t) c][(size_t) (ta + t)] += gain * piece[(size_t) c][(size_t) from];
+            };
+            const auto copied = std::min (inLength, outLength);
+            for (Frame t = 0; t < copied; ++t)
+            {
+                float g = 1.0f;
+                if (outLength < inLength || (! loop && outLength > inLength))
+                    g = std::min (1.0f, (float) (copied - t) / (float) std::min (fade, copied));
+                put (t, t, g);
+            }
+            if (loop && outLength > inLength)
+            {
+                // The second half of the piece again and again, each repeat crossfaded into the last.
+                const auto span = std::clamp<Frame> (inLength / 2, std::min (inLength, (Frame) (0.01 * rate)), inLength);
+                const auto cross = std::max<Frame> (1, std::min (span / 4, (Frame) (0.005 * rate)));
+                for (Frame at = inLength - cross; at < outLength; at += span - cross)
+                    for (Frame j = 0; j < span && at + j < outLength; ++j)
+                    {
+                        // The repeat fades in over the crossfade (the copy before it was not faded, so it fades out here).
+                        const auto in = j < cross ? (float) (j + 1) / (float) (cross + 1) : 1.0f;
+                        if (j < cross)
+                            for (int c = 0; c < channels; ++c)
+                                result[(size_t) c][(size_t) (ta + at + j)] *= 1.0f - in;
+                        auto g = in;
+                        if (outLength - (at + j) < fade)
+                            g *= (float) (outLength - (at + j)) / (float) fade;
+                        put (at + j, inLength - span + j, g);
+                    }
+            }
+            if (progress != nullptr)
+                progress->store ((float) tb / (float) std::max<Frame> (1, resultLength));
+            if (cancel != nullptr && cancel->load())
+            {
+                error = "Cancelled.";
+                return nullptr;
+            }
+        }
+        return fromChannels (result, rate);
+    }
+
+    // Texture: 80 ms Hann grains at half-grain steps, each read from where its centre
+    // maps back to in the source, scattered by up to a quarter grain so stretched
+    // drones and noise do not buzz at the grain rate.
+    AudioDataPtr textureRender (const AudioData& audio, Frame start, const std::vector<Anchor>& points, std::string& error,
+                                std::atomic<float>* progress, const std::atomic<bool>* cancel)
+    {
+        const auto channels = audio.numChannels();
+        const auto rate = audio.sampleRate();
+        const auto length = points.back().source, resultLength = points.back().target;
+        const auto grain = std::max<Frame> (64, ((Frame) (0.08 * rate) / 2) * 2), hop = grain / 2;
+        std::vector<float> window ((size_t) grain);
+        for (Frame i = 0; i < grain; ++i)
+            window[(size_t) i] = (float) (0.5 - 0.5 * std::cos (2.0 * M_PI * (double) i / (double) grain));
+        std::vector<std::vector<float>> result ((size_t) channels, std::vector<float> ((size_t) resultLength, 0.0f));
+        std::vector<std::vector<float>> buffer ((size_t) channels, std::vector<float> ((size_t) grain));
+        std::vector<float*> ptrs;
+        for (auto& c : buffer)
+            ptrs.push_back (c.data());
+        std::uint32_t random = 0x2545F491u;
+        for (Frame centre = 0; centre - hop < resultLength; centre += hop)
+        {
+            random = random * 1664525u + 1013904223u;
+            const auto scatter = ((double) (random >> 8) / (double) (1u << 24) - 0.5) * 0.5 * (double) grain;
+            auto from = (Frame) std::llround (mapThrough (points, (double) centre, false) + scatter) - grain / 2;
+            from = std::clamp<Frame> (from, 0, std::max<Frame> (0, length - grain));
+            for (auto& c : buffer)
+                std::fill (c.begin(), c.end(), 0.0f);
+            audio.read (start + from, (int) std::min (grain, length - from), ptrs.data());
+            for (Frame i = 0; i < grain; ++i)
+            {
+                const auto t = centre - grain / 2 + i;
+                if (t < 0 || t >= resultLength)
+                    continue;
+                for (int c = 0; c < channels; ++c)
+                    result[(size_t) c][(size_t) t] += window[(size_t) i] * buffer[(size_t) c][(size_t) i];
+            }
+            if ((centre / hop) % 64 == 0)
+            {
+                if (progress != nullptr)
+                    progress->store ((float) centre / (float) std::max<Frame> (1, resultLength));
+                if (cancel != nullptr && cancel->load())
+                {
+                    error = "Cancelled.";
+                    return nullptr;
+                }
+            }
+        }
+        return fromChannels (result, rate);
+    }
+}
+
 AudioDataPtr timestretch::SegmentCache::find (const AudioData& source, Frame from, Frame to, Frame length, Mode mode) const
 {
     if (owner != &source)
@@ -541,7 +715,7 @@ void timestretch::SegmentCache::add (const AudioData& source, Frame from, Frame 
 
 AudioDataPtr timestretch::render (const AudioData& audio, Frame start, Frame end, Frame resultLength, std::vector<Anchor> anchors,
                                   Mode mode, std::string& error, std::atomic<float>* progress, const std::atomic<bool>* cancel,
-                                  SegmentCache* cache)
+                                  SegmentCache* cache, const std::vector<Frame>& hits)
 {
     start = std::clamp<Frame> (start, 0, audio.length());
     end = std::clamp<Frame> (end, start, audio.length());
@@ -560,6 +734,16 @@ AudioDataPtr timestretch::render (const AudioData& audio, Frame start, Frame end
         copy.appendShared (audio, start, end);
         return copy.finish();
     }
+    if (mode == Mode::beats || mode == Mode::beatsNoLoop)
+    {
+        std::vector<Frame> inRange;
+        for (const auto h : hits)
+            if (h >= 0 && h < length)
+                inRange.push_back (h);
+        return beatsRender (audio, start, points, inRange, mode == Mode::beats, error, progress, cancel);
+    }
+    if (mode == Mode::texture)
+        return textureRender (audio, start, points, error, progress, cancel);
     if (points.size() == 2)
         return renderConstant (audio, start, end, resultLength, mode, error, progress, cancel);
 

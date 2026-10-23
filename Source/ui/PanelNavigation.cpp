@@ -10,6 +10,7 @@
 #include "MasterPanel.h"
 #include "MixerWindow.h"
 #include "Panels.h"
+#include "QuantizePanel.h"
 #include "ReferencePanel.h"
 #include "SamplerWindow.h"
 #include "SlicerWindow.h"
@@ -85,7 +86,7 @@ std::vector<MainWindow::PanelStop> MainWindow::panelStops() const
     return { { editor, nullptr }, { samplerWin, samplerPanel }, { chainRow, chainPanel }, { masterWidget, masterPanel },
              { metersPanel->content(), metersPanel }, { markerList, markerPanel }, { historyList, historyPanel },
              { diagnostics, diagnosticsPanel }, { referencePanel, referencesPanel }, { ambiSceneView, ambiScenePanel },
-             { findWidget, findPanel }, { slicerWin, slicerPanel } };
+             { findWidget, findPanel }, { slicerWin, slicerPanel }, { quantizeWidget, quantizePanel } };
 }
 
 int MainWindow::stopWithFocus (const std::vector<PanelStop>& stops) const

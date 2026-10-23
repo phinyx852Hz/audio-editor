@@ -22,6 +22,7 @@
 #include "../Source/core/Pitch.h"
 #include "../Source/core/PitchFix.h"
 #include "../Source/core/TimeStretch.h"
+#include "../Source/core/Quantize.h"
 #include "../Source/core/Binaural.h"
 #include "../Source/core/Ambisonics.h"
 #include "../Source/core/SpatialStudio.h"
@@ -2791,6 +2792,124 @@ namespace
             q.swing = 1.0;
             const auto swung = timestretch::quantize (hits, g, rate, q, 0, (Frame) (10 * rate));
             check (swung.size() >= 2 && std::abs ((double) swung[1].second / rate - (0.125 + 0.125 / 3.0)) < 1e-3, "full swing puts the second sixteenth a third of a step late");
+        }
+
+        // The Quantize panel's engine: grooves, iterative quantizing, randomizing, filtering hits.
+        {
+            BeatGrid g;
+            g.bpm = 120.0;   // a sixteenth is 125 ms
+            const auto mpc = audioquantize::swing (0.25, 58.0);
+            check (mpc.offsets.size() == 2 && std::abs (mpc.offsets[1] - 0.16) < 1e-9, "58 % swing puts the offbeat 0.16 of a step late");
+            audioquantize::Settings s;
+            s.groove = mpc;
+            check (std::abs (audioquantize::lineFor (0.27, s) - (0.25 + 0.16 * 0.25)) < 1e-9, "a grooved offbeat line is late");
+            check (std::abs (audioquantize::lineFor (0.52, s) - 0.5) < 1e-9, "a grooved downbeat line stays");
+
+            // Iterative: a hit 40 ms late, already warped half way (now 20 ms late), goes half way again from there.
+            std::vector<audioquantize::Hit> hits { { (Frame) (0.165 * rate), (Frame) (0.145 * rate) } };
+            audioquantize::Settings half;
+            half.strength = 0.5;
+            const auto again = audioquantize::place (hits, g, rate, half, 0, (Frame) rate);
+            check (again.size() == 1 && again[0].first == hits[0].source && again[0].second == (Frame) std::llround (0.135 * rate),
+                   "iterative quantize moves half way from where the hit is now");
+            // A warped hit outside the catch range keeps its place.
+            half.reach = 0.1;
+            const auto kept = audioquantize::place (hits, g, rate, half, 0, (Frame) rate);
+            check (kept.size() == 1 && kept[0].second == hits[0].now, "a warped hit left alone keeps where it was warped to");
+
+            // Randomize: within the range, and the same every time for a seed.
+            std::vector<audioquantize::Hit> line;
+            for (int i = 0; i < 32; ++i)
+                line.push_back ({ (Frame) ((i * 0.125 + 0.03) * rate), (Frame) ((i * 0.125 + 0.03) * rate) });
+            audioquantize::Settings random;
+            random.randomMs = 5.0;
+            const auto r1 = audioquantize::place (line, g, rate, random, 0, (Frame) (10 * rate));
+            const auto r2 = audioquantize::place (line, g, rate, random, 0, (Frame) (10 * rate));
+            bool inside = r1.size() == 32, moved = false;
+            for (size_t i = 0; i < r1.size(); ++i)
+            {
+                const auto off = (double) r1[i].second / rate - (double) i * 0.125;
+                inside = inside && std::abs (off) <= 0.0051;
+                moved = moved || std::abs (off) > 0.0005;
+            }
+            check (inside && moved && r1 == r2, "randomize lands each hit within 5 ms of its line, repeatably");
+
+            // Only the hits on eighths.
+            std::vector<Frame> mixed;
+            for (int i = 0; i < 8; ++i)
+                mixed.push_back ((Frame) (i * 0.125 * rate));
+            check (audioquantize::onGrid (mixed, g, rate, 0.5).size() == 4, "the eighths filter keeps every other sixteenth");
+
+            // A groove taken from a performance with late offbeats, and back through text.
+            std::vector<Frame> played;
+            for (int i = 0; i < 32; ++i)
+                played.push_back ((Frame) ((i * 0.125 + (i % 2 == 1 ? 0.02 : 0.0)) * rate));
+            const auto feel = audioquantize::extract (played, g, rate, 0.25, 2, 0, (Frame) (10 * rate));
+            check (feel.offsets.size() == 2 && std::abs (feel.offsets[0]) < 0.01 && std::abs (feel.offsets[1] - 0.16) < 0.01,
+                   "extracting a groove finds offbeats 20 ms (0.16 of a step) late");
+            const auto back = audioquantize::fromText (audioquantize::toText (feel));
+            check (back.offsets.size() == 2 && std::abs (back.offsets[1] - feel.offsets[1]) < 1e-6 && back.division == 0.25,
+                   "a groove survives its text form");
+            check (! audioquantize::fromText ("nonsense").isSet(), "unreadable groove text gives no groove");
+        }
+
+        // Spectral hitpoints find notes that change without getting louder; Level does not.
+        {
+            std::vector<float> legato ((size_t) (rate * 1.5));
+            double phase = 0.0;
+            for (size_t i = 0; i < legato.size(); ++i)
+            {
+                const auto t = (double) i / rate;
+                phase += 2.0 * M_PI * (t < 0.5 ? 220.0 : t < 1.0 ? 330.0 : 262.0) / rate;
+                legato[i] = (float) (0.5 * std::sin (phase));
+            }
+            const auto notes = build ({ legato });
+            audioquantize::Detection d;
+            check (audioquantize::hits (*notes, d).empty(), "level finds no hits in a steady legato line");
+            d.method = audioquantize::Method::spectral;
+            const auto found = audioquantize::hits (*notes, d);
+            bool both = found.size() == 2;
+            for (size_t i = 0; both && i < 2; ++i)
+                both = std::abs ((double) found[i] / rate - 0.5 * (double) (i + 1)) < 0.015;
+            check (both, "spectral finds the two note changes: " + std::to_string (found.size()));
+        }
+
+        // Beats: no stretching, so the clicks keep their exact shape at their new places.
+        {
+            const auto beats = timestretch::render (*drums, 0, drums->length(), drums->length(), { { 28800, 33600 }, { 52800, 52800 } },
+                                                    timestretch::Mode::beats, error);
+            check (beats != nullptr && beats->length() == drums->length(), "beats keeps the length asked for");
+            if (beats != nullptr)
+            {
+                const auto x = channel (*beats, 0);
+                const auto second = peakAt (x, 26000, 42000);
+                check (std::abs (second - 33600.0) <= 2.0, "beats puts the anchored click at 0.7 s exactly: " + std::to_string (second));
+                check (std::abs (std::abs (x[(size_t) second]) - 0.9f) < 1e-3, "the click is copied, not stretched");
+            }
+            // Twice as long with Beats: each click once per gap, the tails looped.
+            const auto longer = timestretch::stretch (*drums, 0, drums->length(), 2.0, timestretch::Mode::beats, error);
+            check (longer != nullptr && longer->length() == 2 * drums->length(), "beats stretches the length");
+            if (longer != nullptr)
+            {
+                const auto x = channel (*longer, 0);
+                check (std::abs (peakAt (x, 50000, 60000) - 57600.0) <= 50.0, "the second click starts at twice its time");
+            }
+        }
+
+        // Texture and Smooth: the lengths asked for, and a tone keeps about its level.
+        for (const auto mode : { timestretch::Mode::texture, timestretch::Mode::smooth })
+        {
+            const auto out = timestretch::stretch (*stereo, 0, stereo->length(), 1.5, mode, error);
+            check (out != nullptr && out->length() == 144000, std::string (timestretch::modeName (mode)) + " stretches to the length asked for");
+            if (out != nullptr)
+            {
+                const auto l = channel (*out, 0);
+                double sum = 0.0;
+                for (size_t i = 24000; i < 120000; ++i)
+                    sum += (double) l[i] * l[i];
+                const auto rms = std::sqrt (sum / 96000.0);
+                check (rms > 0.25 && rms < 0.5, std::string (timestretch::modeName (mode)) + " keeps the tone's level: " + std::to_string (rms));
+            }
         }
     }
 

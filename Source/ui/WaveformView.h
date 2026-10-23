@@ -33,6 +33,8 @@ public:
     // a flag without moving the audio; double-click on one adds or removes a flag, and
     // double-click anywhere else selects the slice between the hits on either side.
     void setWarp (std::shared_ptr<const WarpEdit>, bool editing);
+    // Where dragged warp points snap: every `division` beats of the grid (0: free).
+    void setWarpSnap (double division) { warpSnapDivision = division; }
     // The beat grid: bar lines, beats and sixteenths as far as the zoom leaves room, bars numbered.
     void setGrid (const BeatGrid&, bool shown);
     // Snap to Grid: clicks, selections and moved selections land on the nearest grid line
@@ -122,6 +124,8 @@ Q_SIGNALS:
     // marker: the index of the flag dragged, or -1 for a tick; reanchor: Shift was held.
     void warpMoved (Frame source, Frame target, int marker, bool reanchor);
     void warpToggled (Frame source);
+    // The end of the selection [from, to) dragged with Ctrl+Alt to `newEnd`: stretch the selection to fit.
+    void stretchDragged (Frame from, Frame to, Frame newEnd);
     // The selection [from, to) dragged so it starts at `start` (copy: Ctrl or Alt held, the original stays).
     void selectionMoved (Frame from, Frame to, Frame start, bool copy);
 
@@ -192,6 +196,10 @@ private:
     std::optional<WarpHit> warpHitAt (QPointF) const;
     Frame warpSnap (double x, bool free) const;
     void drawWarp (QPainter&);
+    double warpSnapDivision = 0.25;
+    // Ctrl+Alt+drag of the selection's end stretches the selection: where the end is being taken.
+    Frame stretchTo = -1;
+    void drawStretch (QPainter&);
 
     // The picture of what changes only with the view or the audio (see paintEvent).
     void paintBase (QPainter&, double laneHeight);
