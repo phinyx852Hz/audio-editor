@@ -128,7 +128,10 @@ if(Python3_FOUND)
         CONFIGURE_COMMAND ""
         # Carla first and on one job: its jackbridge.a and jackbridge.min.a rules run make in
         # the same folder at once, which in parallel can leave an archive without its index.
+        # The bundled libraries (jansson, libarchive, zstd...) also on one job, so a failed
+        # download or unpack shows its own error instead of scrolling away under other jobs.
         BUILD_COMMAND make -j1 carla
+            COMMAND make -j1 deps
             COMMAND ${stock_make} clap
         INSTALL_COMMAND ${CMAKE_COMMAND} -E rm -rf ${PHINYX_STOCK_DIR}/Cardinal.clap
             # Its resources are symlinks into the source folder: copied as the files they point to.
