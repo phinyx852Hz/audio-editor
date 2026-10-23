@@ -339,10 +339,11 @@ void DockablePanel::show (bool giveFocus)
             const auto hint = contentWidget->sizeHint().expandedTo (QSize (220, 180));
             const bool first = ! sized;
             sized = true;
-            if (dockWidget->height() < 80)
-                mainWindow.resizeDocks ({ dockWidget }, { hint.height() }, Qt::Vertical);
             const auto area = mainWindow.dockWidgetArea (dockWidget);
             const bool side = area == Qt::LeftDockWidgetArea || area == Qt::RightDockWidgetArea;
+            // Along the top or bottom (Simplest) it is the height that gets squeezed.
+            if (dockWidget->height() < 80 || (first && ! side && dockWidget->height() < hint.height() * 3 / 4))
+                mainWindow.resizeDocks ({ dockWidget }, { hint.height() }, Qt::Vertical);
             if (dockWidget->width() < 80 || (first && side && dockWidget->width() < hint.width() * 3 / 4))
                 mainWindow.resizeDocks ({ dockWidget }, { hint.width() }, Qt::Horizontal);
         });

@@ -748,10 +748,10 @@ void MainWindow::registerCommands()
         activateWindow();
         waveform->setFocus();
     });
-    // F6 and Shift+F6 go round the waveform and every panel that is showing.
+    // F6 and Shift+F6 (and Alt tapped) go round the waveform and every panel that is showing.
     add ("view.nextPanel", Category::view, tr ("&Next Panel"), { KS (Qt::Key_F6) }, [this] { focusPanel (1); });
     add ("view.previousPanel", Category::view, tr ("Pre&vious Panel"), { KS (Qt::SHIFT | Qt::Key_F6) }, [this] { focusPanel (-1); });
-    commands.action (QStringLiteral ("view.nextPanel"))->setStatusTip (tr ("Hold F6 and press an arrow key to go to the panel that way"));
+    commands.action (QStringLiteral ("view.nextPanel"))->setStatusTip (tr ("Or tap Alt. Hold Alt (or this key) and press an arrow key to go to the panel that way"));
     add ("view.fullScreen", Category::view, tr ("F&ull Screen"), { KS (Qt::META | Qt::Key_F) }, [this]
     {
         auto* f = QApplication::focusWidget();
@@ -1212,6 +1212,10 @@ void MainWindow::restoreLayout()
         // Dock layouts restore reliably only once the window exists on screen.
         defaultLayout = saveState (layoutVersion);
         restoreState (appSettings().value (QStringLiteral ("window/state")).toByteArray(), layoutVersion);
+        // A tiling window manager (Hyprland and the like) sizes the window after it maps, and Qt
+        // squeezes the docks to match; put each one back to the size it had when the app closed.
+        restoreDockSizes();
+        QTimer::singleShot (500, this, &MainWindow::restoreDockSizes);
 
         const auto problems = QString::fromStdString (engine.restoreMasterSection());
         masterWidget->refresh();
@@ -1239,6 +1243,36 @@ void MainWindow::restoreLayout()
         autosaveTimer.start (std::max (5, seconds) * 1000);
 }
 
+void MainWindow::restoreDockSizes()
+{
+    auto settings = appSettings();
+    for (auto* p : panels)
+    {
+        auto* d = p->dock();
+        if (p->isPoppedOut() || d->isFloating() || ! d->isVisible())
+            continue;
+        // With nothing saved yet, a dock much narrower than its content wants gets that width.
+        auto saved = settings.value (QStringLiteral ("panels/%1/size").arg (p->id())).toSize();
+        if (! saved.isValid())
+        {
+            const auto hint = p->content()->sizeHint().expandedTo (QSize (220, 180));
+            saved = QSize (std::max (d->width(), d->width() < hint.width() * 3 / 4 ? hint.width() : 0),
+                           std::max (d->height(), d->height() < 80 ? hint.height() : 0));
+        }
+        const auto area = dockWidgetArea (d);
+        if (area == Qt::LeftDockWidgetArea || area == Qt::RightDockWidgetArea)
+        {
+            if (d->width() != saved.width())
+                resizeDocks ({ d }, { saved.width() }, Qt::Horizontal);
+        }
+        else if (area == Qt::TopDockWidgetArea || area == Qt::BottomDockWidgetArea)
+        {
+            if (d->height() != saved.height())
+                resizeDocks ({ d }, { saved.height() }, Qt::Vertical);
+        }
+    }
+}
+
 void MainWindow::saveLayout()
 {
     auto settings = appSettings();
@@ -1249,6 +1283,10 @@ void MainWindow::saveLayout()
         settings.setValue (QStringLiteral ("panels/%1/poppedOut").arg (p->id()), popped);
         if (p->isPoppedOut())
             p->hide();  // docks it back so the app can exit
+        else if (p->dock()->isVisible() && ! p->dock()->isFloating())
+            settings.setValue (QStringLiteral ("panels/%1/size").arg (p->id()), p->dock()->size());
+        else
+            settings.remove (QStringLiteral ("panels/%1/size").arg (p->id()));
     }
 
     settings.setValue (QStringLiteral ("window/geometry"), saveGeometry());

@@ -82,6 +82,7 @@ private:
     void buildPanels();
     void restoreLayout();
     void saveLayout();
+    void restoreDockSizes();   // each docked panel back to the size it closed at
     DockablePanel* focusedOrLastPanel() const;
     QList<FindItem> findItems();   // processes, effects and plugins for the Find panel
     void updateStatus();
@@ -151,7 +152,9 @@ private:
     bool navigationKey (QObject*, QEvent*);     // the application-wide filter for the keys above
     void buildNavigation();
     void openDropped (const QStringList& paths);
-    bool f6Held = false, f6Moved = false;
+    bool panelKeyHeld = false, panelKeyMoved = false;   // the Next Panel key (F6) held, and an arrow pressed with it
+    int panelKey = 0;
+    bool altArmed = false, altMoved = false;   // Alt down with nothing else yet, and an arrow pressed with it
     void resetConfiguration();
 public:
     // After the window is gone: clears the settings if Reset Configuration asked to; true if it did (then restart).
