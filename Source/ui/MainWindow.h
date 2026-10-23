@@ -681,5 +681,12 @@ private:
 
     Recovery recovery;
     QTimer autosaveTimer;
+
+    // The CPU meter in the status bar: PHINYX's own processor use and the audio thread's load.
+    void updateCpuMeter();
+    class QLabel* cpuLabel = nullptr;
+    QTimer cpuTimer;
+    QElapsedTimer cpuWatch;
+    long long cpuLastTicks = 0;
     QHash<QString, QString> recoveringFrom;   // recovery file being opened -> the file it was an unsaved copy of
 };

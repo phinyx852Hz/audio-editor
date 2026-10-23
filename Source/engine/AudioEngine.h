@@ -133,6 +133,8 @@ public:
 
     std::string deviceDescription() const;
     double deviceSampleRate() const;     // what the scope samples run at
+    // How much of each audio block's time the audio thread takes, 0 to 1; near 1 the sound drops out.
+    double audioLoad() const;
     // The file's channel layout when it is not the usual one (dsp::layoutChoices): sets the stereo fold-down.
     void setLayoutName (const std::string&);
     std::vector<AudioOutputChoice> availableOutputs();

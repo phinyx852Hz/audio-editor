@@ -64,6 +64,7 @@
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QKeyEvent>
+#include <QFile>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -83,6 +84,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <unistd.h>
 
 namespace
 {
@@ -164,6 +166,12 @@ MainWindow::MainWindow (AudioEngine& e)
     centralStack->addWidget (editor);
     setCentralWidget (centralStack);
     statusBar()->addWidget (new QWidget (this), 1);   // messages show on the left; the details are under the editor
+    cpuLabel = new QLabel (this);
+    cpuLabel->setContentsMargins (0, 0, 12, 0);
+    cpuLabel->setToolTip (tr ("CPU: what PHINYX uses of the processor, all its threads together (100% is one core, as top shows it).\n"
+                              "Audio: how much of each audio block's time the sound takes to make; near 100% it drops out."));
+    statusBar()->addPermanentWidget (cpuLabel);
+    connect (&cpuTimer, &QTimer::timeout, this, &MainWindow::updateCpuMeter);
     statusBar()->addPermanentWidget (new QLabel (tr ("Opacity"), this));
     statusBar()->addPermanentWidget (makeOpacitySlider (this));
 
@@ -588,6 +596,24 @@ void MainWindow::registerCommands()
     });
     commands.action (QStringLiteral ("view.gainKnob"))->setCheckable (true);
     commands.action (QStringLiteral ("view.gainKnob"))->setChecked (appSettings().value (QStringLiteral ("view/gainKnob"), true).toBool());
+    add ("view.cpuMeter", Category::view, tr ("&CPU Meter"), {}, [this]
+    {
+        const auto on = commands.action (QStringLiteral ("view.cpuMeter"))->isChecked();
+        appSettings().setValue (QStringLiteral ("view/cpuMeter"), on);
+        cpuLabel->setVisible (on);
+        if (on)
+        {
+            cpuLastTicks = -1;
+            updateCpuMeter();
+            cpuTimer.start (1000);
+        }
+        else
+            cpuTimer.stop();
+    });
+    commands.action (QStringLiteral ("view.cpuMeter"))->setCheckable (true);
+    commands.action (QStringLiteral ("view.cpuMeter"))->setStatusTip (tr ("Show PHINYX's processor use and the audio load in the status bar"));
+    commands.action (QStringLiteral ("view.cpuMeter"))->setChecked (! appSettings().value (QStringLiteral ("view/cpuMeter"), true).toBool());
+    commands.action (QStringLiteral ("view.cpuMeter"))->trigger();   // shows it (or not) as last time
     add ("view.levelColors", Category::view, tr ("Colour Waveform by &Level"), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_W) }, [this]
     {
         const auto on = commands.action (QStringLiteral ("view.levelColors"))->isChecked();
@@ -825,7 +851,7 @@ void MainWindow::buildMenus()
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
-                               "view.overview", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "analyze.window", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "view.fullScreen", "-",
+                               "view.overview", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "view.cpuMeter", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "analyze.window", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "view.fullScreen", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
         { tr ("Visuali&zer"), { "view.visualizer", "view.visualizerFullScreen", "view.visualizerBehind", "-",
                                "view.visualizerNext", "view.visualizerPrevious", "view.visualizerChoose", "-",
@@ -1297,6 +1323,34 @@ void MainWindow::saveLayout()
     settings.setValue (QStringLiteral ("view/focusFollowsMouse"), focusFollowsMouse->isEnabled());
     settings.setValue (QStringLiteral ("audio/separateOutputs"), engine.monitorMode() == AudioEngine::MonitorMode::separateOutputs);
     engine.saveMasterSection();
+}
+
+void MainWindow::updateCpuMeter()
+{
+    // The process's CPU time (every thread) against the time passed, from /proc like top.
+    long long ticks = -1;
+    if (QFile stat (QStringLiteral ("/proc/self/stat")); stat.open (QIODevice::ReadOnly))
+    {
+        const auto line = QString::fromLatin1 (stat.readAll());
+        const auto fields = line.mid (line.lastIndexOf (QLatin1Char (')')) + 2).split (QLatin1Char (' '));
+        if (fields.size() > 12)
+            ticks = fields[11].toLongLong() + fields[12].toLongLong();   // utime + stime
+    }
+    QString cpu = QStringLiteral ("–");
+    if (ticks >= 0 && cpuLastTicks >= 0 && cpuWatch.isValid() && cpuWatch.elapsed() > 0)
+    {
+        static const auto perSecond = (double) std::max (1L, sysconf (_SC_CLK_TCK));
+        const auto percent = 100.0 * (double) (ticks - cpuLastTicks) / perSecond / ((double) cpuWatch.elapsed() / 1000.0);
+        cpu = QStringLiteral ("%1%").arg (std::max (0.0, percent), 0, 'f', 0);
+    }
+    cpuLastTicks = ticks;
+    cpuWatch.restart();
+
+    const auto load = engine.audioLoad();
+    const auto audio = load < 0.0 ? QStringLiteral ("–") : QStringLiteral ("%1%").arg (100.0 * load, 0, 'f', 0);
+    const bool busy = load >= 0.8;
+    cpuLabel->setText (busy ? tr ("CPU %1 · <span style=\"color:%3\"><b>Audio %2</b></span>").arg (cpu, audio, Theme::current().color (QStringLiteral ("meterHigh")).name())
+                            : tr ("CPU %1 · Audio %2").arg (cpu, audio));
 }
 
 void MainWindow::openMenuBar()
