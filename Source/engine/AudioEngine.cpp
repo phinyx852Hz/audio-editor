@@ -906,6 +906,11 @@ double AudioEngine::deviceSampleRate() const
     return 48000.0;
 }
 
+double AudioEngine::audioLoad() const
+{
+    return impl->deviceManager.getCurrentAudioDevice() != nullptr ? impl->deviceManager.getCpuUsage() : -1.0;
+}
+
 std::string AudioEngine::deviceDescription() const
 {
     if (auto* device = impl->deviceManager.getCurrentAudioDevice())
