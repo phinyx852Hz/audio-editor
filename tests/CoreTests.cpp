@@ -27,6 +27,7 @@
 #include "../Source/core/Ambisonics.h"
 #include "../Source/core/SpatialStudio.h"
 #include "../Source/core/PrismSplit.h"
+#include "../Source/core/Sonify.h"
 
 #include <algorithm>
 #include <cmath>
@@ -3203,6 +3204,111 @@ namespace
         }
     }
 
+    // Image sonification: pictures read as notes, with free pitch through pitch bend.
+    void testSonify()
+    {
+        using namespace sonify;
+        {
+            // B, G, R, x: the left half white, the right half black, averaged to 2 by 1.
+            std::vector<uint8_t> px (4 * 2 * 4, 0);
+            for (int y = 0; y < 2; ++y)
+                for (int x = 0; x < 2; ++x)
+                    for (int c = 0; c < 3; ++c)
+                        px[(size_t) (y * 4 + x) * 4 + (size_t) c] = 255;
+            const auto p = fromPixels (px.data(), 4, 2, 16, 2, 1);
+            check (p.width == 2 && p.height == 1 && near (p.at (0, 0), 1.0, 1e-4) && near (p.at (1, 0), 0.0, 1e-4), "sonify picture from pixels");
+        }
+
+        check (nearestInScale (65.0, Scale::pentatonic, 0) == 64.0, "sonify: F snaps to E in C pentatonic");
+        check (nearestInScale (66.0, Scale::major, 2) == 66.0, "sonify: F# is in D major");
+        check (nearestInScale (60.4, Scale::chromatic, 0) == 60.0, "sonify: chromatic rounds");
+        Settings s;
+        s.lowest = 36;
+        s.highest = 84;
+        s.scale = Scale::major;
+        s.quantize = 0.0;
+        check (near (pitchFor (0.51, s), 60.48, 1e-9), "sonify: free pitch");
+        s.quantize = 1.0;
+        check (pitchFor (0.51, s) == 60.0, "sonify: quantized pitch");
+        s.quantize = 0.5;
+        check (near (pitchFor (0.51, s), 60.24, 1e-9), "sonify: half quantized");
+
+        const auto find = [] (const std::vector<Message>& out, int status)
+        {
+            return std::find_if (out.begin(), out.end(), [status] (const Message& m) { return m.status == status; });
+        };
+
+        {
+            // A bright spot at the top of the first column, scanned: the top note, then let go.
+            Picture p;
+            p.width = 16;
+            p.height = 12;
+            p.light.assign (16 * 12, 0.0f);
+            p.light[0] = 1.0f;
+            Sonifier son;
+            Settings t;
+            t.scale = Scale::pentatonic;
+            t.voices = 1;
+            t.drums = false;
+            son.setSettings (t);
+            std::vector<Message> out;
+            son.advance (p, 0.0, out);
+            const auto on = find (out, 0x90);
+            check (on != out.end() && on->data1 == 84 && on->data2 == 127, "sonify scan plays the top note");
+            check (son.sounding().size() == 1 && son.sounding()[0].y < 0.1f, "sonify scan says where it plays");
+            out.clear();
+            son.advance (p, 0.125, out);   // a sixteenth at 120 BPM: the next, dark column
+            const auto off = find (out, 0x80);
+            check (off != out.end() && off->data1 == 84, "sonify scan lets go in the dark");
+            check (near (son.scanPosition(), 1.0 / 16.0, 1e-6), "sonify scan position");
+        }
+        {
+            // A lane lit between notes: the note below and a pitch bend up to the rest.
+            Picture p;
+            p.width = 1;
+            p.height = 5;
+            p.light = { 0.0f, 0.0f, 1.0f, 1.0f, 0.0f };   // centred 2.5 rows down: 0.375 up
+            Sonifier son;
+            Settings t;
+            t.mode = Mode::lanes;
+            t.voices = 1;
+            t.quantize = 0.0;
+            t.lowest = 36;
+            t.highest = 85;   // 36 + 0.375 * 49 = 54.375
+            t.drums = false;
+            son.setSettings (t);
+            std::vector<Message> out;
+            son.advance (p, 0.0, out);
+            const auto bend = find (out, 0xE0), on = find (out, 0x90);
+            check (on != out.end() && on->data1 == 54, "sonify lanes note");
+            check (bend != out.end() && bend < on && std::abs ((bend->data1 | (bend->data2 << 7)) - (8192 + 1536)) <= 2, "sonify lanes bends to the free pitch");
+            out.clear();
+            son.stop (out);
+            check (find (out, 0x80) != out.end() && find (out, 0xE0) != out.end(), "sonify stop lets go and centres the bend");
+        }
+        {
+            // Stripes: every step changes everything, so the drums play on channel 10.
+            Picture p;
+            p.width = 8;
+            p.height = 6;
+            p.light.assign (8 * 6, 0.0f);
+            for (int y = 0; y < 6; ++y)
+                for (int x = 0; x < 8; x += 2)
+                    p.light[(size_t) (y * 8 + x)] = 1.0f;
+            Sonifier son;
+            Settings t;
+            t.columns = 8;
+            son.setSettings (t);
+            std::vector<Message> out;
+            son.advance (p, 0.0, out);
+            son.advance (p, 0.125, out);
+            int drums = 0;
+            for (const auto& m : out)
+                drums += m.status == (0x90 | drumChannel) ? 1 : 0;
+            check (drums == 3, "sonify drums on change");
+        }
+    }
+
 int main()
 {
     testStorage();
@@ -3237,6 +3343,7 @@ int main()
     testPatchBay();
     testSpatialStudio();
     testPrismSplit();
+    testSonify();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");
