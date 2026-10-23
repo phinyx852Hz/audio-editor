@@ -47,6 +47,7 @@
 #include <QSaveFile>
 #include <QShortcut>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QSlider>
 #include <QSplitter>
 #include <QSpinBox>
@@ -3168,8 +3169,26 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     bottom->addWidget (midiStatus);
     bottom->addWidget (midiButton);
 
+    // The transport row scrolls sideways rather than setting how narrow the mixer can be, so
+    // the editor's side panels (Find) can widen while the mixer is in the editor's place.
+    auto* topRow = new QWidget (this);
+    top->setContentsMargins (0, 0, 0, 0);
+    topRow->setLayout (top);
+    auto* topScroll = new QScrollArea (this);
+    topScroll->setWidget (topRow);
+    topScroll->setWidgetResizable (true);
+    topScroll->setFrameShape (QFrame::NoFrame);
+    topScroll->setFocusPolicy (Qt::NoFocus);
+    topScroll->setVerticalScrollBarPolicy (Qt::ScrollBarAlwaysOff);
+    topScroll->setHorizontalScrollBarPolicy (Qt::ScrollBarAsNeeded);
+    topScroll->viewport()->setAutoFillBackground (false);
+    topRow->setAutoFillBackground (false);
+    topScroll->setFixedHeight (topRow->sizeHint().height() + topScroll->horizontalScrollBar()->sizeHint().height());
+    // Every MIDI input's name on one line would do the same.
+    midiStatus->setWordWrap (true);
+
     auto* layout = new QVBoxLayout (this);
-    layout->addLayout (top);
+    layout->addWidget (topScroll);
     layout->addWidget (sideSplitter, 1);
     layout->addLayout (bottom);
 
