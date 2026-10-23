@@ -118,6 +118,7 @@ private:
     void stopPreview();
     void tick();
     QString decoderName() const;
+    void fillCustomDecoders();
 
     Host host;
     studio::Scene scene;

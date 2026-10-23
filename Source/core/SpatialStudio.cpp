@@ -1793,7 +1793,14 @@ namespace studio
         std::ostringstream o;
         o << "{\"order\":" << scene.order << ",\"bpm\":" << number (scene.bpm) << ",\"tail\":" << number (scene.tailSeconds)
           << ",\"master\":{\"gainDb\":" << number (scene.master.gainDb) << ",\"decoder\":" << quote (scene.master.decoder)
-          << ",\"hrtf\":" << quote (scene.master.hrtfPath) << "},\"chain\":[";
+          << ",\"hrtf\":" << quote (scene.master.hrtfPath) << ",\"speakers\":[";
+        for (size_t i = 0; i < scene.master.speakers.size(); ++i)
+        {
+            const auto& sp = scene.master.speakers[i];
+            o << (i ? "," : "") << "{\"name\":" << quote (sp.name) << ",\"azimuth\":" << number (sp.azimuth)
+              << ",\"elevation\":" << number (sp.elevation) << ",\"lfe\":" << (sp.lfe ? "true" : "false") << "}";
+        }
+        o << "]},\"chain\":[";
         for (size_t i = 0; i < scene.chain.size(); ++i)
         {
             const auto& d = scene.chain[i];
@@ -1832,6 +1839,17 @@ namespace studio
             if (const auto* v = (*m)["gainDb"]) s.master.gainDb = v->n;
             if (const auto* v = (*m)["decoder"]) s.master.decoder = v->s;
             if (const auto* v = (*m)["hrtf"]) s.master.hrtfPath = v->s;
+            if (const auto* list = (*m)["speakers"])
+                for (const auto& item : list->items)
+                {
+                    ambi::Speaker sp;
+                    if (const auto* v = item["name"]) sp.name = v->s;
+                    if (const auto* v = item["azimuth"]) sp.azimuth = v->n;
+                    if (const auto* v = item["elevation"]) sp.elevation = v->n;
+                    if (const auto* v = item["lfe"]) sp.lfe = v->b;
+                    if ((int) s.master.speakers.size() < maxSpeakers)
+                        s.master.speakers.push_back (sp);
+                }
         }
         if (const auto* chain = root["chain"])
             for (const auto& item : chain->items)
@@ -2009,7 +2027,12 @@ namespace studio
             const auto louder = ambi::mix (scene, scaled (identity));
             return ambi::decodeBinaural (*louder, master.hrtfPath, error, progress);
         }
-        const auto speakers = ambi::layout (master.decoder);
+        const auto speakers = isCustom (master.decoder) ? master.speakers : ambi::layout (master.decoder);
+        if (isCustom (master.decoder) && std::count_if (speakers.begin(), speakers.end(), [] (const ambi::Speaker& sp) { return ! sp.lfe; }) < 2)
+        {
+            error = "The speaker array " + master.decoder.substr (8) + " needs at least two speakers that are not subwoofers";
+            return {};
+        }
         if (speakers.empty())
         {
             error = "Unknown decoder " + master.decoder;
@@ -2023,8 +2046,93 @@ namespace studio
         static const char* names[] { "", "Ambisonics (1st order)", "Ambisonics (2nd order)", "Ambisonics (3rd order)" };
         if (master.decoder == "AmbiX" || master.decoder == "FuMa")
             return names[std::clamp (order, 1, 3)];
-        if (master.decoder == "Headphones")
-            return {};
+        if (master.decoder == "Headphones" || isCustom (master.decoder))
+            return {};   // a custom array is labelled by its channel count
         return master.decoder;
+    }
+
+    bool isCustom (const std::string& decoder) { return decoder.rfind ("Custom: ", 0) == 0; }
+
+    bool parseSpeakers (const std::string& text, std::vector<ambi::Speaker>& speakers, std::string& error)
+    {
+        std::vector<ambi::Speaker> out;
+        std::istringstream lines (text);
+        std::string line;
+        int number = 0;
+        while (std::getline (lines, line))
+        {
+            ++number;
+            if (const auto hash = line.find ('#'); hash != std::string::npos)
+                line.erase (hash);
+            std::istringstream words (line);
+            std::string name, extra;
+            if (! (words >> name))
+                continue;
+            ambi::Speaker sp;
+            sp.name = name;
+            if (! (words >> sp.azimuth >> sp.elevation))
+            {
+                error = "Line " + std::to_string (number) + ": a speaker needs a name, an azimuth and an elevation";
+                return false;
+            }
+            if (words >> extra)
+            {
+                std::transform (extra.begin(), extra.end(), extra.begin(), [] (unsigned char c) { return (char) std::toupper (c); });
+                if (extra != "LFE")
+                {
+                    error = "Line " + std::to_string (number) + ": after the elevation only LFE may follow";
+                    return false;
+                }
+                sp.lfe = true;
+            }
+            if (sp.azimuth < -360.0 || sp.azimuth > 360.0 || sp.elevation < -90.0 || sp.elevation > 90.0)
+            {
+                error = "Line " + std::to_string (number) + ": azimuth runs from -180 to 180 and elevation from -90 to 90";
+                return false;
+            }
+            sp.azimuth = wrap (sp.azimuth);
+            out.push_back (sp);
+        }
+        if ((int) out.size() > maxSpeakers)
+        {
+            error = "At most " + std::to_string (maxSpeakers) + " speakers (the engine plays 16 channels)";
+            return false;
+        }
+        if (std::count_if (out.begin(), out.end(), [] (const ambi::Speaker& sp) { return ! sp.lfe; }) < 2)
+        {
+            error = "At least two speakers that are not subwoofers";
+            return false;
+        }
+        speakers = std::move (out);
+        return true;
+    }
+
+    std::string formatSpeakers (const std::vector<ambi::Speaker>& speakers)
+    {
+        std::ostringstream o;
+        for (const auto& sp : speakers)
+            o << sp.name << ' ' << number (sp.azimuth) << ' ' << number (sp.elevation) << (sp.lfe ? " LFE" : "") << '\n';
+        return o.str();
+    }
+
+    std::vector<std::pair<std::string, std::vector<ambi::Speaker>>> exampleArrays()
+    {
+        const auto ring = [] (int count, double elevation, double offset, const std::string& prefix)
+        {
+            std::vector<ambi::Speaker> r;
+            for (int i = 0; i < count; ++i)
+                r.push_back ({ prefix + std::to_string (i + 1), wrap (offset + 360.0 * i / count), elevation, false });
+            return r;
+        };
+        const auto join = [] (std::vector<ambi::Speaker> a, const std::vector<ambi::Speaker>& b) { a.insert (a.end(), b.begin(), b.end()); return a; };
+        return {
+            { "Octagon (8, clockwise from front left)", ring (8, 0, -22.5, "") },
+            { "Hexagon (6)", ring (6, 0, -30, "") },
+            { "8 + 4 dome", join (ring (8, 0, -22.5, ""), ring (4, 45, -45, "H")) },
+            { "8 + 8 two rings", join (ring (8, 0, -22.5, ""), ring (8, 40, -22.5, "H")) },
+            { "12 + 4 dome", join (ring (12, 0, -15, ""), ring (4, 50, -45, "H")) },
+            { "8 + 6 + 1 + sub", join (join (join (ring (8, 0, -22.5, ""), ring (6, 45, -30, "H")), { { "Top", 0, 90, false } }), { { "LFE", 0, 0, true } }) },
+            { "Cube (8: 4 low, 4 high)", join (ring (4, -35, -45, "L"), ring (4, 35, -45, "H")) },
+        };
     }
 }

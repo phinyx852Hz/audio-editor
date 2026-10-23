@@ -74,7 +74,7 @@ class AmbiDecodeDialog final : public QDialog
 
 public:
     AmbiDecodeDialog (const QString& initialTarget, const QStringList& hrtfFiles, const QString& initialHrtf, QWidget* parent);
-    QString target() const;   // "Headphones" or a name from ambi::layoutNames()
+    QString target() const;   // "Headphones", a name from ambi::layoutNames(), or "Custom: " and one of your arrays
     QString hrtf() const;
 
 private:

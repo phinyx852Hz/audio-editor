@@ -146,6 +146,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/AmbiDialogs.cpp
     Source/ui/AmbiScene.cpp
     Source/ui/AmbiStudio.cpp
+    Source/ui/SpeakerArrays.cpp
     Source/ui/Visualizer.cpp
     Source/ui/VisualizerSection.cpp
     Source/ui/TrackerSection.cpp

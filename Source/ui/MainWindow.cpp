@@ -379,6 +379,8 @@ void MainWindow::registerCommands()
     commands.action (QStringLiteral ("spatial.layout"))->setStatusTip (tr ("What the channels are: 5.1, 5.2 two subwoofers, 7.2.4, 9.1.6, quad, ambisonics, surround, Atmos-style beds"));
     add ("spatial.studio", Category::spatial, tr ("Ambisonic &Studio..."), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_H) }, [this] { ambiStudio(); });
     commands.action (QStringLiteral ("spatial.studio"))->setStatusTip (tr ("Envelop for Live (E4L) style rack: source, stereo, quad, multi panners, spinner, spatial delays, AuraVerb, B-format convolution reverb, HOA transform, slicer, master bus decoder"));
+    add ("spatial.speakerArrays", Category::spatial, tr ("Spea&ker Arrays..."), {}, [this] { speakerArrays(); });
+    commands.action (QStringLiteral ("spatial.speakerArrays"))->setStatusTip (tr ("Your own speaker array, up to 16 channels, for the ambisonic decoders: ring, dome, studio, custom layout"));
     add ("spatial.encode", Category::spatial, tr ("&Encode to Ambisonics..."), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_E) }, [this] { ambiEncode(); });
     commands.action (QStringLiteral ("spatial.encode"))->setStatusTip (tr ("Place a mono or stereo sound in an ambisonic scene: AmbiX, B-format, 360, VR, spatial audio"));
     add ("spatial.rotate", Category::spatial, tr ("&Rotate / Mirror Scene..."), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_Y) }, [this] { ambiRotate(); });
@@ -808,7 +810,7 @@ void MainWindow::buildMenus()
                                "repair.brushSmaller", "repair.brushLarger", "repair.addHarmonics", "-",
                                "repair.frequencyRange", "repair.allFrequencies", "-", "view.spectral" } },
         { tr ("Effe&ct"),    { "effect.repeat", "-", "@nyquist.generate", "-", "@nyquist.effect" } },
-        { tr ("Spat&ial"),   { "spatial.binaural", "process.midSide", "process.stereoize", "-", "spatial.layout", "-", "spatial.studio", "-", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.fumaToAmbix", "spatial.ambixToFuma", "-", "view.ambiScene", "analyze.imagingView" } },
+        { tr ("Spat&ial"),   { "spatial.binaural", "process.midSide", "process.stereoize", "-", "spatial.layout", "-", "spatial.studio", "-", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.speakerArrays", "spatial.fumaToAmbix", "spatial.ambixToFuma", "-", "view.ambiScene", "analyze.imagingView" } },
         { tr ("&Warp"),      { "warp.showGrid", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "-", "warp.detectGrid", "warp.autoDetect", "warp.setTempo", "warp.downbeat", "warp.halve", "warp.double", "-",
                                "warp.edit", "warp.previousHit", "warp.nextHit", "warp.toggleMarker", "warp.nudgeEarlier", "warp.nudgeLater", "-",
                                "warp.quantizePanel", "warp.quantize", "warp.markersFromHits", "warp.sliceAtHits", "warp.resetWarp", "-", "warp.stretch", "warp.halfSpeed", "warp.doubleSpeed", "-", "warp.exportLoop" } },

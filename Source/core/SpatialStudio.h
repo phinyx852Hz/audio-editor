@@ -81,9 +81,20 @@ namespace studio
     struct Master
     {
         double gainDb = 0.0;
-        std::string decoder = "AmbiX";   // "AmbiX", "FuMa", "Headphones", or an ambi::layoutNames() name
+        std::string decoder = "AmbiX";   // "AmbiX", "FuMa", "Headphones", an ambi::layoutNames() name, or "Custom: <name>"
         std::string hrtfPath;
+        std::vector<ambi::Speaker> speakers;   // the custom array, when the decoder is one
     };
+
+    // Your own speaker array, up to 16 channels, as text: one speaker a line, "name azimuth
+    // elevation", with "LFE" after it for a subwoofer; "#" starts a comment. Azimuth as
+    // everywhere (0 ahead, 90 right). False with `error` set when it cannot be used.
+    constexpr int maxSpeakers = 16;
+    bool parseSpeakers (const std::string& text, std::vector<ambi::Speaker>& speakers, std::string& error);
+    std::string formatSpeakers (const std::vector<ambi::Speaker>&);
+    // Common studio arrays to start from: rings, domes, a cube.
+    std::vector<std::pair<std::string, std::vector<ambi::Speaker>>> exampleArrays();
+    bool isCustom (const std::string& decoder);
 
     struct Scene
     {

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "AmbiStudio.h"
 #include "AmbiScene.h"
+#include "SpeakerArrays.h"
 #include "Settings.h"
 #include "Theme.h"
 
@@ -672,9 +673,25 @@ void AmbiStudio::buildMaster (QWidget* parent, QVBoxLayout* into)
     decoderBox->addItem (tr ("Headphones (binaural)"), QStringLiteral ("Headphones"));
     for (const auto& n : ambi::layoutNames())
         decoderBox->addItem (tr ("%1 speakers").arg (QString::fromStdString (n)), QString::fromStdString (n));
-    decoderBox->setCurrentIndex (std::max (0, decoderBox->findData (QString::fromStdString (scene.master.decoder))));
     decoderBox->setToolTip (tr ("What Apply makes of the scene: an ambisonic file (to record or edit further), binaural for headphones, or speaker feeds"));
-    form->addRow (tr ("&Decoder:"), decoderBox);
+    auto* arrays = new QToolButton (box);
+    arrays->setText (tr ("Arrays..."));
+    arrays->setAccessibleName (tr ("Speaker arrays"));
+    arrays->setToolTip (tr ("Your own speaker arrays, up to 16 channels"));
+    auto* decoderRow = new QHBoxLayout();
+    decoderRow->addWidget (decoderBox, 1);
+    decoderRow->addWidget (arrays);
+    form->addRow (tr ("&Decoder:"), decoderRow);
+    connect (arrays, &QToolButton::clicked, this, [this]
+    {
+        const auto now = QString::fromStdString (scene.master.decoder);
+        SpeakerArraysDialog dialog (studio::isCustom (scene.master.decoder) ? now.mid (8) : QString(), this);
+        dialog.exec();
+        if (! dialog.chosen().isEmpty())
+            scene.master.decoder = "Custom: " + dialog.chosen().toStdString();
+        fillCustomDecoders();
+        changed();
+    });
 
     hrtfBox = new QComboBox (box);
     for (const auto& f : host.hrtfFiles)
@@ -688,6 +705,7 @@ void AmbiStudio::buildMaster (QWidget* parent, QVBoxLayout* into)
     monitorBox->setCurrentIndex (appSettings().value (QStringLiteral ("ambiStudio/monitor"), 0).toInt());
     monitorBox->setToolTip (tr ("How the preview is heard (E4L's Monitor 1+2)"));
     form->addRow (tr ("&Monitor:"), monitorBox);
+    fillCustomDecoders();
 
     previewBox = new QCheckBox (tr ("&Preview"), box);
     previewBox->setToolTip (tr ("Hear the rack on the selection (or the first 15 s), looping"));
@@ -707,7 +725,11 @@ void AmbiStudio::buildMaster (QWidget* parent, QVBoxLayout* into)
     connect (masterGainBox, &QDoubleSpinBox::valueChanged, this, [this] (double v) { scene.master.gainDb = v; changed(); });
     connect (decoderBox, &QComboBox::currentIndexChanged, this, [this]
     {
+        if (updating)
+            return;
         scene.master.decoder = decoderBox->currentData().toString().toStdString();
+        if (studio::isCustom (scene.master.decoder))
+            scene.master.speakers = speakerarrays::get (QString::fromStdString (scene.master.decoder.substr (8)));
         hrtfBox->setEnabled (scene.master.decoder == "Headphones" || monitorBox->currentIndex() == 0);
         changed();
     });
@@ -897,8 +919,8 @@ void AmbiStudio::loadPreset (const studio::Scene& s)
     bpmBox->setValue (scene.bpm);
     tailBox->setValue (scene.tailSeconds);
     masterGainBox->setValue (scene.master.gainDb);
-    decoderBox->setCurrentIndex (std::max (0, decoderBox->findData (QString::fromStdString (scene.master.decoder))));
     updating = false;
+    fillCustomDecoders();
     refreshRack();
     rack->setCurrentRow (scene.chain.empty() ? -1 : 0);
     changed();
@@ -1080,4 +1102,30 @@ void AmbiStudio::keyPressEvent (QKeyEvent* e)
         return;
     }
     QDialog::keyPressEvent (e);
+}
+
+void AmbiStudio::fillCustomDecoders()
+{
+    // Your arrays after the built-in layouts; a rack that names one you no longer have keeps its own copy.
+    updating = true;
+    for (int i = decoderBox->count() - 1; i >= 0; --i)
+        if (studio::isCustom (decoderBox->itemData (i).toString().toStdString()))
+            decoderBox->removeItem (i);
+    auto names = speakerarrays::names();
+    const auto mine = QString::fromStdString (scene.master.decoder);
+    if (studio::isCustom (scene.master.decoder))
+    {
+        const auto saved = speakerarrays::get (mine.mid (8));
+        if (! saved.empty())
+            scene.master.speakers = saved;
+        else if (! names.contains (mine.mid (8)) && ! scene.master.speakers.empty())
+            names << mine.mid (8);
+    }
+    for (const auto& name : names)
+        decoderBox->addItem (tr ("Custom: %1 (%2 channels)").arg (name).arg (name == mine.mid (8) && studio::isCustom (scene.master.decoder)
+                                                                             ? scene.master.speakers.size() : speakerarrays::get (name).size()),
+                             QStringLiteral ("Custom: ") + name);
+    decoderBox->setCurrentIndex (std::max (0, decoderBox->findData (mine)));
+    hrtfBox->setEnabled (scene.master.decoder == "Headphones" || monitorBox->currentIndex() == 0);
+    updating = false;
 }
