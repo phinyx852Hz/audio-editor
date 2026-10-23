@@ -66,6 +66,7 @@ public:
     void focusSearch();          // selects the search text, ready to type over
     bool searchIsReady() const;  // the search has the keyboard with nothing to keep: empty or all selected
     void reload();               // collects the items again and refilters
+    QString currentFile() const; // the highlighted result's path when it is a file, else empty
 
     // The Selector, top to bottom: Silver, Violet, Indigo, Azure, Emerald, Gold, Saffron, Ruby.
     static constexpr int numColours = 8;

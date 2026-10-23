@@ -101,7 +101,9 @@ public:
     void show (bool giveFocus);
     void hide();
     void toggle();               // show and focus it, or hide it when it already has focus
-    void setPoppedOut (bool);
+    void setPoppedOut (bool);    // also where it opens from now on
+    bool opensInWindow() const    { return ownWindow; }
+    void setOpensInWindow (bool w) { ownWindow = w; }
 
 protected:
     bool eventFilter (QObject*, QEvent*) override;
@@ -115,6 +117,8 @@ private:
     QDockWidget* dockWidget;
     bool sized = false;   // widened to its content once this session
     QWidget* window = nullptr;
+    bool ownWindow = false;   // shown in its own window rather than in its dock
+    QSize windowSize;         // the size its window had when last closed
     QWidget* focusFrame = nullptr;
 };
 

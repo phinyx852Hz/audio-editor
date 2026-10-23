@@ -3,6 +3,7 @@
 // (sampler/SlicerEngine.h) in their own windows, fed from the editor, and MIDI inputs
 // that play them.
 #include "MainWindow.h"
+#include "FindPanel.h"
 #include "MixerWindow.h"
 #include "PatchBayWindow.h"
 #include "Panels.h"
@@ -17,6 +18,7 @@
 
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QApplication>
 #include <QFileInfo>
 #include <QLabel>
 #include <QListWidget>
@@ -189,6 +191,29 @@ void MainWindow::playInstruments()
         });
 }
 
+// The file highlighted in Find while Find has the keyboard: F7 and F8 send it.
+QString MainWindow::findFile() const
+{
+    const auto* focus = QApplication::focusWidget();
+    return findWidget != nullptr && focus != nullptr && findWidget->isAncestorOf (focus) ? findWidget->currentFile() : QString();
+}
+
+// Opening Simplest or the Slicer takes the keyboard; give it back to Find once
+// the panel's own deferred focus has run, and again once a window that has just
+// opened has been mapped (the window manager focuses a new window).
+void MainWindow::keepFindFocus (QWidget* had)
+{
+    const auto giveBack = [focus = QPointer<QWidget> (had)]
+    {
+        if (focus == nullptr)
+            return;
+        focus->window()->activateWindow();
+        focus->setFocus (Qt::OtherFocusReason);
+    };
+    QTimer::singleShot (0, this, giveBack);
+    QTimer::singleShot (300, this, giveBack);
+}
+
 void MainWindow::showSampler()
 {
     midiTarget = 0;
@@ -201,6 +226,13 @@ void MainWindow::showSampler()
 // (after an edit), and the start, end and loop stay where they were.
 void MainWindow::sendToSampler (bool keepMarkers)
 {
+    if (const auto path = findFile(); ! keepMarkers && ! path.isEmpty())
+    {
+        auto* focus = QApplication::focusWidget();
+        loadSamplerFile (path);
+        keepFindFocus (focus);   // to try the next file
+        return;
+    }
     if (keepMarkers)
     {
         if (samplerTab != activeTab || samplerPath != doc.path() || data() == nullptr)
@@ -370,6 +402,13 @@ void MainWindow::showSlicer()
 // markers (measured from the sound's start) to slice by.
 void MainWindow::sendToSlicer (bool keepSlices)
 {
+    if (const auto path = findFile(); ! keepSlices && ! path.isEmpty())
+    {
+        auto* focus = QApplication::focusWidget();
+        loadSlicerFile (path);
+        keepFindFocus (focus);
+        return;
+    }
     if (keepSlices && (slicerTab != activeTab || slicerPath != doc.path() || data() == nullptr))
     {
         if (! slicerFollowTimer.isActive())

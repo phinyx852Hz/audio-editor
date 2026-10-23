@@ -394,6 +394,8 @@ private:
     void samplerFollow();
     void loadSamplerFile (const QString& path);   // a file dropped on Simplest
     void loadSlicerFile (const QString& path);    // a file dropped on the Slicer
+    QString findFile() const;                     // the file highlighted in Find, when Find has the keyboard
+    void keepFindFocus (QWidget* had);            // after F7 or F8 from Find
     void midiInputsDialog();
     void openMidiInputs();
     void updateMidiStatus();

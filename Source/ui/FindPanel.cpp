@@ -569,6 +569,12 @@ static const FindItem* itemOf (QTreeWidgetItem* row)
     return static_cast<const FindItem*> (row->data (0, itemRole).value<const void*>());
 }
 
+QString FindPanel::currentFile() const
+{
+    const auto* item = itemOf (results->currentItem());
+    return item != nullptr && item->kind == FindItem::Kind::file ? item->key.mid (5) : QString();
+}
+
 void FindPanel::activate (QTreeWidgetItem* row)
 {
     if (row != nullptr && row->data (0, indexRole).toInt() == folderRow)

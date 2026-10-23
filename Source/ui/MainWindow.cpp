@@ -1251,8 +1251,15 @@ void MainWindow::restoreLayout()
 
         auto s = appSettings();
         for (auto* p : panels)
-            if (s.value (QStringLiteral ("panels/%1/poppedOut").arg (p->id()), false).toBool())
+        {
+            // Simplest and the Slicer want more room than a dock leaves them: their own window to start with.
+            const bool window = p == samplerPanel || p == slicerPanel;
+            p->setOpensInWindow (s.value (QStringLiteral ("panels/%1/window").arg (p->id()), window).toBool());
+            // (one left showing in its dock by an older layout moves to its window too)
+            if (s.value (QStringLiteral ("panels/%1/poppedOut").arg (p->id()), false).toBool()
+                || (p->opensInWindow() && p->dock()->isVisible()))
                 p->setPoppedOut (true);
+        }
 
         activateWindow();
         waveform->setFocus();
@@ -1307,6 +1314,7 @@ void MainWindow::saveLayout()
     {
         const bool popped = p->isPoppedOut() && p->isShown();
         settings.setValue (QStringLiteral ("panels/%1/poppedOut").arg (p->id()), popped);
+        settings.setValue (QStringLiteral ("panels/%1/window").arg (p->id()), p->opensInWindow());
         if (p->isPoppedOut())
             p->hide();  // docks it back so the app can exit
         else if (p->dock()->isVisible() && ! p->dock()->isFloating())

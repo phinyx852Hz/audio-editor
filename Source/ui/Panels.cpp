@@ -317,6 +317,11 @@ bool DockablePanel::containsFocus() const
 
 void DockablePanel::show (bool giveFocus)
 {
+    if (window == nullptr && ownWindow)
+    {
+        setPoppedOut (true);
+        return;
+    }
     if (window != nullptr)
     {
         window->show();
@@ -385,6 +390,7 @@ void DockablePanel::toggle()
 
 void DockablePanel::setPoppedOut (bool popOut)
 {
+    ownWindow = popOut;
     if (popOut == isPoppedOut())
         return;
 
@@ -395,7 +401,7 @@ void DockablePanel::setPoppedOut (bool popOut)
         return;
     }
 
-    const auto size = dockWidget->isVisible() ? dockWidget->size() : contentWidget->sizeHint();
+    const auto size = windowSize.isValid() ? windowSize : dockWidget->isVisible() ? dockWidget->size() : contentWidget->sizeHint();
 
     // A parentless window, so tiling window managers treat it as a normal window.
     window = new QWidget (nullptr, Qt::Window);
@@ -425,6 +431,7 @@ void DockablePanel::dockBack (bool keepVisible)
 
     auto* old = window;
     window = nullptr;
+    windowSize = old->size();
     old->removeEventFilter (this);
     qApp->removeEventFilter (this);
     dockWidget->setWidget (contentWidget);
