@@ -82,6 +82,7 @@ private:
     void buildPanels();
     void restoreLayout();
     void saveLayout();
+    void restoreDockSizes();   // each docked panel back to the size it closed at
     DockablePanel* focusedOrLastPanel() const;
     QList<FindItem> findItems();   // processes, effects and plugins for the Find panel
     void updateStatus();
