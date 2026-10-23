@@ -12,6 +12,7 @@
 #include "../patchbay/PatchBay.h"
 
 #include <QApplication>
+#include <QFileInfo>
 #include <QMessageBox>
 #include <QStatusBar>
 
@@ -43,15 +44,39 @@ void MainWindow::registerInstrumentCommands()
 
 // The patchbay synth playing a stock instrument: the one it already is, or with `load`
 // the first free one, started here. -1 when there is none; `why` then says why, and
-// `failed` is set when the instrument is there but would not start.
+// `failed` is set when that is worth a dialog: it would not start, or with `load` it
+// is missing or could not be read.
 int MainWindow::instrumentSynth (const char* key, bool load, QString* why, bool* failed)
 {
     const auto* info = stock::instrument (key);
     if (info == nullptr)
         return -1;
     const auto name = QStringLiteral ("%1 (%2)").arg (tr (info->function), QString::fromUtf8 (info->original));
-    const auto id = engine.stockInstrumentId (key);
-    if (id.empty())
+    auto id = engine.stockInstrumentId (key);
+    if (id.empty() && load)
+    {
+        // Not in the list: look again, in case its scan failed or timed out when PHINYX started.
+        std::string file;
+        QApplication::setOverrideCursor (Qt::WaitCursor);
+        id = engine.rescanStockInstrument (key, file);
+        QApplication::restoreOverrideCursor();
+        if (id.empty())
+        {
+            const auto app = QStringLiteral (APP_DISPLAY_NAME);
+            const auto path = QString::fromStdString (file);
+            if (why != nullptr)
+                *why = path.isEmpty() ? tr ("%1 cannot be opened: no stock plugin folder was found for this copy of %2.").arg (name, app)
+                     : ! QFileInfo::exists (path) ? tr ("%1 was not built with this copy of %2: %3 is missing. Building %2 again "
+                                                        "(cmake --build build) builds it; if that fails, its error is in the build output.")
+                                                        .arg (name, app, path)
+                     : tr ("%1 is installed (%2) but %3 could not read it: looking inside it failed or took too long.")
+                           .arg (name, path, app);
+            if (failed != nullptr)
+                *failed = true;
+            return -1;
+        }
+    }
+    else if (id.empty())
     {
         if (why != nullptr)
             *why = tr ("%1 was not built with this copy of %2").arg (name, QStringLiteral (APP_DISPLAY_NAME));

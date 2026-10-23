@@ -158,6 +158,21 @@ std::string MasterChain::stockInstrumentId (const char* key) const
     return {};
 }
 
+std::string MasterChain::rescanStockInstrument (const char* key, std::string& file)
+{
+    const auto* info = stock::instrument (key);
+    const auto folder = stock::folder();
+    file.clear();
+    if (info == nullptr || folder == juce::File())
+        return {};
+    const auto path = folder.getChildFile (info->file);
+    file = path.getFullPathName().toStdString();
+    if (! path.exists())
+        return {};
+    loadStockPlugins();
+    return stockInstrumentId (key);
+}
+
 const stock::Info* MasterChain::stockInfo (const std::string& pluginId) const
 {
     const auto d = stockList.getTypeForIdentifierString (pluginId);

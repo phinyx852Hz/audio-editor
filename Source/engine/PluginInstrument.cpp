@@ -215,5 +215,6 @@ std::string AudioEngine::instrumentPluginId (const mixer::Instrument& instrument
 }
 
 std::string AudioEngine::stockInstrumentId (const char* key) const { return const_cast<AudioEngine*> (this)->masterChain().stockInstrumentId (key); }
+std::string AudioEngine::rescanStockInstrument (const char* key, std::string& file) { return masterChain().rescanStockInstrument (key, file); }
 
 std::vector<PluginInfo> AudioEngine::knownInstruments() const { return const_cast<AudioEngine*> (this)->masterChain().instruments(); }

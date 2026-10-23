@@ -253,6 +253,8 @@ public:
     std::vector<PluginInfo> knownInstruments() const;
     // A stock instrument's plugin id, by its key ("granular", see StockPlugins.h); empty when it was not built.
     std::string stockInstrumentId (const char* key) const;
+    // The same, looking at the stock folder again first; `file` is where it should be (MasterChain).
+    std::string rescanStockInstrument (const char* key, std::string& file);
     // Message thread. Null with `error` when it could not be started.
     std::shared_ptr<mixer::Instrument> loadInstrumentPlugin (const std::string& pluginId, double sampleRate, std::string& error);
     static std::string instrumentPluginId (const mixer::Instrument&);   // empty for the built-in ones
