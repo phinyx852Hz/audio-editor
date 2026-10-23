@@ -12,6 +12,8 @@
 #include "../patchbay/PatchBay.h"
 
 #include <QApplication>
+#include <QFileInfo>
+#include <QInputDialog>
 #include <QMessageBox>
 #include <QStatusBar>
 
@@ -43,15 +45,39 @@ void MainWindow::registerInstrumentCommands()
 
 // The patchbay synth playing a stock instrument: the one it already is, or with `load`
 // the first free one, started here. -1 when there is none; `why` then says why, and
-// `failed` is set when the instrument is there but would not start.
+// `failed` is set when that is worth a dialog: it would not start, or with `load` it
+// is missing or could not be read.
 int MainWindow::instrumentSynth (const char* key, bool load, QString* why, bool* failed)
 {
     const auto* info = stock::instrument (key);
     if (info == nullptr)
         return -1;
     const auto name = QStringLiteral ("%1 (%2)").arg (tr (info->function), QString::fromUtf8 (info->original));
-    const auto id = engine.stockInstrumentId (key);
-    if (id.empty())
+    auto id = engine.stockInstrumentId (key);
+    if (id.empty() && load)
+    {
+        // Not in the list: look again, in case its scan failed or timed out when PHINYX started.
+        std::string file;
+        QApplication::setOverrideCursor (Qt::WaitCursor);
+        id = engine.rescanStockInstrument (key, file);
+        QApplication::restoreOverrideCursor();
+        if (id.empty())
+        {
+            const auto app = QStringLiteral (APP_DISPLAY_NAME);
+            const auto path = QString::fromStdString (file);
+            if (why != nullptr)
+                *why = path.isEmpty() ? tr ("%1 cannot be opened: no stock plugin folder was found for this copy of %2.").arg (name, app)
+                     : ! QFileInfo::exists (path) ? tr ("%1 was not built with this copy of %2: %3 is missing. Building %2 again "
+                                                        "(cmake --build build) builds it; if that fails, its error is in the build output.")
+                                                        .arg (name, app, path)
+                     : tr ("%1 is installed (%2) but %3 could not read it: looking inside it failed or took too long.")
+                           .arg (name, path, app);
+            if (failed != nullptr)
+                *failed = true;
+            return -1;
+        }
+    }
+    else if (id.empty())
     {
         if (why != nullptr)
             *why = tr ("%1 was not built with this copy of %2").arg (name, QStringLiteral (APP_DISPLAY_NAME));
@@ -104,6 +130,28 @@ void MainWindow::openInstrument (const char* key)
         return;
     const auto name = QStringLiteral ("%1 (%2)").arg (tr (info->function), QString::fromUtf8 (info->original));
     playInstruments();
+
+    // Every patchbay synth is taken by another instrument: offer to swap one out
+    // rather than only saying so in the status bar.
+    bool full = instrumentSynth (key, false) < 0;
+    for (int i = 0; i < patchbay::maxSynths && full; ++i)
+        full = patchBay->synth (i) != nullptr;
+    if (full)
+    {
+        QStringList taken;
+        for (int i = 0; i < patchbay::maxSynths; ++i)
+            taken << tr ("Synth %1: %2").arg (i + 1).arg (QString::fromStdString (patchBay->synth (i)->name()));
+        bool ok = false;
+        const auto pick = QInputDialog::getItem (this, name, tr ("All %1 patchbay synths are in use. Replace one with %2?")
+                                                     .arg (patchbay::maxSynths).arg (name),
+                                                 taken, 0, false, &ok);
+        if (! ok)
+            return;
+        patchBay->setSynth (taken.indexOf (pick), nullptr);
+        if (patchBayWin != nullptr)
+            patchBayWin->refill();
+    }
+
     QString why;
     bool failed = false;
     const auto slot = instrumentSynth (key, true, &why, &failed);
