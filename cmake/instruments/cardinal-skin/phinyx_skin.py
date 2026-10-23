@@ -3,7 +3,8 @@
 # PHINYX artwork for Cardinal. Draws a PHINYX version of every file in VCV
 # Rack's component library (knobs, jacks, switches, buttons, lights, sliders,
 # screws, cable plugs, rails), whose own artwork is CC-BY-NC-4.0, over the
-# originals before Cardinal is built, and gives the cables PHINYX's colours.
+# originals before Cardinal is built. Also restyles VCV Fundamental's knobs,
+# jacks and buttons to match (its panels stay) and gives the cables PHINYX's colours.
 # Run in Cardinal's source folder:
 #   python3 phinyx_skin.py
 #
@@ -110,12 +111,13 @@ def jack(w, h, p, ring=None):
     return svg(w, h, body)
 
 
-def button(w, h, p, on):
+def button(w, h, p, on, dot=True):
+    """dot: draw the lit centre (off where Rack lights the button itself)."""
     edge = p["highlight"] if on else p["mid"]
     inset = 0.6
     r = min(w, h) * 0.16
     body = f'<path d="{rounded(inset, inset, w - 2 * inset, h - 2 * inset, r)}" fill="{p["button"]}" stroke="{edge}" stroke-width="1.2"/>'
-    if on:
+    if on and dot:
         body += f'<path d="{circle(w / 2, h / 2, min(w, h) * 0.14)}" fill="{p["highlight"]}"/>'
     return svg(w, h, body)
 
@@ -343,6 +345,133 @@ def component_library(folder):
     return len(names)
 
 
+# --------------------------------------------------------------------------
+# VCV Fundamental's own controls (GPL-3.0-or-later), restyled to match. The
+# panels stay as they are.
+
+FUNDAMENTAL_SWEEP = 135.0  # PHINYX's 270 degree travel, set on the knobs below
+
+
+def edit(path, old, new, marker):
+    """Replace old with new in a source file once; marker shows it is done."""
+    with open(path) as f:
+        source = f.read()
+    if marker in source:
+        return
+    if old not in source:
+        sys.exit(f"phinyx_skin.py: {path} has changed, its PHINYX edit needs updating")
+    with open(path, "w") as f:
+        f.write(source.replace(old, new, 1))
+
+
+KNOB_VALUE = """
+	// PHINYX: the value along the track in the highlight colour, from zero on a
+	// knob that goes both ways, and a dot at each step of a stepped knob (phinyx_skin.py).
+	void drawPhinyxValue(const DrawArgs& args) {
+		ParamQuantity* const pq = getParamQuantity();
+		if (pq == nullptr || ! (pq->getMaxValue() > pq->getMinValue()))
+			return;
+		const float lo = pq->getMinValue(), hi = pq->getMaxValue();
+		// The track as phinyx_skin.py draws it in the 18 or 68 unit SVG, scaled to the knob.
+		const float design = size <= 22 ? 18.f : 68.f;
+		const float k = size / design;
+		const float track = std::max(1.6f, design * 0.075f);
+		const float width = track * k;
+		const float radius = (design * 0.5f - track * 0.5f - 0.3f) * k;
+		const float c = size * 0.5f;
+		auto angle = [&](float t) { return minAngle + (maxAngle - minAngle) * t - float(M_PI) * 0.5f; };
+		const float origin = lo < 0.f && hi > 0.f ? -lo / (hi - lo) : 0.f;
+		const float v = pq->getScaledValue();
+		if (std::fabs(v - origin) > 0.002f) {
+			nvgBeginPath(args.vg);
+			nvgArc(args.vg, c, c, radius, angle(std::min(v, origin)), angle(std::max(v, origin)), NVG_CW);
+			nvgLineCap(args.vg, NVG_BUTT);
+			nvgStrokeWidth(args.vg, width);
+			nvgStrokeColor(args.vg, nvgRGB(0x4f, 0xc3, 0xf7));
+			nvgStroke(args.vg);
+		}
+		const int steps = pq->snapEnabled ? (int) std::round(hi - lo) : 0;
+		if (steps >= 1 && steps <= 24) {
+			nvgBeginPath(args.vg);
+			for (int i = 0; i <= steps; ++i) {
+				const float a = angle((float) i / steps);
+				nvgCircle(args.vg, c + radius * std::cos(a), c + radius * std::sin(a), width * 0.32f);
+			}
+			nvgFillColor(args.vg, nvgRGB(0xa3, 0xa9, 0xb4));
+			nvgFill(args.vg);
+		}
+	}
+"""
+
+
+def fundamental(folder):
+    res = os.path.join(folder, "res/components")
+    p = DARK
+    files = {
+        "knob.svg": knob_bg(68, 68, p, FUNDAMENTAL_SWEEP),
+        "knob-marker.svg": knob_pointer(68, 68, p),
+        "knob-small.svg": knob_bg(18, 18, p, FUNDAMENTAL_SWEEP),
+        "knob-marker-small.svg": knob_pointer(18, 18, p),
+        "port.svg": jack(22, 22, p, p["highlight"]),
+        "port-out.svg": jack(22, 22, p, p["accent"]),
+        "button-off.svg": button(21, 21, p, False),
+        "button-on.svg": button(21, 21, p, True, dot=False),
+    }
+    for name, art in files.items():
+        with open(os.path.join(res, name), "w") as f:
+            f.write(art)
+
+    hpp = os.path.join(folder, "src/components.hpp")
+    edit(hpp, """		scale = size / sw->box.size.x;
+""", """		scale = size / sw->box.size.x;
+		// PHINYX: 270 degrees of travel, as on PHINYX's own knobs
+		minAngle = -0.75f * M_PI;
+		maxAngle = 0.75f * M_PI;
+""", "PHINYX: 270 degrees")
+    edit(hpp, """		RoundKnob::draw(args);
+		nvgRestore(args.vg);
+	}
+""", """		RoundKnob::draw(args);
+		nvgRestore(args.vg);
+		drawPhinyxValue(args);
+	}
+""" + KNOB_VALUE, "PHINYX: the value along the track")
+    edit(hpp, """struct FundamentalPort : app::SvgPort {
+	FundamentalPort() {
+		setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/port.svg")));
+	}
+};""", """// PHINYX: inputs ring in the highlight colour, outputs in the accent colour (phinyx_skin.py).
+// The port's type is set after it is made, so outputs change drawing on their first step.
+struct FundamentalPort : app::SvgPort {
+	bool outputSvg = false;
+
+	FundamentalPort() {
+		setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/port.svg")));
+	}
+
+	void step() override {
+		if (type == engine::Port::OUTPUT && ! outputSvg) {
+			setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/port-out.svg")));
+			outputSvg = true;
+		}
+		app::SvgPort::step();
+	}
+};""", "PHINYX: inputs ring")
+    edit(hpp, """			bgColor = nvgRGBA(190, 152, 152, 53);
+			borderColor = nvgRGBA(241, 33, 33, 53);
+			addBaseColor(nvgRGB(210, 11, 11));""", """			// PHINYX: lit in the highlight colour (phinyx_skin.py)
+			bgColor = nvgRGBA(0x4f, 0xc3, 0xf7, 40);
+			borderColor = nvgRGBA(0x4f, 0xc3, 0xf7, 60);
+			addBaseColor(nvgRGB(0x4f, 0xc3, 0xf7));""", "PHINYX: lit in the highlight")
+
+
+def cardinal_widgets(path):
+    """Cardinal's own drawn knob (Host Audio's level) in the highlight colour instead of Cardinal red."""
+    edit(path, """        const NVGcolor cardinalColor = nvgRGBf(0.76f, 0.11f, 0.22f);""",
+         """        const NVGcolor cardinalColor = nvgRGB(0x4f, 0xc3, 0xf7); // PHINYX: the highlight colour (phinyx_skin.py)""",
+         "PHINYX: the highlight colour")
+
+
 ARTWORK_NOTE = """# PHINYX artwork in Cardinal
 
 The files in `res/ComponentLibrary` (installed as `resources/ComponentLibrary`)
@@ -377,6 +506,8 @@ def cable_colours(path):
 def main():
     count = component_library("src/Rack/res/ComponentLibrary")
     cable_colours("src/CardinalCommon.cpp")
+    fundamental("plugins/Fundamental")
+    cardinal_widgets("plugins/Cardinal/src/Widgets.hpp")
     with open("PHINYX-ARTWORK.md", "w") as f:
         f.write(ARTWORK_NOTE)
     print(f"phinyx_skin.py: drew {count} component library files")
