@@ -142,7 +142,7 @@ void SliceView::paintEvent (QPaintEvent*)
     if (sample == nullptr)
     {
         g.setPen (theme.color (QStringLiteral ("placeholderText")));
-        g.drawText (rect(), Qt::AlignCenter, tr ("Send a sound here from the editor: Sample > Send to Slicer (F8), or drag a file here from Find"));
+        g.drawText (rect(), Qt::AlignCenter, tr ("Send a sound here from the editor: Sample > Send to Slicer (F8), or drag an audio file here from Find or a file manager"));
         return;
     }
     const auto mid = height() / 2.0;
