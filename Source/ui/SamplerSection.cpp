@@ -66,6 +66,14 @@ void MainWindow::registerSamplerCommands()
     // MIDI plays the Sampler or the Slicer (whichever was used last) straight from the MIDI thread.
     midiInputs->setHandler ([this, e = samplerEngine.get(), s = slicerEngine.get()] (int status, int channel, int a, int b)
     {
+        // Controllers also turn the Prism macros that follow them (and teach one waiting to learn).
+        if (status == 0xB0)
+            QMetaObject::invokeMethod (this, [this, channel, a, b]
+            {
+                if (engine.midiController (channel, a, b))
+                    statusBar()->showMessage (tr ("Macro follows CC %1 on channel %2").arg (a).arg (channel), 4000);
+            }, Qt::QueuedConnection);
+
         // No instrument window open: MIDI plays nothing.
         const auto target = midiTarget.load (std::memory_order_relaxed);
         // A patchbay synth: everything, on the channel it came on.

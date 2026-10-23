@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MasterChain.h"
 #include "PluginWindow.h"
+#include "Prism.h"
 #include "BuiltinEffects.h"
 #include "ClapFormat.h"
 #include "StockFrame.h"
@@ -165,6 +166,8 @@ const stock::Info* MasterChain::stockInfo (const std::string& pluginId) const
 
 std::unique_ptr<juce::PluginDescription> MasterChain::findDescription (const std::string& pluginId) const
 {
+    if (const auto prism = PrismProcessor::description(); prism.createIdentifierString().toStdString() == pluginId)
+        return std::make_unique<juce::PluginDescription> (prism);
     for (const auto& d : builtin::descriptions())
         if (d.createIdentifierString().toStdString() == pluginId)
             return std::make_unique<juce::PluginDescription> (d);
@@ -220,6 +223,7 @@ std::vector<PluginInfo> MasterChain::listPlugins (bool wantInstruments) const
 {
     std::vector<PluginInfo> result;
     auto all = builtin::descriptions();
+    all.push_back (PrismProcessor::description());
     for (const auto* list : { &stockList, &pluginList })
         for (const auto& d : list->getTypes())
             all.push_back (d);
@@ -381,9 +385,44 @@ std::string MasterChain::finishScan()
 }
 
 //==============================================================================
+std::unique_ptr<juce::AudioPluginInstance> MasterChain::makePrism() const
+{
+    PrismProcessor::Factory f;
+    f.create = [this] (const juce::PluginDescription& d, const juce::MemoryBlock* state, int numChannels, double sampleRate, int block,
+                       juce::String& error) -> std::unique_ptr<juce::AudioPluginInstance>
+    {
+        std::unique_ptr<juce::AudioPluginInstance> instance;
+        try
+        {
+            instance = PrismProcessor::isPrism (d) ? makePrism()
+                     : builtin::isBuiltin (d)      ? builtin::create (d)
+                                                   : formats.createPluginInstance (d, sampleRate, block, error);
+            if (instance == nullptr)
+            {
+                if (error.isEmpty())
+                    error = "this effect is not part of this version";
+                return nullptr;
+            }
+            applyLayout (*instance, numChannels);
+            if (state != nullptr && state->getSize() > 0)
+                instance->setStateInformation (state->getData(), (int) state->getSize());
+            preparePlugin (*instance, sampleRate, block);
+            return instance;
+        }
+        catch (const std::exception& e) { error = e.what(); }
+        catch (...)                      { error = "an unknown error"; }
+        (void) instance.release();   // it threw: deleting it would call into it again
+        return nullptr;
+    };
+    f.arrange = [this] (juce::AudioPluginInstance& p, int numChannels) { applyLayout (p, numChannels); };
+    return std::make_unique<PrismProcessor> (std::move (f));
+}
+
 std::unique_ptr<juce::AudioPluginInstance> MasterChain::createInstance (const juce::PluginDescription& d, juce::String& error) const
 {
-    auto instance = builtin::isBuiltin (d) ? builtin::create (d) : formats.createPluginInstance (d, rate, blockSize, error);
+    auto instance = PrismProcessor::isPrism (d) ? makePrism()
+                  : builtin::isBuiltin (d)      ? builtin::create (d)
+                                                : formats.createPluginInstance (d, rate, blockSize, error);
     if (instance == nullptr)
     {
         if (error.isEmpty())
@@ -448,7 +487,9 @@ std::unique_ptr<juce::AudioPluginInstance> MasterChain::createEffect (const std:
     std::unique_ptr<juce::AudioPluginInstance> instance;
     try
     {
-        instance = builtin::isBuiltin (*d) ? builtin::create (*d) : formats.createPluginInstance (*d, sampleRate, maxBlock, error);
+        instance = PrismProcessor::isPrism (*d) ? makePrism()
+                 : builtin::isBuiltin (*d)      ? builtin::create (*d)
+                                                : formats.createPluginInstance (*d, sampleRate, maxBlock, error);
         if (instance == nullptr)
         {
             if (error.isEmpty())
@@ -628,9 +669,12 @@ MasterSlotInfo MasterChain::info (int index) const
         guard (s, [&] { i.mainParameters = stock::footerParameters (*stockInfo, *s.plugin); });
     i.pluginId = s.description.createIdentifierString().toStdString();
     i.bypassed = s.bypassed;
+    i.prism = PrismProcessor::isPrism (s.description);
     if (s.usable())
         guard (s, [&]
         {
+            if (auto* prism = dynamic_cast<PrismProcessor*> (s.plugin.get()))
+                i.name = prism->getName().toStdString();
             i.latencySamples = s.plugin->getLatencySamples();
             i.hasEditor = s.hasEditor;
             i.channels = std::min (channelCount, std::max (s.plugin->getTotalNumInputChannels(), s.plugin->getTotalNumOutputChannels()));
@@ -693,70 +737,73 @@ int MasterChain::totalLatency() const
 }
 
 //==============================================================================
-std::vector<PluginParameterInfo> MasterChain::parameters (int index) const
+PluginParameterInfo MasterChain::describe (juce::AudioProcessorParameter& p)
+{
+    PluginParameterInfo info;
+    info.name = p.getName (64).toStdString();
+    info.value = p.getValue();
+    info.valueText = (p.getCurrentValueAsText() + " " + stock::unit (p)).trim().toStdString();
+    info.isBoolean = p.isBoolean();
+    const auto steps = p.getNumSteps();
+    info.numSteps = steps > 1 && steps <= 1000 ? steps : 0;
+    return info;
+}
+
+std::vector<PluginParameterInfo> MasterChain::parameters (int index) const   { return parameters (ChainPath { index, {} }); }
+PluginParameterInfo MasterChain::parameter (int index, int p) const          { return parameter (ChainPath { index, {} }, p); }
+void MasterChain::setParameter (int index, int p, float v)                    { setParameter (ChainPath { index, {} }, p, v); }
+bool MasterChain::setParameterFromText (int index, int p, const std::string& t) { return setParameterFromText (ChainPath { index, {} }, p, t); }
+
+std::vector<PluginParameterInfo> MasterChain::parameters (const ChainPath& path) const
 {
     std::vector<PluginParameterInfo> result;
-    if (index < 0 || index >= (int) slots.size() || ! slots[(size_t) index].usable())
+    const auto place = locate (path);
+    if (place.plugin == nullptr)
         return result;
 
-    const auto& s = slots[(size_t) index];
-    if (! guard (s, [&]
+    if (! call (place, [&] (juce::AudioPluginInstance& plugin)
         {
-            for (auto* p : s.plugin->getParameters())
-            {
-                PluginParameterInfo info;
-                info.name = p->getName (64).toStdString();
-                info.value = p->getValue();
-                info.valueText = (p->getCurrentValueAsText() + " " + stock::unit (*p)).trim().toStdString();
-                info.isBoolean = p->isBoolean();
-                const auto steps = p->getNumSteps();
-                info.numSteps = steps > 1 && steps <= 1000 ? steps : 0;
-                result.push_back (info);
-            }
+            for (auto* p : plugin.getParameters())
+                result.push_back (describe (*p));
         }))
         result.clear();
-
     return result;
 }
 
-PluginParameterInfo MasterChain::parameter (int index, int parameter) const
+PluginParameterInfo MasterChain::parameter (const ChainPath& path, int parameter) const
 {
     PluginParameterInfo info;
-    if (index < 0 || index >= (int) slots.size() || ! slots[(size_t) index].usable())
+    const auto place = locate (path);
+    if (place.plugin == nullptr)
         return info;
 
-    const auto& s = slots[(size_t) index];
-    const auto& params = s.plugin->getParameters();
-    if (parameter < 0 || parameter >= params.size())
-        return info;
-
-    auto* p = params[parameter];
-    if (! guard (s, [&]
+    if (! call (place, [&] (juce::AudioPluginInstance& plugin)
         {
-            info.name = p->getName (64).toStdString();
-            info.value = p->getValue();
-            info.valueText = (p->getCurrentValueAsText() + " " + stock::unit (*p)).trim().toStdString();
-            info.isBoolean = p->isBoolean();
-            const auto steps = p->getNumSteps();
-            info.numSteps = steps > 1 && steps <= 1000 ? steps : 0;
+            const auto& params = plugin.getParameters();
+            if (parameter >= 0 && parameter < params.size())
+                info = describe (*params[parameter]);
         }))
         info = {};
     return info;
 }
 
-bool MasterChain::setParameterFromText (int index, int parameter, const std::string& typed)
+bool MasterChain::setParameterFromText (const ChainPath& path, int parameter, const std::string& typed)
 {
-    if (index < 0 || index >= (int) slots.size() || ! slots[(size_t) index].usable())
-        return false;
-
+    const auto place = locate (path);
     bool done = false;
-    guard (slots[(size_t) index], [&] { done = setParameterFromTextUnguarded (index, parameter, typed); });
+    if (place.plugin != nullptr)
+        call (place, [&] (juce::AudioPluginInstance& plugin)
+        {
+            done = setParameterFromTextUnguarded (plugin, parameter, typed);
+            if (auto* prism = dynamic_cast<PrismProcessor*> (&plugin))
+                prism->applyMacrosNow();
+        });
     return done;
 }
 
-bool MasterChain::setParameterFromTextUnguarded (int index, int parameter, const std::string& typed)
+bool MasterChain::setParameterFromTextUnguarded (juce::AudioPluginInstance& plugin, int parameter, const std::string& typed)
 {
-    const auto& params = slots[(size_t) index].plugin->getParameters();
+    const auto& params = plugin.getParameters();
     if (parameter < 0 || parameter >= params.size())
         return false;
 
@@ -831,15 +878,19 @@ float MasterChain::takePeak (int index)
     return index >= 0 && index < (int) peaks.size() ? peaks[(size_t) index].exchange (0.0f, std::memory_order_relaxed) : 0.0f;
 }
 
-void MasterChain::setParameter (int index, int parameter, float value)
+void MasterChain::setParameter (const ChainPath& path, int parameter, float value)
 {
-    if (index < 0 || index >= (int) slots.size() || ! slots[(size_t) index].usable())
-        return;
-
-    const auto& s = slots[(size_t) index];
-    const auto& params = s.plugin->getParameters();
-    if (parameter >= 0 && parameter < params.size())
-        guard (s, [&] { params[parameter]->setValueNotifyingHost (std::clamp (value, 0.0f, 1.0f)); });
+    const auto place = locate (path);
+    if (place.plugin != nullptr)
+        call (place, [&] (juce::AudioPluginInstance& plugin)
+        {
+            const auto& params = plugin.getParameters();
+            if (parameter >= 0 && parameter < params.size())
+                params[parameter]->setValueNotifyingHost (std::clamp (value, 0.0f, 1.0f));
+            // A macro turns what it is mapped to straight away, playing or not.
+            if (auto* prism = dynamic_cast<PrismProcessor*> (&plugin))
+                prism->applyMacrosNow();
+        });
 }
 
 bool MasterChain::canShowWindow (int index) const
@@ -1256,6 +1307,19 @@ AudioDataPtr MasterChain::render (const AudioData& data, Frame start, Frame end,
     const auto length = end - start;
 
     const juce::ScopedLock sl (lock);
+    // Prisms wait for their own lock while rendering, and leave their ray solos out.
+    struct Offline
+    {
+        MasterChain& chain;
+        explicit Offline (MasterChain& c) : chain (c) { set (true); }
+        ~Offline() { set (false); }
+        void set (bool b)
+        {
+            for (auto& s : chain.slots)
+                if (auto* prism = s.usable() ? dynamic_cast<PrismProcessor*> (s.plugin.get()) : nullptr)
+                    prism->setNonRealtime (b);
+        }
+    } offline (*this);
     std::array<bool, AudioEngine::numMasterSlots> wasUsable {};
     for (size_t i = 0; i < slots.size(); ++i)
         wasUsable[i] = slots[i].usable();
@@ -1380,4 +1444,279 @@ AudioDataPtr MasterChain::render (const AudioData& data, Frame start, Frame end,
         result = mono.finish();
     }
     return result;
+}
+
+//==============================================================================
+MasterChain::Place MasterChain::locate (const ChainPath& path) const
+{
+    Place place;
+    if (path.slot < 0 || path.slot >= (int) slots.size() || slots[(size_t) path.slot].plugin == nullptr)
+        return place;
+
+    const auto& s = slots[(size_t) path.slot];
+    place.slot = path.slot;
+    place.exists = true;
+    place.plugin = s.usable() ? s.plugin.get() : nullptr;
+    for (const auto& [ray, device] : path.steps)
+    {
+        auto* prism = dynamic_cast<PrismProcessor*> (place.plugin);
+        if (prism == nullptr || ! prism->exists (ray, device))
+            return {};
+        place.owner = prism;
+        place.ray = ray;
+        place.device = device;
+        place.plugin = prism->plugin (ray, device);
+    }
+    return place;
+}
+
+bool MasterChain::call (const Place& place, const std::function<void (juce::AudioPluginInstance&)>& fn) const
+{
+    if (place.plugin == nullptr)
+        return false;
+    if (place.owner != nullptr)
+        return place.owner->guard (place.ray, place.device, fn);
+    return guard (slots[(size_t) place.slot], [&] { fn (*place.plugin); });
+}
+
+MasterSlotInfo MasterChain::info (const ChainPath& path) const
+{
+    if (path.topLevel())
+        return info (path.slot);
+    const auto place = locate (path);
+    return place.owner != nullptr ? place.owner->deviceInfo (place.ray, place.device) : MasterSlotInfo {};
+}
+
+void MasterChain::setBypassed (const ChainPath& path, bool b)
+{
+    if (path.topLevel())
+        return setBypassed (path.slot, b);
+    if (const auto place = locate (path); place.owner != nullptr)
+        place.owner->setDeviceBypassed (place.ray, place.device, b);
+}
+
+std::string MasterChain::reload (const ChainPath& path)
+{
+    if (path.topLevel())
+        return reload (path.slot);
+    const auto place = locate (path);
+    return place.owner != nullptr ? place.owner->reloadDevice (place.ray, place.device) : "There is no plugin here.";
+}
+
+void MasterChain::remove (const ChainPath& path)
+{
+    if (path.topLevel())
+        return clear (path.slot);
+    if (const auto place = locate (path); place.owner != nullptr)
+        place.owner->removeDevice (place.ray, place.device);
+}
+
+bool MasterChain::canShowWindow (const ChainPath& path) const
+{
+    if (path.topLevel())
+        return canShowWindow (path.slot);
+    const auto place = locate (path);
+    return place.owner != nullptr && place.owner->canShowWindow (place.ray, place.device);
+}
+
+void MasterChain::showWindow (const ChainPath& path)
+{
+    if (path.topLevel())
+        return showWindow (path.slot);
+    if (const auto place = locate (path); place.owner != nullptr)
+        place.owner->showWindow (place.ray, place.device);
+}
+
+float MasterChain::takePeak (const ChainPath& path)
+{
+    if (path.topLevel())
+        return takePeak (path.slot);
+    const auto place = locate (path);
+    return place.owner != nullptr ? place.owner->takeDevicePeak (place.ray, place.device) : 0.0f;
+}
+
+PrismProcessor* MasterChain::prismAt (const ChainPath& path) const
+{
+    return dynamic_cast<PrismProcessor*> (locate (path).plugin);
+}
+
+PrismInfo MasterChain::prismInfo (const ChainPath& path) const
+{
+    if (auto* prism = prismAt (path))
+        return prism->info();
+    return {};
+}
+
+std::string MasterChain::prismAdd (const ChainPath& path, int ray, int index, const std::string& pluginId)
+{
+    auto* prism = prismAt (path);
+    if (prism == nullptr)
+        return "There is no Prism here.";
+    auto description = findDescription (pluginId);
+    if (description == nullptr)
+        return "This plugin is not in the plugin list. Scan for plugins again.";
+    return prism->addDevice (ray, index, *description);
+}
+
+float MasterChain::takeRayPeak (const ChainPath& path, int ray)
+{
+    auto* prism = prismAt (path);
+    return prism != nullptr ? prism->takeRayPeak (ray) : 0.0f;
+}
+
+std::string MasterChain::group (int first, int last)
+{
+    const auto n = (int) slots.size();
+    first = std::clamp (first, 0, n - 1);
+    last = std::clamp (last, first, n - 1);
+    std::vector<int> chosen;
+    for (int i = first; i <= last; ++i)
+        if (slots[(size_t) i].plugin != nullptr)
+            chosen.push_back (i);
+    if (chosen.empty())
+        return "Pick the plugins to group first.";
+
+    juce::String error;
+    bool editor = false;
+    auto made = start (PrismProcessor::description(), nullptr, editor, error);
+    auto* prism = dynamic_cast<PrismProcessor*> (made.get());
+    if (prism == nullptr)
+        return ("Could not make a Prism: " + error).toStdString();
+
+    // Each plugin moves into the Prism's first ray still running, settings and all.
+    for (const auto i : chosen)
+    {
+        auto& s = slots[(size_t) i];
+        const auto failed = ! s.usable();
+        if (failed)
+        {
+            if (auto* w = windows[(size_t) i].release())
+                guard (s, [w] { w->setVisible (false); });
+        }
+        else
+            windows[(size_t) i].reset();
+
+        juce::MemoryBlock state;
+        if (! failed)
+            guard (s, [&] { s.plugin->getStateInformation (state); });
+        if (state.getSize() == 0)
+        {
+            const std::lock_guard<std::mutex> l (s.health->mutex);
+            state = s.health->lastState;
+        }
+        const auto description = s.description;
+        const auto bypassed = s.bypassed;
+        std::unique_ptr<juce::AudioPluginInstance> plugin;
+        {
+            const juce::ScopedLock sl (lock);
+            plugin = std::move (s.plugin);
+            s = {};
+            if (soloSlot == i)
+                soloSlot = -1;
+        }
+        if (failed)
+        {
+            (void) plugin.release();   // deleting it would call into it again
+            prism->adopt (0, nullptr, description, bypassed, state);
+        }
+        else
+            prism->adopt (0, std::move (plugin), description, bypassed, state);
+    }
+
+    const juce::ScopedLock sl (lock);
+    slots[(size_t) chosen.front()] = { std::move (made), PrismProcessor::description(), false, 0, {}, editor };
+    return {};
+}
+
+std::string MasterChain::ungroup (int slot)
+{
+    if (slot < 0 || slot >= (int) slots.size())
+        return "That is not a Prism.";
+    auto* prism = slots[(size_t) slot].usable() ? dynamic_cast<PrismProcessor*> (slots[(size_t) slot].plugin.get()) : nullptr;
+    if (prism == nullptr)
+        return "That is not a Prism.";
+
+    const auto info = prism->info();
+    int filled = -1, count = 0;
+    for (int r = 0; r < (int) info.rays.size(); ++r)
+        if (! info.rays[(size_t) r].devices.empty())
+        {
+            if (filled >= 0)
+                return "Only a Prism with one ray of plugins can be ungrouped.";
+            filled = r;
+            count = (int) info.rays[(size_t) r].devices.size();
+        }
+
+    int free = 0;
+    for (const auto& s : slots)
+        free += s.plugin == nullptr ? 1 : 0;
+    if (count - 1 > free)
+        return "Its " + std::to_string (count) + " plugins need " + std::to_string (count - 1 - free)
+             + " more free slots in the chain; remove some plugins first.";
+
+    auto released = filled >= 0 ? prism->release (filled) : std::vector<PrismProcessor::Released> {};
+    discard ((size_t) slot);
+
+    // The first takes the Prism's slot; each of the rest goes into a free slot and moves up behind the one before.
+    int previous = -1, lost = 0;
+    for (auto& r : released)
+    {
+        if (r.plugin == nullptr)
+        {
+            ++lost;
+            continue;
+        }
+        int target = previous < 0 ? slot : -1;
+        for (int i = 0; i < (int) slots.size() && target < 0; ++i)
+            if (slots[(size_t) i].plugin == nullptr)
+                target = i;
+        if (target < 0)
+            break;
+
+        bool editor = false;
+        try { editor = r.plugin->hasEditor(); } catch (...) {}
+        {
+            const juce::ScopedLock sl (lock);
+            slots[(size_t) target] = { std::move (r.plugin), r.description, r.bypassed, 0, {}, editor };
+            slots[(size_t) target].health->lastState = r.lastState;
+        }
+        if (previous < 0)
+            previous = target;
+        else if (target < previous)
+            move (target, previous);   // `previous` shifts back one, the new one lands right after it
+        else
+        {
+            if (target != previous + 1)
+                move (target, previous + 1);
+            previous = previous + 1;
+        }
+    }
+    return lost > 0 ? std::to_string (lost) + " plugin(s) that had stopped working were left out." : std::string();
+}
+
+bool MasterChain::controller (int channel, int number, int value)
+{
+    if (learnMacro >= 0)
+    {
+        if (auto* prism = prismAt (learnPath))
+            prism->setController (learnMacro, number, channel);
+        learnMacro = -1;
+        return true;
+    }
+
+    for (auto& s : slots)
+        if (auto* prism = s.usable() ? dynamic_cast<PrismProcessor*> (s.plugin.get()) : nullptr)
+            guard (s, [&] { prism->controller (channel, number, value); });
+    return false;
+}
+
+void MasterChain::learnController (const ChainPath& prism, int macro)
+{
+    learnPath = prism;
+    learnMacro = macro >= 0 && macro < PrismInfo::numMacros ? macro : -1;
+}
+
+bool MasterChain::learning (const ChainPath& prism, int macro) const
+{
+    return learnMacro >= 0 && learnMacro == macro && learnPath == prism;
 }

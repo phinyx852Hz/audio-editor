@@ -26,6 +26,7 @@
 #include "../Source/core/Binaural.h"
 #include "../Source/core/Ambisonics.h"
 #include "../Source/core/SpatialStudio.h"
+#include "../Source/core/PrismSplit.h"
 
 #include <algorithm>
 #include <cmath>
@@ -3088,6 +3089,120 @@ namespace
         bay.setSynth (1, nullptr);
     }
 
+    // A Prism with nothing in its rays gives back what went in, in every split.
+    void testPrismSplit()
+    {
+        constexpr int channels = 2, frames = 48000, rays = 4;
+        const double rate = 48000.0;
+        std::vector<std::vector<float>> input (channels, std::vector<float> (frames));
+        std::mt19937 rng (7);
+        std::uniform_real_distribution<float> noise (-0.5f, 0.5f);
+        for (auto& c : input)
+            for (auto& v : c)
+                v = noise (rng);
+
+        std::vector<std::vector<std::vector<float>>> rayData (rays, std::vector<std::vector<float>> (channels, std::vector<float> (frames)));
+        std::vector<std::vector<float*>> rayChannels (rays);
+        std::vector<float* const*> rayPtrs (rays);
+        std::vector<const float* const*> rayReadPtrs (rays);
+        for (int r = 0; r < rays; ++r)
+        {
+            for (auto& c : rayData[(size_t) r])
+                rayChannels[(size_t) r].push_back (c.data());
+            rayPtrs[(size_t) r] = rayChannels[(size_t) r].data();
+            rayReadPtrs[(size_t) r] = rayChannels[(size_t) r].data();
+        }
+        std::vector<const float*> in { input[0].data(), input[1].data() };
+        std::vector<std::vector<float>> output (channels, std::vector<float> (frames));
+        std::vector<float*> out { output[0].data(), output[1].data() };
+        const float unity[rays] { 1.0f, 1.0f, 1.0f, 1.0f };
+
+        for (auto mode : { prism::Split::parallel, prism::Split::midSide, prism::Split::leftRight })
+        {
+            prism::Splitter s;
+            s.prepare (rate, channels);
+            s.split (mode, in.data(), channels, frames, rayPtrs.data(), rays);
+            // Parallel adds the rays, so with gains of 1/n the sum is the input again.
+            const auto heard = prism::raysHeard (mode, rays);
+            float gains[rays];
+            for (int r = 0; r < rays; ++r)
+                gains[r] = mode == prism::Split::parallel ? 1.0f / (float) heard : 1.0f;
+            prism::Splitter::join (mode, rayReadPtrs.data(), gains, rays, out.data(), channels, frames);
+            float worst = 0.0f;
+            for (int ch = 0; ch < channels; ++ch)
+                for (int i = 0; i < frames; ++i)
+                    worst = std::max (worst, std::abs (output[(size_t) ch][(size_t) i] - input[(size_t) ch][(size_t) i]));
+            check (worst < 1.0e-5f, std::string ("prism ") + prism::splitName (mode) + " gives back its input");
+        }
+
+        // Mid/side: the side ray alone holds L - R.
+        {
+            prism::Splitter s;
+            s.prepare (rate, channels);
+            s.split (prism::Split::midSide, in.data(), channels, frames, rayPtrs.data(), rays);
+            check (near (rayData[1][0][100], 0.5 * (input[0][100] - input[1][100]), 1.0e-6), "prism side ray holds the side");
+            check (near (rayData[0][1][100], 0.5 * (input[0][100] + input[1][100]), 1.0e-6), "prism mid ray holds the mid");
+            check (rayData[2][0][100] == 0.0f, "prism mid/side leaves ray 3 silent");
+        }
+
+        // Bands: each band is a part of the spectrum, and all four add back to the same level at every frequency.
+        for (int bands = 2; bands <= 4; ++bands)
+        {
+            const double crossovers[] { 150.0, 1200.0, 6000.0 };
+            for (double hz : { 40.0, 150.0, 500.0, 1200.0, 3000.0, 6000.0, 14000.0 })
+            {
+                prism::Splitter s;
+                s.prepare (rate, 1);
+                s.setBands (bands, crossovers);
+                std::vector<float> sine (frames);
+                for (int i = 0; i < frames; ++i)
+                    sine[(size_t) i] = (float) std::sin (2.0 * M_PI * hz * i / rate);
+                const float* sineIn[] { sine.data() };
+                s.split (prism::Split::bands, sineIn, 1, frames, rayPtrs.data(), bands);
+                float* mono[] { output[0].data() };
+                prism::Splitter::join (prism::Split::bands, rayReadPtrs.data(), unity, bands, mono, 1, frames);
+                // RMS, not the peak: a sampled sine seldom lands on its crest.
+                double power = 0.0;
+                for (int i = frames / 2; i < frames; ++i)
+                    power += (double) output[0][(size_t) i] * output[0][(size_t) i];
+                const auto rms = std::sqrt (power / (frames / 2)) * M_SQRT2;
+                check (near (20.0 * std::log10 (rms), 0.0, 0.02),
+                       "prism " + std::to_string (bands) + " bands add back flat at " + std::to_string ((int) hz) + " Hz");
+            }
+        }
+
+        // The lowest band of two holds the low tone, the highest band the high one.
+        {
+            prism::Splitter s;
+            s.prepare (rate, 1);
+            const double crossover[] { 1000.0 };
+            s.setBands (2, crossover);
+            std::vector<float> low (frames);
+            for (int i = 0; i < frames; ++i)
+                low[(size_t) i] = (float) std::sin (2.0 * M_PI * 60.0 * i / rate);
+            const float* lowIn[] { low.data() };
+            s.split (prism::Split::bands, lowIn, 1, frames, rayPtrs.data(), 2);
+            float lowPeak = 0.0f, highPeak = 0.0f;
+            for (int i = frames / 2; i < frames; ++i)
+            {
+                lowPeak = std::max (lowPeak, std::abs (rayData[0][0][(size_t) i]));
+                highPeak = std::max (highPeak, std::abs (rayData[1][0][(size_t) i]));
+            }
+            check (lowPeak > 0.99f && highPeak < 0.01f, "prism low tone goes to the low band");
+        }
+
+        // Delay lines rays up by whole samples.
+        {
+            prism::Delay d;
+            d.prepare (1, 64);
+            std::vector<float> block (16, 0.0f);
+            block[0] = 1.0f;
+            float* io[] { block.data() };
+            d.process (io, 1, 16, 5);
+            check (block[5] == 1.0f && block[0] == 0.0f, "prism delay of 5 samples");
+        }
+    }
+
 int main()
 {
     testStorage();
@@ -3121,6 +3236,7 @@ int main()
     testLauncher();
     testPatchBay();
     testSpatialStudio();
+    testPrismSplit();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "ChainRow.h"
 #include "MasterPanel.h"
+#include "PrismEditor.h"
 #include "Potentiometer.h"
 #include "Theme.h"
 
@@ -81,11 +82,13 @@ void LevelBar::paintEvent (QPaintEvent*)
 }
 
 //==============================================================================
-DeviceCard::DeviceCard (AudioEngine& e, Kind k, int slot, QWidget* parent)
-    : QFrame (parent), engine (e), cardKind (k), slotIndex (slot)
+DeviceCard::DeviceCard (AudioEngine& e, Kind k, ChainPath where, QWidget* parent)
+    : QFrame (parent), engine (e), cardKind (k), place (std::move (where))
 {
     setFocusPolicy (Qt::NoFocus);
-    setFixedWidth (k == Kind::add ? 110 : k == Kind::master ? 186 : 236);
+    const auto info = k == Kind::plugin ? engine.chainDevice (place) : MasterSlotInfo {};
+    isPrism = info.prism && ! info.failed;
+    setFixedWidth (k == Kind::add ? 110 : k == Kind::master ? 186 : isPrism ? 440 : 236);
     setMinimumHeight (150);
 
     auto* layout = new QVBoxLayout (this);
@@ -111,7 +114,7 @@ DeviceCard::DeviceCard (AudioEngine& e, Kind k, int slot, QWidget* parent)
     header->addWidget (power);
     header->addWidget (title, 1);
 
-    if (k == Kind::plugin)
+    if (k == Kind::plugin && place.topLevel())
     {
         solo = smallButton (tr ("S"), tr ("Solo: hear only this plugin while playing (S)"), this, true);
         header->addWidget (solo);
@@ -130,15 +133,25 @@ DeviceCard::DeviceCard (AudioEngine& e, Kind k, int slot, QWidget* parent)
     body->addLayout (knobGrid, 1);
     layout->addLayout (body, 1);
 
-    if (k == Kind::plugin)
+    if (k == Kind::plugin && isPrism)
     {
-        const auto info = engine.masterSlot (slot);
+        // A Prism's eight macros, and a strip showing its rays.
+        title->setText (elided (QString::fromStdString (info.name), title->font(), 300));
+        title->setToolTip (QString::fromStdString (info.name));
+        const auto prism = engine.prismInfo (place);
+        for (int m = 0; m < PrismInfo::numMacros; ++m)
+            addKnob (m, QString::fromStdString (prism.macros[(size_t) m].name), 0);
+        rays = new PrismStrip (this);
+        layout->insertWidget (2, rays);
+    }
+    else if (k == Kind::plugin)
+    {
         title->setText (elided (QString::fromStdString (info.name), title->font(), 150));
         title->setToolTip (QString::fromStdString (info.name));
 
         // A stock plugin's main controls, the same as its window's footer; otherwise the first
         // few continuous parameters. Switches and the plugin's own bypass are left to Edit.
-        const auto params = engine.masterSlotParameters (slot);
+        const auto params = engine.chainParameters (place);
         for (const auto i : info.mainParameters)
             if (i >= 0 && i < (int) params.size() && (int) knobs.size() < maxKnobs)
                 addKnob (i, QString::fromStdString (params[(size_t) i].name), params[(size_t) i].numSteps);
@@ -185,6 +198,12 @@ DeviceCard::DeviceCard (AudioEngine& e, Kind k, int slot, QWidget* parent)
         auto* footer = new QHBoxLayout;
         auto* edit = smallButton (tr ("Edit..."), tr ("All parameters (Enter)"), this);
         auto* window = windowButton = smallButton (tr ("Window"), tr ("The plugin's own window (E)"), this);
+        if (isPrism)
+        {
+            edit->setText (tr ("Open"));
+            edit->setToolTip (tr ("Pop the Prism out to edit its rays; it docks back when you are done (Enter)"));
+            window->hide();
+        }
         footer->addWidget (edit);
         footer->addWidget (window);
         footer->addStretch (1);
@@ -196,15 +215,18 @@ DeviceCard::DeviceCard (AudioEngine& e, Kind k, int slot, QWidget* parent)
 
         connect (power, &QToolButton::clicked, this, [this] (bool on)
         {
-            engine.setMasterSlotBypassed (slotIndex, ! on);
+            engine.setChainBypassed (place, ! on);
             Q_EMIT changed();
         });
-        connect (solo, &QToolButton::clicked, this, [this] (bool on)
+        if (solo != nullptr)
         {
-            engine.setMasterSoloSlot (on ? slotIndex : -1);
-            Q_EMIT changed();
-        });
-        watch (solo);
+            connect (solo, &QToolButton::clicked, this, [this] (bool on)
+            {
+                engine.setMasterSoloSlot (on ? place.slot : -1);
+                Q_EMIT changed();
+            });
+            watch (solo);
+        }
     }
     else
     {
@@ -233,7 +255,8 @@ void DeviceCard::addKnob (int parameter, const QString& name, int steps)
     kn.steps = steps;
     auto* pot = new Potentiometer (this);
     kn.dial = pot;
-    kn.dial->setFixedSize (40, 40);
+    const auto labelWidth = isPrism ? 48 : 52;
+    kn.dial->setFixedSize (isPrism ? 32 : 40, isPrism ? 32 : 40);
     kn.dial->setFocusPolicy (Qt::NoFocus);
     kn.dial->setWrapping (false);
     kn.dial->setAccessibleName (name);
@@ -247,7 +270,7 @@ void DeviceCard::addKnob (int parameter, const QString& name, int steps)
     else
         kn.dial->setRange (0, steps > 1 ? steps - 1 : dialResolution);
 
-    kn.name = new QLabel (elided (name, font(), 50), this);
+    kn.name = new QLabel (elided (name, font(), labelWidth - 2), this);
     kn.name->setToolTip (name);
     kn.name->setAlignment (Qt::AlignHCenter);
     kn.value = new QLabel (this);
@@ -257,8 +280,8 @@ void DeviceCard::addKnob (int parameter, const QString& name, int steps)
     small.setPointSizeF (small.pointSizeF() * 0.85);
     kn.name->setFont (small);
     kn.value->setFont (small);
-    kn.name->setFixedWidth (52);
-    kn.value->setFixedWidth (52);
+    kn.name->setFixedWidth (labelWidth);
+    kn.value->setFixedWidth (labelWidth);
 
     const auto index = knobs.size();
     connect (kn.dial, &QDial::valueChanged, this, [this, index] (int position)
@@ -282,8 +305,7 @@ void DeviceCard::knobMoved (const Knob& kn, int position)
     else if (kn.parameter == ditherNoise)
         engine.setMasterDither (engine.masterDitherBits(), (dsp::Dither) std::clamp (position, 0, 2));
     else
-        engine.setMasterSlotParameter (slotIndex, kn.parameter,
-                                       (float) position / (float) std::max (1, kn.dial->maximum()));
+        engine.setChainParameter (place, kn.parameter, (float) position / (float) std::max (1, kn.dial->maximum()));
     sync();
 }
 
@@ -313,14 +335,14 @@ void DeviceCard::setKnobFromEngine (Knob& kn)
     }
     else
     {
-        const auto p = engine.masterSlotParameter (slotIndex, kn.parameter);
+        const auto p = engine.chainParameter (place, kn.parameter);
         position = (int) std::lround (p.value * kn.dial->maximum());
         text = QString::fromStdString (p.valueText);
     }
 
     if (! kn.dial->isSliderDown())
         kn.dial->setValue (position);
-    kn.value->setText (elided (text, kn.value->font(), 52));
+    kn.value->setText (elided (text, kn.value->font(), kn.value->width()));
     kn.value->setToolTip (text);
 }
 
@@ -335,20 +357,51 @@ void DeviceCard::sync()
 
     if (cardKind == Kind::plugin)
     {
-        const auto info = engine.masterSlot (slotIndex);
+        const auto info = engine.chainDevice (place);
+        const auto soloed = place.topLevel() && engine.masterSoloSlot() == place.slot;
         power->setChecked (! info.bypassed);
         power->setText (info.bypassed ? tr ("Off") : tr ("On"));
-        solo->setChecked (engine.masterSoloSlot() == slotIndex);
-        windowButton->setVisible (info.hasEditor || info.failed);   // built-in effects have only their knobs
+        if (solo != nullptr)
+            solo->setChecked (soloed);
+        windowButton->setVisible ((info.hasEditor || info.failed) && ! isPrism);   // built-in effects have only their knobs
         windowButton->setText (info.failed ? tr ("Reload") : tr ("Window"));
         windowButton->setToolTip (info.failed ? tr ("Load the plugin again with its last settings (E)") : tr ("The plugin's own window (E)"));
 
         auto text = QString::fromStdString (info.format);
+        if (isPrism)
+        {
+            const auto prism = engine.prismInfo (place);
+            text = prismSummary (prism);
+            for (int m = 0; m < (int) knobs.size() && m < PrismInfo::numMacros; ++m)
+            {
+                const auto& macro = prism.macros[(size_t) m];
+                const auto macroName = QString::fromStdString (macro.name);
+                if (knobs[(size_t) m].name->toolTip() != macroName)
+                {
+                    knobs[(size_t) m].name->setText (elided (macroName, knobs[(size_t) m].name->font(), knobs[(size_t) m].name->width() - 2));
+                    knobs[(size_t) m].name->setToolTip (macroName);
+                    knobs[(size_t) m].dial->setAccessibleName (macroName);
+                }
+            }
+            if (title->toolTip() != QString::fromStdString (prism.name))
+            {
+                title->setText (elided (QString::fromStdString (prism.name), title->font(), 300));
+                title->setToolTip (QString::fromStdString (prism.name));
+            }
+            std::vector<PrismStrip::Ray> shown;
+            for (int r = 0; r < (int) prism.rays.size(); ++r)
+            {
+                const auto& ray = prism.rays[(size_t) r];
+                shown.push_back ({ QString::fromStdString (ray.name), ray.heard, ray.muted, ray.soloed,
+                                   engine.prismTakeRayPeak (place, r), (int) ray.devices.size() });
+            }
+            rays->set (shown);
+        }
         if (info.latencySamples > 0)
             text += tr ("  %1 smp latency").arg (info.latencySamples);
         if (info.channels > 0 && info.channels < engine.masterChannels())
             text += info.channels <= 2 ? tr ("  L/R only") : tr ("  first %1 ch").arg (info.channels);
-        if (engine.masterSoloSlot() == slotIndex)
+        if (soloed)
             text += tr ("  SOLO");
         if (info.failed)
         {
@@ -362,7 +415,7 @@ void DeviceCard::sync()
         detail->setStyleSheet (info.failed ? QStringLiteral ("color: %1").arg (Theme::current().color (QStringLiteral ("meterHigh")).name())
                                            : QString());
         title->setForegroundRole (info.bypassed || info.failed || engine.isMasterBypassed() ? QPalette::PlaceholderText : QPalette::WindowText);
-        level->push (engine.takeMasterSlotPeak (slotIndex));
+        level->push (engine.takeChainPeak (place));
     }
     else
     {
@@ -396,7 +449,7 @@ void DeviceCard::editValue (int index, const QString& startText)
     else if (kn.parameter < 0)
         current = kn.value->text();
     else
-        current = QString::fromStdString (engine.masterSlotParameter (slotIndex, kn.parameter).valueText);
+        current = QString::fromStdString (engine.chainParameter (place, kn.parameter).valueText);
 
     valueEditor = new QLineEdit (this);
     valueEditor->setAccessibleName (tr ("Type a value for %1").arg (kn.dial->accessibleName()));
@@ -473,7 +526,7 @@ void DeviceCard::applyTypedValue (int index, const QString& text)
         }
         engine.setMasterGainDb (std::clamp (db, -60.0, 24.0));
     }
-    else if (! engine.setMasterSlotParameterText (slotIndex, kn.parameter, text.toStdString()))
+    else if (! engine.setChainParameterText (place, kn.parameter, text.toStdString()))
     {
         Q_EMIT message (tr ("%1 does not understand \"%2\"").arg (kn.dial->accessibleName(), text));
         return;
@@ -514,12 +567,136 @@ void DeviceCard::paintEvent (QPaintEvent*)
     g.setBrush (palette().color (cardKind == Kind::add ? QPalette::Window : QPalette::Base));
     g.drawRoundedRect (r, 6, 6);
 
-    auto pen = QPen (palette().color (QPalette::Mid), 1.0);
+    // A card in a range picked with Shift (to group into a Prism) is tinted.
+    if (inRange && ! selected)
+    {
+        auto tint = palette().color (QPalette::Highlight);
+        tint.setAlphaF (0.12);
+        g.setBrush (tint);
+        g.drawRoundedRect (r, 6, 6);
+    }
+
+    auto pen = QPen (palette().color (inRange ? QPalette::Highlight : QPalette::Mid), 1.0);
     if (selected)
         pen = QPen (palette().color (focused ? QPalette::Link : QPalette::Highlight), focused ? 2.0 : 1.5);
     g.setPen (pen);
     g.setBrush (Qt::NoBrush);
     g.drawRoundedRect (r, 6, 6);
+
+    // A Prism that is popped out for editing stays lit where it docks.
+    if (editing)
+    {
+        auto glow = palette().color (QPalette::Highlight);
+        for (int i = 3; i >= 1; --i)
+        {
+            glow.setAlphaF (0.14 * (4 - i));
+            g.setPen (QPen (glow, i * 2.0));
+            g.drawRoundedRect (r.adjusted (i, i, -i, -i), 6, 6);
+        }
+        g.setPen (QPen (palette().color (QPalette::Highlight), 1.5, Qt::DashLine));
+        g.drawRoundedRect (r, 6, 6);
+    }
+}
+
+void DeviceCard::setInRange (bool b)
+{
+    if (inRange != b)
+    {
+        inRange = b;
+        update();
+    }
+}
+
+void DeviceCard::setEditing (bool b)
+{
+    if (editing != b)
+    {
+        editing = b;
+        update();
+    }
+}
+
+int DeviceCard::parameterOf (int index) const
+{
+    return index >= 0 && index < (int) knobs.size() ? knobs[(size_t) index].parameter : -1;
+}
+
+QString DeviceCard::prismSummary (const PrismInfo& prism)
+{
+    static const char* splits[] { QT_TR_NOOP ("Parallel"), QT_TR_NOOP ("Bands"), QT_TR_NOOP ("Mid/Side"), QT_TR_NOOP ("Left/Right") };
+    int heard = 0;
+    for (const auto& r : prism.rays)
+        heard += r.heard ? 1 : 0;
+    auto text = tr ("Prism  %1").arg (tr (splits[std::clamp (prism.split, 0, 3)]));
+    if (prism.split == PrismInfo::bands)
+    {
+        QStringList hz;
+        for (int i = 0; i + 1 < heard && i < 3; ++i)
+        {
+            const auto f = prism.crossoverHz[(size_t) i];
+            hz << (f >= 1000.0 ? QString::number (f / 1000.0, 'f', 1) + QStringLiteral ("k") : QString::number (std::lround (f)));
+        }
+        text += QStringLiteral ("  ") + hz.join (QStringLiteral (" / "));
+    }
+    else
+        text += prism.rays.size() == 1 ? tr ("  1 ray") : tr ("  %1 rays").arg (prism.rays.size());
+    if (prism.latencySamples > 0)
+        text += tr ("  %1 smp").arg (prism.latencySamples);
+    return text;
+}
+
+//==============================================================================
+PrismStrip::PrismStrip (QWidget* parent) : QWidget (parent)
+{
+    setFixedHeight (12);
+    setToolTip (tr ("The Prism's rays and their levels"));
+}
+
+void PrismStrip::set (const std::vector<Ray>& next)
+{
+    // Levels fall back smoothly, like the level bars.
+    std::vector<float> falling;
+    for (size_t i = 0; i < next.size(); ++i)
+    {
+        const auto db = next[i].peak > 0.0f ? 20.0f * std::log10 (next[i].peak) : -100.0f;
+        const auto before = i < shownDb.size() ? shownDb[i] : -100.0f;
+        falling.push_back (std::max (db, before - 3.0f));
+    }
+    shownDb = falling;
+    rays = next;
+    update();
+}
+
+void PrismStrip::paintEvent (QPaintEvent*)
+{
+    if (rays.empty())
+        return;
+    QPainter g (this);
+    g.setRenderHint (QPainter::Antialiasing);
+    const auto& theme = Theme::current();
+    const auto gap = 3.0;
+    const auto w = (width() - gap * ((double) rays.size() - 1)) / (double) rays.size();
+    // One bar per ray, its colour fading through a spectrum like light through a prism.
+    for (size_t i = 0; i < rays.size(); ++i)
+    {
+        const QRectF bar (i * (w + gap), 2.0, w, height() - 4.0);
+        auto hue = QColor::fromHsvF (std::fmod (0.62 - 0.11 * (double) i + 1.0, 1.0), 0.55, 0.9);
+        auto back = Theme::withOpacity (theme.color (QStringLiteral ("meterBackground")));
+        g.setPen (Qt::NoPen);
+        g.setBrush (back);
+        g.drawRoundedRect (bar, 2, 2);
+        if (! rays[i].heard || rays[i].muted)
+            hue.setAlphaF (0.25);
+        const auto fraction = std::clamp ((shownDb[i] + 60.0f) / 60.0f, 0.0f, 1.0f);
+        g.setBrush (hue);
+        g.drawRoundedRect (QRectF (bar.left(), bar.top(), std::max (2.0, bar.width() * fraction), bar.height()), 2, 2);
+        if (rays[i].soloed)
+        {
+            g.setPen (QPen (palette().color (QPalette::Highlight), 1.2));
+            g.setBrush (Qt::NoBrush);
+            g.drawRoundedRect (bar, 2, 2);
+        }
+    }
 }
 
 bool DeviceCard::eventFilter (QObject* watched, QEvent* e)
@@ -577,8 +754,12 @@ void DeviceCard::mouseMoveEvent (QMouseEvent* e)
         || (e->position().toPoint() - pressPos).manhattanLength() < QApplication::startDragDistance())
         return;
 
+    // In the chain, the slot; in a Prism, the ray and the device.
     auto* mime = new QMimeData;
-    mime->setData (slotMime, QByteArray::number (slotIndex));
+    if (place.topLevel())
+        mime->setData (slotMime, QByteArray::number (place.slot));
+    else
+        mime->setData (prismDeviceMime(), QByteArray::number (place.steps.back().first) + ',' + QByteArray::number (place.steps.back().second));
     auto* drag = new QDrag (this);
     drag->setMimeData (mime);
     drag->setPixmap (grab().scaledToWidth (width() / 2, Qt::SmoothTransformation));
@@ -676,7 +857,7 @@ void ChainRow::rebuild()
 
     auto addCard = [this] (DeviceCard::Kind kind, int slot)
     {
-        auto* card = new DeviceCard (engine, kind, slot, strip);
+        auto* card = new DeviceCard (engine, kind, ChainPath { slot, {} }, strip);
         const auto index = (int) cards.size();
         cards.push_back (card);
         stripLayout->addWidget (card);
@@ -692,10 +873,24 @@ void ChainRow::rebuild()
                 c->sync();
             Q_EMIT chainChanged();
         });
-        connect (card, &DeviceCard::editRequested, this, [this, slot] { editParameters (slot); });
+        connect (card, &DeviceCard::editRequested, this, [this, index, slot]
+        {
+            if (cards[(size_t) index]->prism())
+                openPrism (index);
+            else
+                editParameters (slot);
+        });
         connect (card, &DeviceCard::message, this, &ChainRow::message);
         connect (card, &DeviceCard::valueEditFinished, this, [this] { setFocus (Qt::OtherFocusReason); });
-        connect (card, &DeviceCard::windowRequested, this, [this, slot] { showWindow (slot); });
+        connect (card, &DeviceCard::windowRequested, this, [this, index, slot]
+        {
+            if (cards[(size_t) index]->prism())
+                openPrism (index);
+            else
+                showWindow (slot);
+        });
+        if (card->prism())
+            card->setEditing (editors.count (engine.prismInfo (card->path()).uid) > 0);
         connect (card, &DeviceCard::addRequested, this, [this] { insertAfter (lastPluginSlot()); });
     };
 
@@ -723,6 +918,7 @@ void ChainRow::rebuild()
             index = i;
 
     current = -1;
+    anchor = -1;
     select (index, knob);
 }
 
@@ -745,6 +941,7 @@ void ChainRow::select (int card, int k)
     if (cards.empty())
         return;
 
+    anchor = -1;
     current = std::clamp (card, 0, (int) cards.size() - 1);
     auto* c = cards[(size_t) current];
     knob = c->numKnobs() == 0 ? -1 : std::clamp (k, -1, c->numKnobs() - 1);
@@ -754,8 +951,19 @@ void ChainRow::select (int card, int k)
 
 void ChainRow::showSelection()
 {
+    const auto [first, last] = range();
     for (int i = 0; i < (int) cards.size(); ++i)
+    {
         cards[(size_t) i]->setSelected (i == current, hasFocus(), knob);
+        cards[(size_t) i]->setInRange (anchor >= 0 && first != last && i >= first && i <= last);
+    }
+}
+
+std::pair<int, int> ChainRow::range() const
+{
+    if (anchor < 0)
+        return { current, current };
+    return { std::min (anchor, current), std::max (anchor, current) };
 }
 
 void ChainRow::focusInEvent (QFocusEvent* e)
@@ -776,10 +984,14 @@ bool ChainRow::handles (const QKeyEvent* k)
     const auto key = k->key();
 
     if (mods == Qt::ControlModifier)
-        return key == Qt::Key_Left || key == Qt::Key_Right;
+        return key == Qt::Key_Left || key == Qt::Key_Right || key == Qt::Key_G;
+
+    if (mods == (Qt::ControlModifier | Qt::ShiftModifier))
+        return key == Qt::Key_G;
 
     if (mods == Qt::ShiftModifier)
-        return key == Qt::Key_Plus || key == Qt::Key_Equal || key == Qt::Key_Minus || key == Qt::Key_Underscore;
+        return key == Qt::Key_Plus || key == Qt::Key_Equal || key == Qt::Key_Minus || key == Qt::Key_Underscore
+            || key == Qt::Key_Left || key == Qt::Key_Right;
 
     if (mods != Qt::NoModifier)
         return false;
@@ -831,10 +1043,31 @@ void ChainRow::keyPressEvent (QKeyEvent* k)
             home->setFocus (Qt::ShortcutFocusReason);
             break;
 
+        case Qt::Key_G:
+            if (shift)
+                ungroupCurrent();
+            else
+                groupSelection();
+            break;
+
         case Qt::Key_Left:
         case Qt::Key_Right:
         {
             const auto delta = k->key() == Qt::Key_Left ? -1 : 1;
+            if (shift)
+            {
+                // Picks a range of plugins (to group): the add and master cards are not part of it.
+                const auto next = current + delta;
+                if (! isPlugin || next < 0 || next >= (int) cards.size() || cards[(size_t) next]->kind() != DeviceCard::Kind::plugin)
+                    break;
+                if (anchor < 0)
+                    anchor = current;
+                const auto keep = anchor;
+                select (next, knob);
+                anchor = keep;
+                showSelection();
+                break;
+            }
             if (! ctrl)
             {
                 select (current + delta, knob);
@@ -869,7 +1102,9 @@ void ChainRow::keyPressEvent (QKeyEvent* k)
 
         case Qt::Key_Return:
         case Qt::Key_Enter:
-            if (isPlugin)
+            if (isPlugin && card->prism())
+                openPrism (current);
+            else if (isPlugin)
                 editParameters (card->slot());
             else if (card != nullptr && card->kind() == DeviceCard::Kind::add)
                 insertAfter (lastPluginSlot());
@@ -901,7 +1136,9 @@ void ChainRow::keyPressEvent (QKeyEvent* k)
         case Qt::Key_B: toggleBypass(); break;
         case Qt::Key_S: toggleSolo(); break;
         case Qt::Key_E:
-            if (isPlugin)
+            if (isPlugin && card->prism())
+                openPrism (current);
+            else if (isPlugin)
                 showWindow (card->slot());
             break;
 
@@ -1090,4 +1327,105 @@ void ChainRow::dropEvent (QDropEvent* e)
     e->acceptProposedAction();
     movePlugin (from, to);
     setFocus (Qt::MouseFocusReason);
+}
+
+//==============================================================================
+void ChainRow::groupSelection()
+{
+    const auto [first, last] = range();
+    if (first < 0 || last >= (int) cards.size() || cards[(size_t) first]->kind() != DeviceCard::Kind::plugin)
+    {
+        Q_EMIT message (tr ("Pick a plugin (Shift+Left/Right for several), then Ctrl+G groups them into a Prism"));
+        return;
+    }
+    int lastSlot = cards[(size_t) first]->slot();
+    for (int i = first; i <= last; ++i)
+        if (cards[(size_t) i]->kind() == DeviceCard::Kind::plugin)
+            lastSlot = cards[(size_t) i]->slot();
+
+    const auto firstSlot = cards[(size_t) first]->slot();
+    const auto count = last - first + 1;
+    QApplication::setOverrideCursor (Qt::WaitCursor);
+    const auto error = engine.groupMasterSlots (firstSlot, lastSlot);
+    QApplication::restoreOverrideCursor();
+    if (! error.empty())
+    {
+        Q_EMIT message (QString::fromStdString (error));
+        return;
+    }
+
+    rebuild();
+    for (int i = 0; i < (int) cards.size(); ++i)
+        if (cards[(size_t) i]->kind() == DeviceCard::Kind::plugin && cards[(size_t) i]->slot() == firstSlot)
+            select (i, -1);
+    Q_EMIT chainChanged();
+    Q_EMIT message ((count == 1 ? tr ("Put the plugin in a Prism") : tr ("Grouped %1 plugins into a Prism").arg (count))
+                    + tr (". Enter opens it; Ctrl+Shift+G ungroups"));
+}
+
+void ChainRow::ungroupCurrent()
+{
+    auto* card = currentCard();
+    if (card == nullptr || ! card->prism())
+    {
+        Q_EMIT message (tr ("Ctrl+Shift+G ungroups a Prism; pick one first"));
+        return;
+    }
+    const auto slot = card->slot();
+    if (auto it = editors.find (engine.prismInfo (card->path()).uid); it != editors.end() && it->second != nullptr)
+        it->second->dockNow();
+
+    const auto error = engine.ungroupMasterSlot (slot);
+    rebuild();
+    for (int i = 0; i < (int) cards.size(); ++i)
+        if (cards[(size_t) i]->kind() == DeviceCard::Kind::plugin && cards[(size_t) i]->slot() == slot)
+            select (i, -1);
+    Q_EMIT chainChanged();
+    Q_EMIT message (error.empty() ? tr ("Prism ungrouped") : QString::fromStdString (error));
+}
+
+void ChainRow::openPrism (int index)
+{
+    if (index < 0 || index >= (int) cards.size() || ! cards[(size_t) index]->prism())
+        return;
+
+    auto* card = cards[(size_t) index];
+    const auto uid = engine.prismInfo (card->path()).uid;
+    // A second press docks it again.
+    if (auto it = editors.find (uid); it != editors.end() && it->second != nullptr)
+    {
+        it->second->dock();
+        return;
+    }
+
+    auto* editor = new PrismEditor (engine, card->slot(), uid, window());
+    editor->pickPlugin = pickPlugin;
+    editors[uid] = editor;
+    card->setEditing (true);
+    connect (editor, &PrismEditor::message, this, &ChainRow::message);
+    connect (editor, &PrismEditor::chainChanged, this, &ChainRow::chainChanged);
+    connect (editor, &PrismEditor::docked, this, [this, uid] (bool returnFocus)
+    {
+        editors.erase (uid);
+        for (auto* c : cards)
+            if (c->prism() && engine.prismInfo (c->path()).uid == uid)
+            {
+                c->setEditing (false);
+                if (returnFocus)
+                    for (int i = 0; i < (int) cards.size(); ++i)
+                        if (cards[(size_t) i] == c)
+                            select (i, knob);
+            }
+        if (returnFocus)
+            setFocus (Qt::OtherFocusReason);
+    });
+    // It docks into whichever card holds its Prism now (the Prism may have moved).
+    editor->findCard = [this] (std::uint64_t id) -> QWidget*
+    {
+        for (auto* c : cards)
+            if (c->prism() && engine.prismInfo (c->path()).uid == id)
+                return c;
+        return nullptr;
+    };
+    editor->popOut (card);
 }
