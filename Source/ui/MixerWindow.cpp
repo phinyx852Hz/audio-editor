@@ -2312,7 +2312,7 @@ public:
         updateMinimum();
     }
 
-    QSize sizeHint() const override { return { 900, headerHeight + stopHeight + window.numScenes * 30 + 2 * margin }; }
+    QSize sizeHint() const override { return { 8 * maxColumn + sceneWidth + 2 * margin, headerHeight + stopHeight + window.numScenes * 30 + 2 * margin }; }
     void updateMinimum() { setMinimumHeight (headerHeight + stopHeight + window.numScenes * minRow + 2 * margin); }
 
 protected:
@@ -2608,8 +2608,11 @@ private:
     };
 
     static constexpr int margin = 4, headerHeight = 24, stopHeight = 24, sceneWidth = 130, minRow = 20, playWidth = 20;
+    // Columns keep one standard width (eight tracks fit in about 1100 px) rather than
+    // stretching across the window; narrower when the room runs out.
+    static constexpr int maxColumn = 120;
 
-    int columnWidth() const { return std::max (40, (width() - 2 * margin - sceneWidth) / std::max (1, window.engine.numTracks())); }
+    int columnWidth() const { return std::clamp ((width() - 2 * margin - sceneWidth) / std::max (1, window.engine.numTracks()), 40, maxColumn); }
     int rowHeight() const
     {
         return std::clamp ((height() - 2 * margin - headerHeight - stopHeight) / std::max (1, window.numScenes), minRow, 40);
