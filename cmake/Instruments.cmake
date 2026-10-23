@@ -114,7 +114,9 @@ ExternalProject_Add_Step(stock_Helm patches
 # (cardinal_foundational.py); only those module folders are checked out. Built
 # as CLAPs; the synth one is used.
 find_package(Python3 COMPONENTS Interpreter)
-if(Python3_FOUND)
+# Cardinal's build downloads jansson, libarchive, libsamplerate and zstd with wget.
+find_program(WGET_EXECUTABLE wget)
+if(Python3_FOUND AND WGET_EXECUTABLE)
     phinyx_stock_licence(Cardinal LICENSE docs/LICENSES.md plugins/Fundamental/LICENSE)
     ExternalProject_Add(stock_Cardinal
         GIT_REPOSITORY https://github.com/DISTRHO/Cardinal.git
@@ -139,8 +141,10 @@ if(Python3_FOUND)
             COMMAND ${CMAKE_COMMAND} -E rm -f ${PHINYX_STOCK_DIR}/Cardinal.clap/CardinalFX.clap
             ${stock_licence_commands})
     list(APPEND stock_targets stock_Cardinal)
-else()
+elseif(NOT Python3_FOUND)
     message(WARNING "Python 3 not found: the Modular instrument (Cardinal) is left out")
+else()
+    message(WARNING "wget not found: the Modular instrument (Cardinal) is left out")
 endif()
 
 # Subtractive1 mono: CA-72, and FM: OctaSine, Rust plugins bundled as CLAPs by their own xtasks.
