@@ -717,6 +717,16 @@ namespace
             if (created)
                 owner.gui->get_size (owner.plugin, &w, &h);
             resizable = created && owner.gui->can_resize (owner.plugin);
+            // Whether it draws itself at another scale (and says so in its size) is asked
+            // once, before its window shows: some take the scale but apply it only later,
+            // unasked, and would end up the wrong size in a window sized for it.
+            if (created && ! resizable && owner.gui->set_scale (owner.plugin, 2.0))
+            {
+                uint32_t w2 = 0, h2 = 0;
+                scales = owner.gui->get_size (owner.plugin, &w2, &h2) && w2 > w * 3 / 2;
+                owner.gui->set_scale (owner.plugin, 1.0);
+                owner.gui->get_size (owner.plugin, &w, &h);
+            }
             setResizable (resizable, false);
             addAndMakeVisible (embedded);
             setSize ((int) std::max (w, 10u), (int) std::max (h, 10u));
@@ -746,6 +756,17 @@ namespace
         {
             const juce::ScopedValueSetter<bool> s (resizingForPlugin, true);
             setSize ((int) w, (int) h);
+        }
+
+        // A plugin of fixed size that can draw itself bigger or smaller (asked when it was
+        // made) is given the scale; it reports its new size, or asks for it.
+        void setScaleFactor (float scale) override
+        {
+            if (! created || ! scales || ! owner.gui->set_scale (owner.plugin, (double) scale))
+                return;
+            uint32_t w = 0, h = 0;
+            if (owner.gui->get_size (owner.plugin, &w, &h) && w > 0 && h > 0)
+                pluginWantsSize (w, h);
         }
 
         void resized() override
@@ -784,6 +805,7 @@ namespace
                                                                        .withAllowForeignWidgetToResizeComponent (false)
                                                                        .withIgnoreXembedMapped() };
         bool created = false, attached = false, resizable = false, resizingForPlugin = false;
+        bool scales = false;   // it draws itself at another scale when asked, and its size follows
     };
 
     juce::AudioProcessorEditor* ClapInstance::createEditor()
