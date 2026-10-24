@@ -73,12 +73,14 @@ target_sources(${APP_ID} PRIVATE
     Source/core/Ambisonics.cpp
     Source/core/SpatialStudio.cpp
     Source/core/PrismSplit.cpp
+    Source/core/Phi.cpp
     Source/core/Nyquist.cpp
     Source/core/Album.cpp
     Source/core/MasterAssist.cpp
     Source/engine/AudioCapture.cpp
     Source/engine/AudioEngine.cpp
     Source/engine/BuiltinEffects.cpp
+    Source/engine/PhiEffects.cpp
     Source/engine/MidiInputs.cpp
     Source/engine/ClapFormat.cpp
     Source/engine/Codec.cpp
@@ -358,6 +360,7 @@ if(PHI_BUILD_TESTS)
     Source/core/Ambisonics.cpp
     Source/core/SpatialStudio.cpp
         Source/core/PrismSplit.cpp
+        Source/core/Phi.cpp
         Source/core/Nyquist.cpp
         Source/core/Album.cpp
         Source/core/MasterAssist.cpp)
