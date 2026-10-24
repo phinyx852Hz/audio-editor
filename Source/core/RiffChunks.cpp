@@ -584,7 +584,7 @@ bool writeMetadata (const std::string& path, const Tags& tags, const Write& w, s
         return ! mine && present.count (a.first) > 0;
     });
 
-    const auto temp = path + ".phinyx-meta";
+    const auto temp = path + ".phi-meta";
     {
         std::ifstream in (path, std::ios::binary);
         std::ofstream out (temp, std::ios::binary | std::ios::trunc);

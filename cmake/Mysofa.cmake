@@ -21,13 +21,13 @@ if(NOT mysofa_POPULATED)
 endif()
 
 if(MYSOFA_FOUND)
-    add_library(phinyx_mysofa INTERFACE)
-    target_link_libraries(phinyx_mysofa INTERFACE PkgConfig::MYSOFA)
+    add_library(phi_mysofa INTERFACE)
+    target_link_libraries(phi_mysofa INTERFACE PkgConfig::MYSOFA)
     message(STATUS "libmysofa: system ${MYSOFA_VERSION}")
 else()
     find_package(ZLIB REQUIRED)
     set(_mysofa ${mysofa_SOURCE_DIR}/src)
-    add_library(phinyx_mysofa STATIC
+    add_library(phi_mysofa STATIC
         ${_mysofa}/hrtf/reader.c ${_mysofa}/hdf/superblock.c ${_mysofa}/hdf/dataobject.c ${_mysofa}/hdf/btree.c
         ${_mysofa}/hdf/fractalhead.c ${_mysofa}/hdf/gunzip.c ${_mysofa}/hdf/gcol.c ${_mysofa}/hrtf/check.c
         ${_mysofa}/hrtf/spherical.c ${_mysofa}/hrtf/lookup.c ${_mysofa}/hrtf/tools.c ${_mysofa}/hrtf/kdtree.c
@@ -36,13 +36,13 @@ else()
     set(_gen ${CMAKE_CURRENT_BINARY_DIR}/mysofa-gen)
     file(WRITE ${_gen}/config.h "#pragma once\n#define CMAKE_INSTALL_PREFIX \"/usr\"\n#define CPACK_PACKAGE_VERSION_MAJOR 1\n#define CPACK_PACKAGE_VERSION_MINOR 3\n#define CPACK_PACKAGE_VERSION_PATCH 5\n")
     file(WRITE ${_gen}/mysofa_export.h "#pragma once\n#define MYSOFA_EXPORT\n")
-    target_include_directories(phinyx_mysofa PRIVATE ${_gen})
-    target_include_directories(phinyx_mysofa SYSTEM PUBLIC ${_mysofa}/hrtf ${_gen})
-    set_target_properties(phinyx_mysofa PROPERTIES POSITION_INDEPENDENT_CODE ON C_STANDARD 99)
-    target_compile_options(phinyx_mysofa PRIVATE -w)
-    target_link_libraries(phinyx_mysofa PUBLIC ZLIB::ZLIB m)
+    target_include_directories(phi_mysofa PRIVATE ${_gen})
+    target_include_directories(phi_mysofa SYSTEM PUBLIC ${_mysofa}/hrtf ${_gen})
+    set_target_properties(phi_mysofa PROPERTIES POSITION_INDEPENDENT_CODE ON C_STANDARD 99)
+    target_compile_options(phi_mysofa PRIVATE -w)
+    target_link_libraries(phi_mysofa PUBLIC ZLIB::ZLIB m)
     message(STATUS "libmysofa: built from the pinned source")
 endif()
 
-# The default HRTF set, next to the executable while building and in share/phinyx/hrtf when installed.
-set(PHINYX_DEFAULT_HRTF ${mysofa_SOURCE_DIR}/share/MIT_KEMAR_normal_pinna.sofa)
+# The default HRTF set, next to the executable while building and in share/phi/hrtf when installed.
+set(PHI_DEFAULT_HRTF ${mysofa_SOURCE_DIR}/share/MIT_KEMAR_normal_pinna.sofa)

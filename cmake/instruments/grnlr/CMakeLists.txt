@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 #
 # GRNLR by Raffael Seyfried (GPL-3.0-or-later) has only a Projucer project for
-# JUCE 4. This builds it as a VST3 instrument with PHINYX's JUCE; the changes it
+# JUCE 4. This builds it as a VST3 instrument with PHI's JUCE; the changes it
 # needs for today's JUCE are in grnlr-juce8.patch. Copied into its source folder
 # by cmake/Instruments.cmake.
 cmake_minimum_required(VERSION 3.22)

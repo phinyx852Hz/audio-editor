@@ -368,7 +368,7 @@ private:
     void openFurnace();   // Tracker2
     qint64 furnacePid = 0;
 
-    // The Performance menu (PerformanceSection.cpp, Source/performance): records PHINYX's
+    // The Performance menu (PerformanceSection.cpp, Source/performance): records PHI's
     // window, cameras and sound to MP4 and streams them live.
     void registerPerformanceCommands();
     void toggleVideoRecording();
@@ -476,7 +476,7 @@ private:
     // Projects (.phi, docs/project.md): the mixer's mix, the patchbay and the view, kept
     // in the file and in last.phi in the config folder, so the next start carries on.
     void openProject (const QString& path);
-    void restoreProject();        // at start: the project open when PHINYX was last closed
+    void restoreProject();        // at start: the project open when PHI was last closed
     bool mixerInView() const;     // the Mixer is what is shown, rather than the editor
     bool projectPatchBay = false; // the patchbay came from a project, not settings.ini
     class QJsonObject projectState() const;               // what a project keeps besides the mix
@@ -499,7 +499,7 @@ private:
     bool visualizerShowing() const;
     void addVisualizerSubmenu (QMenu* menu, const QString& which);   // artistic, science, milkdrop, rain
     void syncVisualModeActions();
-    class QActionGroup* visualModeActions = nullptr;   // the window or the one behind PHINYX
+    class QActionGroup* visualModeActions = nullptr;   // the window or the one behind PHI
     void showMilkDropPreset (const QString& path);
     void setRainTempo (double bpm);   // Digital Rain, saved and shown
     double fileTempo() const;         // the open file's BPM tag, or 0
@@ -508,7 +508,7 @@ private:
     void downloadMilkDropPresets();
     class VisualizerWindow* visualizer = nullptr;
     class VisualizerView* visualBackdrop = nullptr;
-    // A web page behind PHINYX instead (VisualizerSection.cpp, WebBackdrop.h); only with Qt WebEngine.
+    // A web page behind PHI instead (VisualizerSection.cpp, WebBackdrop.h); only with Qt WebEngine.
     void toggleWebBackdrop();
     bool chooseWebAddress (bool reload);   // false when cancelled
     class WebBackdrop* webBackdrop = nullptr;
@@ -712,7 +712,7 @@ private:
     Recovery recovery;
     QTimer autosaveTimer;
 
-    // The CPU meter in the status bar: PHINYX's own processor use and the audio thread's load.
+    // The CPU meter in the status bar: PHI's own processor use and the audio thread's load.
     void updateCpuMeter();
     class QLabel* cpuLabel = nullptr;
     QTimer cpuTimer;

@@ -164,7 +164,7 @@ BatchWindow::BatchWindow (QWidget* parent)
     // Tags-only and rename settings take the steps' place in those modes.
     tagsArea = new QGroupBox (tr ("Tag template"), this);
     tagTemplate = new QPlainTextEdit (tagsArea);
-    tagTemplate->setPlaceholderText (tr ("One per line, for example:\nartist=PHINYX Band\nalbum=Live 2026\ntitle={filename}\ncomment=Mastered {today}"));
+    tagTemplate->setPlaceholderText (tr ("One per line, for example:\nartist=PHI Band\nalbum=Live 2026\ntitle={filename}\ncomment=Mastered {today}"));
     tagTemplate->setToolTip (MetadataEditor::variablesHelp() + tr ("\nAlso {lufs}, {truepeak} and {lra}, measured from each file."));
     auto* templatePick = new QComboBox (tagsArea);
     templatePick->addItem (tr ("Fill from a saved template..."));
@@ -645,7 +645,7 @@ void BatchWindow::remember()
 void BatchWindow::openBatch()
 {
     const auto path = QFileDialog::getOpenFileName (this, tr ("Open Batch"), appSettings().value (QStringLiteral ("batch/saved")).toString(),
-                                                    tr ("PHINYX batches (*.phbatch)"));
+                                                    tr ("PHI batches (*.phbatch)"));
     if (path.isEmpty())
         return;
     QFile file (path);
@@ -681,7 +681,7 @@ void BatchWindow::openBatch()
 void BatchWindow::saveBatch()
 {
     auto path = QFileDialog::getSaveFileName (this, tr ("Save Batch"), appSettings().value (QStringLiteral ("batch/saved"), QDir::homePath() + tr ("/Batch.phbatch")).toString(),
-                                              tr ("PHINYX batches (*.phbatch)"));
+                                              tr ("PHI batches (*.phbatch)"));
     if (path.isEmpty())
         return;
     if (! path.endsWith (QStringLiteral (".phbatch")))
@@ -704,7 +704,7 @@ QString BatchWindow::reportPath() const
     if (! reportEdit->text().isEmpty())
         return reportEdit->text();
     const auto folder = job.files.empty() ? QDir::homePath() : QFileInfo (qs (job.files.front())).absolutePath();
-    return folder + tr ("/PHINYX report %1.csv").arg (QDateTime::currentDateTime().toString (QStringLiteral ("yyyy-MM-dd HH.mm")));
+    return folder + tr ("/PHI report %1.csv").arg (QDateTime::currentDateTime().toString (QStringLiteral ("yyyy-MM-dd HH.mm")));
 }
 
 //==============================================================================

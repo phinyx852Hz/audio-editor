@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 #
 # Ami Sampler by Finley Baker (_astriid_, GPL-3.0) has only a Projucer project.
-# This builds it as a VST3 instrument with PHINYX's JUCE, with the settings of
+# This builds it as a VST3 instrument with PHI's JUCE, with the settings of
 # its ami.jucer. Copied into its source folder by cmake/Instruments.cmake.
 cmake_minimum_required(VERSION 3.22)
 project(AmiSampler VERSION 1.0.0 LANGUAGES C CXX)

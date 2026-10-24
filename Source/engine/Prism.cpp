@@ -1059,7 +1059,7 @@ void PrismProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
 //==============================================================================
 std::unique_ptr<juce::XmlElement> PrismProcessor::toXml() const
 {
-    auto xml = std::make_unique<juce::XmlElement> ("PHINYX_PRISM");
+    auto xml = std::make_unique<juce::XmlElement> ("PHINYX_PRISM");   // PHINYX_ like the other built-ins' state tags
     xml->setAttribute ("version", 1);
     xml->setAttribute ("name", name);
     xml->setAttribute ("split", split->getIndex());

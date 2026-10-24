@@ -9,7 +9,7 @@
 
 // MilkDrop presets through projectM, rendered off screen (its own OpenGL context
 // and framebuffer) into an image the Visualizer paints like its other views, so
-// it works in the window, full screen and behind PHINYX alike.
+// it works in the window, full screen and behind PHI alike.
 class MilkDrop
 {
 public:
@@ -17,7 +17,7 @@ public:
     static bool builtIn();
     // Where presets are looked for: yours first, then the system's.
     static QStringList presetFolders();
-    static QString userPresetFolder();   // ~/.local/share/phinyx/milkdrop
+    static QString userPresetFolder();   // ~/.local/share/phi/milkdrop
     static QString categoryOf (const QString& presetPath);   // its folders under the preset folder, or nothing
 
     MilkDrop();

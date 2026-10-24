@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Adapted from MilkyTracker's tracker/PatternTools.cpp, Copyright 2009 Peter Barth
-// (github.com/milkytracker/MilkyTracker), GPL-3.0-or-later, used in PHINYX (AGPL-3.0) with credit.
+// (github.com/milkytracker/MilkyTracker), GPL-3.0-or-later, used in PHI (AGPL-3.0) with credit.
 // The effect conversions and names below are MilkyTracker's own, unchanged apart from
 // the integer type names and the class they live in.
 #include "PatternText.h"
@@ -465,7 +465,7 @@ void PatternText::getVolumeName(char* name, pp_uint32 volume)
 }
 
 //==============================================================================
-// PHINYX: one cell, laid out as MilkyTracker's PatternEditorControl draws it.
+// PHI: one cell, laid out as MilkyTracker's PatternEditorControl draws it.
 namespace
 {
     // MilkyTracker's font has its own glyphs for these; the nearest Unicode ones.

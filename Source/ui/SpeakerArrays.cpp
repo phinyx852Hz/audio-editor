@@ -178,7 +178,7 @@ SpeakerArraysDialog::SpeakerArraysDialog (const QString& initial, QWidget* paren
     {
         if (table->rowCount() >= studio::maxSpeakers)
         {
-            status->setText (tr ("16 speakers is the most PHINYX plays"));
+            status->setText (tr ("16 speakers is the most PHI plays"));
             return;
         }
         addRow ({ std::to_string (table->rowCount() + 1), 0.0, 0.0, false });

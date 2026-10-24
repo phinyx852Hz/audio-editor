@@ -83,9 +83,9 @@ SonifyPanel::SonifyPanel (QWidget* parent, bool webPage) : QWidget (parent)
     sources->addItem (tr ("Picture or video file..."), (int) file);
     sources->addItem (tr ("Camera"), (int) camera);
     if (webPage)
-        sources->addItem (tr ("Web page behind PHINYX"), (int) web);
+        sources->addItem (tr ("Web page behind PHI"), (int) web);
     sources->setToolTip (tr ("What is played: whichever view the visualizer shows (MilkDrop too), a picture or video shown in its "
-                             "Picture view, a camera, or the web page behind PHINYX"));
+                             "Picture view, a camera, or the web page behind PHI"));
     connect (sources, &QComboBox::activated, this, [this] (int row) { Q_EMIT sourceChosen (sources->itemData (row).toInt()); });
 
     mode = new QComboBox (this);

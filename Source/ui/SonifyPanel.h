@@ -13,7 +13,7 @@ class QSlider;
 class QSpinBox;
 
 // The Sonify bar of the Visualizer window: what is played (the visualizer itself, a
-// picture or video file, a camera or the web page behind PHINYX), how (scan or lanes,
+// picture or video file, a camera or the web page behind PHI), how (scan or lanes,
 // free pitch to scale notes, tempo, voices, drums) and on what (the built-in Synth or
 // whatever the MIDI keyboard plays). MainWindow does the playing (SonifySection.cpp).
 class SonifyPanel final : public QWidget

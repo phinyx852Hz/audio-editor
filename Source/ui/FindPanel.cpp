@@ -501,7 +501,7 @@ void FindPanel::refilter()
         if (section == Section::plugins || section == Section::files || section == Section::place || byKind)
             std::stable_sort (list.begin(), list.end(), [] (const FindItem* a, const FindItem* b)
             {
-                // Among visualizations, PHINYX's own views come before the many MilkDrop presets.
+                // Among visualizations, PHI's own views come before the many MilkDrop presets.
                 const bool aView = a->key.startsWith (QStringLiteral ("command:")), bView = b->key.startsWith (QStringLiteral ("command:"));
                 if (a->kind == FindItem::Kind::visual && b->kind == FindItem::Kind::visual && aView != bView)
                     return aView;

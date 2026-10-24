@@ -1,4 +1,4 @@
-# PHINYX Mixer: design draft
+# PHI Mixer: design draft
 
 Status: step 1 built (2026-10-21); the rest is the proposal the owner reviewed (2026-10-19).
 See "Built so far" at the end.
@@ -29,7 +29,7 @@ clip, an instrument is the instrument, and a live input will record into new cli
 A small mixer in its own window: **up to 8 tracks and a master out (track 9)**. A new mix
 starts with 2 tracks; Ctrl+T adds one (up to 8) and Ctrl+Shift+T removes the selected one. It mixes bus stems
 from another DAW, or works as an instrument for composing, producing and performing. The
-mix goes straight into the PHINYX editor, where the Master Section does the mastering.
+mix goes straight into the PHI editor, where the Master Section does the mastering.
 
 On purpose, it has none of these:
 - No MIDI editing. An instrument plugin can be loaded and played from a MIDI keyboard, but
@@ -78,7 +78,7 @@ Cubase and Harrison Mixbus mixers. What the owner likes most:
      BBC ballistics) and correlation.
    - Right-click picks a display from a list. Double-click opens it large in a floating
      window.
-   - It reuses PHINYX's existing goniometer, spectrum and meter code.
+   - It reuses PHI's existing goniometer, spectrum and meter code.
 5. **Sends (Ableton)**: two send dials, **A Reverb** and **B Delay**, from −∞ to 0 dB, and
    post-fader by default. Right-click a dial to switch it to pre-fader.
 6. **Panner**: both kinds are on every strip, with no switching between them.
@@ -89,7 +89,7 @@ Cubase and Harrison Mixbus mixers. What the owner likes most:
    - **Spatial panner (Harrison)**: a small live picture under the pot that you can drag;
      the pot and the picture move together. Double-click it to open it large. With a stereo
      master it shows position and width as a stereo image. With a surround or ambisonic master it
-     becomes a top-down room (5.1 to 9.1.6) or a sphere (ambisonics), using PHINYX's
+     becomes a top-down room (5.1 to 9.1.6) or a sphere (ambisonics), using PHI's
      existing Spatial code.
 7. **Mute, Solo, Record**. Solo works like a console: soloing a track mutes the others,
    and any number of tracks can be soloed.
@@ -103,7 +103,7 @@ Cubase and Harrison Mixbus mixers. What the owner likes most:
 
 These are two narrow strips between the tracks and the master, as Ableton's return tracks
 are. Each one holds a single effect, fully wet, then a pan pot, mute, a fader and a meter.
-- **A** starts with PHINYX's built-in reverb (a plate, about 1.8 s long).
+- **A** starts with PHI's built-in reverb (a plate, about 1.8 s long).
 - **B** starts with a tempo-synced delay (a dotted eighth, with feedback at 30 %).
 - Either effect can be swapped for any plugin. The templates set their own (the podcast
   templates use a short room reverb and no delay).
@@ -118,7 +118,7 @@ The master still has no plugins. The returns are part of the mix that feeds it.
 - **Display:** the same thumbnail choices, plus loudness (momentary and short-term LUFS) and
   true peak.
 - **Level:** a fader and meter. There are no plugins.
-- **Mix Down to Editor:** renders the mix and opens it as a new file in PHINYX.
+- **Mix Down to Editor:** renders the mix and opens it as a new file in PHI.
   - When every track is a stem, the mix renders faster than real time.
   - When a track is a live input or an instrument, the mix is recorded in real time while
     you play. That is how a performance is captured.
@@ -183,7 +183,7 @@ master set to Stereo.
 
 More templates can be added in the same way; each is a small file.
 
-## Keyboard (PHINYX is keyboard-first)
+## Keyboard (PHI is keyboard-first)
 
 | Keys | What they do |
 |---|---|
@@ -244,13 +244,13 @@ Every control has a screen-reader name and announces its value.
 - `Source/ui/MixerWindow.*`, `MixerSection.cpp`: the window, the strips and master, the Mixer
   menu (`F3`), keys, project files (`.phi`, docs/project.md: the mix's JSON with the patchbay
   and the view; `.phinyxmix` mixes from before still open) and the autosaved project
-  `last.phi` in `~/.config/phinyx/mixer/`. The mixer is heard through the engine's instrument slot with
+  `last.phi` in `~/.config/phi/mixer/`. The mixer is heard through the engine's instrument slot with
   the Sampler and Slicer, so it sounds on top of the editor; MIDI goes to the mixer while its
   window was used last.
 - Bounce (`B`, `Shift+B`, or the strip's right-click menu): `Engine::mixdown` with one track
   renders it alone, from the start of the mix to its own end plus the instrument's tail, after
   trim and polarity but before fader and pan, whatever mute and solo say. The WAV (32-bit float)
-  goes in `<mix> Bounces/` beside the mix (`~/Music/PHINYX Bounces/` until it is saved).
+  goes in `<mix> Bounces/` beside the mix (`~/Music/PHI Bounces/` until it is saved).
   In place, the WAV becomes the track's audio, the MIDI file is turned off but kept with the
   instrument, and trim and polarity reset since they are in the WAV. To a new track, the new
   track takes the fader, pan and colour and the original is muted; with 8 tracks it says to
@@ -278,7 +278,7 @@ Every control has a screen-reader name and announces its value.
   in the rows reverses the selected clips and `R` on a strip still arms it. A double-click on an
   audio clip hands the part you hear to a new editor tab (named after the clip) and hides the
   mixer, which keeps playing; `F3` saves a changed tab as a 32-bit WAV in `<mix> Edits/`
-  (`~/Music/PHINYX Edits/` until the mix is saved), puts it on the clip with undo, closes the tab
+  (`~/Music/PHI Edits/` until the mix is saved), puts it on the clip with undo, closes the tab
   and shows the mixer. The window opens over the editor's central area, between its side
   panels. Faders are taller, with dB marks (+6 to −60 and −∞) on the left, and meters have dBFS
   marks on the right; trim and pan use the editor's `Potentiometer` knob

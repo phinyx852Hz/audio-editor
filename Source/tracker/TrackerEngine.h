@@ -17,7 +17,7 @@ struct TXMPattern;
 
 // The Tracker's sound: a module (XM, MOD, IT, S3M and the other formats MilkyTracker
 // reads) played by MilkyPlay, MilkyTracker's player library. It plays live through
-// PHINYX's audio engine (render() on the audio thread) and records into new audio,
+// PHI's audio engine (render() on the audio thread) and records into new audio,
 // either stereo or one stereo pair per mixer track.
 class TrackerEngine
 {

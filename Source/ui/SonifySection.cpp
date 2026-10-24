@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Visualizer > Sonify: what the Visualizer shows (any view, MilkDrop too), a picture or
-// video file, a camera or the web page behind PHINYX, played as notes (core/Sonify.h)
+// video file, a camera or the web page behind PHI, played as notes (core/Sonify.h)
 // on the built-in Synth in the patchbay, or on whatever the MIDI keyboard plays. The
 // picture is read small (64 by 48) about 20 times a second, from the UI timer; the notes
 // go to the instruments' live MIDI queues, which the audio thread takes each block.
@@ -15,7 +15,7 @@
 #include "../performance/Cameras.h"
 #include "../performance/VideoFile.h"
 
-#if PHINYX_WEB_BACKDROP
+#if PHI_WEB_BACKDROP
  #include "WebBackdrop.h"
 #endif
 
@@ -61,19 +61,19 @@ void MainWindow::registerSonifyCommands()
         if (chooseSonifySource (SonifyPanel::camera))
             setSonifying (true);
     })->setStatusTip (tr ("Shows a camera in the visualizer's Picture view and plays it as notes"));
-#if PHINYX_WEB_BACKDROP
+#if PHI_WEB_BACKDROP
     add ("visualizer.sonifyWeb", tr ("Sonify the &Web Page"), [this]
     {
         if (chooseSonifySource (SonifyPanel::web))
             setSonifying (true);
-    })->setStatusTip (tr ("Plays the web page behind PHINYX (a video, an animation) as notes"));
+    })->setStatusTip (tr ("Plays the web page behind PHI (a video, an animation) as notes"));
 #endif
 }
 
 // The Sonify bar in the Visualizer window, with the settings it was left with.
 void MainWindow::addSonifyPanel()
 {
-    sonifyPanel = new SonifyPanel (visualizer, PHINYX_WEB_BACKDROP != 0);
+    sonifyPanel = new SonifyPanel (visualizer, PHI_WEB_BACKDROP != 0);
     auto s = appSettings();
     sonify::Settings d;
     d.mode = (sonify::Mode) std::clamp (s.value (key ("mode"), (int) d.mode).toInt(), 0, (int) sonify::Mode::spiral);
@@ -191,7 +191,7 @@ bool MainWindow::chooseSonifySource (int source)
         ok = startSonifyCamera();
     else
         stopSonifyMotion();
-#if PHINYX_WEB_BACKDROP
+#if PHI_WEB_BACKDROP
     if (ok && source == SonifyPanel::web && (webBackdrop == nullptr || ! webBackdrop->isVisible()))
     {
         toggleWebBackdrop();
@@ -326,7 +326,7 @@ void MainWindow::sonifyTick()
             view->requestFrame (QSize (pictureWidth, pictureHeight));
         }
     }
-#if PHINYX_WEB_BACKDROP
+#if PHI_WEB_BACKDROP
     else if (sonifySource == SonifyPanel::web && webBackdrop != nullptr && webBackdrop->isVisible() && now - sonifyAsked >= frameEvery)
     {
         sonifyAsked = now;

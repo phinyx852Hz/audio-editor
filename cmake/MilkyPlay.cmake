@@ -4,9 +4,9 @@
 # New-BSD licensed, by Peter "pailes" Barth and the MilkyTracker contributors.
 # It plays and loads the Tracker's modules (XM, MOD, IT, S3M and others).
 
-add_library(phinyx_milkyplay STATIC
+add_library(phi_milkyplay STATIC
     third_party/milkyplay/AudioDriverBase.cpp
-    third_party/milkyplay/AudioDriverManager_PHINYX.cpp
+    third_party/milkyplay/AudioDriverManager_PHI.cpp
     third_party/milkyplay/AudioDriver_NULL.cpp
     third_party/milkyplay/AudioDriver_WAVWriter.cpp
     third_party/milkyplay/ChannelMixer.cpp
@@ -55,8 +55,8 @@ add_library(phinyx_milkyplay STATIC
     third_party/milkyplay/XMFile.cpp
     third_party/milkyplay/XModule.cpp
 )
-target_include_directories(phinyx_milkyplay PUBLIC third_party/milkyplay)
-# Built as for MilkyTracker (more samples per instrument, the editor's module calls), with PHINYX's driver manager.
-target_compile_definitions(phinyx_milkyplay PUBLIC MILKYTRACKER)
-set_target_properties(phinyx_milkyplay PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_compile_options(phinyx_milkyplay PRIVATE -w)   # third-party code: its warnings are not ours to fix
+target_include_directories(phi_milkyplay PUBLIC third_party/milkyplay)
+# Built as for MilkyTracker (more samples per instrument, the editor's module calls), with PHI's driver manager.
+target_compile_definitions(phi_milkyplay PUBLIC MILKYTRACKER)
+set_target_properties(phi_milkyplay PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_compile_options(phi_milkyplay PRIVATE -w)   # third-party code: its warnings are not ours to fix

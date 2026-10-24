@@ -1,4 +1,4 @@
-# PHINYX Patchbay
+# PHI Patchbay
 
 Status: step 1 built (2026-10-22). Owner's ask (2026-10-22): "a DAW patchbay panel that would
 pop out, sort of like Bitwig's grid, but a big 8X8 patch bay that would be dynamically populated
@@ -8,7 +8,7 @@ modulation and a project-wide patchbay (Daw Patchbay.docx) set the direction bel
 
 ## What it is
 
-One routing graph for everything PHINYX plays live, and an 8x8 grid to patch it. The patchbay
+One routing graph for everything PHI plays live, and an 8x8 grid to patch it. The patchbay
 is the router itself, not a second engine on top: the mixer's tracks, the Sampler, the Slicer and
 the editor's playback all go through it, and the Mixer and the grid show the same routing. This
 is the notes' central rule: "one authoritative routing graph shared by the patchbay, track mixer,

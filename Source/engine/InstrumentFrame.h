@@ -12,7 +12,7 @@
 // The window a stock instrument opens in: its own view, untouched (its own
 // look and fonts), with a thin opacity bar along the bottom. The bar sets the
 // whole window's opacity, from Theme::minOpacity to 1, and it is kept per
-// instrument. Coloured from the PHINYX theme like StockFrame.
+// instrument. Coloured from the PHI theme like StockFrame.
 class InstrumentFrame final : public juce::Component
 {
 public:

@@ -5,7 +5,7 @@
 #include <utility>
 #include <vector>
 
-// A small XML reader and writer for the metadata PHINYX keeps as XML (XMP
+// A small XML reader and writer for the metadata PHI keeps as XML (XMP
 // packets, iXML chunks). Elements, attributes, text, entities and CDATA;
 // comments, processing instructions and DOCTYPE are skipped. Plain C++.
 namespace minixml

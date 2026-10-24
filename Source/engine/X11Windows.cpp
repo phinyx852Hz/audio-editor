@@ -30,7 +30,7 @@ namespace x11
 
         char name[] = APP_ID;
         XClassHint hint { name, name };
-        auto* x = juce::X11Symbols::getInstance();   // JUCE loads libX11 at run time; PHINYX does not link it
+        auto* x = juce::X11Symbols::getInstance();   // JUCE loads libX11 at run time; PHI does not link it
         x->xSetClassHint (d, (::Window) (juce::pointer_sized_uint) handle, &hint);
         x->xFlush (d);
     }

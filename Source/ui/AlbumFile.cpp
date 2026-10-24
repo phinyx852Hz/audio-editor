@@ -62,7 +62,7 @@ namespace albumfile
             songs.append (o);
         }
 
-        const QJsonObject root {
+        const QJsonObject root {   // "phinyxAlbum": named before the rename to PHI, kept so older versions read it
             { QStringLiteral ("phinyxAlbum"), formatVersion },
             { QStringLiteral ("sampleRate"), m.sampleRate },
             { QStringLiteral ("channels"), m.channels },
@@ -118,7 +118,7 @@ namespace albumfile
         const auto root = json.object();
         if (json.isNull() || ! (root.contains (QStringLiteral ("phinyxAlbum")) || root.contains (QStringLiteral ("phinyxMontage"))))
         {
-            error = json.isNull() ? parseError.errorString() : QObject::tr ("This is not a PHINYX album.");
+            error = json.isNull() ? parseError.errorString() : QObject::tr ("This is not a PHI album.");
             return nullptr;
         }
 

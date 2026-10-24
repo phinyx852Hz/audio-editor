@@ -87,7 +87,7 @@ namespace batch
     FileResult runFile (const std::string& path, const Job&, const MasterRender&,
                         std::atomic<float>* progress = nullptr, const std::atomic<bool>* cancel = nullptr);
 
-    // Audio files in a folder (and its subfolders when recursive) that PHINYX opens.
+    // Audio files in a folder (and its subfolders when recursive) that PHI opens.
     std::vector<std::string> filesIn (const std::string& folder, bool recursive, const std::string& filter = {});
 
     std::string reportCsv (const std::vector<FileResult>&);

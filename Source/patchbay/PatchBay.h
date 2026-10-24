@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #pragma once
 
-// The patchbay: one routing graph for everything PHINYX plays live. Every source
+// The patchbay: one routing graph for everything PHI plays live. Every source
 // (the editor's playback, the Sampler, the Slicer, the patchbay's own synths, the
 // mixer's tracks, the Mix Bus and the FX buses) has a stereo output, and every
 // destination (the mixer's tracks, the Mix Bus, the FX buses and the Main Out) has a

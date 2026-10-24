@@ -10,7 +10,7 @@
 class QWidget;
 
 // Colour themes. Built-in themes ship with the app; anyone can add more as
-// JSON files in ~/.local/share/phinyx/themes (see docs/themes.md). A theme
+// JSON files in ~/.local/share/phi/themes (see docs/themes.md). A theme
 // file names a built-in "base" and overrides any of its colours.
 struct Theme
 {
@@ -33,7 +33,7 @@ struct Theme
     static const Theme& current();
     static void apply (const Theme&);  // sets the application palette and the custom colours
 
-    // Remembered choice, stored in ~/.config/phinyx/settings.ini.
+    // Remembered choice, stored in ~/.config/phi/settings.ini.
     static QString savedName();
     static void saveName (const QString&);
 
