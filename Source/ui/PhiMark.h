@@ -19,20 +19,22 @@
 //   - the serifs are φ² stems wide and 1/φ² of a stem tall.
 // The same shapes are in packaging/phi-mark-*.svg and packaging/phi.svg (see packaging/PHI-MARK.md).
 //
-// Colours follow the window: gold on black while the window is opaque, white on
-// nothing (transparent) once the window's opacity is turned down. The compact mark,
-// for buttons, is always white: as tall as the ring is wide (a square, 618 by 618),
-// so it fits a button without making it any bigger, and without serifs.
+// The mark is gold, on black. The compact mark, for buttons, is white: as tall as
+// the ring is wide (a square, 618 by 618), so it fits a button without making it
+// any bigger, and without serifs.
 namespace phimark
 {
-    enum class Style { automatic, goldOnBlack, white, compact };
+    enum class Style { goldOnBlack, white, compact };
 
-    QPixmap pixmap (int height, Style = Style::automatic, qreal devicePixelRatio = 1.0);
+    QPixmap pixmap (int height, Style = Style::goldOnBlack, qreal devicePixelRatio = 1.0);
+
+    void makePhiWindow (QWidget* window);              // a Φ plugin's window: black, with gold highlights
 
     bool isPhiPlugin (const std::string& pluginId);   // one of PHI's own Φ effects
     QString withoutPhi (const QString& name);          // "Φ EQ" -> "EQ", when the mark stands in for the letter
 }
 
+// The gold mark on a black tile.
 class PhiMark final : public QWidget
 {
 public:

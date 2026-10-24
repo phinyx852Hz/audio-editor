@@ -15,9 +15,9 @@ PHI's logo is its own capital phi (Unicode U+03A6, Φ).
 | Ring stroke | one stem at the sides, 1/φ of a stem at top and bottom | the thick and thin of a pen stroke |
 | Serifs | φ² stems wide, 1/φ² of a stem tall | |
 
-**Colours.** Gold `#c8a24a` on black `#0b0b0c` while a window is opaque; white, on a transparent background, once the window's opacity is turned down. The program draws the mark itself from these numbers (`Source/ui/PhiMark.cpp`), so it is sharp at every size.
+**Colours.** Gold `#c8a24a` on black `#0b0b0c`. A Φ plugin's window is black throughout, with the gold mark. The program draws the mark itself from these numbers (`Source/ui/PhiMark.cpp`), so it is sharp at every size.
 
-**The compact mark.** For the Φ button used across the DAW. It is as tall as the ring is wide (618 = 382 × φ), so it is square and fits a button without making it bigger. Same ring and stem, no serifs, always white whether the window is opaque or transparent (`PhiButton` in `Source/ui/PhiMark.h`).
+**The compact mark.** For the Φ button used across the DAW. It is as tall as the ring is wide (618 = 382 × φ), so it is square and fits a button without making it bigger. Same ring and stem, no serifs, always white (`PhiButton` in `Source/ui/PhiMark.h`).
 
 **Files.**
 - `phi.svg`: the app icon, gold on a black rounded tile.

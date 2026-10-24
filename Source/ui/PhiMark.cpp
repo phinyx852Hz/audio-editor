@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "PhiMark.h"
-#include "Theme.h"
 
 #include <QPainter>
 #include <QPainterPath>
@@ -42,18 +41,10 @@ namespace
     const QColor gold (0xc8, 0xa2, 0x4a);
     const QColor black (0x0b, 0x0b, 0x0c);
 
-    phimark::Style resolve (phimark::Style s)
-    {
-        if (s != phimark::Style::automatic)
-            return s;
-        return Theme::opacity() >= 0.999 ? phimark::Style::goldOnBlack : phimark::Style::white;
-    }
-
     // Paints the mark centred in `area`: on a black rounded tile when gold, bare when white.
     void paint (QPainter& g, const QRectF& area, phimark::Style style)
     {
         g.setRenderHint (QPainter::Antialiasing);
-        style = resolve (style);
 
         auto inner = area;
         if (style == phimark::Style::goldOnBlack)
@@ -93,6 +84,22 @@ namespace phimark
         return p;
     }
 
+    void makePhiWindow (QWidget* window)
+    {
+        QPalette p = window->palette();
+        const QColor text (0xe8, 0xe4, 0xda);
+        for (const auto role : { QPalette::Window, QPalette::Base, QPalette::Button })
+            p.setColor (role, role == QPalette::Window ? black : QColor (0x1a, 0x1a, 0x1c));
+        p.setColor (QPalette::AlternateBase, QColor (0x14, 0x14, 0x16));
+        for (const auto role : { QPalette::WindowText, QPalette::Text, QPalette::ButtonText })
+            p.setColor (role, text);
+        p.setColor (QPalette::PlaceholderText, QColor (0x8a, 0x86, 0x7e));
+        p.setColor (QPalette::Highlight, gold);
+        p.setColor (QPalette::HighlightedText, black);
+        window->setPalette (p);
+        window->setAutoFillBackground (true);
+    }
+
     bool isPhiPlugin (const std::string& pluginId)
     {
         return pluginId.rfind ("phinyx:phi-", 0) == 0;
@@ -113,7 +120,7 @@ PhiMark::PhiMark (int height, QWidget* parent) : QWidget (parent)
 void PhiMark::paintEvent (QPaintEvent*)
 {
     QPainter g (this);
-    paint (g, QRectF (rect()), phimark::Style::automatic);
+    paint (g, QRectF (rect()), phimark::Style::goldOnBlack);
 }
 
 PhiButton::PhiButton (QWidget* parent) : QToolButton (parent)

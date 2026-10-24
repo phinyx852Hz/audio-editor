@@ -452,7 +452,8 @@ ParameterDialog::ParameterDialog (AudioEngine& e, ChainPath p, QWidget* parent)
     auto* layout = new QVBoxLayout (this);
     if (phimark::isPhiPlugin (pluginId))
     {
-        // PHI's own Φ effects carry the Φ mark and their name in a header.
+        // PHI's own Φ effects: a black window, with the gold Φ mark and their name in a header.
+        phimark::makePhiWindow (this);
         auto* header = new QHBoxLayout;
         auto* name = new QLabel (phimark::withoutPhi (QString::fromStdString (info.name)), this);
         auto f = name->font();
