@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+#include "core/PhiVoice.h"
 #include "engine/AudioEngine.h"
 #include "engine/MasterChain.h"
 #include "ui/Brand.h"
@@ -13,6 +14,7 @@
 #include <QIcon>
 #include <QPointer>
 #include <QProcess>
+#include <QRandomGenerator>
 #include <QStandardPaths>
 
 #include <cstdio>
@@ -47,6 +49,22 @@ namespace
             return false;
         }
     };
+
+    // The splash's sound: the next patch of this install's own golden sequence, so each
+    // start sounds different. The count and the seed are kept in the settings.
+    void playStartupSound (AudioEngine& engine)
+    {
+        auto settings = appSettings();
+        if (! settings.contains (QStringLiteral ("splash/soundSeed")))
+            settings.setValue (QStringLiteral ("splash/soundSeed"), QRandomGenerator::global()->generateDouble());
+        const auto seed = settings.value (QStringLiteral ("splash/soundSeed")).toDouble();
+        const auto launch = settings.value (QStringLiteral ("splash/soundLaunch"), 0).toLongLong();
+        settings.setValue (QStringLiteral ("splash/soundLaunch"), launch + 1);
+
+        auto sound = std::make_shared<phi::StartupSound> (launch, seed);
+        sound->prepare (engine.deviceSampleRate());
+        engine.playOneShot ([sound] (float* left, float* right, int frames) { return sound->render (left, right, frames); });
+    }
 }
 
 int main (int argc, char* argv[])
@@ -88,6 +106,15 @@ int main (int argc, char* argv[])
 
     // The Φ splash while the audio device opens and the window is built.
     QPointer<PhiSplash> splash;
+    // The splash asks for its sound as it opens, which may be before the audio device is.
+    AudioEngine* soundEngine = nullptr;
+    bool soundWanted = false;
+    PhiSplash::startupSound() = [&soundEngine, &soundWanted]
+    {
+        soundWanted = soundEngine == nullptr;
+        if (soundEngine != nullptr)
+            playStartupSound (*soundEngine);
+    };
     if (! parser.isSet (noSplash))
     {
         splash = new PhiSplash;
@@ -99,6 +126,12 @@ int main (int argc, char* argv[])
     engine.setConfigFolder ((QStandardPaths::writableLocation (QStandardPaths::GenericConfigLocation)
                              + QStringLiteral ("/" APP_ID)).toStdString());
     const auto deviceError = engine.openDefaultDevice();
+    if (deviceError.empty())
+    {
+        soundEngine = &engine;
+        if (soundWanted)
+            playStartupSound (engine);
+    }
 
     int result = 0;
     {
@@ -112,6 +145,7 @@ int main (int argc, char* argv[])
 
         result = app.exec();
     }
+    PhiSplash::startupSound() = nullptr;
 
     // Tools > Reset Configuration: clear the settings now that nothing will write them again, and start afresh.
     if (MainWindow::finishReset())

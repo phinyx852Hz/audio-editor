@@ -173,6 +173,10 @@ public:
     // stereo at deviceSampleRate(). Empty: none.
     void setInstrument (LiveRender render);
     bool hasInstrument() const;
+    // A sound played once on top of everything (the Φ synth's sound as the splash opens):
+    // `render` adds to left and right at deviceSampleRate() and returns false once it has ended.
+    using OneShot = std::function<bool (float* left, float* right, int numFrames)>;
+    void playOneShot (OneShot render);
     bool isPlaying() const;
     // Plays [start, end) over and over; end <= start turns looping off.
     void setLoop (Frame start, Frame end);
