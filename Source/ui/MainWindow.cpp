@@ -40,6 +40,7 @@
 #include "../engine/BuiltinEffects.h"
 #include "../engine/StockPlugins.h"
 #include "../engine/VampHost.h"
+#include "MasterAssistant.h"
 #include "MasterPanel.h"
 #include "Panels.h"
 #include "QuantizePanel.h"
@@ -518,6 +519,8 @@ void MainWindow::registerCommands()
     })->setCheckable (true);
     add ("master.render", Category::master, tr ("&Render in Place"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_Return) }, [this] { renderInPlace(); });
     add ("master.renderNew", Category::master, tr ("Render to &New Tab"), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_Return) }, [this] { renderToNewTab(); });
+    add ("master.assistant", Category::master, tr ("Master &Assistant..."), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_M) }, [this] { masterAssistant(); })
+        ->setStatusTip (tr ("Tunes the plugins in the Master Section towards a reference track or a loudness target"));
     add ("master.scan", Category::master, tr ("&Scan Plugins"), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_S) },
          [this] { masterWidget->scanPlugins(); });
 
@@ -848,7 +851,7 @@ void MainWindow::buildMenus()
                                "album.properties", "album.twoTracks", "album.export" } },
         { tr ("A&nalyze"),   { "analyze.loudness", "-", "analyze.beats", "analyze.onsets", "analyze.tempoKey", "analyze.vamp", "-", "analyze.window", "view.meters", "analyze.imagingView", "analyze.resetMeters", "-", "view.spectral", "-", "@nyquist.analyze" } },
         { tr ("Too&ls"),     { "tools.macroRecord", "tools.macroApply", "tools.macros", "-", "tools.batch", "-", "tools.managePlugins", "-", "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan", "-", "tools.resetConfig" } },
-        { tr ("Ma&ster"),    { "view.master", "view.chain", "master.addPlugin", "master.bypass", "-", "master.render", "master.renderNew", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
+        { tr ("Ma&ster"),    { "view.master", "view.chain", "master.addPlugin", "master.bypass", "-", "master.assistant", "-", "master.render", "master.renderNew", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
@@ -1409,6 +1412,7 @@ void MainWindow::updateCommandStates()
     commands.action (QStringLiteral ("marker.addRegion"))->setEnabled (open);
     commands.action (QStringLiteral ("master.render"))->setEnabled (open);
     commands.action (QStringLiteral ("master.renderNew"))->setEnabled (open);
+    commands.action (QStringLiteral ("master.assistant"))->setEnabled (open);
 
     for (const auto* id : { "marker.add", "marker.next", "marker.previous", "analyze.loudness" })
         commands.action (QString::fromLatin1 (id))->setEnabled (open);
@@ -3357,6 +3361,39 @@ void MainWindow::renderInPlace()
     masterWidget->refresh();
     commands.action (QStringLiteral ("master.bypass"))->setChecked (true);
     statusBar()->showMessage (tr ("Rendered in place. The Master Section is now bypassed; Ctrl+Shift+B turns it back on."), 8000);
+}
+
+void MainWindow::masterAssistant()
+{
+    if (data() == nullptr || refuseAlbumEdit())
+        return;
+    bool anyPlugin = false;
+    for (int slot = 0; slot < AudioEngine::numMasterSlots; ++slot)
+        anyPlugin = anyPlugin || ! engine.masterSlot (slot).empty;
+    if (! anyPlugin)
+    {
+        QMessageBox::information (this, tr ("Master Assistant"),
+                                  tr ("The Master Assistant tunes the plugins you put in the Master Section; it does not choose them.\n"
+                                      "Build a chain first (Ctrl+Alt+E adds a plugin), or load a preset chain, then open it again."));
+        return;
+    }
+
+    MasterAssistant::References refs;
+    for (const auto& r : references)
+        refs.names << QFileInfo (r.path).fileName();
+    refs.current = currentReference;
+    refs.load = [this] (int row) -> AudioDataPtr
+    {
+        if (row < 0 || row >= (int) references.size() || ! loadReference (row))
+            return nullptr;
+        return references[(size_t) row].atRate;
+    };
+
+    const auto [s, e] = processRange();
+    MasterAssistant dialog (engine, data(), s, e, std::move (refs), [this] { togglePlayback(); }, this);
+    dialog.exec();
+    masterWidget->refresh();
+    waveform->setFocus();
 }
 
 void MainWindow::renderToNewTab()
