@@ -590,6 +590,7 @@ private:
     // Master Section
     bool masterWouldChange (const QString& title);   // false (with a note) when rendering would change nothing
     void renderInPlace();     // bounce the selection or file through the Master Section
+    void masterAssistant();   // tunes the Master Section's knobs towards a target (MasterAssistant.h)
     void renderToNewTab();    // the same into a new untitled tab
 
     // Export (ExportSection.cpp): every output of the Export dialog, and its codec preview.
