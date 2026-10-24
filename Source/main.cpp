@@ -45,6 +45,60 @@ namespace
             return false;
         }
     };
+
+    // The editor itself. Everything it made, the window, the engine with its plugin
+    // instances and the application, is gone by the time this returns.
+    int runEditor (int& argc, char* argv[])
+    {
+#if PHI_WEB_BACKDROP
+        QCoreApplication::setAttribute (Qt::AA_ShareOpenGLContexts);   // Qt WebEngine asks for it before the application starts
+#endif
+        Application app (argc, argv);
+        QApplication::setApplicationName (QStringLiteral (APP_ID));
+        moveOldSettings();
+        QApplication::setApplicationDisplayName (QStringLiteral (APP_DISPLAY_NAME));
+        QApplication::setWindowIcon (QIcon (QStringLiteral (APP_ICON)));
+        QApplication::setApplicationVersion (QStringLiteral (APP_VERSION));
+        // Wayland app-id, used by Hyprland window rules (class:^(phi)$).
+        QGuiApplication::setDesktopFileName (QStringLiteral (APP_ID));
+
+        // Use the remembered theme, falling back to the default when it has gone away.
+        const auto themes = Theme::available();
+        auto theme = themes.first();
+        for (const auto& t : themes)
+            if (t.name == Theme::savedName())
+                theme = t;
+        Theme::apply (theme);
+
+        QCommandLineParser parser;
+        parser.setApplicationDescription (QStringLiteral (APP_BRAND_NAME " audio editor and mastering suite"));
+        parser.addHelpOption();
+        parser.addVersionOption();
+        parser.addPositionalArgument (QStringLiteral ("file"), QStringLiteral ("Audio file to open."));
+        parser.process (app);
+
+        AudioEngine engine;
+        engine.setConfigFolder ((QStandardPaths::writableLocation (QStandardPaths::GenericConfigLocation)
+                                 + QStringLiteral ("/" APP_ID)).toStdString());
+        const auto deviceError = engine.openDefaultDevice();
+
+        int result = 0;
+        {
+            MainWindow window (engine);
+            window.show();
+
+            if (! parser.positionalArguments().isEmpty())
+                window.openFile (QDir::current().absoluteFilePath (parser.positionalArguments().first()));
+
+            result = app.exec();
+        }
+
+        // Tools > Reset Configuration: clear the settings now that nothing will write them again, and start afresh.
+        if (MainWindow::finishReset())
+            QProcess::startDetached (QCoreApplication::applicationFilePath(), {});
+
+        return result;
+    }
 }
 
 int main (int argc, char* argv[])
@@ -55,52 +109,11 @@ int main (int argc, char* argv[])
     if (argc == 5 && std::string (argv[1]) == MasterChain::scanOption)
         std::_Exit (MasterChain::scanInThisProcess (argv[2], argv[3], juce::File (argv[4])));
 
-#if PHI_WEB_BACKDROP
-    QCoreApplication::setAttribute (Qt::AA_ShareOpenGLContexts);   // Qt WebEngine asks for it before the application starts
-#endif
-    Application app (argc, argv);
-    QApplication::setApplicationName (QStringLiteral (APP_ID));
-    moveOldSettings();
-    QApplication::setApplicationDisplayName (QStringLiteral (APP_DISPLAY_NAME));
-    QApplication::setWindowIcon (QIcon (QStringLiteral (APP_ICON)));
-    QApplication::setApplicationVersion (QStringLiteral (APP_VERSION));
-    // Wayland app-id, used by Hyprland window rules (class:^(phi)$).
-    QGuiApplication::setDesktopFileName (QStringLiteral (APP_ID));
-
-    // Use the remembered theme, falling back to the default when it has gone away.
-    const auto themes = Theme::available();
-    auto theme = themes.first();
-    for (const auto& t : themes)
-        if (t.name == Theme::savedName())
-            theme = t;
-    Theme::apply (theme);
-
-    QCommandLineParser parser;
-    parser.setApplicationDescription (QStringLiteral (APP_BRAND_NAME " audio editor and mastering suite"));
-    parser.addHelpOption();
-    parser.addVersionOption();
-    parser.addPositionalArgument (QStringLiteral ("file"), QStringLiteral ("Audio file to open."));
-    parser.process (app);
-
-    AudioEngine engine;
-    engine.setConfigFolder ((QStandardPaths::writableLocation (QStandardPaths::GenericConfigLocation)
-                             + QStringLiteral ("/" APP_ID)).toStdString());
-    const auto deviceError = engine.openDefaultDevice();
-
-    int result = 0;
-    {
-        MainWindow window (engine);
-        window.show();
-
-        if (! parser.positionalArguments().isEmpty())
-            window.openFile (QDir::current().absoluteFilePath (parser.positionalArguments().first()));
-
-        result = app.exec();
-    }
-
-    // Tools > Reset Configuration: clear the settings now that nothing will write them again, and start afresh.
-    if (MainWindow::finishReset())
-        QProcess::startDetached (QCoreApplication::applicationFilePath(), {});
-
-    return result;
+    // The editor leaves the same way, for the same reason. Plugin libraries stay loaded
+    // until PHI quits (see ClapFormat), so their static destructors and exit hooks would
+    // run inside exit(), after the window, the GL contexts and the audio threads they
+    // point at are gone; Cardinal crashes there. PHI's own cleanup has already run.
+    const auto result = runEditor (argc, argv);
+    std::fflush (nullptr);
+    std::_Exit (result);
 }
