@@ -21,7 +21,26 @@ namespace
             { 0, 2, 3, 5, 7, 9, 10 },                   // dorian
             { 0, 2, 4, 6, 8, 10 },                      // whole tone
         };
-        return table[std::clamp ((int) s, 0, (int) Scale::count - 1)];
+        return table[std::clamp ((int) s, 0, (int) Scale::wholeTone)];
+    }
+
+    constexpr double phi = 1.6180339887498949;
+
+    // The phi scale: phi^0 .. phi^7 as pitches above the root, folded into one octave.
+    const std::vector<double>& phiSteps()
+    {
+        static const std::vector<double> steps = []
+        {
+            std::vector<double> out;
+            for (int n = 0; n < 8; ++n)
+            {
+                const double cents = n * std::log2 (phi) * 12.0;
+                out.push_back (cents - 12.0 * std::floor (cents / 12.0));
+            }
+            std::sort (out.begin(), out.end());
+            return out;
+        }();
+        return steps;
     }
 
     // General MIDI drums for the bottom, middle and top of the picture.
@@ -78,12 +97,25 @@ Picture fromPixels (const uint8_t* pixels, int width, int height, int stride, in
 
 const char* scaleName (Scale s)
 {
-    static const char* names[] { "Chromatic", "Major", "Minor", "Pentatonic", "Minor Pentatonic", "Blues", "Dorian", "Whole Tone" };
+    static const char* names[] { "Chromatic", "Major", "Minor", "Pentatonic", "Minor Pentatonic", "Blues", "Dorian", "Whole Tone", "\u03a6 (golden)" };
     return names[std::clamp ((int) s, 0, (int) Scale::count - 1)];
 }
 
 double nearestInScale (double note, Scale s, int root)
 {
+    if (s == Scale::phi)
+    {
+        double best = note, distance = 1e9;
+        const int octave = (int) std::floor ((note - root) / 12.0);
+        for (int o = octave - 1; o <= octave + 1; ++o)
+            for (const double step : phiSteps())
+                if (const double n = root + 12.0 * o + step; std::abs (n - note) < distance)
+                {
+                    distance = std::abs (n - note);
+                    best = n;
+                }
+        return best;
+    }
     const auto& steps = intervals (s);
     double best = std::round (note), distance = 1e9;
     const int around = (int) std::floor (note);
@@ -99,6 +131,13 @@ double nearestInScale (double note, Scale s, int root)
         }
     }
     return best;
+}
+
+bool fibonacciBeat (long step)
+{
+    // The lower Wythoff sequence's gaps: 2 where the word has a 1, 1 where it has a 0.
+    const auto n = (double) (step + 1);
+    return std::floor ((n + 1.0) * phi) - std::floor (n * phi) == 2.0;
 }
 
 double pitchFor (double height, const Settings& s)
@@ -154,6 +193,8 @@ void Sonifier::step (const Picture& picture, std::vector<Message>& out)
 {
     if (set.mode == Mode::scan)
         scanStep (picture, out);
+    else if (set.mode == Mode::spiral)
+        spiralStep (picture, out);
     else
         laneStep (picture, true, out);
     ++steps;
@@ -272,12 +313,48 @@ void Sonifier::laneStep (const Picture& p, bool onStep, std::vector<Message>& ou
         drumStep (rows (p, 0, p.width), out);
 }
 
+void Sonifier::spiralStep (const Picture& p, std::vector<Message>& out)
+{
+    // Vogel's sunflower: point k of `count` lies at radius sqrt(k / count), turned by the
+    // golden angle each time; the columns setting is how many points before the centre again.
+    const long count = std::max (8, set.columns * 8);
+    const long k = steps % count;
+    const double angle = k * 3.14159265358979323846 * (3.0 - std::sqrt (5.0));
+    const double r = 0.5 * std::sqrt ((k + 0.5) / count);
+    const double fx = 0.5 + r * std::cos (angle), fy = 0.5 + r * std::sin (angle);
+    const int cx = std::clamp ((int) (fx * p.width), 0, p.width - 1), cy = std::clamp ((int) (fy * p.height), 0, p.height - 1);
+
+    // The light around the point, 3 by 3.
+    float sum = 0.0f;
+    int taken = 0;
+    for (int y = std::max (0, cy - 1); y <= std::min (p.height - 1, cy + 1); ++y)
+        for (int x = std::max (0, cx - 1); x <= std::min (p.width - 1, cx + 1); ++x)
+        {
+            sum += p.at (x, y);
+            ++taken;
+        }
+    const float level = sum / (float) std::max (1, taken);
+
+    // The voices take turns, so each note rings while the next ones sound.
+    const int v = (int) (steps % set.voices);
+    if (level >= (float) set.threshold)
+    {
+        release (v, out);
+        play (v, pitchFor (1.0 - fy, set), level, out);
+        voice[v].x = (float) fx;
+        voice[v].y = (float) fy;
+    }
+    else
+        release (v, out);
+    drumStep (rows (p, 0, p.width), out);
+}
+
 void Sonifier::drumStep (const std::vector<float>& profile, std::vector<Message>& out)
 {
     for (const int d : drumsHeld)
         out.push_back ({ (uint8_t) (0x80 | drumChannel), (uint8_t) d, 0 });
     drumsHeld.clear();
-    if (set.drums && lastDrumProfile.size() == profile.size() && ! profile.empty())
+    if (set.drums && lastDrumProfile.size() == profile.size() && ! profile.empty() && (! set.fibonacciDrums || fibonacciBeat (steps)))
     {
         // Thirds from the bottom: kick, snare, hi-hat.
         const int h = (int) profile.size();

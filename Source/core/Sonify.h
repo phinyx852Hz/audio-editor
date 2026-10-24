@@ -31,9 +31,13 @@ namespace sonify
     // scan: a line sweeps across the picture, a column a step, and plays the bright
     // spots it crosses (for still pictures). lanes: the picture is cut into a lane per
     // voice, and each plays where its light is, gliding as it moves (for moving ones).
-    enum class Mode { scan, lanes };
+    // spiral: each step looks at the next point of a sunflower spiral from the centre,
+    // turning by the golden angle (137.5 degrees), so it never lines up or repeats.
+    enum class Mode { scan, lanes, spiral };
 
-    enum class Scale { chromatic, major, minor, pentatonic, minorPentatonic, blues, dorian, wholeTone, count };
+    // phi: powers of the golden ratio folded into the octave (8 pitches, between the
+    // keys, so played with pitch bend).
+    enum class Scale { chromatic, major, minor, pentatonic, minorPentatonic, blues, dorian, wholeTone, phi, count };
     const char* scaleName (Scale);
 
     struct Settings
@@ -48,6 +52,7 @@ namespace sonify
         int voices = 4;                 // notes at once, 1 to maxVoices
         double threshold = 0.4;         // how bright a spot must be to sound, 0 to 1
         bool drums = true;              // change strikes drums on channel 10
+        bool fibonacciDrums = false;    // drums only on the 1s of the Fibonacci word (1011010110110...)
         double bendRange = 2.0;         // the instrument's pitch bend range in semitones
     };
 
@@ -70,6 +75,7 @@ namespace sonify
     // pulled towards the scale by the quantize amount.
     double pitchFor (double height, const Settings&);
     double nearestInScale (double note, Scale, int root);
+    bool fibonacciBeat (long step);   // the Fibonacci word's digit at a step (from 0) is 1
 
     class Sonifier
     {
@@ -99,6 +105,7 @@ namespace sonify
         void step (const Picture&, std::vector<Message>& out);
         void scanStep (const Picture&, std::vector<Message>& out);
         void laneStep (const Picture&, bool onStep, std::vector<Message>& out);
+        void spiralStep (const Picture&, std::vector<Message>& out);
         void drumStep (const std::vector<float>& profile, std::vector<Message>& out);
         void play (int voice, double target, float level, std::vector<Message>& out);
         void release (int voice, std::vector<Message>& out);

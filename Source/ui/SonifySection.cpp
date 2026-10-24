@@ -76,7 +76,7 @@ void MainWindow::addSonifyPanel()
     sonifyPanel = new SonifyPanel (visualizer, PHINYX_WEB_BACKDROP != 0);
     auto s = appSettings();
     sonify::Settings d;
-    d.mode = (sonify::Mode) std::clamp (s.value (key ("mode"), (int) d.mode).toInt(), 0, 1);
+    d.mode = (sonify::Mode) std::clamp (s.value (key ("mode"), (int) d.mode).toInt(), 0, (int) sonify::Mode::spiral);
     d.quantize = s.value (key ("quantize"), d.quantize).toDouble();
     d.scale = (sonify::Scale) std::clamp (s.value (key ("scale"), (int) d.scale).toInt(), 0, (int) sonify::Scale::count - 1);
     d.root = s.value (key ("root"), d.root).toInt();
@@ -87,6 +87,7 @@ void MainWindow::addSonifyPanel()
     d.voices = s.value (key ("voices"), d.voices).toInt();
     d.threshold = s.value (key ("threshold"), d.threshold).toDouble();
     d.drums = s.value (key ("drums"), d.drums).toBool();
+    d.fibonacciDrums = s.value (key ("fibonacciDrums"), d.fibonacciDrums).toBool();
     d.bendRange = s.value (key ("bendRange"), d.bendRange).toDouble();
     sonifyPanel->setSettings (d);
     sonifyPanel->setTarget (s.value (key ("target"), (int) SonifyPanel::builtInSynth).toInt());
@@ -127,6 +128,7 @@ void MainWindow::saveSonifySettings()
     s.setValue (key ("voices"), d.voices);
     s.setValue (key ("threshold"), d.threshold);
     s.setValue (key ("drums"), d.drums);
+    s.setValue (key ("fibonacciDrums"), d.fibonacciDrums);
     s.setValue (key ("bendRange"), d.bendRange);
     s.setValue (key ("target"), sonifyPanel->target());
 }

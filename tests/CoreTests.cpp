@@ -3307,6 +3307,36 @@ namespace
                 drums += m.status == (0x90 | drumChannel) ? 1 : 0;
             check (drums == 3, "sonify drums on change");
         }
+
+        {
+            // Phi: powers of the golden ratio folded into the octave, between the keys.
+            const double up = std::log2 ((1.0 + std::sqrt (5.0)) / 2.0) * 12.0;   // 8.33 semitones
+            check (near (nearestInScale (60.0 + up + 0.2, Scale::phi, 0), 60.0 + up, 1e-9), "sonify phi scale step");
+            check (nearestInScale (60.1, Scale::phi, 0) == 60.0, "sonify phi scale root");
+            std::string word;
+            for (long i = 0; i < 13; ++i)
+                word += fibonacciBeat (i) ? '1' : '0';
+            check (word == "1011010110110", "sonify Fibonacci word");
+        }
+        {
+            // Spiral: the first point is the centre; the voices take turns.
+            Picture p;
+            p.width = 16;
+            p.height = 12;
+            p.light.assign (16 * 12, 1.0f);
+            Sonifier son;
+            Settings t;
+            t.mode = Mode::spiral;
+            t.voices = 2;
+            t.drums = false;
+            son.setSettings (t);
+            std::vector<Message> out;
+            son.advance (p, 0.0, out);
+            check (son.sounding().size() == 1 && near (son.sounding()[0].x, 0.5, 0.05) && near (son.sounding()[0].y, 0.5, 0.05), "sonify spiral starts at the centre");
+            son.advance (p, 0.125, out);
+            check (son.sounding().size() == 2, "sonify spiral voices take turns");
+            check (find (out, 0x91) != out.end(), "sonify spiral second voice on channel 2");
+        }
     }
 
 int main()

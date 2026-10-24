@@ -91,8 +91,11 @@ SonifyPanel::SonifyPanel (QWidget* parent, bool webPage) : QWidget (parent)
     mode = new QComboBox (this);
     mode->addItem (tr ("Scan"), (int) sonify::Mode::scan);
     mode->addItem (tr ("Lanes"), (int) sonify::Mode::lanes);
+    mode->addItem (tr ("Spiral"), (int) sonify::Mode::spiral);
     mode->setToolTip (tr ("Scan: a line sweeps across, a column a step, and plays the bright spots it crosses (best for still pictures).\n"
-                          "Lanes: a lane per voice, each playing where its light is and gliding as it moves (best for moving pictures)."));
+                          "Lanes: a lane per voice, each playing where its light is and gliding as it moves (best for moving pictures).\n"
+                          "Spiral: a step looks at the next point of a sunflower spiral, turning by the golden angle (137.5°), "
+                          "so a still picture plays as a melody that never repeats."));
 
     targets = new QComboBox (this);
     targets->addItem (tr ("Built-in Synth"), (int) builtInSynth);
@@ -103,6 +106,8 @@ SonifyPanel::SonifyPanel (QWidget* parent, bool webPage) : QWidget (parent)
 
     drums = new QCheckBox (tr ("Drums"), this);
     drums->setToolTip (tr ("Change strikes General MIDI drums on channel 10: kick at the bottom, snare in the middle, hi-hat at the top"));
+    fibonacci = new QCheckBox (tr ("Φ rhythm"), this);
+    fibonacci->setToolTip (tr ("The drums play only on the 1s of the Fibonacci word (1011010110110...): a groove that never quite repeats"));
 
     quantize = new QSlider (Qt::Horizontal, this);
     quantize->setRange (0, 100);
@@ -129,7 +134,7 @@ SonifyPanel::SonifyPanel (QWidget* parent, bool webPage) : QWidget (parent)
     voices->setToolTip (tr ("How many notes at once (lanes: how many lanes)"));
     columns = new QSpinBox (this);
     columns->setRange (2, 128);
-    columns->setToolTip (tr ("Scan: the steps across the picture"));
+    columns->setToolTip (tr ("Scan: the steps across the picture. Spiral: eight times this many points before it starts again at the centre"));
     low = new NoteSpin (this);
     low->setToolTip (tr ("The note at the bottom of the picture"));
     high = new NoteSpin (this);
@@ -151,6 +156,7 @@ SonifyPanel::SonifyPanel (QWidget* parent, bool webPage) : QWidget (parent)
     first->addWidget (label (tr ("Pla&ys:"), targets, this));
     first->addWidget (targets);
     first->addWidget (drums);
+    first->addWidget (fibonacci);
     first->addWidget (note, 1);
 
     auto* second = new QHBoxLayout;
@@ -195,8 +201,9 @@ SonifyPanel::SonifyPanel (QWidget* parent, bool webPage) : QWidget (parent)
         connect (s, &QSlider::valueChanged, this, emitChanged);
     for (auto* s : { tempo, voices, columns, low, high, bend })
         connect (s, &QSpinBox::valueChanged, this, emitChanged);
-    connect (drums, &QCheckBox::toggled, this, emitChanged);
-    connect (mode, &QComboBox::currentIndexChanged, this, [this] { columns->setEnabled (mode->currentData().toInt() == (int) sonify::Mode::scan); });
+    for (auto* c : { drums, fibonacci })
+        connect (c, &QCheckBox::toggled, this, emitChanged);
+    connect (mode, &QComboBox::currentIndexChanged, this, [this] { columns->setEnabled (mode->currentData().toInt() != (int) sonify::Mode::lanes); });
 
     setSettings ({});
 }
@@ -215,6 +222,7 @@ sonify::Settings SonifyPanel::settings() const
     s.voices = voices->value();
     s.threshold = threshold->value() / 100.0;
     s.drums = drums->isChecked();
+    s.fibonacciDrums = fibonacci->isChecked();
     s.bendRange = bend->value();
     return s;
 }
@@ -233,8 +241,9 @@ void SonifyPanel::setSettings (const sonify::Settings& s)
     voices->setValue (s.voices);
     threshold->setValue ((int) std::lround (s.threshold * 100.0));
     drums->setChecked (s.drums);
+    fibonacci->setChecked (s.fibonacciDrums);
     bend->setValue ((int) std::lround (s.bendRange));
-    columns->setEnabled (s.mode == sonify::Mode::scan);
+    columns->setEnabled (s.mode != sonify::Mode::lanes);
     quiet = false;
 }
 

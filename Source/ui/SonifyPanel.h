@@ -45,7 +45,7 @@ private:
     QComboBox *sources, *mode, *scale, *key, *targets;
     QSlider *quantize, *threshold;
     QSpinBox *tempo, *voices, *columns, *low, *high, *bend;
-    QCheckBox* drums;
+    QCheckBox *drums, *fibonacci;
     QLabel* note;
     bool quiet = false;
 };
