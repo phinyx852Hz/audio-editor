@@ -320,7 +320,7 @@ def page(title, body, book, current, version, prev=None, nxt=None, extra_class="
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{html.escape(title)} · PHI Manual</title>
+<title>{html.escape(title) if title == "PHI Manual" else html.escape(title) + " · PHI Manual"}</title>
 <link rel="icon" href="assets/phi.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
@@ -466,7 +466,9 @@ def build_site(book, where, entries, version):
     copy_assets(dest)
     order = [(ch.file, ch.title) for ch in book] + [("genindex.html", "Index")]
 
-    home = cover_html(version, False) + contents_html(book, "site")
+    home = (cover_html(version, False)
+            + '<p class="pdf-link"><a href="PHI-Manual.pdf">Download the whole manual as a PDF</a></p>'
+            + contents_html(book, "site"))
     (dest / "index.html").write_text(page("PHI Manual", home, book, None, version, None, order[0], "home"))
     for i, ch in enumerate(book):
         soup = BeautifulSoup(str(ch.soup), "html.parser")
@@ -545,6 +547,9 @@ def build_pdf(book, where, entries, version):
     doc = HTML(filename=str(source)).render()
     pdf = dest / "PHI-Manual.pdf"
     doc.write_pdf(str(pdf))
+    site = dest / "site"
+    if site.is_dir():
+        shutil.copy(pdf, site / pdf.name)
     print(f"pdf: {pdf} ({len(doc.pages)} pages)")
 
 

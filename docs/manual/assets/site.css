@@ -106,3 +106,5 @@ dl.ix dt, dl.ix dd { break-inside: avoid; }
   .ix-cols { columns: 1; }
   .cover-title { font-size: 44px; }
 }
+.pdf-link { text-align: center; margin: 1.5em 0 0; font-family: var(--sans, Inter, sans-serif); }
+.pdf-link a { display: inline-block; padding: .55em 1.2em; border: 1px solid #c8a24a; border-radius: 6px; color: #c8a24a; text-decoration: none; }
