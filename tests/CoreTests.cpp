@@ -27,6 +27,7 @@
 #include "../Source/core/Ambisonics.h"
 #include "../Source/core/SpatialStudio.h"
 #include "../Source/core/PrismSplit.h"
+#include "../Source/core/MasterAssist.h"
 #include "../Source/core/Sonify.h"
 #include "../Source/core/Phi.h"
 
@@ -3205,6 +3206,172 @@ namespace
         }
     }
 
+    void testMasterAssist()
+    {
+        // Measuring: a 1 kHz sine, the same on both sides, at half scale.
+        const auto sine = makeSine (2, 48000 * 10, 1000.0, 0.5);
+        const auto p = assist::measure (*sine, 0, sine->length());
+        check (p.valid, "assist: a sine is measured");
+        check (near (p.lufs, -6.0, 0.5), "assist: loudness of a half-scale stereo sine is about -6 LUFS");
+        check (near (p.plr, p.truePeakDb - p.lufs, 1.0e-9), "assist: PLR is true peak minus loudness");
+        check (p.sideToMidDb < -100.0, "assist: identical sides have no side");
+        const auto loudest = std::max_element (p.bandsDb.begin(), p.bandsDb.end()) - p.bandsDb.begin();
+        check (loudest == 5, "assist: a 1 kHz sine is loudest in the 1 kHz octave");
+        double mean = 0.0;
+        for (auto b : p.bandsDb)
+            mean += b;
+        check (near (mean, 0.0, 1.0e-6), "assist: octave levels are against their mean");
+
+        const auto silence = makeSine (2, 48000, 1000.0, 0.0);
+        check (! assist::measure (*silence, 0, silence->length()).valid, "assist: silence is not a valid measure");
+
+        // Tone curves are centred, and warm has more low end than bright.
+        for (auto tone : { assist::Tone::balanced, assist::Tone::warm, assist::Tone::bright })
+        {
+            const auto c = assist::toneCurve (tone);
+            double sum = 0.0;
+            for (auto v : c)
+                sum += v;
+            check (near (sum, 0.0, 1.0e-9), "assist: a tone curve is centred on 0 dB");
+        }
+        check (assist::toneCurve (assist::Tone::warm)[1] > assist::toneCurve (assist::Tone::bright)[1],
+               "assist: warm has more 63 Hz than bright");
+
+        // Residuals: the peak counts only above the ceiling, the width not for mono.
+        assist::Target t;
+        t.lufs = -14.0;
+        t.truePeakDb = -1.0;
+        t.widthWeight = 1.0;
+        t.sideToMidDb = -10.0;
+        assist::Profile got;
+        got.valid = true;
+        got.lufs = -16.0;
+        got.truePeakDb = -3.0;
+        auto r = assist::residuals (got, t);
+        check (r.size() == 4 + assist::Profile::numBands, "assist: residuals have a fixed length");
+        check (near (r[0], -2.0, 1.0e-9), "assist: 2 LU too quiet");
+        check (r[1] == 0.0, "assist: a peak under the ceiling costs nothing");
+        check (r[3] == 0.0, "assist: no width residual for mono");
+        got.truePeakDb = 0.0;
+        check (near (assist::residuals (got, t)[1], 2.0, 1.0e-9), "assist: 1 dB over the ceiling, weighted 2");
+
+        // An excerpt's target is shifted by what the excerpt differs from the whole by.
+        assist::Profile whole = got, part = got;
+        whole.lufs = -18.0;
+        part.lufs = -16.0;
+        check (near (t.forExcerpt (whole, part).lufs, -12.0, 1.0e-9), "assist: an excerpt 2 LU louder aims 2 LU higher");
+
+        // Excerpts: two minutes, quiet but for 10 seconds at 60 s, come out shorter and with the loud part.
+        {
+            AudioData::Builder b (2, 48000.0);
+            std::vector<float> l (48000), rr (48000);
+            for (int sec = 0; sec < 120; ++sec)
+            {
+                const auto amp = sec >= 60 && sec < 70 ? 0.8f : 0.05f;
+                for (int i = 0; i < 48000; ++i)
+                    l[(size_t) i] = rr[(size_t) i] = amp * (float) std::sin (2.0 * M_PI * 220.0 * (sec * 48000 + i) / 48000.0);
+                const float* ptrs[] = { l.data(), rr.data() };
+                b.append (ptrs, 48000);
+            }
+            const auto song = b.finish();
+            const auto ex = assist::excerpt (*song, 0, song->length(), 30.0);
+            check (ex->lengthSeconds() <= 31.0 && ex->lengthSeconds() >= 18.0, "assist: an excerpt is about 30 seconds");
+            check (ex->peakAbs (0, ex->length()) > 0.7f, "assist: an excerpt holds the loudest part");
+            const auto shortOne = assist::excerpt (*sine, 0, sine->length(), 30.0);
+            check (shortOne->length() == sine->length(), "assist: a short file is its own excerpt");
+        }
+
+        // Which parameters move by default.
+        check (assist::guessRole ("Threshold (dB)") == assist::Role::dynamics, "assist: threshold is dynamics");
+        check (assist::guessRole ("Output Ceiling") == assist::Role::ceiling, "assist: ceiling");
+        check (assist::guessRole ("Attack") == assist::Role::time, "assist: attack is a time");
+        check (assist::guessRole ("Gain 3") == assist::Role::eq, "assist: a numbered gain is an EQ band");
+        check (assist::guessRole ("Freq 3") == assist::Role::other, "assist: a frequency is left alone");
+        check (assist::guessRole ("Input Gain") == assist::Role::level, "assist: input gain is a level");
+        check (assist::movedByDefault ("Input Gain", 0, false), "assist: input gain moves");
+        check (assist::movedByDefault ("Width", 0, false), "assist: width moves");
+        check (assist::movedByDefault ("Ratio", 0, false), "assist: ratio moves");
+        check (! assist::movedByDefault ("Ceiling", 0, false), "assist: the ceiling stays yours");
+        check (! assist::movedByDefault ("Release", 0, false), "assist: release stays");
+        check (! assist::movedByDefault ("Bypass", 0, true), "assist: switches stay");
+        check (! assist::movedByDefault ("Gain 2", 12, false), "assist: stepped parameters stay");
+
+        // A knob only moves for its own job.
+        {
+            assist::Target loudOnly;
+            check (assist::policy (assist::Role::level, loudOnly, 0.3).moves, "assist: a gain moves for loudness");
+            check (assist::policy (assist::Role::level, loudOnly, 0.3).freedom == 1.0, "assist: a gain may go as far as it needs");
+            check (! assist::policy (assist::Role::width, loudOnly, 0.3).moves, "assist: width does not move to get louder");
+            check (! assist::policy (assist::Role::eq, loudOnly, 0.3).moves, "assist: EQ does not move when tone is not matched");
+            auto toned = loudOnly;
+            toned.toneWeight = 0.5;
+            check (assist::policy (assist::Role::eq, toned, 0.3).moves, "assist: EQ moves when tone is matched");
+            check (assist::policy (assist::Role::time, loudOnly, 0.3).moves, "assist: a knob you tick yourself moves");
+        }
+
+        // The optimiser on a made-up chain: a gain knob (-24..+24 dB), a tilt knob, and a knob that does nothing.
+        {
+            assist::Settings s;
+            s.maxEvaluations = 40;
+            int calls = 0;
+            const assist::Evaluate chain = [&] (const std::vector<double>& x, std::vector<double>& res)
+            {
+                ++calls;
+                const auto gain = -24.0 + 48.0 * x[0];
+                const auto tilt = std::tanh (4.0 * (x[1] - 0.5)) * 6.0;
+                res = { (-20.0 + gain) - (-14.0), tilt - 1.5 };
+                return true;
+            };
+            const auto result = assist::optimise ({ 0.5, 0.5, 0.5 }, chain, s);
+            check (result.error < 0.05 * result.startError, "assist: the optimiser gets close to the target");
+            check (near (-24.0 + 48.0 * result.values[0], 6.0, 0.3), "assist: the gain lands near +6 dB");
+            check (result.values[2] == 0.5, "assist: a knob that does nothing is left where it was");
+            check (calls <= s.maxEvaluations, "assist: the optimiser keeps to its budget");
+            check (result.evaluations == calls, "assist: evaluations are counted");
+
+            // It may not move further than its freedom.
+            s.freedom = 0.05;
+            const auto held = assist::optimise ({ 0.5, 0.5, 0.5 }, chain, s);
+            check (held.values[0] <= 0.55 + 1.0e-9, "assist: a parameter stays within its freedom");
+
+            // Cancelled from the first render: nothing moves.
+            const assist::Evaluate cancelled = [] (const std::vector<double>&, std::vector<double>&) { return false; };
+            const auto none = assist::optimise ({ 0.3 }, cancelled, s);
+            check (none.stopped && none.values[0] == 0.3, "assist: a cancelled search changes nothing");
+        }
+
+        // End to end on real audio: a gain "plugin" on a quiet sine, aimed at -14 LUFS.
+        {
+            const auto quiet = makeSine (2, 48000 * 4, 440.0, 0.1);
+            assist::Target target;
+            target.lufs = -14.0;
+            target.truePeakDb = 0.0;
+            assist::Settings s;
+            s.maxEvaluations = 20;
+            const assist::Evaluate gainChain = [&] (const std::vector<double>& x, std::vector<double>& res)
+            {
+                const auto g = (float) std::pow (10.0, (-24.0 + 48.0 * x[0]) / 20.0);
+                const auto out = quiet->processed (0, quiet->length(), [g] (std::vector<std::vector<float>>& block, Frame)
+                {
+                    for (auto& c : block)
+                        for (auto& v : c)
+                            v *= g;
+                });
+                res = assist::residuals (assist::measure (*out, 0, out->length()), target);
+                return true;
+            };
+            const auto result = assist::optimise ({ 0.5 }, gainChain, s);
+            const auto g = std::pow (10.0, (-24.0 + 48.0 * result.values[0]) / 20.0);
+            const auto louder = quiet->processed (0, quiet->length(), [g] (std::vector<std::vector<float>>& block, Frame)
+            {
+                for (auto& c : block)
+                    for (auto& v : c)
+                        v *= (float) g;
+            });
+            check (near (assist::measure (*louder, 0, louder->length()).lufs, -14.0, 0.5), "assist: a quiet sine is brought to -14 LUFS");
+        }
+    }
+
     // Image sonification: pictures read as notes, with free pitch through pitch bend.
     void testSonify()
     {
@@ -3713,6 +3880,7 @@ int main()
     testPatchBay();
     testSpatialStudio();
     testPrismSplit();
+    testMasterAssist();
     testSonify();
     testPhi();
 
