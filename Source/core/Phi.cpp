@@ -885,6 +885,11 @@ namespace phi
         std::fill (gainDb.begin(), gainDb.end(), 0.0f);
         fill = 0;
         deepest = 0.0f;
+        for (int p = 0; p < pictureSize; ++p)
+        {
+            shownLevel[(size_t) p].store (-200.0f, std::memory_order_relaxed);
+            shownCut[(size_t) p].store (0.0f, std::memory_order_relaxed);
+        }
     }
 
     void Deresonator::frame()
@@ -933,6 +938,23 @@ namespace phi
             deepest = std::min (deepest, g);
         }
 
+        // The picture for the window: a Hann frame of a full-scale sine peaks at size / 4 per channel.
+        const auto fullScaleDb = 20.0 * std::log10 (size / 4.0 * std::max (1, channels));
+        for (int p = 0; p < pictureSize; ++p)
+        {
+            const auto from = std::clamp ((int) std::floor (pictureHz (p) / binHz), 0, bins - 1);
+            const auto to = std::clamp ((int) std::floor ((p + 1 < pictureSize ? pictureHz (p + 1) : rate / 2.0) / binHz), from + 1, bins);
+            auto level = -200.0;
+            auto cut = 0.0f;
+            for (int k = from; k < to; ++k)
+            {
+                level = std::max (level, levelDb[(size_t) k]);
+                cut = std::min (cut, gainDb[(size_t) k]);
+            }
+            shownLevel[(size_t) p].store ((float) (level - fullScaleDb), std::memory_order_relaxed);
+            shownCut[(size_t) p].store (cut, std::memory_order_relaxed);
+        }
+
         // Hann in and out at 75 % overlap adds up to 1.5.
         constexpr float overlapScale = 1.0f / 1.5f;
         const auto mix = (float) settings.mix;
@@ -958,6 +980,20 @@ namespace phi
             std::fill (out.end() - hop, out.end(), 0.0f);
             auto& in = input[(size_t) ch];
             std::copy (in.begin() + hop, in.end(), in.begin());
+        }
+    }
+
+    double Deresonator::pictureHz (int point)
+    {
+        return 20.0 * std::pow (1000.0, (double) point / (pictureSize - 1));
+    }
+
+    void Deresonator::picture (float* levelDb, float* cutDb) const
+    {
+        for (int p = 0; p < pictureSize; ++p)
+        {
+            levelDb[p] = shownLevel[(size_t) p].load (std::memory_order_relaxed);
+            cutDb[p] = shownCut[(size_t) p].load (std::memory_order_relaxed);
         }
     }
 

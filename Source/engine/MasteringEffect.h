@@ -2,6 +2,7 @@
 #pragma once
 
 #include "BuiltinEffects.h"
+#include "DeviceDisplay.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -42,6 +43,9 @@ namespace builtin
             return in == l.getMainOutputChannelSet()
                 && (in == juce::AudioChannelSet::mono() || in == juce::AudioChannelSet::stereo());
         }
+
+        // What a Φ effect's window draws; nothing for the others. Called from the message thread.
+        virtual DeviceDisplay display() { return {}; }
 
         void releaseResources() override {}
         bool acceptsMidi() const override  { return false; }

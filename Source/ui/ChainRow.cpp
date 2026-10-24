@@ -4,6 +4,7 @@
 #include "PrismEditor.h"
 #include "Potentiometer.h"
 #include "PhiMark.h"
+#include "PhiWindow.h"
 #include "Theme.h"
 
 #include <QApplication>
@@ -1274,9 +1275,7 @@ void ChainRow::editParameters (int slot)
     if (engine.masterSlot (slot).empty)
         return;
 
-    auto* dialog = new ParameterDialog (engine, slot, window());
-    dialog->setAttribute (Qt::WA_DeleteOnClose);
-    dialog->show();
+    openParameterWindow (engine, ChainPath { slot, {} }, window());
 }
 
 void ChainRow::showWindow (int slot)
@@ -1289,6 +1288,8 @@ void ChainRow::showWindow (int slot)
                                       : QString::fromStdString (error));
         Q_EMIT chainChanged();
     }
+    else if (phimark::isPhiPlugin (info.pluginId))
+        editParameters (slot);   // a Φ effect's window is its Φ window
     else if (engine.canShowPluginWindow (slot))
         engine.showPluginWindow (slot);
     else if (! info.empty)

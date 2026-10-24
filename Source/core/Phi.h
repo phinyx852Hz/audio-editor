@@ -10,6 +10,7 @@
 #include <array>
 #include <complex>
 #include <cstdint>
+#include <atomic>
 #include <memory>
 #include <vector>
 
@@ -394,6 +395,13 @@ namespace phi
         // The deepest cut of the last frame, in dB (0 or below).
         float deepestCutDb() const { return deepest; }
 
+        // For its window, from any thread: the last frame at pictureSize frequencies from
+        // 20 Hz to 20 kHz, a third of an octave apart and more: the level (dB, a full-scale
+        // sine at 0) and the cut (dB, 0 or below), the loudest and deepest of the bins near each.
+        static constexpr int pictureSize = 128;
+        static double pictureHz (int point);
+        void picture (float* levelDb, float* cutDb) const;
+
     private:
         void frame();
         void layout();
@@ -410,6 +418,7 @@ namespace phi
         std::vector<int> spanLow, spanHigh;
         double attack = 0.5, release = 0.5;
         float deepest = 0.0f;
+        std::array<std::atomic<float>, pictureSize> shownLevel {}, shownCut {};
     };
 }
 

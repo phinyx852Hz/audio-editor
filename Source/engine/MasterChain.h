@@ -91,6 +91,7 @@ public:
     MasterSlotInfo info (const ChainPath&) const;
     std::vector<PluginParameterInfo> parameters (const ChainPath&) const;
     PluginParameterInfo parameter (const ChainPath&, int index) const;
+    DeviceDisplay display (const ChainPath&) const;
     void setParameter (const ChainPath&, int index, float value);
     bool setParameterFromText (const ChainPath&, int index, const std::string& text);
     void setBypassed (const ChainPath&, bool);

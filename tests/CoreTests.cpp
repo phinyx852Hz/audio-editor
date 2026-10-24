@@ -3879,6 +3879,27 @@ namespace
             check (toneDb (tamed, 24000, 1000.0) - toneDb (ringing, 24000, 1000.0) < -6.0, "phi de-resonator turns a resonance down");
             const auto plain = run (noise);
             check (std::abs (rmsDb (plain, 24000) - rmsDb (noise, 24000)) < 1.5, "phi de-resonator leaves noise nearly alone");
+
+            // Its window's picture: the cut is deepest at the resonance, and the tone stands out there.
+            {
+                phi::Deresonator r;
+                phi::Deresonator::Settings t;
+                t.depth = 1.0;
+                r.prepare (rate, 1);
+                r.set (t);
+                auto y = ringing;
+                float* p[] { y.data() };
+                r.process (p, 1, (int) y.size());
+                std::array<float, phi::Deresonator::pictureSize> level {}, cut {};
+                r.picture (level.data(), cut.data());
+                const auto deepest = (int) (std::min_element (cut.begin(), cut.end()) - cut.begin());
+                const auto loudest = (int) (std::max_element (level.begin(), level.end()) - level.begin());
+                check (std::abs (std::log2 (phi::Deresonator::pictureHz (deepest) / 1000.0)) < 0.15 && cut[(size_t) deepest] < -3.0f,
+                       "phi de-resonator's picture shows its cut at the resonance");
+                check (std::abs (std::log2 (phi::Deresonator::pictureHz (loudest) / 1000.0)) < 0.15 && level[(size_t) loudest] > -30.0f
+                           && level[(size_t) loudest] < 0.0f,
+                       "phi de-resonator's picture shows the tone's level in dB full scale");
+            }
         }
     }
 

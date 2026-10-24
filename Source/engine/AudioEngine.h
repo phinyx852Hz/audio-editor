@@ -6,6 +6,7 @@
 #include "../core/Dsp.h"
 #include "../core/Metadata.h"
 #include "TagIO.h"
+#include "DeviceDisplay.h"
 
 #include <array>
 #include <atomic>
@@ -304,6 +305,7 @@ public:
     MasterSlotInfo chainDevice (const ChainPath&) const;
     std::vector<PluginParameterInfo> chainParameters (const ChainPath&) const;
     PluginParameterInfo chainParameter (const ChainPath&, int index) const;
+    DeviceDisplay chainDisplay (const ChainPath&) const;   // a Φ effect's picture; Kind::none for others
     void setChainParameter (const ChainPath&, int index, float normalisedValue);
     bool setChainParameterText (const ChainPath&, int index, const std::string& text);
     void setChainBypassed (const ChainPath&, bool);

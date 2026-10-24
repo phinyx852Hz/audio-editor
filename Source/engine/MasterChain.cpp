@@ -3,6 +3,7 @@
 #include "PluginWindow.h"
 #include "Prism.h"
 #include "BuiltinEffects.h"
+#include "MasteringEffect.h"
 #include "ClapFormat.h"
 #include "StockFrame.h"
 #include "StockPlugins.h"
@@ -782,6 +783,21 @@ std::vector<PluginParameterInfo> MasterChain::parameters (const ChainPath& path)
                 result.push_back (describe (*p));
         }))
         result.clear();
+    return result;
+}
+
+DeviceDisplay MasterChain::display (const ChainPath& path) const
+{
+    DeviceDisplay result;
+    const auto place = locate (path);
+    if (place.plugin == nullptr)
+        return result;
+    if (! call (place, [&] (juce::AudioPluginInstance& plugin)
+        {
+            if (auto* effect = dynamic_cast<builtin::MasteringEffect*> (&plugin))
+                result = effect->display();
+        }))
+        result = {};
     return result;
 }
 
