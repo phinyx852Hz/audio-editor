@@ -121,6 +121,7 @@ public:
     void projectChanged() { changed(); }   // the patchbay, say: the project differs from its file
     QString mixName() const;
     QString trackName (int track) const;   // what its strip says (the patchbay shows it)
+    void stripsChanged();   // faders, pans... set on the engine from outside (the Mix Assistant): shown, and the mix marked changed
 
     void addTrack();
     void removeTrack();

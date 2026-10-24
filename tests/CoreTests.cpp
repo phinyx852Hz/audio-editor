@@ -28,6 +28,7 @@
 #include "../Source/core/SpatialStudio.h"
 #include "../Source/core/PrismSplit.h"
 #include "../Source/core/MasterAssist.h"
+#include "../Source/mixer/MixAssist.h"
 #include "../Source/core/Sonify.h"
 #include "../Source/core/Phi.h"
 
@@ -3846,6 +3847,89 @@ namespace
         }
     }
 
+    void testMixAssist()
+    {
+        using mixassist::Role;
+        check (mixassist::guessRole ("Lead Vox") == Role::leadVocal, "mix assist: lead vox");
+        check (mixassist::guessRole ("BV 2") == Role::vocal, "mix assist: backing vocals");
+        check (mixassist::guessRole ("Vocals") == Role::leadVocal, "mix assist: a lone vocal leads");
+        check (mixassist::guessRole ("KICK") == Role::kick, "mix assist: kick");
+        check (mixassist::guessRole ("BA") == Role::bass, "mix assist: BA is bass");
+        check (mixassist::guessRole ("DR") == Role::drums, "mix assist: DR is drums");
+        check (mixassist::guessRole ("Gtr L") == Role::guitar, "mix assist: guitar");
+        check (mixassist::guessRole ("Strings") == Role::pad, "mix assist: strings are a pad");
+        check (mixassist::guessRole ("Track 3") == Role::other, "mix assist: an unknown name");
+        check (mixassist::roleOffsetDb (Role::leadVocal) > mixassist::roleOffsetDb (Role::pad), "mix assist: the lead above a pad");
+
+        // Pan laws as the mixer has them.
+        mixassist::Track mono, stereo;
+        mono.monoAudio = true;
+        double l = 0.0, r = 0.0;
+        mixassist::panGains (mono, 0.0, l, r);
+        check (near (l, std::sqrt (0.5), 1.0e-9) && near (r, std::sqrt (0.5), 1.0e-9), "mix assist: mono audio is equal power");
+        mixassist::panGains (stereo, 0.0, l, r);
+        check (l == 1.0 && r == 1.0, "mix assist: the rest is balance");
+        mixassist::panGains (stereo, -1.0, l, r);
+        check (l == 1.0 && r == 0.0, "mix assist: balance hard left");
+
+        auto track = [] (const char* name, double freq, double amp, bool monoAudio = false, double seconds = 40.0)
+        {
+            mixassist::Track t;
+            t.name = name;
+            t.role = mixassist::guessRole (name);
+            t.monoAudio = monoAudio;
+            t.stem = makeSine (2, (Frame) (48000 * seconds), freq, amp);
+            return t;
+        };
+
+        // Mixing: a mono sine at the centre is 3 dB down on each side.
+        {
+            std::vector<mixassist::Track> one { track ("Kick", 60.0, 0.5, true) };
+            const auto m = mixassist::mix (one, { 0.0 }, { 0.0 });
+            check (near (m->peakAbs (0, m->length()), 0.5f * std::sqrt (0.5f), 0.01), "mix assist: a mono stem mixes at equal power");
+        }
+
+        // Pans by rule: kick and bass in the middle, the rest spread both ways, a panned track kept.
+        {
+            std::vector<mixassist::Track> ts { track ("Kick", 60.0, 0.3, true), track ("Keys", 2000.0, 0.2, true),
+                                               track ("Gtr", 1000.0, 0.2, true), track ("Pad", 500.0, 0.2, true) };
+            ts[3].pan = -0.4;
+            std::vector<assist::Profile> ps;
+            for (auto& t : ts)
+                ps.push_back (assist::measure (*t.stem, 0, t.stem->length()));
+            const auto pans = mixassist::rulePans (ts, ps, true);
+            check (pans[0] == 0.0, "mix assist: the kick stays in the middle");
+            check (pans[1] * pans[2] < 0.0, "mix assist: two others go to opposite sides");
+            check (std::abs (pans[1]) >= std::abs (pans[2]), "mix assist: the brighter goes wider");
+            check (pans[3] == -0.4, "mix assist: a track you panned keeps its pan");
+        }
+
+        // A whole suggestion: the vocal far too quiet, the pad too loud, the mix too hot.
+        {
+            std::vector<mixassist::Track> ts { track ("Lead Vox", 1000.0, 0.05, true), track ("Kick", 60.0, 0.4, true),
+                                               track ("Bass", 120.0, 0.3, true), track ("Pad", 500.0, 0.5),
+                                               track ("Gtr", 1000.0, 0.05, true, 30.0) };
+            mixassist::Settings settings;
+            const auto s = mixassist::suggest (ts, settings);
+            check (s.faderDb.size() == ts.size() && s.evaluations > 0, "mix assist: a fader for every track");
+            check (s.after.valid && near (s.after.lufs, settings.mixLufs, 1.5), "mix assist: the mix lands near its loudness");
+            check (s.after.truePeakDb <= settings.ceilingDb + 0.5, "mix assist: the mix keeps its headroom");
+            check (s.levelAfter[0] - s.levelAfter[3] > s.levelBefore[0] - s.levelBefore[3] + 10.0, "mix assist: the vocal comes up over the pad");
+            double worst = 0.0;
+            for (size_t i = 0; i < ts.size(); ++i)
+                worst = std::max (worst, std::abs (s.levelAfter[i] - s.levelAim[i]));
+            check (worst < 2.0, "mix assist: every track near the level its role asks for");
+            check (s.pan[0] == 0.0 && s.pan[1] == 0.0 && s.pan[2] == 0.0, "mix assist: vocal, kick and bass centred");
+            const auto overlap = std::find_if (s.overlaps.begin(), s.overlaps.end(), [] (const mixassist::Overlap& o) { return o.hidden == 0 && o.hiding == 4; });
+            check (overlap != s.overlaps.end() && overlap->band == 5, "mix assist: the guitar hides the vocal at 1 kHz");
+
+            // A fader you lock stays.
+            ts[3].moveFader = false;
+            const auto locked = mixassist::suggest (ts, settings);
+            check (locked.faderDb[3] == 0.0, "mix assist: a locked fader stays");
+        }
+    }
+
 int main()
 {
     testStorage();
@@ -3881,6 +3965,7 @@ int main()
     testSpatialStudio();
     testPrismSplit();
     testMasterAssist();
+    testMixAssist();
     testSonify();
     testPhi();
 

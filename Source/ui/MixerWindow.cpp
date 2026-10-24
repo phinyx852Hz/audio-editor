@@ -3876,6 +3876,13 @@ void MixerWindow::arm (int track)
                                        : tr ("The MIDI keyboard plays track %1's %2.").arg (track + 1).arg (QString::fromStdString (inst->name())));
 }
 
+void MixerWindow::stripsChanged()
+{
+    for (int i = 0; i < engine.numTracks(); ++i)
+        strips[(size_t) i]->refresh();
+    changed();
+}
+
 void MixerWindow::changed()
 {
     if (restoring)
