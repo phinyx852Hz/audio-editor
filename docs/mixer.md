@@ -314,8 +314,27 @@ Every control has a screen-reader name and announces its value.
   `inserts` with each effect's id, state and bypass). The Mix Assistant's Apply EQ Cuts puts its
   overlap cuts in a Φ EQ in the hiding track's inserts, on the nearest band.
 
-Next: sends (Ableton style: A and B knobs on each strip) and the A Reverb and B Delay returns,
-thumbnails, live inputs and recording, templates, the spatial panner. The Sampler and Slicer windows of the Sample menu
+- Sends and returns (2026-10-24, owner: "how sends are structured in Ableton (super easy and
+  simple)"). `Strip::sendDb` and `sendPre` for A and B: post-fader (and pan) by default, or
+  after the inserts and width but before the fader; a muted track's sends are silent and bounces
+  have none. `Engine::setReturnEffect` and `returnStrip`: each return runs its effect on the sum
+  of its sends, then balance pan, fader and mute, into the master (with the patchbay, into its
+  Mix Bus); meters 9 and 10. The return strips sit between the tracks and the master: A Reverb
+  starts with Φ Space (1.8 s, fully wet), B Delay with Φ Echo (one tap, a dotted eighth at the
+  tempo, 30 % feedback, fully wet); right-click the effect to pick another. Send A and Send B
+  pots on every strip show their level in dB (right-click: pre-fader).
+- Cubase touches (from the owner's Chris Selim and Dom Sigalas videos): Q-Link (Ctrl+click
+  picks strips; with Q-Link on, a change to one goes to all of them, levels by the same amount);
+  Alt+Shift while changing a control sends it to every track; Bypass Inserts and Bypass Sends
+  for the whole mix (`Engine::bypassInserts`, `bypassSends`); meters coloured from -12 dB and
+  again from -6 dB.
+
+Next (owner, 2026-10-24): track modes (Audio, Instrument, Hybrid: the audio clips and the live
+instrument as two layers with their own Mix and a Duck sidechain from one into the other), a
+Channel window (Pre and a Φ EQ with another track's spectrum to compare), loudness on the master,
+snapshots and mixer history, then In/Out routing (Ableton's Audio From and Audio To), live inputs
+and recording, thumbnails, templates and the spatial panner. No inspector: with 8 tracks the
+strips have the room. The Sampler and Slicer windows of the Sample menu
 could dock into the mixer as track 1 (the other thread's docking work).
 
 Patchbay (2026-10-22, docs/patchbay.md): while the patchbay plays (it always does live), the
