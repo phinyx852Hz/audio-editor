@@ -23,6 +23,7 @@ MasterChain::MasterChain()
     juce::addDefaultFormatsToManager (formats);
     addExtraFormats (formats);
     scratch.setSize (maxChannels, blockSize);
+    dry.setSize (maxChannels, blockSize);
 }
 
 MasterChain::~MasterChain()
@@ -618,6 +619,7 @@ std::string MasterChain::reload (int index)
     auto& s = slots[(size_t) index];
     const auto description = s.description;
     const auto bypassed = s.bypassed;
+    const auto mix = s.mix;
     juce::MemoryBlock state;
     {
         const std::lock_guard<std::mutex> l (s.health->mutex);
@@ -634,7 +636,7 @@ std::string MasterChain::reload (int index)
 
     discard ((size_t) index);
     const juce::ScopedLock sl (lock);
-    slots[(size_t) index] = { std::move (instance), description, bypassed, 0, {}, editor };
+    slots[(size_t) index] = { std::move (instance), description, bypassed, 0, {}, editor, mix };
     slots[(size_t) index].health->lastState = state;
     return {};
 }
@@ -669,6 +671,15 @@ void MasterChain::setBypassed (int index, bool b)
     }
 }
 
+void MasterChain::setMix (int index, float mix)
+{
+    if (index >= 0 && index < (int) slots.size())
+    {
+        const juce::ScopedLock sl (lock);
+        slots[(size_t) index].mix = std::clamp (mix, 0.0f, 1.0f);
+    }
+}
+
 MasterSlotInfo MasterChain::info (int index) const
 {
     MasterSlotInfo i;
@@ -684,6 +695,7 @@ MasterSlotInfo MasterChain::info (int index) const
         guard (s, [&] { i.mainParameters = stock::footerParameters (*stockInfo, *s.plugin); });
     i.pluginId = s.description.createIdentifierString().toStdString();
     i.bypassed = s.bypassed;
+    i.mix = s.mix;
     i.prism = PrismProcessor::isPrism (s.description);
     if (s.usable())
         guard (s, [&]
@@ -1053,6 +1065,7 @@ void MasterChain::save() const
         auto* slot = root.createNewChildElement ("SLOT");
         slot->setAttribute ("index", (int) i);
         slot->setAttribute ("bypassed", s.bypassed);
+        slot->setAttribute ("mix", (double) s.mix);
         // A failed plugin is saved with its settings from before it failed.
         juce::MemoryBlock state;
         const auto fresh = s.usable() && guard (s, [&] { s.plugin->getStateInformation (state); });
@@ -1128,7 +1141,8 @@ std::string MasterChain::restore()
         }
 
         const juce::ScopedLock sl (lock);
-        slots[(size_t) index] = { std::move (instance), d, slot->getBoolAttribute ("bypassed", false), 0, {}, editor };
+        slots[(size_t) index] = { std::move (instance), d, slot->getBoolAttribute ("bypassed", false), 0, {}, editor,
+                                  (float) std::clamp (slot->getDoubleAttribute ("mix", 1.0), 0.0, 1.0) };
         slots[(size_t) index].health->lastState = state;
     }
 
@@ -1142,6 +1156,7 @@ void MasterChain::prepare (double sampleRate, int maxBlockSize)
     rate = sampleRate;
     blockSize = std::max (32, maxBlockSize);
     scratch.setSize (maxChannels, blockSize, false, false, true);
+    dry.setSize (maxChannels, blockSize, false, false, true);
     prepareDelays();
 
     for (auto& s : slots)
@@ -1266,6 +1281,31 @@ void MasterChain::processChain (juce::AudioBuffer<float>& io, int startSample, i
                 raise (1, 1);
             }
 
+            // Dry/wet: the input kept aside, late by the plugin's latency so the two line up.
+            const auto blend = s.mix < 0.999f;
+            const auto blended = s.plugin->getTotalNumOutputChannels() == 1 ? ioChannels : std::min (channels, ioChannels);
+            if (blend)
+            {
+                const auto latency = s.plugin->getLatencySamples();
+                if (latency > 0 && latency + n <= maxDelay)
+                {
+                    if (! listening)   // while listening the delay above has taken this block in already
+                        delaySlot (index, latency, blended, n, false);
+                    const auto& ring = delays[index];
+                    const auto from = (delayWrite[index] - n - latency + 2 * maxDelay) % maxDelay;
+                    const auto first = std::min (n, maxDelay - from);
+                    for (int ch = 0; ch < std::min (blended, ring.getNumChannels()); ++ch)
+                    {
+                        dry.copyFrom (ch, 0, ring, ch, from, first);
+                        if (first < n)
+                            dry.copyFrom (ch, first, ring, ch, 0, n - first);
+                    }
+                }
+                else
+                    for (int ch = 0; ch < blended; ++ch)
+                        dry.copyFrom (ch, 0, scratch, ch, 0, n);
+            }
+
             juce::AudioBuffer<float> proxy (scratch.getArrayOfWritePointers(), channels, n);
             const auto ok = guard (s, [&] { s.plugin->processBlock (proxy, midi); });
             midi.clear();
@@ -1275,6 +1315,13 @@ void MasterChain::processChain (juce::AudioBuffer<float>& io, int startSample, i
             // A mono-out plugin feeds both sides.
             if (s.plugin->getTotalNumOutputChannels() == 1 && ioChannels > 1)
                 scratch.copyFrom (1, 0, scratch, 0, 0, n);
+
+            if (blend)
+                for (int ch = 0; ch < blended; ++ch)
+                {
+                    scratch.applyGain (ch, 0, n, s.mix);
+                    scratch.addFrom (ch, 0, dry, ch, 0, n, 1.0f - s.mix);
+                }
 
             if (listening)
             {

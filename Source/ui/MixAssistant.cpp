@@ -110,7 +110,14 @@ MixAssistant::MixAssistant (mixer::Engine& e, QStringList trackNames, References
     overlaps = new QLabel (this);
     overlaps->setWordWrap (true);
     overlaps->setTextInteractionFlags (Qt::TextSelectableByMouse);
-    layout->addWidget (overlaps);
+    eqButton = new QPushButton (tr ("Apply &EQ Cuts"), this);
+    eqButton->setToolTip (tr ("Puts each cut below in a Φ EQ in the inserts of the track that covers the other; "
+                              "open it from the strip to adjust it, or remove it to undo"));
+    eqButton->setEnabled (false);
+    auto* overlapRow = new QHBoxLayout;
+    overlapRow->addWidget (overlaps, 1);
+    overlapRow->addWidget (eqButton, 0, Qt::AlignTop);
+    layout->addLayout (overlapRow);
 
     auto* runRow = new QHBoxLayout;
     suggestButton = new QPushButton (tr ("&Suggest"), this);
@@ -151,6 +158,23 @@ MixAssistant::MixAssistant (mixer::Engine& e, QStringList trackNames, References
             cancel->store (true);
         else
             suggest();
+    });
+    connect (eqButton, &QPushButton::clicked, this, [this]
+    {
+        if (! applyEq)
+            return;
+        QStringList done, problems;
+        for (const auto& [row, list] : cuts)
+        {
+            const auto error = applyEq (rows[(size_t) row].track, list);
+            if (error.isEmpty())
+                done << rows[(size_t) row].name;
+            else
+                problems << error;
+        }
+        eqButton->setEnabled (false);
+        status->setText (problems.isEmpty() ? tr ("A Φ EQ with the cuts is in the inserts of %1.").arg (done.join (", "))
+                                            : problems.join (' '));
     });
     connect (amount, &QSlider::valueChanged, this, [this] (int v)
     {
@@ -355,16 +379,19 @@ void MixAssistant::showResult (const Outcome& out)
     }
 
     QStringList lines;
+    cuts.clear();
     for (const auto& o : s.overlaps)
     {
         const auto hidden = rows[(size_t) out.tracks[(size_t) o.hidden]].name;
         const auto hiding = rows[(size_t) out.tracks[(size_t) o.hiding]].name;
         const auto hz = assist::Profile::bandCentres()[(size_t) o.band];
+        cuts[out.tracks[(size_t) o.hiding]].push_back ({ hz, -std::abs (o.cutDb) });
         const auto where = hz >= 1000.0 ? tr ("%1 kHz").arg (hz / 1000.0) : tr ("%1 Hz").arg (hz);
         lines << tr ("• %1 covers %2 around %3: cut %1 there by about %4 dB").arg (hiding, hidden, where).arg (o.cutDb, 0, 'f', 0);
     }
+    eqButton->setEnabled (! cuts.empty() && applyEq != nullptr);
     overlaps->setText (lines.isEmpty() ? QString()
-                                       : tr ("Where one track hides another (for an EQ by hand, in the editor or a plugin on the track's sound):\n")
+                                       : tr ("Where one track hides another (Apply EQ Cuts puts these in the tracks' inserts):\n")
                                              + lines.join ('\n'));
 
     QString text = tr ("Mix: %1 LUFS, %2 dBTP before; %3 LUFS, %4 dBTP suggested. Press A to compare with yours, set the amount, "
