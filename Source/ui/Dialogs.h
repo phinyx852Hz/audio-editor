@@ -132,7 +132,7 @@ private:
     class QSpinBox* widthBox;
     class QDoubleSpinBox* delayBox;
     class QSpinBox* bassBox;
-    class QCheckBox* goldenBox;
+    class QAbstractButton* goldenBox;   // a Φ button
 };
 
 // The frequency band of a spectral selection, typed in (0 to 0 = every frequency).

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MidSideDialog.h"
+#include "PhiMark.h"
 #include "Theme.h"
 
 #include <QCheckBox>
@@ -204,7 +205,7 @@ MidSideDialog::MidSideDialog (const midside::Settings& initial, bool wholeFile, 
     liftBox = spin (0, 100, 5, tr (" %"), tr ("Widens louder moments more (up to twice), so choruses and hits open up"));
     matchBox = new QCheckBox (tr ("&Match level"), this);
     matchBox->setToolTip (tr ("Keeps the result as loud as the original, so you hear the width and not just more level"));
-    goldenBox = new QCheckBox (tr ("Φ &golden ratio for generated sides"), this);
+    goldenBox = new PhiButton (tr ("Golden ratio for generated sides"), this);
     goldenBox->setToolTip (tr ("Generate sides makes its width with four allpasses spaced by the golden ratio instead of one delay, "
                                "so the colour it adds is uneven and less pitched. Still vanishes in mono"));
     listenBox = new QComboBox (this);
@@ -227,7 +228,7 @@ MidSideDialog::MidSideDialog (const midside::Settings& initial, bool wholeFile, 
     form->addRow (QString(), hugeBox);
     form->addRow (tr ("M&ono below:"), monoBox);
     form->addRow (tr ("&Generate sides:"), generateBox);
-    form->addRow (QString(), goldenBox);
+    form->addRow (tr ("Gol&den ratio sides:"), goldenBox);
     form->addRow (tr ("A&ir:"), airBox);
     form->addRow (tr ("&Rotation:"), rotationBox);
     form->addRow (tr ("&Lift:"), liftBox);
@@ -277,8 +278,9 @@ MidSideDialog::MidSideDialog (const midside::Settings& initial, bool wholeFile, 
         connect (b, &QSpinBox::valueChanged, this, &MidSideDialog::changed);
     for (auto* b : { airBox, rotationBox })
         connect (b, &QDoubleSpinBox::valueChanged, this, &MidSideDialog::changed);
-    for (auto* b : { hugeBox, matchBox, goldenBox })
+    for (auto* b : { hugeBox, matchBox })
         connect (b, &QCheckBox::toggled, this, &MidSideDialog::changed);
+    connect (goldenBox, &QAbstractButton::toggled, this, &MidSideDialog::changed);
     connect (hugeBox, &QCheckBox::toggled, this, [this] (bool on) { widthBox->setMaximum (on ? 300 : 200); });
     connect (listenBox, &QComboBox::currentIndexChanged, this, &MidSideDialog::changed);
     connect (field, &MidSideField::changed, this, [this] (double w, double r)

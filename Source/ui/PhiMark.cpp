@@ -123,11 +123,28 @@ void PhiMark::paintEvent (QPaintEvent*)
     paint (g, QRectF (rect()), phimark::Style::goldOnBlack);
 }
 
-PhiButton::PhiButton (QWidget* parent) : QToolButton (parent)
+PhiButton::PhiButton (const QString& accessibleName, QWidget* parent) : QToolButton (parent)
 {
+    setCheckable (true);
     setAutoRaise (true);
-    setAccessibleName (QString::fromUtf8 ("Φ"));
+    setFocusPolicy (Qt::StrongFocus);
+    setAccessibleName (accessibleName);
     const auto side = fontMetrics().height();
     setIconSize (QSize (side, side));
-    setIcon (QIcon (phimark::pixmap (side, phimark::Style::compact, devicePixelRatioF())));
+    // On: the mark in full white. Off: the same mark faded to 1/φ², so the state reads at a glance.
+    QIcon icon;
+    for (const qreal ratio : { 1.0, 2.0 })
+    {
+        const auto on = phimark::pixmap (side, phimark::Style::compact, ratio);
+        QPixmap off (on.size());
+        off.setDevicePixelRatio (ratio);
+        off.fill (Qt::transparent);
+        QPainter g (&off);
+        g.setOpacity (1.0 / (phi * phi));
+        g.drawPixmap (0, 0, on);
+        g.end();
+        icon.addPixmap (on, QIcon::Normal, QIcon::On);
+        icon.addPixmap (off, QIcon::Normal, QIcon::Off);
+    }
+    setIcon (icon);
 }

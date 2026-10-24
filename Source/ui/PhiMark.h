@@ -44,9 +44,10 @@ protected:
     void paintEvent (QPaintEvent*) override;
 };
 
-// The Φ button used across the DAW: the compact white mark, a line of text high.
+// The Φ button used across the DAW to turn a golden-ratio option on: the compact
+// white mark, a line of text high, so it takes no more room than a checkbox.
 class PhiButton final : public QToolButton
 {
 public:
-    explicit PhiButton (QWidget* parent = nullptr);
+    explicit PhiButton (const QString& accessibleName, QWidget* parent = nullptr);
 };
