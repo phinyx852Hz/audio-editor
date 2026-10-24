@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "BuiltinEffects.h"
+#include "MasteringEffect.h"
+#include "PhiEffects.h"
 #include "../core/Dsp.h"
 #include "../core/MidSide.h"
 
@@ -8,6 +10,11 @@
 
 namespace
 {
+    using builtin::MasteringEffect;
+
+    // The switch that turns on the golden-ratio allpasses of Stereoize and Mid/Side's Generate.
+    juce::String goldenName() { return juce::String::fromUTF8 ("Φ Golden"); }
+
     //==========================================================================
     // Stereoize: the live version of Process > Stereoize. Widens the front left
     // and right from their mid signal, so mono sources get a stereo image while
@@ -44,10 +51,13 @@ namespace
                         return t.trim().equalsIgnoreCase ("off") ? 0.0f : t.retainCharacters ("+-.0123456789eE").getFloatValue();
                     }));
 
-            width = w.get(); delay = d.get(); bass = b.get();
+            auto g = std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "golden", 1 }, goldenName(), false);
+
+            width = w.get(); delay = d.get(); bass = b.get(); golden = g.get();
             addHostedParameter (std::move (w));
             addHostedParameter (std::move (d));
             addHostedParameter (std::move (b));
+            addHostedParameter (std::move (g));
         }
 
         static juce::PluginDescription description()
@@ -97,9 +107,10 @@ namespace
             smoothedWidth.setTargetValue ((float) wanted.width);
             // The filter can change on the fly; a new delay is switched in while
             // the widening is briefly faded out, so it does not click.
-            if (std::abs (wanted.bassHz - applied.bassHz) > 1.0e-6)
+            if (std::abs (wanted.bassHz - applied.bassHz) > 1.0e-6 || wanted.golden != applied.golden)
             {
                 applied.bassHz = wanted.bassHz;
+                applied.golden = wanted.golden;   // crossfades inside the core
                 core.set (applied);
             }
 
@@ -140,6 +151,7 @@ namespace
             xml.setAttribute ("width", (double) width->get());
             xml.setAttribute ("delayMs", (double) delay->get());
             xml.setAttribute ("bassHz", (double) bass->get());
+            xml.setAttribute ("golden", golden->get());
             copyXmlToBinary (xml, data);
         }
 
@@ -150,99 +162,24 @@ namespace
                 *width = (float) xml->getDoubleAttribute ("width", 60.0);
                 *delay = (float) xml->getDoubleAttribute ("delayMs", 12.0);
                 *bass = (float) xml->getDoubleAttribute ("bassHz", 200.0);
+                *golden = xml->getBoolAttribute ("golden", false);
             }
         }
 
     private:
         dsp::StereoizeSettings current() const
         {
-            return { width->get() / 100.0, delay->get(), bass->get() < 0.5f ? 0.0 : (double) bass->get() };
+            return { width->get() / 100.0, delay->get(), bass->get() < 0.5f ? 0.0 : (double) bass->get(), golden->get() };
         }
 
         juce::AudioParameterFloat* width = nullptr;
         juce::AudioParameterFloat* delay = nullptr;
         juce::AudioParameterFloat* bass = nullptr;
+        juce::AudioParameterBool* golden = nullptr;
         dsp::Stereoizer core;
         dsp::StereoizeSettings applied;
         juce::SmoothedValue<float> smoothedWidth;
         float fade = 1.0f, fadeStep = 0.002f;
-    };
-
-    //==========================================================================
-    // What the mastering effects below share: one bus of 1 or 2 channels in and
-    // out, no window, and their parameters saved by ID.
-    class MasteringEffect : public juce::AudioPluginInstance
-    {
-    public:
-        MasteringEffect (const char* stateTag)
-            : AudioPluginInstance (BusesProperties().withInput ("Input", juce::AudioChannelSet::stereo())
-                                                    .withOutput ("Output", juce::AudioChannelSet::stereo())),
-              tag (stateTag)
-        {
-        }
-
-        static juce::PluginDescription describe (const char* name, const char* id, const char* category, int uid)
-        {
-            juce::PluginDescription p;
-            p.name = p.descriptiveName = name;
-            p.pluginFormatName = builtin::formatName;
-            p.category = category;
-            p.manufacturerName = APP_DISPLAY_NAME;
-            p.version = "1";
-            p.fileOrIdentifier = id;
-            p.uniqueId = p.deprecatedUid = uid;
-            p.isInstrument = false;
-            p.numInputChannels = p.numOutputChannels = 2;
-            return p;
-        }
-
-        bool isBusesLayoutSupported (const BusesLayout& l) const override
-        {
-            const auto in = l.getMainInputChannelSet();
-            return in == l.getMainOutputChannelSet()
-                && (in == juce::AudioChannelSet::mono() || in == juce::AudioChannelSet::stereo());
-        }
-
-        void releaseResources() override {}
-        bool acceptsMidi() const override  { return false; }
-        bool producesMidi() const override { return false; }
-        juce::AudioProcessorEditor* createEditor() override { return nullptr; }
-        bool hasEditor() const override { return false; }
-
-        int getNumPrograms() override { return 1; }
-        int getCurrentProgram() override { return 0; }
-        void setCurrentProgram (int) override {}
-        const juce::String getProgramName (int) override { return {}; }
-        void changeProgramName (int, const juce::String&) override {}
-
-        void getStateInformation (juce::MemoryBlock& data) override
-        {
-            juce::XmlElement xml (tag);
-            for (auto* p : getParameters())
-                if (auto* r = dynamic_cast<juce::RangedAudioParameter*> (p))
-                    xml.setAttribute (r->getParameterID(), (double) r->convertFrom0to1 (r->getValue()));
-            copyXmlToBinary (xml, data);
-        }
-
-        void setStateInformation (const void* data, int size) override
-        {
-            if (auto xml = getXmlFromBinary (data, size); xml != nullptr && xml->hasTagName (tag))
-                for (auto* p : getParameters())
-                    if (auto* r = dynamic_cast<juce::RangedAudioParameter*> (p); r != nullptr && xml->hasAttribute (r->getParameterID()))
-                        r->setValueNotifyingHost (r->convertTo0to1 ((float) xml->getDoubleAttribute (r->getParameterID())));
-        }
-
-    protected:
-        static juce::AudioParameterFloatAttributes number (int decimals, const char* unit)
-        {
-            return juce::AudioParameterFloatAttributes()
-                .withLabel (unit)
-                .withStringFromValueFunction ([decimals] (float v, int) { return juce::String (v, decimals); })
-                .withValueFromStringFunction ([] (const juce::String& t) { return t.retainCharacters ("+-.0123456789eE").getFloatValue(); });
-        }
-
-    private:
-        juce::String tag;
     };
 
     //==========================================================================
@@ -276,8 +213,9 @@ namespace
             auto o = std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "matchLevel", 1 }, "Match Level", true);
             auto li = std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "listen", 1 }, "Listen",
                 juce::StringArray { "Stereo", "Mono", "Side", "Bass" }, 0);
+            auto gd = std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "golden", 1 }, goldenName(), false);
             width = w.get(); huge = h.get(); monoBelow = m.get(); generate = g.get(); air = a.get();
-            rotation = r.get(); lift = l.get(); matchLevel = o.get(); listen = li.get();
+            rotation = r.get(); lift = l.get(); matchLevel = o.get(); listen = li.get(); golden = gd.get();
             addHostedParameter (std::move (w));
             addHostedParameter (std::move (h));
             addHostedParameter (std::move (m));
@@ -287,6 +225,7 @@ namespace
             addHostedParameter (std::move (l));
             addHostedParameter (std::move (o));
             addHostedParameter (std::move (li));
+            addHostedParameter (std::move (gd));
         }
 
         static juce::PluginDescription description()
@@ -328,11 +267,12 @@ namespace
             s.lift = lift->get() / 100.0;
             s.matchLevel = matchLevel->get();
             s.listen = (midside::Listen) listen->getIndex();
+            s.golden = golden->get();
             return s;
         }
 
         juce::AudioParameterFloat *width = nullptr, *monoBelow = nullptr, *generate = nullptr, *air = nullptr, *rotation = nullptr, *lift = nullptr;
-        juce::AudioParameterBool *huge = nullptr, *matchLevel = nullptr;
+        juce::AudioParameterBool *huge = nullptr, *matchLevel = nullptr, *golden = nullptr;
         juce::AudioParameterChoice* listen = nullptr;
         midside::Processor core;
     };
@@ -463,7 +403,11 @@ namespace builtin
 {
     std::vector<juce::PluginDescription> descriptions()
     {
-        return { StereoizeProcessor::description(), MidSideProcessor::description(), LimiterProcessor::description() };
+        auto list = std::vector<juce::PluginDescription> { StereoizeProcessor::description(), MidSideProcessor::description(),
+                                                           LimiterProcessor::description() };
+        for (auto& d : phifx::descriptions())
+            list.push_back (std::move (d));
+        return list;
     }
 
     bool isDither (const juce::PluginDescription& d)
@@ -486,6 +430,6 @@ namespace builtin
             return std::make_unique<LimiterProcessor>();
         if (isBuiltin (d) && d.fileOrIdentifier == DitherProcessor::identifier)
             return std::make_unique<DitherProcessor>();
-        return nullptr;
+        return phifx::create (d);
     }
 }
