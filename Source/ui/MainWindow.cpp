@@ -41,6 +41,7 @@
 #include "MetadataEditor.h"
 #include "../core/Repair.h"
 #include "../engine/BuiltinEffects.h"
+#include "../engine/PluginWindow.h"
 #include "../engine/StockPlugins.h"
 #include "../engine/VampHost.h"
 #include "MasterAssistant.h"
@@ -929,6 +930,7 @@ QSlider* MainWindow::makeOpacitySlider (QWidget* parent)
     slider->setToolTip (tr ("Window opacity (Ctrl+Alt+- and Ctrl+Alt+=)"));
     connect (slider, &QSlider::valueChanged, this, [this] (int v) { changeOpacity (v / 100.0, false); });
     opacitySliders.push_back (slider);
+    PluginWindow::setOpacityForAll (Theme::opacity());   // plugin windows open at the saved opacity
     return slider;
 }
 
@@ -956,6 +958,7 @@ void MainWindow::focusPanel (int direction)
 void MainWindow::changeOpacity (double value, bool announce)
 {
     Theme::setOpacity (value);
+    PluginWindow::setOpacityForAll (Theme::opacity());
     const auto percent = (int) std::lround (Theme::opacity() * 100.0);
 
     for (auto* s : opacitySliders)
