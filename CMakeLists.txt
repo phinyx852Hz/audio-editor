@@ -258,6 +258,10 @@ target_link_libraries(${APP_ID}
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags)
 
+# The stock plugins patched to take the PHI frame's colour as their background
+# find it with dlsym (Source/engine/StockFrame.cpp).
+target_link_options(${APP_ID} PRIVATE -Wl,--export-dynamic-symbol=phi_plugin_background)
+
 include(GNUInstallDirs)
 
 # Vamp analysis plugins (cmake/Vamp.cmake)
