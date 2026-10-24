@@ -2966,6 +2966,144 @@ namespace
         }
     };
 
+    // The strip beyond gains: inserts, the cuts, width and track delay.
+    void testMixerStrip()
+    {
+        const double rate = 48000.0;
+        mixer::Engine m;
+        m.prepare (rate);
+        m.setNumTracks (1);
+        auto clipOf = [&] (float left, float right, int channels)
+        {
+            AudioData::Builder b (channels, rate);
+            std::vector<float> a (48000, left), c (48000, right);
+            const float* ptrs[2] = { a.data(), c.data() };
+            b.append (ptrs, 48000);
+            return mixer::makeAudioClip (*b.finish(), "clip.wav");
+        };
+        std::vector<float> l (512), r (512);
+        auto settle = [&] (int blocks = 3)
+        {
+            for (int i = 0; i < blocks; ++i)
+            {
+                std::fill (l.begin(), l.end(), 0.0f);
+                std::fill (r.begin(), r.end(), 0.0f);
+                m.render (l.data(), r.data(), 512);
+            }
+        };
+
+        m.setClips (0, { mixer::makeClip (clipOf (0.5f, 0.5f, 2), 0) });
+        check (! m.monoTrack (0), "mixer strip: a track of stereo files is not mono");
+        m.play();
+        settle();
+        check (near (l[300], 0.5, 1.0e-4) && near (r[300], 0.5, 1.0e-4), "mixer strip: flat, the stereo clip as it is");
+
+        auto twice = std::make_shared<DoubleEffect>();
+        m.setInserts (0, { { twice, false } });
+        settle();
+        check (m.inserts (0).size() == 1 && near (l[300], 1.0, 1.0e-4) && near (r[300], 1.0, 1.0e-4), "mixer strip: an insert processes the track");
+        m.setInserts (0, { { twice, true } });
+        settle();
+        check (near (l[300], 0.5, 1.0e-4), "mixer strip: a bypassed insert is not heard");
+        m.setInserts (0, { { twice, false } });
+        m.strip (0).faderDb = -6.0206f;
+        m.strip (0).pan = -1.0f;
+        settle();
+        check (near (l[300], 0.5, 1.0e-3) && near (r[300], 0.0, 1.0e-4), "mixer strip: pan and fader come after the inserts");
+        m.strip (0).faderDb = 0.0f;
+        m.strip (0).pan = 0.0f;
+
+        std::string error;
+        m.setPosition (0);
+        const auto bounce = m.mixdown (0.0, error, nullptr, nullptr, 0);
+        float a[1], c[1];
+        float* pa[2] = { a, c };
+        if (bounce != nullptr)
+            bounce->read (1000, 1, pa);
+        check (bounce != nullptr && near (a[0], 1.0, 1.0e-4), "mixer strip: a bounce has the inserts");
+        m.setInserts (0, {});
+
+        m.strip (0).lowCut = true;
+        m.strip (0).lowCutHz = 100.0f;
+        m.strip (0).lowCutSlope = 24;
+        m.setPosition (0);
+        m.play();
+        settle (40);
+        check (std::abs (l[300]) < 1.0e-3 && std::abs (r[300]) < 1.0e-3, "mixer strip: the low cut takes out DC");
+        m.strip (0).lowCut = false;
+        m.strip (0).highCut = true;
+        m.strip (0).highCutHz = 1000.0f;
+        settle (20);
+        check (near (l[300], 0.5, 1.0e-3), "mixer strip: the high cut lets DC through");
+        m.strip (0).highCut = false;
+
+        m.setClips (0, { mixer::makeClip (clipOf (0.5f, 0.1f, 2), 0) });
+        m.strip (0).width = 0.0f;
+        m.setPosition (0);
+        m.play();
+        settle();
+        check (near (l[300], 0.3, 1.0e-4) && near (r[300], 0.3, 1.0e-4), "mixer strip: width 0 is mono");
+        m.strip (0).width = 2.0f;
+        settle();
+        check (near (l[300], 0.7, 1.0e-4) && near (r[300], -0.1, 1.0e-4), "mixer strip: width 200 % doubles the sides");
+        m.strip (0).width = 1.0f;
+        settle();
+        check (near (l[300], 0.5, 1.0e-4) && near (r[300], 0.1, 1.0e-4), "mixer strip: back to 100 %");
+
+        m.strip (0).delayMs = 10.0f;   // 480 frames
+        m.setPosition (0);
+        m.play();
+        settle (1);
+        check (std::abs (l[100]) < 1.0e-9 && l[511] > 0.1f, "mixer strip: track delay starts the clip later");
+        check (m.length() == 48480, "mixer strip: the delay makes the mix longer");
+        m.strip (0).delayMs = -10.0f;
+        m.setPosition (0);
+        settle (1);
+        check (near (l[0], 0.5, 1.0e-4), "mixer strip: a negative delay plays the clip early");
+        m.strip (0).delayMs = 0.0f;
+
+        // A track of mono files keeps its equal-power pan through the inserts.
+        m.setClips (0, { mixer::makeClip (clipOf (0.5f, 0.5f, 1), 0) });
+        check (m.monoTrack (0), "mixer strip: a track of mono files is mono");
+        m.setInserts (0, { { twice, false } });
+        m.setPosition (0);
+        m.play();
+        settle();
+        check (near (l[300], std::sqrt (0.5), 1.0e-4) && near (r[300], std::sqrt (0.5), 1.0e-4), "mixer strip: mono through an insert, equal power");
+        m.setInserts (0, {});
+
+        // Sends: post-fader by default, pre-fader when asked, into the returns and their effects.
+        m.setClips (0, { mixer::makeClip (clipOf (0.5f, 0.5f, 2), 0) });
+        m.setPosition (0);
+        m.play();
+        m.strip (0).sendDb[0] = 0.0f;
+        settle();
+        check (near (l[300], 1.0, 1.0e-4), "mixer strip: send A at 0 dB adds the track again through return A");
+        m.setReturnEffect (0, twice);
+        settle();
+        check (near (l[300], 1.5, 1.0e-4), "mixer strip: return A's effect");
+        auto ret = m.takeMeter (mixer::returnIndex);
+        check (ret.peak[0] > 0.9f, "mixer strip: return A has a meter");
+        m.strip (0).faderDb = -6.0206f;
+        settle();
+        check (near (l[300], 0.25 + 0.5, 1.0e-3), "mixer strip: a post-fader send follows the fader");
+        m.strip (0).sendPre[0] = true;
+        settle();
+        check (near (l[300], 0.25 + 1.0, 1.0e-3), "mixer strip: a pre-fader send does not");
+        m.returnStrip (0).mute = true;
+        settle();
+        check (near (l[300], 0.25, 1.0e-3), "mixer strip: a muted return");
+        m.returnStrip (0).mute = false;
+        m.strip (0).mute = true;
+        settle();
+        check (std::abs (l[300]) < 1.0e-6, "mixer strip: muting the track mutes its sends");
+        m.strip (0).mute = false;
+        const auto dry = m.mixdown (0.0, error, nullptr, nullptr, 0);
+        if (dry != nullptr)
+            dry->read (1000, 1, pa);
+        check (dry != nullptr && near (a[0], 0.5, 1.0e-4), "mixer strip: a bounce has no sends");
+    }
+
     void testPatchBay()
     {
         using namespace patchbay;
@@ -3962,6 +4100,7 @@ int main()
     testMixer();
     testLauncher();
     testPatchBay();
+    testMixerStrip();
     testSpatialStudio();
     testPrismSplit();
     testMasterAssist();

@@ -5,11 +5,13 @@
 // same kind of track: a timeline of clips, each an audio file or a MIDI file, placed
 // one after another or overlapping, plus an instrument. Audio clips play as they
 // are; MIDI clips and a MIDI keyboard play the instrument. Each track then goes
-// through trim, polarity, pan, fader, mute and solo. No MIDI editing.
+// through its strip: trim, polarity, low and high cut, the inserts (effects), width,
+// pan, fader, mute and solo. No MIDI editing.
 // The clip launcher (docs/clip-launcher.md) plays the same tracks from a grid of slots,
 // one clip per track at a time, launched on the beat.
 // Plain C++, no JUCE or Qt: the UI sets things from its thread, render() runs on
 // the audio thread, mixdown() on a worker thread.
+#include "Effect.h"
 #include "Instruments.h"
 #include "MidiFile.h"
 #include "../core/AudioData.h"
@@ -25,6 +27,8 @@ namespace mixer
 {
     constexpr int maxTracks = 8;
     constexpr int masterIndex = maxTracks;   // meters: 0..7 the tracks, 8 the master
+    constexpr int numReturns = 2;            // A (a reverb) and B (a delay), fed by each track's sends
+    constexpr int returnIndex = masterIndex + 1;   // meters: 9 return A, 10 return B
 
     // An audio file on a track, already at the mixer's rate.
     struct AudioClip
@@ -113,7 +117,39 @@ namespace mixer
         std::atomic<bool> mute { false }, solo { false };
         std::atomic<int> transpose { 0 };       // semitones for the MIDI clips; channel 10 (drums) is left alone
         std::atomic<uint32_t> channels { 0xFFFF };   // MIDI channels of the clips that play, a bit each
+        // Pre: a low cut and a high cut after trim and polarity (Butterworth, 12 or 24 dB an
+        // octave), and a delay of the track's clips against the others, ± milliseconds.
+        std::atomic<bool> lowCut { false }, highCut { false };
+        std::atomic<float> lowCutHz { 80.0f }, highCutHz { 12000.0f };
+        std::atomic<int> lowCutSlope { 12 }, highCutSlope { 12 };   // dB an octave: 12 or 24
+        std::atomic<float> delayMs { 0.0f };    // ±maxDelayMs: + later, - earlier
+        // After the inserts: the stereo width, 0 mono .. 1 as it is .. 2 twice as wide.
+        // Tracks of mono files only have none.
+        std::atomic<float> width { 1.0f };
+        // Sends to the returns A and B (Ableton): after the fader (and pan) unless `sendPre`,
+        // then after the inserts and width but before the fader. Muting the track mutes them.
+        std::array<std::atomic<float>, numReturns> sendDb { -100.0f, -100.0f };   // -inf (below -96) .. 0
+        std::array<std::atomic<bool>, numReturns> sendPre { false, false };
     };
+
+    // A return's controls: its effect (fully wet) is set on the engine.
+    struct ReturnStrip
+    {
+        std::atomic<float> faderDb { 0.0f };
+        std::atomic<float> pan { 0.0f };    // balance
+        std::atomic<bool> mute { false };
+    };
+    constexpr float maxDelayMs = 500.0f;
+    constexpr float minCutHz = 20.0f, maxCutHz = 20000.0f;
+
+    // An effect in a track's inserts, before the width, pan and fader.
+    constexpr int maxInserts = 8;
+    struct Insert
+    {
+        EffectPtr effect;
+        bool bypassed = false;
+    };
+    using Inserts = std::vector<Insert>;
 
     // The patchbay (patchbay/PatchBay.h) routes the tracks while it is on. It says in
     // which order to play them, adds what is patched into a track (before trim, pan and
@@ -153,10 +189,24 @@ namespace mixer
         Clips clips (int track) const;
         void setInstrument (int track, InstrumentPtr);   // prepared here
         InstrumentPtr instrument (int track) const;
+        // The track's inserts, in order (up to maxInserts). The effects are prepared here;
+        // the ones no longer used are let go after the swap, on the calling thread.
+        void setInserts (int track, Inserts);
+        Inserts inserts (int track) const;
+        // Whether the track only has mono files: then it pans with equal power and has no width.
+        bool monoTrack (int track) const;
         Strip& strip (int track) { return strips[(size_t) track]; }
+        // The returns: what the sends feed, summed, through an effect (null: as it is), pan,
+        // fader and mute, into the master (or, with the patchbay, its Mix Bus).
+        void setReturnEffect (int index, EffectPtr);   // prepared here
+        EffectPtr returnEffect (int index) const;
+        ReturnStrip& returnStrip (int index) { return returnStrips[(size_t) index]; }
         const Strip& strip (int track) const { return strips[(size_t) track]; }
 
         std::atomic<float> masterDb { 0.0f };
+        // Every track's inserts, or every send, left out at once; the mix keeps them. Bounces
+        // and mix downs follow them too: they render what you hear.
+        std::atomic<bool> bypassInserts { false }, bypassSends { false };
 
         // Transport.
         void play();
@@ -193,10 +243,11 @@ namespace mixer
         void liveMidi (uint8_t status, uint8_t data1, uint8_t data2);
         void panic();   // every instrument silent
 
-        Meter takeMeter (int index);   // a track (0..7) or the master (8), after the fader
+        Meter takeMeter (int index);   // a track (0..7), the master (8) or a return (9, 10), after the fader
 
-        // With a patch, render() adds nothing itself: the tracks go to the patch, which
-        // does the master (masterDb) and its meter (meterMaster). Null: the usual sum.
+        // With a patch, render() adds only the returns: the tracks go to the patch, which
+        // does the master (masterDb) and its meter (meterMaster), and adds what render() gave
+        // into its Mix Bus. Null: the usual sum.
         void setPatch (Patch* p) { patch = p; }
         void meterMaster (const float* left, const float* right, int frames) { meter (masterIndex, left, right, frames); }
         // How many frames the next block may have: up to `wanted`, ending at the loop end.
@@ -208,7 +259,8 @@ namespace mixer
         // Renders the whole mix from the start, stereo at the mixer's rate, with the
         // instruments' tails (up to `tailSeconds` of sound after the last clip ends).
         // With `onlyTrack` it is a bounce: that track alone, from the start of the mix to
-        // its own last clip's end, before its fader and pan, whatever mute and solo say.
+        // its own last clip's end, before its fader and pan (with its cuts, inserts and
+        // width), whatever mute and solo say.
         // Live playback is silent meanwhile. Worker thread.
         AudioDataPtr mixdown (double tailSeconds, std::string& error,
                               std::atomic<float>* progress = nullptr, const std::atomic<bool>* cancel = nullptr,
@@ -239,6 +291,31 @@ namespace mixer
             bool launchChanged = false;       // notes held so far are let go
             Clips passClips = Clips (2);      // the playing clip's pass and the next, by pass parity
             std::vector<size_t> passCursors = std::vector<size_t> (2, 0);
+
+            // The strip's processing.
+            Inserts inserts;
+            bool mono = false;                // only mono files: equal-power pan, no width
+            Frame delay = 0;                  // the clips' delay used last, in frames
+            struct Biquad
+            {
+                float b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0;
+                float z[2][2] {};             // per side
+                void process (float* l, float* r, int frames);
+            };
+            struct Cut
+            {
+                bool on = false;
+                float hz = 0.0f;
+                int slope = 0;
+                std::array<Biquad, 2> stages; // one for 12 dB, both for 24
+                void update (bool on, float hz, int slope, bool high, double rate);
+                void process (float* l, float* r, int frames);
+            };
+            Cut lowCut, highCut;
+            float preL = 0.0f, preR = 0.0f, preMono = 0.0f;   // last block's trim and polarity gains
+            float postL = 0.0f, postR = 0.0f;   // and pan and fader gains, when the strip processes
+            float width = 1.0f;
+            std::array<float, numReturns> sendGain {};   // last block's send gains
         };
         struct LaunchRequest
         {
@@ -261,6 +338,8 @@ namespace mixer
         void renderBlock (float* left, float* right, int frames, Frame at, bool play, bool withLive, int blockOffset = 0);
         Frame lengthLocked() const;
         Frame trackEndLocked (int track) const;
+        Frame delayFrames (int track) const;   // the strip's delay, at the mixer's rate
+        static bool monoClips (const Clips&);
         void releaseHeld (Track&, std::vector<NoteEvent>&, int offset = 0, int clip = -1);   // -1: every clip's
         // Launcher, with the lock held, on the audio thread.
         void takeLaunches (bool play);    // requests, and queued launches that are due
@@ -275,7 +354,11 @@ namespace mixer
         std::atomic<int> tracks { 2 };
         std::array<Track, maxTracks> lanes;
         std::array<Strip, maxTracks> strips;
-        std::array<MeterState, maxTracks + 1> meters {};
+        std::array<MeterState, maxTracks + 1 + numReturns> meters {};
+        std::array<ReturnStrip, numReturns> returnStrips;
+        std::array<EffectPtr, numReturns> returnEffects;
+        std::array<std::array<float, 2>, numReturns> returnGain {};   // last block's, left and right
+        std::array<std::vector<float>, numReturns> returnL, returnR;
 
         std::atomic<bool> playing { false }, stopPending { false };
         std::atomic<Frame> pos { 0 };
@@ -295,7 +378,7 @@ namespace mixer
         std::atomic<Frame> clock { 0 };
         std::atomic<bool> clockReset { false };
 
-        std::vector<float> mixL, mixR, trackL, trackR, instL, instR, monoBuf, outL, outR;
+        std::vector<float> mixL, mixR, trackL, trackR, instL, instR, monoBuf, outL, outR, sendPreL, sendPreR;
         std::vector<NoteEvent> events;
     };
 }

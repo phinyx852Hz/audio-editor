@@ -6,6 +6,7 @@
 #include "SlicerWindow.h"
 #include "Theme.h"
 #include "../core/Dsp.h"
+#include "../core/Phi.h"
 #include "../engine/AudioEngine.h"
 
 #include <QCheckBox>
@@ -38,6 +39,7 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QMenu>
 #include <QMessageBox>
 #include <QMimeData>
@@ -61,6 +63,7 @@
 #include <cmath>
 #include <functional>
 #include <map>
+#include <optional>
 #include <set>
 #include <utility>
 
@@ -220,6 +223,17 @@ namespace
         const auto amount = (int) std::lround (std::abs (pan) * 100.0f);
         return amount == 0 ? QStringLiteral ("C") : QString::number (amount) + (pan < 0 ? QStringLiteral ("L") : QStringLiteral ("R"));
     }
+
+    QString hzText (float hz)
+    {
+        return hz >= 1000.0f ? QString::number (hz / 1000.0f, 'f', hz >= 10000.0f ? 0 : 1) + QStringLiteral ("k") : QString::number ((int) std::lround (hz));
+    }
+
+    // A strip's sections, each shown or hidden on every strip at once (the Strips menu).
+    constexpr int knob = 30;   // a strip's pots
+
+    enum StripSection { instrumentSection = 1, preSection = 2, insertSection = 4, panSection = 8, sendSection = 16 };
+    constexpr int allSections = instrumentSection | preSection | insertSection | panSection | sendSection;
 
     const QColor trackColours[mixer::maxTracks] {
         QColor (0x4f, 0xc3, 0xf7), QColor (0xef, 0x53, 0x50), QColor (0xab, 0x47, 0xbc), QColor (0x26, 0xa6, 0x9a),
@@ -438,11 +452,16 @@ void LevelMeter::paintEvent (QPaintEvent*)
     {
         const auto x = c * half, w = half - 1;
         const auto yPeak = yFor (peak[c]), yRms = yFor (rms[c]);
-        const auto yMid = yFor (0.5f), yHigh = yFor (0.89f);   // -6 dB and -1 dB
-        auto colourAt = [&] (int y) { return y <= yHigh ? QStringLiteral ("meterHigh") : (y <= yMid ? QStringLiteral ("meterMid") : QStringLiteral ("meterLow")); };
+        // Zones to read from across the room: the theme's low colour up to -12 dB, its mid colour
+        // to -6, between mid and high (orange) to -1, then its high colour.
+        const auto yCaution = yFor (0.2512f), yMid = yFor (0.5f), yHigh = yFor (0.89f);   // -12, -6 and -1 dB
+        const auto low = theme.color (QStringLiteral ("meterLow")), mid = theme.color (QStringLiteral ("meterMid"));
+        const auto high = theme.color (QStringLiteral ("meterHigh"));
+        const QColor orange ((mid.red() + high.red()) / 2, (mid.green() + high.green()) / 2, (mid.blue() + high.blue()) / 2);
+        auto colourAt = [&] (int y) { return y <= yHigh ? high : y <= yMid ? orange : y <= yCaution ? mid : low; };
         for (int y = yPeak; y < top + height; ++y)
         {
-            auto colour = theme.color (colourAt (y));
+            auto colour = colourAt (y);
             if (y < yRms)
                 colour.setAlpha (110);   // the peak above the RMS
             g.setPen (colour);
@@ -506,6 +525,19 @@ public:
             return b;
         };
 
+        // The sections that can be hidden, each a widget of its own.
+        auto section = [this, layout]
+        {
+            auto* part = new QWidget (this);
+            auto* v = new QVBoxLayout (part);
+            v->setContentsMargins (0, 0, 0, 0);
+            v->setSpacing (3);
+            layout->addWidget (part);
+            return std::make_pair (part, v);
+        };
+        QVBoxLayout* sectionLayout = nullptr;
+        std::tie (instrumentPart, sectionLayout) = section();
+
         // What the MIDI clips play.
         instrumentBox = new QComboBox (this);
         instrumentBox->setFocusPolicy (Qt::NoFocus);
@@ -515,7 +547,7 @@ public:
         auto* instRow = new QHBoxLayout;
         instRow->addWidget (instrumentBox, 1);
         instRow->addWidget (editButton);
-        layout->addLayout (instRow);
+        sectionLayout->addLayout (instRow);
 
         transposeBox = new QSpinBox (this);
         transposeBox->setRange (-48, 48);
@@ -527,40 +559,147 @@ public:
         midiOptions->addWidget (transposeBox, 1);
         midiOptions->addWidget (channelsButton);
         midiOptions->addWidget (armButton);
-        layout->addLayout (midiOptions);
+        sectionLayout->addLayout (midiOptions);
 
-        // Pre: trim and polarity.
+        // Pre (Cubase): trim and polarity, the low and high cut, the track delay.
+        std::tie (prePart, sectionLayout) = section();
         trimDial = new Potentiometer (this);
         trimDial->setRange (-240, 240);
-        trimDial->setFixedSize (40, 40);
+        trimDial->setFixedSize (knob, knob);
         trimDial->setFocusPolicy (Qt::NoFocus);
         static_cast<Potentiometer*> (trimDial)->setOrigin (0);
         trimDial->setToolTip (MixerWindow::tr ("Trim, ±24 dB, before everything else (double-click: 0 dB)"));
         trimLabel = new QLabel (this);
         invertL = smallButton (QStringLiteral ("ØL"), MixerWindow::tr ("Flip the left side's polarity"), true);
         invertR = smallButton (QStringLiteral ("ØR"), MixerWindow::tr ("Flip the right side's polarity"), true);
+        // Trim sits with pan and width, smaller pots side by side with their values below.
+        lowCutButton = smallButton ({}, MixerWindow::tr ("Low cut: click turns it on or off; right-click for its frequency and slope"), true);
+        highCutButton = smallButton ({}, MixerWindow::tr ("High cut: click turns it on or off; right-click for its frequency and slope"), true);
         auto* pre = new QHBoxLayout;
-        auto* trimColumn = new QVBoxLayout;
-        trimColumn->addWidget (trimDial, 0, Qt::AlignHCenter);
-        trimColumn->addWidget (trimLabel, 0, Qt::AlignHCenter);
-        pre->addLayout (trimColumn);
-        auto* polarity = new QVBoxLayout;
-        polarity->addWidget (invertL);
-        polarity->addWidget (invertR);
-        pre->addLayout (polarity);
-        layout->addLayout (pre);
+        pre->setSpacing (2);
+        pre->addWidget (invertL);
+        pre->addWidget (invertR);
+        pre->addWidget (lowCutButton);
+        pre->addWidget (highCutButton);
+        sectionLayout->addLayout (pre);
+        delayBox = new QDoubleSpinBox (this);
+        delayBox->setRange (-mixer::maxDelayMs, mixer::maxDelayMs);
+        delayBox->setDecimals (1);
+        delayBox->setSingleStep (1.0);
+        delayBox->setPrefix (MixerWindow::tr ("Delay "));
+        delayBox->setSuffix (MixerWindow::tr (" ms"));
+        delayBox->setToolTip (MixerWindow::tr ("Track delay: the track's clips play this much later (or, below 0, earlier) than the others, "
+                                               "to line them up or for groove"));
+        sectionLayout->addWidget (delayBox);
 
+        // Inserts: effects before the width, pan and fader.
+        std::tie (insertPart, sectionLayout) = section();
+        auto* insertTitle = new QLabel (MixerWindow::tr ("Inserts"), this);
+        insertTitle->setEnabled (false);
+        addInsertButton = smallButton (QStringLiteral ("+"), MixerWindow::tr ("Add an effect to the track's inserts (Insert)"), false);
+        addInsertButton->setMaximumWidth (26);
+        auto* insertHead = new QHBoxLayout;
+        insertHead->addWidget (insertTitle, 1);
+        insertHead->addWidget (addInsertButton);
+        sectionLayout->addLayout (insertHead);
+        insertList = new QListWidget (this);
+        insertList->setFocusPolicy (Qt::NoFocus);
+        insertList->setContextMenuPolicy (Qt::CustomContextMenu);
+        insertList->setHorizontalScrollBarPolicy (Qt::ScrollBarAlwaysOff);
+        insertList->setVerticalScrollBarPolicy (Qt::ScrollBarAlwaysOff);
+        insertList->setDragDropMode (QAbstractItemView::InternalMove);
+        insertList->setToolTip (MixerWindow::tr ("The track's insert slots, top first. Click an empty one to add an effect; double-click one to open it; "
+                                                 "right-click to bypass, move or remove it; drag to reorder"));
+        sectionLayout->addWidget (insertList);
+
+        // Sends (Ableton): A and B, filled in below with the other pots.
+        QVBoxLayout* sendLayout = nullptr;
+        std::tie (sendPart, sendLayout) = section();
+
+        std::tie (panPart, sectionLayout) = section();
         panDial = new Potentiometer (this);
         panDial->setRange (-100, 100);
-        panDial->setFixedSize (40, 40);
+        panDial->setFixedSize (knob, knob);
         panDial->setFocusPolicy (Qt::NoFocus);
         static_cast<Potentiometer*> (panDial)->setOrigin (0);
         panDial->setToolTip (MixerWindow::tr ("Pan ([ and ]): equal power for a mono file, balance for stereo and instruments (double-click: centre)"));
         panLabel = new QLabel (this);
-        auto* panColumn = new QVBoxLayout;
-        panColumn->addWidget (panDial, 0, Qt::AlignHCenter);
-        panColumn->addWidget (panLabel, 0, Qt::AlignHCenter);
-        layout->addLayout (panColumn);
+        auto knobColumn = [this] (QDial* dial, QLabel* label, const QString& title)
+        {
+            auto* part = new QWidget (this);
+            auto* column = new QVBoxLayout (part);
+            column->setContentsMargins (0, 0, 0, 0);
+            column->setSpacing (0);
+            auto* name = new QLabel (title, part);
+            name->setEnabled (false);
+            auto f = name->font();
+            f.setPointSizeF (std::max (6.5, f.pointSizeF() * 0.8));
+            name->setFont (f);
+            label->setFont (f);
+            column->addWidget (name, 0, Qt::AlignHCenter);
+            column->addWidget (dial, 0, Qt::AlignHCenter);
+            column->addWidget (label, 0, Qt::AlignHCenter);
+            return part;
+        };
+        trimPart = knobColumn (trimDial, trimLabel, MixerWindow::tr ("Trim"));
+        auto* panColumnPart = knobColumn (panDial, panLabel, MixerWindow::tr ("Pan"));
+        widthDial = new Potentiometer (this);
+        widthDial->setRange (0, 200);
+        widthDial->setFixedSize (knob, knob);
+        widthDial->setFocusPolicy (Qt::NoFocus);
+        static_cast<Potentiometer*> (widthDial)->setOrigin (100);
+        widthDial->setToolTip (MixerWindow::tr ("Width, after the inserts: 0 % mono, 100 % as it is, 200 % twice as wide (double-click: 100 %). "
+                                                "A track of mono files has none"));
+        widthLabel = new QLabel (this);
+        widthPart = knobColumn (widthDial, widthLabel, MixerWindow::tr ("Width"));
+        auto* sendRow = new QHBoxLayout;
+        sendRow->setSpacing (2);
+        for (int r = 0; r < mixer::numReturns; ++r)
+        {
+            auto* dial = new Potentiometer (this);
+            dial->setRange (0, faderPosition (0.0));
+            dial->setFixedSize (knob, knob);
+            dial->setFocusPolicy (Qt::NoFocus);
+            dial->setContextMenuPolicy (Qt::CustomContextMenu);
+            dial->setToolTip (MixerWindow::tr ("Send %1 to the %2 return, -∞ to 0 dB, after the fader (right-click: before it; double-click: -∞)")
+                                  .arg (QChar ('A' + r)).arg (r == 0 ? MixerWindow::tr ("A Reverb") : MixerWindow::tr ("B Delay")));
+            sendDials[(size_t) r] = dial;
+            sendLabels[(size_t) r] = new QLabel (this);
+            sendRow->addWidget (knobColumn (dial, sendLabels[(size_t) r], r == 0 ? MixerWindow::tr ("Send A") : MixerWindow::tr ("Send B")));
+            dial->installEventFilter (this);
+            QObject::connect (dial, &QDial::valueChanged, this, [this, r] (int v)
+            {
+                if (updating)
+                    return;
+                const auto db = faderDb (v);
+                const auto delta = db - strip().sendDb[(size_t) r].load();
+                window.forLinked (index, [r, db, delta] (mixer::Strip& s, bool self)
+                {
+                    s.sendDb[(size_t) r] = self ? db : (float) std::clamp ((double) std::max (-60.0f, s.sendDb[(size_t) r].load()) + delta, -100.0, 0.0);
+                });
+                showValues();
+            });
+            QObject::connect (dial, &QWidget::customContextMenuRequested, this, [this, r]
+            {
+                QMenu menu (this);
+                auto* preAction = menu.addAction (MixerWindow::tr ("Pre-Fader"));
+                preAction->setCheckable (true);
+                preAction->setChecked (strip().sendPre[(size_t) r].load());
+                QObject::connect (preAction, &QAction::toggled, this, [this, r] (bool on)
+                {
+                    window.forLinked (index, [r, on] (mixer::Strip& s, bool) { s.sendPre[(size_t) r] = on; });
+                });
+                menu.exec (QCursor::pos());
+            });
+        }
+        sendLayout->addLayout (sendRow);
+
+        auto* panRow = new QHBoxLayout;
+        panRow->setSpacing (2);
+        panRow->addWidget (trimPart);
+        panRow->addWidget (panColumnPart);
+        panRow->addWidget (widthPart);
+        sectionLayout->addLayout (panRow);
 
         muteButton = smallButton (MixerWindow::tr ("M"), MixerWindow::tr ("Mute (M)"), true);
         soloButton = smallButton (MixerWindow::tr ("S"), MixerWindow::tr ("Solo (S): soloed tracks are heard, the others are not"), true);
@@ -613,36 +752,123 @@ public:
         QObject::connect (transposeBox, &QSpinBox::editingFinished, &window, [this] { window.setFocus(); });
         QObject::connect (channelsButton, &QPushButton::clicked, this, [this] { channelMenu(); });
         QObject::connect (armButton, &QPushButton::clicked, this, [this] { window.arm (index); });
+        // Q-Link (or Alt+Shift, every track): a change to one strip goes to the others too,
+        // levels moved by the same amount, switches set the same.
         QObject::connect (trimDial, &QDial::valueChanged, this, [this] (int v)
         {
             if (updating)
                 return;
-            strip().trimDb = (float) v / 10.0f;
+            const auto db = (float) v / 10.0f, delta = db - strip().trimDb.load();
+            window.forLinked (index, [db, delta] (mixer::Strip& s, bool self) { s.trimDb = self ? db : std::clamp (s.trimDb.load() + delta, -24.0f, 24.0f); });
             showValues();
-            window.changed();
         });
-        QObject::connect (invertL, &QPushButton::toggled, this, [this] (bool on) { if (! updating) { strip().invertLeft = on; window.changed(); } });
-        QObject::connect (invertR, &QPushButton::toggled, this, [this] (bool on) { if (! updating) { strip().invertRight = on; window.changed(); } });
+        QObject::connect (invertL, &QPushButton::toggled, this, [this] (bool on)
+        {
+            if (! updating)
+                window.forLinked (index, [on] (mixer::Strip& s, bool) { s.invertLeft = on; });
+        });
+        QObject::connect (invertR, &QPushButton::toggled, this, [this] (bool on)
+        {
+            if (! updating)
+                window.forLinked (index, [on] (mixer::Strip& s, bool) { s.invertRight = on; });
+        });
         QObject::connect (panDial, &QDial::valueChanged, this, [this] (int v)
         {
             if (updating)
                 return;
-            strip().pan = (float) v / 100.0f;
+            const auto pan = (float) v / 100.0f;
+            window.forLinked (index, [pan] (mixer::Strip& s, bool) { s.pan = pan; });
             showValues();
-            window.changed();
         });
-        QObject::connect (muteButton, &QPushButton::toggled, this, [this] (bool on) { if (! updating) { strip().mute = on; window.changed(); } });
-        QObject::connect (soloButton, &QPushButton::toggled, this, [this] (bool on) { if (! updating) { strip().solo = on; window.changed(); } });
+        QObject::connect (widthDial, &QDial::valueChanged, this, [this] (int v)
+        {
+            if (updating)
+                return;
+            const auto width = (float) v / 100.0f;
+            window.forLinked (index, [width] (mixer::Strip& s, bool) { s.width = width; });
+            showValues();
+        });
+        QObject::connect (lowCutButton, &QPushButton::toggled, this, [this] (bool on)
+        {
+            if (! updating)
+                window.forLinked (index, [on] (mixer::Strip& s, bool) { s.lowCut = on; });
+        });
+        QObject::connect (highCutButton, &QPushButton::toggled, this, [this] (bool on)
+        {
+            if (! updating)
+                window.forLinked (index, [on] (mixer::Strip& s, bool) { s.highCut = on; });
+        });
+        lowCutButton->setContextMenuPolicy (Qt::CustomContextMenu);
+        highCutButton->setContextMenuPolicy (Qt::CustomContextMenu);
+        QObject::connect (lowCutButton, &QWidget::customContextMenuRequested, this, [this] { cutMenu (false); });
+        QObject::connect (highCutButton, &QWidget::customContextMenuRequested, this, [this] { cutMenu (true); });
+        QObject::connect (delayBox, &QDoubleSpinBox::valueChanged, this, [this] (double value)
+        {
+            if (updating)
+                return;
+            window.forLinked (index, [value] (mixer::Strip& s, bool) { s.delayMs = (float) value; });
+        });
+        QObject::connect (delayBox, &QDoubleSpinBox::editingFinished, &window, [this] { window.setFocus(); });
+        QObject::connect (addInsertButton, &QPushButton::clicked, this, [this]
+        {
+            window.select (index);
+            window.chooseInsert (index, -1, addInsertButton->mapToGlobal (QPoint (0, addInsertButton->height())));
+        });
+        QObject::connect (insertList, &QListWidget::itemClicked, this, [this] (QListWidgetItem* item)
+        {
+            window.select (index);
+            if (item->data (Qt::UserRole).toInt() < 0)
+                window.chooseInsert (index, -1, insertList->viewport()->mapToGlobal (insertList->visualItemRect (item).bottomLeft()));
+        });
+        QObject::connect (insertList, &QListWidget::itemDoubleClicked, this, [this] (QListWidgetItem* item)
+        {
+            window.select (index);
+            window.editInsert (index, item->data (Qt::UserRole).toInt());
+        });
+        QObject::connect (insertList, &QWidget::customContextMenuRequested, this, [this] (QPoint at)
+        {
+            window.select (index);
+            const auto* item = insertList->itemAt (at);
+            window.insertMenu (index, item != nullptr ? item->data (Qt::UserRole).toInt() : -1, insertList->viewport()->mapToGlobal (at));
+        });
+        // A drag in the list reorders the inserts.
+        QObject::connect (insertList->model(), &QAbstractItemModel::rowsMoved, this, [this]
+        {
+            if (updating)
+                return;
+            std::vector<int> order;
+            for (int k = 0; k < insertList->count(); ++k)
+                if (const auto at = insertList->item (k)->data (Qt::UserRole).toInt(); at >= 0)
+                    order.push_back (at);
+            // Refreshed later: the list is still in the middle of its drop.
+            QTimer::singleShot (0, &window, [this, order] { window.reorderInserts (index, order); });
+        });
+        QObject::connect (muteButton, &QPushButton::toggled, this, [this] (bool on)
+        {
+            if (! updating)
+                window.forLinked (index, [on] (mixer::Strip& s, bool) { s.mute = on; });
+        });
+        QObject::connect (soloButton, &QPushButton::toggled, this, [this] (bool on)
+        {
+            if (! updating)
+                window.forLinked (index, [on] (mixer::Strip& s, bool) { s.solo = on; });
+        });
         QObject::connect (fader, &QSlider::valueChanged, this, [this] (int v)
         {
             if (updating)
                 return;
-            strip().faderDb = faderDb (v);
+            const auto db = faderDb (v);
+            const auto delta = db - std::max (-60.0f, strip().faderDb.load());
+            window.forLinked (index, [db, delta] (mixer::Strip& s, bool self)
+            {
+                s.faderDb = self ? db : (float) std::clamp ((double) std::max (-60.0f, s.faderDb.load()) + delta, -100.0, 6.0);
+            });
             showValues();
-            window.changed();
         });
         trimDial->installEventFilter (this);
         panDial->installEventFilter (this);
+        widthDial->installEventFilter (this);
+        applyLayout();
         faderValue->installEventFilter (this);
     }
 
@@ -687,11 +913,119 @@ public:
     // The launcher's strips: name, pan, mute and solo, fader and meter. The rest is in the rack.
     void setCompact (bool on)
     {
-        for (QWidget* w : std::initializer_list<QWidget*> { instrumentBox, editButton, transposeBox, channelsButton, armButton,
-                                                             trimDial, trimLabel, invertL, invertR })
-            w->setVisible (! on);
-        setMinimumWidth (on ? 96 : 128);
-        setMaximumWidth (on ? 150 : 170);
+        compact = on;
+        applyLayout();
+    }
+
+    // The sections shown (the Strips menu, or the launcher's compact strips) and the width.
+    void applyLayout()
+    {
+        const auto shown = window.stripSections;
+        instrumentPart->setVisible (! compact && (shown & instrumentSection) != 0);
+        prePart->setVisible (! compact && (shown & preSection) != 0);
+        insertPart->setVisible (! compact && (shown & insertSection) != 0);
+        sendPart->setVisible (! compact && (shown & sendSection) != 0);
+        panPart->setVisible ((shown & panSection) != 0 || compact);
+        widthPart->setVisible (! compact);
+        trimPart->setVisible (! compact);
+        const bool wide = window.wideStrips && ! compact;
+        setMinimumWidth (compact ? 96 : wide ? 180 : 128);
+        setMaximumWidth (compact ? 150 : wide ? 240 : 170);
+    }
+
+    // The inserts as the engine has them; each row keeps its place in the engine's list.
+    void refreshInserts()
+    {
+        const auto list = window.engine.inserts (index);
+        const bool was = updating;
+        updating = true;
+        insertList->clear();
+        // Slots as on a Cubase strip, always there: at least four, one empty after the last used.
+        const auto slots = std::min (mixer::maxInserts, std::max (4, (int) list.size() + 1));
+        for (int k = (int) list.size(); k < slots; ++k)
+        {
+            auto* item = new QListWidgetItem (QStringLiteral ("%1  —").arg (k + 1));
+            item->setData (Qt::UserRole, -1);
+            item->setForeground (palette().color (QPalette::Disabled, QPalette::Text));
+            item->setToolTip (MixerWindow::tr ("An empty insert slot: click it to add an effect"));
+            item->setFlags (item->flags() & ~Qt::ItemIsDragEnabled);
+            insertList->addItem (item);
+        }
+        for (size_t k = 0; k < list.size(); ++k)
+        {
+            auto* item = new QListWidgetItem (QStringLiteral ("%1  ").arg (k + 1) + QString::fromStdString (list[k].effect->name()));
+            insertList->insertItem ((int) k, item);
+            item->setData (Qt::UserRole, (int) k);
+            item->setToolTip (list[k].bypassed ? MixerWindow::tr ("%1 (bypassed)").arg (item->text()) : item->text());
+            if (list[k].bypassed)
+            {
+                auto f = item->font();
+                f.setStrikeOut (true);
+                item->setFont (f);
+                item->setForeground (palette().color (QPalette::Disabled, QPalette::Text));
+            }
+        }
+        // As tall as its slots, no scrolling.
+        const auto row = std::max (16, insertList->fontMetrics().height() + 4);
+        insertList->setFixedHeight (row * slots + 2 * insertList->frameWidth() + 2);
+        addInsertButton->setEnabled ((int) list.size() < mixer::maxInserts);
+        updating = was;
+    }
+
+    // The low or high cut's frequency and slope (for the linked strips too).
+    void cutMenu (bool high)
+    {
+        window.select (index);
+        const auto& s = strip();
+        const auto on = (high ? s.highCut : s.lowCut).load();
+        const auto hz = (high ? s.highCutHz : s.lowCutHz).load();
+        const auto slope = (high ? s.highCutSlope : s.lowCutSlope).load();
+        auto setCut = [this, high] (std::optional<bool> turnOn, std::optional<float> frequency, std::optional<int> dbPerOctave)
+        {
+            window.forLinked (index, [=] (mixer::Strip& x, bool)
+            {
+                if (turnOn)
+                    (high ? x.highCut : x.lowCut) = *turnOn;
+                if (frequency)
+                    (high ? x.highCutHz : x.lowCutHz) = *frequency;
+                if (dbPerOctave)
+                    (high ? x.highCutSlope : x.lowCutSlope) = *dbPerOctave;
+            });
+            refresh();
+        };
+        QMenu menu (this);
+        auto* onAction = menu.addAction (high ? MixerWindow::tr ("High Cut On") : MixerWindow::tr ("Low Cut On"));
+        onAction->setCheckable (true);
+        onAction->setChecked (on);
+        QObject::connect (onAction, &QAction::toggled, this, [setCut] (bool v) { setCut (v, {}, {}); });
+        menu.addSeparator();
+        const std::vector<float> choices = high ? std::vector<float> { 5000, 6000, 8000, 10000, 12000, 15000, 18000 }
+                                                : std::vector<float> { 30, 40, 60, 70, 80, 100, 120, 150, 200, 300 };
+        for (const auto f : choices)
+        {
+            auto* a = menu.addAction (hzText (f) + MixerWindow::tr (" Hz"));
+            a->setCheckable (true);
+            a->setChecked (std::abs (hz - f) < 0.5f);
+            QObject::connect (a, &QAction::triggered, this, [setCut, f] { setCut (true, f, {}); });
+        }
+        menu.addAction (MixerWindow::tr ("Frequency..."), this, [this, setCut, hz, high]
+        {
+            bool ok = false;
+            const auto f = QInputDialog::getDouble (this, high ? MixerWindow::tr ("High Cut") : MixerWindow::tr ("Low Cut"), MixerWindow::tr ("Frequency (Hz):"),
+                                                    hz, mixer::minCutHz, mixer::maxCutHz, 0, &ok);
+            if (ok)
+                setCut (true, (float) f, {});
+        });
+        menu.addSeparator();
+        for (const int db : { 12, 24 })
+        {
+            auto* a = menu.addAction (MixerWindow::tr ("%1 dB an Octave").arg (db));
+            a->setCheckable (true);
+            a->setChecked (slope == db);
+            QObject::connect (a, &QAction::triggered, this, [setCut, db] { setCut ({}, {}, db); });
+        }
+        auto* button = high ? highCutButton : lowCutButton;
+        menu.exec (button->mapToGlobal (QPoint (0, button->height())));
     }
 
     // Everything shown, from the engine and the window's track info.
@@ -713,6 +1047,16 @@ public:
         invertL->setChecked (s.invertLeft.load());
         invertR->setChecked (s.invertRight.load());
         panDial->setValue ((int) std::lround (s.pan.load() * 100.0f));
+        widthDial->setValue ((int) std::lround (s.width.load() * 100.0f));
+        const bool mono = window.engine.monoTrack (index);
+        widthDial->setEnabled (! mono);
+        widthLabel->setEnabled (! mono);
+        lowCutButton->setChecked (s.lowCut.load());
+        highCutButton->setChecked (s.highCut.load());
+        delayBox->setValue (s.delayMs.load());
+        for (int r = 0; r < mixer::numReturns; ++r)
+            sendDials[(size_t) r]->setValue (faderPosition (s.sendDb[(size_t) r].load()));
+        refreshInserts();
         muteButton->setChecked (s.mute.load());
         soloButton->setChecked (s.solo.load());
         fader->setValue (faderPosition (s.faderDb.load()));
@@ -723,8 +1067,20 @@ public:
     void showValues()
     {
         auto& s = strip();
-        trimLabel->setText (dbText (s.trimDb.load()) + MixerWindow::tr (" dB"));
+        trimLabel->setText (dbText (s.trimDb.load()));
         panLabel->setText (panText (s.pan.load()));
+        widthLabel->setText (window.engine.monoTrack (index) ? MixerWindow::tr ("mono") : QStringLiteral ("%1%").arg ((int) std::lround (s.width.load() * 100.0f)));
+        const auto slope = [] (int db) { return db >= 24 ? QStringLiteral ("²") : QString(); };
+        // Narrow strips name the cuts; wide ones give their frequency too (it is in the tooltip anyway).
+        const bool wide = window.wideStrips;
+        lowCutButton->setText (wide ? MixerWindow::tr ("LC %1").arg (hzText (s.lowCutHz.load())) + slope (s.lowCutSlope.load()) : MixerWindow::tr ("LC"));
+        highCutButton->setText (wide ? MixerWindow::tr ("HC %1").arg (hzText (s.highCutHz.load())) + slope (s.highCutSlope.load()) : MixerWindow::tr ("HC"));
+        lowCutButton->setToolTip (MixerWindow::tr ("Low cut at %1 Hz, %2 dB an octave: click turns it on or off; right-click for its frequency and slope")
+                                      .arg (hzText (s.lowCutHz.load())).arg (s.lowCutSlope.load()));
+        highCutButton->setToolTip (MixerWindow::tr ("High cut at %1 Hz, %2 dB an octave: click turns it on or off; right-click for its frequency and slope")
+                                       .arg (hzText (s.highCutHz.load())).arg (s.highCutSlope.load()));
+        for (int r = 0; r < mixer::numReturns; ++r)
+            sendLabels[(size_t) r]->setText (dbText (s.sendDb[(size_t) r].load()) + (s.sendPre[(size_t) r].load() ? MixerWindow::tr (" pre") : QString()));
         faderValue->setText (dbText (s.faderDb.load()));
     }
 
@@ -734,10 +1090,12 @@ public:
         peakValue->setText (peakText (meter->highestPeak()));
     }
 
-    void setSelected (bool on)
+    // Picked strips (Ctrl+click, for Q-Link) have a dashed border, the selected one a solid one.
+    void setSelected (bool on, bool picked = false)
     {
-        setStyleSheet (on ? QStringLiteral ("QFrame#strip { border: 2px solid %1; }").arg (Theme::current().color (QStringLiteral ("highlight")).name())
-                          : QString());
+        const auto colour = Theme::current().color (QStringLiteral ("highlight")).name();
+        setStyleSheet (on ? QStringLiteral ("QFrame#strip { border: 2px solid %1; }").arg (colour)
+                          : picked ? QStringLiteral ("QFrame#strip { border: 2px dashed %1; }").arg (colour) : QString());
         auto f = number->font();
         f.setBold (on);
         number->setFont (f);
@@ -788,6 +1146,10 @@ protected:
                 trimDial->setValue (0);
             else if (o == panDial)
                 panDial->setValue (0);
+            else if (o == widthDial)
+                widthDial->setValue (100);
+            else if (o == sendDials[0] || o == sendDials[1])
+                static_cast<QDial*> (o)->setValue (0);
             else if (o == faderValue)
             {
                 bool ok = false;
@@ -807,7 +1169,10 @@ protected:
 
     void mousePressEvent (QMouseEvent* e) override
     {
-        window.select (index);
+        if (e->modifiers() & Qt::ControlModifier)
+            window.pick (index, true);
+        else
+            window.select (index);
         QFrame::mousePressEvent (e);
     }
 
@@ -872,6 +1237,23 @@ public:
     MixerWindow& window;
     const int index;
     bool updating = false;
+    bool compact = false;
+    QWidget* instrumentPart;
+    QWidget* prePart;
+    QWidget* insertPart;
+    QWidget* sendPart;
+    std::array<QDial*, mixer::numReturns> sendDials {};
+    std::array<QLabel*, mixer::numReturns> sendLabels {};
+    QWidget* panPart;
+    QWidget* widthPart;
+    QWidget* trimPart;
+    QPushButton* lowCutButton;
+    QPushButton* highCutButton;
+    QDoubleSpinBox* delayBox;
+    QPushButton* addInsertButton;
+    QListWidget* insertList;
+    QDial* widthDial;
+    QLabel* widthLabel;
     QFrame* colourBar;
     QLabel* number;
     QLineEdit* nameEdit;
@@ -2972,6 +3354,127 @@ private:
 };
 
 //==============================================================================
+//==============================================================================
+// A return strip (Ableton): what the tracks' A or B sends feed, through one effect
+// (fully wet), then pan, mute, a fader and a meter. Between the tracks and the master.
+class ReturnStripWidget final : public QFrame
+{
+public:
+    ReturnStripWidget (MixerWindow& w, int i) : QFrame (&w), window (w), index (i)
+    {
+        setFrameShape (QFrame::StyledPanel);
+        setObjectName (QStringLiteral ("returnStrip"));
+        setFocusPolicy (Qt::NoFocus);
+        setMinimumWidth (96);
+        setMaximumWidth (120);
+        auto* layout = new QVBoxLayout (this);
+        layout->setContentsMargins (5, 5, 5, 5);
+        layout->setSpacing (3);
+        auto* title = new QLabel (index == 0 ? MixerWindow::tr ("A Reverb") : MixerWindow::tr ("B Delay"), this);
+        auto bold = title->font();
+        bold.setBold (true);
+        title->setFont (bold);
+        title->setAlignment (Qt::AlignCenter);
+        layout->addWidget (title);
+        effectButton = new QPushButton (this);
+        effectButton->setFocusPolicy (Qt::NoFocus);
+        effectButton->setContextMenuPolicy (Qt::CustomContextMenu);
+        effectButton->setToolTip (MixerWindow::tr ("The return's effect, fully wet: click opens it, right-click picks another"));
+        layout->addWidget (effectButton);
+        panDial = new Potentiometer (this);
+        panDial->setRange (-100, 100);
+        panDial->setFixedSize (knob, knob);
+        panDial->setFocusPolicy (Qt::NoFocus);
+        static_cast<Potentiometer*> (panDial)->setOrigin (0);
+        panDial->setToolTip (MixerWindow::tr ("The return's pan (balance; double-click: centre)"));
+        panLabel = new QLabel (this);
+        layout->addWidget (panDial, 0, Qt::AlignHCenter);
+        layout->addWidget (panLabel, 0, Qt::AlignHCenter);
+        muteButton = new QPushButton (MixerWindow::tr ("M"), this);
+        muteButton->setCheckable (true);
+        muteButton->setFocusPolicy (Qt::NoFocus);
+        muteButton->setToolTip (MixerWindow::tr ("Mute the return"));
+        layout->addWidget (muteButton);
+        fader = new Fader (this);
+        fader->setToolTip (MixerWindow::tr ("The return's level, -∞ to +6 dB"));
+        meter = new LevelMeter (this);
+        auto* row = new QHBoxLayout;
+        row->addStretch (1);
+        row->addWidget (fader);
+        row->addWidget (meter);
+        row->addStretch (1);
+        layout->addLayout (row, 1);
+        value = new QLabel (this);
+        value->setAlignment (Qt::AlignCenter);
+        layout->addWidget (value);
+
+        QObject::connect (effectButton, &QPushButton::clicked, this, [this] { window.editReturn (index); });
+        QObject::connect (effectButton, &QWidget::customContextMenuRequested, this, [this]
+        {
+            window.chooseReturnEffect (index, effectButton->mapToGlobal (QPoint (0, effectButton->height())));
+        });
+        QObject::connect (panDial, &QDial::valueChanged, this, [this] (int v)
+        {
+            if (updating)
+                return;
+            controls().pan = (float) v / 100.0f;
+            refresh();
+            window.changed();
+        });
+        QObject::connect (muteButton, &QPushButton::toggled, this, [this] (bool on) { if (! updating) { controls().mute = on; window.changed(); } });
+        QObject::connect (fader, &QSlider::valueChanged, this, [this] (int v)
+        {
+            if (updating)
+                return;
+            controls().faderDb = faderDb (v);
+            refresh();
+            window.changed();
+        });
+        panDial->installEventFilter (this);
+    }
+
+    mixer::ReturnStrip& controls() { return window.engine.returnStrip (index); }
+
+    void refresh()
+    {
+        updating = true;
+        auto& c = controls();
+        const auto fx = window.engine.returnEffect (index);
+        effectButton->setText (fx != nullptr ? QString::fromStdString (fx->name()) : MixerWindow::tr ("No effect"));
+        panDial->setValue ((int) std::lround (c.pan.load() * 100.0f));
+        panLabel->setText (panText (c.pan.load()));
+        muteButton->setChecked (c.mute.load());
+        fader->setValue (faderPosition (c.faderDb.load()));
+        value->setText (dbText (c.faderDb.load()));
+        updating = false;
+    }
+
+    void tick (double seconds) { meter->setLevels (window.engine.takeMeter (mixer::returnIndex + index), seconds); }
+
+protected:
+    bool eventFilter (QObject* o, QEvent* e) override
+    {
+        if (o == panDial && e->type() == QEvent::MouseButtonDblClick)
+        {
+            panDial->setValue (0);
+            return true;
+        }
+        return QFrame::eventFilter (o, e);
+    }
+
+private:
+    MixerWindow& window;
+    const int index;
+    bool updating = false;
+    QPushButton* effectButton;
+    QDial* panDial;
+    QLabel* panLabel;
+    QPushButton* muteButton;
+    QSlider* fader;
+    LevelMeter* meter;
+    QLabel* value;
+};
+
 MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* parent)
     : QWidget (parent, Qt::Window), engine (e), audio (a), hooks (std::move (h))
 {
@@ -3026,6 +3529,16 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     scenesBox->setValue (numScenes);
     scenesBox->setPrefix (tr ("Scenes "));
     scenesBox->setToolTip (tr ("How many scenes (rows) the launcher has"));
+    stripSections = appSettings().value (QStringLiteral ("mixer/stripSections"), allSections).toInt() & allSections;
+    wideStrips = appSettings().value (QStringLiteral ("mixer/wideStrips"), false).toBool();
+    auto* stripsButton = button (tr ("Strips"), tr ("Which sections the strips show (instrument, Pre, inserts, sends, trim and pan), and wide or narrow strips"));
+    qLinkButton = button (tr ("Q-Link"), tr ("Q-Link: a change to one of the picked strips (Ctrl+click picks them) goes to all of them; "
+                                             "Alt+Shift while changing one sends it to every track"));
+    qLinkButton->setCheckable (true);
+    bypassInsertsButton = button (tr ("Bypass Inserts"), tr ("Leave out every track's inserts, to hear the mix without them"));
+    bypassInsertsButton->setCheckable (true);
+    bypassSendsButton = button (tr ("Bypass Sends"), tr ("Leave out every send, to hear the mix without the returns"));
+    bypassSendsButton->setCheckable (true);
     auto* addButton = button (tr ("+ Track"), tr ("Add a track, up to 8 (Ctrl+T)"));
     auto* removeButton = button (tr ("− Track"), tr ("Remove the last track (Ctrl+Shift+T)"));
     auto* openButton = button (tr ("Open..."), tr ("Open a project (Ctrl+O): the mix, the patchbay and the view"));
@@ -3045,6 +3558,10 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     top->addWidget (quantiseBox);
     top->addWidget (scenesBox);
     top->addStretch (1);
+    top->addWidget (qLinkButton);
+    top->addWidget (bypassInsertsButton);
+    top->addWidget (bypassSendsButton);
+    top->addWidget (stripsButton);
     top->addWidget (addButton);
     top->addWidget (removeButton);
     top->addWidget (openButton);
@@ -3108,6 +3625,11 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     auto* mixRow = new QHBoxLayout (mixArea);
     mixRow->setContentsMargins (0, 0, 0, 0);
     mixRow->addWidget (scroll, 1);
+    for (int r = 0; r < mixer::numReturns; ++r)
+    {
+        returnStrips[(size_t) r] = new ReturnStripWidget (*this, r);
+        mixRow->addWidget (returnStrips[(size_t) r]);
+    }
     mixRow->addWidget (masterStrip);
 
     // The tracks across time above the strips, as in a DAW's arrangement.
@@ -3228,6 +3750,9 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     connect (scenesBox, &QSpinBox::editingFinished, this, [this] { setFocus(); });
     engine.tempo = tempoBox->value();
     engine.launchQuantise = quantiseBeats[quantiseBox->currentIndex()];
+    connect (bypassInsertsButton, &QPushButton::toggled, this, [this] (bool on) { engine.bypassInserts = on; });
+    connect (bypassSendsButton, &QPushButton::toggled, this, [this] (bool on) { engine.bypassSends = on; });
+    connect (stripsButton, &QPushButton::clicked, this, [this, stripsButton] { stripsMenu (stripsButton->mapToGlobal (QPoint (0, stripsButton->height()))); });
     connect (addButton, &QPushButton::clicked, this, [this] { addTrack(); });
     connect (removeButton, &QPushButton::clicked, this, [this] { removeTrack(); });
     connect (openButton, &QPushButton::clicked, this, [this] { openMix(); });
@@ -3247,6 +3772,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     timer.start();
     lastTick = QDateTime::currentMSecsSinceEpoch();
 
+    defaultReturns();
     rebuildStrips();
     select (0);
     showLauncher (false);
@@ -3275,6 +3801,8 @@ void MixerWindow::rebuildStrips()
         strips[(size_t) i]->setVisible (i < count);
         strips[(size_t) i]->refresh();
     }
+    for (auto* r : returnStrips)
+        r->refresh();
     if (selected < mixer::masterIndex && selected >= count)
         select (count - 1);
     if (grid != nullptr)
@@ -3287,8 +3815,10 @@ void MixerWindow::select (int index)
     if (index < mixer::masterIndex)
         index = std::clamp (index, 0, engine.numTracks() - 1);
     selected = index;
+    if (! picked.count (index))
+        picked = { index };
     for (int i = 0; i < mixer::maxTracks; ++i)
-        strips[(size_t) i]->setSelected (i == selected);
+        strips[(size_t) i]->setSelected (i == selected, picked.count (i) > 0);
     if (lanes != nullptr)
         lanes->update();
     if (browser != nullptr)
@@ -3309,6 +3839,8 @@ void MixerWindow::tick()
     lastTick = now;
     for (int i = 0; i < engine.numTracks(); ++i)
         strips[(size_t) i]->tick (seconds);
+    for (auto* r : returnStrips)
+        r->tick (seconds);
     masterMeter->setLevels (engine.takeMeter (mixer::masterIndex), seconds);
     masterPeak->setText (peakText (masterMeter->highestPeak()));
     refreshTransport();
@@ -3876,6 +4408,520 @@ void MixerWindow::arm (int track)
                                        : tr ("The MIDI keyboard plays track %1's %2.").arg (track + 1).arg (QString::fromStdString (inst->name())));
 }
 
+//==============================================================================
+// The knobs of an effect without a window of its own (the built-in and Φ effects): a slider
+// for each, its value beside it. Deletes itself when closed; keeps the effect alive meanwhile.
+static QDialog* effectDialog (mixer::EffectPtr effect, const QString& title, QWidget* parent, std::function<void()> changed)
+{
+    auto* d = new QDialog (parent);
+    d->setAttribute (Qt::WA_DeleteOnClose);
+    d->setWindowTitle (title);
+    auto* form = new QFormLayout (d);
+    const auto params = effect->parameters();
+    if (params.empty())
+        form->addRow (new QLabel (QObject::tr ("This effect has no settings."), d));
+    std::vector<QLabel*> values;
+    for (size_t k = 0; k < params.size(); ++k)
+    {
+        const auto& p = params[k];
+        auto* value = new QLabel (QString::fromStdString (p.text), d);
+        value->setMinimumWidth (70);
+        values.push_back (value);
+        auto* row = new QHBoxLayout;
+        if (p.toggle)
+        {
+            auto* box = new QCheckBox (d);
+            box->setChecked (p.value >= 0.5f);
+            QObject::connect (box, &QCheckBox::toggled, d, [=] (bool on)
+            {
+                effect->setParameter ((int) k, on ? 1.0f : 0.0f);
+                value->setText (QString::fromStdString (effect->parameters()[k].text));
+                changed();
+            });
+            row->addWidget (box, 1);
+        }
+        else
+        {
+            auto* slider = new QSlider (Qt::Horizontal, d);
+            const int steps = p.steps > 1 ? p.steps - 1 : 1000;
+            slider->setRange (0, steps);
+            slider->setValue ((int) std::lround (p.value * steps));
+            slider->setMinimumWidth (180);
+            QObject::connect (slider, &QSlider::valueChanged, d, [=] (int v)
+            {
+                effect->setParameter ((int) k, (float) v / (float) steps);
+                value->setText (QString::fromStdString (effect->parameters()[k].text));
+                changed();
+            });
+            row->addWidget (slider, 1);
+        }
+        row->addWidget (value);
+        form->addRow (QString::fromStdString (p.name), row);
+    }
+    auto keep = std::make_shared<mixer::EffectPtr> (effect);
+    QObject::connect (d, &QObject::destroyed, d, [keep] { keep->reset(); });
+    return d;
+}
+
+void MixerWindow::chooseInsert (int track, int replace, QPoint at)
+{
+    if (replace < 0 && (int) engine.inserts (track).size() >= mixer::maxInserts)
+    {
+        status->setText (tr ("Track %1 has all %2 inserts in use.").arg (track + 1).arg (mixer::maxInserts));
+        return;
+    }
+    QMenu menu (this);
+    auto plugins = audio.knownPlugins();
+    std::sort (plugins.begin(), plugins.end(), [] (const PluginInfo& x, const PluginInfo& y)
+    {
+        return QString::fromStdString (x.name).compare (QString::fromStdString (y.name), Qt::CaseInsensitive) < 0;
+    });
+    // By format (Built-in, Stock, VST3, LV2...), the built-in ones first.
+    std::map<QString, QMenu*> byFormat;
+    auto formatMenu = [&] (const QString& format)
+    {
+        auto& m = byFormat[format];
+        if (m == nullptr)
+            m = new QMenu (format, &menu);
+        return m;
+    };
+    for (const auto& p : plugins)
+    {
+        const auto id = p.id;
+        formatMenu (QString::fromStdString (p.format))->addAction (QString::fromStdString (p.name), this, [this, track, id, replace] { addInsert (track, id, replace); });
+    }
+    if (auto it = byFormat.find (QStringLiteral ("Built-in")); it != byFormat.end())
+        menu.addMenu (it->second);
+    for (const auto& [format, sub] : byFormat)
+        if (format != QLatin1String ("Built-in"))
+            menu.addMenu (sub);
+    if (plugins.empty())
+        menu.addAction (tr ("No effects found (Master Section > Manage Plug-ins scans for them)"))->setEnabled (false);
+    menu.exec (at.isNull() ? QCursor::pos() : at);
+}
+
+void MixerWindow::addInsert (int track, const std::string& pluginId, int replace)
+{
+    std::string error;
+    auto made = audio.loadEffectPlugin (pluginId, rate(), error);
+    if (made == nullptr)
+    {
+        QMessageBox::warning (this, tr ("Inserts"), tr ("The effect could not be started: %1").arg (QString::fromStdString (error)));
+        return;
+    }
+    auto list = engine.inserts (track);
+    if (replace >= 0 && replace < (int) list.size())
+        list[(size_t) replace] = { made, false };
+    else
+        list.push_back ({ made, false });
+    engine.setInserts (track, std::move (list));
+    strips[(size_t) track]->refreshInserts();
+    changed();
+    status->setText (tr ("%1 is on track %2 (double-click it to open it).").arg (QString::fromStdString (made->name())).arg (track + 1));
+}
+
+void MixerWindow::editInsert (int track, int insert)
+{
+    const auto list = engine.inserts (track);
+    if (insert < 0 || insert >= (int) list.size())
+        return;
+    const auto effect = list[(size_t) insert].effect;
+    if (effect->hasWindow())
+    {
+        effect->showWindow();
+        changed();
+        return;
+    }
+    auto* d = effectDialog (effect, tr ("%1: %2").arg (info[(size_t) track].name, QString::fromStdString (effect->name())), this, [this] { changed(); });
+    d->show();
+    d->raise();
+    d->activateWindow();
+}
+
+void MixerWindow::insertMenu (int track, int insert, QPoint at)
+{
+    const auto list = engine.inserts (track);
+    QMenu menu (this);
+    const bool full = (int) list.size() >= mixer::maxInserts;
+    if (insert >= 0 && insert < (int) list.size())
+    {
+        const auto& x = list[(size_t) insert];
+        menu.addAction (tr ("&Open %1").arg (QString::fromStdString (x.effect->name())), this, [this, track, insert] { editInsert (track, insert); });
+        auto* bypass = menu.addAction (tr ("&Bypass"));
+        bypass->setCheckable (true);
+        bypass->setChecked (x.bypassed);
+        connect (bypass, &QAction::toggled, this, [this, track, insert] (bool on) { setInsertBypassed (track, insert, on); });
+        menu.addAction (tr ("Move &Up"), this, [this, track, insert] { moveInsert (track, insert, insert - 1); })->setEnabled (insert > 0);
+        menu.addAction (tr ("Move &Down"), this, [this, track, insert] { moveInsert (track, insert, insert + 1); })->setEnabled (insert + 1 < (int) list.size());
+        menu.addAction (tr ("&Replace..."), this, [this, track, insert, at] { chooseInsert (track, insert, at); });
+        menu.addAction (tr ("&Remove"), this, [this, track, insert] { removeInsert (track, insert); });
+        menu.addSeparator();
+    }
+    menu.addAction (tr ("&Add Effect..."), this, [this, track, at] { chooseInsert (track, -1, at); })->setEnabled (! full);
+    const bool anyOn = std::any_of (list.begin(), list.end(), [] (const mixer::Insert& x) { return ! x.bypassed; });
+    menu.addAction (anyOn ? tr ("Bypass &All") : tr ("Turn &All On"), this, [this, track, anyOn]
+    {
+        auto all = engine.inserts (track);
+        for (auto& x : all)
+            x.bypassed = anyOn;
+        engine.setInserts (track, std::move (all));
+        strips[(size_t) track]->refreshInserts();
+        changed();
+    })->setEnabled (! list.empty());
+    menu.exec (at);
+}
+
+void MixerWindow::setInsertBypassed (int track, int insert, bool on)
+{
+    auto list = engine.inserts (track);
+    if (insert < 0 || insert >= (int) list.size())
+        return;
+    list[(size_t) insert].bypassed = on;
+    engine.setInserts (track, std::move (list));
+    strips[(size_t) track]->refreshInserts();
+    changed();
+}
+
+void MixerWindow::removeInsert (int track, int insert)
+{
+    auto list = engine.inserts (track);
+    if (insert < 0 || insert >= (int) list.size())
+        return;
+    list.erase (list.begin() + insert);
+    engine.setInserts (track, std::move (list));
+    strips[(size_t) track]->refreshInserts();
+    changed();
+}
+
+void MixerWindow::moveInsert (int track, int insert, int to)
+{
+    auto list = engine.inserts (track);
+    if (insert < 0 || insert >= (int) list.size() || to < 0 || to >= (int) list.size() || to == insert)
+        return;
+    const auto x = list[(size_t) insert];
+    list.erase (list.begin() + insert);
+    list.insert (list.begin() + to, x);
+    engine.setInserts (track, std::move (list));
+    strips[(size_t) track]->refreshInserts();
+    changed();
+}
+
+void MixerWindow::reorderInserts (int track, const std::vector<int>& order)
+{
+    const auto list = engine.inserts (track);
+    mixer::Inserts now;
+    for (const auto k : order)
+        if (k >= 0 && k < (int) list.size())
+            now.push_back (list[(size_t) k]);
+    if (now.size() == list.size())
+    {
+        engine.setInserts (track, std::move (now));
+        changed();
+    }
+    strips[(size_t) track]->refreshInserts();
+}
+
+QJsonArray MixerWindow::insertsJson (int track) const
+{
+    QJsonArray list;
+    for (const auto& x : engine.inserts (track))
+        list.append (QJsonObject {
+            { "id", QString::fromStdString (x.effect->pluginId()) }, { "name", QString::fromStdString (x.effect->name()) },
+            { "state", QString::fromStdString (x.effect->state()) }, { "bypassed", x.bypassed },
+        });
+    return list;
+}
+
+void MixerWindow::loadInserts (int track, const QJsonArray& list, QStringList& problems)
+{
+    mixer::Inserts made;
+    for (const auto& value : list)
+    {
+        const auto o = value.toObject();
+        std::string error;
+        auto effect = audio.loadEffectPlugin (o.value ("id").toString().toStdString(), rate(), error);
+        if (effect == nullptr)
+        {
+            problems << tr ("Track %1: the insert %2 could not be started (%3)").arg (track + 1).arg (o.value ("name").toString(), QString::fromStdString (error));
+            continue;
+        }
+        effect->setState (o.value ("state").toString().toStdString());
+        made.push_back ({ effect, o.value ("bypassed").toBool() });
+    }
+    engine.setInserts (track, std::move (made));
+}
+
+void MixerWindow::stripsMenu (QPoint at)
+{
+    QMenu menu (this);
+    const std::pair<int, QString> sections[] = {
+        { instrumentSection, tr ("&Instrument and MIDI") }, { preSection, tr ("&Pre: Polarity, Cuts and Delay") },
+        { insertSection, tr ("I&nserts") }, { sendSection, tr ("S&ends") }, { panSection, tr ("&Trim, Pan and Width") },
+    };
+    auto apply = [this]
+    {
+        appSettings().setValue (QStringLiteral ("mixer/stripSections"), stripSections);
+        appSettings().setValue (QStringLiteral ("mixer/wideStrips"), wideStrips);
+        for (auto* strip : strips)
+            strip->applyLayout();
+    };
+    for (const auto& [bit, text] : sections)
+    {
+        auto* a = menu.addAction (text);
+        a->setCheckable (true);
+        a->setChecked ((stripSections & bit) != 0);
+        connect (a, &QAction::toggled, this, [this, bit, apply] (bool on)
+        {
+            stripSections = on ? (stripSections | bit) : (stripSections & ~bit);
+            apply();
+        });
+    }
+    menu.addAction (tr ("&Show All"), this, [this, apply] { stripSections = allSections; apply(); });
+    menu.addAction (tr ("Only &Faders"), this, [this, apply] { stripSections = 0; apply(); });
+    menu.addSeparator();
+    auto* wide = menu.addAction (tr ("&Wide Strips"));
+    wide->setCheckable (true);
+    wide->setChecked (wideStrips);
+    connect (wide, &QAction::toggled, this, [this, apply] (bool on) { wideStrips = on; apply(); });
+    menu.exec (at);
+}
+
+QString MixerWindow::applyEqCuts (int track, const std::vector<std::pair<double, double>>& cuts)
+{
+    const auto phiEq = QString::fromUtf8 ("Φ EQ");
+    std::string id;
+    for (const auto& p : audio.knownPlugins())
+        if (QString::fromStdString (p.name) == phiEq)
+            id = p.id;
+    if (id.empty())
+        return tr ("The Φ EQ is not among the plugins (Manage Plug-ins may have turned it off).");
+    auto list = engine.inserts (track);
+    auto it = std::find_if (list.begin(), list.end(), [&] (const mixer::Insert& x) { return x.effect->pluginId() == id; });
+    if (it == list.end())
+    {
+        if ((int) list.size() >= mixer::maxInserts)
+            return tr ("%1 has all its inserts in use.").arg (info[(size_t) track].name);
+        std::string error;
+        auto made = audio.loadEffectPlugin (id, rate(), error);
+        if (made == nullptr)
+            return tr ("The Φ EQ could not be started: %1").arg (QString::fromStdString (error));
+        list.push_back ({ made, false });
+        it = list.end() - 1;
+    }
+    it->bypassed = false;
+    const auto effect = it->effect;
+    engine.setInserts (track, std::move (list));
+    // Each cut on the band nearest to it (the bands are a golden ratio apart), the deepest kept.
+    std::array<double, phi::Eq::numBands> gains {};
+    const auto params = effect->parameters();
+    for (int b = 0; b < phi::Eq::numBands && b < (int) params.size(); ++b)
+        gains[(size_t) b] = params[(size_t) b].value * 24.0 - 12.0;
+    for (const auto& [hz, db] : cuts)
+    {
+        int nearest = 0;
+        for (int b = 1; b < phi::Eq::numBands; ++b)
+            if (std::abs (std::log (phi::Eq::bandHz (b) / hz)) < std::abs (std::log (phi::Eq::bandHz (nearest) / hz)))
+                nearest = b;
+        gains[(size_t) nearest] = std::min (gains[(size_t) nearest], std::clamp (db, -12.0, 0.0));
+    }
+    for (int b = 0; b < phi::Eq::numBands; ++b)
+        effect->setParameter (b, (float) ((gains[(size_t) b] + 12.0) / 24.0));
+    strips[(size_t) track]->refreshInserts();
+    changed();
+    return {};
+}
+
+void MixerWindow::forLinked (int track, const std::function<void (mixer::Strip&, bool self)>& fn)
+{
+    fn (engine.strip (track), true);
+    std::set<int> others;
+    const auto mods = QApplication::keyboardModifiers();
+    if ((mods & (Qt::AltModifier | Qt::ShiftModifier)) == (Qt::AltModifier | Qt::ShiftModifier))
+        for (int i = 0; i < engine.numTracks(); ++i)
+            others.insert (i);
+    else if (qLinkButton != nullptr && qLinkButton->isChecked() && picked.count (track))
+        others = picked;
+    for (const auto i : others)
+        if (i != track && i < engine.numTracks())
+        {
+            fn (engine.strip (i), false);
+            strips[(size_t) i]->refresh();
+        }
+    changed();
+}
+
+void MixerWindow::pick (int track, bool add)
+{
+    if (! add)
+    {
+        select (track);
+        return;
+    }
+    if (picked.count (track) && picked.size() > 1)
+    {
+        picked.erase (track);
+        select (track == selected ? *picked.begin() : selected);
+    }
+    else
+    {
+        picked.insert (track);
+        select (track);
+    }
+    if (picked.size() > 1 && ! qLinkButton->isChecked())
+        status->setText (tr ("%1 strips picked: turn on Q-Link to change them together.").arg (picked.size()));
+}
+
+namespace
+{
+    // Sets an effect's knob by its name, as text in its own units ("1.8", "100").
+    void setKnob (const mixer::EffectPtr& fx, const char* name, double value)
+    {
+        const auto params = fx->parameters();
+        for (size_t k = 0; k < params.size(); ++k)
+            if (params[k].name == name)
+                fx->setParameterText ((int) k, QString::number (value).toStdString());
+    }
+}
+
+void MixerWindow::defaultReturns (int only)
+{
+    std::string space, echo;
+    for (const auto& p : audio.knownPlugins())
+    {
+        const auto name = QString::fromStdString (p.name);
+        if (name == QString::fromUtf8 ("Φ Space"))
+            space = p.id;
+        else if (name == QString::fromUtf8 ("Φ Echo"))
+            echo = p.id;
+    }
+    for (int r = 0; r < mixer::numReturns; ++r)
+        if (only < 0 || only == r)
+        {
+            auto& c = engine.returnStrip (r);
+            c.faderDb = 0.0f;
+            c.pan = 0.0f;
+            c.mute = false;
+            setReturnEffect (r, r == 0 ? space : echo);
+        }
+    // A: a plate-like 1.8 s; B: a dotted eighth at the tempo, 30 % feedback; both fully wet.
+    if (auto a = engine.returnEffect (0); a != nullptr && only != 1)
+    {
+        setKnob (a, "Decay", 1.8);
+        setKnob (a, "Mix", 100.0);
+    }
+    if (auto b = engine.returnEffect (1); b != nullptr && only != 0)
+    {
+        setKnob (b, "Time", 0.75 * 60000.0 / std::max (20.0, tempoBox->value()));
+        setKnob (b, "Taps", 1.0);
+        setKnob (b, "Feedback", 30.0);
+        setKnob (b, "Mix", 100.0);
+    }
+    for (auto* r : returnStrips)
+        if (r != nullptr)
+            r->refresh();
+}
+
+void MixerWindow::setReturnEffect (int index, const std::string& pluginId)
+{
+    mixer::EffectPtr made;
+    if (! pluginId.empty())
+    {
+        std::string error;
+        made = audio.loadEffectPlugin (pluginId, rate(), error);
+        if (made == nullptr)
+            status->setText (tr ("The return's effect could not be started: %1").arg (QString::fromStdString (error)));
+    }
+    engine.setReturnEffect (index, made);
+    if (returnStrips[(size_t) index] != nullptr)
+        returnStrips[(size_t) index]->refresh();
+    changed();
+}
+
+void MixerWindow::chooseReturnEffect (int index, QPoint at)
+{
+    QMenu menu (this);
+    menu.addAction (tr ("No Effect (the sends as they are)"), this, [this, index] { setReturnEffect (index, {}); });
+    menu.addAction (index == 0 ? tr ("Back to the Default (Φ Space)") : tr ("Back to the Default (Φ Echo)"), this, [this, index] { defaultReturns (index); });
+    menu.addSeparator();
+    auto plugins = audio.knownPlugins();
+    std::sort (plugins.begin(), plugins.end(), [] (const PluginInfo& x, const PluginInfo& y)
+    {
+        return QString::fromStdString (x.name).compare (QString::fromStdString (y.name), Qt::CaseInsensitive) < 0;
+    });
+    std::map<QString, QMenu*> byFormat;
+    for (const auto& p : plugins)
+    {
+        auto& sub = byFormat[QString::fromStdString (p.format)];
+        if (sub == nullptr)
+            sub = new QMenu (QString::fromStdString (p.format), &menu);
+        const auto id = p.id;
+        sub->addAction (QString::fromStdString (p.name), this, [this, index, id] { setReturnEffect (index, id); });
+    }
+    for (const auto& [format, sub] : byFormat)
+        menu.addMenu (sub);
+    menu.exec (at);
+}
+
+void MixerWindow::editReturn (int index)
+{
+    const auto fx = engine.returnEffect (index);
+    if (fx == nullptr)
+    {
+        chooseReturnEffect (index, QCursor::pos());
+        return;
+    }
+    if (fx->hasWindow())
+    {
+        fx->showWindow();
+        return;
+    }
+    auto* d = effectDialog (fx, index == 0 ? tr ("A Reverb: %1").arg (QString::fromStdString (fx->name()))
+                                           : tr ("B Delay: %1").arg (QString::fromStdString (fx->name())), this, [this] { changed(); });
+    d->show();
+    d->raise();
+    d->activateWindow();
+}
+
+QJsonArray MixerWindow::returnsJson() const
+{
+    QJsonArray list;
+    for (int r = 0; r < mixer::numReturns; ++r)
+    {
+        auto& c = engine.returnStrip (r);
+        const auto fx = engine.returnEffect (r);
+        QJsonObject o { { "fader", c.faderDb.load() }, { "pan", c.pan.load() }, { "mute", c.mute.load() } };
+        if (fx != nullptr)
+            o.insert ("effect", QJsonObject { { "id", QString::fromStdString (fx->pluginId()) }, { "name", QString::fromStdString (fx->name()) },
+                                              { "state", QString::fromStdString (fx->state()) } });
+        list.append (o);
+    }
+    return list;
+}
+
+void MixerWindow::loadReturns (const QJsonArray& list, QStringList& problems)
+{
+    for (int r = 0; r < mixer::numReturns && r < list.size(); ++r)
+    {
+        const auto o = list[r].toObject();
+        auto& c = engine.returnStrip (r);
+        c.faderDb = (float) o.value ("fader").toDouble();
+        c.pan = (float) o.value ("pan").toDouble();
+        c.mute = o.value ("mute").toBool();
+        const auto e = o.value ("effect").toObject();
+        mixer::EffectPtr made;
+        if (! e.isEmpty())
+        {
+            std::string error;
+            made = audio.loadEffectPlugin (e.value ("id").toString().toStdString(), rate(), error);
+            if (made == nullptr)
+                problems << tr ("Return %1: %2 could not be started (%3)").arg (QChar ('A' + r)).arg (e.value ("name").toString(), QString::fromStdString (error));
+            else
+                made->setState (e.value ("state").toString().toStdString());
+        }
+        engine.setReturnEffect (r, made);
+    }
+}
+
 void MixerWindow::stripsChanged()
 {
     for (int i = 0; i < engine.numTracks(); ++i)
@@ -3981,6 +5027,13 @@ void MixerWindow::keyPressEvent (QKeyEvent* e)
             case Qt::Key_Down: nudgeFader (shift ? -0.1 : -1.0); return;
             case Qt::Key_BracketLeft: nudgePan (shift ? -0.01f : -0.05f); return;
             case Qt::Key_BracketRight: nudgePan (shift ? 0.01f : 0.05f); return;
+            case Qt::Key_Insert:
+                if (! master)
+                {
+                    auto* list = strips[(size_t) selected]->insertList;
+                    chooseInsert (selected, -1, list->mapToGlobal (QPoint (0, list->height())));
+                }
+                return;
             case Qt::Key_0:
                 if (master)
                     masterFader->setValue (faderPosition (0.0));
@@ -4079,6 +5132,18 @@ bool MixerWindow::newMix()
         s.mute = s.solo = false;
         s.transpose = 0;
         s.channels = 0xFFFF;
+        s.lowCut = s.highCut = false;
+        s.lowCutHz = 80.0f;
+        s.highCutHz = 12000.0f;
+        s.lowCutSlope = s.highCutSlope = 12;
+        s.delayMs = 0.0f;
+        s.width = 1.0f;
+        for (int r = 0; r < mixer::numReturns; ++r)
+        {
+            s.sendDb[(size_t) r] = -100.0f;
+            s.sendPre[(size_t) r] = false;
+        }
+        engine.setInserts (i, {});
         auto& t = info[(size_t) i];
         if (t.editor != nullptr)
             t.editor->close();
@@ -4107,6 +5172,7 @@ bool MixerWindow::newMix()
     engine.setNumTracks (2);
     engine.setLiveTrack (0);
     masterFader->setValue (faderPosition (0.0));
+    defaultReturns();
     restoring = false;
     path.clear();
     modified = false;
@@ -4204,6 +5270,11 @@ bool MixerWindow::writeMix (const QString& file, QString& error)
             { "trim", s.trimDb.load() }, { "fader", s.faderDb.load() }, { "pan", s.pan.load() },
             { "invertLeft", s.invertLeft.load() }, { "invertRight", s.invertRight.load() },
             { "mute", s.mute.load() }, { "solo", s.solo.load() },
+            { "lowCut", QJsonObject { { "on", s.lowCut.load() }, { "hz", s.lowCutHz.load() }, { "slope", s.lowCutSlope.load() } } },
+            { "highCut", QJsonObject { { "on", s.highCut.load() }, { "hz", s.highCutHz.load() }, { "slope", s.highCutSlope.load() } } },
+            { "delayMs", s.delayMs.load() }, { "width", s.width.load() }, { "inserts", insertsJson (i) },
+            { "sends", QJsonArray { QJsonObject { { "db", s.sendDb[0].load() }, { "pre", s.sendPre[0].load() } },
+                                    QJsonObject { { "db", s.sendDb[1].load() }, { "pre", s.sendPre[1].load() } } } },
         };
         // The clips, in seconds so a mix opens the same at any rate.
         QJsonArray clips;
@@ -4292,6 +5363,7 @@ bool MixerWindow::writeMix (const QString& file, QString& error)
     QJsonObject root {
         { "phinyxProject", 1 }, { "phinyxMix", 3 }, { "tempo", tempoBox->value() }, { "midiFollowsTempo", followTempoBox->isChecked() },
         { "master", engine.masterDb.load() }, { "armed", engine.liveTrack() }, { "tracks", tracks }, { "launcher", launcher },
+        { "returns", returnsJson() },
     };
     if (hooks.projectState)
     {
@@ -4363,6 +5435,23 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
         s.invertRight = o.value ("invertRight").toBool();
         s.mute = o.value ("mute").toBool();
         s.solo = o.value ("solo").toBool();
+        const auto lowCut = o.value ("lowCut").toObject(), highCut = o.value ("highCut").toObject();
+        s.lowCut = lowCut.value ("on").toBool();
+        s.lowCutHz = (float) lowCut.value ("hz").toDouble (80.0);
+        s.lowCutSlope = lowCut.value ("slope").toInt (12);
+        s.highCut = highCut.value ("on").toBool();
+        s.highCutHz = (float) highCut.value ("hz").toDouble (12000.0);
+        s.highCutSlope = highCut.value ("slope").toInt (12);
+        s.delayMs = (float) std::clamp (o.value ("delayMs").toDouble(), (double) -mixer::maxDelayMs, (double) mixer::maxDelayMs);
+        s.width = (float) std::clamp (o.value ("width").toDouble (1.0), 0.0, 2.0);
+        loadInserts (i, o.value ("inserts").toArray(), problems);
+        const auto sends = o.value ("sends").toArray();
+        for (int r = 0; r < mixer::numReturns && r < sends.size(); ++r)
+        {
+            const auto send = sends[r].toObject();
+            s.sendDb[(size_t) r] = (float) std::clamp (send.value ("db").toDouble (-100.0), -100.0, 0.0);
+            s.sendPre[(size_t) r] = send.value ("pre").toBool();
+        }
 
         const auto io = o.value ("instrument").toObject();
         const auto kind = io.value ("kind").toString();
@@ -4460,6 +5549,8 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
         }
     }
     engine.tempo = tempoBox->value();
+    if (root.contains (QStringLiteral ("returns")))
+        loadReturns (root.value ("returns").toArray(), problems);
 
     // The launcher (version 3 on).
     const auto launcher = root.value ("launcher").toObject();
@@ -4633,8 +5724,16 @@ void MixerWindow::bounce (int track, bool inPlace)
         list.push_back (mixer::makeClip (clip, 0));   // the bounce starts at the start of the mix
         stamp (list);
         engine.setClips (track, std::move (list));
+        // So are the cuts, the inserts (bypassed, kept), the width and the delay.
         from.trimDb = 0.0f;
         from.invertLeft = from.invertRight = false;
+        from.lowCut = from.highCut = false;
+        from.width = 1.0f;
+        from.delayMs = 0.0f;
+        auto inserts = engine.inserts (track);
+        for (auto& x : inserts)
+            x.bypassed = true;
+        engine.setInserts (track, std::move (inserts));
     }
     else
     {
@@ -4643,6 +5742,10 @@ void MixerWindow::bounce (int track, bool inPlace)
         auto& to = engine.strip (target);
         to.trimDb = 0.0f;
         to.invertLeft = to.invertRight = false;
+        to.lowCut = to.highCut = false;
+        to.width = 1.0f;
+        to.delayMs = 0.0f;
+        engine.setInserts (target, {});
         to.faderDb = from.faderDb.load();
         to.pan = from.pan.load();
         to.mute = false;

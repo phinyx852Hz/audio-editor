@@ -215,8 +215,8 @@ Every control has a screen-reader name and announces its value.
 1. Engine: 8 tracks (audio file, MIDI file and instrument each) plus a master summing bus,
    with trim, polarity, pan, fader and meters, and Mix Down to Editor. **Built.**
 2. The window and the strips, keyboard first.
-3. Inserts, using the Master Section's chain code, then the two sends and the Reverb and
-   Delay returns.
+3. Inserts, using the Master Section's plugins, then the two sends and the Reverb and
+   Delay returns. **Inserts built** (2026-10-24).
 4. Thumbnail displays.
 5. Live inputs, record and monitoring.
 6. Instruments with MIDI keyboard input. **Built with step 1** (the unified track needs them).
@@ -290,8 +290,32 @@ Every control has a screen-reader name and announces its value.
   polarity, mute and solo, sample-accurate MIDI, transpose, channels, notes let go on a jump,
   the keyboard, meters, mixdown, serial clips, reversed audio and MIDI) and the Synth.
 
-Next: Pre (cuts, track delay), inserts, the A and B returns, thumbnails, live inputs and
-recording, templates, the spatial panner. The Sampler and Slicer windows of the Sample menu
+- The strip and inserts (step 3, 2026-10-24; owner: "a combo of the best features of Ableton
+  and Cubase... I like the insert slots of Cubase"; smaller pots, trim and pan side by side with
+  their values below). Each track goes through trim, polarity, low cut, high cut, its inserts,
+  width, pan and fader. `mixer::Strip` has the low and high cut (Butterworth, 12 or 24 dB an
+  octave, 20 Hz to 20 kHz, off by default), the track delay (±500 ms; the track's clips are read
+  that much earlier or later, so nothing is buffered and a negative delay works too) and the width
+  (0 to 200 %, mid/side, none on a track of mono files). `Engine::setInserts` gives a track up to 8
+  effects (`mixer::Effect`, `Source/mixer/Effect.h`, now shared with the patchbay's FX buses and
+  made by `AudioEngine::loadEffectPlugin`: built-in, Φ, stock, VST3, LV2, LADSPA, CLAP). A track
+  with no cuts, inserts or width keeps the gain-only path; otherwise mono files go on both sides,
+  through the cuts and inserts, and the pan after them stays equal power for a track of mono
+  files. Bounces have the cuts, inserts and width (before fader and pan); bouncing in place turns
+  them off (the inserts stay, bypassed) and resets the delay. Mute comes after the inserts.
+  The strip: Trim, Pan and Width pots (30 px) side by side with their values below; the Pre
+  section has ØL ØR, the LC and HC buttons (click: on or off; right-click: frequency and slope)
+  and Delay. Insert slots are always shown, Cubase style: at least 4, one empty after the last
+  used, up to 8; click an empty slot (or press Insert) for the effects menu, by format;
+  double-click opens the plugin's window or, for the built-in and Φ effects, a dialog of their
+  knobs; right-click bypasses, moves, replaces or removes; drag to reorder. The Strips button
+  shows or hides the Instrument, Pre, Inserts and Trim/Pan/Width sections on every strip and
+  makes the strips wide. Projects keep all of it (`lowCut`, `highCut`, `delayMs`, `width` and
+  `inserts` with each effect's id, state and bypass). The Mix Assistant's Apply EQ Cuts puts its
+  overlap cuts in a Φ EQ in the hiding track's inserts, on the nearest band.
+
+Next: sends (Ableton style: A and B knobs on each strip) and the A Reverb and B Delay returns,
+thumbnails, live inputs and recording, templates, the spatial panner. The Sampler and Slicer windows of the Sample menu
 could dock into the mixer as track 1 (the other thread's docking work).
 
 Patchbay (2026-10-22, docs/patchbay.md): while the patchbay plays (it always does live), the

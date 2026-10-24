@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <functional>
+#include <map>
 #include <memory>
 #include <vector>
 
@@ -25,8 +26,9 @@ class QTreeWidget;
 // each track sits where its role suggests, with headroom for mastering and, given
 // a reference, its tonal balance. It bounces every track it hears, then fits the
 // faders in memory (mixassist::, MixAssist.h). It never touches clips, instruments,
-// trim or the patchbay. Overlaps where one track hides another are listed, for an
-// EQ by hand. As in the Master Assistant: Amount, A to compare, Keep or Revert.
+// trim or the patchbay. Overlaps where one track hides another are listed; Apply EQ
+// Cuts puts them in a Φ EQ in the hiding track's inserts. As in the Master Assistant:
+// Amount, A to compare, Keep or Revert.
 class MixAssistant final : public QDialog
 {
     Q_OBJECT
@@ -42,6 +44,9 @@ public:
     MixAssistant (mixer::Engine&, QStringList trackNames, References, std::function<void()> playStop,
                   std::function<void()> stripsChanged, QWidget* parent);
     ~MixAssistant() override;
+
+    // Puts cuts (frequency in Hz, dB) in a Φ EQ in the track's inserts; an error, or empty.
+    std::function<QString (int track, const std::vector<std::pair<double, double>>& cuts)> applyEq;
 
     void reject() override;
     void accept() override;
@@ -87,6 +92,8 @@ private:
     QComboBox* reference;
     QCheckBox *balanceBox, *panBox, *keepPansBox;
     QLabel* overlaps;
+    QPushButton* eqButton;
+    std::map<int, std::vector<std::pair<double, double>>> cuts;   // by row, from the last suggestion
     QProgressBar* bar;
     QLabel* status;
     QPushButton *suggestButton, *abButton, *keepButton;

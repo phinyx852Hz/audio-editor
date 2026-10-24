@@ -25,23 +25,9 @@ namespace slicer { class Engine; }
 
 namespace patchbay
 {
-    // An effect on an FX bus: stereo in, stereo out, in place. Plugins come from the
-    // engine (AudioEngine::loadEffectPlugin).
-    class Effect
-    {
-    public:
-        virtual ~Effect() = default;
-        virtual std::string name() const = 0;
-        virtual std::string pluginId() const { return {}; }
-        virtual void prepare (double sampleRate, int maxBlock) = 0;
-        virtual void process (float* left, float* right, int frames) = 0;   // audio thread
-        virtual void reset() {}
-        virtual bool hasWindow() const { return false; }
-        virtual void showWindow() {}
-        virtual std::string state() const { return {}; }
-        virtual void setState (const std::string&) {}
-    };
-    using EffectPtr = std::shared_ptr<Effect>;
+    // An effect on an FX bus (mixer/Effect.h).
+    using Effect = mixer::Effect;
+    using EffectPtr = mixer::EffectPtr;
 
     constexpr int maxSynths = 4, maxBuses = 4;
 

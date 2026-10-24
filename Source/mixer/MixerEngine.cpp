@@ -24,6 +24,83 @@ namespace mixer
             for (int i = 0; i < frames; ++i)
                 out[i] += in[i] * (from + step * (float) (i + 1));
         }
+
+        // The same, in place.
+        void scaleRamped (float* io, int frames, float from, float to)
+        {
+            const auto step = (to - from) / (float) frames;
+            for (int i = 0; i < frames; ++i)
+                io[i] *= from + step * (float) (i + 1);
+        }
+    }
+
+    //==========================================================================
+    void Engine::Track::Biquad::process (float* l, float* r, int frames)
+    {
+        float* sides[2] = { l, r };
+        for (int c = 0; c < 2; ++c)
+        {
+            auto* x = sides[c];
+            auto z1 = z[c][0], z2 = z[c][1];
+            for (int i = 0; i < frames; ++i)
+            {
+                const auto in = x[i];
+                const auto out = b0 * in + z1;
+                z1 = b1 * in - a1 * out + z2;
+                z2 = b2 * in - a2 * out;
+                x[i] = out;
+            }
+            // Denormals and a filter left ringing on nothing settle to silence.
+            z[c][0] = std::abs (z1) < 1.0e-20f ? 0.0f : z1;
+            z[c][1] = std::abs (z2) < 1.0e-20f ? 0.0f : z2;
+        }
+    }
+
+    // Butterworth: one stage at Q 0.707 for 12 dB an octave, two at 0.541 and 1.307 for 24.
+    void Engine::Track::Cut::update (bool turnOn, float frequency, int dbPerOctave, bool high, double sampleRate)
+    {
+        frequency = std::clamp (frequency, minCutHz, std::min (maxCutHz, (float) (sampleRate * 0.45)));
+        dbPerOctave = dbPerOctave >= 24 ? 24 : 12;
+        if (turnOn != on)
+            for (auto& b : stages)
+                std::fill (&b.z[0][0], &b.z[0][0] + 4, 0.0f);
+        on = turnOn;
+        if (! on || (std::abs (frequency - hz) < 1.0e-3f && dbPerOctave == slope))
+            return;
+        hz = frequency;
+        slope = dbPerOctave;
+        const double qs12[] = { 0.70710678 }, qs24[] = { 0.54119610, 1.30656296 };
+        const auto* qs = slope == 24 ? qs24 : qs12;
+        const int count = slope == 24 ? 2 : 1;
+        const auto w = 2.0 * 3.14159265358979 * hz / sampleRate;
+        for (int k = 0; k < 2; ++k)
+        {
+            auto& b = stages[(size_t) k];
+            if (k >= count)
+            {
+                b.b0 = 1.0f;
+                b.b1 = b.b2 = b.a1 = b.a2 = 0.0f;
+                continue;
+            }
+            const auto alpha = std::sin (w) / (2.0 * qs[k]);
+            const auto cw = std::cos (w);
+            const auto a0 = 1.0 + alpha;
+            const auto b1 = high ? 1.0 - cw : -(1.0 + cw);
+            b.b0 = (float) (std::abs (b1) * 0.5 / a0);
+            b.b1 = (float) (b1 / a0);
+            b.b2 = b.b0;
+            b.a1 = (float) (-2.0 * cw / a0);
+            b.a2 = (float) ((1.0 - alpha) / a0);
+        }
+    }
+
+    void Engine::Track::Cut::process (float* l, float* r, int frames)
+    {
+        if (! on)
+            return;
+        stages[0].process (l, r, frames);
+        if (slope == 24)
+            stages[1].process (l, r, frames);
     }
 
     AudioClipPtr makeAudioClip (const AudioData& data, const std::string& path)
@@ -164,8 +241,13 @@ namespace mixer
     //==========================================================================
     Engine::Engine()
     {
-        for (auto* v : { &mixL, &mixR, &trackL, &trackR, &instL, &instR, &monoBuf, &outL, &outR })
+        for (auto* v : { &mixL, &mixR, &trackL, &trackR, &instL, &instR, &monoBuf, &outL, &outR, &sendPreL, &sendPreR })
             v->resize (block);
+        for (int r = 0; r < numReturns; ++r)
+        {
+            returnL[(size_t) r].resize (block);
+            returnR[(size_t) r].resize (block);
+        }
         events.reserve (1024);
         liveQueue.reserve (256);
         liveTaken.reserve (256);
@@ -180,8 +262,16 @@ namespace mixer
         const std::lock_guard<std::mutex> l (lock);
         rate = sampleRate > 0.0 ? sampleRate : 48000.0;
         for (auto& t : lanes)
+        {
             if (t.instrument != nullptr)
                 t.instrument->prepare (rate.load(), block);
+            for (auto& x : t.inserts)
+                x.effect->prepare (rate.load(), block);
+            t.lowCut.hz = t.highCut.hz = 0.0f;   // worked out again for the new rate
+        }
+        for (auto& fx : returnEffects)
+            if (fx != nullptr)
+                fx->prepare (rate.load(), block);
         expected = -1;
     }
 
@@ -219,6 +309,7 @@ namespace mixer
         const bool hadMidi = std::any_of (t.clips.begin(), t.clips.end(), [] (const Clip& c) { return c.isMidi(); });
         std::swap (t.clips, list);
         std::swap (t.cursors, cursors);
+        t.mono = monoClips (t.clips);
         t.relocate = true;
         // Notes the old clips left sounding are let go.
         if (hadMidi && t.instrument != nullptr)
@@ -248,6 +339,68 @@ namespace mixer
     {
         const std::lock_guard<std::mutex> l (lock);
         return lanes[(size_t) index].instrument;
+    }
+
+    void Engine::setInserts (int index, Inserts list)
+    {
+        if (index < 0 || index >= maxTracks)
+            return;
+        list.erase (std::remove_if (list.begin(), list.end(), [] (const Insert& x) { return x.effect == nullptr; }), list.end());
+        if ((int) list.size() > maxInserts)
+            list.resize ((size_t) maxInserts);
+        // Effects new to the track are prepared before it hears them.
+        const auto old = inserts (index);
+        for (auto& x : list)
+            if (std::none_of (old.begin(), old.end(), [&] (const Insert& o) { return o.effect == x.effect; }))
+                x.effect->prepare (rate.load(), block);
+        const std::lock_guard<std::mutex> l (lock);
+        std::swap (lanes[(size_t) index].inserts, list);
+    }   // the effects taken out are let go here, after the lock
+
+    void Engine::setReturnEffect (int index, EffectPtr effect)
+    {
+        if (index < 0 || index >= numReturns)
+            return;
+        if (effect != nullptr)
+            effect->prepare (rate.load(), block);
+        const std::lock_guard<std::mutex> l (lock);
+        std::swap (returnEffects[(size_t) index], effect);
+    }
+
+    EffectPtr Engine::returnEffect (int index) const
+    {
+        const std::lock_guard<std::mutex> l (lock);
+        return index >= 0 && index < numReturns ? returnEffects[(size_t) index] : nullptr;
+    }
+
+    Inserts Engine::inserts (int index) const
+    {
+        const std::lock_guard<std::mutex> l (lock);
+        return lanes[(size_t) index].inserts;
+    }
+
+    bool Engine::monoClips (const Clips& clips)
+    {
+        bool any = false;
+        for (const auto& c : clips)
+        {
+            if (c.audio == nullptr || ! c.audio->mono)
+                return false;
+            any = true;
+        }
+        return any;
+    }
+
+    bool Engine::monoTrack (int index) const
+    {
+        const std::lock_guard<std::mutex> l (lock);
+        return lanes[(size_t) index].mono;
+    }
+
+    Frame Engine::delayFrames (int index) const
+    {
+        const auto ms = std::clamp (strips[(size_t) index].delayMs.load(), -maxDelayMs, maxDelayMs);
+        return (Frame) std::llround (ms * 0.001 * rate.load());
     }
 
     void Engine::play()
@@ -482,7 +635,7 @@ namespace mixer
         Frame end = 0;
         for (const auto& c : lanes[(size_t) i].clips)
             end = std::max (end, c.end());
-        return end;
+        return end > 0 ? std::max<Frame> (0, end + delayFrames (i)) : 0;
     }
 
     Frame Engine::trackEnd (int i) const
@@ -519,7 +672,7 @@ namespace mixer
     Meter Engine::takeMeter (int index)
     {
         Meter m;
-        if (index < 0 || index > masterIndex)
+        if (index < 0 || index >= (int) meters.size())
             return m;
         auto& s = meters[(size_t) index];
         for (int c = 0; c < 2; ++c)
@@ -665,6 +818,11 @@ namespace mixer
 
         std::fill (mixL.begin(), mixL.begin() + frames, 0.0f);
         std::fill (mixR.begin(), mixR.begin() + frames, 0.0f);
+        for (int r = 0; r < numReturns; ++r)
+        {
+            std::fill (returnL[(size_t) r].begin(), returnL[(size_t) r].begin() + frames, 0.0f);
+            std::fill (returnR[(size_t) r].begin(), returnR[(size_t) r].begin() + frames, 0.0f);
+        }
         const auto armedTrack = armed.load();
 
         for (int slot = 0; slot < (routed != nullptr ? maxTracks : count); ++slot)
@@ -692,8 +850,12 @@ namespace mixer
                 placePasses (t, clock.load());
             const auto& clips = launched ? t.passClips : t.clips;
             auto& cursors = launched ? t.passCursors : t.cursors;
-            const auto base = launched ? clock.load() : at;
-            const bool trackJumped = (launched ? false : jumped) || t.launchChanged;
+            // The track's delay: its clips play that much later (or earlier) than the others.
+            const auto delay = delayFrames (i);
+            const bool delayChanged = delay != t.delay;
+            t.delay = delay;
+            const auto base = (launched ? clock.load() : at) - delay;
+            const bool trackJumped = (launched ? false : jumped) || t.launchChanged || delayChanged;
             t.launchChanged = false;
 
             // MIDI from the clips: let go of what they held when the transport stops, jumps or loses channels.
@@ -815,14 +977,38 @@ namespace mixer
             // whatever mute and solo say; a mono file is then on both sides at full level.
             const bool bouncing = only >= 0;
             const bool audible = bouncing || (! s.mute.load() && (! anySolo || s.solo.load()));
-            const auto level = audible ? dbToGain (s.trimDb.load()) * (bouncing ? 1.0f : dbToGain (s.faderDb.load())) : 0.0f;
+            const auto trim = dbToGain (s.trimDb.load());
+            const auto fader = audible ? (bouncing ? 1.0f : dbToGain (s.faderDb.load())) : 0.0f;
+            const auto level = trim * fader;
             const auto pan = bouncing ? 0.0f : std::clamp (s.pan.load(), -1.0f, 1.0f);
             const auto signL = s.invertLeft.load() ? -1.0f : 1.0f, signR = s.invertRight.load() ? -1.0f : 1.0f;
             const auto balanceL = std::min (1.0f, 1.0f - pan), balanceR = std::min (1.0f, 1.0f + pan);
             const auto angle = (pan + 1.0f) * 0.25f * 3.14159265f;
-            const auto monoL = level * signL * (bouncing ? 1.0f : std::cos (angle));
-            const auto monoR = level * signR * (bouncing ? 1.0f : std::sin (angle));
+            const auto equalL = bouncing ? 1.0f : std::cos (angle), equalR = bouncing ? 1.0f : std::sin (angle);
+            const auto monoL = level * signL * equalL;
+            const auto monoR = level * signR * equalR;
             const auto gainL = level * signL * balanceL, gainR = level * signR * balanceR;
+
+            // What the strip does besides gains: the cuts, the inserts and the width.
+            t.lowCut.update (s.lowCut.load(), s.lowCutHz.load(), s.lowCutSlope.load(), false, rate.load());
+            t.highCut.update (s.highCut.load(), s.highCutHz.load(), s.highCutSlope.load(), true, rate.load());
+            const auto width = t.mono ? 1.0f : std::clamp (s.width.load(), 0.0f, 2.0f);
+            const bool insertsOn = ! bypassInserts.load();
+            const bool anyInsert = insertsOn && std::any_of (t.inserts.begin(), t.inserts.end(), [] (const Insert& x) { return ! x.bypassed; });
+            // The sends (none in a bounce); a pre-fader one needs the signal before the fader.
+            std::array<float, numReturns> sends {};
+            bool anyPre = false;
+            for (int r = 0; r < numReturns; ++r)
+            {
+                sends[(size_t) r] = bouncing || ! audible || bypassSends.load() ? 0.0f : dbToGain (s.sendDb[(size_t) r].load());
+                anyPre = anyPre || (s.sendPre[(size_t) r].load() && (sends[(size_t) r] > 0.0f || t.sendGain[(size_t) r] > 0.0f));
+            }
+            const bool processing = t.lowCut.on || t.highCut.on || anyInsert || std::abs (width - 1.0f) > 1.0e-4f
+                                 || std::abs (t.width - 1.0f) > 1.0e-4f || anyPre;
+            // Before the inserts, trim and polarity; after them, pan and fader (equal power when
+            // the track only has mono files, balance otherwise), and mute.
+            const auto preL = trim * signL, preR = trim * signR;
+            const auto postL = fader * (t.mono ? equalL : balanceL), postR = fader * (t.mono ? equalR : balanceR);
 
             // After a jump there is nothing to ramp from: the new place starts at its level.
             if (jumped)
@@ -831,6 +1017,10 @@ namespace mixer
                 t.monoR = monoR;
                 t.gainL = gainL;
                 t.gainR = gainR;
+                t.preL = preL;
+                t.preR = preR;
+                t.postL = postL;
+                t.postR = postR;
             }
 
             // The track's own sum, for its meter, then into the mix.
@@ -838,17 +1028,76 @@ namespace mixer
             auto* sumR = trackR.data();
             std::fill (sumL, sumL + frames, 0.0f);
             std::fill (sumR, sumR + frames, 0.0f);
-            addRamped (sumL, instL.data(), frames, t.gainL, gainL);
-            addRamped (sumR, instR.data(), frames, t.gainR, gainR);
-            if (hasMono)
+            if (processing)
             {
-                addRamped (sumL, monoBuf.data(), frames, t.monoL, monoL);
-                addRamped (sumR, monoBuf.data(), frames, t.monoR, monoR);
+                // Mono files go on both sides, so the inserts get one stereo signal.
+                addRamped (sumL, instL.data(), frames, t.preL, preL);
+                addRamped (sumR, instR.data(), frames, t.preR, preR);
+                if (hasMono)
+                {
+                    addRamped (sumL, monoBuf.data(), frames, t.preL, preL);
+                    addRamped (sumR, monoBuf.data(), frames, t.preR, preR);
+                }
+                t.lowCut.process (sumL, sumR, frames);
+                t.highCut.process (sumL, sumR, frames);
+                if (insertsOn)
+                    for (auto& x : t.inserts)
+                        if (! x.bypassed)
+                            x.effect->process (sumL, sumR, frames);
+                if (std::abs (width - 1.0f) > 1.0e-4f || std::abs (t.width - 1.0f) > 1.0e-4f)
+                {
+                    const auto step = (width - t.width) / (float) frames;
+                    for (int k = 0; k < frames; ++k)
+                    {
+                        const auto w = t.width + step * (float) (k + 1);
+                        const auto mid = 0.5f * (sumL[k] + sumR[k]), side = 0.5f * (sumL[k] - sumR[k]) * w;
+                        sumL[k] = mid + side;
+                        sumR[k] = mid - side;
+                    }
+                }
+                if (anyPre)
+                {
+                    std::copy (sumL, sumL + frames, sendPreL.begin());
+                    std::copy (sumR, sumR + frames, sendPreR.begin());
+                }
+                scaleRamped (sumL, frames, t.postL, postL);
+                scaleRamped (sumR, frames, t.postR, postR);
             }
+            else
+            {
+                addRamped (sumL, instL.data(), frames, t.gainL, gainL);
+                addRamped (sumR, instR.data(), frames, t.gainR, gainR);
+                if (hasMono)
+                {
+                    addRamped (sumL, monoBuf.data(), frames, t.monoL, monoL);
+                    addRamped (sumR, monoBuf.data(), frames, t.monoR, monoR);
+                }
+            }
+            // Both ways keep their gains, so turning the processing on or off ramps from where it was.
             t.monoL = monoL;
             t.monoR = monoR;
             t.gainL = gainL;
             t.gainR = gainR;
+            t.preL = preL;
+            t.preR = preR;
+            t.postL = postL;
+            t.postR = postR;
+            t.width = width;
+
+            for (int r = 0; r < numReturns; ++r)
+            {
+                auto& was = t.sendGain[(size_t) r];
+                const auto g = sends[(size_t) r];
+                if (jumped)
+                    was = g;
+                if (g > 0.0f || was > 0.0f)
+                {
+                    const bool pre = s.sendPre[(size_t) r].load() && processing;
+                    addRamped (returnL[(size_t) r].data(), pre ? sendPreL.data() : sumL, frames, was, g);
+                    addRamped (returnR[(size_t) r].data(), pre ? sendPreR.data() : sumR, frames, was, g);
+                }
+                was = g;
+            }
 
             if (withLive)
                 meter (i, sumL, sumR, frames);
@@ -863,10 +1112,37 @@ namespace mixer
                 mixR[(size_t) k] += sumR[k];
             }
         }
+        // The returns: each through its effect, pan, fader and mute, then with the tracks.
+        if (only < 0)
+            for (int r = 0; r < numReturns; ++r)
+            {
+                auto* rl = returnL[(size_t) r].data();
+                auto* rr = returnR[(size_t) r].data();
+                if (auto& fx = returnEffects[(size_t) r])
+                    fx->process (rl, rr, frames);
+                const auto& rs = returnStrips[(size_t) r];
+                const auto level = rs.mute.load() ? 0.0f : dbToGain (rs.faderDb.load());
+                const auto pan = std::clamp (rs.pan.load(), -1.0f, 1.0f);
+                const float gains[2] = { level * std::min (1.0f, 1.0f - pan), level * std::min (1.0f, 1.0f + pan) };
+                auto& was = returnGain[(size_t) r];
+                if (jumped)
+                    was = { gains[0], gains[1] };
+                scaleRamped (rl, frames, was[0], gains[0]);
+                scaleRamped (rr, frames, was[1], gains[1]);
+                was = { gains[0], gains[1] };
+                if (withLive)
+                    meter (returnIndex + r, rl, rr, frames);
+                for (int k = 0; k < frames; ++k)
+                {
+                    mixL[(size_t) k] += rl[k];
+                    mixR[(size_t) k] += rr[k];
+                }
+            }
         if (routed != nullptr)
         {
-            std::fill (left, left + frames, 0.0f);   // the patch has the tracks, and does the master
-            std::fill (right, right + frames, 0.0f);
+            // The patch has the tracks, and does the master; the returns go to its Mix Bus.
+            std::copy (mixL.begin(), mixL.begin() + frames, left);
+            std::copy (mixR.begin(), mixR.begin() + frames, right);
             return;
         }
 
@@ -901,9 +1177,16 @@ namespace mixer
         {
             if (t.instrument != nullptr)
                 t.instrument->reset();
+            for (auto& x : t.inserts)
+                x.effect->reset();
+            t.lowCut.hz = t.highCut.hz = 0.0f;
+            t.lowCut.on = t.highCut.on = false;   // their filters start from silence
             t.held = {};
             t.relocate = true;
         }
+        for (auto& fx : returnEffects)
+            if (fx != nullptr)
+                fx->reset();
         stopPending = false;
         expected = -1;
 
@@ -942,6 +1225,10 @@ namespace mixer
         {
             if (t.instrument != nullptr)
                 t.instrument->reset();
+            for (auto& x : t.inserts)
+                x.effect->reset();
+            t.lowCut.hz = t.highCut.hz = 0.0f;
+            t.lowCut.on = t.highCut.on = false;   // their filters start from silence
             t.held = {};
             t.relocate = true;
         }
