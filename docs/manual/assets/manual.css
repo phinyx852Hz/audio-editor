@@ -1,0 +1,133 @@
+/* PHI manual: shared typography for the web site and the PDF. */
+:root {
+  --gold: #c8a24a;
+  --gold-deep: #9c7a2c;
+  --gold-soft: #f4ecd8;
+  --ink: #1a1a1c;
+  --ink-soft: #55555c;
+  --black: #0b0b0c;
+  --paper: #ffffff;
+  --rule: #e4dfd2;
+  --code-bg: #f6f3ec;
+  --note: #3d6f9c;
+  --tip: #4f7d4a;
+  --important: #a3462f;
+  --serif: "EB Garamond", "EB Garamond 12", Garamond, Georgia, serif;
+  --sans: "Inter", "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+}
+
+.chapter h1.chapter-title, .index h1.chapter-title {
+  font-family: var(--serif);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+}
+.chapter h1.chapter-title[data-label]::before {
+  content: attr(data-label);
+  display: block;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 0.32em;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--gold-deep);
+  margin-bottom: 0.6em;
+}
+.chapter h2 {
+  font-family: var(--sans);
+  font-weight: 600;
+  color: var(--ink);
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 0.2em;
+}
+.chapter h3 { font-family: var(--sans); font-weight: 600; color: var(--ink); }
+.chapter h4 { font-family: var(--sans); font-weight: 600; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.8em; }
+
+.chapter p, .chapter li, .chapter td, .chapter dd { hyphens: auto; }
+.chapter a { color: var(--gold-deep); text-decoration: none; border-bottom: 1px solid rgba(200, 162, 74, 0.4); }
+
+code, pre { font-family: var(--mono); font-size: 0.86em; }
+code { background: var(--code-bg); padding: 0.05em 0.3em; border-radius: 3px; }
+pre { background: var(--code-bg); padding: 0.8em 1em; border-radius: 4px; overflow-x: auto; line-height: 1.45; }
+pre code { background: none; padding: 0; }
+
+.keys { white-space: nowrap; }
+kbd {
+  font-family: var(--sans);
+  font-size: 0.74em;
+  font-weight: 600;
+  display: inline-block;
+  padding: 0.08em 0.42em 0.04em;
+  margin: 0 0.06em;
+  border: 1px solid #c9c2b0;
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: #fbfaf6;
+  color: var(--ink);
+  line-height: 1.3;
+  vertical-align: 0.06em;
+}
+
+table { border-collapse: collapse; width: 100%; font-size: 0.92em; margin: 1em 0; }
+th { font-family: var(--sans); font-weight: 600; font-size: 0.85em; text-align: left; color: var(--ink-soft);
+     border-bottom: 2px solid var(--gold); padding: 0.35em 0.6em; }
+td { border-bottom: 1px solid var(--rule); padding: 0.35em 0.6em; vertical-align: top; }
+
+figure { margin: 1.4em 0; text-align: center; }
+figure img { max-width: 100%; border: 1px solid #d8d3c6; border-radius: 4px; }
+figcaption { font-family: var(--sans); font-size: 0.78em; color: var(--ink-soft); margin-top: 0.5em; text-align: left; }
+.fignum { font-weight: 600; color: var(--gold-deep); }
+.shot-placeholder {
+  font-family: var(--sans); font-size: 0.8em; color: var(--gold-deep);
+  border: 1.5px dashed var(--gold); border-radius: 6px; background: var(--gold-soft);
+  padding: 2.4em 1em; text-align: center;
+}
+
+/* Call-outs */
+.note, .tip, .important, .phi, .hardware {
+  border-left: 3px solid var(--note);
+  background: #f2f6fa;
+  padding: 0.6em 1em;
+  margin: 1.2em 0;
+  border-radius: 0 4px 4px 0;
+}
+.note > :first-child::before, .tip > :first-child::before, .important > :first-child::before,
+.phi > :first-child::before, .hardware > :first-child::before {
+  font-family: var(--sans); font-weight: 600; font-size: 0.72em; letter-spacing: 0.12em;
+  text-transform: uppercase; margin-right: 0.6em;
+}
+.note > :first-child::before { content: "Note"; color: var(--note); }
+.tip { border-color: var(--tip); background: #f2f7f1; }
+.tip > :first-child::before { content: "Tip"; color: var(--tip); }
+.important { border-color: var(--important); background: #fbf1ee; }
+.important > :first-child::before { content: "Important"; color: var(--important); }
+.hardware { border-color: var(--ink-soft); background: #f4f4f4; }
+.hardware > :first-child::before { content: "Not yet tested on hardware"; color: var(--ink-soft); }
+.phi { border-color: var(--gold); background: var(--gold-soft); }
+.phi > :first-child::before { content: "Φ"; font-family: var(--serif); font-size: 1.3em; letter-spacing: 0; color: var(--gold-deep); }
+.note > *:last-child, .tip > *:last-child, .important > *:last-child, .phi > *:last-child, .hardware > *:last-child { margin-bottom: 0; }
+.note > *:first-child, .tip > *:first-child, .important > *:first-child, .phi > *:first-child, .hardware > *:first-child { margin-top: 0; }
+
+/* Steps: an ordered list marked {.steps} */
+ol.steps, .steps > ol { counter-reset: step; list-style: none; padding-left: 0; }
+ol.steps > li, .steps > ol > li { counter-increment: step; position: relative; padding-left: 2.2em; margin: 0.5em 0; }
+ol.steps > li::before, .steps > ol > li::before {
+  content: counter(step); position: absolute; left: 0; top: 0.05em;
+  width: 1.5em; height: 1.5em; border-radius: 50%; background: var(--black); color: var(--gold);
+  font-family: var(--sans); font-size: 0.8em; font-weight: 600; text-align: center; line-height: 1.5em;
+}
+
+/* Maths and formulas in the Φ chapter */
+.formula { font-family: var(--serif); font-size: 1.25em; text-align: center; margin: 1em 0; color: var(--ink); }
+.formula em { font-style: italic; }
+.epigraph { font-family: var(--serif); font-style: italic; color: var(--ink-soft); margin: 1.5em 3em; text-align: right; }
+.epigraph p { margin: 0.2em 0; }
+.dropcap::first-letter { font-family: var(--serif); float: left; font-size: 3.6em; line-height: 0.85; padding: 0.04em 0.08em 0 0; color: var(--gold-deep); }
+
+/* Index */
+dl.ix { margin: 0 0 1em; }
+dl.ix dt { font-weight: 500; margin-top: 0.25em; }
+dl.ix dd { margin-left: 1.2em; }
+.ix-refs { color: var(--ink-soft); }
+.ix-letter { font-family: var(--serif); color: var(--gold-deep); border: none; margin: 0.6em 0 0.1em; }

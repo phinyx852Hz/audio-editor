@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 618.03 618.03" role="img" aria-label="Φ">
+  <title>Φ (PHI), compact</title>
+  <!-- The compact Φ mark for buttons: PHI's own mark (see packaging/PHI-MARK.md), created 24 October 2026
+       for PHI by its author (phinyx852Hz), who holds the copyright. As tall as the ring is wide
+       (618 = 382 × φ), so it is square; the same ring and stem, no serifs. Always white. -->
+  <g fill="#ffffff">
+    <path fill-rule="evenodd" d="M0,309.02 a309.02,190.98 0 1,0 618.03,0 a309.02,190.98 0 1,0 -618.03,0 Z M90.17,309.02 a218.85,135.25 0 1,1 437.69,0 a218.85,135.25 0 1,1 -437.69,0 Z"/>
+    <path d="M263.93,0 h90.17 v618.03 h-90.17 Z"/>
+  </g>
+</svg>

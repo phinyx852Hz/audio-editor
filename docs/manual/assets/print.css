@@ -1,0 +1,88 @@
+/* PHI manual: the printed book (WeasyPrint). */
+@page {
+  size: A4;
+  margin: 24mm 20mm 24mm 22mm;
+  @bottom-center { content: none; }
+}
+@page :left {
+  margin-left: 20mm; margin-right: 24mm;
+  @top-left { content: counter(page); font: 600 8.5pt var(--sans); color: #9c7a2c; }
+  @top-center { content: string(part); font: 500 8pt var(--sans); color: #888; letter-spacing: 0.12em; text-transform: uppercase; }
+}
+@page :right {
+  margin-left: 24mm; margin-right: 20mm;
+  @top-right { content: counter(page); font: 600 8.5pt var(--sans); color: #9c7a2c; }
+  @top-center { content: string(chapter); font: 500 8pt var(--sans); color: #888; letter-spacing: 0.12em; text-transform: uppercase; }
+}
+@page cover { margin: 0; background: #0b0b0c; @top-left { content: none; } @top-right { content: none; } @top-center { content: none; } }
+@page bare { @top-left { content: none; } @top-right { content: none; } @top-center { content: none; } }
+@page chapter-start { @top-left { content: none; } @top-right { content: none; } @top-center { content: none; }
+  @bottom-center { content: counter(page); font: 600 8.5pt var(--sans); color: #9c7a2c; } }
+@page part { margin: 0; background: #0b0b0c; @top-left { content: none; } @top-right { content: none; } @top-center { content: none; } }
+
+html { font-family: var(--serif); font-size: 11pt; line-height: 1.42; color: var(--ink); }
+body { margin: 0; }
+
+/* Cover */
+.cover { page: cover; height: 297mm; position: relative; color: var(--gold); break-after: page; }
+.cover-inner { position: absolute; left: 0; right: 0; top: 52mm; text-align: center; }
+.cover-mark { height: 118mm; }
+.cover-title { font-family: var(--serif); font-size: 46pt; letter-spacing: 0.42em; margin: 14mm 0 0 0.42em; color: var(--gold); }
+.cover-sub { font-family: var(--sans); font-size: 9pt; letter-spacing: 0.32em; text-transform: uppercase; color: #a89464; margin-top: 3mm; }
+.cover-rule { width: 38mm; height: 0.6pt; background: var(--gold); margin: 9mm auto; }
+.cover-book { font-family: var(--serif); font-size: 17pt; font-style: italic; color: #e9dcb6; }
+.cover-version { font-family: var(--sans); font-size: 8pt; letter-spacing: 0.2em; color: #7d6d48; margin-top: 4mm; text-transform: uppercase; }
+
+/* Part pages */
+.part-page { page: part; height: 297mm; break-before: right; break-after: page; position: relative; color: var(--gold); }
+.part-num { position: absolute; top: 110mm; width: 100%; text-align: center; font-family: var(--sans); font-size: 10pt; letter-spacing: 0.4em; text-transform: uppercase; color: #a89464; }
+.part-title { position: absolute; top: 122mm; width: 100%; text-align: center; font-family: var(--serif); font-size: 34pt; color: var(--gold); string-set: part content(); }
+
+/* Copyright page */
+.chapter.copyright-page { page: bare; break-before: page; break-after: page; font-size: 8.2pt; line-height: 1.4; padding-top: 30mm; }
+.chapter.copyright-page h1.chapter-title, .chapter.copyright-page > h1.chapter-title { page: bare; string-set: none; font-size: 11pt; font-family: var(--sans); font-weight: 600; margin: 0 0 1em !important; }
+.copyright-page h2 { font-size: 9pt; border: none; margin: 1.2em 0 0.3em; }
+
+/* Contents */
+.contents { page: bare; break-before: right; }
+.contents-title { font-family: var(--serif); font-weight: 500; font-size: 26pt; margin: 0 0 8mm; }
+ol.toc, ol.toc ol { list-style: none; padding: 0; margin: 0; }
+ol.toc > li.toc-part-title { font-family: var(--sans); font-weight: 600; font-size: 8pt; letter-spacing: 0.28em; text-transform: uppercase; color: var(--gold-deep); margin: 6mm 0 1.5mm; break-after: avoid; }
+ol.toc > li.toc-ch > a { font-family: var(--sans); font-weight: 600; font-size: 10pt; margin-top: 2.2mm; }
+ol.toc ol { margin: 0.6mm 0 1mm 9mm; }
+ol.toc ol a { font-size: 9.6pt; }
+ol.toc a { display: flex; color: var(--ink); text-decoration: none; border: none; }
+ol.toc a .n { width: 9mm; flex: none; color: var(--gold-deep); }
+ol.toc a .dots { flex: 1; border-bottom: 1px dotted #b9b2a0; margin: 0 2mm 1.2mm; min-width: 6mm; }
+ol.toc a .t { flex: none; max-width: 80%; }
+ol.toc a .pg { flex: none; color: var(--ink-soft); font-weight: 400; min-width: 7mm; text-align: right; }
+ol.toc li.toc-front a { font-weight: 500; }
+
+/* Chapters */
+.chapter { break-before: right; }
+.chapter-front { break-before: right; }
+.chapter > h1.chapter-title, .chapter h1.chapter-title { page: chapter-start; font-size: 30pt; line-height: 1.1; margin: 28mm 0 12mm; string-set: chapter content(); }
+.chapter h1.chapter-title[data-label]::before { font-size: 8pt; }
+.chapter h2 { font-size: 13pt; margin: 8mm 0 3mm; break-after: avoid; }
+.chapter h3 { font-size: 11pt; margin: 5mm 0 1.5mm; break-after: avoid; }
+.chapter p { margin: 0 0 2.4mm; text-align: justify; orphans: 2; widows: 2; }
+.chapter ul, .chapter ol { margin: 0 0 2.4mm; padding-left: 6mm; }
+.chapter li { margin: 0.6mm 0; }
+.chapter a { border: none; color: var(--gold-deep); }
+.chapter a[href^="#"]:not(.ixref)::after { content: none; }
+a.xref::after { content: " (page " target-counter(attr(href), page) ")"; color: var(--ink-soft); font-size: 0.9em; }
+figure { break-inside: avoid; }
+figure img { max-height: 120mm; }
+table { break-inside: auto; font-size: 9pt; }
+tr { break-inside: avoid; }
+pre { white-space: pre-wrap; font-size: 8.4pt; }
+.note, .tip, .important, .phi, .hardware { break-inside: avoid; font-size: 10pt; }
+
+/* Index */
+.index { break-before: right; }
+.index h1.chapter-title { page: chapter-start; font-size: 30pt; margin: 28mm 0 10mm; string-set: chapter "Index", part "Index"; }
+.ix-cols { columns: 2; column-gap: 9mm; font-size: 8.8pt; line-height: 1.32; }
+.ix-letter { font-size: 14pt; break-after: avoid; }
+dl.ix dt, dl.ix dd { break-inside: avoid; }
+.ix-refs a { color: var(--ink-soft); border: none; }
+a.ixref::after { content: target-counter(attr(href), page); }
