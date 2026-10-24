@@ -5,7 +5,13 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <atomic>
+#include <cctype>
+#include <cstdio>
+#include <cstdlib>
 #include <dlfcn.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
 
 namespace x11
 {
@@ -19,6 +25,51 @@ namespace x11
         {
             auto* system = juce::XWindowSystem::getInstanceWithoutCreating();
             return system != nullptr ? system->getDisplay() : nullptr;
+        }
+
+        // Sends a request to Hyprland's socket, when running under Hyprland; the reply is
+        // read and dropped. The socket is in $XDG_RUNTIME_DIR/hypr, or /tmp/hypr before 0.40.
+        void hyprland (const std::string& request)
+        {
+            const auto* signature = std::getenv ("HYPRLAND_INSTANCE_SIGNATURE");
+            if (signature == nullptr || *signature == 0)
+                return;
+            const auto* runtime = std::getenv ("XDG_RUNTIME_DIR");
+            for (const auto& base : { std::string (runtime != nullptr ? runtime : ""), std::string ("/tmp") })
+            {
+                if (base.empty())
+                    continue;
+                const auto path = base + "/hypr/" + signature + "/.socket.sock";
+                sockaddr_un address {};
+                if (path.size() >= sizeof (address.sun_path))
+                    continue;
+                address.sun_family = AF_UNIX;
+                path.copy (address.sun_path, path.size());
+                const auto fd = ::socket (AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+                if (fd < 0)
+                    return;
+                if (::connect (fd, reinterpret_cast<sockaddr*> (&address), sizeof (address)) == 0)
+                {
+                    if (::write (fd, request.data(), request.size()) == (ssize_t) request.size())
+                    {
+                        char reply[256];
+                        while (::read (fd, reply, sizeof (reply)) > 0) {}
+                    }
+                    ::close (fd);
+                    return;
+                }
+                ::close (fd);
+            }
+        }
+
+        // A Hyprland window rule that matches this exact title: every character that is not
+        // a letter or digit becomes "." (any character), as spaces and ";" cannot appear.
+        std::string titleRule (const std::string& title)
+        {
+            std::string rule = "title:^(";
+            for (const auto c : title)
+                rule += (std::isalnum ((unsigned char) c) != 0) ? c : '.';
+            return rule + ")$";
         }
     }
 
@@ -35,8 +86,19 @@ namespace x11
         x->xFlush (d);
     }
 
-    void setOpacity (void* handle, double opacity)
+    void setOpacity (void* handle, double opacity, const std::string& title)
     {
+        if (! title.empty())
+        {
+            // The request changed between Hyprland versions; the ones it does not know fail harmlessly.
+            char value[16];
+            std::snprintf (value, sizeof (value), "%.2f", juce::jlimit (0.0, 1.0, opacity));
+            const auto rule = titleRule (title);
+            hyprland ("[[BATCH]]dispatch setprop " + rule + " alpha " + value
+                      + " ; dispatch setprop " + rule + " opacity " + value
+                      + " ; setprop " + rule + " alpha " + value + " lock");
+        }
+
         auto* d = display();
         if (d == nullptr || handle == nullptr || lost)
             return;
@@ -47,6 +109,15 @@ namespace x11
         x->xChangeProperty (d, (::Window) (juce::pointer_sized_uint) handle, atom, XA_CARDINAL, 32, PropModeReplace,
                             reinterpret_cast<unsigned char*> (&value), 1);
         x->xFlush (d);
+    }
+
+    void floatWindow (const std::string& title, int width, int height)
+    {
+        const auto rule = titleRule (title);
+        hyprland ("[[BATCH]]dispatch setfloating " + rule
+                  + " ; dispatch resizewindowpixel exact " + std::to_string (width) + " " + std::to_string (height) + "," + rule
+                  + " ; dispatch focuswindow " + rule
+                  + " ; dispatch centerwindow");
     }
 
     void surviveLostConnection (std::function<void()> whenLost)
