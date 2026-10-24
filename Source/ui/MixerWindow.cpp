@@ -12,6 +12,7 @@
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QColorDialog>
+#include <QActionGroup>
 #include <QApplication>
 #include <QComboBox>
 #include <QDateTime>
@@ -536,6 +537,34 @@ public:
             return std::make_pair (part, v);
         };
         QVBoxLayout* sectionLayout = nullptr;
+
+        // The track's mode: its audio clips, its instrument, or both as layers (Hybrid).
+        auto* modeRow = new QHBoxLayout;
+        modeRow->setSpacing (2);
+        const char* modeNames[] = { QT_TRANSLATE_NOOP ("MixerWindow", "Hybrid"), QT_TRANSLATE_NOOP ("MixerWindow", "Audio"),
+                                    QT_TRANSLATE_NOOP ("MixerWindow", "Inst") };
+        const char* modeTips[] = {
+            QT_TRANSLATE_NOOP ("MixerWindow", "Hybrid: the audio clips and the instrument together, as two layers with their own levels; one can duck the other"),
+            QT_TRANSLATE_NOOP ("MixerWindow", "Audio: only the track's audio clips play"),
+            QT_TRANSLATE_NOOP ("MixerWindow", "Instrument: only the instrument plays, from the MIDI clips and the keyboard"),
+        };
+        for (int m : { 1, 2, 0 })
+        {
+            auto* b = smallButton (MixerWindow::tr (modeNames[m]), MixerWindow::tr (modeTips[m]), true);
+            auto f = b->font();
+            f.setPointSizeF (std::max (6.5, f.pointSizeF() * 0.85));
+            b->setFont (f);
+            modeButtons[(size_t) m] = b;
+            modeRow->addWidget (b);
+            QObject::connect (b, &QPushButton::clicked, this, [this, m]
+            {
+                window.forLinked (index, [m] (mixer::Strip& x, bool) { x.mode = m; });
+                refresh();
+                applyLayout();
+            });
+        }
+        layout->addLayout (modeRow);
+
         std::tie (instrumentPart, sectionLayout) = section();
 
         // What the MIDI clips play.
@@ -560,6 +589,10 @@ public:
         midiOptions->addWidget (channelsButton);
         midiOptions->addWidget (armButton);
         sectionLayout->addLayout (midiOptions);
+
+        // Hybrid: the two layers' levels and the duck, filled in with the other pots below.
+        QVBoxLayout* layerLayout = nullptr;
+        std::tie (layerPart, layerLayout) = section();
 
         // Pre (Cubase): trim and polarity, the low and high cut, the track delay.
         std::tie (prePart, sectionLayout) = section();
@@ -693,6 +726,59 @@ public:
             });
         }
         sendLayout->addLayout (sendRow);
+
+        auto layerDial = [this] (int minimum, int maximum, const QString& tip)
+        {
+            auto* dial = new Potentiometer (this);
+            dial->setRange (minimum, maximum);
+            dial->setFixedSize (knob, knob);
+            dial->setFocusPolicy (Qt::NoFocus);
+            dial->setToolTip (tip);
+            dial->installEventFilter (this);
+            return dial;
+        };
+        audioLayerDial = layerDial (0, faderSteps, MixerWindow::tr ("The audio clips' level in the hybrid track (double-click: 0 dB)"));
+        instLayerDial = layerDial (0, faderSteps, MixerWindow::tr ("The instrument's level in the hybrid track (double-click: 0 dB)"));
+        duckDial = layerDial (0, 480, MixerWindow::tr ("Duck: the key (the instrument, or another track) pushes this track down by up to this much "
+                                                       "as it plays (a kick pumping a loop); right-click for the key, Hard, Soft and HF-safe, "
+                                                       "the band, the attack and the release"));
+        duckDial->setContextMenuPolicy (Qt::CustomContextMenu);
+        audioLayerLabel = new QLabel (this);
+        instLayerLabel = new QLabel (this);
+        duckLabel = new QLabel (this);
+        auto* layerRow = new QHBoxLayout;
+        layerRow->setSpacing (2);
+        audioLayerPart = knobColumn (audioLayerDial, audioLayerLabel, MixerWindow::tr ("Audio"));
+        instLayerPart = knobColumn (instLayerDial, instLayerLabel, MixerWindow::tr ("Inst"));
+        layerRow->addWidget (audioLayerPart);
+        layerRow->addWidget (instLayerPart);
+        layerRow->addWidget (knobColumn (duckDial, duckLabel, MixerWindow::tr ("Duck")));
+        layerLayout->addLayout (layerRow);
+        QObject::connect (audioLayerDial, &QDial::valueChanged, this, [this] (int v)
+        {
+            if (updating)
+                return;
+            const auto db = faderDb (v);
+            window.forLinked (index, [db] (mixer::Strip& x, bool) { x.audioLayerDb = db; });
+            showValues();
+        });
+        QObject::connect (instLayerDial, &QDial::valueChanged, this, [this] (int v)
+        {
+            if (updating)
+                return;
+            const auto db = faderDb (v);
+            window.forLinked (index, [db] (mixer::Strip& x, bool) { x.instrumentLayerDb = db; });
+            showValues();
+        });
+        QObject::connect (duckDial, &QDial::valueChanged, this, [this] (int v)
+        {
+            if (updating)
+                return;
+            const auto db = (float) v / 10.0f;
+            window.forLinked (index, [db] (mixer::Strip& x, bool) { x.duckDb = db; });
+            showValues();
+        });
+        QObject::connect (duckDial, &QWidget::customContextMenuRequested, this, [this] { duckMenu(); });
 
         auto* panRow = new QHBoxLayout;
         panRow->setSpacing (2);
@@ -921,7 +1007,12 @@ public:
     void applyLayout()
     {
         const auto shown = window.stripSections;
-        instrumentPart->setVisible (! compact && (shown & instrumentSection) != 0);
+        const auto mode = (mixer::TrackMode) strip().mode.load();
+        instrumentPart->setVisible (! compact && (shown & instrumentSection) != 0 && mode != mixer::TrackMode::audio);
+        // The duck in every mode (another track can key it); the layer levels only in a hybrid.
+        layerPart->setVisible (! compact && (shown & instrumentSection) != 0);
+        audioLayerPart->setVisible (mode == mixer::TrackMode::hybrid);
+        instLayerPart->setVisible (mode == mixer::TrackMode::hybrid);
         prePart->setVisible (! compact && (shown & preSection) != 0);
         insertPart->setVisible (! compact && (shown & insertSection) != 0);
         sendPart->setVisible (! compact && (shown & sendSection) != 0);
@@ -953,7 +1044,10 @@ public:
         }
         for (size_t k = 0; k < list.size(); ++k)
         {
-            auto* item = new QListWidgetItem (QStringLiteral ("%1  ").arg (k + 1) + QString::fromStdString (list[k].effect->name()));
+            // A parallel insert shows how much of it is heard.
+            const auto mix = (int) std::lround (list[k].mix * 100.0f);
+            auto* item = new QListWidgetItem (QStringLiteral ("%1  ").arg (k + 1) + QString::fromStdString (list[k].effect->name())
+                                              + (mix < 100 ? QStringLiteral (" %1%").arg (mix) : QString()));
             insertList->insertItem ((int) k, item);
             item->setData (Qt::UserRole, (int) k);
             item->setToolTip (list[k].bypassed ? MixerWindow::tr ("%1 (bypassed)").arg (item->text()) : item->text());
@@ -970,6 +1064,87 @@ public:
         insertList->setFixedHeight (row * slots + 2 * insertList->frameWidth() + 2);
         addInsertButton->setEnabled ((int) list.size() < mixer::maxInserts);
         updating = was;
+    }
+
+    // What keys the duck (one layer of a hybrid, or another track), how hard, which band, how fast.
+    void duckMenu()
+    {
+        window.select (index);
+        const auto& s = strip();
+        const auto key = s.duckKey.load();
+        QMenu menu (this);
+        auto* keys = new QActionGroup (&menu);
+        auto keyAction = [&] (const QString& text, int track, bool audioLeads)
+        {
+            auto* a = menu.addAction (text);
+            a->setCheckable (true);
+            a->setActionGroup (keys);
+            a->setChecked (key == track && (track >= 0 || s.audioDucksInstrument.load() == audioLeads));
+            QObject::connect (a, &QAction::triggered, this, [this, track, audioLeads]
+            {
+                window.forLinked (index, [track, audioLeads] (mixer::Strip& x, bool) { x.duckKey = track; x.audioDucksInstrument = audioLeads; });
+                refresh();
+            });
+            return a;
+        };
+        const bool hybrid = s.mode.load() == (int) mixer::TrackMode::hybrid;
+        keyAction (MixerWindow::tr ("The Instrument Ducks the Audio"), -1, false)->setEnabled (hybrid);
+        keyAction (MixerWindow::tr ("The Audio Ducks the Instrument"), -1, true)->setEnabled (hybrid);
+        auto* from = menu.addMenu (MixerWindow::tr ("Ducked by Another &Track"));
+        for (int t = 0; t < window.engine.numTracks(); ++t)
+            if (t != index)
+            {
+                auto* a = keyAction (window.trackName (t), t, false);
+                menu.removeAction (a);
+                from->addAction (a);
+            }
+        menu.addSeparator();
+        // The three ducking groups: a hard pump, a gentle one, and one that leaves the highs alone.
+        struct Preset { const char* name; float db, attack, release, below; };
+        static const Preset presets[] = {
+            { QT_TRANSLATE_NOOP ("MixerWindow", "Hard: 24 dB, Fast Release"), 24.0f, 1.0f, 120.0f, 0.0f },
+            { QT_TRANSLATE_NOOP ("MixerWindow", "Soft: 8 dB, Slow Release"), 8.0f, 5.0f, 220.0f, 0.0f },
+            { QT_TRANSLATE_NOOP ("MixerWindow", "HF-Safe: 12 dB Below 150 Hz"), 12.0f, 1.0f, 150.0f, 150.0f },
+        };
+        for (const auto& p : presets)
+            menu.addAction (MixerWindow::tr (p.name), this, [this, p]
+            {
+                window.forLinked (index, [p] (mixer::Strip& x, bool)
+                {
+                    x.duckDb = p.db;
+                    x.duckAttackMs = p.attack;
+                    x.duckReleaseMs = p.release;
+                    x.duckBelowHz = p.below;
+                });
+                refresh();
+            });
+        menu.addSeparator();
+        const auto below = s.duckBelowHz.load();
+        menu.addAction (below > 0.0f ? MixerWindow::tr ("Only Below: %1 Hz...").arg (hzText (below)) : MixerWindow::tr ("Only Below: Full Band..."), this, [this, below]
+        {
+            bool ok = false;
+            const auto v = QInputDialog::getInt (this, MixerWindow::tr ("Duck"), MixerWindow::tr ("Duck only what lies below (Hz; 0: the whole sound):"),
+                                                 (int) std::lround (below), 0, 2000, 10, &ok);
+            if (ok)
+                window.forLinked (index, [v] (mixer::Strip& x, bool) { x.duckBelowHz = (float) v; });
+            showValues();
+        });
+        auto timing = [this] (const QString& title, std::atomic<float> mixer::Strip::* field, double low, double high)
+        {
+            bool ok = false;
+            const auto v = QInputDialog::getDouble (this, MixerWindow::tr ("Duck"), title, (strip().*field).load(), low, high, 1, &ok);
+            if (ok)
+                window.forLinked (index, [field, v] (mixer::Strip& x, bool) { (x.*field) = (float) v; });
+        };
+        menu.addAction (MixerWindow::tr ("Attack: %1 ms...").arg (s.duckAttackMs.load(), 0, 'f', 1), this, [timing]
+        {
+            timing (MixerWindow::tr ("Attack (ms):"), &mixer::Strip::duckAttackMs, 0.1, 100.0);
+        });
+        menu.addAction (MixerWindow::tr ("Release: %1 ms...").arg (s.duckReleaseMs.load(), 0, 'f', 0), this, [timing]
+        {
+            timing (MixerWindow::tr ("Release (ms):"), &mixer::Strip::duckReleaseMs, 5.0, 2000.0);
+        });
+        menu.exec (QCursor::pos());
     }
 
     // The low or high cut's frequency and slope (for the linked strips too).
@@ -1054,6 +1229,11 @@ public:
         lowCutButton->setChecked (s.lowCut.load());
         highCutButton->setChecked (s.highCut.load());
         delayBox->setValue (s.delayMs.load());
+        for (int m = 0; m < 3; ++m)
+            modeButtons[(size_t) m]->setChecked (s.mode.load() == m);
+        audioLayerDial->setValue (faderPosition (s.audioLayerDb.load()));
+        instLayerDial->setValue (faderPosition (s.instrumentLayerDb.load()));
+        duckDial->setValue ((int) std::lround (s.duckDb.load() * 10.0f));
         for (int r = 0; r < mixer::numReturns; ++r)
             sendDials[(size_t) r]->setValue (faderPosition (s.sendDb[(size_t) r].load()));
         refreshInserts();
@@ -1079,6 +1259,15 @@ public:
                                       .arg (hzText (s.lowCutHz.load())).arg (s.lowCutSlope.load()));
         highCutButton->setToolTip (MixerWindow::tr ("High cut at %1 Hz, %2 dB an octave: click turns it on or off; right-click for its frequency and slope")
                                        .arg (hzText (s.highCutHz.load())).arg (s.highCutSlope.load()));
+        audioLayerLabel->setText (dbText (s.audioLayerDb.load()));
+        instLayerLabel->setText (dbText (s.instrumentLayerDb.load()));
+        // Who keys it (I, A or a track number) and how deep; a band duck is marked with a ↓.
+        const auto key = s.duckKey.load();
+        const bool keyed = key >= 0 || s.mode.load() == (int) mixer::TrackMode::hybrid;
+        const auto keyText = key >= 0 ? QString::number (key + 1) : s.audioDucksInstrument.load() ? QStringLiteral ("A") : QStringLiteral ("I");
+        duckLabel->setText (s.duckDb.load() < 0.05f || ! keyed ? MixerWindow::tr ("off")
+                                                               : QStringLiteral ("%1→%2%3").arg (keyText).arg (s.duckDb.load(), 0, 'f', 0)
+                                                                     .arg (s.duckBelowHz.load() > 0.0f ? QStringLiteral ("↓") : QString()));
         for (int r = 0; r < mixer::numReturns; ++r)
             sendLabels[(size_t) r]->setText (dbText (s.sendDb[(size_t) r].load()) + (s.sendPre[(size_t) r].load() ? MixerWindow::tr (" pre") : QString()));
         faderValue->setText (dbText (s.faderDb.load()));
@@ -1148,8 +1337,10 @@ protected:
                 panDial->setValue (0);
             else if (o == widthDial)
                 widthDial->setValue (100);
-            else if (o == sendDials[0] || o == sendDials[1])
+            else if (o == sendDials[0] || o == sendDials[1] || o == duckDial)
                 static_cast<QDial*> (o)->setValue (0);
+            else if (o == audioLayerDial || o == instLayerDial)
+                static_cast<QDial*> (o)->setValue (faderPosition (0.0));
             else if (o == faderValue)
             {
                 bool ok = false;
@@ -1241,6 +1432,16 @@ public:
     QWidget* instrumentPart;
     QWidget* prePart;
     QWidget* insertPart;
+    QWidget* layerPart;
+    std::array<QPushButton*, 3> modeButtons {};
+    QDial* audioLayerDial;
+    QDial* instLayerDial;
+    QDial* duckDial;
+    QLabel* audioLayerLabel;
+    QLabel* instLayerLabel;
+    QLabel* duckLabel;
+    QWidget* audioLayerPart;
+    QWidget* instLayerPart;
     QWidget* sendPart;
     std::array<QDial*, mixer::numReturns> sendDials {};
     std::array<QLabel*, mixer::numReturns> sendLabels {};
@@ -4551,6 +4752,14 @@ void MixerWindow::insertMenu (int track, int insert, QPoint at)
         bypass->setCheckable (true);
         bypass->setChecked (x.bypassed);
         connect (bypass, &QAction::toggled, this, [this, track, insert] (bool on) { setInsertBypassed (track, insert, on); });
+        menu.addAction (tr ("&Mix: %1%...").arg ((int) std::lround (x.mix * 100.0f)), this, [this, track, insert, mix = x.mix]
+        {
+            bool ok = false;
+            const auto v = QInputDialog::getInt (this, tr ("Insert Mix"), tr ("How much of the effect, the rest the dry sound (parallel processing), %:"),
+                                                 (int) std::lround (mix * 100.0f), 0, 100, 5, &ok);
+            if (ok)
+                setInsertMix (track, insert, (float) v / 100.0f);
+        });
         menu.addAction (tr ("Move &Up"), this, [this, track, insert] { moveInsert (track, insert, insert - 1); })->setEnabled (insert > 0);
         menu.addAction (tr ("Move &Down"), this, [this, track, insert] { moveInsert (track, insert, insert + 1); })->setEnabled (insert + 1 < (int) list.size());
         menu.addAction (tr ("&Replace..."), this, [this, track, insert, at] { chooseInsert (track, insert, at); });
@@ -4577,6 +4786,17 @@ void MixerWindow::setInsertBypassed (int track, int insert, bool on)
     if (insert < 0 || insert >= (int) list.size())
         return;
     list[(size_t) insert].bypassed = on;
+    engine.setInserts (track, std::move (list));
+    strips[(size_t) track]->refreshInserts();
+    changed();
+}
+
+void MixerWindow::setInsertMix (int track, int insert, float mix)
+{
+    auto list = engine.inserts (track);
+    if (insert < 0 || insert >= (int) list.size())
+        return;
+    list[(size_t) insert].mix = std::clamp (mix, 0.0f, 1.0f);
     engine.setInserts (track, std::move (list));
     strips[(size_t) track]->refreshInserts();
     changed();
@@ -4627,7 +4847,7 @@ QJsonArray MixerWindow::insertsJson (int track) const
     for (const auto& x : engine.inserts (track))
         list.append (QJsonObject {
             { "id", QString::fromStdString (x.effect->pluginId()) }, { "name", QString::fromStdString (x.effect->name()) },
-            { "state", QString::fromStdString (x.effect->state()) }, { "bypassed", x.bypassed },
+            { "state", QString::fromStdString (x.effect->state()) }, { "bypassed", x.bypassed }, { "mix", x.mix },
         });
     return list;
 }
@@ -4646,7 +4866,7 @@ void MixerWindow::loadInserts (int track, const QJsonArray& list, QStringList& p
             continue;
         }
         effect->setState (o.value ("state").toString().toStdString());
-        made.push_back ({ effect, o.value ("bypassed").toBool() });
+        made.push_back ({ effect, o.value ("bypassed").toBool(), (float) std::clamp (o.value ("mix").toDouble (1.0), 0.0, 1.0) });
     }
     engine.setInserts (track, std::move (made));
 }
@@ -5138,6 +5358,14 @@ bool MixerWindow::newMix()
         s.lowCutSlope = s.highCutSlope = 12;
         s.delayMs = 0.0f;
         s.width = 1.0f;
+        s.mode = (int) mixer::TrackMode::hybrid;
+        s.audioLayerDb = s.instrumentLayerDb = 0.0f;
+        s.duckDb = 0.0f;
+        s.audioDucksInstrument = false;
+        s.duckAttackMs = 1.0f;
+        s.duckReleaseMs = 150.0f;
+        s.duckKey = -1;
+        s.duckBelowHz = 0.0f;
         for (int r = 0; r < mixer::numReturns; ++r)
         {
             s.sendDb[(size_t) r] = -100.0f;
@@ -5273,6 +5501,10 @@ bool MixerWindow::writeMix (const QString& file, QString& error)
             { "lowCut", QJsonObject { { "on", s.lowCut.load() }, { "hz", s.lowCutHz.load() }, { "slope", s.lowCutSlope.load() } } },
             { "highCut", QJsonObject { { "on", s.highCut.load() }, { "hz", s.highCutHz.load() }, { "slope", s.highCutSlope.load() } } },
             { "delayMs", s.delayMs.load() }, { "width", s.width.load() }, { "inserts", insertsJson (i) },
+            { "mode", s.mode.load() }, { "audioLayer", s.audioLayerDb.load() }, { "instrumentLayer", s.instrumentLayerDb.load() },
+            { "duck", QJsonObject { { "db", s.duckDb.load() }, { "audioLeads", s.audioDucksInstrument.load() },
+                                    { "attack", s.duckAttackMs.load() }, { "release", s.duckReleaseMs.load() },
+                                    { "key", s.duckKey.load() }, { "below", s.duckBelowHz.load() } } },
             { "sends", QJsonArray { QJsonObject { { "db", s.sendDb[0].load() }, { "pre", s.sendPre[0].load() } },
                                     QJsonObject { { "db", s.sendDb[1].load() }, { "pre", s.sendPre[1].load() } } } },
         };
@@ -5445,6 +5677,16 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
         s.delayMs = (float) std::clamp (o.value ("delayMs").toDouble(), (double) -mixer::maxDelayMs, (double) mixer::maxDelayMs);
         s.width = (float) std::clamp (o.value ("width").toDouble (1.0), 0.0, 2.0);
         loadInserts (i, o.value ("inserts").toArray(), problems);
+        s.mode = std::clamp (o.value ("mode").toInt(), 0, 2);
+        s.audioLayerDb = (float) o.value ("audioLayer").toDouble();
+        s.instrumentLayerDb = (float) o.value ("instrumentLayer").toDouble();
+        const auto duck = o.value ("duck").toObject();
+        s.duckDb = (float) std::clamp (duck.value ("db").toDouble(), 0.0, 48.0);
+        s.audioDucksInstrument = duck.value ("audioLeads").toBool();
+        s.duckAttackMs = (float) duck.value ("attack").toDouble (1.0);
+        s.duckReleaseMs = (float) duck.value ("release").toDouble (150.0);
+        s.duckKey = std::clamp (duck.value ("key").toInt (-1), -1, mixer::maxTracks - 1);
+        s.duckBelowHz = (float) std::clamp (duck.value ("below").toDouble(), 0.0, 2000.0);
         const auto sends = o.value ("sends").toArray();
         for (int r = 0; r < mixer::numReturns && r < sends.size(); ++r)
         {

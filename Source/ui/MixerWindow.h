@@ -213,6 +213,7 @@ private:
     void editInsert (int track, int insert);                 // its window, or its knobs for the built-in ones
     void insertMenu (int track, int insert, QPoint at);      // insert -1: the list's empty space
     void setInsertBypassed (int track, int insert, bool);
+    void setInsertMix (int track, int insert, float mix);   // 0..1, the rest dry
     void removeInsert (int track, int insert);
     void moveInsert (int track, int insert, int to);
     void reorderInserts (int track, const std::vector<int>& order);   // the engine's indices in their new order

@@ -3102,6 +3102,79 @@ namespace
         if (dry != nullptr)
             dry->read (1000, 1, pa);
         check (dry != nullptr && near (a[0], 0.5, 1.0e-4), "mixer strip: a bounce has no sends");
+        m.strip (0).sendDb[0] = -100.0f;
+        m.strip (0).sendPre[0] = false;
+        m.setReturnEffect (0, nullptr);
+        m.strip (0).faderDb = 0.0f;
+
+        // Track modes: a steady 0.25 from the instrument with the 0.5 audio clip.
+        struct Steady final : mixer::Instrument
+        {
+            Kind kind() const override { return Kind::synth; }
+            std::string name() const override { return "Steady"; }
+            void prepare (double, int) override {}
+            void process (const mixer::NoteEvent*, int, float* left, float* right, int frames) override
+            {
+                for (int i = 0; i < frames; ++i)
+                {
+                    left[i] += 0.25f;
+                    right[i] += 0.25f;
+                }
+            }
+            void releaseAll() override {}
+            void reset() override {}
+        };
+        m.setInstrument (0, std::make_shared<Steady>());
+        m.setPosition (0);
+        m.play();
+        settle();
+        check (near (l[300], 0.75, 1.0e-4), "mixer modes: hybrid plays the audio and the instrument");
+        m.strip (0).mode = (int) mixer::TrackMode::audio;
+        settle();
+        check (near (l[300], 0.5, 1.0e-4), "mixer modes: audio only");
+        m.strip (0).mode = (int) mixer::TrackMode::instrument;
+        settle();
+        check (near (l[300], 0.25, 1.0e-4), "mixer modes: instrument only");
+        m.strip (0).mode = (int) mixer::TrackMode::hybrid;
+        m.strip (0).audioLayerDb = -6.0206f;
+        settle();
+        check (near (l[300], 0.5, 1.0e-3), "mixer modes: the audio layer's level");
+        m.strip (0).audioLayerDb = 0.0f;
+        m.strip (0).duckDb = 12.0f;   // the instrument at 0.25 (-12 dBFS) is half way: 6 dB down
+        settle (20);
+        check (near (l[300], 0.25 + 0.5 * 0.5012, 2.0e-3), "mixer modes: the instrument ducks the audio");
+        m.strip (0).audioDucksInstrument = true;   // the audio at 0.5 (-6 dBFS): the whole 12 dB
+        settle (20);
+        check (near (l[300], 0.5 + 0.25 * 0.2512, 2.0e-3), "mixer modes: the audio ducks the instrument");
+        m.strip (0).audioDucksInstrument = false;
+        m.strip (0).duckBelowHz = 100.0f;   // DC is all below it: still ducked
+        m.setPosition (0);   // the one-second clip from its start again
+        settle (80);   // the key was the louder audio: its release first
+        check (near (l[300], 0.25 + 0.5 * 0.5012, 3.0e-3), "mixer modes: ducking below a frequency ducks the lows");
+        m.strip (0).duckDb = 0.0f;
+        m.strip (0).duckBelowHz = 0.0f;
+        m.setInstrument (0, nullptr);
+
+        // Another track as the key: track 2's 0.5 ducks track 1 by the whole 12 dB.
+        m.setNumTracks (2);
+        m.setClips (1, { mixer::makeClip (clipOf (0.5f, 0.5f, 2), 0) });
+        m.strip (0).duckKey = 1;
+        m.strip (0).duckDb = 12.0f;
+        m.strip (0).mode = (int) mixer::TrackMode::audio;
+        m.setPosition (0);
+        m.play();
+        settle (20);
+        check (near (l[300], 0.5 + 0.5 * 0.2512, 3.0e-3), "mixer modes: another track ducks this one");
+        m.strip (0).duckDb = 0.0f;
+        m.strip (0).duckKey = -1;
+        m.strip (0).mode = (int) mixer::TrackMode::hybrid;
+        m.setClips (1, {});
+
+        // An insert's Mix: half of the doubled sound and half of the dry.
+        m.setInserts (0, { { twice, false, 0.5f } });
+        settle();
+        check (near (l[300], 0.75, 1.0e-4), "mixer strip: an insert's mix keeps some of the dry sound");
+        m.setInserts (0, {});
     }
 
     void testPatchBay()

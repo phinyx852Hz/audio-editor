@@ -241,8 +241,10 @@ namespace mixer
     //==========================================================================
     Engine::Engine()
     {
-        for (auto* v : { &mixL, &mixR, &trackL, &trackR, &instL, &instR, &monoBuf, &outL, &outR, &sendPreL, &sendPreR })
+        for (auto* v : { &mixL, &mixR, &trackL, &trackR, &instL, &instR, &monoBuf, &outL, &outR, &sendPreL, &sendPreR, &audL, &audR, &dryL, &dryR, &duckGains })
             v->resize (block);
+        for (auto& k : keyLevels)
+            k.resize (block);
         for (int r = 0; r < numReturns; ++r)
         {
             returnL[(size_t) r].resize (block);
@@ -371,6 +373,97 @@ namespace mixer
     {
         const std::lock_guard<std::mutex> l (lock);
         return index >= 0 && index < numReturns ? returnEffects[(size_t) index] : nullptr;
+    }
+
+    // The two layers into one: the audio's stereo part into instL and instR, its mono part
+    // left in monoBuf, each at its layer's level, one ducked by the other in a hybrid track.
+    void Engine::layers (int index, Track& t, const Strip& s, TrackMode mode, bool hasMono, int frames, bool jumped)
+    {
+        const bool hybrid = mode == TrackMode::hybrid;
+        const auto audioGain = hybrid ? dbToGain (s.audioLayerDb.load()) : 1.0f;
+        const auto instGain = mode == TrackMode::audio ? 0.0f : hybrid ? dbToGain (s.instrumentLayerDb.load()) : 1.0f;
+        if (jumped)
+        {
+            t.audioLayer = audioGain;
+            t.instrumentLayer = instGain;
+        }
+        if (std::abs (t.audioLayer - 1.0f) > 1.0e-6f || std::abs (audioGain - 1.0f) > 1.0e-6f)
+        {
+            scaleRamped (audL.data(), frames, t.audioLayer, audioGain);
+            scaleRamped (audR.data(), frames, t.audioLayer, audioGain);
+            if (hasMono)
+                scaleRamped (monoBuf.data(), frames, t.audioLayer, audioGain);
+        }
+        if (std::abs (t.instrumentLayer - 1.0f) > 1.0e-6f || std::abs (instGain - 1.0f) > 1.0e-6f)
+        {
+            scaleRamped (instL.data(), frames, t.instrumentLayer, instGain);
+            scaleRamped (instR.data(), frames, t.instrumentLayer, instGain);
+        }
+        t.audioLayer = audioGain;
+        t.instrumentLayer = instGain;
+
+        // The duck: a peak follower on the key (the other layer of a hybrid track, or another
+        // track's sound); at -6 dBFS and above the key pushes the rest down by the whole amount,
+        // below that by its share. With a frequency, only what lies below it is ducked.
+        const auto key = std::clamp (s.duckKey.load(), -1, maxTracks - 1);
+        const auto amount = (key >= 0 || hybrid) ? std::clamp (s.duckDb.load(), 0.0f, 48.0f) : 0.0f;
+        if (amount > 0.01f && key != index)
+        {
+            const bool audioLeads = key < 0 && s.audioDucksInstrument.load();
+            const auto r = (float) rate.load();
+            const auto attack = 1.0f - std::exp (-1.0f / (std::max (0.05f, s.duckAttackMs.load()) * 0.001f * r));
+            const auto release = 1.0f - std::exp (-1.0f / (std::max (1.0f, s.duckReleaseMs.load()) * 0.001f * r));
+            auto& gains = duckGains;
+            for (int k = 0; k < frames; ++k)
+            {
+                const auto level = key >= 0 ? keyLevels[(size_t) key][(size_t) k]
+                                 : audioLeads ? std::max ({ std::abs (audL[(size_t) k]), std::abs (audR[(size_t) k]), std::abs (monoBuf[(size_t) k]) })
+                                              : std::max (std::abs (instL[(size_t) k]), std::abs (instR[(size_t) k]));
+                auto& e = t.duckEnvelope;
+                e += (level - e) * (level > e ? attack : release);
+                gains[(size_t) k] = std::pow (10.0f, -amount * std::min (1.0f, e / 0.5f) / 20.0f);
+            }
+            // What is ducked: the audio, the instrument, or (keyed by another track) both.
+            const bool duckAudio = key >= 0 || ! audioLeads, duckInstrument = key >= 0 || audioLeads;
+            const auto below = s.duckBelowHz.load();
+            t.duckSplit.update (below > 0.0f, below, 12, true, r);   // a high cut: the low-pass
+            std::array<float*, 5> targets { duckInstrument ? instL.data() : nullptr, duckInstrument ? instR.data() : nullptr,
+                                            duckAudio ? audL.data() : nullptr, duckAudio ? audR.data() : nullptr,
+                                            duckAudio && hasMono ? monoBuf.data() : nullptr };
+            for (size_t c = 0; c < targets.size(); ++c)
+            {
+                auto* x = targets[c];
+                if (x == nullptr)
+                    continue;
+                if (! t.duckSplit.on)
+                {
+                    for (int k = 0; k < frames; ++k)
+                        x[k] *= gains[(size_t) k];
+                    continue;
+                }
+                // The low part (a low-pass of the high cut's kind) ducked, the rest kept: they add back to x.
+                auto& b = t.duckSplit.stages[0];
+                auto z1 = t.duckState[c][0], z2 = t.duckState[c][1];
+                for (int k = 0; k < frames; ++k)
+                {
+                    const auto in = x[k];
+                    const auto low = b.b0 * in + z1;
+                    z1 = b.b1 * in - b.a1 * low + z2;
+                    z2 = b.b2 * in - b.a2 * low;
+                    x[k] = in - low + low * gains[(size_t) k];
+                }
+                t.duckState[c][0] = std::abs (z1) < 1.0e-20f ? 0.0f : z1;
+                t.duckState[c][1] = std::abs (z2) < 1.0e-20f ? 0.0f : z2;
+            }
+        }
+        else
+            t.duckEnvelope = 0.0f;
+
+        for (int k = 0; k < frames; ++k)
+        {
+            instL[(size_t) k] += audL[(size_t) k];
+            instR[(size_t) k] += audR[(size_t) k];
+        }
     }
 
     Inserts Engine::inserts (int index) const
@@ -859,7 +952,8 @@ namespace mixer
             t.launchChanged = false;
 
             // MIDI from the clips: let go of what they held when the transport stops, jumps or loses channels.
-            const bool playMidi = play && std::any_of (clips.begin(), clips.end(), [] (const Clip& c) { return c.isMidi(); });
+            const auto mode = (TrackMode) s.mode.load();
+            const bool playMidi = play && mode != TrackMode::audio && std::any_of (clips.begin(), clips.end(), [] (const Clip& c) { return c.isMidi(); });
             const auto channels = s.channels.load();
             if ((t.wasPlayingMidi || launched) && (trackJumped || ! playMidi || stopping || channels != t.lastChannels))
                 releaseHeld (t, events);
@@ -937,15 +1031,15 @@ namespace mixer
             std::fill (instR.begin(), instR.begin() + frames, 0.0f);
             if (t.instrument != nullptr)
                 t.instrument->process (events.data(), (int) events.size(), instL.data(), instR.data(), frames);
-            if (routed != nullptr)
-                routed->trackInput (i, blockOffset, instL.data(), instR.data(), frames);   // through the strip like the instrument
 
             // The audio clips: stereo ones join the instrument (both are balanced), mono ones
             // go apart to be panned with equal power. A short fade at each edge keeps a
-            // trimmed clip from clicking.
+            // trimmed clip from clicking. An instrument-only track plays none.
             std::fill (monoBuf.begin(), monoBuf.begin() + frames, 0.0f);
+            std::fill (audL.begin(), audL.begin() + frames, 0.0f);
+            std::fill (audR.begin(), audR.begin() + frames, 0.0f);
             bool hasMono = false;
-            if (play)
+            if (play && mode != TrackMode::instrument)
                 for (const auto& c : clips)
                 {
                     if (c.audio == nullptr || c.muted || c.start >= base + frames || c.end() <= base)
@@ -965,12 +1059,15 @@ namespace mixer
                             monoBuf[k] += a.left[src] * g;
                         else
                         {
-                            instL[k] += a.left[src] * g;
-                            instR[k] += a.right[src] * g;
+                            audL[k] += a.left[src] * g;
+                            audR[k] += a.right[src] * g;
                         }
                     }
                     hasMono = hasMono || a.mono;
                 }
+            layers (i, t, s, mode, hasMono, frames, jumped);
+            if (routed != nullptr)
+                routed->trackInput (i, blockOffset, instL.data(), instR.data(), frames);   // through the strip like the instrument
 
             // Trim, polarity, pan, fader, mute and solo, as one gain a side for each source.
             // A bounce takes the track before its fader and pan (trim and polarity included),
@@ -1042,8 +1139,24 @@ namespace mixer
                 t.highCut.process (sumL, sumR, frames);
                 if (insertsOn)
                     for (auto& x : t.inserts)
-                        if (! x.bypassed)
-                            x.effect->process (sumL, sumR, frames);
+                    {
+                        if (x.bypassed)
+                            continue;
+                        // A slot's Mix below 100 % keeps some of what went in: parallel processing.
+                        const auto mix = std::clamp (x.mix, 0.0f, 1.0f);
+                        if (mix < 0.999f)
+                        {
+                            std::copy (sumL, sumL + frames, dryL.begin());
+                            std::copy (sumR, sumR + frames, dryR.begin());
+                        }
+                        x.effect->process (sumL, sumR, frames);
+                        if (mix < 0.999f)
+                            for (int k = 0; k < frames; ++k)
+                            {
+                                sumL[k] = dryL[(size_t) k] + (sumL[k] - dryL[(size_t) k]) * mix;
+                                sumR[k] = dryR[(size_t) k] + (sumR[k] - dryR[(size_t) k]) * mix;
+                            }
+                    }
                 if (std::abs (width - 1.0f) > 1.0e-4f || std::abs (t.width - 1.0f) > 1.0e-4f)
                 {
                     const auto step = (width - t.width) / (float) frames;
@@ -1099,6 +1212,9 @@ namespace mixer
                 was = g;
             }
 
+            // Its sound as a key for other tracks' ducks (theirs before it in the order hear the last block's).
+            for (int k = 0; k < frames; ++k)
+                keyLevels[(size_t) i][(size_t) k] = std::max (std::abs (sumL[k]), std::abs (sumR[k]));
             if (withLive)
                 meter (i, sumL, sumR, frames);
             if (routed != nullptr)
@@ -1187,6 +1303,8 @@ namespace mixer
         for (auto& fx : returnEffects)
             if (fx != nullptr)
                 fx->reset();
+        for (auto& k : keyLevels)
+            std::fill (k.begin(), k.end(), 0.0f);
         stopPending = false;
         expected = -1;
 

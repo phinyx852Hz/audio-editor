@@ -329,8 +329,25 @@ Every control has a screen-reader name and announces its value.
   for the whole mix (`Engine::bypassInserts`, `bypassSends`); meters coloured from -12 dB and
   again from -6 dB.
 
-Next (owner, 2026-10-24): track modes (Audio, Instrument, Hybrid: the audio clips and the live
-instrument as two layers with their own Mix and a Duck sidechain from one into the other), a
+- Track modes (2026-10-24, owner: "audio only, instrument only, audio and instrument mixed into a
+  single wave form", and a kick sidechained into a drum loop on the same track). `Strip::mode`:
+  Hybrid (the default: the audio clips and the instrument as two layers, each with its own level,
+  `audioLayerDb` and `instrumentLayerDb`, the Audio and Inst pots), Audio (clips only) or
+  Instrument (no audio clips). Hybrid gives 8 tracks 16 sources. The Duck pot (0 to 48 dB) is a
+  peak-following sidechain: at -6 dBFS and above the key pushes the ducked sound down by the
+  whole amount, below that by its share. The key is one layer of a hybrid (the instrument ducks
+  the audio, or the audio the instrument) or another track (`duckKey`; it ducks all of this
+  one). Right-click the Duck pot for the key, attack and release, Only Below (`duckBelowHz`: a
+  12 dB/oct split, so only the lows duck and the highs pass, e.g. a loop's hats under a kick),
+  and three presets from the owner's Ableton video's ducking groups: Hard (24 dB, 120 ms
+  release), Soft (8 dB, 220 ms) and HF-Safe (12 dB below 150 Hz). Its label reads key→dB, e.g.
+  `I→12` or `3→24↓`. Clipping: the layers are summed in float before trim and the fader, so
+  nothing clips inside the strip; the meter's red zone shows a hot track and the Trim brings it
+  down.
+- Insert Mix: each insert has a dry/wet Mix (`Insert::mix`, right-click a slot: Mix...), for
+  parallel compression or saturation in one slot; a slot under 100 % shows its percentage.
+
+Next (owner, 2026-10-24): a
 Channel window (Pre and a Φ EQ with another track's spectrum to compare), loudness on the master,
 snapshots and mixer history, then In/Out routing (Ableton's Audio From and Audio To), live inputs
 and recording, thumbnails, templates and the spatial panner. No inspector: with 8 tracks the

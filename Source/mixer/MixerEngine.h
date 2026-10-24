@@ -107,9 +107,25 @@ namespace mixer
         bool timeline = true;      // the track plays its timeline clips, not the launcher
     };
 
+    // What a track plays (owner, 2026-10-24): its audio clips only, its instrument only (the
+    // MIDI clips and the keyboard), or both as two layers, each with its own level, one of
+    // which can duck the other (a kick on the instrument pumping a drum loop in the audio).
+    enum class TrackMode { hybrid = 0, audio = 1, instrument = 2 };
+
     // A track's controls, set from any thread.
     struct Strip
     {
+        std::atomic<int> mode { (int) TrackMode::hybrid };
+        // Hybrid: each layer's level, and the duck: the source layer's level pushes the other
+        // down by up to duckDb (reached when the source peaks at -6 dBFS), with attack and release.
+        std::atomic<float> audioLayerDb { 0.0f }, instrumentLayerDb { 0.0f };   // -inf (below -96) .. +6
+        std::atomic<float> duckDb { 0.0f };          // 0 (off) .. 48
+        std::atomic<bool> audioDucksInstrument { false };   // else the instrument ducks the audio
+        // The key: -1 the other layer (a hybrid track), or another track whose sound (after its
+        // fader) ducks this whole track, in any mode. duckBelowHz > 0 ducks only below it.
+        std::atomic<int> duckKey { -1 };
+        std::atomic<float> duckBelowHz { 0.0f };
+        std::atomic<float> duckAttackMs { 1.0f }, duckReleaseMs { 150.0f };
         std::atomic<float> trimDb { 0.0f };     // ±24, before everything
         std::atomic<float> faderDb { 0.0f };    // -inf (below -96) .. +6
         std::atomic<float> pan { 0.0f };        // -1 left .. 1 right: equal power for mono audio, balance otherwise
@@ -148,6 +164,7 @@ namespace mixer
     {
         EffectPtr effect;
         bool bypassed = false;
+        float mix = 1.0f;   // 0..1: what the effect gives, against what went in (parallel)
     };
     using Inserts = std::vector<Insert>;
 
@@ -316,6 +333,10 @@ namespace mixer
             float postL = 0.0f, postR = 0.0f;   // and pan and fader gains, when the strip processes
             float width = 1.0f;
             std::array<float, numReturns> sendGain {};   // last block's send gains
+            float audioLayer = 1.0f, instrumentLayer = 1.0f;   // last block's layer gains
+            float duckEnvelope = 0.0f;
+            Cut duckSplit;                    // its low-pass, below which the duck works
+            float duckState[5][2] {};         // per ducked side: the instrument's, the audio's, mono
         };
         struct LaunchRequest
         {
@@ -348,6 +369,7 @@ namespace mixer
         void endPasses (int frames);      // after a block: one-shot clips that ended, the UI's info
         bool launcherBusy() const;
         void meter (int index, const float* left, const float* right, int frames);
+        void layers (int index, Track&, const Strip&, TrackMode, bool hasMono, int frames, bool jumped);
 
         mutable std::mutex lock;   // tracks: held by render and by changes
         std::atomic<double> rate { 48000.0 };
@@ -378,7 +400,8 @@ namespace mixer
         std::atomic<Frame> clock { 0 };
         std::atomic<bool> clockReset { false };
 
-        std::vector<float> mixL, mixR, trackL, trackR, instL, instR, monoBuf, outL, outR, sendPreL, sendPreR;
+        std::vector<float> mixL, mixR, trackL, trackR, instL, instR, monoBuf, outL, outR, sendPreL, sendPreR, audL, audR, dryL, dryR, duckGains;
+        std::array<std::vector<float>, maxTracks> keyLevels;   // each track's sound, for ducks
         std::vector<NoteEvent> events;
     };
 }
