@@ -10,8 +10,8 @@ if(PkgConfig_FOUND)
 endif()
 
 if(VAMP_HOSTSDK_FOUND)
-    add_library(phinyx_vamp_host INTERFACE)
-    target_link_libraries(phinyx_vamp_host INTERFACE PkgConfig::VAMP_HOSTSDK)
+    add_library(phi_vamp_host INTERFACE)
+    target_link_libraries(phi_vamp_host INTERFACE PkgConfig::VAMP_HOSTSDK)
     message(STATUS "Vamp host SDK: system ${VAMP_HOSTSDK_VERSION}")
 else()
     include(FetchContent)
@@ -21,7 +21,7 @@ else()
     # The SDK has no CMakeLists.txt, so this only downloads it.
     FetchContent_MakeAvailable(vampsdk)
     set(vamp_src ${vampsdk_SOURCE_DIR}/src/vamp-hostsdk)
-    add_library(phinyx_vamp_host STATIC
+    add_library(phi_vamp_host STATIC
         ${vamp_src}/Files.cpp
         ${vamp_src}/PluginHostAdapter.cpp
         ${vamp_src}/RealTime.cpp
@@ -32,8 +32,8 @@ else()
         ${vamp_src}/PluginSummarisingAdapter.cpp
         ${vamp_src}/PluginWrapper.cpp
         ${vamp_src}/acsymbols.c)
-    target_include_directories(phinyx_vamp_host SYSTEM PUBLIC ${vampsdk_SOURCE_DIR})
-    set_target_properties(phinyx_vamp_host PROPERTIES POSITION_INDEPENDENT_CODE ON)
-    target_link_libraries(phinyx_vamp_host PUBLIC ${CMAKE_DL_LIBS})
+    target_include_directories(phi_vamp_host SYSTEM PUBLIC ${vampsdk_SOURCE_DIR})
+    set_target_properties(phi_vamp_host PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    target_link_libraries(phi_vamp_host PUBLIC ${CMAKE_DL_LIBS})
     message(STATUS "Vamp host SDK: built from the pinned source")
 endif()

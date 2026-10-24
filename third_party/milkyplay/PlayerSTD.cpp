@@ -312,7 +312,7 @@ void PlayerSTD::timerHandler(mp_sint32 currentBeatPacket)
 		externalFrame = currentBeatPacket * (mp_sint32)getBeatPacketSize();
 		tickhandler();
 
-		// PHINYX: external notes end where the key goes up or the volume reaches zero
+		// PHI: external notes end where the key goes up or the volume reaches zero
 		if (externalNotes)
 		{
 			for (mp_sint32 chn = 0; chn < numChannels && chn < MAX_EXTERNAL_CHANNELS; chn++)
@@ -635,7 +635,7 @@ void PlayerSTD::releaseExternalNotes()
 
 void PlayerSTD::playInstrument(mp_sint32 chn, TModuleChannel* chnInf, bool bNoRestart/* = false*/)
 {
-	// PHINYX: an external instrument gets the note; its sample stays silent
+	// PHI: an external instrument gets the note; its sample stays silent
 	if (externalNotes && chnInf->ins && externalNotes->plays(chnInf->ins))
 	{
 		if (!bNoRestart && chn < MAX_EXTERNAL_CHANNELS)

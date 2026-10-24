@@ -10,7 +10,7 @@
 // Vamp analysis plugins (vamp-plugins.org), the plugin type Sonic Visualiser
 // uses: beat trackers, onset detectors, key and tempo estimators, pitch
 // trackers and more. Plugins are looked for in the stock vamp folder (the QM
-// Vamp Plugins ship with PHINYX), then VAMP_PATH or the usual places (~/vamp,
+// Vamp Plugins ship with PHI), then VAMP_PATH or the usual places (~/vamp,
 // ~/.vamp, /usr/local/lib/vamp, /usr/lib/vamp). No JUCE or Qt types here.
 namespace vamphost
 {

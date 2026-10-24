@@ -12,7 +12,7 @@
 
 namespace
 {
-    // Whether a PHINYX run with this process id is still going (a crashed one
+    // Whether a PHI run with this process id is still going (a crashed one
     // can linger as a zombie for a moment: state Z in /proc/<pid>/stat).
     bool stillRunning (qint64 pid)
     {

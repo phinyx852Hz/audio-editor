@@ -4,11 +4,11 @@
 #include <functional>
 
 // Plugin windows are JUCE windows on X11 (XWayland on Wayland). These keep
-// PHINYX itself alive and recognisable there.
+// PHI itself alive and recognisable there.
 namespace x11
 {
-    // Gives a plugin window the class "phinyx", so window manager rules
-    // (Hyprland's class:^(phinyx)$) apply to it like the main window.
+    // Gives a plugin window the class "phi", so window manager rules
+    // (Hyprland's class:^(phi)$) apply to it like the main window.
     void setWindowClass (void* nativeWindowHandle);
 
     // Sets a window's opacity, 0 to 1 (_NET_WM_WINDOW_OPACITY), for compositors
@@ -21,7 +21,7 @@ namespace x11
     void surviveLostConnection (std::function<void()> whenLost);
     bool connectionLost();
 
-    // Puts PHINYX's own X error handler back. Plugins may install theirs while
+    // Puts PHI's own X error handler back. Plugins may install theirs while
     // creating or showing their windows; Xlib keeps one handler for the whole
     // process, so call this after handing control to plugin GUI code.
     void useHostErrorHandler();

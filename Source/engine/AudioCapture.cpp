@@ -5,7 +5,7 @@
 #include <cstring>
 #include <mutex>
 
-#if PHINYX_PIPEWIRE
+#if PHI_PIPEWIRE
 
 #include <pipewire/pipewire.h>
 #include <spa/param/audio/format-utils.h>
@@ -214,7 +214,7 @@ std::string AudioCapture::connect()
     std::call_once (initialised, [] { pw_init (nullptr, nullptr); });
 
     auto i = std::make_unique<Impl> (*this);
-    i->loop = pw_thread_loop_new ("phinyx-capture", nullptr);
+    i->loop = pw_thread_loop_new ("phi-capture", nullptr);
     if (i->loop == nullptr)
         return "Could not start PipeWire's thread";
 

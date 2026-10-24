@@ -9,7 +9,7 @@
 
 // Nyquist effects, as in Audacity: small programs in Nyquist (a Lisp for
 // sound, by Roger B. Dannenberg) in .ny files whose header names the effect
-// and its controls. PHINYX runs them with libnyquist, the same library
+// and its controls. PHI runs them with libnyquist, the same library
 // Audacity uses (third_party/libnyquist), so Audacity's own plug-ins and the
 // many shared online work here. Header parsing and the variables set up for
 // the script follow Audacity's NyquistBase.cpp (GPLv2+). Plain C++.

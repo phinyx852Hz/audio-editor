@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- PHI's logo: the Greek capital phi, drawn as shapes so it needs no font. -->
+  <rect x="8" y="8" width="240" height="240" rx="48" fill="#16181d"/>
+  <g fill="none" stroke="#4fc3f7" stroke-width="18" stroke-linecap="round">
+    <ellipse cx="128" cy="128" rx="68" ry="50"/>
+    <line x1="128" y1="40" x2="128" y2="216"/>
+    <line x1="100" y1="40" x2="156" y2="40"/>
+    <line x1="100" y1="216" x2="156" y2="216"/>
+  </g>
+</svg>

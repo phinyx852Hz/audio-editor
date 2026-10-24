@@ -5,9 +5,9 @@
 
 #include <vector>
 
-// Stock plugins: free plugins by other authors that ship with PHINYX as CLAPs
+// Stock plugins: free plugins by other authors that ship with PHI as CLAPs
 // or VST3s (built by cmake/StockPlugins.cmake) and are listed under Built-in. They open
-// in the PHINYX frame (StockFrame) with their own view in the middle.
+// in the PHI frame (StockFrame) with their own view in the middle.
 // The stock instruments (cmake/Instruments.cmake) are the samplers and synths of
 // the Sample and Synth menus and Find's Instruments, named by what they do
 // ("Granular"); their own view opens untouched in a floating window with an
@@ -30,15 +30,15 @@ namespace stock
         // Instruments only:
         Role role = Role::effect;
         const char* key = nullptr;         // "granular": the command is instrument.granular
-        const char* function = nullptr;    // "Granular": its name in PHINYX, by what it does
+        const char* function = nullptr;    // "Granular": its name in PHI, by what it does
         const char* original = nullptr;    // "GRNLR": the name its authors gave it
     };
 
     const std::vector<Info>& all();
     const Info* instrument (const char* key);   // nullptr when there is none by that key
 
-    // The folder holding the stock plugins: PHINYX_STOCK_PATH when set, else
-    // lib/phinyx/stock next to the installed binary, else the build folder's.
+    // The folder holding the stock plugins: PHI_STOCK_PATH when set, else
+    // lib/phi/stock next to the installed binary, else the build folder's.
     // An invalid File when there is none.
     juce::File folder();
 

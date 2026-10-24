@@ -3,7 +3,7 @@
 
 // The Slicer's sound engine: one sample cut into up to 64 slices, each on a pad
 // with its own level, pan, pitch, direction, play mode, envelope and choke group
-// (after Ninjas2 by Clearly Broken Software, written for PHINYX). Plain C++: pads
+// (after Ninjas2 by Clearly Broken Software, written for PHI). Plain C++: pads
 // may be hit from any thread, render() runs on the audio thread. The sample is
 // given at the rate render() runs at.
 #include "SamplerEngine.h"

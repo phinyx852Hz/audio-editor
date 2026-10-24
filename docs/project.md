@@ -1,15 +1,15 @@
 # Projects (.phi)
 
-A PHINYX project is a mix and production session in one file: the mixer's tracks with their
+A PHI project is a mix and production session in one file: the mixer's tracks with their
 clips and instruments, the strips and master, the patchbay, and which view was in front. It is
 saved with Mixer > Save Project (`Ctrl+S` in the mixer, `Ctrl+Shift+S` for Save As), opened with
-Mixer > Open Project (`Ctrl+O` in the mixer), with File > Open, by passing it to `phinyx` on the
+Mixer > Open Project (`Ctrl+O` in the mixer), with File > Open, by passing it to `phi` on the
 command line, or by double-clicking it in a file manager.
 
-When PHINYX quits, the project as it is (saved or not) goes to `last.phi` in
-`~/.config/phinyx/mixer/`, and once a minute while it runs (with the recovery autosave). At the
+When PHI quits, the project as it is (saved or not) goes to `last.phi` in
+`~/.config/phi/mixer/`, and once a minute while it runs (with the recovery autosave). At the
 next start that project opens again, under its own name and still marked unsaved if it was, its
-patchbay comes back with it, and if the Mixer was in front when PHINYX closed, it is in front
+patchbay comes back with it, and if the Mixer was in front when PHI closed, it is in front
 again.
 
 ## The file

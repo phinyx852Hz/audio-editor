@@ -920,7 +920,7 @@ nyx_rval nyx_eval_expression(const char *expr_string)
    xmem();
 #endif
 
-   // (PHINYX: debug print removed)
+   // (PHI: debug print removed)
    return nyx_get_type(nyx_result);
 }
 
@@ -966,7 +966,7 @@ int nyx_get_audio(nyx_audio_callback callback, void *userdata)
    // cached in registers to be lost.
    volatile int success = FALSE;
 
-   // (PHINYX: debug print removed)
+   // (PHI: debug print removed)
    if (nyx_get_type(nyx_result) != nyx_audio) {
       return FALSE;
    }

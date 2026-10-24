@@ -25,7 +25,7 @@ namespace xmp
     // Padding leaves room to edit the packet in place (WAV, AIFF).
     std::string serialize (const Packet&, const std::string& toolkit, bool padding = true);
 
-    // The URI of a namespace PHINYX knows, or empty.
+    // The URI of a namespace PHI knows, or empty.
     std::string uriOf (const std::string& prefix);
 
     // Reads a packet into tags (see meta::absorb). False when it is not XMP.

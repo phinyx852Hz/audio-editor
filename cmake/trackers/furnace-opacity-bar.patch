@@ -6,28 +6,28 @@ index 90aa88c..d228ba1 100644
    if (x) pendingLayoutImportReopen.push(&x); \
    x=false;
  
-+// PHINYX: a thin opacity bar along the bottom of the window, like PHINYX's
++// PHI: a thin opacity bar along the bottom of the window, like PHI's
 +// instrument windows. Click or drag along it, the mouse wheel nudges it, a
 +// double-click makes the window solid again. Kept in Furnace's settings.
-+#define PHINYX_MIN_OPACITY 0.2f
++#define PHI_MIN_OPACITY 0.2f
 +
-+void FurnaceGUI::drawPhinyxOpacity() {
-+  if (phinyxOpacity<0.0f) {
-+    phinyxOpacity=CLAMP(e->getConfFloat("phinyxOpacity",1.0f),PHINYX_MIN_OPACITY,1.0f);
-+    SDL_SetWindowOpacity(sdlWin,phinyxOpacity);
++void FurnaceGUI::drawPhiOpacity() {
++  if (phiOpacity<0.0f) {
++    phiOpacity=CLAMP(e->getConfFloat("phinyxOpacity",1.0f),PHI_MIN_OPACITY,1.0f);
++    SDL_SetWindowOpacity(sdlWin,phiOpacity);
 +  }
 +  float height=16.0f*dpiScale;
 +  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(0.0f,0.0f));
 +  ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize,0.0f);
 +  ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize,ImVec2(1.0f,1.0f));
-+  bool open=ImGui::BeginViewportSideBar("##PHINYXOpacity",ImGui::GetMainViewport(),ImGuiDir_Down,height,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoNav|ImGuiWindowFlags_NoDocking);
++  bool open=ImGui::BeginViewportSideBar("##PHIOpacity",ImGui::GetMainViewport(),ImGuiDir_Down,height,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoNav|ImGuiWindowFlags_NoDocking);
 +  ImGui::PopStyleVar(3);
 +  if (open) {
 +    ImDrawList* dl=ImGui::GetWindowDrawList();
 +    ImVec2 pos=ImGui::GetWindowPos();
 +    ImVec2 size=ImGui::GetWindowSize();
 +    float pad=6.0f*dpiScale;
-+    String label=fmt::sprintf("Opacity %d%%",(int)round(phinyxOpacity*100.0f));
++    String label=fmt::sprintf("Opacity %d%%",(int)round(phiOpacity*100.0f));
 +    float labelW=92.0f*dpiScale;
 +    ImVec2 textSize=ImGui::CalcTextSize(label.c_str());
 +    dl->AddText(ImVec2(pos.x+pad,pos.y+(size.y-textSize.y)*0.5f),ImGui::GetColorU32(ImGuiCol_TextDisabled),label.c_str());
@@ -36,10 +36,10 @@ index 90aa88c..d228ba1 100644
 +    float trackW=size.x-pad*2.0f-labelW;
 +    ImGui::SetCursorScreenPos(ImVec2(trackX,pos.y));
 +    if (trackW>1.0f) {
-+      ImGui::InvisibleButton("##PHINYXOpacityTrack",ImVec2(trackW,size.y));
-+      float value=phinyxOpacity;
++      ImGui::InvisibleButton("##PHIOpacityTrack",ImVec2(trackW,size.y));
++      float value=phiOpacity;
 +      if (ImGui::IsItemActive()) {
-+        value=PHINYX_MIN_OPACITY+(1.0f-PHINYX_MIN_OPACITY)*CLAMP((ImGui::GetIO().MousePos.x-trackX)/trackW,0.0f,1.0f);
++        value=PHI_MIN_OPACITY+(1.0f-PHI_MIN_OPACITY)*CLAMP((ImGui::GetIO().MousePos.x-trackX)/trackW,0.0f,1.0f);
 +      }
 +      if (ImGui::IsItemHovered()) {
 +        if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) value=1.0f;
@@ -47,11 +47,11 @@ index 90aa88c..d228ba1 100644
 +        if (wheel>0.0f) value+=0.05f;
 +        if (wheel<0.0f) value-=0.05f;
 +      }
-+      value=CLAMP(value,PHINYX_MIN_OPACITY,1.0f);
-+      if (fabs(value-phinyxOpacity)>=0.0001f) {
-+        phinyxOpacity=value;
-+        SDL_SetWindowOpacity(sdlWin,phinyxOpacity);
-+        e->setConf("phinyxOpacity",phinyxOpacity);
++      value=CLAMP(value,PHI_MIN_OPACITY,1.0f);
++      if (fabs(value-phiOpacity)>=0.0001f) {
++        phiOpacity=value;
++        SDL_SetWindowOpacity(sdlWin,phiOpacity);
++        e->setConf("phinyxOpacity",phiOpacity);
 +      }
 +      if (ImGui::IsItemDeactivated()) e->saveConf();
 +
@@ -61,7 +61,7 @@ index 90aa88c..d228ba1 100644
 +      dl->AddRectFilled(a,b,ImGui::GetColorU32(ImGuiCol_FrameBg),trackH*0.5f);
 +      ImVec4 fill=uiColors[GUI_COLOR_ACCENT_PRIMARY];
 +      if (!ImGui::IsItemHovered() && !ImGui::IsItemActive()) fill.w*=0.8f;
-+      float fraction=(phinyxOpacity-PHINYX_MIN_OPACITY)/(1.0f-PHINYX_MIN_OPACITY);
++      float fraction=(phiOpacity-PHI_MIN_OPACITY)/(1.0f-PHI_MIN_OPACITY);
 +      dl->AddRectFilled(a,ImVec2(trackX+trackW*fraction,b.y),ImGui::ColorConvertFloat4ToU32(fill),trackH*0.5f);
 +    }
 +  }
@@ -75,7 +75,7 @@ index 90aa88c..d228ba1 100644
          ImGui::Text(_("| modified"));
        }
        ImGui::EndMainMenuBar();
-+      drawPhinyxOpacity();
++      drawPhiOpacity();
      }
  
      MEASURE(calcChanOsc,calcChanOsc());
@@ -87,9 +87,9 @@ index 15963e2..4704ced 100644
    void drawRegView();
    void drawAbout();
    void drawIntro(double introTime, bool monitor=false);
-+  // PHINYX: the window's opacity bar
-+  void drawPhinyxOpacity();
-+  float phinyxOpacity=-1.0f;
++  // PHI: the window's opacity bar
++  void drawPhiOpacity();
++  float phiOpacity=-1.0f;
    void drawSettings();
    void drawDebug();
    void drawCSPlayer();

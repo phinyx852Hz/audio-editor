@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The Performance menu: records PHINYX's own window to an MP4 (H.265 and AAC, with the
-// cameras and a track for each sound) and streams it live, like OBS but for PHINYX alone.
+// The Performance menu: records PHI's own window to an MP4 (H.265 and AAC, with the
+// cameras and a track for each sound) and streams it live, like OBS but for PHI alone.
 // The clip launcher (docs/clip-launcher.md) opens from here: it is the mixer's, in its upper area.
 #include "MainWindow.h"
 #include "MixerWindow.h"
@@ -58,12 +58,12 @@ void MainWindow::registerPerformanceCommands()
                           "Enter on a sound in the Selector puts it in the next slot of its colour"));
 
     add ("performance.record", tr ("&Record Video"), { KS (Qt::CTRL | Qt::Key_F12) }, [this] { toggleVideoRecording(); })
-        ->setStatusTip (tr ("Record PHINYX's window, the cameras and the sound to an MP4 (H.265 and AAC); again to stop"));
+        ->setStatusTip (tr ("Record PHI's window, the cameras and the sound to an MP4 (H.265 and AAC); again to stop"));
     commands.action (QStringLiteral ("performance.record"))->setCheckable (true);
     add ("performance.stream", tr ("&Go Live"), { KS (Qt::SHIFT | Qt::Key_F12) }, [this] { toggleStreaming(); })
-        ->setStatusTip (tr ("Stream PHINYX's window, the cameras and the mix live (YouTube, Twitch, any RTMP or SRT server); again to stop"));
+        ->setStatusTip (tr ("Stream PHI's window, the cameras and the mix live (YouTube, Twitch, any RTMP or SRT server); again to stop"));
     commands.action (QStringLiteral ("performance.stream"))->setCheckable (true);
-    // Both work from any PHINYX window, such as the full-screen Visualizer being recorded.
+    // Both work from any PHI window, such as the full-screen Visualizer being recorded.
     for (const auto* id : { "performance.record", "performance.stream" })
         commands.action (QString::fromLatin1 (id))->setShortcutContext (Qt::ApplicationShortcut);
     add ("performance.settings", tr ("Video and Stream &Settings..."), {}, [this] { performanceSettings(); })
@@ -93,7 +93,7 @@ void MainWindow::registerPerformanceCommands()
 
 QWidget* MainWindow::performanceTarget (bool follow)
 {
-    // A full-screen PHINYX window (the Visualizer on F11) always; else the one in front
+    // A full-screen PHI window (the Visualizer on F11) always; else the one in front
     // when following; else the main window. Never dialogs, menus or popped-out panels.
     for (auto* w : QApplication::topLevelWidgets())
         if (w != this && w->isVisible() && w->isFullScreen() && qobject_cast<QDialog*> (w) == nullptr)
@@ -126,8 +126,8 @@ void MainWindow::capturePerformanceFrame()
     if (! performance->wantsPicture())
         return;
 
-    // PHINYX draws its window into the picture itself, at the recording's size, so
-    // text stays sharp at 4K and nothing outside PHINYX can get in.
+    // PHI draws its window into the picture itself, at the recording's size, so
+    // text stays sharp at 4K and nothing outside PHI can get in.
     auto* window = performanceTarget (performanceFollow);
     const auto canvas = performance->canvasSize();
     const auto logical = window->size();

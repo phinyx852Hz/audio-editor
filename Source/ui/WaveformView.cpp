@@ -639,7 +639,7 @@ void WaveformView::paintBase (QPainter& g, double laneHeight)
             requestSpectrogram();
             if (! spectrogram.image.isNull())
             {
-                // See-through like the rest when the window is: the visualizer behind PHINYX shows through.
+                // See-through like the rest when the window is: the visualizer behind PHI shows through.
                 g.setOpacity (Theme::opacity() * Theme::opacity() * std::min (1.0, 2.0 * mix));
                 g.drawImage (rect(), spectrogram.image);  // stretched while a fresh one renders
                 g.setOpacity (1.0);
@@ -751,7 +751,7 @@ void WaveformView::paintEvent (QPaintEvent*)
 
     if (! data || data->numChannels() == 0)
     {
-        // Over the window's own background (and the visualizer when it is behind PHINYX), not replacing it.
+        // Over the window's own background (and the visualizer when it is behind PHI), not replacing it.
         g.fillRect (rect(), Theme::withOpacity (theme.color (QStringLiteral ("waveformBackground"))));
         g.setPen (pal.color (QPalette::PlaceholderText));
         g.drawText (rect(), Qt::AlignCenter,

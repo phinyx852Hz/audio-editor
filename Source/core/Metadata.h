@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-// Every metadata schema PHINYX reads and writes, like Audition's Metadata panel.
+// Every metadata schema PHI reads and writes, like Audition's Metadata panel.
 // Plain C++.
 //
 // A document's Tags hold two kinds of keys:
@@ -21,7 +21,7 @@
 //
 // Other keys: "picture.N" (cover art, see Picture), "xmpns:<prefix>" (an XMP
 // namespace URI), "xmpraw:<prefix>:<name>" (an XMP property kept as its XML),
-// "raw:wav:<id>" (a WAV chunk PHINYX does not know, kept as base64).
+// "raw:wav:<id>" (a WAV chunk PHI does not know, kept as base64).
 namespace meta
 {
     enum class Schema { common, riff, bext, cart, ixml, id3, vorbis, mp4, ape, xmp };
@@ -68,7 +68,7 @@ namespace meta
     void set (Tags&, const Field&, const std::string& value);
 
     // Values to write for a schema: every field with a value (by id), plus
-    // schema keys PHINYX has no field for (kept from the file).
+    // schema keys PHI has no field for (kept from the file).
     std::vector<std::pair<std::string, std::string>> valuesFor (const Tags&, Schema);
 
     // Adds what a file's schema holds to `tags`: fills common keys that are

@@ -6,7 +6,7 @@
 #include <QString>
 
 // Key combinations the desktop keeps for itself. Under Hyprland (Omarchy) these
-// come from `hyprctl binds -j`; a key bound there never reaches PHINYX.
+// come from `hyprctl binds -j`; a key bound there never reaches PHI.
 namespace DesktopShortcuts
 {
     // Key combination -> what the desktop does with it. Empty outside Hyprland.

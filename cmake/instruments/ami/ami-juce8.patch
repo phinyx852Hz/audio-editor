@@ -9,7 +9,7 @@ index f620d2e..d7ee524 100755
 -                                            int qualityOptionIndex) override;
 +                                            int qualityOptionIndex);
 +
-+    // JUCE 8 writers: through the ones above (PHINYX build).
++    // JUCE 8 writers: through the ones above (PHI build).
 +    std::unique_ptr<juce::AudioFormatWriter> createWriterFor (std::unique_ptr<juce::OutputStream>& out,
 +                                                              const juce::AudioFormatWriterOptions& o) override
 +    {
@@ -42,7 +42,7 @@ index 177ed77..b2eed95 100755
                                                const juce::StringPairArray& metadataValues,
 -                                              int qualityOptionIndex) override;
 +                                              int qualityOptionIndex);
-+    // JUCE 8 writers: through the ones above (PHINYX build).
++    // JUCE 8 writers: through the ones above (PHI build).
 +    std::unique_ptr<juce::AudioFormatWriter> createWriterFor (std::unique_ptr<juce::OutputStream>& out,
 +                                                              const juce::AudioFormatWriterOptions& o) override
 +    {
@@ -70,7 +70,7 @@ index a75e72a..19db828 100755
 -                                             int qualityOptionIndex) override;
 +                                             int qualityOptionIndex);
 +
-+    // JUCE 8 writers: through the ones above (PHINYX build).
++    // JUCE 8 writers: through the ones above (PHI build).
 +    std::unique_ptr<juce::AudioFormatWriter> createWriterFor (std::unique_ptr<juce::OutputStream>& out,
 +                                                              const juce::AudioFormatWriterOptions& o) override
 +    {

@@ -12,7 +12,7 @@
 
 // Autosave and crash recovery. Every open file with unsaved changes is
 // written now and then (audio, markers and tags, as a 32-bit float WAV) to
-// ~/.cache/phinyx/recovery, named after this run's process id. A clean quit
+// ~/.cache/phi/recovery, named after this run's process id. A clean quit
 // removes them; after a crash the next start finds files whose run is gone
 // and offers them back. The undo history is not kept.
 class Recovery
@@ -41,7 +41,7 @@ public:
         QString audioFile, infoFile;
         QString originalPath, name;
     };
-    // Files from runs of PHINYX that are no longer running.
+    // Files from runs of PHI that are no longer running.
     static std::vector<LeftBehind> leftBehind();
     static void remove (const LeftBehind&);
     static QString folder();

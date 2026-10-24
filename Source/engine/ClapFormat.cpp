@@ -89,7 +89,7 @@ namespace
     private:
         explicit ClapModule (const juce::File& f) : file (f) { loaded().add (this); }
 
-        // Plugin libraries stay loaded until PHINYX quits: unloading one is unsafe,
+        // Plugin libraries stay loaded until PHI quits: unloading one is unsafe,
         // since it can leave behind an X error handler, exit hooks or threads
         // that point into code that is gone. Never freed, so nothing unloads at
         // exit either.
@@ -136,7 +136,7 @@ namespace
     class ClapInstance;
 
     //==========================================================================
-    // What the plugin sees of PHINYX. Exists before the instance (the plugin is
+    // What the plugin sees of PHI. Exists before the instance (the plugin is
     // created, and its ports read, before the JUCE processor can be built).
     struct Host
     {

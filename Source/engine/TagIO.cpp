@@ -169,7 +169,7 @@ namespace
         using namespace TagLib::ID3v2;
         const auto encoding = options.id3Version == 3 ? String::UTF16 : String::UTF8;
 
-        // Frames PHINYX writes go; others (play counts, ratings...) stay.
+        // Frames PHI writes go; others (play counts, ratings...) stay.
         std::vector<TagLib::ID3v2::Frame*> remove;
         for (auto* frame : tag.frameList())
         {
@@ -373,7 +373,7 @@ namespace
 
     void writeMp4 (TagLib::MP4::Tag& tag, const Tags& tags, const Options& options)
     {
-        // Items PHINYX reads as text, numbers or pictures go; others stay.
+        // Items PHI reads as text, numbers or pictures go; others stay.
         std::vector<String> remove;
         for (const auto& [key, item] : tag.itemMap())
         {
@@ -823,7 +823,7 @@ std::vector<std::pair<std::string, std::string>> rawItems (const std::string& pa
         if (f.hasID3v1Tag())
             out.emplace_back ("ID3v1", "present");
         if (f.hasAPETag())
-            out.emplace_back ("APEv2", "present (not written by PHINYX)");
+            out.emplace_back ("APEv2", "present (not written by PHI)");
         return out;
     }
     if (ext == "tta")

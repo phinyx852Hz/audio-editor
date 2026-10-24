@@ -602,7 +602,7 @@ std::string reportCsv (const std::vector<FileResult>& results)
 std::string toJson (const Job& job)
 {
     auto* root = new juce::DynamicObject();
-    root->setProperty ("phinyxBatch", 1);
+    root->setProperty ("phinyxBatch", 1);   // named before the rename to PHI, kept so older versions read it
     juce::Array<juce::var> files;
     for (const auto& f : job.files)
         files.add (juce::String::fromUTF8 (f.c_str()));
@@ -638,7 +638,7 @@ Job fromJson (const std::string& text, std::string& error)
     const auto root = juce::JSON::parse (juce::String::fromUTF8 (text.c_str()));
     if (! root.isObject() || ! root.hasProperty ("phinyxBatch"))
     {
-        error = "not a PHINYX batch file";
+        error = "not a PHI batch file";
         return job;
     }
     if (const auto* files = root["files"].getArray())

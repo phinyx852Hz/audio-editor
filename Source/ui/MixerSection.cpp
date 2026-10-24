@@ -60,9 +60,9 @@ void MainWindow::registerMixerCommands()
         mixerWin->newMixFromSet (findWidget->setName (set), names, colours);
     })->setStatusTip (tr ("A new project of 8 tracks with the names and colours of the set chosen in the Find panel's Selector, from the bottom up"));
     add ("mixer.open", tr ("&Open Project..."), {}, [this] { showMixer(); mixerWin->openMix(); })
-        ->setStatusTip (tr ("Open a PHINYX project (.phi): the mix, the patchbay and the view as they were saved"));
+        ->setStatusTip (tr ("Open a PHI project (.phi): the mix, the patchbay and the view as they were saved"));
     add ("mixer.save", tr ("&Save Project"), {}, [this] { mixerWindow()->saveMix (false); })
-        ->setStatusTip (tr ("Save the mix, the patchbay and the view in a PHINYX project (.phi)"));
+        ->setStatusTip (tr ("Save the mix, the patchbay and the view in a PHI project (.phi)"));
     add ("mixer.saveAs", tr ("Save Project &As..."), {}, [this] { mixerWindow()->saveMix (true); });
     add ("mixer.addTrack", tr ("Add &Track"), {}, [this] { showMixer(); mixerWin->addTrack(); });
     add ("mixer.removeTrack", tr ("&Remove Last Track"), {}, [this] { showMixer(); mixerWin->removeTrack(); });

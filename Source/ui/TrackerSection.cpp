@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The Tracker menu: MilkyTracker's module player (MilkyPlay), played through PHINYX and
+// The Tracker menu: MilkyTracker's module player (MilkyPlay), played through PHI and
 // recorded into the editor, stereo or one stereo pair per mixer track.
 #include "MainWindow.h"
 #include "Settings.h"
@@ -141,9 +141,9 @@ void MainWindow::registerTrackerCommands()
                                 "its player library MilkyPlay plays the modules, and its pattern display and its module and pattern editors are followed here.</p>"
                                 "<p>MilkyTracker is by Peter \"pailes\" Barth and its contributors (Christopher O'Neill, Dale Whinham, "
                                 "Julian Harnath and many others). MilkyPlay is under the New BSD licence and MilkyTracker under the "
-                                "GNU GPL version 3 or later; PHINYX uses both with thanks, under the GNU AGPL version 3.</p>"
+                                "GNU GPL version 3 or later; PHI uses both with thanks, under the GNU AGPL version 3.</p>"
                                 "<p>Tracker2 is <b>Furnace</b> (tildearrow.org/furnace, github.com/tildearrow/furnace) by tildearrow "
-                                "and its contributors, under the GNU GPL version 2 or later. It runs as its own program, built by PHINYX "
+                                "and its contributors, under the GNU GPL version 2 or later. It runs as its own program, built by PHI "
                                 "from its source with an opacity bar added along the bottom of its window.</p>"));
     });
 }
@@ -151,7 +151,7 @@ void MainWindow::registerTrackerCommands()
 // Tracker2 is Furnace, run as a program of its own in its own window: built from
 // source into the stock folder (cmake/Trackers.cmake), with an opacity bar added along
 // the bottom that it keeps in its own settings. It plays through the desktop's sound
-// (PipeWire, JACK or ALSA), not through PHINYX, and stays open if PHINYX closes.
+// (PipeWire, JACK or ALSA), not through PHI, and stays open if PHI closes.
 void MainWindow::openFurnace()
 {
     if (furnacePid > 0 && ::kill ((pid_t) furnacePid, 0) == 0)
@@ -166,17 +166,17 @@ void MainWindow::openFurnace()
     if (program.isEmpty() || ! QFileInfo (program).isExecutable())
     {
         QMessageBox::warning (this, tr ("Tracker2 (Furnace)"),
-                              tr ("Furnace isn't installed with this PHINYX. It is built with the stock instruments "
-                                  "(PHINYX_STOCK_INSTRUMENTS), which need SDL2's build tools."));
+                              tr ("Furnace isn't installed with this PHI. It is built with the stock instruments "
+                                  "(PHI_STOCK_INSTRUMENTS), which need SDL2's build tools."));
         return;
     }
     QProcess process;
     process.setProgram (program);
     auto environment = QProcessEnvironment::systemEnvironment();
     // On X11 (XWayland under Wayland), where a window's opacity can be set, like the
-    // instruments' windows, and with PHINYX's window class for window manager rules.
+    // instruments' windows, and with PHI's window class for window manager rules.
     environment.insert (QStringLiteral ("SDL_VIDEODRIVER"), QStringLiteral ("x11"));
-    environment.insert (QStringLiteral ("SDL_VIDEO_X11_WMCLASS"), QStringLiteral ("phinyx"));
+    environment.insert (QStringLiteral ("SDL_VIDEO_X11_WMCLASS"), QStringLiteral ("phi"));
     process.setProcessEnvironment (environment);
     process.setStandardOutputFile (QProcess::nullDevice());
     process.setStandardErrorFile (QProcess::nullDevice());
@@ -396,7 +396,7 @@ bool MainWindow::trackerSave (bool saveAs)
     if (saveAs || path.isEmpty() || ! path.endsWith (QStringLiteral (".xm"), Qt::CaseInsensitive))
     {
         if (! tracker->isEditable()
-            && QMessageBox::question (w, tr ("Save Song"), tr ("The song is saved as an XM module (FastTracker 2), which PHINYX can edit. Continue?")) != QMessageBox::Yes)
+            && QMessageBox::question (w, tr ("Save Song"), tr ("The song is saved as an XM module (FastTracker 2), which PHI can edit. Continue?")) != QMessageBox::Yes)
             return false;
         const auto folder = appSettings().value (QStringLiteral ("tracker/folder"), QDir::homePath()).toString();
         auto base = tracker->title().empty() ? tr ("Untitled") : QString::fromStdString (tracker->title());
@@ -553,7 +553,7 @@ void MainWindow::trackerSaveLinks (const QString& path)
         statusBar()->showMessage (tr ("The Retro Sampler links could not be saved to %1").arg (side), 8000);
         return;
     }
-    QByteArray text ("PHINYX Tracker links 1\n");
+    QByteArray text ("PHINYX Tracker links 1\n");   // the file's header from before the rename to PHI, kept as it is
     for (const auto& [instrument, slot] : links)
         text += QStringLiteral ("link %1 %2\n").arg (instrument).arg (slot).toUtf8();
     if (const auto s = trackerAmi (false); s >= 0)

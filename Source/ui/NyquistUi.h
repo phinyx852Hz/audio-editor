@@ -23,7 +23,7 @@ namespace nyquistui
     };
 
     // Points libnyquist at its runtime and returns the plug-in folders, in
-    // order of preference: the user's, PHINYX's bundled ones, then any
+    // order of preference: the user's, PHI's bundled ones, then any
     // installed Audacity's.
     QStringList setUpFolders();
     QString userFolder();

@@ -830,7 +830,7 @@ namespace
                "xmp: unknown namespace and a structure kept");
 
         t[tag::title] = "New Title";
-        const auto written = xmp::write (t, "PHINYX");
+        const auto written = xmp::write (t, "PHI");
         Tags again;
         check (xmp::read (written, again, error), "xmp: read what was written " + error);
         check (again[tag::title] == "New Title" && again[tag::artist] == "One\nTwo" && again["xmp:my:flag"] == "yes"
@@ -838,7 +838,7 @@ namespace
                "xmp: round trip");
         check (written.find ("<rdf:Seq>") != std::string::npos && written.find ("xmlns:stEvt") != std::string::npos, "xmp: lists and structure namespaces written");
         Tags none;
-        check (xmp::write (none, "PHINYX").empty() && ! xmp::read ("<a/>", none, error), "xmp: nothing to write, not XMP");
+        check (xmp::write (none, "PHI").empty() && ! xmp::read ("<a/>", none, error), "xmp: nothing to write, not XMP");
     }
 
     void testIxml()
@@ -870,7 +870,7 @@ namespace
     void testRiffChunks()
     {
         // A small WAV: fmt, an unknown chunk, data, an odd-sized chunk after it.
-        const std::string path = "/tmp/phinyx-core-test.wav";
+        const std::string path = "/tmp/phi-core-test.wav";
         const auto le32s = [] (uint32_t v) { std::string s; for (int i = 0; i < 4; ++i) s += (char) ((v >> (8 * i)) & 0xff); return s; };
         {
             std::string fmt = std::string ("\x01\x00\x01\x00", 4) + le32s (48000) + le32s (96000) + std::string ("\x02\x00\x10\x00", 4);
@@ -889,7 +889,7 @@ namespace
         Tags t = read;
         t[tag::title] = "Night Drive";
         t[tag::comment] = "Line one\nLine two";
-        t[tag::bwfOriginator] = "PHINYX";
+        t[tag::bwfOriginator] = "PHI";
         t[tag::bwfTimeReference] = "5000000000";
         t[tag::bwfLoudness] = "-14.00";
         t[tag::bwfTruePeak] = "-1.00";
@@ -901,7 +901,7 @@ namespace
         t["ixml:SCENE"] = "4";
         t["xmp:xmpDM:scene"] = "Scene 4";
         riff::Write w;
-        w.software = "PHINYX";
+        w.software = "PHI";
         w.id3 = std::string ("ID3\x04\x00\x00\x00\x00\x00\x00", 10);
         std::string error;
         check (riff::writeMetadata (path, t, w, error), "riff: write " + error);
@@ -922,7 +922,7 @@ namespace
         const auto id3 = riff::readMetadata (path, back);
         check (id3 == w.id3, "riff: ID3 chunk bytes returned");
         check (back[tag::title] == "Night Drive" && back[tag::comment] == "Line one\nLine two", "riff: INFO round trip");
-        check (back[tag::bwfOriginator] == "PHINYX" && back[tag::bwfTimeReference] == "5000000000" && back[tag::bwfLoudness] == "-14.00"
+        check (back[tag::bwfOriginator] == "PHI" && back[tag::bwfTimeReference] == "5000000000" && back[tag::bwfLoudness] == "-14.00"
                    && back[tag::bwfTruePeak] == "-1.00" && back.count (tag::bwfLoudnessRange) == 0 && back[tag::bwfCodingHistory] == "A=PCM,F=48000,W=16,M=mono"
                    && back[tag::bwfUmid].compare (0, 8, "060a2b34") == 0 && back.count (tag::bwfDescription) == 0,
                "riff: bext round trip (the description follows the comment)");
@@ -931,7 +931,7 @@ namespace
         check (back["ixml:SCENE"] == "4" && back["xmp:xmpDM:scene"] == "Scene 4" && back["raw:wav:umid"] == read["raw:wav:umid"], "riff: iXML, XMP and raw chunk round trip");
 
         // AIFF: text chunks and XMP.
-        const std::string aiff = "/tmp/phinyx-core-test.aiff";
+        const std::string aiff = "/tmp/phi-core-test.aiff";
         const auto be32s = [] (uint32_t v) { std::string s; for (int i = 3; i >= 0; --i) s += (char) ((v >> (8 * i)) & 0xff); return s; };
         {
             std::string body = "AIFF";
@@ -953,7 +953,7 @@ namespace
 
     void testNyquist()
     {
-        const std::string share = PHINYX_SHARE_SOURCE_DIR;
+        const std::string share = PHI_SHARE_SOURCE_DIR;
         nyquist::setFolders (share + "/nyquist", { share + "/nyquist-plug-ins" }, "/tmp");
 
         // The header: name, type, controls.
@@ -2266,7 +2266,7 @@ namespace
         const auto mono = b.finish();
 
         binaural::Settings settings;
-        settings.hrtfPath = PHINYX_DEFAULT_HRTF;
+        settings.hrtfPath = PHI_DEFAULT_HRTF;
         std::string error;
         const auto ears = [&] (double azimuth, double& leftEnergy, double& rightEnergy, Frame& leftPeak, Frame& rightPeak)
         {
@@ -2603,7 +2603,7 @@ namespace
         const auto encoded = ambi::encode (*b.finish(), settings);
         check (encoded->numChannels() == 9 && encoded->length() == 24000, "2nd order encoding has 9 channels");
         std::string error;
-        const auto ears = ambi::decodeBinaural (*encoded, PHINYX_DEFAULT_HRTF, error);
+        const auto ears = ambi::decodeBinaural (*encoded, PHI_DEFAULT_HRTF, error);
         check (ears != nullptr && ears->numChannels() == 2, "binaural decode (" + error + ")");
         if (ears != nullptr)
         {

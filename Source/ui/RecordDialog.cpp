@@ -299,7 +299,7 @@ QStringList RecordingFile::recoverAll()
         QLockFile lk (info.filePath() + QStringLiteral (".lock"));
         lk.setStaleLockTime (0);
         if (! lk.tryLock (0))
-            continue;   // another PHINYX window is still recording into it
+            continue;   // another PHI window is still recording into it
 
         QFile f (info.filePath());
         if (! f.open (QIODevice::ReadWrite) || f.size() < headerBytes)

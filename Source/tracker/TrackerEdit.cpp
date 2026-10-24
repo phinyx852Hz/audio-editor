@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Editing for the Tracker. Adapted from MilkyTracker's tracker/ModuleEditor.cpp and
 // tracker/PatternEditor.cpp (Copyright 2009 Peter Barth, github.com/milkytracker/MilkyTracker,
-// GPL-3.0-or-later), used in PHINYX (AGPL-3.0) with credit: the same pattern layout,
+// GPL-3.0-or-later), used in PHI (AGPL-3.0) with credit: the same pattern layout,
 // new-song set-up, order list operations, the FastTracker 2 volume and effect column
-// rules and the row insert and delete, rewritten around PHINYX's TrackerEngine.
+// rules and the row insert and delete, rewritten around PHI's TrackerEngine.
 #include "TrackerPlayer.h"
 #include "PatternText.h"
 
@@ -139,7 +139,7 @@ std::string TrackerEngine::makeEditable()
         return {};
 
     // As MilkyTracker opens a module that is not XM: write it as XM and read that back.
-    QTemporaryFile temp (QDir::tempPath() + QStringLiteral ("/phinyx-tracker-XXXXXX.xm"));
+    QTemporaryFile temp (QDir::tempPath() + QStringLiteral ("/phi-tracker-XXXXXX.xm"));
     if (! temp.open())
         return "Could not make a temporary file to convert the module.";
     const auto tempPath = temp.fileName().toStdString();

@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 cmake_minimum_required(VERSION 3.22)
 
-project(Phinyx VERSION 0.5.0 LANGUAGES C CXX)
+project(Phi VERSION 0.5.0 LANGUAGES C CXX)
 
 # The app's names live here so a rename touches one place.
-set(APP_ID "phinyx" CACHE STRING "Lowercase id: binary, config folder, Wayland app-id")
-set(APP_DISPLAY_NAME "PHINYX" CACHE STRING "Name shown to users")
+set(APP_ID "phi" CACHE STRING "Lowercase id: binary, config folder, Wayland app-id")
+set(APP_DISPLAY_NAME "PHI" CACHE STRING "Name shown to users (ASCII; window titles add the letter phi, see Source/ui/Brand.h)")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -172,10 +172,10 @@ target_sources(${APP_ID} PRIVATE
 # system's (clap/clap.h, e.g. the clap package), or the pinned release.
 set(CLAP_DIR "" CACHE PATH "Path to a local CLAP SDK checkout (the folder holding include/clap)")
 if(CLAP_DIR)
-    set(PHINYX_CLAP_INCLUDE "${CLAP_DIR}/include")
+    set(PHI_CLAP_INCLUDE "${CLAP_DIR}/include")
 else()
-    find_path(PHINYX_CLAP_INCLUDE clap/clap.h)
-    if(NOT PHINYX_CLAP_INCLUDE)
+    find_path(PHI_CLAP_INCLUDE clap/clap.h)
+    if(NOT PHI_CLAP_INCLUDE)
         include(FetchContent)
         FetchContent_Declare(clap
             GIT_REPOSITORY https://github.com/free-audio/clap.git
@@ -185,34 +185,34 @@ else()
         if(NOT clap_POPULATED)
             FetchContent_Populate(clap)
         endif()
-        set(PHINYX_CLAP_INCLUDE "${clap_SOURCE_DIR}/include")
+        set(PHI_CLAP_INCLUDE "${clap_SOURCE_DIR}/include")
     endif()
 endif()
-target_include_directories(${APP_ID} SYSTEM PRIVATE ${PHINYX_CLAP_INCLUDE})
+target_include_directories(${APP_ID} SYSTEM PRIVATE ${PHI_CLAP_INCLUDE})
 
 # JACK headers come from jack2 or pipewire-jack. JUCE loads libjack at run time,
-# so JACK output works with either; without headers PHINYX builds ALSA-only.
+# so JACK output works with either; without headers PHI builds ALSA-only.
 include(CheckIncludeFile)
-check_include_file(jack/jack.h PHINYX_HAVE_JACK_HEADERS)
-if(PHINYX_HAVE_JACK_HEADERS)
-    set(PHINYX_JACK 1)
+check_include_file(jack/jack.h PHI_HAVE_JACK_HEADERS)
+if(PHI_HAVE_JACK_HEADERS)
+    set(PHI_JACK 1)
 else()
-    set(PHINYX_JACK 0)
+    set(PHI_JACK 0)
     message(STATUS "jack/jack.h not found: building without the JACK backend (ALSA and PipeWire's ALSA still work)")
 endif()
 
 # Recording (desktop audio, inputs, single apps) talks to PipeWire directly.
-# Without libpipewire-0.3 PHINYX still builds; it just cannot record.
+# Without libpipewire-0.3 PHI still builds; it just cannot record.
 find_package(PkgConfig QUIET)
 if(PkgConfig_FOUND)
     pkg_check_modules(PIPEWIRE QUIET IMPORTED_TARGET libpipewire-0.3)
 endif()
 if(PIPEWIRE_FOUND)
-    set(PHINYX_PIPEWIRE 1)
+    set(PHI_PIPEWIRE 1)
     target_include_directories(${APP_ID} SYSTEM PRIVATE ${PIPEWIRE_INCLUDE_DIRS})
     target_link_libraries(${APP_ID} PRIVATE PkgConfig::PIPEWIRE)
 else()
-    set(PHINYX_PIPEWIRE 0)
+    set(PHI_PIPEWIRE 0)
     message(STATUS "libpipewire-0.3 not found: building without recording")
 endif()
 
@@ -225,7 +225,7 @@ pkg_check_modules(TAGLIB REQUIRED IMPORTED_TARGET taglib>=1.12)
 target_link_libraries(${APP_ID} PRIVATE PkgConfig::FFMPEG PkgConfig::TAGLIB)
 
 target_compile_definitions(${APP_ID} PRIVATE
-    PHINYX_PIPEWIRE=${PHINYX_PIPEWIRE}
+    PHI_PIPEWIRE=${PHI_PIPEWIRE}
     APP_ID="${APP_ID}"
     APP_DISPLAY_NAME="${APP_DISPLAY_NAME}"
     APP_VERSION="${PROJECT_VERSION}"
@@ -233,7 +233,7 @@ target_compile_definitions(${APP_ID} PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_ALSA=1
-    JUCE_JACK=${PHINYX_JACK}
+    JUCE_JACK=${PHI_JACK}
     JUCE_MODAL_LOOPS_PERMITTED=1
     JUCE_PLUGINHOST_VST3=1
     JUCE_PLUGINHOST_LV2=1
@@ -254,75 +254,79 @@ include(GNUInstallDirs)
 
 # Vamp analysis plugins (cmake/Vamp.cmake)
 include(cmake/Vamp.cmake)
-target_link_libraries(${APP_ID} PRIVATE phinyx_vamp_host)
+target_link_libraries(${APP_ID} PRIVATE phi_vamp_host)
 
 # Rubber Band (cmake/RubberBand.cmake): pitch correction.
 include(cmake/RubberBand.cmake)
-target_link_libraries(${APP_ID} PRIVATE phinyx_rubberband)
+target_link_libraries(${APP_ID} PRIVATE phi_rubberband)
 
 # libmysofa (cmake/Mysofa.cmake): HRTF sets for binaural rendering, with the MIT KEMAR set.
 include(cmake/Mysofa.cmake)
-target_link_libraries(${APP_ID} PRIVATE phinyx_mysofa)
-target_compile_definitions(${APP_ID} PRIVATE PHINYX_DEFAULT_HRTF="${PHINYX_DEFAULT_HRTF}")
+target_link_libraries(${APP_ID} PRIVATE phi_mysofa)
+target_compile_definitions(${APP_ID} PRIVATE PHI_DEFAULT_HRTF="${PHI_DEFAULT_HRTF}")
 
 # projectM (cmake/ProjectM.cmake): MilkDrop presets in the Visualizer.
 include(cmake/ProjectM.cmake)
-if(PHINYX_HAVE_PROJECTM)
+if(PHI_HAVE_PROJECTM)
     target_sources(${APP_ID} PRIVATE Source/ui/MilkDrop.cpp)
-    target_link_libraries(${APP_ID} PRIVATE phinyx_projectm)
+    target_link_libraries(${APP_ID} PRIVATE phi_projectm)
 endif()
-install(FILES "${PHINYX_DEFAULT_HRTF}" DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/hrtf")
+install(FILES "${PHI_DEFAULT_HRTF}" DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/hrtf")
 
-# A web page behind PHINYX (Visualizer > Web Page) needs Qt WebEngine, a built-in Chromium of a
+# A web page behind PHI (Visualizer > Web Page) needs Qt WebEngine, a built-in Chromium of a
 # few hundred MB. It is built when Qt WebEngine is installed (qt6-webengine), unless turned off.
-option(PHINYX_WEB_BACKDROP "Build the web page backdrop when Qt WebEngine is installed" ON)
-set(PHINYX_HAVE_WEB 0)
-if(PHINYX_WEB_BACKDROP)
+option(PHI_WEB_BACKDROP "Build the web page backdrop when Qt WebEngine is installed" ON)
+set(PHI_HAVE_WEB 0)
+if(PHI_WEB_BACKDROP)
     find_package(Qt6 QUIET COMPONENTS WebEngineWidgets)
     if(Qt6WebEngineWidgets_FOUND)
-        set(PHINYX_HAVE_WEB 1)
+        set(PHI_HAVE_WEB 1)
         target_sources(${APP_ID} PRIVATE Source/ui/WebBackdrop.cpp)
         target_link_libraries(${APP_ID} PRIVATE Qt6::WebEngineWidgets)
     else()
         message(STATUS "Qt WebEngine not found: building without the web page backdrop")
     endif()
 endif()
-target_compile_definitions(${APP_ID} PRIVATE PHINYX_WEB_BACKDROP=${PHINYX_HAVE_WEB})
+target_compile_definitions(${APP_ID} PRIVATE PHI_WEB_BACKDROP=${PHI_HAVE_WEB})
 
 # MilkyPlay (cmake/MilkyPlay.cmake): MilkyTracker's module player, for the Tracker.
 include(cmake/MilkyPlay.cmake)
-target_link_libraries(${APP_ID} PRIVATE phinyx_milkyplay)
+target_link_libraries(${APP_ID} PRIVATE phi_milkyplay)
 
 # Nyquist effects (cmake/Nyquist.cmake): libnyquist, its runtime and the bundled plug-ins.
 include(cmake/Nyquist.cmake)
-target_link_libraries(${APP_ID} PRIVATE phinyx_nyquist)
+target_link_libraries(${APP_ID} PRIVATE phi_nyquist)
 file(RELATIVE_PATH nyquist_relative "/${CMAKE_INSTALL_BINDIR}" "/${CMAKE_INSTALL_DATADIR}/${APP_ID}")
 target_compile_definitions(${APP_ID} PRIVATE
-    PHINYX_SHARE_RELATIVE="${nyquist_relative}"
-    PHINYX_SHARE_SOURCE_DIR="${CMAKE_SOURCE_DIR}/share")
+    PHI_SHARE_RELATIVE="${nyquist_relative}"
+    PHI_SHARE_SOURCE_DIR="${CMAKE_SOURCE_DIR}/share")
 
-# Stock plugins (cmake/StockPlugins.cmake). Off builds PHINYX without them.
-option(PHINYX_STOCK_PLUGINS "Build and bundle the stock plugins" ON)
-if(PHINYX_STOCK_PLUGINS)
+# Stock plugins (cmake/StockPlugins.cmake). Off builds PHI without them.
+option(PHI_STOCK_PLUGINS "Build and bundle the stock plugins" ON)
+if(PHI_STOCK_PLUGINS)
     include(cmake/StockPlugins.cmake)
 else()
-    set(PHINYX_STOCK_DIR "${CMAKE_BINARY_DIR}/stock")
-    set(PHINYX_STOCK_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/${APP_ID}/stock")
+    set(PHI_STOCK_DIR "${CMAKE_BINARY_DIR}/stock")
+    set(PHI_STOCK_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/${APP_ID}/stock")
 endif()
-file(RELATIVE_PATH stock_relative "/${CMAKE_INSTALL_BINDIR}" "/${PHINYX_STOCK_INSTALL_DIR}")
+file(RELATIVE_PATH stock_relative "/${CMAKE_INSTALL_BINDIR}" "/${PHI_STOCK_INSTALL_DIR}")
 target_compile_definitions(${APP_ID} PRIVATE
-    PHINYX_STOCK_RELATIVE="${stock_relative}"
-    PHINYX_STOCK_BUILD_DIR="${PHINYX_STOCK_DIR}")
+    PHI_STOCK_RELATIVE="${stock_relative}"
+    PHI_STOCK_BUILD_DIR="${PHI_STOCK_DIR}")
+
+# The Φ logo: built in for the windows, and installed for the desktop's launcher.
+qt_add_resources(${APP_ID} brand PREFIX "/" FILES packaging/phi.svg)
 
 install(TARGETS ${APP_ID} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-install(FILES packaging/phinyx.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
-install(FILES packaging/phinyx-project.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/mime/packages)
+install(FILES packaging/phi.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
+install(FILES packaging/phi.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+install(FILES packaging/phi-project.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/mime/packages)
 
 # Core tests: plain C++, no JUCE or Qt. Run with ctest.
-option(PHINYX_BUILD_TESTS "Build the core tests" ON)
-if(PHINYX_BUILD_TESTS)
+option(PHI_BUILD_TESTS "Build the core tests" ON)
+if(PHI_BUILD_TESTS)
     enable_testing()
-    add_executable(phinyx-core-tests
+    add_executable(phi-core-tests
         tests/CoreTests.cpp
         Source/core/AudioData.cpp
         Source/core/AudioDocument.cpp
@@ -354,15 +358,15 @@ if(PHINYX_BUILD_TESTS)
         Source/core/PrismSplit.cpp
         Source/core/Nyquist.cpp
         Source/core/Album.cpp)
-    target_link_libraries(phinyx-core-tests PRIVATE phinyx_nyquist phinyx_rubberband phinyx_mysofa)
-    target_compile_definitions(phinyx-core-tests PRIVATE PHINYX_DEFAULT_HRTF="${PHINYX_DEFAULT_HRTF}")
-    target_compile_definitions(phinyx-core-tests PRIVATE PHINYX_SHARE_SOURCE_DIR="${CMAKE_SOURCE_DIR}/share")
-    add_test(NAME core COMMAND phinyx-core-tests)
+    target_link_libraries(phi-core-tests PRIVATE phi_nyquist phi_rubberband phi_mysofa)
+    target_compile_definitions(phi-core-tests PRIVATE PHI_DEFAULT_HRTF="${PHI_DEFAULT_HRTF}")
+    target_compile_definitions(phi-core-tests PRIVATE PHI_SHARE_SOURCE_DIR="${CMAKE_SOURCE_DIR}/share")
+    add_test(NAME core COMMAND phi-core-tests)
 
     # The video writer: an MP4 with H.265 (or H.264) and several AAC tracks, read back.
-    add_executable(phinyx-performance-tests
+    add_executable(phi-performance-tests
         tests/PerformanceTests.cpp
         Source/performance/MediaWriter.cpp)
-    target_link_libraries(phinyx-performance-tests PRIVATE PkgConfig::FFMPEG)
-    add_test(NAME performance COMMAND phinyx-performance-tests)
+    target_link_libraries(phi-performance-tests PRIVATE PkgConfig::FFMPEG)
+    add_test(NAME performance COMMAND phi-performance-tests)
 endif()

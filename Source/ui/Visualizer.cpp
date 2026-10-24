@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "Visualizer.h"
 #include "Theme.h"
-#if PHINYX_HAVE_PROJECTM
+#if PHI_HAVE_PROJECTM
  #include "MilkDrop.h"
 #endif
 
@@ -108,7 +108,7 @@ const std::vector<VisualizerView::Mode>& VisualizerView::modes()
         { "spectrogram", QT_TRANSLATE_NOOP ("VisualizerView", "Spectrogram"),       true,  QT_TRANSLATE_NOOP ("VisualizerView", "Frequency over time, scrolling, log frequency, -100 to 0 dBFS") },
         { "waterfall",   QT_TRANSLATE_NOOP ("VisualizerView", "Waterfall"),         true,  QT_TRANSLATE_NOOP ("VisualizerView", "Recent spectra stacked in depth, newest in front") },
         { "surface",     QT_TRANSLATE_NOOP ("VisualizerView", "3D Spectrum"),       true,  QT_TRANSLATE_NOOP ("VisualizerView", "Frequency, time and level as a coloured surface, about 4 s deep; drag to turn, wheel to zoom") },
-#if PHINYX_HAVE_PROJECTM
+#if PHI_HAVE_PROJECTM
         { "milkdrop",    QT_TRANSLATE_NOOP ("VisualizerView", "MilkDrop"),          false, QT_TRANSLATE_NOOP ("VisualizerView", "MilkDrop presets through projectM; Up/Down change the preset, L keeps it") },
 #endif
     };
@@ -174,7 +174,7 @@ bool VisualizerView::isMilkDrop() const
 
 MilkDrop* VisualizerView::milkDrop()
 {
-#if PHINYX_HAVE_PROJECTM
+#if PHI_HAVE_PROJECTM
     if (milk == nullptr)
         milk = std::make_unique<MilkDrop>();
     return milk.get();
@@ -185,7 +185,7 @@ MilkDrop* VisualizerView::milkDrop()
 
 void VisualizerView::milkDropStep (int direction)
 {
-#if PHINYX_HAVE_PROJECTM
+#if PHI_HAVE_PROJECTM
     if (auto* m = milkDrop())
         direction > 0 ? m->next() : m->previous();
 #else
@@ -195,7 +195,7 @@ void VisualizerView::milkDropStep (int direction)
 
 void VisualizerView::milkDropChoose (int index)
 {
-#if PHINYX_HAVE_PROJECTM
+#if PHI_HAVE_PROJECTM
     if (auto* m = milkDrop())
         m->choose (index);
 #else
@@ -205,7 +205,7 @@ void VisualizerView::milkDropChoose (int index)
 
 void VisualizerView::reloadMilkDrop()
 {
-#if PHINYX_HAVE_PROJECTM
+#if PHI_HAVE_PROJECTM
     if (milk != nullptr)
         milk->reloadPresets();
 #endif
@@ -232,7 +232,7 @@ void VisualizerView::addSamples (const std::vector<float>& left, const std::vect
     }
     if (n > 0)
         lastSamplesAt = clock.elapsed();
-#if PHINYX_HAVE_PROJECTM
+#if PHI_HAVE_PROJECTM
     if (milk != nullptr && isMilkDrop())
         milk->addSamples (left.data(), right.data(), n);
 #endif
@@ -255,7 +255,7 @@ void VisualizerView::tick()
             rainShownTempo = rainBpm;
         }
     }
-#if PHINYX_HAVE_PROJECTM
+#if PHI_HAVE_PROJECTM
     if (isMilkDrop() && isVisible())
     {
         auto* m = milkDrop();
@@ -598,7 +598,7 @@ void VisualizerView::paintEvent (QPaintEvent*)
             g.setRenderHint (QPainter::SmoothPixmapTransform);
             g.drawImage (QRectF (rect()), milkFrame);
         }
-#if PHINYX_HAVE_PROJECTM
+#if PHI_HAVE_PROJECTM
         else if (milk != nullptr && (! milk->ready() || milk->presetCount() == 0))
         {
             g.setPen (colour ("text"));
@@ -632,7 +632,7 @@ void VisualizerView::paintEvent (QPaintEvent*)
     if (backdrop)
     {
         // The window's own background, which this covers: the opacity is how much
-        // of PHINYX's colour lies over the visualizer.
+        // of PHI's colour lies over the visualizer.
         auto tint = palette().color (QPalette::Window);
         tint.setAlpha (255);
         tint.setAlphaF ((float) Theme::opacity());
@@ -665,7 +665,7 @@ void VisualizerView::drawTitle (QPainter& g)
     if (isRain())
         about = rainBpm > 0.0 ? tr ("%1 BPM   (Up/Down: tempo, tap T: set it, 0: stop; Left/Right: other views)").arg (std::lround (rainBpm))
                               : tr ("Still   (Up/Down: tempo, tap T: set it; Left/Right: other views)");
-#if PHINYX_HAVE_PROJECTM
+#if PHI_HAVE_PROJECTM
     if (isMilkDrop() && milk != nullptr && milk->presetCount() > 0)
         about = tr ("%1%2   (%3 of %4%5; Up/Down: other presets, L: keep this one)")
                     .arg (milk->presetCategory().isEmpty() ? QString() : milk->presetCategory() + QStringLiteral (" / "), milk->presetName())
@@ -1333,7 +1333,7 @@ void VisualizerView::wheelEvent (QWheelEvent* e)
 //==============================================================================
 void VisualizerView::keyPressEvent (QKeyEvent* e)
 {
-#if PHINYX_HAVE_PROJECTM
+#if PHI_HAVE_PROJECTM
     if (isMilkDrop() && milk != nullptr)
     {
         if (e->key() == Qt::Key_Up || e->key() == Qt::Key_PageUp || e->key() == Qt::Key_Down || e->key() == Qt::Key_PageDown)
@@ -1468,9 +1468,9 @@ VisualizerWindow::VisualizerWindow (QWidget* parent) : QWidget (parent, Qt::Dial
     auto* full = new QPushButton (tr ("Full Screen (F11)"), this);
     full->setFocusPolicy (Qt::NoFocus);
     connect (full, &QPushButton::clicked, this, &VisualizerWindow::toggleFullScreen);
-    auto* behind = new QPushButton (tr ("Behind PHINYX (Ctrl+F11)"), this);
+    auto* behind = new QPushButton (tr ("Behind PHI (Ctrl+F11)"), this);
     behind->setFocusPolicy (Qt::NoFocus);
-    behind->setToolTip (tr ("Shows the visualizer behind the whole PHINYX window; the window opacity sets how much of it you see"));
+    behind->setToolTip (tr ("Shows the visualizer behind the whole PHI window; the window opacity sets how much of it you see"));
     connect (behind, &QPushButton::clicked, this, &VisualizerWindow::backdropRequested);
 
     bar = new QWidget (this);

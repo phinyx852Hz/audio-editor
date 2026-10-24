@@ -232,7 +232,7 @@ public:
     void dispatchMessages();
 
     // Lower-case file extensions without the dot, e.g. "wav".
-    // Where the plugin list and Master Section state are kept (~/.config/phinyx).
+    // Where the plugin list and Master Section state are kept (~/.config/phi).
     void setConfigFolder (const std::string&);
 
     //==========================================================================

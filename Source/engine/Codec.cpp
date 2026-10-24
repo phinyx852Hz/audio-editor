@@ -705,7 +705,7 @@ std::vector<std::string> missingFormats()
     if (avcodec_find_encoder_by_name ("libfdk_aac") == nullptr)
         out.emplace_back ("HE-AAC (needs FFmpeg with the non-free libfdk-aac)");
     out.emplace_back ("Monkey's Audio, OptimFROG, TAK, Musepack, MQA (no encoder on Linux in FFmpeg)");
-    out.emplace_back ("DSD (DSF, DSDIFF): planned, with PHINYX's own modulator");
+    out.emplace_back ("DSD (DSF, DSDIFF): planned, with PHI's own modulator");
     return out;
 }
 

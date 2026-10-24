@@ -11,7 +11,7 @@
 
 // Encoding and decoding through FFmpeg (libavcodec, libavformat): every audio
 // encoder the installed FFmpeg has, so a newer FFmpeg adds formats without a
-// new PHINYX. Well-known formats get their own settings; the rest are listed as
+// new PHI. Well-known formats get their own settings; the rest are listed as
 // "Other FFmpeg encoders" in a container that takes them.
 namespace codec
 {
@@ -34,7 +34,7 @@ namespace codec
         std::string extension;      // without the dot
         std::string muxer, encoder; // FFmpeg names
         bool lossless = false;
-        bool native = false;           // WAV and AIFF: written by PHINYX's own writer, with every chunk schema
+        bool native = false;           // WAV and AIFF: written by PHI's own writer, with every chunk schema
         bool taggedByTagLib = false;   // else FFmpeg writes the common tags
         bool chapters = false;         // the container keeps chapters (from the markers)
         std::vector<int> bitDepths;    // lossless and PCM: the depths it takes (32 = float)

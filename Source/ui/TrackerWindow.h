@@ -96,7 +96,7 @@ private:
     static constexpr int headerHeight = 44;
 };
 
-// The Tracker window (Tracker menu): MilkyTracker's player and editor in PHINYX. It
+// The Tracker window (Tracker menu): MilkyTracker's player and editor in PHI. It
 // opens, edits and saves modules, plays and follows them, and records the song into
 // a new editor tab, stereo or one stereo pair per mixer track.
 class TrackerWindow final : public QWidget

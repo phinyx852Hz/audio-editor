@@ -15,7 +15,7 @@ index f6d23b6ed..d0dd8e2b9 100644
          vstBuffers.silenceFlags     = busMap.isActive() ? 0 : std::numeric_limits<Steinberg::uint64>::max();
      }
  
-+    // PHINYX: an inactive bus (a side chain the host left off) gets a silent
++    // PHI: an inactive bus (a side chain the host left off) gets a silent
 +    // buffer rather than null channel pointers, because some plugins and bridges
 +    // such as yabridge copy every channel of every bus, active or not.
 +    template <typename FloatType>

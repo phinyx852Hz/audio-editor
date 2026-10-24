@@ -492,7 +492,7 @@ namespace
     // Section, meters) works on the file's own channels; this sends them to the
     // outputs, one each when there are enough, or folded down to stereo.
     // Something played live in place of the file, such as the Tracker: stereo at the
-    // device's rate, after the Master Section (it is mixed, not mastered, in PHINYX).
+    // device's rate, after the Master Section (it is mixed, not mastered, in PHI).
     class LiveSource final : public juce::AudioSource
     {
     public:
@@ -1097,41 +1097,41 @@ void AudioEngine::prismLearnController (const ChainPath& p, int macro)  { impl->
 bool AudioEngine::prismLearning (const ChainPath& p, int macro) const   { return impl->master.learning (p, macro); }
 
 // The rest act on the Prism at the path, when there is one.
-#define PHINYX_WITH_PRISM(path, body) if (auto* prism = impl->master.prismAt (path)) { body; }
-void AudioEngine::prismMoveDevice (const ChainPath& p, int fr, int f, int tr, int t) { PHINYX_WITH_PRISM (p, prism->moveDevice (fr, f, tr, t)) }
-int AudioEngine::prismAddRay (const ChainPath& p)                   { PHINYX_WITH_PRISM (p, return prism->addRay()) return -1; }
-void AudioEngine::prismRemoveRay (const ChainPath& p, int ray)      { PHINYX_WITH_PRISM (p, prism->removeRay (ray)) }
-void AudioEngine::prismSetRayGain (const ChainPath& p, int ray, double db) { PHINYX_WITH_PRISM (p, prism->setRayGain (ray, db)) }
-void AudioEngine::prismSetRayMuted (const ChainPath& p, int ray, bool b)   { PHINYX_WITH_PRISM (p, prism->setRayMuted (ray, b)) }
-void AudioEngine::prismSetRaySoloed (const ChainPath& p, int ray, bool b)  { PHINYX_WITH_PRISM (p, prism->setRaySoloed (ray, b)) }
-void AudioEngine::prismRenameRay (const ChainPath& p, int ray, const std::string& n) { PHINYX_WITH_PRISM (p, prism->renameRay (ray, n)) }
-void AudioEngine::prismRename (const ChainPath& p, const std::string& n) { PHINYX_WITH_PRISM (p, prism->rename (juce::String (n).trim().isEmpty() ? juce::String ("Prism") : juce::String (n).trim())) }
+#define PHI_WITH_PRISM(path, body) if (auto* prism = impl->master.prismAt (path)) { body; }
+void AudioEngine::prismMoveDevice (const ChainPath& p, int fr, int f, int tr, int t) { PHI_WITH_PRISM (p, prism->moveDevice (fr, f, tr, t)) }
+int AudioEngine::prismAddRay (const ChainPath& p)                   { PHI_WITH_PRISM (p, return prism->addRay()) return -1; }
+void AudioEngine::prismRemoveRay (const ChainPath& p, int ray)      { PHI_WITH_PRISM (p, prism->removeRay (ray)) }
+void AudioEngine::prismSetRayGain (const ChainPath& p, int ray, double db) { PHI_WITH_PRISM (p, prism->setRayGain (ray, db)) }
+void AudioEngine::prismSetRayMuted (const ChainPath& p, int ray, bool b)   { PHI_WITH_PRISM (p, prism->setRayMuted (ray, b)) }
+void AudioEngine::prismSetRaySoloed (const ChainPath& p, int ray, bool b)  { PHI_WITH_PRISM (p, prism->setRaySoloed (ray, b)) }
+void AudioEngine::prismRenameRay (const ChainPath& p, int ray, const std::string& n) { PHI_WITH_PRISM (p, prism->renameRay (ray, n)) }
+void AudioEngine::prismRename (const ChainPath& p, const std::string& n) { PHI_WITH_PRISM (p, prism->rename (juce::String (n).trim().isEmpty() ? juce::String ("Prism") : juce::String (n).trim())) }
 void AudioEngine::prismSetSplit (const ChainPath& p, int split)
 {
-    PHINYX_WITH_PRISM (p, prism->setSplit ((PrismInfo::Split) std::clamp (split, 0, 3)))
+    PHI_WITH_PRISM (p, prism->setSplit ((PrismInfo::Split) std::clamp (split, 0, 3)))
 }
-std::string AudioEngine::prismGroup (const ChainPath& p, int ray, int first, int last) { PHINYX_WITH_PRISM (p, return prism->group (ray, first, last)) return "There is no Prism here."; }
+std::string AudioEngine::prismGroup (const ChainPath& p, int ray, int first, int last) { PHI_WITH_PRISM (p, return prism->group (ray, first, last)) return "There is no Prism here."; }
 std::string AudioEngine::prismUngroup (const ChainPath& device)
 {
     if (device.topLevel())
         return ungroupMasterSlot (device.slot);
     const auto [ray, index] = device.steps.back();
-    PHINYX_WITH_PRISM (device.outer(), return prism->ungroup (ray, index))
+    PHI_WITH_PRISM (device.outer(), return prism->ungroup (ray, index))
     return "There is no Prism here.";
 }
-void AudioEngine::prismRenameMacro (const ChainPath& p, int m, const std::string& n) { PHINYX_WITH_PRISM (p, prism->renameMacro (m, n)) }
+void AudioEngine::prismRenameMacro (const ChainPath& p, int m, const std::string& n) { PHI_WITH_PRISM (p, prism->renameMacro (m, n)) }
 std::string AudioEngine::prismMap (const ChainPath& p, int m, int ray, int device, int parameter, float low, float high)
 {
-    PHINYX_WITH_PRISM (p, return prism->map (m, ray, device, parameter, low, high))
+    PHI_WITH_PRISM (p, return prism->map (m, ray, device, parameter, low, high))
     return "There is no Prism here.";
 }
-void AudioEngine::prismUnmap (const ChainPath& p, int m, int mapping) { PHINYX_WITH_PRISM (p, prism->unmap (m, mapping)) }
+void AudioEngine::prismUnmap (const ChainPath& p, int m, int mapping) { PHI_WITH_PRISM (p, prism->unmap (m, mapping)) }
 void AudioEngine::prismSetMappingRange (const ChainPath& p, int m, int mapping, float low, float high)
 {
-    PHINYX_WITH_PRISM (p, prism->setMappingRange (m, mapping, low, high); prism->applyMacrosNow())
+    PHI_WITH_PRISM (p, prism->setMappingRange (m, mapping, low, high); prism->applyMacrosNow())
 }
-void AudioEngine::prismForgetController (const ChainPath& p, int m) { PHINYX_WITH_PRISM (p, prism->setController (m, -1, 0)) }
-#undef PHINYX_WITH_PRISM
+void AudioEngine::prismForgetController (const ChainPath& p, int m) { PHI_WITH_PRISM (p, prism->setController (m, -1, 0)) }
+#undef PHI_WITH_PRISM
 
 void AudioEngine::saveMasterSection() const                          { impl->master.save(); }
 std::string AudioEngine::restoreMasterSection()                      { return impl->master.restore(); }
@@ -1347,7 +1347,7 @@ bool AudioEngine::saveFile (const std::string& path, const AudioData& data, cons
 
     // Write to a temporary file first so a failed save never destroys the original.
     // It keeps the extension, so the tag writers know the type.
-    const auto temp = file.getSiblingFile ("." + file.getFileNameWithoutExtension() + ".phinyx-tmp" + ext);
+    const auto temp = file.getSiblingFile ("." + file.getFileNameWithoutExtension() + ".phi-tmp" + ext);
     temp.deleteFile();
     const auto tempPath = temp.getFullPathName().toStdString();
 

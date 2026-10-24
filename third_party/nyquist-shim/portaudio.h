@@ -1,12 +1,12 @@
 /* SPDX-License-Identifier: AGPL-3.0-only
  *
- * PHINYX builds libnyquist without PortAudio. Nyquist only uses it to play
+ * PHI builds libnyquist without PortAudio. Nyquist only uses it to play
  * sounds itself (PLAY), which an embedded effect has no use for, so this
  * header declares what sndwritepa.c needs and the functions report that no
- * audio device is available. Nyquist effects return their audio to PHINYX.
+ * audio device is available. Nyquist effects return their audio to PHI.
  */
-#ifndef PHINYX_PORTAUDIO_SHIM_H
-#define PHINYX_PORTAUDIO_SHIM_H
+#ifndef PHI_PORTAUDIO_SHIM_H
+#define PHI_PORTAUDIO_SHIM_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -51,7 +51,7 @@ typedef struct PaHostApiInfo
 
 static inline PaError Pa_Initialize (void) { return paDeviceUnavailable; }
 static inline PaError Pa_Terminate (void) { return paNoError; }
-static inline const char* Pa_GetErrorText (PaError e) { (void) e; return "playing from Nyquist is not available in PHINYX"; }
+static inline const char* Pa_GetErrorText (PaError e) { (void) e; return "playing from Nyquist is not available in PHI"; }
 static inline PaDeviceIndex Pa_GetDefaultOutputDevice (void) { return paNoDevice; }
 static inline PaDeviceIndex Pa_GetDeviceCount (void) { return 0; }
 static inline const PaDeviceInfo* Pa_GetDeviceInfo (PaDeviceIndex i) { (void) i; return 0; }

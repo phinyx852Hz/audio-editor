@@ -35,7 +35,7 @@ namespace tagio
     // The ID3v2 tag for tags, as bytes.
     std::string renderId3 (const Tags&, const Options&);
 
-    // Replaces the tags of an existing file (frames PHINYX does not know stay).
+    // Replaces the tags of an existing file (frames PHI does not know stay).
     bool write (const std::string& path, const Tags&, const std::vector<Marker>& markers, double sampleRate,
                 const Options&, std::string& error);
 
