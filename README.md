@@ -13,7 +13,7 @@ At start PHI shows the gold Φ on a black tile (not full screen) for at least 1.
 and plays a new sound each time: a chord on a small phase distortion voice, in the manner
 of Casio's CZ synths, with a patch from the next point of a golden sequence spread over its
 16 settings (wave, bend, envelopes, tuning, chord), so starts keep sounding different and
-never clump; it rings out through a granular reverb with a tail of about 2 seconds. It is a
+never clump (the first start is always the same sound, picked for PHI); it rings out through a granular reverb with a tail of about 2 seconds. It is a
 stand-in for the Φ synth, PHI's own phase distortion synth, until that is bundled.
 `--no-splash` starts without either.
 

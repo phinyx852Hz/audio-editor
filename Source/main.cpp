@@ -14,7 +14,6 @@
 #include <QIcon>
 #include <QPointer>
 #include <QProcess>
-#include <QRandomGenerator>
 #include <QStandardPaths>
 
 #include <cstdio>
@@ -50,14 +49,13 @@ namespace
         }
     };
 
-    // The splash's sound: the next patch of this install's own golden sequence, so each
-    // start sounds different. The count and the seed are kept in the settings.
+    // The splash's sound: the next patch of the golden sequence, so each start sounds
+    // different. Every install walks the same sequence from the same start, so the first
+    // start is always the same chosen sound; the count is kept in the settings.
     void playStartupSound (AudioEngine& engine)
     {
+        constexpr double seed = 0.7;   // the sequence whose first sound was picked for PHI
         auto settings = appSettings();
-        if (! settings.contains (QStringLiteral ("splash/soundSeed")))
-            settings.setValue (QStringLiteral ("splash/soundSeed"), QRandomGenerator::global()->generateDouble());
-        const auto seed = settings.value (QStringLiteral ("splash/soundSeed")).toDouble();
         const auto launch = settings.value (QStringLiteral ("splash/soundLaunch"), 0).toLongLong();
         settings.setValue (QStringLiteral ("splash/soundLaunch"), launch + 1);
 
