@@ -36,9 +36,9 @@ namespace phimark
     QString withoutPhi (const QString& name);          // "Φ EQ" -> "EQ", when the mark stands in for the letter
 }
 
-// The window shown while PHI starts: the gold mark on its black tile, 1000/φ² (382)
-// pixels square in the middle of the screen, not full screen, with the version under the
-// mark. It stays at least 1.618 seconds, and closes once the main window is up.
+// The window shown while PHI starts, in the middle of the screen (not full screen): a
+// golden rectangle 618 x 382, the gold mark in its square, "PHI" and the version in the
+// rest, and the golden spiral through it. It stays at least 1.618 seconds, and closes once the main window is up.
 class PhiSplash final : public QWidget
 {
 public:

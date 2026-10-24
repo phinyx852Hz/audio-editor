@@ -156,10 +156,10 @@ PhiButton::PhiButton (const QString& accessibleName, QWidget* parent, bool isSwi
 //==============================================================================
 PhiSplash::PhiSplash() : QWidget (nullptr, Qt::SplashScreen | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint)
 {
-    setAttribute (Qt::WA_TranslucentBackground);   // the tile's rounded corners
+    setAttribute (Qt::WA_TranslucentBackground);   // the rounded corners
     setAttribute (Qt::WA_DeleteOnClose);
-    const auto side = (int) std::lround (1000.0 / (phi * phi));
-    resize (side, side);
+    const auto h = (int) std::lround (1000.0 / (phi * phi));   // 382
+    resize ((int) std::lround (h * phi), h);                    // 618 x 382, a golden rectangle
     if (const auto* screen = QGuiApplication::primaryScreen())
         move (screen->availableGeometry().center() - rect().center());
     shown.start();
@@ -186,16 +186,62 @@ std::function<void()>& PhiSplash::startupSound()
 
 void PhiSplash::paintEvent (QPaintEvent*)
 {
+    // A golden rectangle: the mark in its square on the left, the name in the golden
+    // rectangle that is left over, and the golden spiral drawn faintly through both, a
+    // quarter turn in each square as the rectangle divides again and again.
     QPainter g (this);
-    paint (g, QRectF (rect()), phimark::Style::goldOnBlack);
+    g.setRenderHint (QPainter::Antialiasing);
+    const QRectF all (rect());
+    const auto radius = all.height() / (phi * phi * phi * phi);
+    g.setPen (Qt::NoPen);
+    g.setBrush (black);
+    g.drawRoundedRect (all, radius, radius);
 
-    // The version in the tile's lower margin, small and gold.
+    auto spiral = gold;
+    spiral.setAlphaF (0.16f);
+    g.setPen (QPen (spiral, 1.2));
+    g.setBrush (Qt::NoBrush);
+    QRectF left = all;
+    for (int turn = 0; turn < 10 && left.width() > 1.0 && left.height() > 1.0; ++turn)
+    {
+        const auto side = std::min (left.width(), left.height());
+        QRectF square;
+        QPointF centre;
+        int start = 0;
+        switch (turn % 4)
+        {
+            case 0: square = QRectF (left.left(), left.top(), side, side);  centre = square.bottomRight(); start = 90;  left.setLeft (square.right()); break;
+            case 1: square = QRectF (left.left(), left.top(), side, side);  centre = square.bottomLeft();  start = 0;   left.setTop (square.bottom()); break;
+            case 2: square = QRectF (left.right() - side, left.top(), side, side); centre = square.topLeft(); start = 270; left.setRight (square.left()); break;
+            default: square = QRectF (left.left(), left.bottom() - side, side, side); centre = square.topRight(); start = 180; left.setBottom (square.top()); break;
+        }
+        if (turn == 0)
+        {
+            g.drawLine (QPointF (square.right(), all.top() + radius), QPointF (square.right(), all.bottom() - radius));
+            paint (g, square, phimark::Style::goldOnBlack);
+            g.setPen (QPen (spiral, 1.2));
+            g.setBrush (Qt::NoBrush);
+        }
+        g.drawArc (QRectF (centre.x() - side, centre.y() - side, 2 * side, 2 * side), start * 16, 90 * 16);
+    }
+
+    // The name and version in the leftover rectangle, the name's baseline on its golden section.
+    const QRectF text (all.height(), 0, all.width() - all.height(), all.height());
     auto f = font();
-    f.setPixelSize (std::max (9, height() / 34));
+    f.setPixelSize ((int) std::lround (text.width() / (phi * phi)));
+    f.setWeight (QFont::DemiBold);
+    f.setLetterSpacing (QFont::PercentageSpacing, 108);
+    g.setFont (f);
+    g.setPen (QColor (0xe8, 0xe4, 0xda));
+    const auto baseline = text.top() + text.height() / phi;
+    g.drawText (QRectF (text.left(), text.top(), text.width(), baseline - text.top()), Qt::AlignHCenter | Qt::AlignBottom, QStringLiteral ("PHI"));
+    f.setPixelSize (std::max (9, (int) std::lround (text.width() / (phi * phi * phi * phi * phi))));
+    f.setWeight (QFont::Normal);
+    f.setLetterSpacing (QFont::PercentageSpacing, 100);
     g.setFont (f);
     g.setPen (gold);
-    const auto margin = height() / (phi * phi * phi * phi);
-    g.drawText (QRectF (0, height() - margin, width(), margin), Qt::AlignCenter, QCoreApplication::applicationVersion());
+    g.drawText (QRectF (text.left(), baseline + text.height() / (phi * phi * phi * phi * phi * phi), text.width(), text.height() / 8),
+                Qt::AlignHCenter | Qt::AlignTop, QCoreApplication::applicationVersion());
 }
 
 void PhiSplash::mousePressEvent (QMouseEvent*)
