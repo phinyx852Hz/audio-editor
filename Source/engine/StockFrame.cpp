@@ -2,6 +2,7 @@
 #include "StockFrame.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 
 namespace
@@ -10,12 +11,25 @@ namespace
     std::uint32_t colourGeneration = 1;
 
     juce::Colour col (std::uint32_t argb) { return juce::Colour (argb); }
+
+    // The frame's background as it shows on screen (the window is opaque, so over black).
+    std::uint32_t shownBackground (std::uint32_t window) { return juce::Colours::black.overlaidWith (col (window)).getARGB(); }
+    std::atomic<std::uint32_t> pluginBackground { shownBackground (PluginFrameColours {}.window) };
+}
+
+// Stock plugins patched to fill their background with the frame's colour, so their
+// view looks see-through in it (Airwindows Consolidated), look this up with dlsym:
+// it is exported from the executable (CMakeLists.txt). 0xAARRGGBB, always opaque.
+extern "C" __attribute__ ((visibility ("default"))) std::uint32_t phi_plugin_background()
+{
+    return pluginBackground.load (std::memory_order_relaxed);
 }
 
 void StockFrame::setColours (const PluginFrameColours& c)
 {
     colours = c;
     ++colourGeneration;
+    pluginBackground.store (shownBackground (c.window), std::memory_order_relaxed);
 }
 
 const PluginFrameColours& StockFrame::currentColours() { return colours; }
