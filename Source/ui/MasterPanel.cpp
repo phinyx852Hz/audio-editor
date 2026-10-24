@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MasterPanel.h"
 #include "Panels.h"
+#include "PhiMark.h"
 
 #include <QApplication>
 #include <QCheckBox>
@@ -11,6 +12,7 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QKeyEvent>
+#include <QFontMetrics>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -448,6 +450,19 @@ ParameterDialog::ParameterDialog (AudioEngine& e, ChainPath p, QWidget* parent)
     closeButtons->addButton (windowButton, QDialogButtonBox::ActionRole);
 
     auto* layout = new QVBoxLayout (this);
+    if (phimark::isPhiPlugin (pluginId))
+    {
+        // PHI's own Φ effects carry the Φ mark and their name in a header.
+        auto* header = new QHBoxLayout;
+        auto* name = new QLabel (phimark::withoutPhi (QString::fromStdString (info.name)), this);
+        auto f = name->font();
+        f.setPointSizeF (f.pointSizeF() * 1.618);
+        f.setBold (true);
+        name->setFont (f);
+        header->addWidget (new PhiMark (QFontMetrics (f).height() + 8, this));
+        header->addWidget (name, 1);
+        layout->addLayout (header);
+    }
     layout->addWidget (filter);
     layout->addWidget (scroll, 1);
     layout->addWidget (closeButtons);

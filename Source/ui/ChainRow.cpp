@@ -3,6 +3,7 @@
 #include "MasterPanel.h"
 #include "PrismEditor.h"
 #include "Potentiometer.h"
+#include "PhiMark.h"
 #include "Theme.h"
 
 #include <QApplication>
@@ -112,6 +113,9 @@ DeviceCard::DeviceCard (AudioEngine& e, Kind k, ChainPath where, QWidget* parent
     title = new QLabel (this);
     title->setFont ([&] { auto f = font(); f.setBold (true); return f; }());
     header->addWidget (power);
+    const auto phiPlugin = k == Kind::plugin && phimark::isPhiPlugin (info.pluginId);
+    if (phiPlugin)
+        header->addWidget (new PhiMark (power->sizeHint().height(), this));
     header->addWidget (title, 1);
 
     if (k == Kind::plugin && place.topLevel())
@@ -146,8 +150,9 @@ DeviceCard::DeviceCard (AudioEngine& e, Kind k, ChainPath where, QWidget* parent
     }
     else if (k == Kind::plugin)
     {
-        title->setText (elided (QString::fromStdString (info.name), title->font(), 150));
-        title->setToolTip (QString::fromStdString (info.name));
+        const auto name = QString::fromStdString (info.name);
+        title->setText (elided (phiPlugin ? phimark::withoutPhi (name) : name, title->font(), 150));
+        title->setToolTip (name);
 
         // A stock plugin's main controls, the same as its window's footer; otherwise the first
         // few continuous parameters. Switches and the plugin's own bypass are left to Edit.

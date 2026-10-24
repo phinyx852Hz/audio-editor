@@ -102,6 +102,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/ExportDialog.cpp
     Source/ui/MetadataEditor.cpp
     Source/ui/MainWindow.cpp
+    Source/ui/PhiMark.cpp
     Source/ui/GainHud.cpp
     Source/ui/LiveEdits.cpp
     Source/ui/Analysis.cpp

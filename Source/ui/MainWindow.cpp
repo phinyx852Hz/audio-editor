@@ -9,6 +9,7 @@
 #include "../sampler/SamplerEngine.h"
 #include "../sampler/SlicerEngine.h"
 #include "Brand.h"
+#include "PhiMark.h"
 #include "Settings.h"
 #include "FindPanel.h"
 #include "Visualizer.h"
@@ -819,10 +820,14 @@ void MainWindow::registerCommands()
     add ("help.menuBar", Category::help, tr ("Open &Menu Bar"), { KS (Qt::Key_F10) }, [this] { openMenuBar(); });
     add ("help.about", Category::help, tr ("&About " APP_DISPLAY_NAME), {}, [this]
     {
-        QMessageBox::about (this, tr ("About " APP_DISPLAY_NAME),
+        QMessageBox about (QMessageBox::NoIcon, tr ("About " APP_DISPLAY_NAME),
             tr ("<b>" APP_BRAND_NAME " " APP_VERSION "</b><p>Audio editor and mastering suite for Linux.</p>"
                 "<p>Free software under the GNU Affero General Public License v3.</p>"
-                "<p>Press Ctrl+Shift+P or F1 to search every command and shortcut.</p>"));
+                "<p>The Φ mark is PHI's own, drawn from the golden ratio.</p>"
+                "<p>Press Ctrl+Shift+P or F1 to search every command and shortcut.</p>"),
+            QMessageBox::Ok, this);
+        about.setIconPixmap (phimark::pixmap (96, phimark::Style::goldOnBlack, devicePixelRatioF()));
+        about.exec();
     });
 }
 
