@@ -8,7 +8,7 @@ class QPlainTextEdit;
 
 // A text report from the Analysis Meters window, in its own window. Nothing is
 // written until you save: Save (Ctrl+S) puts it in the report folder (Folder...
-// changes it, remembered; ~/Documents/PHINYX Analysis at first), Save As picks
+// changes it, remembered; ~/Documents/PHI Analysis at first), Save As picks
 // anywhere. Closing an unsaved report (Ctrl+W, Super+W, Esc or the window's close
 // button) asks whether to save it; Discard lets it go.
 class AnalysisReport final : public QWidget

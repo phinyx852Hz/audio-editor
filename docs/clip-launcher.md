@@ -1,7 +1,7 @@
-# PHINYX Clip Launcher
+# PHI Clip Launcher
 
 Status: Tier 1 built (2026-10-22). The design, with a clickable mock and the survey of other
-launchers, is the owner's "PHINYX Clip Launcher" page; this file is what the code does.
+launchers, is the owner's "PHI Clip Launcher" page; this file is what the code does.
 
 ## What the owner asked for (2026-10-22)
 
@@ -48,7 +48,7 @@ So one pass down the Selector, one pick per colour, builds a scene across the tr
 in a colour fills the next scene down. The mixer's own file browser does the same for the selected
 track while the launcher shows.
 
-A WAV (or any audio file PHINYX reads) becomes an audio clip; a MIDI file becomes a MIDI clip that
+A WAV (or any audio file PHI reads) becomes an audio clip; a MIDI file becomes a MIDI clip that
 plays the track's instrument (the Synth is chosen for a track that has none). A MIDI loop is made
 whole bars long, at the tempo it plays at.
 

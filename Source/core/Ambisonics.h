@@ -39,7 +39,7 @@ namespace ambi
         double azimuth = 0.0, elevation = 0.0;
         bool lfe = false;
     };
-    // Layouts in the channel order PHINYX plays them in (dsp::speakerLayout): Stereo to 9.1.6,
+    // Layouts in the channel order PHI plays them in (dsp::speakerLayout): Stereo to 9.1.6,
     // with two subwoofers in 5.2, 7.2 and 7.2.4 (LFE2 straight after LFE1).
     std::vector<std::string> layoutNames();
     std::vector<Speaker> layout (const std::string& name);

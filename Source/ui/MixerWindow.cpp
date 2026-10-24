@@ -355,7 +355,7 @@ namespace
 
     QString projectFilter()
     {
-        return MixerWindow::tr ("PHINYX projects (*.phi *.phinyxmix);;All files (*)");
+        return MixerWindow::tr ("PHI projects (*.phi *.phinyxmix);;All files (*)");
     }
 
     enum Choice { noInstrument, synthChoice, samplerChoice, slicerChoice, firstPlugin };
@@ -2979,7 +2979,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     setObjectName (QStringLiteral ("MixerWindow"));
     setFocusPolicy (Qt::StrongFocus);
     restoring = true;   // nothing below is a change to the mix
-    Theme::makeTranslucent (this);   // the same theme and window opacity as the rest of PHINYX
+    Theme::makeTranslucent (this);   // the same theme and window opacity as the rest of PHI
     for (int i = 0; i < mixer::maxTracks; ++i)
     {
         info[(size_t) i].name = tr ("Track %1").arg (i + 1);
@@ -4163,7 +4163,7 @@ bool MixerWindow::saveMix (bool saveAs)
     if (saveAs || file.isEmpty())
     {
         file = QFileDialog::getSaveFileName (this, tr ("Save Project"), QDir (folder()).filePath (mixName() + QLatin1Char ('.') + projectSuffix),
-                                             tr ("PHINYX projects (*.phi)"));
+                                             tr ("PHI projects (*.phi)"));
         if (file.isEmpty())
             return false;
         if (QFileInfo (file).suffix().compare (projectSuffix, Qt::CaseInsensitive) != 0)
@@ -4281,6 +4281,7 @@ bool MixerWindow::writeMix (const QString& file, QString& error)
     const QJsonObject launcher {
         { "scenes", numScenes }, { "quantise", engine.launchQuantise.load() }, { "sceneNames", names }, { "slots", slotList }, { "shown", launcherShown() },
     };
+    // The phinyx keys are from before the rename to PHI; kept so every version reads every project.
     QJsonObject root {
         { "phinyxProject", 1 }, { "phinyxMix", 3 }, { "tempo", tempoBox->value() }, { "midiFollowsTempo", followTempoBox->isChecked() },
         { "master", engine.masterDb.load() }, { "armed", engine.liveTrack() }, { "tracks", tracks }, { "launcher", launcher },
@@ -4319,7 +4320,7 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
     const auto root = doc.object();
     if (doc.isNull() || ! root.contains (QStringLiteral ("phinyxMix")))
     {
-        error = tr ("%1 is not a PHINYX project.").arg (QFileInfo (file).fileName());
+        error = tr ("%1 is not a PHI project.").arg (QFileInfo (file).fileName());
         return false;
     }
     const auto keepPath = path;
@@ -4561,7 +4562,7 @@ void MixerWindow::bounce (int track, bool inPlace)
     engine.stop();
 
     // Where it goes: beside the mix, or in the Music folder until the mix is saved.
-    const auto base = path.isEmpty() ? QDir (QStandardPaths::writableLocation (QStandardPaths::MusicLocation)).filePath (tr ("PHINYX Bounces"))
+    const auto base = path.isEmpty() ? QDir (QStandardPaths::writableLocation (QStandardPaths::MusicLocation)).filePath (tr ("PHI Bounces"))
                                      : QFileInfo (path).absoluteDir().filePath (QFileInfo (path).completeBaseName() + tr (" Bounces"));
     QDir().mkpath (base);
     auto stem = QStringLiteral ("Track %1 %2").arg (track + 1).arg (info[(size_t) track].name).trimmed();
@@ -4760,7 +4761,7 @@ bool MixerWindow::replaceClipAudio (int track, uint32_t id, const AudioData& edi
     }
 
     // Saved beside the mix (in the Music folder until it is saved), the original left as it was.
-    const auto base = path.isEmpty() ? QDir (QStandardPaths::writableLocation (QStandardPaths::MusicLocation)).filePath (tr ("PHINYX Edits"))
+    const auto base = path.isEmpty() ? QDir (QStandardPaths::writableLocation (QStandardPaths::MusicLocation)).filePath (tr ("PHI Edits"))
                                      : QFileInfo (path).absoluteDir().filePath (QFileInfo (path).completeBaseName() + tr (" Edits"));
     QDir().mkpath (base);
     auto stem = name;

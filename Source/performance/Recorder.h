@@ -19,10 +19,10 @@
 
 class AudioEngine;
 
-// The Performance menu's video recorder and live stream, OBS-style but for PHINYX only:
-// the picture is PHINYX's own window (rendered by PHINYX, so no other window or screen
+// The Performance menu's video recorder and live stream, OBS-style but for PHI only:
+// the picture is PHI's own window (rendered by PHI, so no other window or screen
 // is ever in it, and no screen-sharing prompt on Wayland), with cameras on top, and the
-// sound is what PHINYX plays plus any microphones. One picture and one sound feed both
+// sound is what PHI plays plus any microphones. One picture and one sound feed both
 // the recording (MP4, H.265) and the stream; either can start and stop on its own.
 //
 // Threads: the UI thread renders the window (submitWindow); a compositor thread puts it
@@ -56,10 +56,10 @@ namespace perf
         std::string encoder;           // empty: the best HEVC encoder
         double quality = 1.0;          // times defaultBitrate
         int audioKbps = 256;           // AAC, per stereo pair
-        bool programTrack = true;      // PHINYX's sound in its own channels (5.1, 7.1...) on a track of its own
+        bool programTrack = true;      // PHI's sound in its own channels (5.1, 7.1...) on a track of its own
         bool fragmented = false;
         std::string folder;
-        bool followWindow = true;      // the PHINYX window in front (Mixer, Tracker...), else always the main window
+        bool followWindow = true;      // the PHI window in front (Mixer, Tracker...), else always the main window
         // Shared
         std::vector<InputChoice> inputs;
         std::vector<CameraChoice> cameras;
@@ -153,7 +153,7 @@ namespace perf
         // Sound
         std::thread audio;
         std::atomic<bool> audioQuit { false };
-        std::vector<Track> tracks;      // 0: the mix; then PHINYX's own channels; then each input
+        std::vector<Track> tracks;      // 0: the mix; then PHI's own channels; then each input
         std::vector<std::unique_ptr<AudioCapture>> inputs;
         std::vector<int> inputTrack;    // track of each input, or -1
         std::unique_ptr<AudioCapture> finder;   // follows PipeWire's applications, when one is recorded
@@ -167,7 +167,7 @@ namespace perf
         int64_t baseline = 0;           // how far the sound runs behind the clock once settled (the device's buffering)
         double lastCheck = 0.0;
         std::vector<std::vector<float>> backlog;   // each input's frames not used yet
-        std::array<std::vector<float>, 2> fold;    // PHINYX's channels to the stereo mix
+        std::array<std::vector<float>, 2> fold;    // PHI's channels to the stereo mix
         int foldFor = 0;
 
         // Cameras

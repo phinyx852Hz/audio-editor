@@ -63,7 +63,7 @@ namespace perf
         std::vector<VideoTrack> video;
         std::vector<AudioTrack> audio;
         int sampleRate = 48000;
-        bool fragmented = false;     // MP4 that stays playable if PHINYX stops without closing it
+        bool fragmented = false;     // MP4 that stays playable if PHI stops without closing it
     };
 
     class MediaWriter

@@ -36,13 +36,13 @@
 
 namespace
 {
-    // HRTF sets: your own, then the one installed with PHINYX (or built with it), then the system's.
+    // HRTF sets: your own, then the one installed with PHI (or built with it), then the system's.
     QStringList hrtfFiles()
     {
         QStringList folders {
             QStandardPaths::writableLocation (QStandardPaths::GenericDataLocation) + QStringLiteral ("/" APP_ID "/hrtf"),
-            QDir (QCoreApplication::applicationDirPath()).absoluteFilePath (QStringLiteral (PHINYX_SHARE_RELATIVE "/hrtf")),
-            QFileInfo (QStringLiteral (PHINYX_DEFAULT_HRTF)).absolutePath(),
+            QDir (QCoreApplication::applicationDirPath()).absoluteFilePath (QStringLiteral (PHI_SHARE_RELATIVE "/hrtf")),
+            QFileInfo (QStringLiteral (PHI_DEFAULT_HRTF)).absolutePath(),
             QStringLiteral ("/usr/share/libmysofa"),
         };
         QStringList files, seen;
@@ -435,7 +435,7 @@ void MainWindow::ambiConvertFuma (bool toFuma)
     state.data = std::move (result);
     doc.apply (what.toStdString(), std::move (state));
     refreshFromDocument (false);
-    statusBar()->showMessage (toFuma ? tr ("Converted to FuMa (W X Y Z order) for older tools; PHINYX itself plays and edits AmbiX, so convert back before editing further")
+    statusBar()->showMessage (toFuma ? tr ("Converted to FuMa (W X Y Z order) for older tools; PHI itself plays and edits AmbiX, so convert back before editing further")
                                      : tr ("Converted from FuMa to AmbiX"), 8000);
 }
 

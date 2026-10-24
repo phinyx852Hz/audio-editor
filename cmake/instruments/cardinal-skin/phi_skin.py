@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 #
-# PHINYX artwork for Cardinal. Draws a PHINYX version of every file in VCV
+# PHI artwork for Cardinal. Draws a PHI version of every file in VCV
 # Rack's component library (knobs, jacks, switches, buttons, lights, sliders,
 # screws, cable plugs, rails), whose own artwork is CC-BY-NC-4.0, over the
 # originals before Cardinal is built. Also restyles VCV Fundamental's knobs,
-# jacks and buttons to match (its panels stay) and gives the cables PHINYX's colours.
+# jacks and buttons to match (its panels stay) and gives the cables PHI's colours.
 # Run in Cardinal's source folder:
-#   python3 phinyx_skin.py
+#   python3 phi_skin.py
 #
 # Everything is plain SVG that Rack's renderer (nanosvg) draws: paths, solid
 # fills and strokes, linear and radial gradients and opacity; no filters,
-# images or <text>. Knobs follow PHINYX's Potentiometer (Source/ui/Potentiometer.h):
+# images or <text>. Knobs follow PHI's Potentiometer (Source/ui/Potentiometer.h):
 # a track around the travel and a line to the current position.
 
 import math
@@ -163,7 +163,7 @@ def slider_track(w, h, p):
 
 
 def slider_handle(w, h, p):
-    """Like the handle of PHINYX's opacity slider: a rounded block with a centre line."""
+    """Like the handle of PHI's opacity slider: a rounded block with a centre line."""
     body = f'<path d="{rounded(0.4, 0.4, w - 0.8, h - 0.8, min(w, h) * 0.3)}" fill="{p["text"]}" stroke="{p["mid"]}" stroke-width="0.8"/>'
     body += f'<path d="M{w * 0.2:.2f} {h / 2:.2f}H{w * 0.8:.2f}" stroke="{p["highlight"]}" stroke-width="{max(0.8, h * 0.08):.2f}" fill="none"/>'
     return svg(w, h, body)
@@ -275,7 +275,7 @@ def pointer_colour(name, p):
 
 
 def component(name, w, h, units):
-    """The PHINYX drawing for a component library file, or None when it is not one we know."""
+    """The PHI drawing for a component library file, or None when it is not one we know."""
     p = DARK
     knobs = ("Knob", "Rogan", "Davies", "Trimpot", "SynthTechAlco", "BefacoTinyPoint")
     if name in ("ScrewSilver",):
@@ -341,7 +341,7 @@ def component_library(folder):
             f.write(art)
     if unknown:
         # A file we do not know would ship VCV's non-commercial artwork: stop the build.
-        sys.exit("phinyx_skin.py: no PHINYX drawing for component library file(s): " + ", ".join(unknown))
+        sys.exit("phi_skin.py: no PHI drawing for component library file(s): " + ", ".join(unknown))
     return len(names)
 
 
@@ -349,7 +349,7 @@ def component_library(folder):
 # VCV Fundamental's own controls (GPL-3.0-or-later), restyled to match. The
 # panels stay as they are.
 
-FUNDAMENTAL_SWEEP = 135.0  # PHINYX's 270 degree travel, set on the knobs below
+FUNDAMENTAL_SWEEP = 135.0  # PHI's 270 degree travel, set on the knobs below
 
 
 def edit(path, old, new, marker):
@@ -359,20 +359,20 @@ def edit(path, old, new, marker):
     if marker in source:
         return
     if old not in source:
-        sys.exit(f"phinyx_skin.py: {path} has changed, its PHINYX edit needs updating")
+        sys.exit(f"phi_skin.py: {path} has changed, its PHI edit needs updating")
     with open(path, "w") as f:
         f.write(source.replace(old, new, 1))
 
 
 KNOB_VALUE = """
-	// PHINYX: the value along the track in the highlight colour, from zero on a
-	// knob that goes both ways, and a dot at each step of a stepped knob (phinyx_skin.py).
-	void drawPhinyxValue(const DrawArgs& args) {
+	// PHI: the value along the track in the highlight colour, from zero on a
+	// knob that goes both ways, and a dot at each step of a stepped knob (phi_skin.py).
+	void drawPhiValue(const DrawArgs& args) {
 		ParamQuantity* const pq = getParamQuantity();
 		if (pq == nullptr || ! (pq->getMaxValue() > pq->getMinValue()))
 			return;
 		const float lo = pq->getMinValue(), hi = pq->getMaxValue();
-		// The track as phinyx_skin.py draws it in the 18 or 68 unit SVG, scaled to the knob.
+		// The track as phi_skin.py draws it in the 18 or 68 unit SVG, scaled to the knob.
 		const float design = size <= 22 ? 18.f : 68.f;
 		const float k = size / design;
 		const float track = std::max(1.6f, design * 0.075f);
@@ -424,23 +424,23 @@ def fundamental(folder):
     hpp = os.path.join(folder, "src/components.hpp")
     edit(hpp, """		scale = size / sw->box.size.x;
 """, """		scale = size / sw->box.size.x;
-		// PHINYX: 270 degrees of travel, as on PHINYX's own knobs
+		// PHI: 270 degrees of travel, as on PHI's own knobs
 		minAngle = -0.75f * M_PI;
 		maxAngle = 0.75f * M_PI;
-""", "PHINYX: 270 degrees")
+""", "PHI: 270 degrees")
     edit(hpp, """		RoundKnob::draw(args);
 		nvgRestore(args.vg);
 	}
 """, """		RoundKnob::draw(args);
 		nvgRestore(args.vg);
-		drawPhinyxValue(args);
+		drawPhiValue(args);
 	}
-""" + KNOB_VALUE, "PHINYX: the value along the track")
+""" + KNOB_VALUE, "PHI: the value along the track")
     edit(hpp, """struct FundamentalPort : app::SvgPort {
 	FundamentalPort() {
 		setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/port.svg")));
 	}
-};""", """// PHINYX: inputs ring in the highlight colour, outputs in the accent colour (phinyx_skin.py).
+};""", """// PHI: inputs ring in the highlight colour, outputs in the accent colour (phi_skin.py).
 // The port's type is set after it is made, so outputs change drawing on their first step.
 struct FundamentalPort : app::SvgPort {
 	bool outputSvg = false;
@@ -456,28 +456,28 @@ struct FundamentalPort : app::SvgPort {
 		}
 		app::SvgPort::step();
 	}
-};""", "PHINYX: inputs ring")
+};""", "PHI: inputs ring")
     edit(hpp, """			bgColor = nvgRGBA(190, 152, 152, 53);
 			borderColor = nvgRGBA(241, 33, 33, 53);
-			addBaseColor(nvgRGB(210, 11, 11));""", """			// PHINYX: lit in the highlight colour (phinyx_skin.py)
+			addBaseColor(nvgRGB(210, 11, 11));""", """			// PHI: lit in the highlight colour (phi_skin.py)
 			bgColor = nvgRGBA(0x4f, 0xc3, 0xf7, 40);
 			borderColor = nvgRGBA(0x4f, 0xc3, 0xf7, 60);
-			addBaseColor(nvgRGB(0x4f, 0xc3, 0xf7));""", "PHINYX: lit in the highlight")
+			addBaseColor(nvgRGB(0x4f, 0xc3, 0xf7));""", "PHI: lit in the highlight")
 
 
 def cardinal_widgets(path):
     """Cardinal's own drawn knob (Host Audio's level) in the highlight colour instead of Cardinal red."""
     edit(path, """        const NVGcolor cardinalColor = nvgRGBf(0.76f, 0.11f, 0.22f);""",
-         """        const NVGcolor cardinalColor = nvgRGB(0x4f, 0xc3, 0xf7); // PHINYX: the highlight colour (phinyx_skin.py)""",
-         "PHINYX: the highlight colour")
+         """        const NVGcolor cardinalColor = nvgRGB(0x4f, 0xc3, 0xf7); // PHI: the highlight colour (phi_skin.py)""",
+         "PHI: the highlight colour")
 
 
-ARTWORK_NOTE = """# PHINYX artwork in Cardinal
+ARTWORK_NOTE = """# PHI artwork in Cardinal
 
 The files in `res/ComponentLibrary` (installed as `resources/ComponentLibrary`)
-are not VCV Rack's component library artwork: PHINYX replaces every one of them
-with its own drawings (cmake/instruments/cardinal-skin/phinyx_skin.py in the
-PHINYX sources) before Cardinal is built. They are part of PHINYX and licensed
+are not VCV Rack's component library artwork: PHI replaces every one of them
+with its own drawings (cmake/instruments/cardinal-skin/phi_skin.py in the
+PHI sources) before Cardinal is built. They are part of PHI and licensed
 AGPL-3.0-only. The CC-BY-NC-4.0 entry for ComponentLibrary in LICENSES.md does
 not apply to this build.
 """
@@ -494,11 +494,11 @@ def cable_colours(path):
         source = f.read()
     block = re.compile(r"(\n[ \t]*)(?://[^\n]*\n[ \t]*)?settings::cableColors = \{.*?\};", re.S)
     if not block.search(source):
-        sys.exit(f"phinyx_skin.py: no cable colour list in {path}")
+        sys.exit(f"phi_skin.py: no cable colour list in {path}")
     def ours(m):
         pad = m.group(1)
         colours = "".join(f'{pad}    color::fromHexString("{c}"),' for c in CABLE_COLOURS)
-        return f"{pad}// PHINYX: the Selector's colours (phinyx_skin.py){pad}settings::cableColors = {{{colours}{pad}}};"
+        return f"{pad}// PHI: the Selector's colours (phi_skin.py){pad}settings::cableColors = {{{colours}{pad}}};"
     with open(path, "w") as f:
         f.write(block.sub(ours, source, count=1))
 
@@ -508,9 +508,9 @@ def main():
     cable_colours("src/CardinalCommon.cpp")
     fundamental("plugins/Fundamental")
     cardinal_widgets("plugins/Cardinal/src/Widgets.hpp")
-    with open("PHINYX-ARTWORK.md", "w") as f:
+    with open("PHI-ARTWORK.md", "w") as f:
         f.write(ARTWORK_NOTE)
-    print(f"phinyx_skin.py: drew {count} component library files")
+    print(f"phi_skin.py: drew {count} component library files")
 
 
 if __name__ == "__main__":

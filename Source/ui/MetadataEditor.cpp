@@ -394,7 +394,7 @@ void MetadataEditor::buildSchema (QTabWidget* tabs, meta::Schema schema, const Q
         form->addRow (new QLabel (tr ("The loudness fields are filled in by Export when the WAV output's \"Fill in BWF loudness\" is on.")));
     }
 
-    // Fields of this schema PHINYX has no name for (kept from the file), and new ones.
+    // Fields of this schema PHI has no name for (kept from the file), and new ones.
     auto* others = new QWidget;
     auto* othersForm = new QFormLayout (others);
     othersForm->setContentsMargins (0, 0, 0, 0);

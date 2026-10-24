@@ -71,14 +71,14 @@ namespace stock
 
     juce::File folder()
     {
-        if (const auto env = juce::SystemStats::getEnvironmentVariable ("PHINYX_STOCK_PATH", {}); env.isNotEmpty())
+        if (const auto env = juce::SystemStats::getEnvironmentVariable ("PHI_STOCK_PATH", {}); env.isNotEmpty())
             return juce::File (env);
 
         const auto exe = juce::File::getSpecialLocation (juce::File::currentExecutableFile);
-        if (const auto installed = exe.getParentDirectory().getChildFile (PHINYX_STOCK_RELATIVE); installed.isDirectory())
+        if (const auto installed = exe.getParentDirectory().getChildFile (PHI_STOCK_RELATIVE); installed.isDirectory())
             return installed;
 
-        if (const auto built = juce::File (PHINYX_STOCK_BUILD_DIR); built.isDirectory())
+        if (const auto built = juce::File (PHI_STOCK_BUILD_DIR); built.isDirectory())
             return built;
 
         return {};

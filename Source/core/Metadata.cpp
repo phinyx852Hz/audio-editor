@@ -90,7 +90,7 @@ namespace
             .add ("ILGT", "Lightness")
             .add ("IPLT", "Palette Setting");
 
-        // Broadcast Wave bext chunk (WAV), EBU Tech 3285 version 2. Keys stay as PHINYX first named them.
+        // Broadcast Wave bext chunk (WAV), EBU Tech 3285 version 2. Keys stay as PHI first named them.
         c.in (Schema::bext, "Broadcast Wave");
         const std::pair<const char*, const char*> bwfKeys[] {
             { tag::bwfDescription, "Description" }, { tag::bwfOriginator, "Originator" },

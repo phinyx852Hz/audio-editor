@@ -13,7 +13,7 @@
 // The window every stock plugin opens in: a header bar (name, credit, A/B
 // compare, on/off), input and output meters at the sides, the plugin's own
 // view in the middle and a footer of knobs for its main controls. Coloured
-// from the PHINYX theme.
+// from the PHI theme.
 class StockFrame final : public juce::Component, private juce::Timer
 {
 public:

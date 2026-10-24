@@ -12,7 +12,7 @@
 // The metadata chunks of WAV (RIFF and RF64) and AIFF files, read and written
 // directly: RIFF INFO and DISP, Broadcast Wave bext (version 2, with loudness),
 // AES46 cart, iXML and XMP (_PMX), the ID3 chunk's bytes, and every chunk
-// PHINYX does not know, which is kept as "raw:wav:<id>". In AIFF: NAME, AUTH,
+// PHI does not know, which is kept as "raw:wav:<id>". In AIFF: NAME, AUTH,
 // (c), ANNO, the ID3 chunk and XMP (APPL "XMP "). Plain C++.
 namespace riff
 {

@@ -314,7 +314,7 @@ BinauralDialog::BinauralDialog (const binaural::Settings& initial, bool stereo, 
     if (! initial.hrtfPath.empty() && hrtfBox->findData (QString::fromStdString (initial.hrtfPath)) < 0)
         hrtfBox->addItem (QFileInfo (QString::fromStdString (initial.hrtfPath)).completeBaseName(), QString::fromStdString (initial.hrtfPath));
     hrtfBox->setCurrentIndex (std::max (0, hrtfBox->findData (QString::fromStdString (initial.hrtfPath))));
-    hrtfBox->setToolTip (tr ("The ears to listen with: a measured HRTF set (SOFA file). Your own sets go in ~/.local/share/phinyx/hrtf"));
+    hrtfBox->setToolTip (tr ("The ears to listen with: a measured HRTF set (SOFA file). Your own sets go in ~/.local/share/phi/hrtf"));
     auto* otherHrtf = new QPushButton (tr ("Other &File..."), this);
     otherHrtf->setAutoDefault (false);
     connect (otherHrtf, &QPushButton::clicked, this, [this]

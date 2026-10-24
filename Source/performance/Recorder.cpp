@@ -148,7 +148,7 @@ struct Recorder::Runner
 };
 
 //==============================================================================
-// PHINYX's sound, from the device's rate to 48 kHz, nudged to keep time with the clock.
+// PHI's sound, from the device's rate to 48 kHz, nudged to keep time with the clock.
 struct Recorder::Resampler
 {
     SwrContext* swr = nullptr;
@@ -254,7 +254,7 @@ std::string Recorder::startSession (const Settings& s)
     quitting = false;
     audioQuit = false;
 
-    // The tracks: the mix first (what players and the stream play), then PHINYX alone in
+    // The tracks: the mix first (what players and the stream play), then PHI alone in
     // its own channels, then each input alone.
     programChannels = std::clamp (engine.masterChannels(), 2, tapChannels);
     tracks.clear();
@@ -363,7 +363,7 @@ void Recorder::finishRunner (std::shared_ptr<Runner>& runner, bool network)
         runner->closing = true;
     }
     runner->wake.notify_all();
-    // A stream whose connection is stuck gives up after a few seconds rather than holding PHINYX.
+    // A stream whose connection is stuck gives up after a few seconds rather than holding PHI.
     // A file always finishes, or it could not be played.
     for (int waited = 0; network && ! runner->done && waited < 500; ++waited)
         std::this_thread::sleep_for (std::chrono::milliseconds (10));
@@ -737,7 +737,7 @@ void Recorder::pumpAudio()
         }
     }
 
-    // Each input gives as many frames as PHINYX did, padded or trimmed to keep in step.
+    // Each input gives as many frames as PHI did, padded or trimmed to keep in step.
     std::vector<std::vector<float>> inputAudio (inputs.size());
     backlog.resize (inputs.size());
     for (size_t i = 0; i < inputs.size(); ++i)
@@ -758,7 +758,7 @@ void Recorder::pumpAudio()
         b.erase (b.begin(), b.begin() + (ptrdiff_t) take);
     }
 
-    // The mix: PHINYX folded to stereo, then the inputs.
+    // The mix: PHI folded to stereo, then the inputs.
     heard = std::clamp (heard, 2, tapChannels);
     if (foldFor != heard)
     {

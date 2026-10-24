@@ -48,7 +48,7 @@ public:
     bool scanNext (std::string& fileBeingScanned);
     std::string finishScan();
 
-    // Each plugin file is examined by a separate copy of PHINYX started with
+    // Each plugin file is examined by a separate copy of PHI started with
     // --scan-plugin, so a plugin that crashes or hangs while loading only takes
     // that copy down; it is then skipped from then on. This is that copy's job:
     // writes what `file` holds to `output` as XML; returns the exit code.
@@ -149,7 +149,7 @@ private:
         // A plugin that throws (yabridge throws "write: Broken pipe" when its Wine
         // side has gone) is marked failed and never called again: not to process,
         // not for its parameters, not even to be deleted, since its destructor
-        // would throw too and end PHINYX. Shared so the slot can move.
+        // would throw too and end PHI. Shared so the slot can move.
         struct Health
         {
             std::atomic<bool> failed { false };
@@ -200,7 +200,7 @@ private:
     void openWindow (int slot);   // empties a slot; a failed plugin and its window are let go without being deleted
 
     static void addExtraFormats (juce::AudioPluginFormatManager&);   // formats JUCE does not have: CLAP
-    // Runs `scanInThisProcess` in a copy of PHINYX; false if that crashed or hung.
+    // Runs `scanInThisProcess` in a copy of PHI; false if that crashed or hung.
     static bool scanOutOfProcess (const juce::AudioPluginFormat&, const juce::String& file, int timeoutMs,
                                   juce::OwnedArray<juce::PluginDescription>& found);
     void loadStockPlugins();

@@ -176,7 +176,7 @@ namespace dsp
     // Runs [start, end) through a TruePeakLimiter (latency removed); the rest is unchanged.
     AudioDataPtr limitTruePeak (const AudioData&, Frame start, Frame end, double ceilingDb, double releaseMs = 100.0);
 
-    // Speakers, and the layout PHINYX assumes for each channel count, in WAV
+    // Speakers, and the layout PHI assumes for each channel count, in WAV
     // (WAVEFORMATEXTENSIBLE / SMPTE) order: 5.1 is L R C LFE Ls Rs.
     enum class Speaker { mono, left, right, centre, lfe, sideLeft, sideRight, rearLeft, rearRight, rearCentre,
                          topFrontLeft, topFrontRight, topRearLeft, topRearRight, other,

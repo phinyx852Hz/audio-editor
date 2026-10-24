@@ -30,7 +30,7 @@ namespace
 
     std::string tempPath (const std::string& name)
     {
-        return (std::filesystem::temp_directory_path() / ("phinyx-performance-" + name)).string();
+        return (std::filesystem::temp_directory_path() / ("phi-performance-" + name)).string();
     }
 
     // Writes `seconds` of a moving picture and a tone on each audio track.
@@ -155,13 +155,13 @@ namespace
         main.height = 360;
         main.fps = 30;
         main.codec = codec;
-        main.title = "PHINYX";
+        main.title = "PHI";
         perf::VideoTrack camera = main;
         camera.width = 320;
         camera.height = 240;
         camera.title = "Camera";
         out.video = { main, camera };
-        out.audio = { { 2, 256000, "Mix" }, { 6, 640000, "PHINYX (6 channels)" }, { 1, 96000, "Microphone" } };
+        out.audio = { { 2, 256000, "Mix" }, { 6, 640000, "PHI (6 channels)" }, { 1, 96000, "Microphone" } };
 
         perf::MediaWriter w;
         const bool opened = w.open (out);
@@ -181,7 +181,7 @@ namespace
             check (p.widths[0] == 640 && p.widths[1] == 320, "video tracks keep their sizes");
             check (p.codecs[2] == AV_CODEC_ID_AAC && p.codecs[3] == AV_CODEC_ID_AAC && p.codecs[4] == AV_CODEC_ID_AAC, "audio tracks are AAC");
             check (p.channels[2] == 2 && p.channels[3] == 6 && p.channels[4] == 1, "audio tracks have 2, 6 and 1 channels");
-            check (p.titles[3] == "PHINYX (6 channels)", "audio tracks keep their names, got '" + p.titles[3] + "'");
+            check (p.titles[3] == "PHI (6 channels)", "audio tracks keep their names, got '" + p.titles[3] + "'");
             check (p.defaultAudioFirst, "the mix is the default audio track");
             check (p.packets[0] >= 59 && p.packets[1] >= 59, "every picture was written");
             // 2 s at 48 kHz is 94 AAC frames of 1024.

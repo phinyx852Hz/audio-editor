@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 #
 # Stock instruments: free samplers and synths by other authors, built from a
-# pinned commit of each one's repository into ${PHINYX_STOCK_DIR} with its
+# pinned commit of each one's repository into ${PHI_STOCK_DIR} with its
 # licence, like the stock plugins (included by cmake/StockPlugins.cmake). They
 # are the Sample and Synth menus' instruments, named by what they do:
 #
@@ -15,25 +15,25 @@
 #   FM                 OctaSine by Joakim Frostegård             AGPL-3.0          CLAP
 #
 # GPLv3 and AGPLv3 works may be combined (section 13 of each), so all of them can
-# ship with PHINYX. Left out on purpose: Ami's sample packs (their rights are not
+# ship with PHI. Left out on purpose: Ami's sample packs (their rights are not
 # clear) and every Cardinal module collection but its own host modules and VCV
 # Fundamental, whose panels are GPL-3.0-or-later or CC0 (others carry
 # non-commercial or permission-only artwork). VCV Rack's component library (the
 # knobs, jacks, switches, screws, plugs and rails that Cardinal draws), which is
-# CC-BY-NC-4.0, is redrawn by PHINYX before the build (cardinal-skin/phinyx_skin.py).
+# CC-BY-NC-4.0, is redrawn by PHI before the build (cardinal-skin/phi_skin.py).
 #
 # Credits are in Source/engine/StockPlugins.cpp and README.md. Each needs what
-# its own build needs: JUCE's Linux headers for the JUCE ones (as PHINYX),
+# its own build needs: JUCE's Linux headers for the JUCE ones (as PHI),
 # Python 3 and fftw for Cardinal, Rust (cargo) for CA-72 and OctaSine, which
 # are left out without it.
 
-option(PHINYX_STOCK_INSTRUMENTS "Build and bundle the stock instruments" ON)
-if(NOT PHINYX_STOCK_INSTRUMENTS)
+option(PHI_STOCK_INSTRUMENTS "Build and bundle the stock instruments" ON)
+if(NOT PHI_STOCK_INSTRUMENTS)
     return()
 endif()
 
 set(instruments_dir ${CMAKE_CURRENT_LIST_DIR}/instruments)
-# The JUCE that PHINYX itself is built with, for GRNLR and Ami, which bring none.
+# The JUCE that PHI itself is built with, for GRNLR and Ami, which bring none.
 if(JUCE_DIR)
     set(instrument_juce ${JUCE_DIR})
 else()
@@ -41,10 +41,10 @@ else()
 endif()
 
 # Builds a JUCE instrument's VST3 with CMake and copies it, and its licence files, in.
-#   phinyx_juce_instrument(name repository commit artefact-path licence-files... [CMAKE_ARGS ...] [PATCH ...])
-function(phinyx_juce_instrument name repository commit artefact)
+#   phi_juce_instrument(name repository commit artefact-path licence-files... [CMAKE_ARGS ...] [PATCH ...])
+function(phi_juce_instrument name repository commit artefact)
     cmake_parse_arguments(PARSE_ARGV 4 arg "" "" "LICENCES;CMAKE_ARGS;PATCH")
-    phinyx_stock_licence(${name} ${arg_LICENCES})
+    phi_stock_licence(${name} ${arg_LICENCES})
     get_filename_component(bundle "${artefact}" NAME)
     ExternalProject_Add(stock_${name}
         GIT_REPOSITORY ${repository}
@@ -55,15 +55,15 @@ function(phinyx_juce_instrument name repository commit artefact)
         ${stock_one_at_a_time}
         CMAKE_GENERATOR Ninja
         CMAKE_ARGS -DCMAKE_BUILD_TYPE=Release ${arg_CMAKE_ARGS}
-        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --parallel ${PHINYX_STOCK_JOBS}
-        INSTALL_COMMAND ${CMAKE_COMMAND} -E rm -rf "${PHINYX_STOCK_DIR}/${bundle}"
-            COMMAND ${CMAKE_COMMAND} -E copy_directory "<BINARY_DIR>/${artefact}" "${PHINYX_STOCK_DIR}/${bundle}"
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --parallel ${PHI_STOCK_JOBS}
+        INSTALL_COMMAND ${CMAKE_COMMAND} -E rm -rf "${PHI_STOCK_DIR}/${bundle}"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory "<BINARY_DIR>/${artefact}" "${PHI_STOCK_DIR}/${bundle}"
             ${stock_licence_commands})
     set(stock_targets ${stock_targets} stock_${name} PARENT_SCOPE)
 endfunction()
 
 # Granular: GRNLR (a Projucer project for JUCE 4; built by our CMakeLists, made to fit JUCE 8)
-phinyx_juce_instrument(GRNLR https://github.com/passivist/GRNLR.git 17702ff3b28fd71cd2a20840120805bc978431c6
+phi_juce_instrument(GRNLR https://github.com/passivist/GRNLR.git 17702ff3b28fd71cd2a20840120805bc978431c6
     GRNLR_artefacts/Release/VST3/GRNLR.vst3
     LICENCES LICENSE.md
     CMAKE_ARGS -DJUCE_DIR=${instrument_juce}
@@ -72,7 +72,7 @@ phinyx_juce_instrument(GRNLR https://github.com/passivist/GRNLR.git 17702ff3b28f
 
 # Retro Sampler: Ami Sampler (a Projucer project; built by our CMakeLists, its audio formats' writers
 # made to fit JUCE 8). Its sample packs are not shipped.
-phinyx_juce_instrument(AmiSampler https://github.com/astriiddev/Ami-Sampler-VST.git 6d76a29c9096ca80c2fb77d35afc77ceb329c05e
+phi_juce_instrument(AmiSampler https://github.com/astriiddev/Ami-Sampler-VST.git 6d76a29c9096ca80c2fb77d35afc77ceb329c05e
     "AmiSampler_artefacts/Release/VST3/Ami Sampler.vst3"
     LICENCES LICENSE.txt
     CMAKE_ARGS -DJUCE_DIR=${instrument_juce}
@@ -82,18 +82,18 @@ phinyx_juce_instrument(AmiSampler https://github.com/astriiddev/Ami-Sampler-VST.
 # Wavetable: Vaporizer2, with its own JUCE. A starter set of its wavetables and presets
 # (vaporizer2-starter.txt, about 28 MB of the library's 1 GB) and its noises go into the
 # bundle's Resources folder, where the patch makes it look on Linux.
-phinyx_juce_instrument(Vaporizer2 https://github.com/VASTDynamics/Vaporizer2.git 1c56c4be304255f1c397dad725ea784f15a55ef5
+phi_juce_instrument(Vaporizer2 https://github.com/VASTDynamics/Vaporizer2.git 1c56c4be304255f1c397dad725ea784f15a55ef5
     VASTvaporizer2_artefacts/Release/VST3/VASTvaporizer2.vst3
     LICENCES LICENSE
     PATCH ${CMAKE_COMMAND} -DPATCH=${instruments_dir}/vaporizer2-bundle-data.patch -P ${CMAKE_CURRENT_LIST_DIR}/ApplyPatch.cmake)
 ExternalProject_Add_Step(stock_Vaporizer2 data
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${PHINYX_STOCK_DIR}/VASTvaporizer2.vst3/Contents/Resources"
-    COMMAND ${CMAKE_COMMAND} -DSRC=<SOURCE_DIR>/VASTvaporizer "-DDEST=${PHINYX_STOCK_DIR}/VASTvaporizer2.vst3/Contents/Resources"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${PHI_STOCK_DIR}/VASTvaporizer2.vst3/Contents/Resources"
+    COMMAND ${CMAKE_COMMAND} -DSRC=<SOURCE_DIR>/VASTvaporizer "-DDEST=${PHI_STOCK_DIR}/VASTvaporizer2.vst3/Contents/Resources"
         -DLIST=${instruments_dir}/vaporizer2-starter.txt -P ${instruments_dir}/CopyListed.cmake
     DEPENDEES install)
 
 # Additive: Overtonium, with the JUCE it pins
-phinyx_juce_instrument(Overtonium https://github.com/benjamindehli/overtonium.git 894224746018c4d7c9bf28d468bc2c99637fddc2
+phi_juce_instrument(Overtonium https://github.com/benjamindehli/overtonium.git 894224746018c4d7c9bf28d468bc2c99637fddc2
     Overtonium_artefacts/Release/VST3/Overtonium.vst3
     LICENCES LICENSE
     CMAKE_ARGS -DOVERTONIUM_INSTALL_AFTER_BUILD=OFF -DOVERTONIUM_BUILD_TESTS=OFF -DOVERTONIUM_BUILD_TOOLS=OFF
@@ -102,13 +102,13 @@ phinyx_juce_instrument(Overtonium https://github.com/benjamindehli/overtonium.gi
 # Subtractive2 poly: Helm (amilajack's fork, ported to JUCE 9; its own CMake build is
 # for macOS, so ours builds the same sources for Linux). Its factory patches go
 # into the bundle's Resources folder, where the patch makes it look on Linux.
-phinyx_juce_instrument(Helm https://github.com/amilajack/helm.git ce20c330364753a13f119638d84c469e5b9aae36
+phi_juce_instrument(Helm https://github.com/amilajack/helm.git ce20c330364753a13f119638d84c469e5b9aae36
     HelmPlugin_artefacts/Release/VST3/Helm.vst3
     LICENCES COPYING
     PATCH ${CMAKE_COMMAND} -E copy ${instruments_dir}/helm/CMakeLists.txt <SOURCE_DIR>/
         COMMAND ${CMAKE_COMMAND} -DPATCH=${instruments_dir}/helm/helm-linux.patch -P ${CMAKE_CURRENT_LIST_DIR}/ApplyPatch.cmake)
 ExternalProject_Add_Step(stock_Helm patches
-    COMMAND ${CMAKE_COMMAND} -E copy_directory <SOURCE_DIR>/patches "${PHINYX_STOCK_DIR}/Helm.vst3/Contents/Resources/patches"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory <SOURCE_DIR>/patches "${PHI_STOCK_DIR}/Helm.vst3/Contents/Resources/patches"
     DEPENDEES install)
 
 # Modular: Cardinal, cut down to its own host modules and VCV Fundamental
@@ -118,7 +118,7 @@ find_package(Python3 COMPONENTS Interpreter)
 # Cardinal's build downloads jansson, libarchive, libsamplerate and zstd with wget.
 find_program(WGET_EXECUTABLE wget)
 if(Python3_FOUND AND WGET_EXECUTABLE)
-    phinyx_stock_licence(Cardinal LICENSE docs/LICENSES.md plugins/Fundamental/LICENSE PHINYX-ARTWORK.md)
+    phi_stock_licence(Cardinal LICENSE docs/LICENSES.md plugins/Fundamental/LICENSE PHI-ARTWORK.md)
     ExternalProject_Add(stock_Cardinal
         GIT_REPOSITORY https://github.com/DISTRHO/Cardinal.git
         GIT_TAG 0a530b73273afc914ec71a78e9165cd28c53b599
@@ -127,7 +127,7 @@ if(Python3_FOUND AND WGET_EXECUTABLE)
         BUILD_IN_SOURCE TRUE
         UPDATE_COMMAND ""
         PATCH_COMMAND ${Python3_EXECUTABLE} -I ${instruments_dir}/cardinal_foundational.py ${instruments_dir}/cardinal-plugins.cpp
-            COMMAND ${Python3_EXECUTABLE} -I ${instruments_dir}/cardinal-skin/phinyx_skin.py
+            COMMAND ${Python3_EXECUTABLE} -I ${instruments_dir}/cardinal-skin/phi_skin.py
         ${stock_one_at_a_time}
         CONFIGURE_COMMAND ""
         # Carla first and on one job: its jackbridge.a and jackbridge.min.a rules run make in
@@ -137,10 +137,10 @@ if(Python3_FOUND AND WGET_EXECUTABLE)
         BUILD_COMMAND make -j1 carla
             COMMAND make -j1 deps
             COMMAND ${stock_make} clap
-        INSTALL_COMMAND ${CMAKE_COMMAND} -E rm -rf ${PHINYX_STOCK_DIR}/Cardinal.clap
+        INSTALL_COMMAND ${CMAKE_COMMAND} -E rm -rf ${PHI_STOCK_DIR}/Cardinal.clap
             # Its resources are symlinks into the source folder: copied as the files they point to.
-            COMMAND cp -rL <SOURCE_DIR>/bin/Cardinal.clap ${PHINYX_STOCK_DIR}/
-            COMMAND ${CMAKE_COMMAND} -E rm -f ${PHINYX_STOCK_DIR}/Cardinal.clap/CardinalFX.clap
+            COMMAND cp -rL <SOURCE_DIR>/bin/Cardinal.clap ${PHI_STOCK_DIR}/
+            COMMAND ${CMAKE_COMMAND} -E rm -f ${PHI_STOCK_DIR}/Cardinal.clap/CardinalFX.clap
             ${stock_licence_commands})
     list(APPEND stock_targets stock_Cardinal)
 elseif(NOT Python3_FOUND)
@@ -150,9 +150,9 @@ else()
 endif()
 
 # Subtractive1 mono: CA-72, and FM: OctaSine, Rust plugins bundled as CLAPs by their own xtasks.
-find_program(PHINYX_CARGO cargo)
-if(PHINYX_CARGO)
-    phinyx_stock_licence(CA-72 LICENSE THIRD-PARTY-NOTICES.txt)
+find_program(PHI_CARGO cargo)
+if(PHI_CARGO)
+    phi_stock_licence(CA-72 LICENSE THIRD-PARTY-NOTICES.txt)
     ExternalProject_Add(stock_CA-72
         GIT_REPOSITORY https://github.com/idlefoundry/ca-72.git
         GIT_TAG 7b8f0ee756f576377c273beabe46bc11f5a7f856
@@ -160,13 +160,13 @@ if(PHINYX_CARGO)
         UPDATE_COMMAND ""
         ${stock_one_at_a_time}
         CONFIGURE_COMMAND ""
-        BUILD_COMMAND ${PHINYX_CARGO} xtask bundle ca72-plugin --profile bundle
+        BUILD_COMMAND ${PHI_CARGO} xtask bundle ca72-plugin --profile bundle
         # Its bundle profile keeps debug information (55 MB); stripped it is 15 MB.
-        INSTALL_COMMAND ${CMAKE_COMMAND} -E copy <SOURCE_DIR>/target/bundled/CA-72.clap ${PHINYX_STOCK_DIR}/
-            COMMAND ${CMAKE_STRIP} --strip-unneeded ${PHINYX_STOCK_DIR}/CA-72.clap
+        INSTALL_COMMAND ${CMAKE_COMMAND} -E copy <SOURCE_DIR>/target/bundled/CA-72.clap ${PHI_STOCK_DIR}/
+            COMMAND ${CMAKE_STRIP} --strip-unneeded ${PHI_STOCK_DIR}/CA-72.clap
             ${stock_licence_commands})
 
-    phinyx_stock_licence(OctaSine LICENSE)
+    phi_stock_licence(OctaSine LICENSE)
     ExternalProject_Add(stock_OctaSine
         GIT_REPOSITORY https://github.com/greatest-ape/OctaSine.git
         GIT_TAG e347a9334a3a976029746719afa0bf0875181b20
@@ -174,8 +174,8 @@ if(PHINYX_CARGO)
         UPDATE_COMMAND ""
         ${stock_one_at_a_time}
         CONFIGURE_COMMAND ""
-        BUILD_COMMAND ${PHINYX_CARGO} xtask bundle -p octasine --release --features clap
-        INSTALL_COMMAND ${CMAKE_COMMAND} -E copy <SOURCE_DIR>/target/bundled/octasine.clap ${PHINYX_STOCK_DIR}/
+        BUILD_COMMAND ${PHI_CARGO} xtask bundle -p octasine --release --features clap
+        INSTALL_COMMAND ${CMAKE_COMMAND} -E copy <SOURCE_DIR>/target/bundled/octasine.clap ${PHI_STOCK_DIR}/
             ${stock_licence_commands})
     list(APPEND stock_targets stock_CA-72 stock_OctaSine)
 else()

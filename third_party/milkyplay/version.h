@@ -2,4 +2,4 @@
 #pragma once
 const int MILKYTRACKER_VERSION = 0x10600;
 // Version string restricted to 20 chars for XM export!
-const char MILKYTRACKER_VERSION_STRING[] = "PHINYX (MilkyPlay)";
+const char MILKYTRACKER_VERSION_STRING[] = "PHI (MilkyPlay)";

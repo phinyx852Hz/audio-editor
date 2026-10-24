@@ -17,7 +17,7 @@
 //==============================================================================
 // One MilkyPlay player with its mixer, pulled a block at a time instead of by a
 // sound card. The mix is taken before MilkyPlay rounds it to 16 bits, so nothing
-// clips on the way into PHINYX. Linked instruments' notes (see TrackerEngine::setLink)
+// clips on the way into PHI. Linked instruments' notes (see TrackerEngine::setLink)
 // go to a LinkSink, or are collected for a recording.
 class TrackerEngine::Player final : private Mixable, private PlayerSTD::ExternalNotes
 {

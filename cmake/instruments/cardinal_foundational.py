@@ -12,7 +12,7 @@ import sys
 
 shutil.copyfile(sys.argv[1], "plugins/plugins.cpp")
 
-MARK = "# PHINYX: foundational modules only (cmake/instruments/cardinal_foundational.py)\n"
+MARK = "# PHI: foundational modules only (cmake/instruments/cardinal_foundational.py)\n"
 with open("plugins/Makefile") as f:
     lines = f.readlines()
 # Run again on a folder it already cut down, it leaves the module lists alone.
@@ -69,7 +69,7 @@ anchor = """                asset::systemDir = resourcePath;
             }
 """
 fix = """
-            // PHINYX: resources next to the .clap file (cardinal_foundational.py)
+            // PHI: resources next to the .clap file (cardinal_foundational.py)
             if (! system::exists(asset::bundlePath))
             {
                 asset::systemDir = system::join(system::getDirectory(bundlePath), "resources");

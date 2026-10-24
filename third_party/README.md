@@ -8,7 +8,7 @@ Roger B. Dannenberg (Carnegie Mellon University), built on XLISP by David
 Betz, with the Nyx embedding interface by Dominic Mazzoni. Licence:
 BSD-style, see `libnyquist/LICENSE.txt` and `libnyquist/nyquist/license.txt`.
 
-Changes for PHINYX:
+Changes for PHI:
 - Removed the Mac and Windows system folders (`nyquist/sys/mac`,
   `nyquist/sys/win`) and the FFT test programs (`nyquist/ffts/*-testing`,
   `Timing-code`), which are not built.
@@ -16,7 +16,7 @@ Changes for PHINYX:
 - Audacity's `CMakeLists.txt` is replaced by `cmake/Nyquist.cmake`.
 
 `nyquist-shim/portaudio.h` stands in for PortAudio, which Nyquist only uses
-to play sound itself; PHINYX gets the audio back from Nyquist instead.
+to play sound itself; PHI gets the audio back from Nyquist instead.
 
 ## Nyquist runtime and plug-ins
 
@@ -33,15 +33,15 @@ github.com/milkytracker/MilkyTracker at commit e3ceb05 (2026-09-10), by Peter
 "pailes" Barth and the MilkyTracker contributors. Licence: New BSD (see the
 header of each file); the rest of MilkyTracker is GPL-3.0-or-later.
 
-Changes for PHINYX:
-- Left out `AudioDriverManager.cpp` and the `drivers/` folder; PHINYX plays the
-  mix through its own audio engine. `AudioDriverManager_PHINYX.cpp` stands in,
+Changes for PHI:
+- Left out `AudioDriverManager.cpp` and the `drivers/` folder; PHI plays the
+  mix through its own audio engine. `AudioDriverManager_PHI.cpp` stands in,
   offering only MilkyPlay's null driver.
 - Added `version.h`, which MilkyTracker generates at build time.
 - MilkyTracker's `CMakeLists.txt` is replaced by `cmake/MilkyPlay.cmake`.
 - `PlayerSTD` can hand an instrument's notes to something outside the player
   (`PlayerSTD::ExternalNotes`) instead of starting its sample: the Tracker's
-  instruments linked to the Retro Sampler. Marked `PHINYX` in the source.
+  instruments linked to the Retro Sampler. Marked `PHI` in the source.
 
 `Source/tracker/PatternText.cpp` adapts the effect conversions and names from
 MilkyTracker's `tracker/PatternTools.cpp` (Copyright 2009 Peter Barth,

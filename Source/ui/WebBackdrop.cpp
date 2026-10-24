@@ -13,8 +13,8 @@
 
 namespace
 {
-    // The window's own colour over the page: the opacity is how much of PHINYX lies over it,
-    // as with the Visualizer behind PHINYX.
+    // The window's own colour over the page: the opacity is how much of PHI lies over it,
+    // as with the Visualizer behind PHI.
     class Tint final : public QWidget
     {
     public:
@@ -49,7 +49,7 @@ WebBackdrop::WebBackdrop (QWidget* window) : QWidget (window)
     tint = new Tint (this);
 
     // A button rather than a hint: the page covers the menus while it is in front.
-    back = new QPushButton (tr ("Back to PHINYX (Esc)"), this);
+    back = new QPushButton (tr ("Back to PHI (Esc)"), this);
     back->setCursor (Qt::PointingHandCursor);
     back->setFocusPolicy (Qt::NoFocus);
     back->setStyleSheet (QStringLiteral ("QPushButton { background: rgba(0,0,0,170); color: white; padding: 6px 14px; border: none; border-radius: 6px; }"

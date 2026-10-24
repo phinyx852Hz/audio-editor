@@ -45,7 +45,7 @@ namespace
         QStringList folders;
         for (const auto& f : vamphost::searchPath())
             folders << QString::fromStdString (f);
-        return QObject::tr ("The analysis plugin %1 was not found. PHINYX ships the QM Vamp Plugins on x86-64; elsewhere install "
+        return QObject::tr ("The analysis plugin %1 was not found. PHI ships the QM Vamp Plugins on x86-64; elsewhere install "
                             "them (Arch: qm-vamp-plugins) or put Vamp plugins in one of these folders:\n\n%2")
             .arg (QString::fromStdString (outputId), folders.join (QLatin1Char ('\n')));
     }

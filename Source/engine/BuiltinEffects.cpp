@@ -22,6 +22,8 @@ namespace
     class StereoizeProcessor final : public juce::AudioPluginInstance
     {
     public:
+        // The phinyx: identifiers and PHINYX_ state tags of the built-in effects are from
+        // before the rename to PHI, kept so the chains and projects saved with them still load.
         static constexpr const char* identifier = "phinyx:stereoize";
 
         StereoizeProcessor()

@@ -201,7 +201,7 @@ void KeymapDialog::rebuild()
             parent->setExpanded (true);
         }
 
-        // Keys the desktop (Hyprland) keeps for itself never reach PHINYX.
+        // Keys the desktop (Hyprland) keeps for itself never reach PHI.
         QStringList notes;
         for (const auto& key : c.action->shortcuts())
             if (const auto owner = DesktopShortcuts::owner (key); ! owner.isEmpty())
@@ -247,7 +247,7 @@ void KeymapDialog::editSelected()
     if (const auto owner = DesktopShortcuts::owner (seq); ! owner.isEmpty())
     {
         if (QMessageBox::question (this, tr ("Taken by the desktop"),
-                tr ("%1 is used by your desktop (%2), so PHINYX would never receive it. Use it anyway?")
+                tr ("%1 is used by your desktop (%2), so PHI would never receive it. Use it anyway?")
                     .arg (seq.toString (QKeySequence::NativeText), owner))
             != QMessageBox::Yes)
             return;
