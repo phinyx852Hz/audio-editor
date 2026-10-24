@@ -866,7 +866,7 @@ void MainWindow::buildMenus()
                                "@visual.artistic", "@visual.science", "-", "@visual.milkdrop", "@visual.rain", "@visual.web", "@visual.sonify", "-",
                                "view.opacityUp", "view.opacityDown", "view.opacityFull" } },
         { tr ("Mi&xer"),     { "mixer.window", "mixer.dock", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
-                               "mixer.playStop", "mixer.mixdown" } },
+                               "mixer.playStop", "mixer.mixdown", "-", "mixer.assistant" } },
         { tr ("S&ample"),    { "sample.send", "sample.window", "sample.refresh", "-", "slice.send", "slice.window", "slice.refresh", "-",
                                "instrument.granular", "instrument.retroSampler", "-", "sample.midiInputs", "sample.panic" } },
         { tr ("S&ynth"),     { "instrument.wavetable", "instrument.modular", "instrument.additive", "-",

@@ -78,6 +78,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/Nyquist.cpp
     Source/core/Album.cpp
     Source/core/MasterAssist.cpp
+    Source/mixer/MixAssist.cpp
     Source/engine/AudioCapture.cpp
     Source/engine/AudioEngine.cpp
     Source/engine/BuiltinEffects.cpp
@@ -117,6 +118,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/DesktopShortcuts.cpp
     Source/ui/MasterPanel.cpp
     Source/ui/MasterAssistant.cpp
+    Source/ui/MixAssistant.cpp
     Source/ui/Panels.cpp
     Source/ui/RecordDialog.cpp
     Source/ui/Recovery.cpp
@@ -368,7 +370,8 @@ if(PHI_BUILD_TESTS)
         Source/core/Phi.cpp
         Source/core/Nyquist.cpp
         Source/core/Album.cpp
-        Source/core/MasterAssist.cpp)
+        Source/core/MasterAssist.cpp
+        Source/mixer/MixAssist.cpp)
     target_link_libraries(phi-core-tests PRIVATE phi_nyquist phi_rubberband phi_mysofa)
     target_compile_definitions(phi-core-tests PRIVATE PHI_DEFAULT_HRTF="${PHI_DEFAULT_HRTF}")
     target_compile_definitions(phi-core-tests PRIVATE PHI_SHARE_SOURCE_DIR="${CMAKE_SOURCE_DIR}/share")
