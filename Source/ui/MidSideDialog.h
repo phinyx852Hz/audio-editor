@@ -79,6 +79,7 @@ private:
     QDoubleSpinBox* rotationBox;
     QSpinBox* liftBox;
     QCheckBox* matchBox;
+    QCheckBox* goldenBox;
     QComboBox* listenBox;
     QLabel* readout;
     QCheckBox* previewBox;
