@@ -66,79 +66,7 @@ void MainWindow::registerSamplerCommands()
     });
 
     // MIDI plays the Sampler or the Slicer (whichever was used last) straight from the MIDI thread.
-    midiInputs->setHandler ([this, e = samplerEngine.get(), s = slicerEngine.get()] (int status, int channel, int a, int b)
-    {
-        // Controllers also turn the Prism macros that follow them (and teach one waiting to learn).
-        if (status == 0xB0)
-            QMetaObject::invokeMethod (this, [this, channel, a, b]
-            {
-                if (engine.midiController (channel, a, b))
-                    statusBar()->showMessage (tr ("Macro follows CC %1 on channel %2").arg (a).arg (channel), 4000);
-            }, Qt::QueuedConnection);
-
-        // No instrument window open: MIDI plays nothing.
-        const auto target = midiTarget.load (std::memory_order_relaxed);
-        // A patchbay synth: everything, on the channel it came on.
-        if (target == 3)
-        {
-            if (auto* p = patchBay.get())
-            {
-                const auto st = (uint8_t) (status | std::clamp (channel - 1, 0, 15));
-                if (status == 0xE0)
-                    p->liveMidi (patchSynth.load(), st, (uint8_t) (a & 0x7F), (uint8_t) ((a >> 7) & 0x7F));
-                else
-                    p->liveMidi (patchSynth.load(), st, (uint8_t) a, (uint8_t) b);
-            }
-            return;
-        }
-        // The Mixer: everything goes to its armed track, on the channel it came on.
-        if (target == 2)
-        {
-            if (auto* m = mixerEngine.get())
-            {
-                const auto st = (uint8_t) (status | std::clamp (channel - 1, 0, 15));
-                if (status == 0xE0)
-                    m->liveMidi (st, (uint8_t) (a & 0x7F), (uint8_t) ((a >> 7) & 0x7F));
-                else
-                    m->liveMidi (st, (uint8_t) a, (uint8_t) b);
-            }
-            return;
-        }
-        const bool slices = target == 1;
-        if (target < 0 && (status == 0x90 || status == 0xE0))
-            return;
-        switch (status)
-        {
-            case 0x90:
-                if (slices)
-                    s->noteOn (a, (float) b / 127.0f);
-                else
-                    e->noteOn (a, (float) b / 127.0f);
-                break;
-            case 0x80:
-                if (slices)
-                    s->noteOff (a);
-                else
-                    e->noteOff (a);
-                break;
-            case 0xE0:
-                if (! slices)
-                    e->pitchBend ((a - 8192) / 8192.0);
-                break;
-            case 0xB0:
-                if (a == 64)
-                    e->sustainPedal (b >= 64);
-                else if (a == 120)
-                {
-                    e->panic();
-                    s->panic();
-                }
-                else if (a == 123)
-                    e->allNotesOff();
-                break;
-            default: break;
-        }
-    });
+    midiInputs->setHandler ([this] (int status, int channel, int a, int b) { playMidi (status, channel, a, b); });
     QTimer::singleShot (0, this, [this] { openMidiInputs(); });
 
     samplerFollowTimer.setSingleShot (true);
@@ -182,6 +110,85 @@ void MainWindow::registerSamplerCommands()
     splitDockWidget (findPanel->dock(), slicerPanel->dock(), Qt::Vertical);
     panels << samplerPanel << slicerPanel;
     updateMidiStatus();
+}
+
+// What a MIDI keyboard plays: the instrument used last (Simplest, the Slicer, the Mixer's
+// armed track or a patchbay synth). Any thread: the MIDI thread, or the sonified Visualizer.
+void MainWindow::playMidi (int status, int channel, int a, int b)
+{
+    auto* e = samplerEngine.get();
+    auto* s = slicerEngine.get();
+
+    // Controllers also turn the Prism macros that follow them (and teach one waiting to learn).
+    if (status == 0xB0)
+        QMetaObject::invokeMethod (this, [this, channel, a, b]
+        {
+            if (engine.midiController (channel, a, b))
+                statusBar()->showMessage (tr ("Macro follows CC %1 on channel %2").arg (a).arg (channel), 4000);
+        }, Qt::QueuedConnection);
+
+    // No instrument window open: MIDI plays nothing.
+    const auto target = midiTarget.load (std::memory_order_relaxed);
+    // A patchbay synth: everything, on the channel it came on.
+    if (target == 3)
+    {
+        if (auto* p = patchBay.get())
+        {
+            const auto st = (uint8_t) (status | std::clamp (channel - 1, 0, 15));
+            if (status == 0xE0)
+                p->liveMidi (patchSynth.load(), st, (uint8_t) (a & 0x7F), (uint8_t) ((a >> 7) & 0x7F));
+            else
+                p->liveMidi (patchSynth.load(), st, (uint8_t) a, (uint8_t) b);
+        }
+        return;
+    }
+    // The Mixer: everything goes to its armed track, on the channel it came on.
+    if (target == 2)
+    {
+        if (auto* m = mixerEngine.get())
+        {
+            const auto st = (uint8_t) (status | std::clamp (channel - 1, 0, 15));
+            if (status == 0xE0)
+                m->liveMidi (st, (uint8_t) (a & 0x7F), (uint8_t) ((a >> 7) & 0x7F));
+            else
+                m->liveMidi (st, (uint8_t) a, (uint8_t) b);
+        }
+        return;
+    }
+    const bool slices = target == 1;
+    if (target < 0 && (status == 0x90 || status == 0xE0))
+        return;
+    switch (status)
+    {
+        case 0x90:
+            if (slices)
+                s->noteOn (a, (float) b / 127.0f);
+            else
+                e->noteOn (a, (float) b / 127.0f);
+            break;
+        case 0x80:
+            if (slices)
+                s->noteOff (a);
+            else
+                e->noteOff (a);
+            break;
+        case 0xE0:
+            if (! slices)
+                e->pitchBend ((a - 8192) / 8192.0);
+            break;
+        case 0xB0:
+            if (a == 64)
+                e->sustainPedal (b >= 64);
+            else if (a == 120)
+            {
+                e->panic();
+                s->panic();
+            }
+            else if (a == 123)
+                e->allNotesOff();
+            break;
+        default: break;
+    }
 }
 
 // Everything live plays through the patchbay, which routes it to the engine, while any

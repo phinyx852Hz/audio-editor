@@ -2,6 +2,7 @@
 #pragma once
 
 #include "../core/Fft.h"
+#include "../core/Sonify.h"
 
 #include <QElapsedTimer>
 #include <QImage>
@@ -55,6 +56,16 @@ public:
     static void setRainTempo (double bpm);
     bool isRain() const;
 
+    // The Picture view: a still picture, or the newest frame of a video or a camera.
+    void setPicture (const QImage&);
+    bool isPicture() const;
+
+    // Sonifying: what is shown, painted once more off screen at `size` (on the next
+    // paint) for the sonifier to read, and where it plays (drawn over the view).
+    void requestFrame (QSize size);
+    QImage takeFrame();   // null until a requested frame was painted
+    void setSonifyMarks (double scan, std::vector<sonify::Spot> spots);   // scan < 0 and no spots: none
+
 Q_SIGNALS:
     void stepMode (int direction);
     void fullScreenRequested();
@@ -87,7 +98,11 @@ private:
     void drawWaterfall (QPainter&);
     void drawSurface (QPainter&, bool science);
     void drawBackground (QPainter&);
+    void drawPicture (QPainter&);
     void drawTitle (QPainter&);
+    void paintScene (QPainter&);
+    void paintOverlay (QPainter&);
+    void drawSonifyMarks (QPainter&);
 
     float xForFrequency (double hz, double left, double width) const;
     double binFrequency (int bin) const { return bin * rate / analyzer.size(); }
@@ -124,6 +139,12 @@ private:
     std::unique_ptr<MilkDrop> milk;
     QImage milkFrame;
 
+    QImage picture;
+    QSize frameWanted;   // empty: none
+    QImage frame;
+    double sonifyScan = -1.0;
+    std::vector<sonify::Spot> sonifySpots;
+
     // Digital Rain: a grid of symbols and a falling trail per column.
     struct RainColumn { double head; float speed; int length; };
     std::vector<RainColumn> rain;
@@ -148,6 +169,9 @@ public:
     explicit VisualizerWindow (QWidget* parent);
 
     VisualizerView* view() const { return visual; }
+    // The Sonify controls, under the bar; the bar's Sonify button shows and hides them.
+    void setSonifyPanel (QWidget*);
+    void showSonifyPanel (bool);
     void syncPicker();
     void toggleFullScreen();
     bool closeWhenLeavingFullScreen = false;   // opened straight into full screen: Esc closes it
@@ -164,4 +188,6 @@ private:
     VisualizerView* visual;
     QWidget* bar;
     QComboBox* picker;
+    QWidget* sonifyPanel = nullptr;
+    class QPushButton* sonifyButton;
 };

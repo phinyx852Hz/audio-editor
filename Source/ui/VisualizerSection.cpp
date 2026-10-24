@@ -199,6 +199,7 @@ VisualizerWindow* MainWindow::visualizerWindow()
             activateWindow();
             waveform->setFocus();
         });
+        addSonifyPanel();
     }
     return visualizer;
 }
@@ -305,6 +306,13 @@ void MainWindow::addVisualizerSubmenu (QMenu* menu, const QString& which)
             sub->addAction (commands.action (QString::fromLatin1 (id)));
     }
 #endif
+    else if (which == QStringLiteral ("sonify"))
+    {
+        auto* sub = menu->addMenu (tr ("S&onify"));
+        for (const auto* id : { "visualizer.sonify", "visualizer.sonifyFile", "visualizer.sonifyCamera", "visualizer.sonifyWeb" })
+            if (auto* a = commands.action (QString::fromLatin1 (id)))
+                sub->addAction (a);
+    }
     else if (which == QStringLiteral ("rain"))
     {
         auto* sub = menu->addMenu (tr ("Digital &Rain"));
@@ -380,6 +388,7 @@ void MainWindow::feedVisualizers()
             view->addSamples (scopeLeft, scopeRight, rate);
             view->tick();
         }
+    sonifyTick();
 }
 
 #if PHI_HAVE_PROJECTM

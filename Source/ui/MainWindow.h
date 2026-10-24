@@ -48,7 +48,8 @@ namespace sampler { class Engine; }
 namespace slicer { class Engine; }
 namespace mixer { class Engine; }
 namespace patchbay { class PatchBay; }
-namespace perf { class Recorder; }
+namespace perf { class Recorder; class Camera; class VideoFile; }
+namespace sonify { class Sonifier; struct Message; struct Picture; }
 
 class MainWindow final : public QMainWindow
 {
@@ -419,6 +420,7 @@ private:
     void slicerFollow();
     void playInstruments();
     void instrumentClosed();
+    void playMidi (int status, int channel, int a, int b);   // as a MIDI keyboard would; any thread
     std::unique_ptr<slicer::Engine> slicerEngine;
     class SlicerWindow* slicerWin = nullptr;
     int slicerTab = -1;
@@ -512,6 +514,32 @@ private:
     class WebBackdrop* webBackdrop = nullptr;
     int visualMode = 0;
     double opacityBeforeBackdrop = 0.0;
+
+    // Sonifying the Visualizer (SonifySection.cpp): what it shows, played as notes.
+    void registerSonifyCommands();
+    void addSonifyPanel();
+    void setSonifying (bool on);
+    void sonifyTick();
+    bool chooseSonifySource (int source);   // false when cancelled
+    bool openSonifyFile (const QString& path);
+    bool startSonifyCamera();
+    void stopSonifyMotion();   // the camera or video
+    void showSonifyPicture (const class QImage&);
+    void sendSonified (const std::vector<sonify::Message>&);
+    int sonifySynth();         // the patchbay slot of the built-in Synth it plays, made when needed; -1: none free
+    void saveSonifySettings();
+    class SonifyPanel* sonifyPanel = nullptr;
+    std::unique_ptr<sonify::Sonifier> sonifier;
+    std::unique_ptr<sonify::Picture> sonifyPicture;   // the newest, small
+    std::unique_ptr<perf::Camera> sonifyCamera;
+    std::unique_ptr<perf::VideoFile> sonifyVideo;
+    uint64_t sonifySerial = 0;     // the camera's or video's last picture shown
+    bool sonifying = false;
+    int sonifySource = 0;          // SonifyPanel::Source
+    int sonifySlot = -1;           // the patchbay synth it last played
+    int sonifyTarget = 0;          // SonifyPanel::Target, as last played
+    QElapsedTimer sonifyClock;
+    qint64 sonifyLast = 0, sonifyAsked = 0;
     void updateAnalysisCommandStates();
     bool runAnalysis (const QString& title, const AudioData&, Frame start, Frame end, const QString& outputId, vamphost::Result&);
     void markFeatures (const QString& outputId, const QString& title);

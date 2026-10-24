@@ -20,6 +20,7 @@
 #include <QWheelEvent>
 
 #include <algorithm>
+#include <utility>
 #include <cmath>
 
 namespace
@@ -102,6 +103,7 @@ const std::vector<VisualizerView::Mode>& VisualizerView::modes()
         { "ribbons",     QT_TRANSLATE_NOOP ("VisualizerView", "Ribbons"),           false, QT_TRANSLATE_NOOP ("VisualizerView", "Layers of the spectrum drifting like an aurora") },
         { "rain",        QT_TRANSLATE_NOOP ("VisualizerView", "Digital Rain"),      false, QT_TRANSLATE_NOOP ("VisualizerView", "Green symbols falling like in The Matrix, at a tempo from 0 (still) to 240 BPM, glowing with the music; Up/Down change the tempo, tap T to set it, 0 stops") },
         { "landscape",   QT_TRANSLATE_NOOP ("VisualizerView", "Spectral Landscape"), false, QT_TRANSLATE_NOOP ("VisualizerView", "Gliding over mountains made of the last seconds of sound; drag to turn, wheel to zoom") },
+        { "picture",     QT_TRANSLATE_NOOP ("VisualizerView", "Picture"),           false, QT_TRANSLATE_NOOP ("VisualizerView", "A still picture, a video or a camera, to sonify (Visualizer > Sonify)") },
         { "spectrum",    QT_TRANSLATE_NOOP ("VisualizerView", "Spectrum Analyzer"), true,  QT_TRANSLATE_NOOP ("VisualizerView", "FFT (4096 points, Hann) on a log frequency axis, dBFS, peak hold, peak readout with note") },
         { "octaves",     QT_TRANSLATE_NOOP ("VisualizerView", "Third-Octave Bands"), true, QT_TRANSLATE_NOOP ("VisualizerView", "31 bands, 20 Hz to 20 kHz (IEC 61260 centres), dB with peak hold, like a real-time analyzer") },
         { "scope",       QT_TRANSLATE_NOOP ("VisualizerView", "Oscilloscope"),      true,  QT_TRANSLATE_NOOP ("VisualizerView", "Left and right over 40 ms, triggered on a rising zero crossing") },
@@ -241,6 +243,31 @@ void VisualizerView::addSamples (const std::vector<float>& left, const std::vect
 double VisualizerView::rainTempo() { return rainBpm; }
 void VisualizerView::setRainTempo (double bpm) { rainBpm = std::clamp (bpm, 0.0, maxRainTempo); }
 bool VisualizerView::isRain() const { return QLatin1String (modes()[(size_t) current].id) == QLatin1String ("rain"); }
+bool VisualizerView::isPicture() const { return QLatin1String (modes()[(size_t) current].id) == QLatin1String ("picture"); }
+
+void VisualizerView::setPicture (const QImage& image)
+{
+    picture = image;
+    if (isPicture())
+        update();
+}
+
+void VisualizerView::requestFrame (QSize size)
+{
+    frameWanted = size;
+    update();
+}
+
+QImage VisualizerView::takeFrame() { return std::exchange (frame, QImage()); }
+
+void VisualizerView::setSonifyMarks (double scan, std::vector<sonify::Spot> spots)
+{
+    if (scan < 0.0 && spots.empty() && sonifyScan < 0.0 && sonifySpots.empty())
+        return;
+    sonifyScan = scan;
+    sonifySpots = std::move (spots);
+    update();
+}
 
 void VisualizerView::tick()
 {
@@ -586,8 +613,33 @@ void VisualizerView::drawBackground (QPainter& g)
 
 void VisualizerView::paintEvent (QPaintEvent*)
 {
+    if (! frameWanted.isEmpty() && ! size().isEmpty())
+    {
+        // Painted off screen this time, so the sonifier reads just what is shown.
+        const auto ratio = devicePixelRatioF();
+        QImage shot (size() * ratio, QImage::Format_RGB32);
+        shot.setDevicePixelRatio (ratio);
+        {
+            QPainter p (&shot);
+            p.setRenderHint (QPainter::Antialiasing);
+            paintScene (p);
+        }
+        frame = shot.scaled (frameWanted, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        frameWanted = QSize();
+        QPainter g (this);
+        g.drawImage (QPointF (0, 0), shot);
+        g.setRenderHint (QPainter::Antialiasing);
+        paintOverlay (g);
+        return;
+    }
     QPainter g (this);
     g.setRenderHint (QPainter::Antialiasing);
+    paintScene (g);
+    paintOverlay (g);
+}
+
+void VisualizerView::paintScene (QPainter& g)
+{
     const auto id = QLatin1String (modes()[(size_t) current].id);
 
     if (id == QLatin1String ("milkdrop"))
@@ -614,6 +666,8 @@ void VisualizerView::paintEvent (QPaintEvent*)
         drawCircleWave (g);
     else if (id == QLatin1String ("rain"))
         drawRain (g);
+    else if (id == QLatin1String ("picture"))
+        drawPicture (g);
     else
     {
         drawBackground (g);
@@ -629,6 +683,12 @@ void VisualizerView::paintEvent (QPaintEvent*)
         else if (id == QLatin1String ("surface"))     drawSurface (g, true);
         else if (id == QLatin1String ("landscape"))   drawSurface (g, false);
     }
+}
+
+// Over the scene: where the sonifier plays, then behind PHI its tint, else the title.
+void VisualizerView::paintOverlay (QPainter& g)
+{
+    drawSonifyMarks (g);
     if (backdrop)
     {
         // The window's own background, which this covers: the opacity is how much
@@ -640,6 +700,48 @@ void VisualizerView::paintEvent (QPaintEvent*)
     }
     else
         drawTitle (g);
+}
+
+void VisualizerView::drawPicture (QPainter& g)
+{
+    g.fillRect (rect(), Qt::black);
+    if (picture.isNull())
+    {
+        g.setPen (colour ("text"));
+        g.drawText (rect().adjusted (40, 40, -40, -40), Qt::AlignCenter | Qt::TextWordWrap,
+                    tr ("No picture yet.\n\nVisualizer > Sonify > Sonify a Picture or Video... shows one here, and Sonify a Camera shows a "
+                        "camera; the Sonify bar plays them on a synth."));
+        return;
+    }
+    // As large as fits, keeping its shape.
+    const auto fitted = picture.size().scaled (size(), Qt::KeepAspectRatio);
+    const QRectF place ((width() - fitted.width()) / 2.0, (height() - fitted.height()) / 2.0, fitted.width(), fitted.height());
+    g.setRenderHint (QPainter::SmoothPixmapTransform);
+    g.drawImage (place, picture);
+}
+
+// The scan line and a ring on each spot playing a note.
+void VisualizerView::drawSonifyMarks (QPainter& g)
+{
+    if (sonifyScan >= 0.0)
+    {
+        const double x = sonifyScan * width();
+        QLinearGradient glow (x - 14.0, 0, x + 14.0, 0);
+        glow.setColorAt (0.0, withAlpha (Qt::white, 0.0));
+        glow.setColorAt (0.5, withAlpha (Qt::white, 0.22));
+        glow.setColorAt (1.0, withAlpha (Qt::white, 0.0));
+        g.fillRect (QRectF (x - 14.0, 0, 28.0, height()), glow);
+        g.setPen (QPen (withAlpha (Qt::white, 0.7), 1.5));
+        g.drawLine (QPointF (x, 0), QPointF (x, height()));
+    }
+    g.setBrush (Qt::NoBrush);
+    for (const auto& s : sonifySpots)
+    {
+        const QPointF at (s.x * width(), s.y * height());
+        const double r = 6.0 + 12.0 * s.level;
+        g.setPen (QPen (withAlpha (art (s.y, phase * 0.02), 0.9), 2.0));
+        g.drawEllipse (at, r, r);
+    }
 }
 
 void VisualizerView::drawTitle (QPainter& g)
@@ -1473,6 +1575,16 @@ VisualizerWindow::VisualizerWindow (QWidget* parent) : QWidget (parent, Qt::Dial
     behind->setToolTip (tr ("Shows the visualizer behind the whole PHI window; the window opacity sets how much of it you see"));
     connect (behind, &QPushButton::clicked, this, &VisualizerWindow::backdropRequested);
 
+    sonifyButton = new QPushButton (tr ("Sonify"), this);
+    sonifyButton->setCheckable (true);
+    sonifyButton->setFocusPolicy (Qt::NoFocus);
+    sonifyButton->setToolTip (tr ("Shows the Sonify controls: what the visualizer shows (or a picture, a video, a camera) played as notes on a synth"));
+    connect (sonifyButton, &QPushButton::toggled, this, [this] (bool on)
+    {
+        if (sonifyPanel != nullptr && ! isFullScreen())
+            sonifyPanel->setVisible (on);
+    });
+
     bar = new QWidget (this);
     auto* row = new QHBoxLayout (bar);
     row->setContentsMargins (8, 6, 8, 6);
@@ -1480,6 +1592,7 @@ VisualizerWindow::VisualizerWindow (QWidget* parent) : QWidget (parent, Qt::Dial
     label->setBuddy (picker);
     row->addWidget (label);
     row->addWidget (picker, 1);
+    row->addWidget (sonifyButton);
     row->addWidget (full);
     row->addWidget (behind);
 
@@ -1500,6 +1613,16 @@ VisualizerWindow::VisualizerWindow (QWidget* parent) : QWidget (parent, Qt::Dial
     });
 }
 
+void VisualizerWindow::setSonifyPanel (QWidget* panel)
+{
+    sonifyPanel = panel;
+    panel->setParent (this);
+    static_cast<QVBoxLayout*> (layout())->insertWidget (1, panel);
+    panel->setVisible (sonifyButton->isChecked() && ! isFullScreen());
+}
+
+void VisualizerWindow::showSonifyPanel (bool on) { sonifyButton->setChecked (on); }
+
 void VisualizerWindow::syncPicker()
 {
     const auto at = picker->findData (visual->mode());
@@ -1513,11 +1636,15 @@ void VisualizerWindow::toggleFullScreen()
     {
         closeWhenLeavingFullScreen = false;
         bar->show();
+        if (sonifyPanel != nullptr)
+            sonifyPanel->setVisible (sonifyButton->isChecked());
         showNormal();
     }
     else
     {
         bar->hide();
+        if (sonifyPanel != nullptr)
+            sonifyPanel->hide();
         showFullScreen();
     }
     raise();

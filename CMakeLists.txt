@@ -69,6 +69,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/PitchFix.cpp
     Source/core/TimeStretch.cpp
     Source/core/Quantize.cpp
+    Source/core/Sonify.cpp
     Source/core/Binaural.cpp
     Source/core/Ambisonics.cpp
     Source/core/SpatialStudio.cpp
@@ -154,6 +155,8 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/SpeakerArrays.cpp
     Source/ui/Visualizer.cpp
     Source/ui/VisualizerSection.cpp
+    Source/ui/SonifyPanel.cpp
+    Source/ui/SonifySection.cpp
     Source/ui/TrackerSection.cpp
     Source/ui/WarpSection.cpp
     Source/ui/QuantizeSection.cpp
@@ -166,6 +169,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/SpatialSection.cpp
     Source/performance/MediaWriter.cpp
     Source/performance/Cameras.cpp
+    Source/performance/VideoFile.cpp
     Source/performance/Recorder.cpp
     Source/ui/PerformanceDialog.cpp
     Source/ui/PerformanceSection.cpp)
@@ -354,6 +358,7 @@ if(PHI_BUILD_TESTS)
         Source/core/PitchFix.cpp
         Source/core/TimeStretch.cpp
     Source/core/Quantize.cpp
+    Source/core/Sonify.cpp
     Source/core/Binaural.cpp
     Source/core/Ambisonics.cpp
     Source/core/SpatialStudio.cpp
