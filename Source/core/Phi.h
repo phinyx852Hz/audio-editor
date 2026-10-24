@@ -28,6 +28,17 @@ namespace phi
     // evenly than random numbers, yet never repeats. 0 <= value < 1.
     double golden (std::int64_t n, double seed = 0.0);
 
+    // The Φ random selector: which of `count` favourites colour `colour` (0 to 7) deals on
+    // deal n. Each colour walks its favourites by a Kronecker sequence, frac (start + n α):
+    // the first colour by α = 1/φ, the golden sequence itself, the others by the fractional
+    // parts of √7, √13, √19, √29, √41, √89 and √73. Like φ these are quadratic irrationals,
+    // badly approximable by fractions, so each colour spreads evenly over its favourites
+    // and (with three or more) never deals the same one twice running. They differ because
+    // eight colours all stepping by 1/φ would move in lockstep: with 8 favourites each only
+    // 64 combinations would ever come up, where these give a different one every deal.
+    // Colours start golden (colour, seed) in. 0 <= result < count; 0 when count < 1.
+    int deal (std::int64_t n, int colour, int count, double seed = 0.0);
+
     // A Sturmian rhythm: step n is a hit when ceil ((n + 1) d - shift) differs
     // from ceil (n d - shift). With d = 1/φ this is the Fibonacci word
     // (1 1 0 1 1 0 1 0 1 1 0 1 1 0 1 0 ...): a pattern that never repeats but

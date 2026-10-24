@@ -127,9 +127,9 @@ void PhiMark::paintEvent (QPaintEvent*)
     paint (g, QRectF (rect()), phimark::Style::goldOnBlack);
 }
 
-PhiButton::PhiButton (const QString& accessibleName, QWidget* parent) : QToolButton (parent)
+PhiButton::PhiButton (const QString& accessibleName, QWidget* parent, bool isSwitch) : QToolButton (parent)
 {
-    setCheckable (true);
+    setCheckable (isSwitch);
     setAutoRaise (true);
     setFocusPolicy (Qt::StrongFocus);
     setAccessibleName (accessibleName);
@@ -148,7 +148,7 @@ PhiButton::PhiButton (const QString& accessibleName, QWidget* parent) : QToolBut
         g.drawPixmap (0, 0, on);
         g.end();
         icon.addPixmap (on, QIcon::Normal, QIcon::On);
-        icon.addPixmap (off, QIcon::Normal, QIcon::Off);
+        icon.addPixmap (isSwitch ? off : on, QIcon::Normal, QIcon::Off);
     }
     setIcon (icon);
 }

@@ -1065,6 +1065,20 @@ void MainWindow::buildPanels()
                                   colour >= 0 ? FindPanel::colour (colour) : QColor());
         return true;
     };
+    // The Φ random selector: into a new scene when the clip launcher is shown, else onto the
+    // mixer's tracks (the mixer opens for it).
+    findWidget->phiDeal = [this] (const QStringList& files, const QStringList& names, const QList<QColor>& colours,
+                                  FindPanel::DealTo to, bool again)
+    {
+        const bool launcherUp = mixerWin != nullptr && mixerWin->isVisible() && mixerWin->launcherShown();
+        const auto launcher = to == FindPanel::DealTo::launcher || (to == FindPanel::DealTo::automatic && launcherUp);
+        showMixer();
+        if (launcher && ! mixerWin->launcherShown())
+            mixerWin->showLauncher (true);
+        if (! launcher && mixerWin->launcherShown())
+            mixerWin->showLauncher (false);
+        mixerWin->phiDeal (files, names, colours, launcher, again);
+    };
     connect (findWidget, &FindPanel::openRequested, this, [this] (const QString& path)
     {
         // With an album in front, a file chosen in the Find panel joins it as a song.

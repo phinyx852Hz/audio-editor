@@ -44,6 +44,20 @@ namespace phi
         return v - std::floor (v);
     }
 
+    int deal (std::int64_t n, int colour, int count, double seed)
+    {
+        if (count < 1)
+            return 0;
+        static const double steps[] { inverse, std::sqrt (7.0), std::sqrt (13.0), std::sqrt (19.0),
+                                      std::sqrt (29.0), std::sqrt (41.0), std::sqrt (89.0), std::sqrt (73.0) };
+        const auto c = ((colour % 8) + 8) % 8;
+        const auto step = steps[c] - std::floor (steps[c]);
+        // n α mod 1 worked out in parts so it stays exact for large n.
+        const auto turns = std::fmod ((double) (n % 1000000) * step, 1.0) + std::fmod ((double) (n / 1000000) * std::fmod (1000000.0 * step, 1.0), 1.0);
+        const auto v = golden (colour, seed) + turns;
+        return std::clamp ((int) std::floor ((v - std::floor (v)) * count), 0, count - 1);
+    }
+
     bool hit (std::int64_t step, double densityValue, double shift)
     {
         const auto n = (double) step;

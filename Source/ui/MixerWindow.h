@@ -131,6 +131,13 @@ public:
     // A file chosen in the Find panel's Selector: into the first empty slot of the track with
     // that name (else that colour, else the selected track), and the mixer follows it there.
     void sendToLauncher (const QString& path, const QString& trackName, const QColor& colour);
+    // The Φ random selector's deal: a file for each Selector colour (empty: that colour has
+    // none), with the colour's name and colour, top colour first. Each goes to the track
+    // with that name, else that colour, else the one a mix from the set gives it (tracks
+    // are added, named and coloured when the mix has fewer). Into the first scene empty on
+    // all those tracks, or onto the tracks after everything on them. `again` deals into
+    // the place the last deal went instead, replacing it.
+    void phiDeal (const QStringList& files, const QStringList& names, const QList<QColor>& colours, bool launcher, bool again);
     void togglePlay();
     void toStart();
 
@@ -214,7 +221,16 @@ private:
     QString sceneName (int scene) const;
     void editSlot (int track, int scene, const std::function<void (mixer::Slot&)>& edit);
     void clearSlot (int track, int scene);
-    int firstEmptyScene (int track) const;   // -1: none among the scenes shown
+    int firstEmptyScene (int track) const;
+    int trackFor (const QString& name, const QColor& colour) const;   // by name, else colour; -1: none
+    struct LastDeal
+    {
+        bool valid = false, launcher = false;
+        int scene = -1;
+        Frame at = 0;
+        std::array<mixer::Clips, mixer::maxTracks> before;   // the tracks' clips before it (a Snapshot)
+    };
+    LastDeal lastDeal;   // -1: none among the scenes shown
     void setScenes (int count);
     void moveCursor (int track, int scene);
     void launchSlot (int track, int scene);

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "FindPanel.h"
+#include "PhiMark.h"
+#include "../core/Phi.h"
 
 #include <QApplication>
 #include <QDir>
@@ -7,6 +9,7 @@
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QHBoxLayout>
 #include <QHeaderView>
 #include <QInputDialog>
 #include <QJsonArray>
@@ -18,6 +21,7 @@
 #include <QLineEdit>
 #include <QMap>
 #include <QPainter>
+#include <QRandomGenerator>
 #include <QSplitter>
 #include <QStyle>
 #include <QStandardPaths>
@@ -207,7 +211,26 @@ FindPanel::FindPanel (QWidget* home, QWidget* parent)
     selectorLabel->setToolTip (tr ("Right-click to choose a set: Favorites, Live Performance, Mixing, Mastering, Podcast or Chakra"));
     selectorLabel->setContextMenuPolicy (Qt::CustomContextMenu);
     connect (selectorLabel, &QLabel::customContextMenuRequested, this, [this, selectorLabel] (const QPoint& at) { selectorMenu (selectorLabel, at); });
-    sideLayout->addWidget (selectorLabel);
+    // The Φ random selector at the end of the Selector line: a click deals one of each
+    // colour's favourite files (to the clip launcher when it is shown, else onto the
+    // mixer's tracks), Shift+click deals again in place of the last deal, right-click chooses.
+    auto* dealButton = new PhiButton (tr ("Φ random selector"), side, false);
+    dealButton->setToolTip (tr ("Φ random selector: deals one of each colour's favourite sounds, picked by the golden ratio, "
+                                "into a new scene of the clip launcher (when it is shown) or onto the mixer's tracks. "
+                                "Again for another combination; Shift+click replaces the last deal; right-click to choose where"));
+    dealButton->setContextMenuPolicy (Qt::CustomContextMenu);
+    connect (dealButton, &QToolButton::clicked, this, [this]
+    {
+        deal (DealTo::automatic, (QApplication::keyboardModifiers() & Qt::ShiftModifier) != 0);
+    });
+    connect (dealButton, &QToolButton::customContextMenuRequested, this, [this, dealButton] (const QPoint& at) { dealMenu (dealButton, at); });
+    auto* selectorLine = new QHBoxLayout;
+    selectorLine->setContentsMargins (0, 0, 0, 0);
+    selectorLine->setSpacing (0);
+    selectorLine->addWidget (selectorLabel, 1);
+    selectorLine->addWidget (dealButton);
+    sideLayout->addLayout (selectorLine);
+    dealSeed = QRandomGenerator::global()->generateDouble();
     sideLayout->addWidget (sidebar, 1);
 
     auto* split = new QSplitter (Qt::Horizontal, this);
@@ -942,6 +965,46 @@ void FindPanel::saveSelector() const
         file.write (QJsonDocument (QJsonObject { { QStringLiteral ("places"), QJsonArray::fromStringList (places) },
                                                  { QStringLiteral ("setId"), setId (setIndex) },
                                                  { QStringLiteral ("sets"), list } }).toJson());
+}
+
+void FindPanel::deal (DealTo target, bool again)
+{
+    // Each colour's favourite files in the set shown (sorted, so a deal number always means
+    // the same pick), then one of each by phi::deal.
+    std::vector<QStringList> favourites ((size_t) numColours);
+    for (auto it = marks().cbegin(); it != marks().cend(); ++it)
+    {
+        if (! it.key().startsWith (QStringLiteral ("file:")))
+            continue;
+        const auto path = it.key().mid (5);
+        for (int c = 0; c < numColours; ++c)
+            if ((it.value() & (1 << c)) != 0 && QFileInfo::exists (path))
+                favourites[(size_t) c].push_back (path);
+    }
+
+    QStringList files, names;
+    QList<QColor> colours;
+    for (int c = 0; c < numColours; ++c)
+    {
+        auto& list = favourites[(size_t) c];
+        list.sort();
+        files.push_back (list.isEmpty() ? QString() : list[phi::deal (deals, c, (int) list.size(), dealSeed)]);
+        names.push_back (markName (setIndex, c));
+        colours.push_back (colour (c));
+    }
+    ++deals;
+    if (phiDeal)
+        phiDeal (files, names, colours, target, again);
+}
+
+void FindPanel::dealMenu (QWidget* on, const QPoint& at)
+{
+    QMenu menu (this);
+    menu.addAction (tr ("Φ Deal into a New &Scene (Clip Launcher)"), this, [this] { deal (DealTo::launcher, false); });
+    menu.addAction (tr ("Φ Deal onto the &Tracks (Mixer)"), this, [this] { deal (DealTo::tracks, false); });
+    menu.addSeparator();
+    menu.addAction (tr ("Deal &Again in Place of the Last (Shift+Click)"), this, [this] { deal (DealTo::automatic, true); });
+    menu.exec (on->mapToGlobal (at));
 }
 
 void FindPanel::chooseSet (int set)

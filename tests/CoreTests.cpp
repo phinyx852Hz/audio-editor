@@ -38,6 +38,7 @@
 #include <functional>
 #include <iterator>
 #include <random>
+#include <set>
 #include <string>
 
 namespace
@@ -3527,6 +3528,41 @@ namespace
                 largest = std::max (largest, v[i] - v[i - 1]);
             }
             check (smallest > 0.0 && largest / smallest < phi::ratio * phi::ratio + 1.0e-6, "golden sequence is evenly spread");
+        }
+
+        // The Φ random selector: each colour spreads evenly over its favourites, never deals
+        // the same one twice running (with three or more), and the colours don't move in
+        // lockstep, so every deal of 8 colours x 8 favourites is a new combination.
+        {
+            bool even = true, noRepeat = true, inRange = true;
+            for (int count = 1; count <= 8; ++count)
+                for (int colour = 0; colour < 8; ++colour)
+                {
+                    std::vector<int> hits ((size_t) count, 0);
+                    for (int n = 0; n < 89; ++n)
+                    {
+                        const auto d = phi::deal (n, colour, count, 0.3);
+                        inRange = inRange && d >= 0 && d < count;
+                        if (d >= 0 && d < count)
+                            ++hits[(size_t) d];
+                        if (count >= 3 && d == phi::deal (n + 1, colour, count, 0.3))
+                            noRepeat = false;
+                    }
+                    for (const auto h : hits)
+                        even = even && std::abs (h - 89.0 / count) < 4.0;
+                }
+            std::set<std::vector<int>> combinations;
+            for (int n = 0; n < 1000; ++n)
+            {
+                std::vector<int> c;
+                for (int colour = 0; colour < 8; ++colour)
+                    c.push_back (phi::deal (n, colour, 8, 0.3));
+                combinations.insert (c);
+            }
+            check (inRange && phi::deal (5, 0, 0) == 0, "phi deal stays in range");
+            check (even, "phi deal spreads evenly over the favourites");
+            check (noRepeat, "phi deal never repeats a favourite twice running");
+            check (combinations.size() == 1000, "phi deal gives a new combination every deal");
         }
 
         // The Fibonacci word: hits on 1/φ of the steps, starting on step 0, never periodic.
