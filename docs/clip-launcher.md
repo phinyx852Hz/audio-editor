@@ -55,8 +55,16 @@ favourite files in the set shown, picked by the golden ratio, into the first sce
 on all their tracks. Press it again for the next scene, with another combination. With the
 launcher hidden it deals onto the mixer's tracks instead, all starting together after everything
 already on them, so each deal follows the last. Shift+click deals again in place of the last
-deal; right-click chooses the launcher or the tracks. A colour with no track of its own gets the
-track a project from the set would give it (added, named and coloured when the mix has fewer).
+deal; right-click chooses the launcher, the tracks or a Prism. A colour with no track of its own
+gets the track a project from the set would give it (added, named and coloured when the mix has
+fewer).
+
+Instruments deal too: an instrument plugin, or a sampler or synth from the Sample and Synth menus,
+marked with a colour is loaded on that colour's track before the files arrive, so a MIDI file dealt
+with it plays on it. **Φ Deal a Prism of Effects** (right-click, or a click when only effects are
+marked) builds a Prism in the first empty Master Section slot: one of each colour's favourite
+effects on a ray of its own named for the colour, in parallel, each ray turned down so that
+together they are about as loud as one.
 
 Each colour walks its favourites by a sequence of its own, frac (start + n α): the first colour by
 α = 1/φ, the others by √7, √13, √19, √29, √41, √89 and √73, quadratic irrationals like φ. Each

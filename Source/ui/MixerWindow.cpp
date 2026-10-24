@@ -5040,17 +5040,19 @@ int MixerWindow::trackFor (const QString& trackName, const QColor& colour) const
     return -1;
 }
 
-void MixerWindow::phiDeal (const QStringList& files, const QStringList& names, const QList<QColor>& colours, bool launcher, bool again)
+void MixerWindow::phiDeal (const QStringList& files, const QStringList& instruments, const QStringList& names,
+                           const QList<QColor>& colours, bool launcher, bool again)
 {
     // Which track each dealt file goes to. A colour with no track of its own gets the one a
     // mix from the set would give it (the top colour on the last track), added when missing.
-    const auto count = std::min ({ (int) files.size(), (int) names.size(), (int) colours.size(), mixer::maxTracks });
+    const auto count = std::min ({ (int) files.size(), (int) instruments.size(), (int) names.size(), (int) colours.size(), mixer::maxTracks });
     std::vector<std::pair<int, QString>> deal;   // track, file
+    std::vector<std::pair<int, QString>> players;   // track, instrument
     std::set<int> used;
     bool added = false;
     for (int c = 0; c < count; ++c)
     {
-        if (files[c].isEmpty())
+        if (files[c].isEmpty() && instruments[c].isEmpty())
             continue;
         auto track = trackFor (names[c], colours[c]);
         if (track < 0)
@@ -5067,13 +5069,27 @@ void MixerWindow::phiDeal (const QStringList& files, const QStringList& names, c
         if (track < 0 || used.count (track) != 0)
             continue;
         used.insert (track);
-        deal.emplace_back (track, files[c]);
+        if (! instruments[c].isEmpty())
+            players.emplace_back (track, instruments[c]);
+        if (! files[c].isEmpty())
+            deal.emplace_back (track, files[c]);
     }
     if (added)
         rebuildStrips();
+    if (deal.empty() && players.empty())
+    {
+        status->setText (tr ("Φ: nothing to deal. Mark sounds or instruments with the Selector's colours first (1 to 8 in the Find panel)."));
+        return;
+    }
+
+    // The instruments first, so the MIDI files dealt play on them.
+    for (const auto& [track, id] : players)
+        setInstrumentKind (track, firstPlugin, id);
+    if (! players.empty())
+        rack->refresh();
     if (deal.empty())
     {
-        status->setText (tr ("Φ: nothing to deal. Mark sounds with the Selector's colours first (1 to 8 on a file in the Find panel)."));
+        status->setText (tr ("Φ dealt %n instrument(s)", nullptr, (int) players.size()));
         return;
     }
 

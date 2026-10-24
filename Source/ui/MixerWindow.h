@@ -131,13 +131,15 @@ public:
     // A file chosen in the Find panel's Selector: into the first empty slot of the track with
     // that name (else that colour, else the selected track), and the mixer follows it there.
     void sendToLauncher (const QString& path, const QString& trackName, const QColor& colour);
-    // The Φ random selector's deal: a file for each Selector colour (empty: that colour has
-    // none), with the colour's name and colour, top colour first. Each goes to the track
+    // The Φ random selector's deal: a file and an instrument (a plugin id, loaded on the
+    // track first) for each Selector colour (empty: that colour has none), with the
+    // colour's name and colour, top colour first. Each goes to the track
     // with that name, else that colour, else the one a mix from the set gives it (tracks
     // are added, named and coloured when the mix has fewer). Into the first scene empty on
     // all those tracks, or onto the tracks after everything on them. `again` deals into
     // the place the last deal went instead, replacing it.
-    void phiDeal (const QStringList& files, const QStringList& names, const QList<QColor>& colours, bool launcher, bool again);
+    void phiDeal (const QStringList& files, const QStringList& instruments, const QStringList& names, const QList<QColor>& colours,
+                  bool launcher, bool again);
     void togglePlay();
     void toStart();
 

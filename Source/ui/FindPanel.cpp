@@ -969,32 +969,67 @@ void FindPanel::saveSelector() const
 
 void FindPanel::deal (DealTo target, bool again)
 {
-    // Each colour's favourite files in the set shown (sorted, so a deal number always means
-    // the same pick), then one of each by phi::deal.
-    std::vector<QStringList> favourites ((size_t) numColours);
+    // Each colour's favourites in the set shown, by kind (sorted, so a deal number always
+    // means the same pick), then one of each by phi::deal.
+    std::vector<QStringList> files ((size_t) numColours), instruments ((size_t) numColours), effects ((size_t) numColours);
     for (auto it = marks().cbegin(); it != marks().cend(); ++it)
     {
-        if (! it.key().startsWith (QStringLiteral ("file:")))
-            continue;
-        const auto path = it.key().mid (5);
-        for (int c = 0; c < numColours; ++c)
-            if ((it.value() & (1 << c)) != 0 && QFileInfo::exists (path))
-                favourites[(size_t) c].push_back (path);
+        const auto& key = it.key();
+        std::vector<QStringList>* kind = nullptr;
+        QString value;
+        if (key.startsWith (QStringLiteral ("file:")))
+        {
+            value = key.mid (5);
+            kind = QFileInfo::exists (value) ? &files : nullptr;
+        }
+        else if (value = instrumentOf ? instrumentOf (key) : QString(); ! value.isEmpty())
+            kind = &instruments;
+        else if (key.startsWith (QStringLiteral ("plugin:")))
+        {
+            value = key.mid (7);
+            kind = &effects;
+        }
+        for (int c = 0; c < numColours && kind != nullptr; ++c)
+            if ((it.value() & (1 << c)) != 0)
+                (*kind)[(size_t) c].push_back (value);
     }
 
-    QStringList files, names;
+    // Each kind walks from its own start, so a colour's file and instrument don't move together.
+    auto pick = [this] (std::vector<QStringList>& lists, double offset)
+    {
+        QStringList picked;
+        for (int c = 0; c < numColours; ++c)
+        {
+            auto& list = lists[(size_t) c];
+            list.sort();
+            list.removeDuplicates();
+            picked.push_back (list.isEmpty() ? QString() : list[phi::deal (deals, c, (int) list.size(), dealSeed + offset)]);
+        }
+        return picked;
+    };
+    QStringList names;
     QList<QColor> colours;
     for (int c = 0; c < numColours; ++c)
     {
-        auto& list = favourites[(size_t) c];
-        list.sort();
-        files.push_back (list.isEmpty() ? QString() : list[phi::deal (deals, c, (int) list.size(), dealSeed)]);
         names.push_back (markName (setIndex, c));
         colours.push_back (colour (c));
     }
+    auto none = [] (const QStringList& l) { return std::all_of (l.begin(), l.end(), [] (const QString& v) { return v.isEmpty(); }); };
+
+    const auto pickedFiles = pick (files, 0.0);
+    const auto pickedInstruments = pick (instruments, phi::inverse);
+    const auto pickedEffects = pick (effects, phi::inverse * phi::inverse);
+    // With only effects marked, the deal is a Prism.
+    if (target == DealTo::automatic && none (pickedFiles) && none (pickedInstruments) && ! none (pickedEffects))
+        target = DealTo::prism;
     ++deals;
-    if (phiDeal)
-        phiDeal (files, names, colours, target, again);
+    if (target == DealTo::prism)
+    {
+        if (phiPrism)
+            phiPrism (pickedEffects, names, colours);
+    }
+    else if (phiDeal)
+        phiDeal (pickedFiles, pickedInstruments, names, colours, target, again);
 }
 
 void FindPanel::dealMenu (QWidget* on, const QPoint& at)
@@ -1002,6 +1037,7 @@ void FindPanel::dealMenu (QWidget* on, const QPoint& at)
     QMenu menu (this);
     menu.addAction (tr ("Φ Deal into a New &Scene (Clip Launcher)"), this, [this] { deal (DealTo::launcher, false); });
     menu.addAction (tr ("Φ Deal onto the &Tracks (Mixer)"), this, [this] { deal (DealTo::tracks, false); });
+    menu.addAction (tr ("Φ Deal a &Prism of Effects (Device Chain)"), this, [this] { deal (DealTo::prism, false); });
     menu.addSeparator();
     menu.addAction (tr ("Deal &Again in Place of the Last (Shift+Click)"), this, [this] { deal (DealTo::automatic, true); });
     menu.exec (on->mapToGlobal (at));
