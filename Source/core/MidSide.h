@@ -27,6 +27,7 @@ namespace midside
         double rotation = 0.0;       // degrees, -45..45; positive turns the image to the right
         double lift = 0.0;           // 0..1: up to twice the width on louder moments
         bool matchLevel = true;      // keeps the output as loud as the input
+        bool golden = false;         // Φ: Generate makes its sides with golden-ratio allpasses (see dsp::StereoizeSettings)
         Listen listen = Listen::stereo;
 
         double maxWidth() const { return huge ? 3.0 : 2.0; }

@@ -612,7 +612,8 @@ QString NormalizeDialog::targetName() const
 }
 
 StereoizeDialog::StereoizeDialog (const dsp::StereoizeSettings& initial, bool wholeFile, int fileChannels, QWidget* parent)
-    : QDialog (parent), widthBox (new QSpinBox (this)), delayBox (new QDoubleSpinBox (this)), bassBox (new QSpinBox (this))
+    : QDialog (parent), widthBox (new QSpinBox (this)), delayBox (new QDoubleSpinBox (this)), bassBox (new QSpinBox (this)),
+      goldenBox (new QCheckBox (tr ("Φ &golden ratio"), this))
 {
     setWindowTitle (tr ("Stereoize"));
 
@@ -635,6 +636,10 @@ StereoizeDialog::StereoizeDialog (const dsp::StereoizeSettings& initial, bool wh
     bassBox->setValue ((int) std::lround (initial.bassHz));
     bassBox->setToolTip (tr ("Bass below this stays in the centre, which keeps the low end solid"));
 
+    goldenBox->setChecked (initial.golden);
+    goldenBox->setToolTip (tr ("Four allpasses spaced by the golden ratio (the delay, then 1/φ, 1/φ², 1/φ³ of it) instead of one delay: "
+                               "the colour the widening adds is uneven rather than a regular comb, so it sounds less pitched"));
+
     auto* about = new QLabel (this);
     about->setWordWrap (true);
     const auto what = fileChannels == 1 ? tr ("Turns this mono file into stereo.") : tr ("Rebuilds the stereo image from the middle of the sound.");
@@ -646,6 +651,7 @@ StereoizeDialog::StereoizeDialog (const dsp::StereoizeSettings& initial, bool wh
     form->addRow (tr ("&Width:"), widthBox);
     form->addRow (tr ("&Delay:"), delayBox);
     form->addRow (tr ("Keep &bass centred below:"), bassBox);
+    form->addRow (QString(), goldenBox);
 
     auto* buttons = new QDialogButtonBox (QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     auto* layout = new QVBoxLayout (this);
@@ -661,7 +667,7 @@ StereoizeDialog::StereoizeDialog (const dsp::StereoizeSettings& initial, bool wh
 
 dsp::StereoizeSettings StereoizeDialog::settings() const
 {
-    return { widthBox->value() / 100.0, delayBox->value(), (double) bassBox->value() };
+    return { widthBox->value() / 100.0, delayBox->value(), (double) bassBox->value(), goldenBox->isChecked() };
 }
 
 //==============================================================================

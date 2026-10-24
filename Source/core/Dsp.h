@@ -44,6 +44,11 @@ namespace dsp
         double width = 0.6;      // 0..1, the level of the added side signal
         double delayMs = 12.0;   // 1..40
         double bassHz = 200.0;   // 0 = everything is widened
+        // Φ: four allpasses at delay, delay/φ, delay/φ², delay/φ³ (each with 1/φ
+        // feedback) in place of the single delay, so the comb it makes is no
+        // longer evenly spaced and the width sounds less pitched. Still sums
+        // back to the original in mono.
+        bool golden = false;
     };
 
     AudioDataPtr stereoize (const AudioData&, Frame start, Frame end, const StereoizeSettings&);
@@ -62,11 +67,17 @@ namespace dsp
         void reset();
 
     private:
+        static constexpr int goldenStages = 4;
+
         double rate = 48000.0;
         double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, x1 = 0, x2 = 0, y1 = 0, y2 = 0;
         std::vector<float> ring;
         size_t ringPos = 0, delay = 1;
         double bassHz = -1.0;
+        // Φ: both paths always run and the switch crossfades between them, so it never clicks.
+        std::array<std::vector<float>, goldenStages> allpass;
+        std::array<size_t, goldenStages> allpassDelay {};
+        float golden = 0.0f, goldenTarget = 0.0f, goldenStep = 0.002f;
     };
 
     // A mono file as two equal channels (other files are returned as they are).

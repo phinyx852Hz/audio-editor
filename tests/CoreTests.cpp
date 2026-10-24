@@ -3388,6 +3388,45 @@ namespace
             }
             check (ok, "phi rhythm gate follows the pattern");
         }
+
+        // Stereoize's Φ switch: golden allpasses instead of one delay. The side is a
+        // different signal but as strong, and left plus right is still the mid.
+        {
+            auto run = [&] (bool golden, std::vector<float>& side)
+            {
+                dsp::Stereoizer z;
+                z.prepare (rate);
+                z.set ({ 1.0, 12.0, 0.0, golden });
+                z.reset();
+                std::mt19937 noise (7);
+                std::normal_distribution<float> n (0.0f, 0.1f);
+                side.resize (48000);
+                for (auto& v : side)
+                    v = z.process (n (noise));
+            };
+            std::vector<float> plain, golden;
+            run (false, plain);
+            run (true, golden);
+            double pp = 0.0, gg = 0.0, pg = 0.0;
+            for (size_t i = 4800; i < plain.size(); ++i)
+            {
+                pp += (double) plain[i] * plain[i];
+                gg += (double) golden[i] * golden[i];
+                pg += (double) plain[i] * golden[i];
+            }
+            check (near (10.0 * std::log10 (gg / pp), 0.0, 0.5), "golden stereoize keeps the side level");
+            check (std::abs (pg) / std::sqrt (pp * gg) < 0.5, "golden stereoize makes a different side");
+
+            auto mono = makeSine (1, 48000, 1000.0, 0.5);
+            dsp::StereoizeSettings settings;
+            settings.golden = true;
+            const auto wide = dsp::stereoize (*mono, 0, mono->length(), settings);
+            double maxSumError = 0.0;
+            for (Frame f = 0; f < wide->length(); f += 37)
+                maxSumError = std::max (maxSumError, std::abs ((double) (sampleAt (*wide, 0, f) + sampleAt (*wide, 1, f)) * 0.5
+                                                               - sampleAt (*mono, 0, f)));
+            check (maxSumError < 1.0e-6, "golden stereoize still folds back to the original mono");
+        }
     }
 
 int main()

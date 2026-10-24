@@ -12,6 +12,9 @@ namespace
 {
     using builtin::MasteringEffect;
 
+    // The switch that turns on the golden-ratio allpasses of Stereoize and Mid/Side's Generate.
+    juce::String goldenName() { return juce::String::fromUTF8 ("Φ Golden"); }
+
     //==========================================================================
     // Stereoize: the live version of Process > Stereoize. Widens the front left
     // and right from their mid signal, so mono sources get a stereo image while
@@ -46,10 +49,13 @@ namespace
                         return t.trim().equalsIgnoreCase ("off") ? 0.0f : t.retainCharacters ("+-.0123456789eE").getFloatValue();
                     }));
 
-            width = w.get(); delay = d.get(); bass = b.get();
+            auto g = std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "golden", 1 }, goldenName(), false);
+
+            width = w.get(); delay = d.get(); bass = b.get(); golden = g.get();
             addHostedParameter (std::move (w));
             addHostedParameter (std::move (d));
             addHostedParameter (std::move (b));
+            addHostedParameter (std::move (g));
         }
 
         static juce::PluginDescription description()
@@ -99,9 +105,10 @@ namespace
             smoothedWidth.setTargetValue ((float) wanted.width);
             // The filter can change on the fly; a new delay is switched in while
             // the widening is briefly faded out, so it does not click.
-            if (std::abs (wanted.bassHz - applied.bassHz) > 1.0e-6)
+            if (std::abs (wanted.bassHz - applied.bassHz) > 1.0e-6 || wanted.golden != applied.golden)
             {
                 applied.bassHz = wanted.bassHz;
+                applied.golden = wanted.golden;   // crossfades inside the core
                 core.set (applied);
             }
 
@@ -142,6 +149,7 @@ namespace
             xml.setAttribute ("width", (double) width->get());
             xml.setAttribute ("delayMs", (double) delay->get());
             xml.setAttribute ("bassHz", (double) bass->get());
+            xml.setAttribute ("golden", golden->get());
             copyXmlToBinary (xml, data);
         }
 
@@ -152,18 +160,20 @@ namespace
                 *width = (float) xml->getDoubleAttribute ("width", 60.0);
                 *delay = (float) xml->getDoubleAttribute ("delayMs", 12.0);
                 *bass = (float) xml->getDoubleAttribute ("bassHz", 200.0);
+                *golden = xml->getBoolAttribute ("golden", false);
             }
         }
 
     private:
         dsp::StereoizeSettings current() const
         {
-            return { width->get() / 100.0, delay->get(), bass->get() < 0.5f ? 0.0 : (double) bass->get() };
+            return { width->get() / 100.0, delay->get(), bass->get() < 0.5f ? 0.0 : (double) bass->get(), golden->get() };
         }
 
         juce::AudioParameterFloat* width = nullptr;
         juce::AudioParameterFloat* delay = nullptr;
         juce::AudioParameterFloat* bass = nullptr;
+        juce::AudioParameterBool* golden = nullptr;
         dsp::Stereoizer core;
         dsp::StereoizeSettings applied;
         juce::SmoothedValue<float> smoothedWidth;
@@ -201,8 +211,9 @@ namespace
             auto o = std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "matchLevel", 1 }, "Match Level", true);
             auto li = std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "listen", 1 }, "Listen",
                 juce::StringArray { "Stereo", "Mono", "Side", "Bass" }, 0);
+            auto gd = std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "golden", 1 }, goldenName(), false);
             width = w.get(); huge = h.get(); monoBelow = m.get(); generate = g.get(); air = a.get();
-            rotation = r.get(); lift = l.get(); matchLevel = o.get(); listen = li.get();
+            rotation = r.get(); lift = l.get(); matchLevel = o.get(); listen = li.get(); golden = gd.get();
             addHostedParameter (std::move (w));
             addHostedParameter (std::move (h));
             addHostedParameter (std::move (m));
@@ -212,6 +223,7 @@ namespace
             addHostedParameter (std::move (l));
             addHostedParameter (std::move (o));
             addHostedParameter (std::move (li));
+            addHostedParameter (std::move (gd));
         }
 
         static juce::PluginDescription description()
@@ -253,11 +265,12 @@ namespace
             s.lift = lift->get() / 100.0;
             s.matchLevel = matchLevel->get();
             s.listen = (midside::Listen) listen->getIndex();
+            s.golden = golden->get();
             return s;
         }
 
         juce::AudioParameterFloat *width = nullptr, *monoBelow = nullptr, *generate = nullptr, *air = nullptr, *rotation = nullptr, *lift = nullptr;
-        juce::AudioParameterBool *huge = nullptr, *matchLevel = nullptr;
+        juce::AudioParameterBool *huge = nullptr, *matchLevel = nullptr, *golden = nullptr;
         juce::AudioParameterChoice* listen = nullptr;
         midside::Processor core;
     };

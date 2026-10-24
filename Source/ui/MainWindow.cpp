@@ -2267,6 +2267,7 @@ void MainWindow::stereoize()
     initial.width = settings.value (QStringLiteral ("stereoize/width"), initial.width).toDouble();
     initial.delayMs = settings.value (QStringLiteral ("stereoize/delayMs"), initial.delayMs).toDouble();
     initial.bassHz = settings.value (QStringLiteral ("stereoize/bassHz"), initial.bassHz).toDouble();
+    initial.golden = settings.value (QStringLiteral ("stereoize/golden"), initial.golden).toBool();
 
     StereoizeDialog dialog (initial, ! hasSelection(), d->numChannels(), this);
     if (dialog.exec() != QDialog::Accepted)
@@ -2276,6 +2277,7 @@ void MainWindow::stereoize()
     settings.setValue (QStringLiteral ("stereoize/width"), chosen.width);
     settings.setValue (QStringLiteral ("stereoize/delayMs"), chosen.delayMs);
     settings.setValue (QStringLiteral ("stereoize/bassHz"), chosen.bassHz);
+    settings.setValue (QStringLiteral ("stereoize/golden"), chosen.golden);
 
     const auto [s, e] = processRange();
     QApplication::setOverrideCursor (Qt::WaitCursor);

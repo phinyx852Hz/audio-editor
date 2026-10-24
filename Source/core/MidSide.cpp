@@ -91,7 +91,7 @@ namespace midside
         air.a1 = 2 * ((a - 1) - (a + 1) * c) / a0;
         air.a2 = ((a + 1) - (a - 1) * c - sa) / a0;
 
-        generator.set ({ 1.0, generateDelayMs, generateFromHz });
+        generator.set ({ 1.0, generateDelayMs, generateFromHz, settings.golden });
     }
 
     void Processor::set (const Settings& s)
@@ -103,7 +103,8 @@ namespace midside
         settings.airDb = std::clamp (s.airDb, -6.0, 6.0);
         settings.rotation = std::clamp (s.rotation, -45.0, 45.0);
         settings.lift = std::clamp (s.lift, 0.0, 1.0);
-        if (std::abs (settings.monoBelowHz - designed.monoBelowHz) > 1.0e-9 || std::abs (settings.airDb - designed.airDb) > 1.0e-9)
+        if (std::abs (settings.monoBelowHz - designed.monoBelowHz) > 1.0e-9 || std::abs (settings.airDb - designed.airDb) > 1.0e-9
+            || settings.golden != designed.golden)
             design();
         if (fresh)
             width = settings.width;

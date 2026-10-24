@@ -201,6 +201,7 @@ void MainWindow::midSideWidth()
     initial.rotation = settings.value (QStringLiteral ("rotation"), initial.rotation).toDouble();
     initial.lift = settings.value (QStringLiteral ("lift"), initial.lift).toDouble();
     initial.matchLevel = settings.value (QStringLiteral ("matchLevel"), initial.matchLevel).toBool();
+    initial.golden = settings.value (QStringLiteral ("golden"), initial.golden).toBool();
 
     const auto [s, e] = processRange();
     // The preview plays up to 15 s from the start of the range, looping, in place of your audio.
@@ -248,6 +249,7 @@ void MainWindow::midSideWidth()
     settings.setValue (QStringLiteral ("rotation"), chosen.rotation);
     settings.setValue (QStringLiteral ("lift"), chosen.lift);
     settings.setValue (QStringLiteral ("matchLevel"), chosen.matchLevel);
+    settings.setValue (QStringLiteral ("golden"), chosen.golden);
 
     AudioDataPtr result;
     runWithProgress (tr ("Mid/Side Width"), [&] (std::atomic<float>&, const std::atomic<bool>&)

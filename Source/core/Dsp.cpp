@@ -84,6 +84,9 @@ namespace dsp
     {
         rate = sampleRate;
         ring.assign ((size_t) std::ceil (maxDelayMs * rate / 1000.0) + 1, 0.0f);
+        for (auto& a : allpass)
+            a.assign (ring.size(), 0.0f);
+        goldenStep = (float) (1.0 / (0.01 * rate));   // 10 ms
         bassHz = -1.0;
         reset();
     }
@@ -91,6 +94,14 @@ namespace dsp
     void Stereoizer::set (const StereoizeSettings& settings)
     {
         delay = std::clamp<size_t> ((size_t) std::lround (std::clamp (settings.delayMs, 1.0, maxDelayMs) * rate / 1000.0), 1, ring.size() - 1);
+        constexpr double inversePhi = 0.6180339887498949;
+        auto stage = (double) delay;
+        for (auto& d : allpassDelay)
+        {
+            d = std::clamp<size_t> ((size_t) std::lround (stage), 1, ring.size() - 1);
+            stage *= inversePhi;
+        }
+        goldenTarget = settings.golden ? 1.0f : 0.0f;
 
         if (std::abs (settings.bassHz - bassHz) < 1.0e-9)
             return;
@@ -116,16 +127,35 @@ namespace dsp
         const auto high = b0 * mid + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
         x2 = x1; x1 = mid; y2 = y1; y1 = high;
 
+        const auto size = ring.size();
         ring[ringPos] = (float) high;
-        const auto delayed = ring[(ringPos + ring.size() - delay) % ring.size()];
-        ringPos = (ringPos + 1) % ring.size();
-        return delayed;
+        const auto delayed = ring[(ringPos + size - delay) % size];
+
+        // Schroeder allpasses: v = x + g v[n - D], y = v[n - D] - g v.
+        constexpr float g = 0.618034f;   // 1/φ
+        auto x = (float) high;
+        for (size_t k = 0; k < allpass.size(); ++k)
+        {
+            auto& a = allpass[k];
+            const auto old = a[(ringPos + size - allpassDelay[k]) % size];
+            const auto v = x + g * old;
+            a[ringPos] = v;
+            x = old - g * v;
+        }
+        ringPos = (ringPos + 1) % size;
+
+        if (golden != goldenTarget)
+            golden = goldenTarget > golden ? std::min (goldenTarget, golden + goldenStep) : std::max (goldenTarget, golden - goldenStep);
+        return delayed + golden * (x - delayed);
     }
 
     void Stereoizer::reset()
     {
         std::fill (ring.begin(), ring.end(), 0.0f);
+        for (auto& a : allpass)
+            std::fill (a.begin(), a.end(), 0.0f);
         ringPos = 0;
+        golden = goldenTarget;
         x1 = x2 = y1 = y2 = 0;
     }
 
@@ -139,6 +169,7 @@ namespace dsp
         Stereoizer core;
         core.prepare (rate);
         core.set (settings);
+        core.reset();   // starts on the chosen path rather than crossfading to it
         const auto width = (float) std::clamp (settings.width, 0.0, 1.0);
         const auto edge = std::max<Frame> (1, (Frame) (rate * 0.01));   // 10 ms fade in and out of the effect
 

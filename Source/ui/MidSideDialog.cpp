@@ -204,6 +204,9 @@ MidSideDialog::MidSideDialog (const midside::Settings& initial, bool wholeFile, 
     liftBox = spin (0, 100, 5, tr (" %"), tr ("Widens louder moments more (up to twice), so choruses and hits open up"));
     matchBox = new QCheckBox (tr ("&Match level"), this);
     matchBox->setToolTip (tr ("Keeps the result as loud as the original, so you hear the width and not just more level"));
+    goldenBox = new QCheckBox (tr ("Φ &golden ratio for generated sides"), this);
+    goldenBox->setToolTip (tr ("Generate sides makes its width with four allpasses spaced by the golden ratio instead of one delay, "
+                               "so the colour it adds is uneven and less pitched. Still vanishes in mono"));
     listenBox = new QComboBox (this);
     listenBox->addItems ({ tr ("Stereo"), tr ("Mono (check it still works summed)"), tr ("Side only"), tr ("Bass (below the mono crossover)") });
     listenBox->setToolTip (tr ("What the preview plays; the result is always stereo"));
@@ -224,6 +227,7 @@ MidSideDialog::MidSideDialog (const midside::Settings& initial, bool wholeFile, 
     form->addRow (QString(), hugeBox);
     form->addRow (tr ("M&ono below:"), monoBox);
     form->addRow (tr ("&Generate sides:"), generateBox);
+    form->addRow (QString(), goldenBox);
     form->addRow (tr ("A&ir:"), airBox);
     form->addRow (tr ("&Rotation:"), rotationBox);
     form->addRow (tr ("&Lift:"), liftBox);
@@ -263,13 +267,17 @@ MidSideDialog::MidSideDialog (const midside::Settings& initial, bool wholeFile, 
     connect (presetBox, &QComboBox::activated, this, [this] (int index)
     {
         if (index > 0)
-            load (midside::presets()[(size_t) index - 1].settings);
+        {
+            auto preset = midside::presets()[(size_t) index - 1].settings;
+            preset.golden = goldenBox->isChecked();   // presets leave the Φ switch as it is
+            load (preset);
+        }
     });
     for (auto* b : { widthBox, monoBox, generateBox, liftBox })
         connect (b, &QSpinBox::valueChanged, this, &MidSideDialog::changed);
     for (auto* b : { airBox, rotationBox })
         connect (b, &QDoubleSpinBox::valueChanged, this, &MidSideDialog::changed);
-    for (auto* b : { hugeBox, matchBox })
+    for (auto* b : { hugeBox, matchBox, goldenBox })
         connect (b, &QCheckBox::toggled, this, &MidSideDialog::changed);
     connect (hugeBox, &QCheckBox::toggled, this, [this] (bool on) { widthBox->setMaximum (on ? 300 : 200); });
     connect (listenBox, &QComboBox::currentIndexChanged, this, &MidSideDialog::changed);
@@ -318,6 +326,7 @@ void MidSideDialog::load (const midside::Settings& s)
     rotationBox->setValue (s.rotation);
     liftBox->setValue ((int) std::lround (s.lift * 100.0));
     matchBox->setChecked (s.matchLevel);
+    goldenBox->setChecked (s.golden);
     loading = false;
     changed();
 }
@@ -333,6 +342,7 @@ midside::Settings MidSideDialog::settings() const
     s.rotation = rotationBox->value();
     s.lift = liftBox->value() / 100.0;
     s.matchLevel = matchBox->isChecked();
+    s.golden = goldenBox->isChecked();
     return s;
 }
 
