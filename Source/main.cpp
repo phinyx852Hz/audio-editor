@@ -3,6 +3,7 @@
 #include "engine/MasterChain.h"
 #include "ui/Brand.h"
 #include "ui/MainWindow.h"
+#include "ui/PhiMark.h"
 #include "ui/Settings.h"
 #include "ui/Theme.h"
 
@@ -10,6 +11,7 @@
 #include <QCommandLineParser>
 #include <QDir>
 #include <QIcon>
+#include <QPointer>
 #include <QProcess>
 #include <QStandardPaths>
 
@@ -80,7 +82,18 @@ int main (int argc, char* argv[])
     parser.addHelpOption();
     parser.addVersionOption();
     parser.addPositionalArgument (QStringLiteral ("file"), QStringLiteral ("Audio file to open."));
+    const QCommandLineOption noSplash (QStringLiteral ("no-splash"), QStringLiteral ("Start without the Φ splash window."));
+    parser.addOption (noSplash);
     parser.process (app);
+
+    // The Φ splash while the audio device opens and the window is built.
+    QPointer<PhiSplash> splash;
+    if (! parser.isSet (noSplash))
+    {
+        splash = new PhiSplash;
+        splash->show();
+        app.processEvents();
+    }
 
     AudioEngine engine;
     engine.setConfigFolder ((QStandardPaths::writableLocation (QStandardPaths::GenericConfigLocation)
@@ -91,6 +104,8 @@ int main (int argc, char* argv[])
     {
         MainWindow window (engine);
         window.show();
+        if (splash != nullptr)
+            splash->finish (&window);
 
         if (! parser.positionalArguments().isEmpty())
             window.openFile (QDir::current().absoluteFilePath (parser.positionalArguments().first()));

@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "PhiMark.h"
 
+#include <QGuiApplication>
 #include <QPainter>
+#include <QScreen>
+#include <QTimer>
 #include <QPainterPath>
 
+#include <algorithm>
 #include <cmath>
 
 namespace
@@ -147,4 +151,54 @@ PhiButton::PhiButton (const QString& accessibleName, QWidget* parent) : QToolBut
         icon.addPixmap (off, QIcon::Normal, QIcon::Off);
     }
     setIcon (icon);
+}
+
+//==============================================================================
+PhiSplash::PhiSplash() : QWidget (nullptr, Qt::SplashScreen | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint)
+{
+    setAttribute (Qt::WA_TranslucentBackground);   // the tile's rounded corners
+    setAttribute (Qt::WA_DeleteOnClose);
+    const auto side = (int) std::lround (1000.0 / (phi * phi));
+    resize (side, side);
+    if (const auto* screen = QGuiApplication::primaryScreen())
+        move (screen->availableGeometry().center() - rect().center());
+    shown.start();
+    if (startupSound())
+        QTimer::singleShot (0, this, [] { startupSound()(); });
+}
+
+void PhiSplash::finish (QWidget* mainWindow)
+{
+    const auto left = std::max<qint64> (0, (qint64) std::lround (phi * 1000.0) - shown.elapsed());
+    QTimer::singleShot ((int) left, this, [this, mainWindow]
+    {
+        close();
+        if (mainWindow != nullptr)
+            mainWindow->activateWindow();
+    });
+}
+
+std::function<void()>& PhiSplash::startupSound()
+{
+    static std::function<void()> sound;
+    return sound;
+}
+
+void PhiSplash::paintEvent (QPaintEvent*)
+{
+    QPainter g (this);
+    paint (g, QRectF (rect()), phimark::Style::goldOnBlack);
+
+    // The version in the tile's lower margin, small and gold.
+    auto f = font();
+    f.setPixelSize (std::max (9, height() / 34));
+    g.setFont (f);
+    g.setPen (gold);
+    const auto margin = height() / (phi * phi * phi * phi);
+    g.drawText (QRectF (0, height() - margin, width(), margin), Qt::AlignCenter, QCoreApplication::applicationVersion());
+}
+
+void PhiSplash::mousePressEvent (QMouseEvent*)
+{
+    close();
 }

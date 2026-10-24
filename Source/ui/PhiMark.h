@@ -2,9 +2,11 @@
 #pragma once
 
 #include <QPixmap>
+#include <QElapsedTimer>
 #include <QToolButton>
 #include <QWidget>
 
+#include <functional>
 #include <string>
 
 // The Φ mark: PHI's own capital phi (U+03A6), drawn from golden-ratio geometry.
@@ -33,6 +35,27 @@ namespace phimark
     bool isPhiPlugin (const std::string& pluginId);   // one of PHI's own Φ effects
     QString withoutPhi (const QString& name);          // "Φ EQ" -> "EQ", when the mark stands in for the letter
 }
+
+// The window shown while PHI starts: the gold mark on its black tile, 1000/φ² (382)
+// pixels square in the middle of the screen, not full screen, with the version under the
+// mark. It stays at least 1.618 seconds, and closes once the main window is up.
+class PhiSplash final : public QWidget
+{
+public:
+    PhiSplash();
+    void finish (QWidget* mainWindow);   // closes when the 1.618 seconds are over
+
+    // Played when the splash opens, if set: the Φ synth's sound for the start (a new random
+    // patch each time). Set it before the splash is shown.
+    static std::function<void()>& startupSound();
+
+protected:
+    void paintEvent (QPaintEvent*) override;
+    void mousePressEvent (QMouseEvent*) override;   // a click closes it at once
+
+private:
+    QElapsedTimer shown;
+};
 
 // The gold mark on a black tile.
 class PhiMark final : public QWidget
