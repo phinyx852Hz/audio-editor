@@ -61,6 +61,7 @@ public:
     std::string reload (int slot);   // a failed plugin, loaded again with its last saved settings
     void move (int from, int to);
     void setBypassed (int slot, bool);
+    void setMix (int slot, float mix);   // dry/wet, 0..1, the dry kept in time with the plugin's latency
     MasterSlotInfo info (int slot) const;
     void setGainDb (double);
     double gainDb() const { return gainDecibels; }
@@ -145,6 +146,7 @@ private:
         int compareSide = 0;              // A/B compare in the stock plugin frame: 0 = A, 1 = B
         juce::MemoryBlock otherSide;      // the settings of the side not being heard; empty until B is first used
         bool hasEditor = false;           // asked once at load: a VST3 builds its whole editor to answer
+        float mix = 1.0f;                 // dry/wet
 
         // A plugin that throws (yabridge throws "write: Broken pipe" when its Wine
         // side has gone) is marked failed and never called again: not to process,
@@ -242,6 +244,7 @@ private:
     int blockSize = 512;
     int channelCount = 2;
     juce::AudioBuffer<float> scratch;
+    juce::AudioBuffer<float> dry;   // a slot's input, for its dry/wet
     juce::MidiBuffer midi;
     std::atomic<float> gain { 1.0f };
     double gainDecibels = 0.0;

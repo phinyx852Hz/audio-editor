@@ -71,6 +71,7 @@ struct MasterSlotInfo
     bool failed = false;      // the plugin stopped working (it threw, or its bridge went away); it is skipped until reloaded
     std::string failure;      // what it said, e.g. "write: Broken pipe"
     bool prism = false;       // a Prism: rays of plugins of its own, opened in the Prism editor
+    float mix = 1.0f;         // a slot's dry/wet: 1 is all the plugin, 0 all the dry sound (slots only)
 };
 
 // A place in the Master Section: a slot, then a (ray, device) step into each Prism on the way.
@@ -308,6 +309,7 @@ public:
     void setChainParameter (const ChainPath&, int index, float normalisedValue);
     bool setChainParameterText (const ChainPath&, int index, const std::string& text);
     void setChainBypassed (const ChainPath&, bool);
+    void setChainMix (const ChainPath&, float mix);   // a slot's dry/wet, 0..1; Prism devices have none
     std::string reloadChainDevice (const ChainPath&);
     void removeChainDevice (const ChainPath&);
     bool canShowChainWindow (const ChainPath&) const;
