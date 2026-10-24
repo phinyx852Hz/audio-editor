@@ -2,6 +2,7 @@
 #pragma once
 
 #include <string>
+#include <utility>
 #include <vector>
 
 // What a Φ effect's window draws above its knobs (Source/ui/PhiWindow.cpp), filled in
@@ -21,4 +22,24 @@ struct DeviceDisplay
     float lowDb = -24.0f, highDb = 24.0f;
     std::string axis;      // taps and curve: what across means, "0 to 2.4 s"
     std::string caption;   // a line in the display's corner: "fundamental 58.9 Hz, cut at 476 Hz"
+
+    // frequency: nodes on the curve that the mouse moves (Φ EQ's bands and cuts). Each
+    // names the parameters (by index, -1 for none) it moves: dragged across, `hzParameter`
+    // is set from text in Hz ("off" past the end of `grid` on the `offSide`); dragged up
+    // and down, `dbParameter` from text in dB; the wheel steps `qParameter`; a right click
+    // picks `typeParameter` from `types`; a double click sets `reset` (index, 0..1 value).
+    struct Handle
+    {
+        float hz = 1000.0f, db = 0.0f;
+        int hzParameter = -1, dbParameter = -1, qParameter = -1, typeParameter = -1;
+        int offSide = 0;   // -1: a low cut, off at the left; 1: a high cut, off at the right
+        bool on = true;
+        std::string label;
+        std::vector<std::pair<int, float>> reset;
+        std::vector<int> knobs;   // the parameters shown as knobs while the node is chosen
+    };
+    std::vector<Handle> handles;
+    std::vector<float> grid;          // the frequencies the nodes snap to, drawn as ticks
+    std::vector<std::string> types;   // the names of typeParameter's choices
+    std::vector<int> knobs;           // with handles: the knobs always shown, after the chosen node's
 };

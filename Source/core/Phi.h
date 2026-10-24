@@ -51,19 +51,58 @@ namespace phi
     double density (int index);
 
     //==========================================================================
-    // Φ EQ: a Super Low shelf at 80 Hz, ten bells at 80 Hz × φⁿ (n = 1..10:
-    // 129 Hz to 9.8 kHz) and a Super High shelf at 80 Hz × φ¹¹ (15.9 kHz).
-    // Neighbouring bands are φ apart, and each bell is as wide as that step:
-    // Q = φ^1.5 (2.06).
+    // Φ EQ: twelve bands that start a golden ratio apart: a Super Low shelf at
+    // 80 Hz, ten bells at 80 Hz × φⁿ (n = 1..10: 129 Hz to 9.8 kHz) and a Super
+    // High shelf at 80 Hz × φ¹¹ (15.9 kHz), each bell as wide as that step
+    // (Q = φ^1.5, 2.06). Every band can be moved, narrowed or widened and made a
+    // bell, a shelf, a notch or a band-pass; Low and High Cut (Butterworth, 12, 24
+    // or 48 dB per octave) and Φ Tilt (a pair of shelves about 1 kHz) come after.
     class Eq
     {
     public:
         static constexpr int numBands = 12;   // Super Low, 10 bells, Super High
         static constexpr double baseHz = 80.0;
-        static double bandHz (int band);      // band 0 is Super Low, 11 Super High
+        static double bandHz (int band);      // where band starts: 0 is Super Low, 11 Super High
+
+        // The golden grid the bands and cuts sit on: 80 Hz × φ^(step / 4), a quarter of a
+        // golden ratio apart, from 18.9 Hz (step -12) to 20.2 kHz (step 46). Band b starts
+        // on step 4b. There is nothing between the steps: this EQ shapes by the golden
+        // ratio rather than hunting down a problem frequency (that is the De-resonator).
+        static constexpr int minStep = -12, maxStep = 46;
+        static double stepHz (int step);
+        static int nearestStep (double hz);
+        // Widths are golden too: the type's own width × φ^(qStep / 2), qStep -6 to 6.
+        static constexpr int minQStep = -6, maxQStep = 6;
+        static double stepQ (int qStep, bool shelf);
+
+        enum class Type { bell, lowShelf, highShelf, notch, bandPass, off };
+        static constexpr int numTypes = 6;
+        struct Band
+        {
+            Type type = Type::bell;
+            double hz = 1000.0;
+            double q = 2.058;
+            double gainDb = 0.0;
+            bool operator== (const Band&) const = default;
+        };
+        struct Settings
+        {
+            std::array<Band, numBands> bands = defaultBands();
+            double lowCutHz = 0.0;    // 0: off
+            int lowCutSlope = 12;     // dB per octave: 12, 24 or 48
+            double highCutHz = 0.0;   // 0: off
+            int highCutSlope = 12;
+            double tiltDb = 0.0;      // + brighter, - darker, about 1 kHz
+            bool operator== (const Settings&) const = default;
+        };
+        static std::array<Band, numBands> defaultBands();
+        static Band defaultBand (int band);
+        static constexpr double bellQ = 2.0581710272714924;   // φ^1.5: one golden step wide
+        static constexpr double shelfQ = 0.7071067811865476;
 
         void prepare (double sampleRate, int numChannels);
-        // Gains in dB per band; recalculates only the bands that changed.
+        void set (const Settings&);   // recalculates only when something changed
+        // Gains in dB per band, the bands where they start (the first Φ EQ).
         void set (const std::array<double, numBands>& gainsDb);
         void reset();
         void process (float* const* channels, int numChannels, int numFrames);
@@ -72,12 +111,18 @@ namespace phi
 
     private:
         struct Biquad { double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0; };
-        void design (int band);
+        void design();
+        void clear (int stage);
 
+        // Every filter has its own stages, which do nothing while it is off, so moving one
+        // never disturbs another: the bands, two cuts of up to 4 biquads, the tilt.
+        static constexpr int lowCutStage = numBands, highCutStage = lowCutStage + 4, tiltStage = highCutStage + 4;
+        static constexpr int maxStages = tiltStage + 2;
         double rate = 48000.0;
-        std::array<Biquad, numBands> coefs {};
-        std::array<double, numBands> gains {};
-        std::vector<std::array<std::array<double, 2>, numBands>> state;   // per channel and band: z1, z2
+        Settings settings;
+        std::array<Biquad, maxStages> coefs {};
+        std::array<bool, maxStages> used {}, wasUsed {};
+        std::vector<std::array<std::array<double, 2>, maxStages>> state;   // per channel and stage: z1, z2
     };
 
     //==========================================================================

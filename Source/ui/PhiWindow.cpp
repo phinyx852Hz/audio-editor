@@ -6,6 +6,7 @@
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -15,6 +16,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 
 namespace
 {
@@ -32,17 +34,39 @@ namespace
 }
 
 //==============================================================================
-// The effect's picture, from its DeviceDisplay.
+// The effect's picture, from its DeviceDisplay. Its nodes (Φ EQ's bands and cuts) are
+// moved with the mouse: dragged across along the golden grid and up and down for gain
+// (Shift finer), the wheel for width, a right click for the type, a double click to reset.
 class PhiDisplay final : public QWidget
 {
 public:
-    using QWidget::QWidget;
+    PhiDisplay (AudioEngine& e, ChainPath p, QWidget* parent)
+        : QWidget (parent), engine (e), path (std::move (p))
+    {
+        setMouseTracking (true);
+    }
 
     void set (DeviceDisplay d)
     {
         shown = std::move (d);
+        if (chosen >= (int) shown.handles.size() || (chosen < 0 && ! shown.handles.empty()))
+            choose (shown.handles.empty() ? -1 : 0);
         update();
     }
+
+    int chosenHandle() const { return chosen; }
+    void choose (int handle)
+    {
+        if (handle == chosen)
+            return;
+        chosen = handle;
+        update();
+        if (onChoose)
+            onChoose (handle);
+    }
+
+    std::function<void (int)> onChoose;   // a node chosen (or -1)
+    std::function<void()> onChange;       // a parameter moved from here
 
 protected:
     void paintEvent (QPaintEvent*) override
@@ -126,6 +150,221 @@ private:
         g.setPen (QPen (gold, 2.2));
         g.setBrush (Qt::NoBrush);
         g.drawPath (curve);
+
+        plot = r;
+        if (shown.handles.empty())
+            return;
+
+        // The golden grid along the bottom, every fourth step (a whole φ) longer.
+        for (size_t i = 0; i < shown.grid.size(); ++i)
+        {
+            const auto gx = xOfHz (r, shown.grid[i]);
+            const bool whole = i % 4 == 0;
+            g.setPen (QPen (whole ? QColor (0x5c, 0x4c, 0x26) : QColor (0x2e, 0x2a, 0x22), 1.0));
+            g.drawLine (QPointF (gx, r.bottom() - (whole ? 8 : 4)), QPointF (gx, r.bottom()));
+        }
+
+        auto nf = font();
+        nf.setPixelSize (9);
+        nf.setWeight (QFont::DemiBold);
+        g.setFont (nf);
+        for (int i = 0; i < (int) shown.handles.size(); ++i)
+        {
+            const auto c = handleAt (i);
+            const auto& h = shown.handles[(size_t) i];
+            const bool picked = i == chosen, over = i == hovered;
+            auto ring = gold;
+            if (! h.on)
+                ring.setAlpha (110);
+            g.setPen (QPen (picked || over ? text : ring, picked ? 2.0 : 1.4));
+            g.setBrush (picked ? QBrush (gold) : QBrush (black));
+            g.drawEllipse (c, radius, radius);
+            g.setPen (picked ? black : (h.on ? gold : faint));
+            g.drawText (QRectF (c.x() - radius, c.y() - radius, 2 * radius, 2 * radius), Qt::AlignCenter, QString::fromStdString (h.label));
+        }
+    }
+
+    double xOfHzIn (double hz) const { return xOfHz (plot, hz); }
+    double hzOfX (double x) const { return 20.0 * std::pow (1000.0, (x - plot.left()) / std::max (1.0, plot.width())); }
+    double yOfDb (double db) const
+    {
+        const auto span = std::max (1.0f, shown.highDb - shown.lowDb);
+        return plot.top() + plot.height() * (shown.highDb - std::clamp (db, (double) shown.lowDb, (double) shown.highDb)) / span;
+    }
+
+    QPointF handleAt (int i) const
+    {
+        const auto& h = shown.handles[(size_t) i];
+        return { std::clamp (xOfHz (plot, h.hz), plot.left() + radius, plot.right() - radius),
+                 std::clamp (yOfDb (h.db), plot.top() + radius, plot.bottom() - radius) };
+    }
+
+    int handleNear (QPointF p) const
+    {
+        if (shown.kind != DeviceDisplay::Kind::frequency)
+            return -1;
+        int best = -1;
+        double nearest = radius + 5.0;
+        for (int i = 0; i < (int) shown.handles.size(); ++i)
+            if (const auto d = QLineF (p, handleAt (i)).length(); d < nearest)
+            {
+                nearest = d;
+                best = i;
+            }
+        return best;
+    }
+
+    PluginParameterInfo parameter (int index) const
+    {
+        const auto all = engine.chainParameters (path);
+        return index >= 0 && index < (int) all.size() ? all[(size_t) index] : PluginParameterInfo {};
+    }
+
+    void changed()
+    {
+        if (onChange)
+            onChange();
+    }
+
+    void mousePressEvent (QMouseEvent* e) override
+    {
+        const auto i = handleNear (e->position());
+        if (i < 0)
+            return QWidget::mousePressEvent (e);
+        choose (i);
+        const auto& h = shown.handles[(size_t) i];
+        if (e->button() == Qt::RightButton)
+        {
+            typeMenu (h, e->globalPosition().toPoint());
+            return;
+        }
+        if (e->button() != Qt::LeftButton)
+            return;
+        dragging = true;
+        dragFrom = e->position();
+        dragGain = 0.0;
+        if (h.dbParameter >= 0)
+            dragGain = QString::fromStdString (parameter (h.dbParameter).valueText).section (' ', 0, 0).toDouble();
+        lastText.clear();
+        e->accept();
+    }
+
+    void mouseMoveEvent (QMouseEvent* e) override
+    {
+        if (! dragging)
+        {
+            const auto over = handleNear (e->position());
+            if (over != hovered)
+            {
+                hovered = over;
+                setCursor (over >= 0 ? Qt::SizeAllCursor : Qt::ArrowCursor);
+                update();
+            }
+            return;
+        }
+        if (chosen < 0 || chosen >= (int) shown.handles.size())
+            return;
+        const auto& h = shown.handles[(size_t) chosen];
+
+        // Across: the nearest step of the grid (no free frequencies), or off past its end.
+        if (h.hzParameter >= 0 && ! shown.grid.empty())
+        {
+            const auto hz = hzOfX (e->position().x());
+            const auto edge = std::pow (phi, 0.125);
+            std::string text;
+            if ((h.offSide < 0 && hz < shown.grid.front() / edge) || (h.offSide > 0 && hz > shown.grid.back() * edge))
+                text = "off";
+            else
+            {
+                const auto best = std::min_element (shown.grid.begin(), shown.grid.end(), [hz] (float a, float b)
+                    { return std::abs (std::log (a / hz)) < std::abs (std::log (b / hz)); });
+                text = std::to_string (*best);
+            }
+            if (text != lastText)
+            {
+                lastText = text;
+                engine.setChainParameterText (path, h.hzParameter, text);
+                changed();
+            }
+        }
+
+        // Up and down: the gain, from where the drag began; Shift ten times finer.
+        if (h.dbParameter >= 0)
+        {
+            const auto perPixel = (shown.highDb - shown.lowDb) / std::max (1.0, plot.height()) * ((e->modifiers() & Qt::ShiftModifier) != 0 ? 0.1 : 1.0);
+            const auto db = std::clamp (dragGain + (dragFrom.y() - e->position().y()) * perPixel, -12.0, 12.0);
+            const auto text = QString::number (std::round (db * 10.0) / 10.0, 'f', 1).toStdString();
+            if (text != lastGain)
+            {
+                lastGain = text;
+                engine.setChainParameterText (path, h.dbParameter, text);
+                changed();
+            }
+        }
+        e->accept();
+    }
+
+    void mouseReleaseEvent (QMouseEvent* e) override
+    {
+        dragging = false;
+        lastGain.clear();
+        QWidget::mouseReleaseEvent (e);
+    }
+
+    void mouseDoubleClickEvent (QMouseEvent* e) override
+    {
+        const auto i = handleNear (e->position());
+        if (i < 0)
+            return QWidget::mouseDoubleClickEvent (e);
+        for (const auto& [index, value] : shown.handles[(size_t) i].reset)
+            engine.setChainParameter (path, index, value);
+        dragging = false;
+        changed();
+    }
+
+    void wheelEvent (QWheelEvent* e) override
+    {
+        // The width, a golden step (√φ) at a time: up narrower, down wider.
+        auto i = handleNear (e->position());
+        if (i < 0)
+            i = chosen;
+        if (i < 0 || i >= (int) shown.handles.size() || shown.handles[(size_t) i].qParameter < 0)
+            return QWidget::wheelEvent (e);
+        const auto q = shown.handles[(size_t) i].qParameter;
+        const auto info = parameter (q);
+        const auto steps = std::max (1, info.numSteps - 1);
+        const auto at = (int) std::lround (info.value * steps) + (e->angleDelta().y() > 0 ? 1 : -1);
+        engine.setChainParameter (path, q, (float) std::clamp (at, 0, steps) / (float) steps);
+        changed();
+        e->accept();
+    }
+
+    void leaveEvent (QEvent*) override
+    {
+        hovered = -1;
+        update();
+    }
+
+    void typeMenu (const DeviceDisplay::Handle& h, QPoint at)
+    {
+        if (h.typeParameter < 0 || shown.types.empty())
+            return;
+        const auto info = parameter (h.typeParameter);
+        const auto steps = std::max (1, (int) shown.types.size() - 1);
+        const auto current = (int) std::lround (info.value * steps);
+        QMenu menu (this);
+        for (int t = 0; t < (int) shown.types.size(); ++t)
+        {
+            auto* a = menu.addAction (QString::fromStdString (shown.types[(size_t) t]));
+            a->setCheckable (true);
+            a->setChecked (t == current);
+            a->setData (t);
+        }
+        if (auto* picked = menu.exec (at))
+        {
+            engine.setChainParameter (path, h.typeParameter, (float) picked->data().toInt() / (float) steps);
+            changed();
+        }
     }
 
     void axis (QPainter& g, const QRectF& r)
@@ -201,7 +440,16 @@ private:
         }
     }
 
+    AudioEngine& engine;
+    ChainPath path;
     DeviceDisplay shown;
+    QRectF plot;
+    static constexpr double radius = 8.0;
+    int chosen = -1, hovered = -1;
+    bool dragging = false;
+    QPointF dragFrom;
+    double dragGain = 0.0;
+    std::string lastText, lastGain;
 };
 
 //==============================================================================
@@ -278,7 +526,7 @@ private:
 
 //==============================================================================
 PhiWindow::PhiWindow (AudioEngine& e, ChainPath p, QWidget* parent)
-    : QDialog (parent), engine (e), path (std::move (p)), pluginId (e.chainDevice (path).pluginId), display (new PhiDisplay (this))
+    : QDialog (parent), engine (e), path (std::move (p)), pluginId (e.chainDevice (path).pluginId), display (new PhiDisplay (e, path, this))
 {
     const auto info = engine.chainDevice (path);
     const auto name = phimark::withoutPhi (QString::fromStdString (info.name));
@@ -307,24 +555,69 @@ PhiWindow::PhiWindow (AudioEngine& e, ChainPath p, QWidget* parent)
     display->setMinimumHeight (144);
     layout->addWidget (display, 618);
 
-    // The knobs: the main controls large, the rest smaller; switches as pills.
-    const auto params = engine.chainParameters (path);
-    std::vector<int> main = info.mainParameters;
-    if (main.empty())
-        for (int i = 0; i < (int) params.size() && (int) main.size() < 4; ++i)
-            if (! params[(size_t) i].isBoolean && params[(size_t) i].numSteps == 0)
-                main.push_back (i);
-    const bool many = params.size() > 8;   // Φ EQ's bands: all the same size
+    knobArea = new QWidget (this);
+    layout->addWidget (knobArea, 382);
+    display->onChoose = [this] (int) { buildKnobs(); };
+    display->onChange = [this] { sync (true); };
+    display->set (engine.chainDisplay (path));
+    buildKnobs();
 
-    auto* row = new QHBoxLayout;
+    // The picture moves at 30 frames a second; the knobs follow automation and the card.
+    auto* timer = new QTimer (this);
+    connect (timer, &QTimer::timeout, this, [this] { sync (++ticks % 5 == 0); });
+    timer->start (33);
+    sync (true);
+}
+
+void PhiWindow::buildKnobs()
+{
+    // The knobs: the main controls large, the rest smaller; switches as pills. With nodes
+    // (Φ EQ), the chosen node's knobs large, then those the effect always shows.
+    controls.clear();
+    for (auto* child : knobArea->findChildren<QWidget*> (Qt::FindDirectChildrenOnly))
+    {
+        child->hide();
+        child->deleteLater();
+    }
+    delete knobArea->layout();
+
+    const auto info = engine.chainDevice (path);
+    const auto params = engine.chainParameters (path);
+    const auto shown = engine.chainDisplay (path);
+    std::vector<int> main, order;
+    bool many = false;
+    if (! shown.handles.empty())
+    {
+        const auto chosen = display->chosenHandle();
+        if (chosen >= 0 && chosen < (int) shown.handles.size())
+            main = shown.handles[(size_t) chosen].knobs;
+        order = main;
+        for (const auto i : shown.knobs)
+            if (std::find (order.begin(), order.end(), i) == order.end())
+                order.push_back (i);
+    }
+    else
+    {
+        main = info.mainParameters;
+        if (main.empty())
+            for (int i = 0; i < (int) params.size() && (int) main.size() < 4; ++i)
+                if (! params[(size_t) i].isBoolean && params[(size_t) i].numSteps == 0)
+                    main.push_back (i);
+        many = params.size() > 8;   // all the same size when there are many
+        order = main;
+        for (int i = 0; i < (int) params.size(); ++i)
+            if (std::find (order.begin(), order.end(), i) == order.end())
+                order.push_back (i);
+    }
+
+    auto* row = new QHBoxLayout (knobArea);
+    row->setContentsMargins (0, 0, 0, 0);
     row->setSpacing (small);
-    std::vector<int> order = main;
-    for (int i = 0; i < (int) params.size(); ++i)
-        if (std::find (order.begin(), order.end(), i) == order.end())
-            order.push_back (i);
     bool smallerStarted = false;
     for (const auto i : order)
     {
+        if (i < 0 || i >= (int) params.size())
+            continue;
         const auto& param = params[(size_t) i];
         const bool big = ! many && std::find (main.begin(), main.end(), i) != main.end();
         if (! big && ! smallerStarted && ! many)
@@ -337,7 +630,7 @@ PhiWindow::PhiWindow (AudioEngine& e, ChainPath p, QWidget* parent)
         c.index = i;
         auto* column = new QVBoxLayout;
         column->setSpacing (2);
-        c.value = new QLabel (QString::fromStdString (param.valueText), this);
+        c.value = new QLabel (QString::fromStdString (param.valueText), knobArea);
         c.value->setAlignment (Qt::AlignHCenter);
         auto vf = c.value->font();
         vf.setPixelSize (11);
@@ -348,7 +641,7 @@ PhiWindow::PhiWindow (AudioEngine& e, ChainPath p, QWidget* parent)
 
         if (param.isBoolean)
         {
-            c.toggle = new QToolButton (this);
+            c.toggle = new QToolButton (knobArea);
             c.toggle->setText (QString::fromStdString (param.name));
             c.toggle->setCheckable (true);
             c.toggle->setChecked (param.value > 0.5f);
@@ -365,7 +658,7 @@ PhiWindow::PhiWindow (AudioEngine& e, ChainPath p, QWidget* parent)
         else
         {
             c.steps = param.numSteps > 1 ? param.numSteps - 1 : 1000;
-            c.knob = new PhiKnob (this);
+            c.knob = new PhiKnob (knobArea);
             c.knob->setRange (0, c.steps);
             c.knob->setSingleStep (std::max (1, c.steps / 100));
             c.knob->setPageStep (std::max (1, c.steps / 10));
@@ -379,7 +672,7 @@ PhiWindow::PhiWindow (AudioEngine& e, ChainPath p, QWidget* parent)
                 engine.setChainParameter (path, index, (float) v / (float) steps);
                 sync (true);
             });
-            auto* label = new QLabel (QString::fromStdString (param.name), this);
+            auto* label = new QLabel (QString::fromStdString (param.name), knobArea);
             label->setAlignment (Qt::AlignHCenter);
             auto lf = label->font();
             lf.setPixelSize (big ? 13 : 11);
@@ -394,13 +687,6 @@ PhiWindow::PhiWindow (AudioEngine& e, ChainPath p, QWidget* parent)
         row->addLayout (column, big ? 3 : 2);
         controls.push_back (c);
     }
-    layout->addLayout (row, 382);
-
-    // The picture moves at 30 frames a second; the knobs follow automation and the card.
-    auto* timer = new QTimer (this);
-    connect (timer, &QTimer::timeout, this, [this] { sync (++ticks % 5 == 0); });
-    timer->start (33);
-    sync (true);
 }
 
 void PhiWindow::sync (bool parameters)

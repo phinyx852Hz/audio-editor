@@ -75,22 +75,61 @@ namespace phi
         return baseHz * power (std::clamp (band, 0, numBands - 1));
     }
 
+    double Eq::stepHz (int step)
+    {
+        return baseHz * std::pow (ratio, std::clamp (step, minStep, maxStep) / 4.0);
+    }
+
+    int Eq::nearestStep (double hz)
+    {
+        if (! (hz > 0.0))
+            return minStep;
+        return std::clamp ((int) std::lround (4.0 * std::log (hz / baseHz) / std::log (ratio)), minStep, maxStep);
+    }
+
+    double Eq::stepQ (int qStep, bool shelf)
+    {
+        return (shelf ? shelfQ : bellQ) * std::pow (ratio, std::clamp (qStep, minQStep, maxQStep) / 2.0);
+    }
+
+    Eq::Band Eq::defaultBand (int band)
+    {
+        Band b;
+        b.hz = bandHz (band);
+        b.type = band == 0 ? Type::lowShelf : band == numBands - 1 ? Type::highShelf : Type::bell;
+        b.q = b.type == Type::bell ? bellQ : shelfQ;
+        return b;
+    }
+
+    std::array<Eq::Band, Eq::numBands> Eq::defaultBands()
+    {
+        std::array<Band, numBands> bands {};
+        for (int b = 0; b < numBands; ++b)
+            bands[(size_t) b] = defaultBand (b);
+        return bands;
+    }
+
     void Eq::prepare (double sampleRate, int numChannels)
     {
         rate = sampleRate;
         state.assign ((size_t) std::max (1, numChannels), {});
-        for (int b = 0; b < numBands; ++b)
-            design (b);
+        design();
+    }
+
+    void Eq::set (const Settings& s)
+    {
+        if (s == settings)
+            return;
+        settings = s;
+        design();
     }
 
     void Eq::set (const std::array<double, numBands>& gainsDb)
     {
+        auto s = settings;
         for (int b = 0; b < numBands; ++b)
-            if (std::abs (gainsDb[(size_t) b] - gains[(size_t) b]) > 1.0e-6)
-            {
-                gains[(size_t) b] = gainsDb[(size_t) b];
-                design (b);
-            }
+            s.bands[(size_t) b].gainDb = gainsDb[(size_t) b];
+        set (s);
     }
 
     void Eq::reset()
@@ -100,59 +139,95 @@ namespace phi
                 z = { 0.0, 0.0 };
     }
 
-    // The bells and shelves of the Audio EQ Cookbook (R. Bristow-Johnson).
-    void Eq::design (int band)
+    // The filters of the Audio EQ Cookbook (R. Bristow-Johnson), and Butterworth cuts
+    // as cascades of its high- and low-passes. Each filter writes its own stages.
+    void Eq::design()
     {
-        auto& c = coefs[(size_t) band];
-        const auto db = gains[(size_t) band];
-        if (std::abs (db) < 1.0e-6)
+        used.fill (false);
+        auto put = [&] (int stage, double b0, double b1, double b2, double a0, double a1, double a2)
         {
-            c = {};
-            return;
-        }
-
-        const auto hz = std::min (bandHz (band), 0.45 * rate);
-        const auto w = twoPi * hz / rate;
-        const auto cw = std::cos (w), sw = std::sin (w);
-        const auto A = std::pow (10.0, db / 40.0);
-        double b0, b1, b2, a0, a1, a2;
-
-        if (band == 0 || band == numBands - 1)
+            if (! used[(size_t) stage])
+                clear (stage);
+            coefs[(size_t) stage] = { b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0 };
+            used[(size_t) stage] = true;
+        };
+        auto filter = [&] (int stage, Type type, double hz, double q, double db)
         {
-            const auto alpha = sw / 2.0 * std::sqrt (2.0);   // shelf slope 1
-            const auto sqA = 2.0 * std::sqrt (A) * alpha;
-            if (band == 0)
-            {
-                b0 = A * ((A + 1) - (A - 1) * cw + sqA);
-                b1 = 2 * A * ((A - 1) - (A + 1) * cw);
-                b2 = A * ((A + 1) - (A - 1) * cw - sqA);
-                a0 = (A + 1) + (A - 1) * cw + sqA;
-                a1 = -2 * ((A - 1) + (A + 1) * cw);
-                a2 = (A + 1) + (A - 1) * cw - sqA;
-            }
-            else
-            {
-                b0 = A * ((A + 1) + (A - 1) * cw + sqA);
-                b1 = -2 * A * ((A - 1) + (A + 1) * cw);
-                b2 = A * ((A + 1) + (A - 1) * cw - sqA);
-                a0 = (A + 1) - (A - 1) * cw + sqA;
-                a1 = 2 * ((A - 1) - (A + 1) * cw);
-                a2 = (A + 1) - (A - 1) * cw - sqA;
-            }
-        }
-        else
-        {
-            const auto q = std::pow (ratio, 1.5);   // a bandwidth of one golden step
+            hz = std::clamp (hz, 10.0, 0.45 * rate);
+            q = std::clamp (q, 0.05, 50.0);
+            const auto w = twoPi * hz / rate;
+            const auto cw = std::cos (w), sw = std::sin (w);
             const auto alpha = sw / (2.0 * q);
-            b0 = 1 + alpha * A;
-            b1 = -2 * cw;
-            b2 = 1 - alpha * A;
-            a0 = 1 + alpha / A;
-            a1 = -2 * cw;
-            a2 = 1 - alpha / A;
-        }
+            const auto A = std::pow (10.0, db / 40.0);
+            const auto sqA = 2.0 * std::sqrt (A) * alpha;
+            switch (type)
+            {
+                case Type::bell:
+                    if (std::abs (db) >= 1.0e-6)
+                        put (stage, 1 + alpha * A, -2 * cw, 1 - alpha * A, 1 + alpha / A, -2 * cw, 1 - alpha / A);
+                    break;
+                case Type::lowShelf:
+                    if (std::abs (db) >= 1.0e-6)
+                        put (stage, A * ((A + 1) - (A - 1) * cw + sqA), 2 * A * ((A - 1) - (A + 1) * cw), A * ((A + 1) - (A - 1) * cw - sqA),
+                             (A + 1) + (A - 1) * cw + sqA, -2 * ((A - 1) + (A + 1) * cw), (A + 1) + (A - 1) * cw - sqA);
+                    break;
+                case Type::highShelf:
+                    if (std::abs (db) >= 1.0e-6)
+                        put (stage, A * ((A + 1) + (A - 1) * cw + sqA), -2 * A * ((A - 1) + (A + 1) * cw), A * ((A + 1) + (A - 1) * cw - sqA),
+                             (A + 1) - (A - 1) * cw + sqA, 2 * ((A - 1) - (A + 1) * cw), (A + 1) - (A - 1) * cw - sqA);
+                    break;
+                case Type::notch:
+                    put (stage, 1, -2 * cw, 1, 1 + alpha, -2 * cw, 1 - alpha);
+                    break;
+                case Type::bandPass:   // 0 dB at the centre
+                    put (stage, alpha, 0, -alpha, 1 + alpha, -2 * cw, 1 - alpha);
+                    break;
+                case Type::off:
+                    break;
+            }
+        };
+        auto cut = [&] (int stage, bool low, double hz, int slope)
+        {
+            static constexpr double q12[] { 0.70710678 }, q24[] { 0.54119610, 1.30656296 },
+                                    q48[] { 0.50979558, 0.60134489, 0.89997622, 2.56291545 };
+            const auto* qs = slope >= 48 ? q48 : slope >= 24 ? q24 : q12;
+            const auto n = slope >= 48 ? 4 : slope >= 24 ? 2 : 1;
+            hz = std::clamp (hz, 10.0, 0.45 * rate);
+            const auto w = twoPi * hz / rate;
+            const auto cw = std::cos (w), sw = std::sin (w);
+            for (int i = 0; i < n; ++i)
+            {
+                const auto alpha = sw / (2.0 * qs[i]);
+                if (low)
+                    put (stage + i, (1 + cw) / 2, -(1 + cw), (1 + cw) / 2, 1 + alpha, -2 * cw, 1 - alpha);
+                else
+                    put (stage + i, (1 - cw) / 2, 1 - cw, (1 - cw) / 2, 1 + alpha, -2 * cw, 1 - alpha);
+            }
+        };
 
-        c = { b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0 };
+        for (int b = 0; b < numBands; ++b)
+        {
+            const auto& band = settings.bands[(size_t) b];
+            filter (b, band.type, band.hz, band.q, band.gainDb);
+        }
+        if (settings.lowCutHz > 0.0)
+            cut (lowCutStage, true, settings.lowCutHz, settings.lowCutSlope);
+        if (settings.highCutHz > 0.0)
+            cut (highCutStage, false, settings.highCutHz, settings.highCutSlope);
+        if (std::abs (settings.tiltDb) >= 1.0e-6)
+        {
+            filter (tiltStage, Type::lowShelf, 1000.0, 0.5, -settings.tiltDb / 2.0);
+            filter (tiltStage + 1, Type::highShelf, 1000.0, 0.5, settings.tiltDb / 2.0);
+        }
+        wasUsed = used;
+    }
+
+    void Eq::clear (int stage)
+    {
+        // A stage coming on starts from silence rather than from where it last stopped.
+        if (! wasUsed[(size_t) stage])
+            for (auto& channel : state)
+                channel[(size_t) stage] = { 0.0, 0.0 };
     }
 
     void Eq::process (float* const* channels, int numChannels, int numFrames)
@@ -161,12 +236,12 @@ namespace phi
         {
             auto* x = channels[ch];
             auto& z = state[(size_t) ch];
-            for (int b = 0; b < numBands; ++b)
+            for (int s = 0; s < maxStages; ++s)
             {
-                if (std::abs (gains[(size_t) b]) < 1.0e-6)
+                if (! used[(size_t) s])
                     continue;
-                const auto& c = coefs[(size_t) b];
-                auto z1 = z[(size_t) b][0], z2 = z[(size_t) b][1];
+                const auto& c = coefs[(size_t) s];
+                auto z1 = z[(size_t) s][0], z2 = z[(size_t) s][1];
                 for (int i = 0; i < numFrames; ++i)
                 {
                     const double in = x[i];
@@ -175,7 +250,7 @@ namespace phi
                     z2 = c.b2 * in - c.a2 * y;
                     x[i] = (float) y;
                 }
-                z[(size_t) b] = { z1, z2 };
+                z[(size_t) s] = { z1, z2 };
             }
         }
     }
@@ -185,13 +260,14 @@ namespace phi
         const auto w = twoPi * hz / rate;
         const std::complex<double> z1 = std::polar (1.0, -w), z2 = z1 * z1;
         std::complex<double> h = 1.0;
-        for (int b = 0; b < numBands; ++b)
-            if (std::abs (gains[(size_t) b]) >= 1.0e-6)
-            {
-                const auto& c = coefs[(size_t) b];
-                h *= (c.b0 + c.b1 * z1 + c.b2 * z2) / (1.0 + c.a1 * z1 + c.a2 * z2);
-            }
-        return 20.0 * std::log10 (std::abs (h));
+        for (int s = 0; s < maxStages; ++s)
+        {
+            if (! used[(size_t) s])
+                continue;
+            const auto& c = coefs[(size_t) s];
+            h *= (c.b0 + c.b1 * z1 + c.b2 * z2) / (1.0 + c.a1 * z1 + c.a2 * z2);
+        }
+        return 20.0 * std::log10 (std::abs (h) + 1.0e-12);
     }
 
     //==========================================================================

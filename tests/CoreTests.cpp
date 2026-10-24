@@ -3631,6 +3631,74 @@ namespace
             check (near (rmsDb (tone, 12000) - before, 6.0, 0.1), "phi EQ boosts its band by 6 dB");
         }
 
+        // The Φ EQ's grid, types, cuts and tilt.
+        {
+            check (near (phi::Eq::stepHz (4), phi::Eq::bandHz (1), 1.0e-9) && near (phi::Eq::stepHz (1) / phi::Eq::stepHz (0), std::pow (phi::ratio, 0.25), 1.0e-9)
+                   && phi::Eq::nearestStep (1000.0) == phi::Eq::nearestStep (phi::Eq::stepHz (phi::Eq::nearestStep (1000.0)))
+                   && phi::Eq::nearestStep (1.0e6) == phi::Eq::maxStep && phi::Eq::nearestStep (0.0) == phi::Eq::minStep,
+                   "phi EQ grid is quarter golden steps from 80 Hz");
+            check (near (phi::Eq::stepQ (2, false) / phi::Eq::stepQ (0, false), phi::ratio, 1.0e-9), "phi EQ widths are golden steps");
+
+            auto response = [&] (const phi::Eq::Settings& s, double hz)
+            {
+                phi::Eq e;
+                e.prepare (rate, 1);
+                e.set (s);
+                return e.responseDb (hz);
+            };
+            phi::Eq::Settings s;
+            s.bands[5].type = phi::Eq::Type::notch;
+            check (response (s, phi::Eq::bandHz (5)) < -40.0 && std::abs (response (s, phi::Eq::bandHz (2))) < 0.5, "phi EQ notch cuts only its frequency");
+            s = {};
+            s.bands[5].type = phi::Eq::Type::bandPass;
+            check (near (response (s, phi::Eq::bandHz (5)), 0.0, 0.05) && response (s, phi::Eq::bandHz (1)) < -12.0, "phi EQ band-pass keeps only its band");
+            s = {};
+            s.bands[0].gainDb = 6.0;
+            check (near (response (s, 25.0), 6.0, 0.3) && std::abs (response (s, 2000.0)) < 0.2, "phi EQ low shelf lifts the lows");
+            s = {};
+            s.bands[3].type = phi::Eq::Type::off;
+            s.bands[3].gainDb = 9.0;
+            check (std::abs (response (s, phi::Eq::bandHz (3))) < 1.0e-6, "phi EQ band switched off does nothing");
+
+            for (const auto slope : { 12, 24, 48 })
+            {
+                s = {};
+                s.lowCutHz = 200.0;
+                s.lowCutSlope = slope;
+                const auto octave = response (s, 100.0) - response (s, 50.0);
+                check (near (response (s, 200.0), -3.0, 0.1) && near (octave, (double) slope, slope * 0.1) && std::abs (response (s, 5000.0)) < 0.05,
+                       "phi EQ low cut is " + std::to_string (slope) + " dB an octave");
+                s = {};
+                s.highCutHz = 2000.0;
+                s.highCutSlope = slope;
+                check (near (response (s, 2000.0), -3.0, 0.1) && response (s, 8000.0) < -1.6 * slope && std::abs (response (s, 50.0)) < 0.05,
+                       "phi EQ high cut is " + std::to_string (slope) + " dB an octave");
+            }
+
+            s = {};
+            s.tiltDb = 6.0;
+            check (near (response (s, 20.0), -3.0, 0.3) && near (response (s, 18000.0), 3.0, 0.4) && std::abs (response (s, 1000.0)) < 0.1,
+                   "phi EQ tilt turns about 1 kHz");
+
+            // Moving one band leaves the others' sound running: no stage restarts but its own.
+            phi::Eq e;
+            e.prepare (rate, 1);
+            s = {};
+            s.bands[2].gainDb = 6.0;
+            e.set (s);
+            auto tone = sine (phi::Eq::bandHz (2), 9600);
+            float* t[] { tone.data() };
+            e.process (t, 1, 4800);
+            s.bands[8].gainDb = 3.0;
+            e.set (s);
+            float* rest[] { tone.data() + 4800 };
+            e.process (rest, 1, 4800);
+            float jump = 0.0f;
+            for (int i = 4790; i < 4810; ++i)
+                jump = std::max (jump, std::abs (tone[(size_t) i + 1] - tone[(size_t) i]));
+            check (jump < 0.2f, "phi EQ changes one band without a click in another");
+        }
+
         // Φ Echo: an impulse comes back at t, tφ, tφ²..., each 1/φ quieter.
         {
             phi::Echo echo;

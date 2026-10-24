@@ -26,11 +26,13 @@ protected:
 
 private:
     void sync (bool parameters);
+    void buildKnobs();
 
     AudioEngine& engine;
     ChainPath path;
     std::string pluginId;
     class PhiDisplay* display;
+    QWidget* knobArea = nullptr;
     struct Control
     {
         int index = 0;
