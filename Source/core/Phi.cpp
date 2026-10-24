@@ -506,4 +506,465 @@ namespace phi
             beats += beatsPerSample;
         }
     }
+
+    //==========================================================================
+    namespace
+    {
+        Biquad normalised (double b0, double b1, double b2, double a0, double a1, double a2)
+        {
+            return { b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0 };
+        }
+
+        // Constant-power gains for a pan from -1 (left) to 1 (right), 1 each in the centre.
+        void panGains (double pan, float& left, float& right)
+        {
+            const auto angle = (std::clamp (pan, -1.0, 1.0) + 1.0) * twoPi / 8.0;
+            left = (float) (std::cos (angle) * std::sqrt (2.0));
+            right = (float) (std::sin (angle) * std::sqrt (2.0));
+        }
+
+        // Band or copy n of a golden fan: 0 in the centre, then left, right, left...
+        double fanPan (int n, double width)
+        {
+            return n == 0 ? 0.0 : (n % 2 == 1 ? -1.0 : 1.0) * std::clamp (width, 0.0, 1.0);
+        }
+    }
+
+    Biquad Biquad::bandPass (double hz, double q, double sampleRate)
+    {
+        const auto w = twoPi * std::min (hz, 0.45 * sampleRate) / sampleRate;
+        const auto alpha = std::sin (w) / (2.0 * q);
+        return normalised (alpha, 0.0, -alpha, 1.0 + alpha, -2.0 * std::cos (w), 1.0 - alpha);
+    }
+
+    Biquad Biquad::bell (double hz, double q, double gainDb, double sampleRate)
+    {
+        const auto w = twoPi * std::min (hz, 0.45 * sampleRate) / sampleRate;
+        const auto alpha = std::sin (w) / (2.0 * q), A = std::pow (10.0, gainDb / 40.0), c = std::cos (w);
+        return normalised (1.0 + alpha * A, -2.0 * c, 1.0 - alpha * A, 1.0 + alpha / A, -2.0 * c, 1.0 - alpha / A);
+    }
+
+    Biquad Biquad::lowPass (double hz, double q, double sampleRate)
+    {
+        const auto w = twoPi * std::min (hz, 0.45 * sampleRate) / sampleRate;
+        const auto alpha = std::sin (w) / (2.0 * q), c = std::cos (w);
+        return normalised ((1.0 - c) / 2.0, 1.0 - c, (1.0 - c) / 2.0, 1.0 + alpha, -2.0 * c, 1.0 - alpha);
+    }
+
+    //==========================================================================
+    double Resonator::bandHz (const Settings& s, int band)
+    {
+        return std::clamp (s.rootHz, 20.0, 2000.0) * power (band);
+    }
+
+    void Resonator::prepare (double sampleRate, int)
+    {
+        rate = sampleRate;
+        set (settings);
+        reset();
+    }
+
+    void Resonator::set (const Settings& s)
+    {
+        settings = s;
+        settings.bands = std::clamp (s.bands, 1, maxBands);
+        settings.q = std::clamp (s.q, 2.0, 100.0);
+        used = 0;
+        for (int b = 0; b < settings.bands && bandHz (settings, b) < 0.45 * rate; ++b)
+        {
+            filters[(size_t) b] = Biquad::bandPass (bandHz (settings, b), settings.q, rate);
+            panGains (fanPan (b, settings.width), gainL[(size_t) b], gainR[(size_t) b]);
+            used = b + 1;
+        }
+        // A band this narrow passes little of a broad sound; bring it back up.
+        makeup = (float) std::sqrt (settings.q);
+    }
+
+    void Resonator::reset()
+    {
+        state = {};
+    }
+
+    void Resonator::process (float* const* channels, int numChannels, int numFrames)
+    {
+        if (numChannels < 1)
+            return;
+        const auto stereo = numChannels >= 2;
+        const auto mix = (float) clamp01 (settings.mix), noise = (float) clamp01 (settings.noise);
+        for (int i = 0; i < numFrames; ++i)
+        {
+            noiseState = noiseState * 1664525u + 1013904223u;
+            const auto white = ((float) (noiseState >> 8) / 8388608.0f - 1.0f) * 0.5f;
+            const auto in = (stereo ? 0.5f * (channels[0][i] + channels[1][i]) : channels[0][i]) + noise * white;
+            float wetL = 0.0f, wetR = 0.0f;
+            for (int b = 0; b < used; ++b)
+            {
+                const auto y = state[(size_t) b].run (filters[(size_t) b], in);
+                wetL += y * gainL[(size_t) b];
+                wetR += y * gainR[(size_t) b];
+            }
+            wetL *= makeup;
+            wetR *= makeup;
+            if (stereo)
+            {
+                channels[0][i] = channels[0][i] * (1.0f - mix) + wetL * mix;
+                channels[1][i] = channels[1][i] * (1.0f - mix) + wetR * mix;
+            }
+            else
+                channels[0][i] = channels[0][i] * (1.0f - mix) + 0.5f * (wetL + wetR) * mix;
+        }
+    }
+
+    //==========================================================================
+    void Stack::prepare (double sampleRate, int)
+    {
+        rate = sampleRate;
+        grain = std::max<size_t> (16, (size_t) (grainMs * 0.001 * sampleRate));
+        ring.assign (grain + 4, 0.0f);
+        smoothedMix = (float) settings.mix;
+        set (settings);
+        reset();
+    }
+
+    void Stack::set (const Settings& s)
+    {
+        settings = s;
+        settings.copies = std::clamp (s.copies, 1, maxCopies);
+        auto level = 1.0;
+        for (int c = 0; c < maxCopies; ++c)
+        {
+            level *= clamp01 (s.decay);
+            float l, r;
+            panGains (fanPan (c + 1, s.width), l, r);
+            const auto on = c < settings.copies ? level : 0.0;
+            gainL[(size_t) c] = (float) on * l;
+            gainR[(size_t) c] = (float) on * r;
+        }
+        tone = Biquad::lowPass (std::clamp (s.toneHz, 200.0, 20000.0), 0.7071, rate);
+    }
+
+    void Stack::reset()
+    {
+        std::fill (ring.begin(), ring.end(), 0.0f);
+        pos = 0;
+        for (int c = 0; c < maxCopies; ++c)
+            phase[(size_t) c] = golden (c);   // the copies' grains start at different places
+        toneState = {};
+    }
+
+    void Stack::process (float* const* channels, int numChannels, int numFrames)
+    {
+        if (numChannels < 1 || ring.empty())
+            return;
+        const auto stereo = numChannels >= 2;
+        const auto size = ring.size();
+        const auto g = (double) grain;
+        const auto mixTarget = (float) clamp01 (settings.mix);
+
+        auto read = [&] (double delay)
+        {
+            const auto whole = (size_t) delay;
+            const auto frac = (float) (delay - (double) whole);
+            const auto a = ring[(pos + size - whole) % size], b = ring[(pos + size - whole - 1) % size];
+            return a + frac * (b - a);
+        };
+
+        for (int i = 0; i < numFrames; ++i)
+        {
+            smoothedMix += 0.001f * (mixTarget - smoothedMix);
+            ring[pos] = stereo ? 0.5f * (channels[0][i] + channels[1][i]) : channels[0][i];
+
+            float wetL = 0.0f, wetR = 0.0f;
+            auto shift = ratio;
+            for (int c = 0; c < settings.copies; ++c)
+            {
+                // The delay shrinks by (shift - 1) samples a sample, so the copy plays shift times faster;
+                // two taps half a grain apart, each faded in and out (Hann), cover the jumps back.
+                auto& p = phase[(size_t) c];
+                p -= (shift - 1.0) / g;
+                p -= std::floor (p);
+                const auto q = p + 0.5 - std::floor (p + 0.5);
+                const auto wp = (float) (0.5 - 0.5 * std::cos (twoPi * p)), wq = 1.0f - wp;
+                const auto v = wp * read (1.0 + p * (g - 2.0)) + wq * read (1.0 + q * (g - 2.0));
+                wetL += v * gainL[(size_t) c];
+                wetR += v * gainR[(size_t) c];
+                shift *= ratio;
+            }
+            wetL = toneState[0].run (tone, wetL);
+            wetR = toneState[1].run (tone, wetR);
+
+            if (stereo)
+            {
+                channels[0][i] += wetL * smoothedMix;
+                channels[1][i] += wetR * smoothedMix;
+            }
+            else
+                channels[0][i] += 0.5f * (wetL + wetR) * smoothedMix;
+            pos = (pos + 1) % size;
+        }
+    }
+
+    //==========================================================================
+    void Tame::prepare (double sampleRate, int numChannels)
+    {
+        rate = sampleRate;
+        analyzer = std::make_unique<SpectrumAnalyzer> (order);
+        ring.assign ((size_t) analyzer->size(), 0.0f);
+        block.assign (ring.size(), 0.0f);
+        magnitudes.assign ((size_t) analyzer->numBins(), -200.0f);
+        state.assign ((size_t) std::max (1, numChannels), {});
+        designedHz = 0.0;
+        set (settings);
+        reset();
+    }
+
+    void Tame::set (const Settings& s)
+    {
+        settings = s;
+        settings.fundamentalHz = std::clamp (s.fundamentalHz, lowestHz, highestHz);
+        settings.depthDb = std::clamp (s.depthDb, -18.0, 0.0);
+        settings.q = std::clamp (s.q, 0.3, 10.0);
+        if (! settings.automatic)
+            found = settings.fundamentalHz;
+        design();
+    }
+
+    void Tame::reset()
+    {
+        std::fill (ring.begin(), ring.end(), 0.0f);
+        for (auto& st : state)
+            st = {};
+        pos = 0;
+        sinceAnalysis = 0;
+    }
+
+    void Tame::design()
+    {
+        const auto hz = cutHz (found);
+        if (designedHz > 0.0 && std::abs (hz / designedHz - 1.0) < 0.002 && std::abs (settings.depthDb - designedDepth) < 1.0e-6)
+            return;
+        designedHz = hz;
+        designedDepth = settings.depthDb;
+        cut = Biquad::bell (hz, settings.q, settings.depthDb, rate);
+    }
+
+    void Tame::analyse()
+    {
+        if (analyzer == nullptr)
+            return;
+        const auto n = ring.size();
+        for (size_t i = 0; i < n; ++i)
+            block[i] = ring[(pos + i) % n];
+        analyzer->magnitudesDb (block.data(), magnitudes.data());
+
+        const auto binHz = rate / (double) n;
+        const auto from = std::max (1, (int) std::ceil (lowestHz / binHz)), to = std::min ((int) magnitudes.size() - 2, (int) (highestHz / binHz));
+        int best = -1;
+        for (int b = from; b <= to; ++b)
+            if (best < 0 || magnitudes[(size_t) b] > magnitudes[(size_t) best])
+                best = b;
+        if (best < 0 || magnitudes[(size_t) best] < -70.0f)
+            return;   // nothing there: keep what was found
+
+        // Parabolic interpolation between the bins on either side.
+        const double l = magnitudes[(size_t) best - 1], c = magnitudes[(size_t) best], r = magnitudes[(size_t) best + 1];
+        const auto denominator = l - 2.0 * c + r;
+        const auto offset = std::abs (denominator) > 1.0e-9 ? std::clamp (0.5 * (l - r) / denominator, -0.5, 0.5) : 0.0;
+        const auto hz = std::clamp ((best + offset) * binHz, lowestHz, highestHz);
+        found *= std::pow (hz / found, 0.3);   // glide there, in pitch
+    }
+
+    void Tame::process (float* const* channels, int numChannels, int numFrames)
+    {
+        if (ring.empty())
+            return;
+        const auto channelsUsed = std::min (numChannels, (int) state.size());
+        for (int i = 0; i < numFrames; ++i)
+        {
+            float mid = 0.0f;
+            for (int ch = 0; ch < channelsUsed; ++ch)
+                mid += channels[ch][i];
+            ring[pos] = mid / (float) std::max (1, channelsUsed);
+            pos = (pos + 1) % ring.size();
+
+            if (settings.automatic && ++sinceAnalysis >= 2048)
+            {
+                sinceAnalysis = 0;
+                analyse();
+                design();
+            }
+            for (int ch = 0; ch < channelsUsed; ++ch)
+                channels[ch][i] = state[(size_t) ch].run (cut, channels[ch][i]);
+        }
+    }
+
+    //==========================================================================
+    void Deresonator::prepare (double sampleRate, int numChannels)
+    {
+        rate = sampleRate;
+        const auto order = 11 + (sampleRate > 60000.0 ? 1 : 0) + (sampleRate > 120000.0 ? 1 : 0);
+        fft = std::make_unique<Fft> (order);
+        size = fft->size();
+        hop = size / 4;
+        bins = size / 2 + 1;
+        window.resize ((size_t) size);
+        for (int i = 0; i < size; ++i)
+            window[(size_t) i] = (float) (0.5 - 0.5 * std::cos (twoPi * i / size));
+        const auto channels = (size_t) std::max (1, numChannels);
+        input.assign (channels, std::vector<float> ((size_t) size, 0.0f));
+        output.assign (channels, std::vector<float> ((size_t) size, 0.0f));
+        ready.assign (channels, std::vector<float> ((size_t) hop, 0.0f));
+        spectra.assign (channels, std::vector<std::complex<float>> ((size_t) size));
+        power.assign ((size_t) bins, 0.0);
+        levelDb.assign ((size_t) bins, 0.0);
+        prefix.assign ((size_t) bins + 1, 0.0);
+        envelopeDb.assign ((size_t) bins, 0.0f);
+        gainDb.assign ((size_t) bins, 0.0f);
+        spanLow.assign ((size_t) bins, 0);
+        spanHigh.assign ((size_t) bins, 0);
+        set (settings);
+        reset();
+    }
+
+    void Deresonator::set (const Settings& s)
+    {
+        const auto sharpnessChanged = std::abs (s.sharpness - settings.sharpness) > 1.0e-9;
+        settings = s;
+        settings.depth = clamp01 (s.depth);
+        settings.sharpness = clamp01 (s.sharpness);
+        settings.speed = clamp01 (s.speed);
+        settings.mix = clamp01 (s.mix);
+        const auto hopSeconds = hop / rate;
+        const auto attackSeconds = 0.05 * std::pow (0.1, settings.speed);   // 50 ms .. 5 ms
+        attack = std::exp (-hopSeconds / attackSeconds);
+        release = std::exp (-hopSeconds / (attackSeconds * ratio));
+        if (sharpnessChanged || spanHigh.empty() || spanHigh.back() == 0)
+            layout();
+    }
+
+    // Each bin's curve is the average level over a span of bins around it, one
+    // golden step wide at 50 % Sharpness (φ times wider at 0 %, φ times narrower at 100 %).
+    void Deresonator::layout()
+    {
+        if (spanLow.empty())
+            return;
+        const auto octaves = std::log2 (ratio) * std::pow (ratio, 1.0 - 2.0 * settings.sharpness);
+        const auto half = std::pow (2.0, octaves / 2.0);
+        for (int k = 0; k < bins; ++k)
+        {
+            spanLow[(size_t) k] = std::clamp ((int) std::floor (k / half), 0, bins - 1);
+            spanHigh[(size_t) k] = std::clamp ((int) std::ceil (k * half), k + 1, bins);
+            // Leave out the bin itself and its neighbours, so a peak does not lift its own curve.
+            if (spanHigh[(size_t) k] - spanLow[(size_t) k] < 7)
+            {
+                spanLow[(size_t) k] = std::max (0, k - 3);
+                spanHigh[(size_t) k] = std::min (bins, k + 4);
+            }
+        }
+    }
+
+    void Deresonator::reset()
+    {
+        for (auto* group : { &input, &output, &ready })
+            for (auto& v : *group)
+                std::fill (v.begin(), v.end(), 0.0f);
+        std::fill (gainDb.begin(), gainDb.end(), 0.0f);
+        fill = 0;
+        deepest = 0.0f;
+    }
+
+    void Deresonator::frame()
+    {
+        const auto channels = (int) input.size();
+        std::fill (power.begin(), power.end(), 0.0);
+        for (int ch = 0; ch < channels; ++ch)
+        {
+            auto& x = spectra[(size_t) ch];
+            for (int i = 0; i < size; ++i)
+                x[(size_t) i] = { input[(size_t) ch][(size_t) i] * window[(size_t) i], 0.0f };
+            fft->forward (x);
+            for (int k = 0; k < bins; ++k)
+                power[(size_t) k] += std::norm (x[(size_t) k]);
+        }
+
+        prefix[0] = 0.0;
+        for (int k = 0; k < bins; ++k)
+        {
+            levelDb[(size_t) k] = 10.0 * std::log10 (power[(size_t) k] + 1.0e-20);
+            prefix[(size_t) k + 1] = prefix[(size_t) k] + levelDb[(size_t) k];
+        }
+
+        const auto binHz = rate / size;
+        const auto threshold = 3.0;   // dB above the curve before anything happens
+        const auto depth = settings.depth;
+        deepest = 0.0f;
+        for (int k = 0; k < bins; ++k)
+        {
+            const auto lo = spanLow[(size_t) k], hi = spanHigh[(size_t) k];
+            // The span's average without the bin and its two neighbours.
+            const auto innerLo = std::max (lo, k - 1), innerHi = std::min (hi, k + 2);
+            const auto count = (hi - lo) - (innerHi - innerLo);
+            const auto sum = (prefix[(size_t) hi] - prefix[(size_t) lo]) - (prefix[(size_t) innerHi] - prefix[(size_t) innerLo]);
+            const auto curve = count > 0 ? sum / count : levelDb[(size_t) k];
+            envelopeDb[(size_t) k] = (float) curve;
+
+            const auto hz = k * binHz;
+            auto target = 0.0;
+            if (hz >= settings.lowHz && hz <= settings.highHz && levelDb[(size_t) k] > -100.0)
+                target = -std::min (24.0, std::max (0.0, levelDb[(size_t) k] - curve - threshold) * depth);
+
+            auto& g = gainDb[(size_t) k];
+            const auto coef = target < g ? attack : release;
+            g = (float) (target + coef * (g - target));
+            deepest = std::min (deepest, g);
+        }
+
+        // Hann in and out at 75 % overlap adds up to 1.5.
+        constexpr float overlapScale = 1.0f / 1.5f;
+        const auto mix = (float) settings.mix;
+        for (int ch = 0; ch < channels; ++ch)
+        {
+            auto& x = spectra[(size_t) ch];
+            for (int k = 0; k < bins; ++k)
+            {
+                const auto gain = std::pow (10.0f, gainDb[(size_t) k] / 20.0f);
+                const auto wet = settings.delta ? 1.0f - gain : gain;
+                const auto applied = settings.delta ? mix * wet : 1.0f - mix * (1.0f - wet);
+                x[(size_t) k] *= applied;
+                if (k > 0 && k < size / 2)
+                    x[(size_t) (size - k)] = std::conj (x[(size_t) k]);
+            }
+            fft->inverse (x);
+            auto& out = output[(size_t) ch];
+            for (int i = 0; i < size; ++i)
+                out[(size_t) i] += x[(size_t) i].real() * window[(size_t) i] * overlapScale;
+
+            std::copy (out.begin(), out.begin() + hop, ready[(size_t) ch].begin());
+            std::copy (out.begin() + hop, out.end(), out.begin());
+            std::fill (out.end() - hop, out.end(), 0.0f);
+            auto& in = input[(size_t) ch];
+            std::copy (in.begin() + hop, in.end(), in.begin());
+        }
+    }
+
+    void Deresonator::process (float* const* channels, int numChannels, int numFrames)
+    {
+        if (fft == nullptr)
+            return;
+        const auto used = std::min (numChannels, (int) input.size());
+        for (int i = 0; i < numFrames; ++i)
+        {
+            for (int ch = 0; ch < used; ++ch)
+            {
+                input[(size_t) ch][(size_t) (size - hop + fill)] = channels[ch][i];
+                channels[ch][i] = ready[(size_t) ch][(size_t) fill];
+            }
+            if (++fill == hop)
+            {
+                fill = 0;
+                frame();
+            }
+        }
+    }
 }
+

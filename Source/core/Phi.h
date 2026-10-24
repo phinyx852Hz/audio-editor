@@ -5,8 +5,12 @@
 // frequencies, levels and patterns all come from the golden ratio φ and the
 // Fibonacci numbers. Plain C++, so the core tests can check them; the effects
 // themselves are in engine/PhiEffects.cpp. No allocation after prepare().
+#include "Fft.h"
+
 #include <array>
+#include <complex>
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace phi
@@ -205,4 +209,196 @@ namespace phi
         double beats = 0.0;
         float gain = 1.0f, smoothCoef = 0.0f;
     };
+
+    //==========================================================================
+    // A biquad for the effects below (Audio EQ Cookbook).
+    struct Biquad
+    {
+        double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0;
+        static Biquad bandPass (double hz, double q, double sampleRate);   // 0 dB at the centre
+        static Biquad bell (double hz, double q, double gainDb, double sampleRate);
+        static Biquad lowPass (double hz, double q, double sampleRate);
+    };
+
+    struct BiquadState
+    {
+        double z1 = 0, z2 = 0;
+        float run (const Biquad& c, float x)
+        {
+            const auto y = c.b0 * x + z1;
+            z1 = c.b1 * x - c.a1 * y + z2;
+            z2 = c.b2 * x - c.a2 * y;
+            return (float) y;
+        }
+    };
+
+    //==========================================================================
+    // Φ Resonator: very narrow band-passes at root × φ⁰, φ¹, φ²... picked out
+    // of the sound (or of white noise mixed in), the root in the centre and the
+    // others panned left, right, left... Frequencies that are not on any scale
+    // yet sound related. After a technique in a tutorial on golden-ratio sound
+    // design: white noise through band-passes at 220, 356, 576, 932, 1507 Hz.
+    class Resonator
+    {
+    public:
+        static constexpr int maxBands = 8;
+
+        struct Settings
+        {
+            double rootHz = 220.0;
+            int bands = 5;
+            double q = 30.0;        // 2..100
+            double width = 1.0;     // 0 = all centred, 1 = hard left and right
+            double noise = 0.0;     // 0..1, white noise added before the band-passes
+            double mix = 1.0;
+        };
+
+        static double bandHz (const Settings&, int band);
+
+        void prepare (double sampleRate, int numChannels);
+        void set (const Settings&);
+        void reset();
+        void process (float* const* channels, int numChannels, int numFrames);
+
+    private:
+        double rate = 48000.0;
+        Settings settings;
+        int used = 0;   // bands below Nyquist
+        std::array<Biquad, maxBands> filters {};
+        std::array<float, maxBands> gainL {}, gainR {};
+        std::array<BiquadState, maxBands> state {};   // the bands run on the mid
+        float makeup = 1.0f;
+        std::uint32_t noiseState = 0x9e3779b9u;
+    };
+
+    //==========================================================================
+    // Φ Stack: copies of the sound pitched up by φ, φ², φ³... (each +8.33
+    // semitones on the last), panned left, right, left... with the original
+    // in the centre, then a low-pass to soften the top. Notes that are not on
+    // the piano, yet sound as one. Each copy comes from a granular pitch shifter
+    // (two crossfaded taps sweeping a delay line), which suits pads and textures.
+    class Stack
+    {
+    public:
+        static constexpr int maxCopies = 4;
+        static constexpr double grainMs = 60.0;
+
+        struct Settings
+        {
+            int copies = 4;
+            double decay = inverse;     // the level of each copy against the one below
+            double width = 1.0;
+            double toneHz = 8000.0;     // the low-pass after the stack
+            double mix = 1.0;           // 0 = the original only
+        };
+
+        void prepare (double sampleRate, int numChannels);
+        void set (const Settings&);
+        void reset();
+        void process (float* const* channels, int numChannels, int numFrames);
+
+    private:
+        double rate = 48000.0;
+        Settings settings;
+        std::vector<float> ring;   // the mid of the input
+        size_t pos = 0, grain = 2880;
+        std::array<double, maxCopies> phase {};
+        std::array<float, maxCopies> gainL {}, gainR {};
+        Biquad tone;
+        std::array<BiquadState, 2> toneState {};
+        float smoothedMix = 1.0f;
+    };
+
+    //==========================================================================
+    // Φ Tame: the "golden EQ" from the same tutorial. A cut at the
+    // fundamental × φ ÷ 2 × 10 (58.9 Hz → 476.5 Hz) softens drums and loops
+    // like gentle compression while leaving their dynamics alone. The
+    // fundamental is either set by hand or found as the strongest peak between
+    // 25 and 250 Hz, followed smoothly.
+    class Tame
+    {
+    public:
+        static constexpr double multiplier = ratio * 5.0;   // φ ÷ 2 × 10
+        static constexpr double lowestHz = 25.0, highestHz = 250.0;
+
+        struct Settings
+        {
+            bool automatic = true;
+            double fundamentalHz = 55.0;   // used when not automatic
+            double depthDb = -6.0;         // -18..0
+            double q = ratio;              // the width of the cut
+        };
+
+        static double cutHz (double fundamentalHz) { return fundamentalHz * multiplier; }
+
+        void prepare (double sampleRate, int numChannels);
+        void set (const Settings&);
+        void reset();
+        void process (float* const* channels, int numChannels, int numFrames);
+        double fundamental() const { return found; }   // what the cut follows now
+
+    private:
+        void analyse();
+        void design();
+
+        static constexpr int order = 13;   // 8192-point analysis
+        double rate = 48000.0;
+        Settings settings;
+        std::unique_ptr<SpectrumAnalyzer> analyzer;
+        std::vector<float> ring, block, magnitudes;
+        size_t pos = 0;
+        int sinceAnalysis = 0;
+        double found = 55.0, designedHz = 0.0, designedDepth = 1.0;
+        Biquad cut;
+        std::vector<BiquadState> state;
+        int samplesSinceDesign = 0;
+    };
+
+    //==========================================================================
+    // Φ De-resonator: turns down resonances while they ring, in the manner of
+    // dynamic resonance suppressors. Short spectra (75 % overlapped Hann
+    // frames) are compared bin by bin with their own smoothed curve, averaged
+    // over one golden step (about 0.69 octave, narrower or wider with
+    // Sharpness); a bin standing above it is turned down by Depth of its
+    // excess. Cuts open again φ times slower than they close. The same gains
+    // go on every channel. Latency: one frame (2048 samples at 48 kHz).
+    class Deresonator
+    {
+    public:
+        struct Settings
+        {
+            double depth = 0.5;        // 0..1, the share of a peak's excess taken away
+            double sharpness = 0.5;    // 0..1: 0 hears broad bumps, 1 only narrow rings
+            double speed = 0.5;        // 0..1: attack from 50 ms down to 5 ms
+            double lowHz = 80.0, highHz = 18000.0;   // where it works
+            double mix = 1.0;
+            bool delta = false;        // play only what it takes away
+        };
+
+        void prepare (double sampleRate, int numChannels);
+        void set (const Settings&);
+        void reset();
+        void process (float* const* channels, int numChannels, int numFrames);
+        int latency() const { return size; }
+        // The deepest cut of the last frame, in dB (0 or below).
+        float deepestCutDb() const { return deepest; }
+
+    private:
+        void frame();
+        void layout();
+
+        double rate = 48000.0;
+        Settings settings;
+        int size = 2048, hop = 512, bins = 1025, fill = 0;
+        std::unique_ptr<Fft> fft;
+        std::vector<float> window;
+        std::vector<std::vector<float>> input, output, ready;
+        std::vector<std::vector<std::complex<float>>> spectra;
+        std::vector<double> power, levelDb, prefix;
+        std::vector<float> envelopeDb, gainDb;
+        std::vector<int> spanLow, spanHigh;
+        double attack = 0.5, release = 0.5;
+        float deepest = 0.0f;
+    };
 }
+

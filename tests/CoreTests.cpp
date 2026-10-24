@@ -3427,6 +3427,120 @@ namespace
                                                                - sampleAt (*mono, 0, f)));
             check (maxSumError < 1.0e-6, "golden stereoize still folds back to the original mono");
         }
+
+        // Goertzel: the level of one frequency in a signal, in dB.
+        auto toneDb = [rate] (const std::vector<float>& x, size_t from, double hz)
+        {
+            const auto k = 2.0 * std::cos (2.0 * M_PI * hz / rate);
+            double s1 = 0.0, s2 = 0.0;
+            for (size_t i = from; i < x.size(); ++i)
+            {
+                const auto s0 = x[i] + k * s1 - s2;
+                s2 = s1;
+                s1 = s0;
+            }
+            const auto power = s1 * s1 + s2 * s2 - k * s1 * s2;
+            return 10.0 * std::log10 (power / std::pow ((double) (x.size() - from), 2.0) + 1.0e-30);
+        };
+
+        // Φ Resonator lets its golden bands through and holds back what lies between them.
+        {
+            phi::Resonator::Settings s;
+            s.rootHz = 220.0;
+            s.width = 0.0;
+            check (near (phi::Resonator::bandHz (s, 2), 220.0 * phi::ratio * phi::ratio, 1.0e-6), "phi resonator bands");
+            auto level = [&] (double hz)
+            {
+                phi::Resonator r;
+                r.prepare (rate, 1);
+                r.set (s);
+                auto x = sine (hz, 48000);
+                float* io[] { x.data() };
+                r.process (io, 1, 48000);
+                return rmsDb (x, 24000);
+            };
+            const auto on = level (phi::Resonator::bandHz (s, 2)), between = level (phi::Resonator::bandHz (s, 2) * 1.27);
+            check (on - between > 20.0, "phi resonator rings on its bands only");
+        }
+
+        // Φ Stack adds a copy a golden ratio above the sound.
+        {
+            phi::Stack stack;
+            phi::Stack::Settings s;
+            s.copies = 1;
+            s.decay = 1.0;
+            s.width = 0.0;
+            s.toneHz = 20000.0;
+            stack.prepare (rate, 1);
+            stack.set (s);
+            auto x = sine (200.0, 48000);
+            float* io[] { x.data() };
+            stack.process (io, 1, 48000);
+            const auto golden = toneDb (x, 9600, 200.0 * phi::ratio), elsewhere = toneDb (x, 9600, 270.0);
+            check (golden - elsewhere > 15.0, "phi stack adds a copy at 200 Hz x phi");
+        }
+
+        // Φ Tame finds a kick's fundamental and cuts at fundamental x φ ÷ 2 × 10.
+        {
+            check (near (phi::Tame::cutHz (58.9), 476.5, 0.1), "phi tame cut frequency");
+            phi::Tame tame;
+            phi::Tame::Settings s;
+            s.depthDb = -9.0;
+            tame.prepare (rate, 1);
+            tame.set (s);
+            const int frames = 96000;
+            std::vector<float> x ((size_t) frames);
+            for (int i = 0; i < frames; ++i)
+                x[(size_t) i] = (float) (0.5 * std::sin (2.0 * M_PI * 58.9 * i / rate) + 0.05 * std::sin (2.0 * M_PI * 476.5 * i / rate));
+            const auto before = toneDb (x, 72000, 476.5);
+            float* io[] { x.data() };
+            tame.process (io, 1, frames);
+            check (near (tame.fundamental(), 58.9, 1.0), "phi tame finds the fundamental, got " + std::to_string (tame.fundamental()));
+            check (near (toneDb (x, 72000, 476.5) - before, -9.0, 1.0), "phi tame cuts at the golden point");
+        }
+
+        // Φ De-resonator: transparent at no depth (only delayed), turns a ringing tone
+        // down, and leaves plain noise nearly alone.
+        {
+            std::mt19937 random (11);
+            std::normal_distribution<float> gauss (0.0f, 0.1f);
+            const int frames = 48000;
+            std::vector<float> noise ((size_t) frames);
+            for (auto& v : noise)
+                v = gauss (random);
+
+            phi::Deresonator d;
+            phi::Deresonator::Settings s;
+            s.depth = 0.0;
+            d.prepare (rate, 1);
+            d.set (s);
+            auto x = noise;
+            float* io[] { x.data() };
+            d.process (io, 1, frames);
+            double error = 0.0;
+            for (int i = d.latency() + 4096; i < frames; ++i)
+                error = std::max (error, (double) std::abs (x[(size_t) i] - noise[(size_t) (i - d.latency())]));
+            check (error < 1.0e-4, "phi de-resonator at no depth gives the sound back, delayed by its latency");
+
+            auto run = [&] (std::vector<float> y)
+            {
+                phi::Deresonator r;
+                phi::Deresonator::Settings t;
+                t.depth = 1.0;
+                r.prepare (rate, 1);
+                r.set (t);
+                float* p[] { y.data() };
+                r.process (p, 1, (int) y.size());
+                return y;
+            };
+            auto ringing = noise;
+            for (int i = 0; i < frames; ++i)
+                ringing[(size_t) i] += (float) (0.3 * std::sin (2.0 * M_PI * 1000.0 * i / rate));
+            const auto tamed = run (ringing);
+            check (toneDb (tamed, 24000, 1000.0) - toneDb (ringing, 24000, 1000.0) < -6.0, "phi de-resonator turns a resonance down");
+            const auto plain = run (noise);
+            check (std::abs (rmsDb (plain, 24000) - rmsDb (noise, 24000)) < 1.5, "phi de-resonator leaves noise nearly alone");
+        }
     }
 
 int main()
