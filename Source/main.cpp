@@ -91,8 +91,7 @@ int main (int argc, char* argv[])
     if (! parser.isSet (noSplash))
     {
         splash = new PhiSplash;
-        splash->show();
-        app.processEvents();
+        splash->play();
     }
 
     AudioEngine engine;

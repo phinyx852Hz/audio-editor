@@ -37,13 +37,17 @@ namespace phimark
 }
 
 // The window shown while PHI starts, in the middle of the screen (not full screen): a
-// golden rectangle 618 x 382, the gold mark in its square, "PHI" and the version in the
-// rest, and the golden spiral through it. It stays at least 1.618 seconds, and closes once the main window is up.
+// golden rectangle 618 x 382, the gold mark in its square, "phī" and the version in the
+// rest, and the golden spiral through it. It opens by spiralling out of a dot: turning
+// back a quarter turn and growing by φ for each square of the spiral, as the golden
+// rectangle is made of itself turned and shrunk by 1/φ. It stays at least φ² (2.618)
+// seconds, and closes once the main window is up; a click closes it at once.
 class PhiSplash final : public QWidget
 {
 public:
     PhiSplash();
-    void finish (QWidget* mainWindow);   // closes when the 1.618 seconds are over
+    void play();                         // shows it and waits while it spirals open (1.618 s)
+    void finish (QWidget* mainWindow);   // closes when the 2.618 seconds are over
 
     // Played when the splash opens, if set: the Φ synth's sound for the start (a new random
     // patch each time). Set it before the splash is shown.
@@ -54,7 +58,14 @@ protected:
     void mousePressEvent (QMouseEvent*) override;   // a click closes it at once
 
 private:
+    void paintContent (QPainter&) const;   // the splash as it ends, unturned
+    QPointF pole() const;                  // where the golden spiral winds in to
+
+    QSizeF card;       // the splash itself, 618 x 382
+    QPointF offset;    // where it sits in the window, which has room around it to turn in
     QElapsedTimer shown;
+    QPixmap content;
+    double progress = 0.0;   // 0 a dot, 1 open
 };
 
 // The gold mark on a black tile.
