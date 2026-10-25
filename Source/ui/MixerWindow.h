@@ -223,6 +223,7 @@ private:
         QPointer<QWidget> editor;    // its Sampler, Slicer or Synth window
         int generation = 0;          // a cleared track outdates loads still running
         int busy = 0;                // audio files loading
+        mixer::TuningChoice tuning;  // the PHI synth's, when neither the clip nor the scene has one
     };
 
     void rebuildStrips();
@@ -378,6 +379,17 @@ private:
     int numScenes = 16;
     int cursorScene = 0;
     std::array<QString, mixer::maxScenes> sceneNames;   // empty: "Scene n"
+    std::array<mixer::TuningChoice, mixer::maxScenes> sceneTunings;
+    // The tuning a track plays in (Tunings.h): its launched clip's, else that scene's, else its own.
+    mixer::TuningChoice tuningInForce (int track) const;
+    QString tuningText (const mixer::TuningChoice&) const;   // "Rāst on D", or "12-TET"
+    void applyTunings();   // tells each instrument whose tuning changed
+    struct HeardTuning
+    {
+        mixer::TuningChoice choice;
+        std::weak_ptr<mixer::Instrument> instrument;
+    };
+    std::array<HeardTuning, mixer::maxTracks> heardTunings;
     std::set<std::pair<int, int>> loadingSlots;        // track and scene of files still loading
     QSplitter* splitter;
     QSplitter* sideSplitter;

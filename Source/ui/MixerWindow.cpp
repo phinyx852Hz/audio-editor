@@ -79,6 +79,25 @@ namespace
 {
     constexpr int faderSteps = 1000;
 
+    const char* const rootNames[12] { "C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B" };
+
+    // A tuning choice in a mix: the system by its plain name, so the list can grow.
+    QJsonValue tuningJson (const mixer::TuningChoice& c)
+    {
+        if (c.system < 0)
+            return QJsonValue::Null;
+        return QJsonObject { { "system", QString::fromStdString (mixer::tuningSystems()[(size_t) c.system].plain) }, { "root", c.root } };
+    }
+
+    mixer::TuningChoice tuningFromJson (const QJsonValue& v)
+    {
+        const auto o = v.toObject();
+        mixer::TuningChoice c;
+        c.system = mixer::findTuning (o.value ("system").toString().toStdString());
+        c.root = std::clamp (o.value ("root").toInt(), 0, 11);
+        return c;
+    }
+
     // The fader's travel: gain = 2 x position^4, so +6 dB at the top, 0 dB at 84 %
     // and most of the throw spent where mixes are made.
     float faderDb (int position)
@@ -3633,6 +3652,50 @@ public:
         clipLayout->addRow (MixerWindow::tr ("Quantise"), quantiseBox);
         clipLayout->addRow (fileRow);
         layout->addWidget (clipGroup);
+
+        // The tuning the PHI synth plays in: the launched clip's, else its scene's, else the track's.
+        tuningGroup = new QGroupBox (MixerWindow::tr ("Tuning (PHI synth)"), this);
+        tuningGroup->setToolTip (MixerWindow::tr ("Ragas in just intonation, church and hypo-modes, jazz modes, maqams and dastgahs with their quarter steps, "
+                                                  "or 2 to 21 equal steps. The PHI synth plays it; other instruments stay in 12-TET."));
+        auto* tuningLayout = new QGridLayout (tuningGroup);
+        tuningLayout->setColumnStretch (1, 1);
+        auto tuningRow = [&] (TuningRow& row, const QString& label, const QString& none, const QString& tip)
+        {
+            row.system = new QComboBox (tuningGroup);
+            row.root = new QComboBox (tuningGroup);
+            noFocus (row.system);
+            noFocus (row.root);
+            row.system->setToolTip (tip);
+            row.root->setToolTip (MixerWindow::tr ("The tonic: Sa, the final, or the maqam's root"));
+            row.system->addItem (none, -1);
+            std::string family;
+            const auto& all = mixer::tuningSystems();
+            for (size_t i = 0; i < all.size(); ++i)
+            {
+                if (all[i].family != family)
+                {
+                    family = all[i].family;
+                    row.system->insertSeparator (row.system->count());
+                }
+                row.system->addItem (QString::fromStdString (all[i].name), (int) i);
+                row.system->setItemData (row.system->count() - 1, QString::fromStdString (all[i].family), Qt::ToolTipRole);
+            }
+            row.system->setMaxVisibleItems (24);
+            for (const auto* name : rootNames)
+                row.root->addItem (QString::fromUtf8 (name));
+            row.root->setMaximumWidth (56);
+            const auto at = tuningLayout->rowCount();
+            tuningLayout->addWidget (new QLabel (label, tuningGroup), at, 0);
+            tuningLayout->addWidget (row.system, at, 1);
+            tuningLayout->addWidget (row.root, at, 2);
+        };
+        tuningRow (trackTuning, MixerWindow::tr ("Track"), MixerWindow::tr ("12-TET"), MixerWindow::tr ("The track's tuning, when neither its clip nor the scene has one"));
+        tuningRow (sceneTuning, MixerWindow::tr ("Scene"), MixerWindow::tr ("The track's"), MixerWindow::tr ("The tuning for every clip in the scene under the cursor"));
+        tuningRow (clipTuning, MixerWindow::tr ("Clip"), MixerWindow::tr ("The scene's"), MixerWindow::tr ("This clip's own tuning, over the scene's and the track's"));
+        tuningLabel = new QLabel (tuningGroup);
+        tuningLabel->setWordWrap (true);
+        tuningLayout->addWidget (tuningLabel, tuningLayout->rowCount(), 0, 1, 3);
+        layout->addWidget (tuningGroup);
         layout->addStretch (1);
 
         auto track = [this] { return window.selected < mixer::masterIndex ? window.selected : -1; };
@@ -3732,6 +3795,31 @@ public:
             window.setFocus();
         });
         QObject::connect (clearButton, &QPushButton::clicked, this, [this, track] { if (track() >= 0) window.clearSlot (track(), window.cursorScene); });
+        auto tuningEdited = [this, track] (TuningRow& row, int level)
+        {
+            return [this, track, &row, level]
+            {
+                if (updating || track() < 0)
+                    return;
+                const auto choice = row.choice();
+                if (level == 0)
+                    window.info[(size_t) track()].tuning = choice;
+                else if (level == 1)
+                    window.sceneTunings[(size_t) window.cursorScene] = choice;
+                else
+                    window.editSlot (track(), window.cursorScene, [choice] (mixer::Slot& x) { x.tuning = choice; });
+                if (level != 2)
+                    window.changed();
+                window.applyTunings();
+                refresh();
+                window.setFocus();
+            };
+        };
+        for (auto [row, level] : { std::pair { &trackTuning, 0 }, { &sceneTuning, 1 }, { &clipTuning, 2 } })
+        {
+            QObject::connect (row->system, &QComboBox::activated, this, tuningEdited (*row, level));
+            QObject::connect (row->root, &QComboBox::activated, this, tuningEdited (*row, level));
+        }
     }
 
     // Everything shown, for the selected track and the slot under the cursor.
@@ -3739,7 +3827,7 @@ public:
     {
         updating = true;
         const auto t = window.selected < mixer::masterIndex ? window.selected : -1;
-        for (auto* group : { instrumentGroup, trackGroup, clipGroup })
+        for (auto* group : { instrumentGroup, trackGroup, clipGroup, tuningGroup })
             group->setEnabled (t >= 0);
         if (t < 0)
         {
@@ -3777,6 +3865,12 @@ public:
         }
         else
             clipName->setText (MixerWindow::tr ("An empty slot: drop a file on it, double-click it, or press Enter on a sound in the Find panel's Selector."));
+        trackTuning.show (info.tuning);
+        sceneTuning.show (window.sceneTunings[(size_t) window.cursorScene]);
+        clipTuning.show (slot != nullptr ? slot->tuning : mixer::TuningChoice {});
+        clipTuning.system->setEnabled (slot != nullptr);
+        if (slot == nullptr)
+            clipTuning.root->setEnabled (false);
         tick();
         updating = false;
     }
@@ -3791,9 +3885,22 @@ public:
                               : launch.playing >= 0 ? MixerWindow::tr ("Plays %1 from the launcher.").arg (window.sceneName (launch.playing))
                                                     : MixerWindow::tr ("Stopped in the launcher; its timeline is not heard."));
         backButton->setEnabled (! launch.timeline);
+        tuningLabel->setText (MixerWindow::tr ("Plays in %1.").arg (window.tuningText (window.tuningInForce (t))));
     }
 
 private:
+    struct TuningRow
+    {
+        QComboBox* system = nullptr;
+        QComboBox* root = nullptr;
+        mixer::TuningChoice choice() const { return { system->currentData().toInt(), root->currentIndex() }; }
+        void show (const mixer::TuningChoice& c)
+        {
+            system->setCurrentIndex (std::max (0, system->findData (c.system)));
+            root->setCurrentIndex (c.root);
+            root->setEnabled (c.system >= 0);
+        }
+    };
     MixerWindow& window;
     bool updating = false;
     QFrame* colourBar;
@@ -3817,6 +3924,9 @@ private:
     QComboBox* quantiseBox;
     QPushButton* chooseButton;
     QPushButton* clearButton;
+    QGroupBox* tuningGroup;
+    TuningRow trackTuning, sceneTuning, clipTuning;
+    QLabel* tuningLabel;
 };
 
 //==============================================================================
@@ -5386,6 +5496,7 @@ void MixerWindow::select (int index)
 
 void MixerWindow::tick()
 {
+    applyTunings();   // launches happen with the mixer hidden too
     if (! isVisible())
         return;   // closed, or docked behind the editor: nothing to draw
     const auto now = QDateTime::currentMSecsSinceEpoch();
@@ -6785,6 +6896,7 @@ bool MixerWindow::newMix()
         t.sound = nullptr;
         ++t.generation;
         t.busy = 0;
+        t.tuning = {};
     }
     for (int t = 0; t < mixer::maxTracks; ++t)
         for (int sc = 0; sc < mixer::maxScenes; ++sc)
@@ -6795,6 +6907,7 @@ bool MixerWindow::newMix()
     engine.backToTimeline (-1);
     loadingSlots.clear();
     sceneNames = {};
+    sceneTunings = {};
     cursorScene = 0;
     setScenes (16);
     engine.launchQuantise = 4.0;
@@ -6912,6 +7025,7 @@ bool MixerWindow::writeMix (const QString& file, QString& error)
                                     { "key", s.duckKey.load() }, { "below", s.duckBelowHz.load() } } },
             { "sends", QJsonArray { QJsonObject { { "db", s.sendDb[0].load() }, { "pre", s.sendPre[0].load() } },
                                     QJsonObject { { "db", s.sendDb[1].load() }, { "pre", s.sendPre[1].load() } } } },
+            { "tuning", tuningJson (t.tuning) },
         };
         // The clips, in seconds so a mix opens the same at any rate.
         QJsonArray clips;
@@ -6987,14 +7101,17 @@ bool MixerWindow::writeMix (const QString& file, QString& error)
                 slotList.append (QJsonObject {
                     { "track", t }, { "scene", sc }, { "kind", c.isMidi() ? "midi" : "audio" }, { "file", storedPath (QString::fromStdString (source), base) },
                     { "offset", (double) c.offset / rate() }, { "length", (double) c.length / rate() }, { "reversed", c.reversed },
-                    { "loop", slot->loop }, { "quantise", slot->quantise },
+                    { "loop", slot->loop }, { "quantise", slot->quantise }, { "tuning", tuningJson (slot->tuning) },
                 });
             }
-    QJsonArray names;
+    QJsonArray names, tunings;
     for (const auto& name : sceneNames)
         names.append (name);
+    for (const auto& tuning : sceneTunings)
+        tunings.append (tuningJson (tuning));
     const QJsonObject launcher {
-        { "scenes", numScenes }, { "quantise", engine.launchQuantise.load() }, { "sceneNames", names }, { "slots", slotList }, { "shown", launcherShown() },
+        { "scenes", numScenes }, { "quantise", engine.launchQuantise.load() }, { "sceneNames", names }, { "sceneTunings", tunings },
+        { "slots", slotList }, { "shown", launcherShown() },
     };
     // The phinyx keys are from before the rename to PHI; kept so every version reads every project.
     QJsonObject root {
@@ -7063,6 +7180,7 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
         t.name = o.value ("name").toString (t.name);
         if (const QColor c (o.value ("colour").toString()); c.isValid())
             t.colour = c;
+        t.tuning = tuningFromJson (o.value ("tuning"));
         s.transpose = o.value ("transpose").toInt();
         s.channels = (uint32_t) o.value ("channels").toInt (0xFFFF);
         s.trimDb = (float) o.value ("trim").toDouble();
@@ -7209,6 +7327,9 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
         const auto names = launcher.value ("sceneNames").toArray();
         for (int sc = 0; sc < std::min ((int) names.size(), mixer::maxScenes); ++sc)
             sceneNames[(size_t) sc] = names[sc].toString();
+        const auto tunings = launcher.value ("sceneTunings").toArray();
+        for (int sc = 0; sc < std::min ((int) tunings.size(), mixer::maxScenes); ++sc)
+            sceneTunings[(size_t) sc] = tuningFromJson (tunings[sc]);
         const auto r = rate();
         for (const auto& value : launcher.value ("slots").toArray())
         {
@@ -7225,6 +7346,7 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
             mixer::Slot like;
             like.loop = o.value ("loop").toBool (true);
             like.quantise = o.value ("quantise").toDouble (-1.0);
+            like.tuning = tuningFromJson (o.value ("tuning"));
             like.clip.offset = (Frame) std::llround (o.value ("offset").toDouble() * r);
             like.clip.length = (Frame) std::llround (o.value ("length").toDouble() * r);
             like.clip.reversed = o.value ("reversed").toBool();
@@ -7973,6 +8095,42 @@ void MixerWindow::editSlot (int track, int scene, const std::function<void (mixe
     changed();
     grid->update();
     rack->refresh();
+}
+
+mixer::TuningChoice MixerWindow::tuningInForce (int track) const
+{
+    const auto playing = engine.launchInfo (track).playing;
+    if (playing < 0 || playing >= mixer::maxScenes)
+        return info[(size_t) track].tuning;
+    const auto& slot = slots[(size_t) track][(size_t) playing];
+    return mixer::tuningInForce (slot != nullptr ? slot->tuning : mixer::TuningChoice {}, sceneTunings[(size_t) playing], info[(size_t) track].tuning);
+}
+
+QString MixerWindow::tuningText (const mixer::TuningChoice& c) const
+{
+    if (c.system < 0)
+        return tr ("12-TET");
+    const auto& system = mixer::tuningSystems()[(size_t) c.system];
+    return tr ("%1 on %2").arg (QString::fromStdString (system.name), QString::fromUtf8 (rootNames[c.root]));
+}
+
+void MixerWindow::applyTunings()
+{
+    for (int t = 0; t < engine.numTracks(); ++t)
+    {
+        const auto inst = engine.instrument (t);
+        const auto choice = tuningInForce (t);
+        auto& heard = heardTunings[(size_t) t];
+        if (choice == heard.choice && inst == heard.instrument.lock())
+            continue;
+        heard = { choice, inst };
+        if (inst == nullptr)
+            continue;
+        if (choice.system < 0)
+            inst->setTuning (nullptr);
+        else
+            inst->setTuning (std::make_shared<const phi::Tuning> (mixer::makeTuning (mixer::tuningSystems()[(size_t) choice.system], choice.root)));
+    }
 }
 
 void MixerWindow::clearSlot (int track, int scene)

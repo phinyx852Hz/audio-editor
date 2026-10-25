@@ -14,6 +14,7 @@
 #include "Effect.h"
 #include "Instruments.h"
 #include "MidiFile.h"
+#include "Tunings.h"
 #include "../core/AudioData.h"
 
 #include <array>
@@ -94,6 +95,7 @@ namespace mixer
         Clip clip;                 // its start is not used: the launch places it
         bool loop = true;          // else it plays once and the track stops
         double quantise = -1.0;    // beats to launch on: -1 the launcher's, 0 at once
+        TuningChoice tuning;       // the PHI synth's tuning while it plays, else the scene's
     };
     using SlotPtr = std::shared_ptr<const Slot>;
 

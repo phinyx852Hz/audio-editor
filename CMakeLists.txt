@@ -51,6 +51,7 @@ target_sources(${APP_ID} PRIVATE
     Source/sampler/SamplerEngine.cpp
     Source/sampler/SlicerEngine.cpp
     Source/mixer/MidiFile.cpp
+    Source/mixer/Tunings.cpp
     Source/mixer/Instruments.cpp
     Source/mixer/MixerEngine.cpp
     Source/patchbay/PatchBay.cpp
@@ -361,6 +362,7 @@ if(PHI_BUILD_TESTS)
         Source/sampler/SamplerEngine.cpp
         Source/sampler/SlicerEngine.cpp
         Source/mixer/MidiFile.cpp
+        Source/mixer/Tunings.cpp
         Source/mixer/Instruments.cpp
         Source/mixer/MixerEngine.cpp
         Source/patchbay/PatchBay.cpp

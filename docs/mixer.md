@@ -438,6 +438,27 @@ on a horizontal track or a clip launcher clip"):
   saved as a 32-bit WAV, "<name> x<ratio>", in the same Edits folder. The clip then plays it from
   the start; Ctrl+Z puts a track's clip back. A track clip that grows overlaps the clips after it.
 
+Modal tunings for the PHI synth (owner, 2026-10-25: "a feature PHI synth only ... the tuning
+could be applied on the clip level, track level or scene level"):
+- The Inspector's **Tuning (PHI synth)** section has a tuning and a root for the track, for the
+  scene under the launcher's cursor, and for the clip in the slot under it. A track plays in its
+  launched clip's tuning, else that scene's, else its own; with none it is 12-TET. The section says
+  which tuning the track plays in now.
+- The systems (`Source/mixer/Tunings.h`): 30 Hindustani ragas in just intonation (five-limit
+  ratios, with Pythagorean komal svaras where the raga sings them low: Darbārī's ga and dha,
+  Toḍī's and Bhairav's re and dha); the six church modes and six hypo-modes in Pythagorean tuning
+  (a hypo-mode's root is the bottom of its range, a fourth below the final); 13 jazz modes; nine
+  maqams and seven dastgahs with quarter steps of 50 cents; and 2 to 21 equal steps to the octave.
+  Names are in IAST (ragas), IJMES (maqams) and a common Persian romanisation (dastgahs); a mix
+  saves the plain ASCII name beside each.
+- A scale's degrees play on the nearest keys from the root, a quarter step on the key above (Rāst's
+  E half-flat on E); the keys between keep their 12-TET pitch. Equal steps run up and down the
+  keys from the root.
+- The mixer hands the tuning to the track's instrument (`mixer::Instrument::setTuning`) whenever
+  it changes. Only the PHI synth retunes; the Synth, Sampler, Slicer and plugins stay in 12-TET.
+  MPE for the PHI synth, and tuning outside MPE synths (a channel and a ±48 bend per note), are
+  next.
+
 The Sampler and Slicer windows of the Sample menu
 could dock into the mixer as track 1 (the other thread's docking work).
 
