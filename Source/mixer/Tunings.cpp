@@ -94,6 +94,17 @@ namespace mixer
             r ("kāfī kānaḍā", "kafi kanada", { 0, 2, 3, 5, 7, 9, 10 }, { { 3, ga27 } });
             r ("śahānā kānaḍā", "shahana kanada", { 0, 2, 3, 5, 7, 9, 10 }, { { 3, ga27 } });
             r ("cārukeśī", "charukeshi", { 0, 2, 4, 5, 7, 8, 10 });
+            // Added by the owner, 2026-10-25.
+            r ("sampūrṇ mālkauns", "sampurn malkauns", { 0, 2, 3, 5, 7, 8, 10 });
+            r ("jhiñjhoṭī", "jhinjhoti", { 0, 2, 4, 5, 7, 9, 10 });
+            r ("janasammohinī", "janasammohini", { 0, 2, 4, 7, 9, 10 });
+            r ("bilāskhānī toḍī", "bilaskhani todi", { 0, 1, 3, 5, 7, 8, 10 }, { { 1, re81 }, { 3, ga27 }, { 8, dha81 } });
+            r ("miyāṅ kī toḍī", "miyan ki todi", { 0, 1, 3, 6, 7, 8, 11 }, { { 1, re81 }, { 3, ga27 }, { 6, 729.0 / 512 }, { 8, dha81 } });
+            r ("naṭ bhairav", "nat bhairav", { 0, 2, 4, 5, 7, 8, 11 });
+            r ("śuddh sāraṅg", "shuddh sarang", { 0, 2, 5, 6, 7, 9, 11 });
+            r ("śyām kalyāṇ", "shyam kalyan", { 0, 2, 4, 5, 6, 7, 9, 11 });
+            r ("śyām kauns", "shyam kauns", { 0, 3, 5, 7, 8, 10 });
+            r ("bairāgī bhairav", "bairagi bhairav", { 0, 1, 5, 7, 10 }, { { 1, re81 } });
             // Each raga again in 12-TET, its svaras on the piano's keys.
             for (size_t i = 0, ragas = all.size(); i < ragas; ++i)
             {
