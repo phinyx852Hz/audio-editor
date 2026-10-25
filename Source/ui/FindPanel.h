@@ -76,9 +76,11 @@ public:
     int currentSet() const { return setIndex; }
     QString setName (int set) const;                // the user's name for it, or the default
     QString markName (int set, int index) const;    // a colour's name in a set (F2 renames)
+    QColor markColour (int set, int index) const;   // a colour in a set: its own, or the Selector's
 
 Q_SIGNALS:
     void openRequested (const QString& path);
+    void setChanged();   // another set chosen, or the chosen one's names or colours changed
 
 protected:
     bool eventFilter (QObject*, QEvent*) override;
@@ -130,8 +132,13 @@ private:
     {
         QString name;                // empty: the default name
         QStringList names;           // per colour; empty entries keep the default
+        QList<QColor> colours;       // per colour; invalid entries keep the Selector's (a set's own scheme)
         QHash<QString, int> marks;   // item key -> bit mask of colours
     };
     std::vector<Set> sets;
     int setIndex = 0;
+    mutable QHash<int, QIcon> dotIcons;   // by mask, in the chosen set's colours
+    void newSet();
+    void deleteSet();
+    void chooseColour (int colour);
 };

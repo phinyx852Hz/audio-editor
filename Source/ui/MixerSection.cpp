@@ -57,7 +57,7 @@ void MainWindow::registerMixerCommands()
         for (int c = 0; c < FindPanel::numColours; ++c)
         {
             names.push_back (findWidget->markName (set, c));
-            colours.push_back (FindPanel::colour (c));
+            colours.push_back (findWidget->markColour (set, c));
         }
         mixerWin->newMixFromSet (findWidget->setName (set), names, colours);
     })->setStatusTip (tr ("A new project of 8 tracks with the names and colours of the set chosen in the Find panel's Selector, from the bottom up"));
@@ -91,6 +91,15 @@ MixerWindow* MainWindow::mixerWindow()
         hooks.projectState = [this] { return projectState(); };
         hooks.setProjectState = [this] (const QJsonObject& project) { setProjectState (project); };
         hooks.resetProject = [this] { resetPatchBay(); };
+        hooks.selectorSet = [this] (QStringList& names, QList<QColor>& colours)
+        {
+            const auto set = findWidget->currentSet();
+            for (int c = 0; c < FindPanel::numColours; ++c)
+            {
+                names.push_back (findWidget->markName (set, c));
+                colours.push_back (findWidget->markColour (set, c));
+            }
+        };
         mixerWin = new MixerWindow (*mixerEngine, engine, std::move (hooks), this);
         connect (mixerWin, &MixerWindow::mixdownRequested, this, [this] { mixDownToEditor(); });
         connect (mixerWin, &MixerWindow::midiInputsRequested, this, [this] { midiInputsDialog(); });
@@ -120,6 +129,9 @@ MixerWindow* MainWindow::mixerWindow()
                 midiTarget = 2;
         });
         mixerWin->restoreAutosave();
+        // The tracks follow the Selector set, bottom category first, as long as they keep its names.
+        mixerWin->applySelectorSet();
+        connect (findWidget, &FindPanel::setChanged, mixerWin, [this] { mixerWin->applySelectorSet(); });
         updateMidiStatus();
     }
     return mixerWin;

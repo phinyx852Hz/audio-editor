@@ -2,6 +2,7 @@
 #include "FindPanel.h"
 
 #include <QApplication>
+#include <QColorDialog>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -15,6 +16,7 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMenu>
+#include <QMessageBox>
 #include <QLineEdit>
 #include <QMap>
 #include <QPainter>
@@ -144,6 +146,14 @@ QString FindPanel::setName (int set) const
     return ! name.isEmpty() ? name : set < defaultSets ? tr (setNames[set]) : tr ("Set %1").arg (set + 1);
 }
 
+QColor FindPanel::markColour (int set, int index) const
+{
+    if (set >= 0 && set < numSets())
+        if (const auto c = sets[(size_t) set].colours.value (index); c.isValid())
+            return c;
+    return colour (index);
+}
+
 QString FindPanel::markName (int set, int index) const
 {
     if (set < 0 || set >= numSets())
@@ -204,7 +214,7 @@ FindPanel::FindPanel (QWidget* home, QWidget* parent)
     auto* selectorLabel = new QLabel (tr ("Selector"), side);
     selectorLabel->setForegroundRole (QPalette::PlaceholderText);
     selectorLabel->setContentsMargins (4, 2, 0, 0);
-    selectorLabel->setToolTip (tr ("Right-click to choose a set: Favorites, Live Performance, Mixing, Mastering, Podcast or Chakra"));
+    selectorLabel->setToolTip (tr ("Right-click to choose a set (Favorites, Live Performance, Mixing, Mastering, Podcast, Chakra or your own), make a new one, or change a colour"));
     selectorLabel->setContextMenuPolicy (Qt::CustomContextMenu);
     connect (selectorLabel, &QLabel::customContextMenuRequested, this, [this, selectorLabel] (const QPoint& at) { selectorMenu (selectorLabel, at); });
     sideLayout->addWidget (selectorLabel);
@@ -296,6 +306,7 @@ FindPanel::FindPanel (QWidget* home, QWidget* parent)
         saveSelector();
         const QSignalBlocker blocker (sidebar);
         item->setText (0, markName (setIndex, c));
+        Q_EMIT setChanged();
     });
     connect (&fileScan, &QFutureWatcher<QList<FindItem>>::finished, this, [this]
     {
@@ -360,10 +371,10 @@ void FindPanel::buildSidebar()
     for (int c = 0; c < numColours; ++c)
     {
         QPixmap square (10, 10);
-        square.fill (colour (c));
+        square.fill (markColour (setIndex, c));
         auto* e = entry (markName (setIndex, c), Section::colour);
         e->setFlags (e->flags() | Qt::ItemIsEditable);
-        e->setToolTip (0, tr ("%1 (key %2): F2 or a double-click renames it").arg (colourName (c)).arg (c + 1));
+        e->setToolTip (0, tr ("%1 (key %2): F2 or a double-click renames it; right-click the Selector for its colour").arg (colourName (c)).arg (c + 1));
         e->setIcon (0, QIcon (square));
         e->setData (0, colourRole, c);
     }
@@ -404,7 +415,7 @@ void FindPanel::buildSidebar()
 
 QIcon FindPanel::dots (int mask) const
 {
-    static QHash<int, QIcon> cache;
+    auto& cache = dotIcons;
     if (auto it = cache.find (mask); it != cache.end())
         return *it;
 
@@ -417,7 +428,7 @@ QIcon FindPanel::dots (int mask) const
     for (int c = 0; c < numColours; ++c)
         if (mask & (1 << c))
         {
-            g.setBrush (colour (c));
+            g.setBrush (markColour (setIndex, c));
             g.drawEllipse (QRectF (x, 1.5, 7, 7));
             x += 6;
         }
@@ -883,6 +894,8 @@ void FindPanel::loadSelector()
                 sets.resize ((size_t) index + 1);
             auto& set = sets[(size_t) index];
             set.name = o.value (QStringLiteral ("name")).toString();
+            for (const auto& c : o.value (QStringLiteral ("colours")).toArray())
+                set.colours.push_back (QColor (c.toString()));   // "" stays invalid: the Selector's
             for (const auto& n : o.value (QStringLiteral ("names")).toArray())
                 set.names.push_back (n.toString());
             const auto m = o.value (QStringLiteral ("marks")).toObject();
@@ -930,7 +943,11 @@ void FindPanel::saveSelector() const
         QJsonObject m;
         for (auto it = set.marks.begin(); it != set.marks.end(); ++it)
             m.insert (it.key(), it.value());
+        QJsonArray colours;
+        for (const auto& c : set.colours)
+            colours.push_back (c.isValid() ? c.name() : QString());
         list.push_back (QJsonObject { { QStringLiteral ("id"), setId ((int) list.size()) },
+                                      { QStringLiteral ("colours"), colours },
                                       { QStringLiteral ("name"), set.name },
                                       { QStringLiteral ("names"), QJsonArray::fromStringList (set.names) },
                                       { QStringLiteral ("marks"), m } });
@@ -949,9 +966,54 @@ void FindPanel::chooseSet (int set)
     if (set < 0 || set >= numSets())
         return;
     setIndex = set;
+    dotIcons.clear();
     saveSelector();
     buildSidebar();
     refilter();
+    Q_EMIT setChanged();
+}
+
+// A set of the user's own: its names start as the colour names, its colours as the Selector's.
+void FindPanel::newSet()
+{
+    bool ok = false;
+    const auto name = QInputDialog::getText (this, tr ("New Selector Set"), tr ("Name of the new set:"), QLineEdit::Normal, {}, &ok).trimmed();
+    if (! ok)
+        return;
+    Set set;
+    set.name = name;
+    sets.push_back (set);
+    chooseSet (numSets() - 1);
+}
+
+void FindPanel::deleteSet()
+{
+    if (setIndex < defaultSets || setIndex >= numSets())
+        return;
+    if (QMessageBox::question (this, tr ("Delete Set"), tr ("Delete the set \u201c%1\u201d, its names, colours and favourites?").arg (setName (setIndex)))
+        != QMessageBox::Yes)
+        return;
+    sets.erase (sets.begin() + setIndex);
+    chooseSet (0);
+}
+
+// A set's colour scheme: any of its eight colours can be changed, for this set only.
+void FindPanel::chooseColour (int c)
+{
+    if (c < 0 || c >= numColours)
+        return;
+    const auto chosen = QColorDialog::getColor (markColour (setIndex, c), this, tr ("Colour of %1").arg (markName (setIndex, c)));
+    if (! chosen.isValid())
+        return;
+    auto& colours = sets[(size_t) setIndex].colours;
+    while (colours.size() < numColours)
+        colours.push_back ({});
+    colours[c] = chosen == colour (c) ? QColor() : chosen;
+    dotIcons.clear();
+    saveSelector();
+    buildSidebar();
+    refilter();
+    Q_EMIT setChanged();
 }
 
 void FindPanel::selectorMenu (QWidget* on, const QPoint& at)
@@ -966,8 +1028,26 @@ void FindPanel::selectorMenu (QWidget* on, const QPoint& at)
     }
     menu.addSeparator();
     if (auto* item = sidebar->currentItem(); item != nullptr && static_cast<Section> (item->data (0, sectionRole).toInt()) == Section::colour)
+    {
         menu.addAction (tr ("Rename %1").arg (item->text (0)), this, [this, item] { sidebar->editItem (item); })->setShortcut (Qt::Key_F2);
+        const auto c = item->data (0, colourRole).toInt();
+        menu.addAction (tr ("Colour of %1...").arg (item->text (0)), this, [this, c] { chooseColour (c); });
+    }
     menu.addAction (tr ("Rename Set \u201c%1\u201d...").arg (setName (setIndex)), this, &FindPanel::renameSet);
+    menu.addSeparator();
+    menu.addAction (tr ("New Set..."), this, &FindPanel::newSet);
+    if (setIndex >= defaultSets)
+        menu.addAction (tr ("Delete Set \u201c%1\u201d...").arg (setName (setIndex)), this, &FindPanel::deleteSet);
+    if (! sets[(size_t) setIndex].colours.isEmpty())
+        menu.addAction (tr ("Reset the Colours"), this, [this]
+        {
+            sets[(size_t) setIndex].colours.clear();
+            dotIcons.clear();
+            saveSelector();
+            buildSidebar();
+            refilter();
+            Q_EMIT setChanged();
+        });
     menu.exec (on->mapToGlobal (at));
 }
 
@@ -978,8 +1058,9 @@ void FindPanel::renameSet()
                                              QLineEdit::Normal, setName (setIndex), &ok).trimmed();
     if (! ok)
         return;
-    sets[(size_t) setIndex].name = name == tr (setNames[std::min (setIndex, defaultSets - 1)]) ? QString() : name;
+    sets[(size_t) setIndex].name = setIndex < defaultSets && name == tr (setNames[setIndex]) ? QString() : name;
     saveSelector();
+    Q_EMIT setChanged();
 }
 
 //==============================================================================

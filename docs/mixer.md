@@ -197,7 +197,8 @@ More templates can be added in the same way; each is a small file.
 | T | Step the thumbnail display |
 | V | Show or hide the tracks across time above the strips |
 | Ctrl+B | Show or hide the file browser |
-| F6, Tab | Next section: browser, tracks, strips (Shift: back) |
+| F6 | Next section: browser, tracks, strips (Shift: back) |
+| Tab | Switch between the clip launcher and the tracks across time (Ableton) |
 | Ctrl+Z, Ctrl+Shift+Z | Undo, redo clip edits |
 | B | Bounce in place: the track's sound (MIDI through its instrument, and its audio) becomes its audio |
 | Shift+B | Bounce to a new track and mute this one (not when all 8 tracks are in use) |
@@ -346,6 +347,15 @@ Every control has a screen-reader name and announces its value.
   down.
 - Insert Mix: each insert has a dry/wet Mix (`Insert::mix`, right-click a slot: Mix...), for
   parallel compression or saturation in one slot; a slot under 100 % shows its percentage.
+
+- Layout (owner, 2026-10-25): every strip's name is at the bottom, under the fader's value, in
+  white on the track's colour. The tracks follow the Selector set chosen in the Find panel, its
+  bottom category first (DR on track 1 in Live Performance), in its colours; a new project has a
+  track for each of its eight categories, and a track keeps a name or colour the user gave it.
+  The Selector's right-click menu makes new sets (New Set..., Delete Set) and changes any
+  category's colour for that set (Colour of...), saved in find.json with the names. The MIDI
+  inputs moved to the top bar's MIDI... button (its tooltip lists them); messages show for five
+  seconds and give their room back. The Device Chain has no title bar.
 
 Next (owner, 2026-10-24): a
 Channel window (Pre and a Φ EQ with another track's spectrum to compare), loudness on the master,
