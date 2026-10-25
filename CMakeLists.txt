@@ -80,6 +80,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/PhiChorus.cpp
     Source/core/PhiVoice.cpp
     Source/core/PhiPhaser.cpp
+    Source/core/PhiTuning.cpp
     Source/core/Nyquist.cpp
     Source/core/Album.cpp
     Source/core/MasterAssist.cpp
@@ -388,6 +389,7 @@ if(PHI_BUILD_TESTS)
         Source/core/PhiChorus.cpp
         Source/core/PhiVoice.cpp
         Source/core/PhiPhaser.cpp
+        Source/core/PhiTuning.cpp
         Source/core/Nyquist.cpp
         Source/core/Album.cpp
         Source/core/MasterAssist.cpp

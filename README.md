@@ -142,7 +142,7 @@ For Performance > Record Video at 4K, the graphics card does the encoding: on AM
 
 For more plugins, `sudo pacman -S lsp-plugins` gives a large free mastering set (EQ, compressors, limiters). `sudo pacman -S dragonfly-reverb-clap` adds free CLAP reverbs; `sudo pacman -S clap-plugins` installs every CLAP plugin Arch packages.
 
-The DSP of the Φ effects, the Φ Phaser and the start-up voice is plain C++ with no JUCE or Qt, and `Source/core/CMakeLists.txt` builds it as a library of its own, `phi_dsp`, for the PHI synth and any other project: fetch this repository with `FetchContent` and `SOURCE_SUBDIR Source/core`, then link `phi_dsp` (the file's comment shows how).
+The DSP of the Φ effects, the Φ Phaser and the start-up voice, and the PHI synth's tuning and MPE (`PhiTuning.h`: a pitch for each key, built from equal steps or a scale in cents and sent as MIDI Tuning Standard messages, and an MPE decoder for each note's own bend, pressure and timbre), is plain C++ with no JUCE or Qt, and `Source/core/CMakeLists.txt` builds it as a library of its own, `phi_dsp`, for the PHI synth and any other project: fetch this repository with `FetchContent` and `SOURCE_SUBDIR Source/core`, then link `phi_dsp` (the file's comment shows how).
 
 To install system wide instead, use the PKGBUILD: `cd packaging/arch && makepkg -si`.
 
