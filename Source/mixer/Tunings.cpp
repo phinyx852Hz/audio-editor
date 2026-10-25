@@ -83,6 +83,7 @@ namespace mixer
             r ("haṃsadhvani", "hamsadhvani", { 0, 2, 4, 7, 11 });
             r ("mālkauns", "malkauns", { 0, 3, 5, 8, 10 });
             r ("jog", "jog", { 0, 3, 4, 5, 7, 10 });
+            r ("jogkauns", "jogkauns", { 0, 3, 4, 5, 8, 10 });   // jog's two ga over mālkauns
             r ("ahīr bhairav", "ahir bhairav", { 0, 1, 4, 5, 7, 9, 10 });
             r ("lalit", "lalit", { 0, 1, 4, 5, 6, 8, 11 });
             r ("pūriyā dhanāśrī", "puriya dhanashri", { 0, 1, 4, 6, 7, 8, 11 });
