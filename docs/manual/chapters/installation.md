@@ -117,10 +117,10 @@ Panels you pop out share that class and have titles such as `Meters - PHI`, so t
 windowrulev2 = monitor 1, title:^(Meters - PHI)$
 ```
 
-Plugin windows have titles like `MVerb - PHI`. They tile like any other window; to float them instead:
+Plugin windows have titles like `MVerb - PHI`. PHI opens them floating at a standard size, through Hyprland's own socket, and sets their opacity the same way. To place them yourself, match their titles:
 
 ```
-windowrulev2 = float, title:^(.* - PHI)$
+windowrulev2 = workspace 4, title:^(.* - PHI)$
 ```
 
 PHI reads Hyprland's own key bindings when it starts and warns you if one of its shortcuts is taken by the desktop, since such keys never reach a program. See [Working from the Keyboard](#keyboard).

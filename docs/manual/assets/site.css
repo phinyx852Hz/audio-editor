@@ -68,6 +68,7 @@ body.home .topline { display: none; }
 .cover { background: #0b0b0c; color: var(--gold); text-align: center; padding: 72px 20px 80px; }
 .cover-mark { height: min(46vh, 420px); }
 .cover-title { font-family: var(--serif); font-size: 64px; letter-spacing: 0.42em; margin: 26px 0 0 0.42em; }
+.cover-sub.cover-sub2 { font-size: 10px; letter-spacing: 0.24em; color: #7d6e4a; margin-top: 4px; }
 .cover-sub { font-family: var(--sans); font-size: 12px; letter-spacing: 0.32em; text-transform: uppercase; color: #a89464; margin-top: 6px; }
 .cover-rule { width: 120px; height: 1px; background: var(--gold); margin: 30px auto; }
 .cover-book { font-family: var(--serif); font-size: 26px; font-style: italic; color: #e9dcb6; }

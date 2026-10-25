@@ -349,7 +349,8 @@ def cover_html(version, for_print):
 <div class="cover-inner">
 <img class="cover-mark" src="{mark}" alt="Φ">
 <div class="cover-title">PHI</div>
-<div class="cover-sub">Audio Editor · Mastering Suite · DAW</div>
+<div class="cover-sub">Open Source DAW</div>
+<div class="cover-sub cover-sub2">Audio Editor · Mastering Suite · Mixer</div>
 <div class="cover-rule"></div>
 <div class="cover-book">{SUBTITLE}</div>
 <div class="cover-version">{html.escape(version)} · {date}</div>
@@ -511,7 +512,7 @@ def print_document(book, where, entries, version, pages=None):
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>PHI {SUBTITLE}</title>
 <meta name="author" content="phinyx852Hz">
-<meta name="description" content="The PHI audio editor, mastering suite and DAW: operation manual">
+<meta name="description" content="PHI, the open-source DAW: operation manual">
 <link rel="stylesheet" href="assets/manual.css"><link rel="stylesheet" href="assets/print.css">
 </head><body class="print">{body}</body></html>"""
 

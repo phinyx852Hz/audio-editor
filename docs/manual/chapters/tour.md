@@ -2,6 +2,8 @@
 
 PHI opens to one window. In its middle is the editor, where the open file is drawn as a waveform. Panels can sit around it, on the left, the right and along the bottom, and any of them can pop out into a window of its own. This chapter names every part, so the rest of the manual can refer to them.
 
+[]{.ix t="Φ splash"}As PHI starts, the **Φ splash** spirals open in the middle of the screen and plays a short phase-distortion chord, a new one each time. It closes once the window is up, or at a click; `phi --no-splash` leaves it out. [The Φ mark](#phi-mark) tells how it is drawn.
+
 ![The PHI window: menus and transport at the top, the overview and editor in the middle, panels around them, and the Device Chain along the bottom.](images/tour-workspace.png)
 
 ## The menu bar

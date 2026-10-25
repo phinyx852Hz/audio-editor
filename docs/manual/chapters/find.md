@@ -2,7 +2,7 @@
 
 []{.ix t="Find panel"}The Find panel (`Ctrl+F`; pressed again it hides the panel) is PHI's browser, like Ableton Live's. One search field finds any process, Nyquist effect, plugin, instrument, visualization or audio file, and a sidebar narrows it down.
 
-![The Find panel: the Selector colours, the categories and places, and the results.](images/find-panel.png)
+![The Find panel: the Selector colours with the Φ button, the categories and places, and the results.](images/find-panel.png)
 
 ## Searching
 

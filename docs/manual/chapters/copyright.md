@@ -1,6 +1,6 @@
 # Copyright and Licences
 
-**PHI Operation Manual.** Written for PHI, the audio editor, mastering suite and DAW for Linux.
+**PHI Operation Manual.** Written for PHI, the open-source DAW for Linux: an audio editor, a mastering suite and a mixer in one. In this manual, *PHI - Open Source DAW* is called PHI.
 
 © 2026 phinyx852Hz (ΦNYX). All rights reserved. No part of this manual may be reproduced or published without the written permission of the author, except for short quotations in reviews and for personal use.
 
@@ -22,4 +22,4 @@ Adobe Audition, Sound Forge, WaveLab, Cubase, Ableton Live, Push, Bitwig Studio,
 
 This edition describes PHI as of the date on its cover. PHI changes quickly, so a feature may have moved or grown since. Where a feature has not yet been tried on real audio hardware, the manual says so.
 
-Screenshots were taken from PHI itself, running on a virtual display with the PHI Dark theme. Your window will look different with another theme, other colours or another window manager.
+Screenshots were taken from PHI itself, running on a virtual display. Most show the PHI Dark theme; those of the newest features show PHI Gold, the default since October 2026. Your window will look different with another theme, other colours or another window manager.

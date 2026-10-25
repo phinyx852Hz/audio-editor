@@ -1,3 +1,10 @@
+/* EB Garamond as TrueType: the CFF (.otf) version prints •, →, −, √, ∞ and the superscripts as
+   wrong glyphs once WeasyPrint subsets it. Where these files are missing, the system font is used. */
+@font-face { font-family: "PHI Garamond"; font-weight: 400; font-style: normal; src: url("file:///usr/share/fonts/truetype/ebgaramond/EBGaramond12-Regular.ttf"); }
+@font-face { font-family: "PHI Garamond"; font-weight: 400; font-style: italic; src: url("file:///usr/share/fonts/truetype/ebgaramond/EBGaramond12-Italic.ttf"); }
+@font-face { font-family: "PHI Garamond"; font-weight: 700; font-style: normal; src: url("file:///usr/share/fonts/truetype/ebgaramond/EBGaramond12-Bold.ttf"); }
+:root { --serif: "PHI Garamond", "EB Garamond", "EB Garamond 12", Garamond, Georgia, serif; }
+
 /* PHI manual: the printed book (WeasyPrint). */
 @page {
   size: A4;
@@ -28,6 +35,7 @@ body { margin: 0; }
 .cover-inner { position: absolute; left: 0; right: 0; top: 52mm; text-align: center; }
 .cover-mark { height: 118mm; }
 .cover-title { font-family: var(--serif); font-size: 46pt; letter-spacing: 0.42em; margin: 14mm 0 0 0.42em; color: var(--gold); }
+.cover-sub.cover-sub2 { font-size: 7pt; letter-spacing: 0.24em; color: #7d6e4a; margin-top: 2mm; }
 .cover-sub { font-family: var(--sans); font-size: 9pt; letter-spacing: 0.32em; text-transform: uppercase; color: #a89464; margin-top: 3mm; }
 .cover-rule { width: 38mm; height: 0.6pt; background: var(--gold); margin: 9mm auto; }
 .cover-book { font-family: var(--serif); font-size: 17pt; font-style: italic; color: #e9dcb6; }

@@ -26,6 +26,23 @@ So one pass down the Selector, one pick per colour, builds a scene across the tr
 
 An audio file becomes an audio clip. A MIDI file becomes a MIDI clip that plays the track's instrument (the Synth, for a track that has none), made whole bars long at the tempo it plays at.
 
+## The Φ random selector {#phi-selector}
+
+[]{.ix t="Φ random selector"}[]{.ix t="Selector!Φ random selector"}![Right-click the Φ button for where to deal.](images/phi-selector.png)
+
+The **Φ** button at the end of the Find panel's Selector line deals a whole scene at once: one of each colour's favourites from the set shown, picked by the golden ratio, into the first scene that is empty on all their tracks. Press it again for the next scene, with another combination.
+
+- With the launcher hidden, it deals onto the mixer's tracks instead, all starting together after everything already on them, so each deal follows the last.
+- `Shift`+click deals again in place of the last deal, when you want another try.
+- Right-click chooses where it deals: the launcher, the tracks, or a Prism.
+- A colour with no track of its own gets the track a project from the set would give it; PHI adds, names and colours it when the mix has fewer tracks.
+
+**Instruments deal too.** An instrument plugin, or a sampler or synth from the Sample and Synth menus, marked with a colour is loaded on that colour's track before the files arrive, so a MIDI file dealt with it plays on it.
+
+[]{.ix t="Φ Deal a Prism of Effects"}**Effects deal into a Prism.** **Φ Deal a Prism of Effects** (right-click, or a click when only effects are marked) builds a [Prism](#prisms) in the first empty Master Section slot: one of each colour's favourite effects on a ray of its own, named for the colour, all in parallel. Each ray is turned down so that together they are about as loud as one.
+
+**Why it never repeats.** Each colour walks its favourites by a sequence of its own: the first colour steps by 1/φ, the others by √7, √13, √19, √29, √41, √89 and √73, irrational numbers of the same family as φ. Each colour spreads evenly over its favourites and never deals the same one twice running (once it has three or more), and the colours never fall into step with each other. With eight favourites per colour there are 8⁸, nearly 17 million, scenes to deal, and every session starts somewhere new. [On Φ](#phi-choice) tells the story behind it.
+
 ## Playing
 
 | Action | Mouse | Keys |

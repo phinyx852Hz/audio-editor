@@ -7,7 +7,7 @@ PHI shows the same chain in two places:
 - the **Master Section panel** (`Ctrl+Shift+E`), a list of slots, good for the keyboard;
 - the **Device Chain** (`Ctrl+Shift+C`), cards along the bottom of the window, good for turning knobs, as in Ableton Live and Bitwig.
 
-![The Device Chain with Φ EQ, Φ Space and the True Peak Limiter, into the Master card.](images/device-chain.png)
+![The Device Chain: Φ EQ, Φ Space, the True Peak Limiter and a Prism, each with its Dry/Wet.](images/device-chain.png)
 
 ## Finding plugins
 
@@ -32,7 +32,8 @@ From the Find panel, `Enter` on a plugin loads it the same way.
 []{.ix t="Device Chain"}Each card has:
 
 - an **on/off** switch and a **solo** button (hear only that plugin while playing);
-- its first few **knobs**;
+- up to eight of the plugin's **knobs**, in two rows;
+- a **Dry/Wet** knob, whatever the plugin, for parallel processing;
 - a **level bar**;
 - **Edit** (all its parameters) and **Window** (the plugin's own window).
 
@@ -57,6 +58,8 @@ Knobs are drawn like Ableton Live's, with the value filled in along an arc (the 
 
 Drag a card by its name to move it with the mouse.
 
+[]{.ix t="Dry/Wet"}[]{.ix t="Parallel processing"}**Dry/Wet.** Every slot has its own Dry/Wet, even when the plugin has none, so parallel compression or saturation needs no Prism. The dry sound is delayed by the plugin's latency, so the two line up. Double-click or `F2` and type a percentage, or `wet` or `dry`. The mix is saved with the chain.
+
 ## The Master Section panel
 
 []{.ix t="Master Section!panel"}The panel lists the eight slots. In the list:
@@ -72,9 +75,13 @@ Drag a card by its name to move it with the mouse.
 
 ## Plugin windows
 
-[]{.ix t="Plugin windows"}A plugin's own window opens when you add it, and with its card's Window button or `E`. Plugin windows tile like any other window on Hyprland and can be any size: a plugin of fixed size is asked to draw itself bigger or smaller to fit (from half to four times its size, which most JUCE-made CLAP and VST3 plugins can do) and sits centred in the rest.
+[]{.ix t="Plugin windows"}A plugin's own window opens when you add it, and with its card's Window button or `E`. It opens floating at a standard size, centred, with the plugin scaled to about two thirds of the screen, on Hyprland too; `Super+F` takes it full screen. Popped-out panels such as Simplest and the Slicer float at a standard size as well. A window can then be any size: a plugin of fixed size is asked to draw itself bigger or smaller to fit (from half to four times its size, which most JUCE-made CLAP and VST3 plugins can do) and sits centred in the rest.
 
 With a plugin window focused, `Esc` or `Ctrl+W` closes it and returns the keys to the chain, and `Ctrl+Tab` / `Ctrl+Shift+Tab` go to the next or previous plugin window. Plugins drawn with their own toolkit may keep those keys; the card's Window button, `E` or your desktop's close key still work. If the desktop force-closes a plugin window, PHI keeps running.
+
+[]{.ix t="Window opacity!plugin windows"}Plugin windows follow PHI's [Opacity](#opacity) slider, so they go see-through with the rest of PHI; the instruments keep their own opacity bar. Hyprland ignores the usual X11 opacity setting, so there PHI sets the opacity, and the floating, through Hyprland itself.
+
+[]{.ix t="Φ effects!window"}**The Φ effects** open in a window of their own instead: see [The Φ window](#phi-window).
 
 ::: note
 Plugin windows use X11 (through XWayland on a Wayland desktop), since that is what Linux plugins draw with.

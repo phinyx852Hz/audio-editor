@@ -4,9 +4,9 @@
 
 ## Themes {#themes}
 
-[]{.ix t="Themes"}PHI comes with **PHI Dark** and **PHI Light**. Options > Theme (`Ctrl+Shift+T`) lists them with any of your own. Moving through the list previews each theme at once; `Enter` keeps it and `Esc` goes back. **Reload** picks up files you have just added or changed, and a file with a mistake in it is listed with the reason it was skipped.
+[]{.ix t="Themes"}PHI comes with **PHI Gold**, **PHI Dark** and **PHI Light**. PHI Gold is the default: gold on near-black, the colours of the Φ mark and of this manual. Options > Theme (`Ctrl+Shift+T`) lists them with any of your own. Moving through the list previews each theme at once; `Enter` keeps it and `Esc` goes back. **Reload** picks up files you have just added or changed, and a file with a mistake in it is listed with the reason it was skipped.
 
-![Choosing a theme: the Golden theme from the end of this section, previewed over the spectral view.](images/theme-picker.png)
+![Choosing a theme: PHI Gold, the default, first in the list.](images/theme-picker.png)
 
 ### Making a theme
 
@@ -27,7 +27,7 @@
 ```
 
 - **name** (required) is shown in the list and must be unique.
-- **base** is `"dark"` (the default) or `"light"`.
+- **base** is `"dark"` (the default), `"light"` or `"gold"`.
 - **colors** are written `#RGB`, `#RRGGBB` or `#RRGGBBAA` (alpha last, as in CSS), or as colour names such as `"orange"`.
 - **spectrogram** is two or more colours, from silence (−120 dBFS) to full scale (0 dBFS).
 
@@ -53,22 +53,17 @@ Themes change colours only, for now. Fonts, icons and widget images are planned.
 :::
 
 ::: phi
-**A golden theme.** Here is the theme in the picture above, in the colours of this manual and of the Φ mark. Save it as `golden.json` in the themes folder and press Reload:
+**PHI Gold.** The default theme takes its three colours from the Φ mark and this manual: gold `#c8a24a`, black `#0b0b0c` and champagne `#e9dcb6`. To make a theme of your own from it, start from `"gold"` and change only what you want. This one keeps the gold and cools the waveform to the champagne:
 
 ```json
 {
-  "name": "Golden",
-  "base": "dark",
-  "colors": {
-    "window": "#0b0b0c", "base": "#111113", "alternateBase": "#161618",
-    "button": "#161618", "accent": "#c8a24a",
-    "highlight": "#c8a24a", "highlightedText": "#0b0b0c",
-    "waveform": "#c8a24a", "waveformBackground": "#0b0b0c",
-    "selection": "#c8a24a40", "marker": "#e8d9a8", "scope": "#c8a24a"
-  },
-  "spectrogram": ["#000000", "#1a1408", "#5a4518", "#c8a24a", "#fff6dc"]
+  "name": "Gold and Champagne",
+  "base": "gold",
+  "colors": { "waveform": "#e9dcb6", "selection": "#e9dcb640" }
 }
 ```
+
+A theme you choose is remembered, so if you picked PHI Dark before PHI Gold arrived, PHI keeps it.
 :::
 
 ## Waveform and meter colours {#waveform-colours}

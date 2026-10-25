@@ -149,7 +149,7 @@ PHI plays with this in three places.
 
 []{.ix t="Golden sequence"}[]{.ix t="Low-discrepancy sequence"}Sometimes PHI has to choose something at random: a patch, a sound, a combination of samples. True random numbers clump: press a random button ten times and you will often get two results that sound almost the same. PHI uses the golden sequence instead. Keep adding 1/φ and keep the part after the decimal point: 0.618, 0.236, 0.854, 0.472, 0.090, 0.708… Each new value lands in the largest gap the earlier ones left. It never repeats, and a short run of it covers the range far more evenly than random numbers do. This is a *low-discrepancy sequence*.
 
-- The **Φ random selector** deals one of each Selector colour's favourite sounds onto your tracks. Each colour walks its favourites by its own golden-type step, so the colours never fall into step with each other and every press gives a new combination.
+- The **Φ random selector** deals one of each Selector colour's favourite sounds, instruments or effects into a scene, onto your tracks or into a Prism (see [The Φ random selector](#phi-selector)). Each colour walks its favourites by a step of its own: 1/φ for the first, and √7, √13, √19… for the others, numbers of the same family. Had every colour stepped by 1/φ, they would move in lockstep, and eight colours of eight favourites would give only 64 combinations; with steps of their own they give nearly 17 million.
 - The **Φ splash** plays a new sound each time PHI starts, chosen the same way.
 - The **Φ synth**'s Φ button makes a new patch with every press (see [Φ the synth](#phi-synth)).
 
@@ -197,7 +197,7 @@ The quality features are safe to leave on: the Φ switches in Stereoize and Mid/
 
 | Effect | Controls (defaults) | In short |
 |---|---|---|
-| Φ EQ | Super Low, ten bands, Super High (±dB), Output | Twelve golden-step bands from 80 Hz to 15.9 kHz |
+| Φ EQ | Super Low, ten bands, Super High (±dB, each a bell, shelf, notch, band-pass or off), Low Cut, High Cut, Tilt, Output | Twelve golden-step bands from 80 Hz to 15.9 kHz, with nodes to drag |
 | Φ Echo | Time (250 ms), Decay (1/φ), Feedback, Mix, Taps (5), Spread | Taps at time × φⁿ, panned by the golden angle |
 | Φ Space | Size, Decay (2 s), Damping, Mix, Pre-delay (13 ms) | Eight lines √φ apart: a smooth reverb |
 | Φ Drift | Mode (Chorus, Tremolo, Pan), Rate (0.618 Hz), Depth, Mix | Three LFOs at rate × 1, φ, φ² |
@@ -206,6 +206,35 @@ The quality features are safe to leave on: the Φ switches in Stereoize and Mid/
 | Φ Stack | Copies (4), Decay, Tone (8 kHz), Mix, Width | Copies pitched up by φ, φ², φ³, φ⁴ |
 | Φ Tame | Depth, Fundamental (55 Hz), Width (Q 1.618), Find Fundamental | A cut at the fundamental × φ ÷ 2 × 10 |
 | Φ De-resonator | Depth, Sharpness, Speed, Mix, Low, High, Delta | Turns resonances down while they ring |
+
+### The Φ window {#phi-window}
+
+[]{.ix t="Φ window"}[]{.ix t="Φ effects!window"}Every Φ effect opens in a window of its own: a golden rectangle, 809 × 500 pixels to start, black and gold, with the Φ and the effect's name at the top. The upper part shows a live picture of what the effect is doing, and gold knobs sit below it, 89 pixels across for the main controls and 55 for the rest, spaced on Fibonacci steps. Switches are pills. The card's **Edit** and **Window** buttons, the Master Section and the Prism editor all open it.
+
+![The Φ window of Φ EQ: the bands as gold nodes on the curve, the knobs below.](images/phi-window.png)
+
+| Effect | Its picture |
+|---|---|
+| Φ EQ | The response curve, with a node for each band and cut |
+| Φ Echo | The taps, by time and level |
+| Φ Space | The decay |
+| Φ Drift | The LFO's path |
+| Φ Rhythm | The pattern, with the step playing lit |
+| Φ Resonator | Its bands |
+| Φ Stack | The copies, by pitch |
+| Φ Tame | Its cut, at the fundamental it found |
+| Φ De-resonator | Live: the level it hears and the cut it makes |
+
+### Shaping Φ EQ {#phi-eq-nodes}
+
+[]{.ix t="Φ EQ!nodes"}In its window each Φ EQ band is a gold node on the curve. Drag a node across to move the band and up or down for its gain (`Shift` for finer steps); the wheel widens or narrows it; right-click chooses its type; double-click resets it. The chosen node's knobs sit beside the cuts, Tilt and Output.
+
+- **Bands on a golden grid.** A band moves along the grid of 80 Hz × φ^(n/4), never between its steps, so every band stays a quarter of a golden step, or a whole number of them, from every other. Width changes a golden step at a time.
+- **Types.** Each band is a bell, a shelf, a notch, a band-pass, or off.
+- **Low Cut and High Cut** at 12, 24 or 48 dB an octave, on the same grid.
+- **Tilt** turns the whole spectrum about 1 kHz.
+
+Moving one band never restarts another, so you can sweep while it plays. A Φ EQ saved before these controls arrived opens as it was.
 
 Φ De-resonator delays the sound by 2048 samples (43 ms at 48 kHz) so it can look at each frequency before it plays; PHI compensates for that delay automatically. **Delta** plays only what it takes away, which is the quickest way to hear what it is doing.
 
@@ -224,7 +253,9 @@ The quality features are safe to leave on: the Φ switches in Stereoize and Mid/
 
 The mark is gold, `#c8a24a`, on black, `#0b0b0c`. PHI draws it itself from these numbers, so it is sharp at every size. A compact form, as tall as the ring is wide and without serifs, is the **Φ button** you meet across the program: in Stereoize, in Mid/Side Width, in Sonify and at the end of the Selector. Lit, it is on; faded to 1/φ² of its brightness, it is off.
 
-The splash that greets you as PHI starts is the gold mark on its black tile, 382 pixels square (1000 ÷ φ²), and it stays for at least 1.618 seconds.
+[]{.ix t="Φ splash"}The splash that greets you as PHI starts is a golden rectangle, 618 × 382 pixels: the gold mark in its square, and in the golden rectangle left over, the name written in small letters as *phī* with the version, its baseline on the golden section. The golden spiral runs faintly through both. The card itself opens along that spiral: it starts as a dot at the spiral's pole and turns back ten quarter turns, growing by φ with each, over 1.618 seconds. It then stays for at least φ² = 2.618 seconds, and closes once the main window is up. A click closes it at once, and `phi --no-splash` leaves it out.
+
+![The Φ splash: the mark in its square, the name in the golden rectangle beside it, and the spiral through both.](images/splash.png)
 
 ## Φ the synth {#phi-synth}
 

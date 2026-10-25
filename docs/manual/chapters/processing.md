@@ -71,7 +71,7 @@ Stereoize is also a live effect: in the Device Chain choose *Add plugin*, then *
 
 []{.ix t="Mid/Side Width"}[]{.ix t="Stereo width"}Process > Mid/Side Width (`Alt+Shift+W`, also in the Spatial menu) widens or narrows the stereo image by working on the side, what differs between left and right, and leaving the centre alone.
 
-![Mid/Side Width at 160 %, previewed: the stereo field, with the measures and what they were before.](images/mid-side-width.png)
+![Mid/Side Width: the stereo field, the measures, and the Φ button for golden-ratio sides.](images/mid-side-width.png)
 
 | Control | Does |
 |---|---|

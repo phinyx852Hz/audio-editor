@@ -1,6 +1,6 @@
 # Welcome to PHI
 
-PHI is an audio editor, a mastering suite and a small DAW for Linux. It brings together the best of three classic editors, Adobe Audition, Sound Forge and WaveLab, and adds an eight-track mixer, a clip launcher, samplers, synthesizers, trackers, spatial audio, a visualizer and a video recorder of its own. It runs natively on Wayland and is made for Arch Linux, Omarchy and the Hyprland desktop, though it runs on any modern Linux desktop.
+PHI is an open-source digital audio workstation for Linux: an audio editor, a mastering suite and a small DAW in one. It brings together the best of three classic editors, Adobe Audition, Sound Forge and WaveLab, and adds an eight-track mixer, a clip launcher, samplers, synthesizers, trackers, spatial audio, a visualizer and a video recorder of its own. It runs natively on Wayland and is made for Arch Linux, Omarchy and the Hyprland desktop, though it runs on any modern Linux desktop.
 
 ![PHI with the Find panel on the left, the meters on the right and the Device Chain along the bottom.](images/tour-workspace.png)
 

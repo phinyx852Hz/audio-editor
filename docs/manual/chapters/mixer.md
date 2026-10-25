@@ -10,7 +10,7 @@ PHI's mixer is a small DAW of eight tracks. Every track is the same kind of trac
 - `Super+F` takes it full screen.
 - `Shift+F3` plays and stops the mix from anywhere.
 
-![The mixer: the file browser on the left, the tracks across time in the middle, and the strips below.](images/mixer.png)
+![The mixer, undocked: the file browser on the left, the tracks across time, and below them the strips, the A and B returns and the master.](images/mixer.png)
 
 The window has three sections. `F6` or `Tab` goes round them (`Shift` backwards).
 
@@ -61,15 +61,89 @@ The window has three sections. `F6` or `Tab` goes round them (`Shift` backwards)
 
 ## The strips
 
-[]{.ix t="Mixer!strips"}[]{.ix t="Fader"}Below the tracks are the strips, one per track, and the master. From top to bottom, each strip has:
+[]{.ix t="Mixer!strips"}[]{.ix t="Fader"}Below the tracks are the strips: one per track, the two returns, and the master. PHI's strip takes what each of two DAWs does best: the insert slots of Cubase and the simple sends of Ableton Live. Every track's sound goes through the same steps, in this order:
+
+::: formula
+trim → polarity → low cut → high cut → inserts → width → pan → fader
+:::
+
+From top to bottom, each strip has:
 
 - the **instrument**, **transpose** (the drums on channel 10 stay put) and which **MIDI channels** play;
-- **trim**, ±24 dB, for gain staging before everything else;
-- **polarity** per side;
-- **pan**: equal power for mono files, balance otherwise;
+- the **Pre** section: polarity per side (**ØL** and **ØR**), the **LC** and **HC** cuts, and the track **Delay**;
+- the **insert slots**;
+- **Trim**, **Pan** and **Width**, three small pots side by side with their values below;
+- the **Send A** and **Send B** pots, the track **mode** and **Duck**;
 - **mute** and **solo**;
 - a **fader**, −∞ to +6 dB, marked in dB on its left: drag it, `Shift` for fine moves, double-click for 0 dB;
-- a **meter**, peak and RMS in dBFS on its right, with peak hold and a clip light.
+- a **meter**, peak and RMS in dBFS on its right, with peak hold and a clip light. It changes colour from −12 dB and again from −6 dB.
+
+![A mixer strip, with Φ EQ and Φ Tame in its inserts.](images/mixer-strip.png)
+
+[]{.ix t="Mixer!Strips button"}The **Strips** button shows or hides the Instrument, Pre, Inserts and Trim/Pan/Width sections on every strip at once, and makes the strips wide. **Only Faders** hides them all.
+
+### Pre: polarity, cuts and delay {#mixer-pre}
+
+[]{.ix t="Low cut"}[]{.ix t="High cut"}[]{.ix t="Track delay"}
+
+- **Trim**, ±24 dB, sets the gain before everything else.
+- **ØL** and **ØR** turn the polarity of each side.
+- **LC** and **HC** are a low cut and a high cut, from 20 Hz to 20 kHz at 12 or 24 dB an octave, off to start. Click one to turn it on or off; right-click it for its frequency and slope.
+- **Delay** moves the whole track up to 500 ms earlier or later, to line it up with the others or for groove. PHI reads the track's clips that much earlier or later, so nothing is held back and a negative delay works too.
+
+### Inserts {#mixer-inserts}
+
+[]{.ix t="Inserts"}[]{.ix t="Mixer!inserts"}Each track has up to eight insert effects. The slots are always shown, as in Cubase: at least four, and one empty slot after the last one used.
+
+- Click an empty slot, or press `Insert`, for the effects menu, sorted by format: Built-in, Φ, stock, VST3, LV2, LADSPA and CLAP.
+- Double-click a slot to open the plugin's window, or for a built-in or Φ effect, a window of its knobs.
+- Right-click a slot to bypass, move, replace or remove it, or to set its **Mix**.
+- Drag a slot to reorder it.
+
+[]{.ix t="Insert Mix"}**Mix** is each insert's own dry/wet, for parallel compression or saturation in one slot. A slot under 100 % shows its percentage.
+
+### Width and pan {#mixer-width}
+
+[]{.ix t="Width"}**Width** runs from 0 % (mono) to 200 %, through mid/side. A track of mono files has none. **Pan** comes after the width: equal power for a track of mono files, balance otherwise.
+
+### Sends and returns {#mixer-sends}
+
+[]{.ix t="Sends"}[]{.ix t="Returns"}Two return strips sit between the tracks and the master:
+
+- **A Reverb** starts with Φ Space (1.8 s, fully wet).
+- **B Delay** starts with Φ Echo: one tap, a dotted eighth at the mix's tempo, 30 % feedback, fully wet.
+
+Right-click a return's effect to choose another, or none. Each return has a balance pan, a fader and a mute, and its own meter.
+
+Every track has a **Send A** and a **Send B** pot, showing its level in dB. A send is taken after the fader and pan; right-click the pot for **Pre-Fader**, which takes it after the inserts and width instead. A muted track's sends are silent, and bounces have none.
+
+### Track modes and Duck {#mixer-duck}
+
+[]{.ix t="Track modes"}[]{.ix t="Hybrid track"}A track plays in one of three modes:
+
+| Mode | Plays |
+|---|---|
+| **Hybrid** (the default) | The audio clips and the instrument as two layers, each with its own level (the **Audio** and **Inst** pots) |
+| **Audio** | Only the audio clips |
+| **Instrument** | Only the instrument |
+
+With every track hybrid, eight tracks hold sixteen sounds. The layers are added together before the trim and the fader, with room to spare, so nothing clips inside the strip; if a track runs hot, the meter's red shows it and the Trim brings it down.
+
+[]{.ix t="Duck"}[]{.ix t="Sidechain"}The **Duck** pot, 0 to 48 dB, turns one sound down whenever another plays: a sidechain that follows the peaks of its key. At −6 dBFS and above the key turns the ducked sound down by the whole amount, and below that by its share. The key is one layer of a hybrid track (the instrument ducks the audio, or the audio the instrument) or another track, which ducks the whole of this one. Right-click the pot for:
+
+- the key, the attack and the release;
+- **Only Below**, which ducks only what lies below a frequency and lets the highs pass, so a drum loop's hats keep going under the kick;
+- three presets: **Hard** (24 dB, fast release), **Soft** (8 dB, slow release) and **HF-Safe** (12 dB below 150 Hz).
+
+The pot's label shows the key and the amount: `I→12` is the instrument ducking by 12 dB, and `3→24↓` is track 3 ducking the lows by 24 dB.
+
+### Changing several strips at once {#q-link}
+
+[]{.ix t="Q-Link"}
+
+- **Q-Link**, as in Cubase: `Ctrl`+click strips to pick them, and with Q-Link on, a change to one goes to all of them. Levels move by the same amount.
+- Hold `Alt+Shift` while changing a control to send the change to every track.
+- **Bypass Inserts** and **Bypass Sends** switch off every insert or every send in the mix at once, to hear it without them.
 
 | Keys (strips focused) | Does |
 |---|---|
@@ -84,22 +158,24 @@ The window has three sections. `F6` or `Tab` goes round them (`Shift` backwards)
 
 A new mix starts with two tracks; Mixer > Add Track (`Ctrl+T`) adds one, up to eight, and Remove Last Track (`Ctrl+Shift+T`) removes the last. The master has a fader and meter and no plugins: mastering stays the editor's job.
 
+All of it, the cuts, delay, width, inserts with their settings, sends, modes and ducking, is saved with the project.
+
 **Transport.** `Space` plays and stops, `Home` goes to the start, `L` loops the whole mix. The tempo box sets the bars and beats; **MIDI follows tempo** plays the MIDI files at it instead of their own tempo maps.
 
 ## Mixing down and bouncing {#mixdown}
 
 []{.ix t="Mix Down to Editor"}[]{.ix t="Bounce"}**Mix Down to Editor** (`Ctrl+F3`, or `Ctrl+Enter` in the mixer) renders the whole mix, with the instruments' tails, into a new stereo tab in the editor, ready for mastering.
 
-**Bounce** renders one track by itself (its MIDI clips through its instrument, plus its audio clips, before the fader and pan) to a 32-bit WAV in a `Bounces` folder beside the mix:
+**Bounce** renders one track by itself (its MIDI clips through its instrument, plus its audio clips, through the cuts, inserts and width, before the fader and pan) to a 32-bit WAV in a `Bounces` folder beside the mix:
 
-- **Bounce in Place** (`B`, or right-click the strip) puts it on the track and mutes the clips it came from. They stay, so you can go back.
+- **Bounce in Place** (`B`, or right-click the strip) puts it on the track and mutes the clips it came from. They stay, so you can go back. The cuts and width are turned off, the inserts are bypassed and the delay is reset, so the sound is not processed twice.
 - **Bounce to New Track** (`Shift+B`) puts it on a new track with the same fader and pan, and mutes the original. It needs a free track.
 
 The mixer is heard on top of the editor, like the samplers.
 
 ## The Mix Assistant {#mix-assistant}
 
-[]{.ix t="Mix Assistant"}Mixer > Mix Assistant (`Alt+Shift+X`) is like Neutron's Mix Assistant. Like the [Master Assistant](#master-assistant), it only sets what you already have: each track's **fader** and **pan**, never its clips, instrument, trim or the patchbay.
+[]{.ix t="Mix Assistant"}Mixer > Mix Assistant (`Alt+Shift+X`) is like Neutron's Mix Assistant. Like the [Master Assistant](#master-assistant), it only sets what you already have: each track's **fader** and **pan**, and the EQ cuts if you ask, never its clips, instrument, trim or the patchbay.
 
 ![The Mix Assistant: each track's role, its setting before and after, and where one track hides another.](images/mix-assistant.png)
 
@@ -109,7 +185,7 @@ The mixer is heard on top of the editor, like the samplers.
 
 **Pans** follow rules: the lead vocal, kick, snare and bass stay in the middle, as do stereo tracks that are already wide; the rest spread to both sides in turn, the brightest widest. Tracks you panned yourself keep their pans unless you untick **Keep pans I set**. Untick **Fader** or **Pan** on a track to leave it alone.
 
-The list shows each track's setting before and after, its level in the mix against the aim, and below it where one track hides another ("Gtr covers Lead Vox around 1 kHz: cut Gtr there by about 2 dB"), for an EQ by hand. **Amount**, `A`, `Space`, **Keep** and **Revert** work as in the Master Assistant.
+The list shows each track's setting before and after, its level in the mix against the aim, and below it where one track hides another ("Gtr covers Lead Vox around 1 kHz: cut Gtr there by about 2 dB"). **Apply EQ Cuts** puts those cuts in a [Φ EQ](#phi-eq-nodes) in the inserts of the track that hides the other, each on the nearest band, or you can make them by hand. **Amount**, `A`, `Space`, **Keep** and **Revert** work as in the Master Assistant.
 
 ## The Patchbay {#patchbay}
 
