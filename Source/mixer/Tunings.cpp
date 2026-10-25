@@ -54,7 +54,7 @@ namespace mixer
         {
             std::vector<TuningSystem> all;
             // Ragas (IAST). Komal svaras that the raga sings low take their Pythagorean ratio:
-            // Darbārī's ati-komal ga and dha, Toḍī's and Bhairav's low re and dha.
+            // darbārī's ati-komal ga and dha, kaunsī kānaḍā's ga, toḍī's and bhairav's low re and dha.
             const auto r = [&] (const char* name, const char* plain, std::initializer_list<int> svaras,
                                 std::initializer_list<std::pair<int, double>> bent = {})
             { all.push_back (raga (name, plain, svaras, bent)); };
@@ -87,7 +87,7 @@ namespace mixer
             r ("lalit", "lalit", { 0, 1, 4, 5, 6, 8, 11 });
             r ("pūriyā dhanāśrī", "puriya dhanashri", { 0, 1, 4, 6, 7, 8, 11 });
             r ("śrī", "shri", { 0, 1, 4, 6, 7, 8, 11 });
-            r ("multānī", "multani", { 0, 1, 3, 6, 7, 8, 11 });
+            r ("kaunsī kānaḍā", "kaunsi kanada", { 0, 2, 3, 5, 7, 8, 10 }, { { 3, ga27 } });   // mālkauns with the kānaḍā ga
             r ("cārukeśī", "charukeshi", { 0, 2, 4, 5, 7, 8, 10 });
             // Each raga again in 12-TET, its svaras on the piano's keys.
             for (size_t i = 0, ragas = all.size(); i < ragas; ++i)
