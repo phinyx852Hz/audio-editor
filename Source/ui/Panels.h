@@ -31,6 +31,7 @@ public:
     explicit FocusFollowsMouse (QObject* parent) : QObject (parent) {}
 
     void setAreas (QList<QWidget*> a) { areas = std::move (a); }
+    void addAreas (const QList<QWidget*>& a) { areas = a + areas; }   // inner ones first
     void setEnabled (bool on)         { enabled = on; }
     bool isEnabled() const            { return enabled; }
 

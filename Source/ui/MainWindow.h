@@ -459,6 +459,13 @@ private:
     // (the master's) steps aside until the Master strip is picked or the editor comes back.
     void updateChainDock();
     bool chainHiddenForMixer = false;
+    // The Find panel is the mixer's Finder in the editor's place: it and the Inspector take
+    // turns (owner, 2026-10-25). Hidden for the Inspector, it comes back with the editor.
+    void mixerFinder (bool show);
+    void updateFindDock();
+    bool findHiddenForMixer = false;
+    bool hidingFindForMixer = false;
+    void sendToLauncher();   // the editor's sound (or its selection) into the mixer's launcher
     class QStackedWidget* centralStack = nullptr;
     QWidget* editorPage = nullptr;
     bool mixerFullFromDock = false;   // Super+F took the docked mixer full screen; again puts it back
