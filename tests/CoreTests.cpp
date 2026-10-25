@@ -27,6 +27,7 @@
 #include "../Source/core/Ambisonics.h"
 #include "../Source/core/SpatialStudio.h"
 #include "../Source/core/PhiVoice.h"
+#include "../Source/core/PhiPhaser.h"
 #include "../Source/core/PrismSplit.h"
 #include "../Source/core/MasterAssist.h"
 #include "../Source/mixer/MixAssist.h"
@@ -3721,6 +3722,92 @@ namespace
         }
     }
 
+    // Φ Phaser: stages φ apart, a sweep that never repeats, and a response that matches what it does.
+    void testPhiPhaser()
+    {
+        phi::Phaser::Settings s;
+        check (near (phi::Phaser::stageHz (s, 3, 0.0) / phi::Phaser::stageHz (s, 2, 0.0), phi::ratio, 1.0e-9)
+               && near (phi::Phaser::stageHz (s, 2, 0.0), s.centreHz, 1.0e-9), "phi phaser: stages a golden ratio apart around the centre");
+        {
+            auto classic = s;
+            classic.spread = 0.0;
+            check (near (phi::Phaser::stageHz (classic, 0, 0.0), phi::Phaser::stageHz (classic, 4, 0.0), 1.0e-9), "phi phaser: no spread is a classic phaser");
+        }
+        bool bounded = true;
+        for (int i = 0; i < 1000; ++i)
+            bounded = bounded && std::abs (phi::Phaser::lfo (i * 0.037, 0.5, 0.0)) <= 1.0 + 1.0e-12;
+        check (bounded, "phi phaser: the LFOs stay within -1 and 1");
+        check (std::abs (phi::Phaser::lfo (0.3, 0.5, 0.0) - phi::Phaser::lfo (2.3, 0.5, 0.0)) > 0.01, "phi phaser: a slow cycle later the sweep is elsewhere");
+
+        // With the LFOs still, its impulse response is the response it draws.
+        {
+            auto still = s;
+            still.depth = 0.0;
+            phi::Phaser p;
+            p.prepare (48000.0, 2);
+            p.set (still);
+            p.reset();
+            const int n = 1 << 16;
+            std::vector<float> left ((size_t) n), right ((size_t) n);
+            left[0] = right[0] = 1.0f;
+            float* channels[] = { left.data(), right.data() };
+            p.process (channels, 2, n);
+            bool matches = true;
+            for (const double hz : { 300.0, 1000.0, 3000.0 })
+            {
+                double re = 0.0, im = 0.0;
+                for (int i = 0; i < n; ++i)
+                {
+                    re += left[(size_t) i] * std::cos (6.283185307179586 * hz * i / 48000.0);
+                    im -= left[(size_t) i] * std::sin (6.283185307179586 * hz * i / 48000.0);
+                }
+                matches = matches && near (10.0 * std::log10 (re * re + im * im), phi::Phaser::responseDb (still, hz, 48000.0), 0.1);
+            }
+            check (matches, "phi phaser: the drawn response is what it does");
+            double deepest = 0.0;
+            for (int i = 0; i < 400; ++i)
+                deepest = std::min (deepest, phi::Phaser::responseDb (still, 20.0 * std::pow (1000.0, i / 399.0), 48000.0));
+            check (deepest < -12.0, "phi phaser: it cuts notches");
+        }
+
+        // No mix leaves the sound alone; full feedback on 13 stages stays stable.
+        {
+            auto dry = s;
+            dry.mix = 0.0;
+            phi::Phaser p;
+            p.prepare (48000.0, 1);
+            p.set (dry);
+            p.reset();
+            std::vector<float> x (4800);
+            for (size_t i = 0; i < x.size(); ++i)
+                x[i] = (float) std::sin (i * 0.01);
+            auto y = x;
+            float* channels[] = { y.data() };
+            p.process (channels, 1, (int) y.size());
+            check (y == x, "phi phaser: no mix is the dry sound");
+
+            auto wild = s;
+            wild.stages = 13;
+            wild.feedback = -0.9;
+            wild.depth = 1.0;
+            wild.rateHz = 5.0;
+            p.set (wild);
+            float peak = 0.0f;
+            std::mt19937 noise (7);
+            std::uniform_real_distribution<float> uniform (-0.5f, 0.5f);
+            float* noisy[] = { x.data() };
+            for (int block = 0; block < 100; ++block)
+            {
+                for (auto& v : x)
+                    v = uniform (noise);
+                p.process (noisy, 1, (int) x.size());
+                for (const auto v : x)
+                    peak = std::max (peak, std::abs (v));
+            }
+            check (std::isfinite (peak) && peak < 4.0f, "phi phaser: stable with the most feedback");
+        }
+    }
+
     // The splash's sound: phase distortion, a patch per start, a granular reverb with a long tail.
     void testPhiVoice()
     {
@@ -4377,6 +4464,7 @@ int main()
     testSonify();
     testPhi();
     testPhiVoice();
+    testPhiPhaser();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");

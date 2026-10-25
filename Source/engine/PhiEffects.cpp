@@ -2,6 +2,7 @@
 #include "PhiEffects.h"
 #include "MasteringEffect.h"
 #include "../core/Phi.h"
+#include "../core/PhiPhaser.h"
 
 #include <algorithm>
 #include <array>
@@ -518,6 +519,105 @@ namespace
     };
 
     //==========================================================================
+    // Φ Phaser: 2, 3, 5, 8 or 13 allpass stages tuned φ apart, swept by LFOs at rate × 1 and φ.
+    class PhiPhaserProcessor final : public MasteringEffect
+    {
+    public:
+        static constexpr const char* identifier = "phinyx:phi-phaser";
+
+        PhiPhaserProcessor() : MasteringEffect ("PHI_PHASER")
+        {
+            juce::StringArray stageNames;
+            for (const auto n : phi::Phaser::stageChoices)
+                stageNames.add (juce::String (n));
+            auto st = std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "stages", 1 }, "Stages", stageNames, 2);
+            auto r = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "rate", 1 }, "Rate",
+                skewed (0.01f, 10.0f, 0.001f, 0.618f), 0.382f, number (3, "Hz"));
+            auto d = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "depth", 1 }, "Depth",
+                juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 61.8f, percent());
+            auto c = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "centre", 1 }, "Centre",
+                skewed (50.0f, 5000.0f, 1.0f, 618.0f), 618.0f, number (0, "Hz"));
+            auto sp = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "spread", 1 }, "Spread",
+                juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 100.0f, percent());
+            auto f = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "feedback", 1 }, "Feedback",
+                juce::NormalisableRange<float> (-90.0f, 90.0f, 0.1f), 38.2f, percent());
+            auto w = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "stereo", 1 }, "Stereo",
+                juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 100.0f, percent());
+            auto m = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "mix", 1 }, "Mix",
+                juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 50.0f, percent());
+            stages = st.get(); rate = r.get(); depth = d.get(); centre = c.get();
+            spread = sp.get(); feedback = f.get(); stereo = w.get(); mix = m.get();
+            addHostedParameter (std::move (st));
+            addHostedParameter (std::move (r));
+            addHostedParameter (std::move (d));
+            addHostedParameter (std::move (c));
+            addHostedParameter (std::move (sp));
+            addHostedParameter (std::move (f));
+            addHostedParameter (std::move (w));
+            addHostedParameter (std::move (m));
+        }
+
+        static juce::PluginDescription description()
+        {
+            return describe (named ("Φ Phaser"), identifier, "Modulation", 0x50484950);   // "PHIP"
+        }
+        void fillInPluginDescription (juce::PluginDescription& d) const override { d = description(); }
+        const juce::String getName() const override { return named ("Φ Phaser"); }
+        double getTailLengthSeconds() const override { return 0.1; }
+
+        void prepareToPlay (double sampleRate, int) override
+        {
+            core.prepare (sampleRate, std::max (1, getTotalNumInputChannels()));
+            core.set (current());
+            core.reset();
+        }
+
+        using AudioPluginInstance::processBlock;
+        void processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override
+        {
+            core.set (current());
+            core.process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples());
+        }
+
+        DeviceDisplay display() override
+        {
+            // The notches with the LFOs at rest; the sweep moves them all together.
+            DeviceDisplay d;
+            d.kind = DeviceDisplay::Kind::frequency;
+            d.lowDb = -30.0f;
+            d.highDb = 12.0f;
+            const auto s = current();
+            const auto rateHz = getSampleRate() > 0.0 ? getSampleRate() : 48000.0;
+            for (int i = 0; i < displayPoints; ++i)
+                d.front.push_back ((float) phi::Phaser::responseDb (s, displayHz (i), rateHz));
+            d.caption = juce::String (s.stages).toStdString() + " stages, " + hertz (phi::Phaser::stageHz (s, 0, 0.0))
+                      + " to " + hertz (phi::Phaser::stageHz (s, s.stages - 1, 0.0)) + ", LFOs at "
+                      + decimal (s.rateHz, 3) + " Hz × 1, φ";
+            return d;
+        }
+
+    private:
+        phi::Phaser::Settings current() const
+        {
+            phi::Phaser::Settings s;
+            s.stages = phi::Phaser::stageChoices[(size_t) std::clamp (stages->getIndex(), 0, phi::Phaser::numStageChoices - 1)];
+            s.rateHz = rate->get();
+            s.depth = depth->get() / 100.0;
+            s.centreHz = centre->get();
+            s.spread = spread->get() / 100.0;
+            s.feedback = feedback->get() / 100.0;
+            s.stereo = stereo->get() / 100.0;
+            s.mix = mix->get() / 100.0;
+            return s;
+        }
+
+        juce::AudioParameterChoice* stages = nullptr;
+        juce::AudioParameterFloat *rate = nullptr, *depth = nullptr, *centre = nullptr, *spread = nullptr,
+                                  *feedback = nullptr, *stereo = nullptr, *mix = nullptr;
+        phi::Phaser core;
+    };
+
+    //==========================================================================
     // Φ Rhythm: a gate that plays the Fibonacci word (or a sparser golden rhythm).
     // It follows the host's tempo and position when there are any, else its own Tempo.
     class PhiRhythmProcessor final : public MasteringEffect
@@ -972,7 +1072,7 @@ namespace phifx
     std::vector<juce::PluginDescription> descriptions()
     {
         return { PhiEqProcessor::description(), PhiEchoProcessor::description(), PhiSpaceProcessor::description(),
-                 PhiDriftProcessor::description(), PhiRhythmProcessor::description(), PhiResonatorProcessor::description(),
+                 PhiDriftProcessor::description(), PhiPhaserProcessor::description(), PhiRhythmProcessor::description(), PhiResonatorProcessor::description(),
                  PhiStackProcessor::description(), PhiTameProcessor::description(), PhiDeresonatorProcessor::description() };
     }
 
@@ -985,6 +1085,7 @@ namespace phifx
         if (id == PhiEchoProcessor::identifier)   return std::make_unique<PhiEchoProcessor>();
         if (id == PhiSpaceProcessor::identifier)  return std::make_unique<PhiSpaceProcessor>();
         if (id == PhiDriftProcessor::identifier)  return std::make_unique<PhiDriftProcessor>();
+        if (id == PhiPhaserProcessor::identifier) return std::make_unique<PhiPhaserProcessor>();
         if (id == PhiRhythmProcessor::identifier) return std::make_unique<PhiRhythmProcessor>();
         if (id == PhiResonatorProcessor::identifier)   return std::make_unique<PhiResonatorProcessor>();
         if (id == PhiStackProcessor::identifier)       return std::make_unique<PhiStackProcessor>();
