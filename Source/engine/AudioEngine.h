@@ -6,6 +6,7 @@
 #include "../core/Dsp.h"
 #include "../core/Metadata.h"
 #include "TagIO.h"
+#include "DeviceDisplay.h"
 
 #include <array>
 #include <atomic>
@@ -36,7 +37,7 @@ struct MeterBlock
 
 namespace codec { struct Format; }
 namespace mixer { class Instrument; }
-namespace patchbay { class Effect; }
+namespace mixer { class Effect; }
 
 struct SaveOptions
 {
@@ -71,6 +72,7 @@ struct MasterSlotInfo
     bool failed = false;      // the plugin stopped working (it threw, or its bridge went away); it is skipped until reloaded
     std::string failure;      // what it said, e.g. "write: Broken pipe"
     bool prism = false;       // a Prism: rays of plugins of its own, opened in the Prism editor
+    float mix = 1.0f;         // a slot's dry/wet: 1 is all the plugin, 0 all the dry sound (slots only)
 };
 
 // A place in the Master Section: a slot, then a (ray, device) step into each Prism on the way.
@@ -262,9 +264,10 @@ public:
     // Message thread. Null with `error` when it could not be started.
     std::shared_ptr<mixer::Instrument> loadInstrumentPlugin (const std::string& pluginId, double sampleRate, std::string& error);
     static std::string instrumentPluginId (const mixer::Instrument&);   // empty for the built-in ones
-    // An effect plugin (or a built-in or stock effect from knownPlugins) for a patchbay FX bus
-    // (PluginEffect.cpp): stereo in and out. Message thread. Null with `error` when it could not be started.
-    std::shared_ptr<patchbay::Effect> loadEffectPlugin (const std::string& pluginId, double sampleRate, std::string& error);
+    // An effect plugin (or a built-in or stock effect from knownPlugins) for a patchbay FX bus or a
+    // mixer track's inserts (PluginEffect.cpp): stereo in and out. Message thread. Null with `error`
+    // when it could not be started.
+    std::shared_ptr<mixer::Effect> loadEffectPlugin (const std::string& pluginId, double sampleRate, std::string& error);
 
     //==========================================================================
     // Master Section: slots of plugins applied to everything played and rendered,
@@ -308,9 +311,11 @@ public:
     MasterSlotInfo chainDevice (const ChainPath&) const;
     std::vector<PluginParameterInfo> chainParameters (const ChainPath&) const;
     PluginParameterInfo chainParameter (const ChainPath&, int index) const;
+    DeviceDisplay chainDisplay (const ChainPath&) const;   // a Φ effect's picture; Kind::none for others
     void setChainParameter (const ChainPath&, int index, float normalisedValue);
     bool setChainParameterText (const ChainPath&, int index, const std::string& text);
     void setChainBypassed (const ChainPath&, bool);
+    void setChainMix (const ChainPath&, float mix);   // a slot's dry/wet, 0..1; Prism devices have none
     std::string reloadChainDevice (const ChainPath&);
     void removeChainDevice (const ChainPath&);
     bool canShowChainWindow (const ChainPath&) const;

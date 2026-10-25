@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "PhiMark.h"
 
+#include <QEventLoop>
 #include <QGuiApplication>
+#include <QPointer>
 #include <QPainter>
 #include <QScreen>
 #include <QTimer>
@@ -127,9 +129,9 @@ void PhiMark::paintEvent (QPaintEvent*)
     paint (g, QRectF (rect()), phimark::Style::goldOnBlack);
 }
 
-PhiButton::PhiButton (const QString& accessibleName, QWidget* parent) : QToolButton (parent)
+PhiButton::PhiButton (const QString& accessibleName, QWidget* parent, bool isSwitch) : QToolButton (parent)
 {
-    setCheckable (true);
+    setCheckable (isSwitch);
     setAutoRaise (true);
     setFocusPolicy (Qt::StrongFocus);
     setAccessibleName (accessibleName);
@@ -148,7 +150,7 @@ PhiButton::PhiButton (const QString& accessibleName, QWidget* parent) : QToolBut
         g.drawPixmap (0, 0, on);
         g.end();
         icon.addPixmap (on, QIcon::Normal, QIcon::On);
-        icon.addPixmap (off, QIcon::Normal, QIcon::Off);
+        icon.addPixmap (isSwitch ? off : on, QIcon::Normal, QIcon::Off);
     }
     setIcon (icon);
 }
@@ -156,20 +158,61 @@ PhiButton::PhiButton (const QString& accessibleName, QWidget* parent) : QToolBut
 //==============================================================================
 PhiSplash::PhiSplash() : QWidget (nullptr, Qt::SplashScreen | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint)
 {
-    setAttribute (Qt::WA_TranslucentBackground);   // the tile's rounded corners
+    setAttribute (Qt::WA_TranslucentBackground);   // the rounded corners, and the dot it grows from
     setAttribute (Qt::WA_DeleteOnClose);
-    const auto side = (int) std::lround (1000.0 / (phi * phi));
+    const auto h = std::round (1000.0 / (phi * phi));   // 382
+    card = QSizeF (std::round (h * phi), h);            // 618 x 382, a golden rectangle
+
+    // The window is a transparent square around the spiral's pole, big enough for the card
+    // to turn about it, with the card in the middle of the screen.
+    const auto centre = pole();
+    double reach = 0.0;
+    for (const auto& corner : { QPointF (0, 0), QPointF (card.width(), 0), QPointF (0, card.height()), QPointF (card.width(), card.height()) })
+        reach = std::max (reach, std::hypot (corner.x() - centre.x(), corner.y() - centre.y()));
+    const auto side = (int) std::ceil (2.0 * reach) + 4;
     resize (side, side);
+    offset = QPointF (side / 2.0, side / 2.0) - centre;
     if (const auto* screen = QGuiApplication::primaryScreen())
-        move (screen->availableGeometry().center() - rect().center());
+        move ((QPointF (screen->availableGeometry().center()) - offset - QPointF (card.width() / 2.0, card.height() / 2.0)).toPoint());
+}
+
+void PhiSplash::play()
+{
+    const auto ratio = devicePixelRatioF();
+    content = QPixmap ((card * ratio).toSize());
+    content.setDevicePixelRatio (ratio);
+    content.fill (Qt::transparent);
+    {
+        QPainter g (&content);
+        paintContent (g);
+    }
+
+    show();
     shown.start();
     if (startupSound())
-        QTimer::singleShot (0, this, [] { startupSound()(); });
+        startupSound()();
+
+    // Spirals open over 1.618 seconds, about 60 frames a second, unless it is clicked away.
+    const qint64 length = (qint64) std::lround (phi * 1000.0);
+    QPointer<PhiSplash> self (this);
+    QEventLoop loop;
+    QTimer frames;
+    QObject::connect (&frames, &QTimer::timeout, &loop, [&]
+    {
+        if (self == nullptr || ! self->isVisible())
+            return loop.quit();
+        progress = std::min (1.0, (double) shown.elapsed() / (double) length);
+        update();
+        if (progress >= 1.0)
+            loop.quit();
+    });
+    frames.start (16);
+    loop.exec();
 }
 
 void PhiSplash::finish (QWidget* mainWindow)
 {
-    const auto left = std::max<qint64> (0, (qint64) std::lround (phi * 1000.0) - shown.elapsed());
+    const auto left = std::max<qint64> (0, (qint64) std::lround (phi * phi * 1000.0) - shown.elapsed());
     QTimer::singleShot ((int) left, this, [this, mainWindow]
     {
         close();
@@ -184,18 +227,110 @@ std::function<void()>& PhiSplash::startupSound()
     return sound;
 }
 
+namespace
+{
+    // The golden rectangle `all` taken apart into squares, a quarter turn at a time: each
+    // square, where the spiral's quarter circle in it is centred, and its start angle.
+    template <typename Visit>
+    void squares (QRectF all, int turns, Visit visit)
+    {
+        auto left = all;
+        for (int turn = 0; turn < turns && left.width() > 1.0e-6 && left.height() > 1.0e-6; ++turn)
+        {
+            const auto side = std::min (left.width(), left.height());
+            QRectF square;
+            QPointF centre;
+            int start = 0;
+            switch (turn % 4)
+            {
+                case 0: square = QRectF (left.left(), left.top(), side, side);  centre = square.bottomRight(); start = 90;  left.setLeft (square.right()); break;
+                case 1: square = QRectF (left.left(), left.top(), side, side);  centre = square.bottomLeft();  start = 0;   left.setTop (square.bottom()); break;
+                case 2: square = QRectF (left.right() - side, left.top(), side, side); centre = square.topLeft(); start = 270; left.setRight (square.left()); break;
+                default: square = QRectF (left.left(), left.bottom() - side, side, side); centre = square.topRight(); start = 180; left.setBottom (square.top()); break;
+            }
+            visit (turn, square, centre, start, left);
+        }
+    }
+}
+
+QPointF PhiSplash::pole() const
+{
+    QPointF at;
+    squares (QRectF (QPointF(), card), 60, [&] (int, const QRectF&, const QPointF&, int, const QRectF& left) { at = left.center(); });
+    return at;
+}
+
 void PhiSplash::paintEvent (QPaintEvent*)
 {
     QPainter g (this);
-    paint (g, QRectF (rect()), phimark::Style::goldOnBlack);
+    g.setCompositionMode (QPainter::CompositionMode_Source);
+    g.fillRect (rect(), Qt::transparent);
+    g.setCompositionMode (QPainter::CompositionMode_SourceOver);
+    if (content.isNull())
+        return;
 
-    // The version in the tile's lower margin, small and gold.
+    // The golden rectangle is itself turned a quarter and shrunk by 1/φ about the spiral's
+    // pole, so turning back t quarters and shrinking by φ^-t winds it into a dot. Eased out,
+    // ten turns (a few pixels) down to none.
+    g.setRenderHint (QPainter::SmoothPixmapTransform);
+    const auto eased = 1.0 - std::pow (1.0 - progress, 3.0);
+    const auto t = 10.0 * (1.0 - eased);
+    const auto centre = pole() + offset;
+    QTransform turn;
+    turn.translate (centre.x(), centre.y());
+    turn.rotate (90.0 * t);
+    turn.scale (std::pow (phi, -t), std::pow (phi, -t));
+    turn.translate (-centre.x(), -centre.y());
+    g.setTransform (turn);
+    g.setOpacity (std::min (1.0, 0.25 + progress * 3.0));
+    g.drawPixmap (offset, content);
+}
+
+void PhiSplash::paintContent (QPainter& g) const
+{
+    // A golden rectangle: the mark in its square on the left, the name in the golden
+    // rectangle that is left over, and the golden spiral drawn faintly through both, a
+    // quarter turn in each square as the rectangle divides again and again.
+    g.setRenderHint (QPainter::Antialiasing);
+    const QRectF all (QPointF(), card);
+    const auto radius = all.height() / (phi * phi * phi * phi);
+    g.setPen (Qt::NoPen);
+    g.setBrush (black);
+    g.drawRoundedRect (all, radius, radius);
+
+    auto spiral = gold;
+    spiral.setAlphaF (0.16f);
+    squares (all, 10, [&] (int turn, const QRectF& square, const QPointF& centre, int start, const QRectF&)
+    {
+        const auto side = square.width();
+        if (turn == 0)
+        {
+            g.setPen (QPen (spiral, 1.2));
+            g.drawLine (QPointF (square.right(), all.top() + radius), QPointF (square.right(), all.bottom() - radius));
+            paint (g, square, phimark::Style::goldOnBlack);
+        }
+        g.setPen (QPen (spiral, 1.2));
+        g.setBrush (Qt::NoBrush);
+        g.drawArc (QRectF (centre.x() - side, centre.y() - side, 2 * side, 2 * side), start * 16, 90 * 16);
+    });
+
+    // The name, in lower case with the macron (phī), and the version in the leftover
+    // rectangle, the name's baseline on its golden section.
+    const QRectF text (all.height(), 0, all.width() - all.height(), all.height());
     auto f = font();
-    f.setPixelSize (std::max (9, height() / 34));
+    f.setPixelSize ((int) std::lround (text.width() / (phi * phi)));
+    f.setWeight (QFont::DemiBold);
+    g.setFont (f);
+    g.setPen (QColor (0xe8, 0xe4, 0xda));
+    const auto baseline = text.top() + text.height() / phi;
+    g.drawText (QRectF (text.left(), text.top(), text.width(), baseline - text.top()), Qt::AlignHCenter | Qt::AlignBottom,
+                QString::fromUtf8 ("phī"));
+    f.setPixelSize (std::max (9, (int) std::lround (text.width() / (phi * phi * phi * phi * phi))));
+    f.setWeight (QFont::Normal);
     g.setFont (f);
     g.setPen (gold);
-    const auto margin = height() / (phi * phi * phi * phi);
-    g.drawText (QRectF (0, height() - margin, width(), margin), Qt::AlignCenter, QCoreApplication::applicationVersion());
+    g.drawText (QRectF (text.left(), baseline + text.height() / (phi * phi * phi * phi * phi * phi), text.width(), text.height() / 8),
+                Qt::AlignHCenter | Qt::AlignTop, QCoreApplication::applicationVersion());
 }
 
 void PhiSplash::mousePressEvent (QMouseEvent*)

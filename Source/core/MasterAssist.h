@@ -25,6 +25,7 @@ namespace assist
         static const std::array<double, numBands>& bandCentres();
 
         std::array<double, numBands> bandsDb {};              // each octave's level against the mean of all ten, dB
+        double bandsMeanDb = -150.0;                          // that mean (the octave's own level is the sum), dB
         double lufs = -200.0;                                 // integrated, BS.1770
         double truePeakDb = -200.0;
         double plr = 0.0;                                     // true peak minus integrated loudness, dB
@@ -66,6 +67,16 @@ namespace assist
     // typical one, in their order in the song, joined with short fades. The
     // whole range when it is no longer than `seconds`.
     AudioDataPtr excerpt (const AudioData&, Frame start, Frame end, double seconds = 30.0);
+
+    // The same in two steps, to cut the same stretches out of several recordings
+    // (the tracks of a mix): where they are, then the stretches themselves.
+    struct Windows
+    {
+        std::vector<Frame> starts;
+        Frame length = 0;
+    };
+    Windows excerptWindows (const AudioData&, Frame start, Frame end, double seconds = 30.0);
+    AudioDataPtr cut (const AudioData&, const Windows&);
 
     // What a parameter does, guessed from its name, and whether the assistant
     // moves it unless told otherwise (gains, EQ band gains, thresholds, ratios and

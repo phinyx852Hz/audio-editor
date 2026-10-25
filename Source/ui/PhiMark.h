@@ -36,14 +36,18 @@ namespace phimark
     QString withoutPhi (const QString& name);          // "Φ EQ" -> "EQ", when the mark stands in for the letter
 }
 
-// The window shown while PHI starts: the gold mark on its black tile, 1000/φ² (382)
-// pixels square in the middle of the screen, not full screen, with the version under the
-// mark. It stays at least 1.618 seconds, and closes once the main window is up.
+// The window shown while PHI starts, in the middle of the screen (not full screen): a
+// golden rectangle 618 x 382, the gold mark in its square, "phī" and the version in the
+// rest, and the golden spiral through it. It opens by spiralling out of a dot: turning
+// back a quarter turn and growing by φ for each square of the spiral, as the golden
+// rectangle is made of itself turned and shrunk by 1/φ. It stays at least φ² (2.618)
+// seconds, and closes once the main window is up; a click closes it at once.
 class PhiSplash final : public QWidget
 {
 public:
     PhiSplash();
-    void finish (QWidget* mainWindow);   // closes when the 1.618 seconds are over
+    void play();                         // shows it and waits while it spirals open (1.618 s)
+    void finish (QWidget* mainWindow);   // closes when the 2.618 seconds are over
 
     // Played when the splash opens, if set: the Φ synth's sound for the start (a new random
     // patch each time). Set it before the splash is shown.
@@ -54,7 +58,14 @@ protected:
     void mousePressEvent (QMouseEvent*) override;   // a click closes it at once
 
 private:
+    void paintContent (QPainter&) const;   // the splash as it ends, unturned
+    QPointF pole() const;                  // where the golden spiral winds in to
+
+    QSizeF card;       // the splash itself, 618 x 382
+    QPointF offset;    // where it sits in the window, which has room around it to turn in
     QElapsedTimer shown;
+    QPixmap content;
+    double progress = 0.0;   // 0 a dot, 1 open
 };
 
 // The gold mark on a black tile.
@@ -67,10 +78,11 @@ protected:
     void paintEvent (QPaintEvent*) override;
 };
 
-// The Φ button used across the DAW to turn a golden-ratio option on: the compact
-// white mark, a line of text high, so it takes no more room than a checkbox.
+// The Φ button used across the DAW: the compact white mark, a line of text high, so it
+// takes no more room than a checkbox. A switch (a golden-ratio option, faded when off)
+// or, with isSwitch false, a plain button (the Φ random selector).
 class PhiButton final : public QToolButton
 {
 public:
-    explicit PhiButton (const QString& accessibleName, QWidget* parent = nullptr);
+    explicit PhiButton (const QString& accessibleName, QWidget* parent = nullptr, bool isSwitch = true);
 };

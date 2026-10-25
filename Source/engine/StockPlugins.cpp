@@ -31,6 +31,10 @@ namespace stock
               { "Input Gain", "Output Ceiling", "Release", "Lookahead" }, "", "ZL Audio", "VST3" },
             { "ZL Splitter.vst3", "ZL Splitter by ZL Audio (zsliu98)", "AGPL-3.0", "https://github.com/ZL-Audio/ZLSplitter",
               { "Split Type", "Mix" }, "", "ZL Audio", "VST3" },
+            // Airwindows Consolidated: every Airwindows effect in one plugin, a JUCE VST3.
+            // Its background takes the frame's colour (cmake/airwindows).
+            { "Airwindows Consolidated.vst3", "Airwindows by Chris Johnson, Consolidated by Paul Walker", "MIT",
+              "https://www.airwindows.com/consolidated/", { "Input Level", "Output Level" }, "", "Airwindows", "VST3" },
 
             // Instruments (cmake/Instruments.cmake). Samplers first, then synths, in menu order.
             { .file = "GRNLR.vst3", .credit = "GRNLR by Raffael Seyfried", .licence = "GPL-3.0-or-later",

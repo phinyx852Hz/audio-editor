@@ -1099,9 +1099,11 @@ void AudioEngine::setPluginFrameColours (const PluginFrameColours& c) { StockFra
 MasterSlotInfo AudioEngine::chainDevice (const ChainPath& p) const                      { return impl->master.info (p); }
 std::vector<PluginParameterInfo> AudioEngine::chainParameters (const ChainPath& p) const { return impl->master.parameters (p); }
 PluginParameterInfo AudioEngine::chainParameter (const ChainPath& p, int i) const       { return impl->master.parameter (p, i); }
+DeviceDisplay AudioEngine::chainDisplay (const ChainPath& p) const                       { return impl->master.display (p); }
 void AudioEngine::setChainParameter (const ChainPath& p, int i, float v)                 { impl->master.setParameter (p, i, v); }
 bool AudioEngine::setChainParameterText (const ChainPath& p, int i, const std::string& t) { return impl->master.setParameterFromText (p, i, t); }
 void AudioEngine::setChainBypassed (const ChainPath& p, bool b)                          { impl->master.setBypassed (p, b); }
+void AudioEngine::setChainMix (const ChainPath& p, float mix)                           { if (p.topLevel()) impl->master.setMix (p.slot, mix); }
 std::string AudioEngine::reloadChainDevice (const ChainPath& p)                          { return impl->master.reload (p); }
 void AudioEngine::removeChainDevice (const ChainPath& p)                                 { impl->master.remove (p); }
 bool AudioEngine::canShowChainWindow (const ChainPath& p) const                          { return impl->master.canShowWindow (p); }

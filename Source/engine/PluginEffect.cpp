@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Effect plugins (VST3, LV2, LADSPA, CLAP, and the built-in and stock effects) on the
-// patchbay's FX buses: stereo in, stereo out. Made through AudioEngine::loadEffectPlugin.
+// patchbay's FX buses and the mixer's inserts: stereo in, stereo out. Made through AudioEngine::loadEffectPlugin.
 #include "AudioEngine.h"
 #include "MasterChain.h"
 #include "PluginWindow.h"
 #include "../patchbay/PatchBay.h"
 
+#include <algorithm>
 #include <cstdlib>
 
 namespace
 {
-    class PluginEffect final : public patchbay::Effect
+    class PluginEffect final : public mixer::Effect
     {
     public:
         PluginEffect (std::unique_ptr<juce::AudioPluginInstance> p, std::string pluginIdentifier)
@@ -126,6 +127,51 @@ namespace
             guard ([&] { plugin->setStateInformation (block.getData(), (int) block.getSize()); });
         }
 
+        std::vector<Parameter> parameters() const override
+        {
+            std::vector<Parameter> list;
+            const_cast<PluginEffect*> (this)->guard ([&]
+            {
+                for (auto* p : plugin->getParameters())
+                {
+                    Parameter info;
+                    info.name = p->getName (64).toStdString();
+                    info.value = p->getValue();
+                    info.text = (p->getCurrentValueAsText() + " " + p->getLabel()).trim().toStdString();
+                    info.toggle = p->isBoolean();
+                    const auto steps = p->getNumSteps();
+                    info.steps = steps > 1 && steps <= 1000 ? steps : 0;
+                    list.push_back (std::move (info));
+                }
+            });
+            return list;
+        }
+
+        void setParameter (int index, float value) override
+        {
+            guard ([&]
+            {
+                const auto& all = plugin->getParameters();
+                if (index >= 0 && index < all.size())
+                    all[index]->setValueNotifyingHost (std::clamp (value, 0.0f, 1.0f));
+            });
+        }
+
+        bool setParameterText (int index, const std::string& text) override
+        {
+            bool done = false;
+            guard ([&]
+            {
+                const auto& all = plugin->getParameters();
+                if (index < 0 || index >= all.size())
+                    return;
+                auto* p = all[index];
+                p->setValueNotifyingHost (std::clamp (p->getValueForText (juce::String (text)), 0.0f, 1.0f));
+                done = true;
+            });
+            return done;
+        }
+
     private:
         template <typename Fn>
         bool guard (Fn&& fn)
@@ -152,7 +198,7 @@ namespace
     };
 }
 
-std::shared_ptr<patchbay::Effect> AudioEngine::loadEffectPlugin (const std::string& pluginId, double sampleRate, std::string& error)
+std::shared_ptr<mixer::Effect> AudioEngine::loadEffectPlugin (const std::string& pluginId, double sampleRate, std::string& error)
 {
     juce::String why;
     auto instance = masterChain().createEffect (pluginId, sampleRate, patchbay::PatchBay::block, why);

@@ -1,0 +1,133 @@
+diff --git a/src-juce/AWConsolidatedEditor.cpp b/src-juce/AWConsolidatedEditor.cpp
+index ef502be..2f853ac 100644
+--- a/src-juce/AWConsolidatedEditor.cpp
++++ b/src-juce/AWConsolidatedEditor.cpp
+@@ -8,6 +8,10 @@
+ 
+ #include <cmrc/cmrc.hpp>
+ 
++#if JUCE_LINUX
++#include <dlfcn.h>
++#endif
++
+ CMRC_DECLARE(awconsolidated_resources);
+ namespace awres = cmrc::awconsolidated_resources;
+ 
+@@ -17,6 +21,32 @@ namespace awres = cmrc::awconsolidated_resources;
+ #define AWC_JUCE_FONT_CTOR(...) juce::Font(__VA_ARGS__)
+ #endif
+ 
++// PHI: in PHI the background is the colour of the PHI frame the view sits in,
++// so it looks see-through there. PHI exports phi_plugin_background() as 0xAARRGGBB;
++// any other host has no such function and gets the usual gradient.
++static bool phiBackground(juce::Colour &colour)
++{
++#if JUCE_LINUX
++    using Fn = uint32_t (*)();
++    static const auto fn = reinterpret_cast<Fn>(dlsym(RTLD_DEFAULT, "phi_plugin_background"));
++    if (fn != nullptr)
++    {
++        colour = juce::Colour(fn());
++        return true;
++    }
++#endif
++    return false;
++}
++
++// PHI: following the system, the light or dark theme goes by the PHI background
++// instead, so the text stays readable on it.
++static bool darkModeActive()
++{
++    if (juce::Colour phi; phiBackground(phi))
++        return phi.getPerceivedBrightness() < 0.5f;
++    return juce::Desktop::getInstance().isDarkModeActive();
++}
++
+ AWLookAndFeel::AWLookAndFeel()
+ {
+     setToSystemTheme();
+@@ -56,7 +86,7 @@ AWLookAndFeel::AWLookAndFeel()
+ 
+ void AWLookAndFeel::setToSystemTheme()
+ {
+-    juce::Desktop::getInstance().isDarkModeActive() ? setDarkTheme() : setLightTheme();
++    darkModeActive() ? setDarkTheme() : setLightTheme();
+ }
+ void AWLookAndFeel::setDarkTheme()
+ {
+@@ -1731,6 +1761,14 @@ void AWConsolidatedAudioProcessorEditor::updateColorStrategy(
+ 
+ void AWConsolidatedAudioProcessorEditor::idle()
+ {
++    if (juce::Colour phi; phiBackground(phi) && phi.getARGB() != phiLastBackground)
++    {
++        phiLastBackground = phi.getARGB();   // the PHI theme changed
++        darkModeSettingChanged();
++        frame->repaint();
++        repaint();
++    }
++
+     if (processor.rebuildUI.exchange(false))
+     {
+         resizeDocArea();
+@@ -1878,7 +1916,9 @@ void AWConsolidatedAudioProcessorEditor::resized()
+ void AWConsolidatedAudioProcessorEditor::paint(juce::Graphics &g)
+ {
+     // only shows in the rounding seam the scaled frame may leave
+-    g.setColour(findColour(ColourIds::gradientStop));
++    auto seam = findColour(ColourIds::gradientStop);
++    phiBackground(seam);
++    g.setColour(seam);
+     g.fillAll();
+ }
+ 
+@@ -1888,7 +1928,13 @@ void AWConsolidatedAudioProcessorEditor::paintContents(juce::Graphics &g)
+     auto gr = juce::ColourGradient(findColour(ColourIds::gradientStart), {0.f, 0.f},
+                                    findColour(ColourIds::gradientStop), {0.f, 1.f * contentHeight},
+                                    false);
+-    g.setGradientFill(gr);
++    if (juce::Colour phi; phiBackground(phi))
++    {
++        phiLastBackground = phi.getARGB();
++        g.setColour(phi);
++    }
++    else
++        g.setGradientFill(gr);
+     g.fillAll();
+ 
+     static constexpr float footerHeight{40};
+@@ -2455,8 +2501,7 @@ AWConsolidatedAudioProcessorEditor::createKeyboardFocusTraverser()
+ void AWConsolidatedAudioProcessorEditor::darkModeSettingChanged()
+ {
+     if (currentColorStrategy == FOLLOW_SYSTEM)
+-        juce::Desktop::getInstance().isDarkModeActive() ? lnf->setDarkTheme()
+-                                                        : lnf->setLightTheme();
++        darkModeActive() ? lnf->setDarkTheme() : lnf->setLightTheme();
+ 
+     if (docBodyEd)
+     {
+diff --git a/src-juce/AWConsolidatedEditor.h b/src-juce/AWConsolidatedEditor.h
+index 33fbb2d..9dd5409 100644
+--- a/src-juce/AWConsolidatedEditor.h
++++ b/src-juce/AWConsolidatedEditor.h
+@@ -178,6 +178,7 @@ class AWConsolidatedAudioProcessorEditor : public juce::AudioProcessorEditor,
+         AWConsolidatedAudioProcessorEditor *ed;
+     };
+     void idle();
++    uint32_t phiLastBackground{0};   // the PHI frame colour last painted
+     std::unique_ptr<IdleTimer> idleTimer;
+     std::unique_ptr<ZoomFrame> frame;
+     std::unique_ptr<Picker> menuPicker;
+diff --git a/src-juce/CMakeLists.txt b/src-juce/CMakeLists.txt
+index 1f41088..b3c23ac 100644
+--- a/src-juce/CMakeLists.txt
++++ b/src-juce/CMakeLists.txt
+@@ -20,7 +20,7 @@ CPMAddPackage(
+ CPMAddPackage(
+         NAME clap-juce-extensions
+         GITHUB_REPOSITORY free-audio/clap-juce-extensions
+-        GIT_TAG main
++        GIT_TAG 7adee3a1bd4684d4caa5601100e364abccff4b4d
+         SUBMODULE_RECURSIVE ON
+ )
+ 

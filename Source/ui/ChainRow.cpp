@@ -4,6 +4,7 @@
 #include "PrismEditor.h"
 #include "Potentiometer.h"
 #include "PhiMark.h"
+#include "PhiWindow.h"
 #include "Theme.h"
 
 #include <QApplication>
@@ -11,6 +12,7 @@
 #include <QDrag>
 #include <QDragEnterEvent>
 #include <QFontMetrics>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
@@ -30,7 +32,9 @@ namespace
 {
     const QString slotMime = QStringLiteral ("application/x-phi-chain-slot");
     constexpr int dialResolution = 1000;
-    constexpr int maxKnobs = 4;
+    constexpr int maxKnobs = 8;      // a plugin's own knobs on its card, two rows of four; then its Mix
+    constexpr int knobsPerRow = 4;
+    constexpr int knobSize = 30;     // the mixer's pots
 
     QToolButton* smallButton (const QString& text, const QString& tip, QWidget* parent, bool checkable = false)
     {
@@ -89,7 +93,7 @@ DeviceCard::DeviceCard (AudioEngine& e, Kind k, ChainPath where, QWidget* parent
     setFocusPolicy (Qt::NoFocus);
     const auto info = k == Kind::plugin ? engine.chainDevice (place) : MasterSlotInfo {};
     isPrism = info.prism && ! info.failed;
-    setFixedWidth (k == Kind::add ? 110 : k == Kind::master ? 186 : isPrism ? 440 : 236);
+    setFixedWidth (k == Kind::add ? 110 : k == Kind::master ? 186 : isPrism ? 500 : 292);
     setMinimumHeight (150);
 
     auto* layout = new QVBoxLayout (this);
@@ -132,8 +136,9 @@ DeviceCard::DeviceCard (AudioEngine& e, Kind k, ChainPath where, QWidget* parent
 
     auto* body = new QHBoxLayout;
     body->setSpacing (4);
-    auto* knobGrid = new QHBoxLayout;
-    knobGrid->setSpacing (2);
+    auto* knobGrid = new QGridLayout;
+    knobGrid->setHorizontalSpacing (2);
+    knobGrid->setVerticalSpacing (4);
     body->addLayout (knobGrid, 1);
     layout->addLayout (body, 1);
 
@@ -177,23 +182,38 @@ DeviceCard::DeviceCard (AudioEngine& e, Kind k, ChainPath where, QWidget* parent
         addKnob (ditherNoise, tr ("Noise"), 3);
     }
 
-    for (auto& kn : knobs)
+    // Every slot has a dry/wet, whatever the plugin has: parallel processing in one place.
+    const auto ownKnobs = (int) knobs.size();
+    if (k == Kind::plugin && place.topLevel())
+        addKnob (slotMix, tr ("Dry/Wet"), 0);
+
+    const auto perRow = isPrism ? PrismInfo::numMacros : knobsPerRow;
+    for (int i = 0; i < (int) knobs.size(); ++i)
     {
+        const auto& kn = knobs[(size_t) i];
         auto* column = new QVBoxLayout;
         column->setSpacing (0);
         column->addWidget (kn.dial, 0, Qt::AlignHCenter);
         column->addWidget (kn.name);
         column->addWidget (kn.value);
-        knobGrid->addLayout (column);
+        if (kn.parameter == slotMix)
+        {
+            column->addStretch (1);
+            knobGrid->addLayout (column, 0, perRow, 2, 1);   // apart from the plugin's own, at the right
+        }
+        else
+            knobGrid->addLayout (column, i / perRow, i % perRow);
     }
 
-    if (knobs.empty())
+    if (ownKnobs == 0)
     {
         auto* none = new QLabel (tr ("No adjustable parameters"), this);
         none->setForegroundRole (QPalette::PlaceholderText);
         none->setWordWrap (true);
-        knobGrid->addWidget (none);
+        knobGrid->addWidget (none, 0, 0, 1, perRow);
     }
+    knobGrid->setColumnStretch (perRow, 0);
+    knobGrid->setRowStretch (2, 1);
 
     if (k == Kind::plugin)
     {
@@ -245,6 +265,7 @@ DeviceCard::DeviceCard (AudioEngine& e, Kind k, ChainPath where, QWidget* parent
     watch (power);
     watch (title);
     watch (detail);
+    setMinimumHeight (std::max (150, layout->sizeHint().height()));   // two rows of knobs never squeezed together
     sync();
 }
 
@@ -260,8 +281,8 @@ void DeviceCard::addKnob (int parameter, const QString& name, int steps)
     kn.steps = steps;
     auto* pot = new Potentiometer (this);
     kn.dial = pot;
-    const auto labelWidth = isPrism ? 48 : 52;
-    kn.dial->setFixedSize (isPrism ? 32 : 40, isPrism ? 32 : 40);
+    const auto labelWidth = isPrism ? 48 : 50;
+    kn.dial->setFixedSize (knobSize, knobSize);
     kn.dial->setFocusPolicy (Qt::NoFocus);
     kn.dial->setWrapping (false);
     kn.dial->setAccessibleName (name);
@@ -270,6 +291,8 @@ void DeviceCard::addKnob (int parameter, const QString& name, int steps)
         kn.dial->setRange (-120, 48);  // master gain in half-dB steps
         pot->setOrigin (0);            // filled from 0 dB, up or down
     }
+    else if (parameter == slotMix)
+        kn.dial->setRange (0, 100);
     else if (parameter < 0)
         kn.dial->setRange (0, steps - 1);
     else
@@ -309,6 +332,8 @@ void DeviceCard::knobMoved (const Knob& kn, int position)
         engine.setMasterDither (depths[std::clamp (position, 0, 3)], engine.masterDitherType());
     else if (kn.parameter == ditherNoise)
         engine.setMasterDither (engine.masterDitherBits(), (dsp::Dither) std::clamp (position, 0, 2));
+    else if (kn.parameter == slotMix)
+        engine.setChainMix (place, (float) position / 100.0f);
     else
         engine.setChainParameter (place, kn.parameter, (float) position / (float) std::max (1, kn.dial->maximum()));
     sync();
@@ -337,6 +362,11 @@ void DeviceCard::setKnobFromEngine (Knob& kn)
         position = (int) type;
         text = type == dsp::Dither::none ? tr ("Round") : type == dsp::Dither::tpdf ? tr ("TPDF") : tr ("Shaped");
         kn.dial->setEnabled (engine.masterDitherBits() > 0);
+    }
+    else if (kn.parameter == slotMix)
+    {
+        position = (int) std::lround (engine.chainDevice (place).mix * 100.0f);
+        text = position >= 100 ? tr ("Wet") : position <= 0 ? tr ("Dry") : QStringLiteral ("%1%").arg (position);
     }
     else
     {
@@ -451,6 +481,8 @@ void DeviceCard::editValue (int index, const QString& startText)
     QString current;
     if (kn.parameter == masterGain)
         current = QString::number (engine.masterGainDb(), 'f', 1);
+    else if (kn.parameter == slotMix)
+        current = QString::number (kn.dial->value());
     else if (kn.parameter < 0)
         current = kn.value->text();
     else
@@ -517,6 +549,19 @@ void DeviceCard::applyTypedValue (int index, const QString& text)
             }
             engine.setMasterDither (engine.masterDitherBits(), type);
         }
+    }
+    else if (kn.parameter == slotMix)
+    {
+        bool ok = false;
+        auto cleaned = text.trimmed().toLower();
+        cleaned.remove (QLatin1Char ('%'));
+        const auto percent = cleaned == QStringLiteral ("wet") ? 100.0 : cleaned == QStringLiteral ("dry") ? 0.0 : cleaned.toDouble (&ok);
+        if (! ok && cleaned != QStringLiteral ("wet") && cleaned != QStringLiteral ("dry"))
+        {
+            Q_EMIT message (tr ("Type a percentage, for example 50 (or wet, or dry)"));
+            return;
+        }
+        engine.setChainMix (place, (float) std::clamp (percent, 0.0, 100.0) / 100.0f);
     }
     else if (kn.parameter < 0)
     {
@@ -782,7 +827,7 @@ ChainRow::ChainRow (AudioEngine& e, QWidget* homeWidget, QWidget* parent)
                                   "Control with Left or Right moves it."));
     setFocusPolicy (Qt::StrongFocus);
     setAcceptDrops (true);
-    setMinimumHeight (175);
+    setMinimumHeight (212);   // a card with two rows of knobs
 
     stripLayout = new QHBoxLayout (strip);
     stripLayout->setContentsMargins (6, 4, 6, 4);
@@ -1274,9 +1319,7 @@ void ChainRow::editParameters (int slot)
     if (engine.masterSlot (slot).empty)
         return;
 
-    auto* dialog = new ParameterDialog (engine, slot, window());
-    dialog->setAttribute (Qt::WA_DeleteOnClose);
-    dialog->show();
+    openParameterWindow (engine, ChainPath { slot, {} }, window());
 }
 
 void ChainRow::showWindow (int slot)
@@ -1289,6 +1332,8 @@ void ChainRow::showWindow (int slot)
                                       : QString::fromStdString (error));
         Q_EMIT chainChanged();
     }
+    else if (phimark::isPhiPlugin (info.pluginId))
+        editParameters (slot);   // a Φ effect's window is its Φ window
     else if (engine.canShowPluginWindow (slot))
         engine.showPluginWindow (slot);
     else if (! info.empty)

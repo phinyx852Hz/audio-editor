@@ -5,6 +5,7 @@
 #include "../mixer/MixerEngine.h"
 
 #include <QColor>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QPointer>
 #include <QTimer>
@@ -31,6 +32,7 @@ class TrackLanes;
 class FileBrowser;
 class ClipGrid;
 class LauncherRack;
+class ReturnStripWidget;
 class QComboBox;
 class QSpinBox;
 
@@ -121,6 +123,11 @@ public:
     void projectChanged() { changed(); }   // the patchbay, say: the project differs from its file
     QString mixName() const;
     QString trackName (int track) const;   // what its strip says (the patchbay shows it)
+    void stripsChanged();   // faders, pans... set on the engine from outside (the Mix Assistant): shown, and the mix marked changed
+
+    // Cuts (Hz, dB) from the Mix Assistant into a Φ EQ in the track's inserts: the one there,
+    // else a new one. An error, or empty.
+    QString applyEqCuts (int track, const std::vector<std::pair<double, double>>& cuts);
 
     void addTrack();
     void removeTrack();
@@ -131,6 +138,15 @@ public:
     // A file chosen in the Find panel's Selector: into the first empty slot of the track with
     // that name (else that colour, else the selected track), and the mixer follows it there.
     void sendToLauncher (const QString& path, const QString& trackName, const QColor& colour);
+    // The Φ random selector's deal: a file and an instrument (a plugin id, loaded on the
+    // track first) for each Selector colour (empty: that colour has none), with the
+    // colour's name and colour, top colour first. Each goes to the track
+    // with that name, else that colour, else the one a mix from the set gives it (tracks
+    // are added, named and coloured when the mix has fewer). Into the first scene empty on
+    // all those tracks, or onto the tracks after everything on them. `again` deals into
+    // the place the last deal went instead, replacing it.
+    void phiDeal (const QStringList& files, const QStringList& instruments, const QStringList& names, const QList<QColor>& colours,
+                  bool launcher, bool again);
     void togglePlay();
     void toStart();
 
@@ -159,6 +175,7 @@ private:
     friend class FileBrowser;
     friend class ClipGrid;
     friend class LauncherRack;
+    friend class ReturnStripWidget;
 
     // What the window keeps about a track besides the engine's settings.
     struct TrackInfo
@@ -199,6 +216,30 @@ private:
     void loadInstrumentSound (int track, const QString& path);   // into the track's Sampler or Slicer
     void takeInstrumentSound (int track);                         // from the Sample menu's
     void arm (int track);
+    // The inserts: effects on a track before its width, pan and fader.
+    void chooseInsert (int track, int replace, QPoint at);   // the effects menu: adds one, or replaces insert `replace`
+    void addInsert (int track, const std::string& pluginId, int replace = -1);
+    void editInsert (int track, int insert);                 // its window, or its knobs for the built-in ones
+    void insertMenu (int track, int insert, QPoint at);      // insert -1: the list's empty space
+    void setInsertBypassed (int track, int insert, bool);
+    void setInsertMix (int track, int insert, float mix);   // 0..1, the rest dry
+    void removeInsert (int track, int insert);
+    void moveInsert (int track, int insert, int to);
+    void reorderInserts (int track, const std::vector<int>& order);   // the engine's indices in their new order
+    QJsonArray insertsJson (int track) const;
+    void loadInserts (int track, const QJsonArray&, QStringList& problems);
+    void stripsMenu (QPoint at);     // which sections the strips show, and how wide they are
+    // Q-Link (Cubase): with it on, a change to one of the picked strips goes to all of them;
+    // Alt+Shift sends it to every track. `fn` gets each strip, and whether it is the one changed.
+    void forLinked (int track, const std::function<void (mixer::Strip&, bool self)>& fn);
+    void pick (int track, bool add);  // Ctrl+click: add or take a strip from the picked ones
+    // The returns: A Reverb and B Delay.
+    void chooseReturnEffect (int index, QPoint at);
+    void setReturnEffect (int index, const std::string& pluginId);   // empty: none
+    void editReturn (int index);
+    void defaultReturns (int only = -1);   // Φ Space on A, Φ Echo on B (a dotted eighth at the tempo); -1 both
+    QJsonArray returnsJson() const;
+    void loadReturns (const QJsonArray&, QStringList& problems);
     void toggleLanes();              // the tracks across time, above the strips (V)
     void updateUpperArea();
     void toggleBrowser();            // the file browser on the left (Ctrl+B)
@@ -214,7 +255,16 @@ private:
     QString sceneName (int scene) const;
     void editSlot (int track, int scene, const std::function<void (mixer::Slot&)>& edit);
     void clearSlot (int track, int scene);
-    int firstEmptyScene (int track) const;   // -1: none among the scenes shown
+    int firstEmptyScene (int track) const;
+    int trackFor (const QString& name, const QColor& colour) const;   // by name, else colour; -1: none
+    struct LastDeal
+    {
+        bool valid = false, launcher = false;
+        int scene = -1;
+        Frame at = 0;
+        std::array<mixer::Clips, mixer::maxTracks> before;   // the tracks' clips before it (a Snapshot)
+    };
+    LastDeal lastDeal;   // -1: none among the scenes shown
     void setScenes (int count);
     void moveCursor (int track, int scene);
     void launchSlot (int track, int scene);
@@ -265,6 +315,13 @@ private:
     QTimer timer;
     qint64 lastTick = 0;
     int selected = 0;
+    int stripSections = 31;
+    std::set<int> picked;            // strips Q-Link joins (the selected one is always among them)
+    QPushButton* qLinkButton = nullptr;
+    QPushButton* bypassInsertsButton = nullptr;
+    QPushButton* bypassSendsButton = nullptr;
+    std::array<ReturnStripWidget*, mixer::numReturns> returnStrips {};          // StripSection bits (MixerWindow.cpp) shown on every strip
+    bool wideStrips = false;
     QString path;                    // the mix file; empty: not saved yet
     bool modified = false;
     bool restoring = false;

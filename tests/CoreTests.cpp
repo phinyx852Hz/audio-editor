@@ -29,6 +29,7 @@
 #include "../Source/core/PhiVoice.h"
 #include "../Source/core/PrismSplit.h"
 #include "../Source/core/MasterAssist.h"
+#include "../Source/mixer/MixAssist.h"
 #include "../Source/core/Sonify.h"
 #include "../Source/core/Phi.h"
 
@@ -39,6 +40,7 @@
 #include <functional>
 #include <iterator>
 #include <random>
+#include <set>
 #include <string>
 
 namespace
@@ -2966,6 +2968,217 @@ namespace
         }
     };
 
+    // The strip beyond gains: inserts, the cuts, width and track delay.
+    void testMixerStrip()
+    {
+        const double rate = 48000.0;
+        mixer::Engine m;
+        m.prepare (rate);
+        m.setNumTracks (1);
+        auto clipOf = [&] (float left, float right, int channels)
+        {
+            AudioData::Builder b (channels, rate);
+            std::vector<float> a (48000, left), c (48000, right);
+            const float* ptrs[2] = { a.data(), c.data() };
+            b.append (ptrs, 48000);
+            return mixer::makeAudioClip (*b.finish(), "clip.wav");
+        };
+        std::vector<float> l (512), r (512);
+        auto settle = [&] (int blocks = 3)
+        {
+            for (int i = 0; i < blocks; ++i)
+            {
+                std::fill (l.begin(), l.end(), 0.0f);
+                std::fill (r.begin(), r.end(), 0.0f);
+                m.render (l.data(), r.data(), 512);
+            }
+        };
+
+        m.setClips (0, { mixer::makeClip (clipOf (0.5f, 0.5f, 2), 0) });
+        check (! m.monoTrack (0), "mixer strip: a track of stereo files is not mono");
+        m.play();
+        settle();
+        check (near (l[300], 0.5, 1.0e-4) && near (r[300], 0.5, 1.0e-4), "mixer strip: flat, the stereo clip as it is");
+
+        auto twice = std::make_shared<DoubleEffect>();
+        m.setInserts (0, { { twice, false } });
+        settle();
+        check (m.inserts (0).size() == 1 && near (l[300], 1.0, 1.0e-4) && near (r[300], 1.0, 1.0e-4), "mixer strip: an insert processes the track");
+        m.setInserts (0, { { twice, true } });
+        settle();
+        check (near (l[300], 0.5, 1.0e-4), "mixer strip: a bypassed insert is not heard");
+        m.setInserts (0, { { twice, false } });
+        m.strip (0).faderDb = -6.0206f;
+        m.strip (0).pan = -1.0f;
+        settle();
+        check (near (l[300], 0.5, 1.0e-3) && near (r[300], 0.0, 1.0e-4), "mixer strip: pan and fader come after the inserts");
+        m.strip (0).faderDb = 0.0f;
+        m.strip (0).pan = 0.0f;
+
+        std::string error;
+        m.setPosition (0);
+        const auto bounce = m.mixdown (0.0, error, nullptr, nullptr, 0);
+        float a[1], c[1];
+        float* pa[2] = { a, c };
+        if (bounce != nullptr)
+            bounce->read (1000, 1, pa);
+        check (bounce != nullptr && near (a[0], 1.0, 1.0e-4), "mixer strip: a bounce has the inserts");
+        m.setInserts (0, {});
+
+        m.strip (0).lowCut = true;
+        m.strip (0).lowCutHz = 100.0f;
+        m.strip (0).lowCutSlope = 24;
+        m.setPosition (0);
+        m.play();
+        settle (40);
+        check (std::abs (l[300]) < 1.0e-3 && std::abs (r[300]) < 1.0e-3, "mixer strip: the low cut takes out DC");
+        m.strip (0).lowCut = false;
+        m.strip (0).highCut = true;
+        m.strip (0).highCutHz = 1000.0f;
+        settle (20);
+        check (near (l[300], 0.5, 1.0e-3), "mixer strip: the high cut lets DC through");
+        m.strip (0).highCut = false;
+
+        m.setClips (0, { mixer::makeClip (clipOf (0.5f, 0.1f, 2), 0) });
+        m.strip (0).width = 0.0f;
+        m.setPosition (0);
+        m.play();
+        settle();
+        check (near (l[300], 0.3, 1.0e-4) && near (r[300], 0.3, 1.0e-4), "mixer strip: width 0 is mono");
+        m.strip (0).width = 2.0f;
+        settle();
+        check (near (l[300], 0.7, 1.0e-4) && near (r[300], -0.1, 1.0e-4), "mixer strip: width 200 % doubles the sides");
+        m.strip (0).width = 1.0f;
+        settle();
+        check (near (l[300], 0.5, 1.0e-4) && near (r[300], 0.1, 1.0e-4), "mixer strip: back to 100 %");
+
+        m.strip (0).delayMs = 10.0f;   // 480 frames
+        m.setPosition (0);
+        m.play();
+        settle (1);
+        check (std::abs (l[100]) < 1.0e-9 && l[511] > 0.1f, "mixer strip: track delay starts the clip later");
+        check (m.length() == 48480, "mixer strip: the delay makes the mix longer");
+        m.strip (0).delayMs = -10.0f;
+        m.setPosition (0);
+        settle (1);
+        check (near (l[0], 0.5, 1.0e-4), "mixer strip: a negative delay plays the clip early");
+        m.strip (0).delayMs = 0.0f;
+
+        // A track of mono files keeps its equal-power pan through the inserts.
+        m.setClips (0, { mixer::makeClip (clipOf (0.5f, 0.5f, 1), 0) });
+        check (m.monoTrack (0), "mixer strip: a track of mono files is mono");
+        m.setInserts (0, { { twice, false } });
+        m.setPosition (0);
+        m.play();
+        settle();
+        check (near (l[300], std::sqrt (0.5), 1.0e-4) && near (r[300], std::sqrt (0.5), 1.0e-4), "mixer strip: mono through an insert, equal power");
+        m.setInserts (0, {});
+
+        // Sends: post-fader by default, pre-fader when asked, into the returns and their effects.
+        m.setClips (0, { mixer::makeClip (clipOf (0.5f, 0.5f, 2), 0) });
+        m.setPosition (0);
+        m.play();
+        m.strip (0).sendDb[0] = 0.0f;
+        settle();
+        check (near (l[300], 1.0, 1.0e-4), "mixer strip: send A at 0 dB adds the track again through return A");
+        m.setReturnEffect (0, twice);
+        settle();
+        check (near (l[300], 1.5, 1.0e-4), "mixer strip: return A's effect");
+        auto ret = m.takeMeter (mixer::returnIndex);
+        check (ret.peak[0] > 0.9f, "mixer strip: return A has a meter");
+        m.strip (0).faderDb = -6.0206f;
+        settle();
+        check (near (l[300], 0.25 + 0.5, 1.0e-3), "mixer strip: a post-fader send follows the fader");
+        m.strip (0).sendPre[0] = true;
+        settle();
+        check (near (l[300], 0.25 + 1.0, 1.0e-3), "mixer strip: a pre-fader send does not");
+        m.returnStrip (0).mute = true;
+        settle();
+        check (near (l[300], 0.25, 1.0e-3), "mixer strip: a muted return");
+        m.returnStrip (0).mute = false;
+        m.strip (0).mute = true;
+        settle();
+        check (std::abs (l[300]) < 1.0e-6, "mixer strip: muting the track mutes its sends");
+        m.strip (0).mute = false;
+        const auto dry = m.mixdown (0.0, error, nullptr, nullptr, 0);
+        if (dry != nullptr)
+            dry->read (1000, 1, pa);
+        check (dry != nullptr && near (a[0], 0.5, 1.0e-4), "mixer strip: a bounce has no sends");
+        m.strip (0).sendDb[0] = -100.0f;
+        m.strip (0).sendPre[0] = false;
+        m.setReturnEffect (0, nullptr);
+        m.strip (0).faderDb = 0.0f;
+
+        // Track modes: a steady 0.25 from the instrument with the 0.5 audio clip.
+        struct Steady final : mixer::Instrument
+        {
+            Kind kind() const override { return Kind::synth; }
+            std::string name() const override { return "Steady"; }
+            void prepare (double, int) override {}
+            void process (const mixer::NoteEvent*, int, float* left, float* right, int frames) override
+            {
+                for (int i = 0; i < frames; ++i)
+                {
+                    left[i] += 0.25f;
+                    right[i] += 0.25f;
+                }
+            }
+            void releaseAll() override {}
+            void reset() override {}
+        };
+        m.setInstrument (0, std::make_shared<Steady>());
+        m.setPosition (0);
+        m.play();
+        settle();
+        check (near (l[300], 0.75, 1.0e-4), "mixer modes: hybrid plays the audio and the instrument");
+        m.strip (0).mode = (int) mixer::TrackMode::audio;
+        settle();
+        check (near (l[300], 0.5, 1.0e-4), "mixer modes: audio only");
+        m.strip (0).mode = (int) mixer::TrackMode::instrument;
+        settle();
+        check (near (l[300], 0.25, 1.0e-4), "mixer modes: instrument only");
+        m.strip (0).mode = (int) mixer::TrackMode::hybrid;
+        m.strip (0).audioLayerDb = -6.0206f;
+        settle();
+        check (near (l[300], 0.5, 1.0e-3), "mixer modes: the audio layer's level");
+        m.strip (0).audioLayerDb = 0.0f;
+        m.strip (0).duckDb = 12.0f;   // the instrument at 0.25 (-12 dBFS) is half way: 6 dB down
+        settle (20);
+        check (near (l[300], 0.25 + 0.5 * 0.5012, 2.0e-3), "mixer modes: the instrument ducks the audio");
+        m.strip (0).audioDucksInstrument = true;   // the audio at 0.5 (-6 dBFS): the whole 12 dB
+        settle (20);
+        check (near (l[300], 0.5 + 0.25 * 0.2512, 2.0e-3), "mixer modes: the audio ducks the instrument");
+        m.strip (0).audioDucksInstrument = false;
+        m.strip (0).duckBelowHz = 100.0f;   // DC is all below it: still ducked
+        m.setPosition (0);   // the one-second clip from its start again
+        settle (80);   // the key was the louder audio: its release first
+        check (near (l[300], 0.25 + 0.5 * 0.5012, 3.0e-3), "mixer modes: ducking below a frequency ducks the lows");
+        m.strip (0).duckDb = 0.0f;
+        m.strip (0).duckBelowHz = 0.0f;
+        m.setInstrument (0, nullptr);
+
+        // Another track as the key: track 2's 0.5 ducks track 1 by the whole 12 dB.
+        m.setNumTracks (2);
+        m.setClips (1, { mixer::makeClip (clipOf (0.5f, 0.5f, 2), 0) });
+        m.strip (0).duckKey = 1;
+        m.strip (0).duckDb = 12.0f;
+        m.strip (0).mode = (int) mixer::TrackMode::audio;
+        m.setPosition (0);
+        m.play();
+        settle (20);
+        check (near (l[300], 0.5 + 0.5 * 0.2512, 3.0e-3), "mixer modes: another track ducks this one");
+        m.strip (0).duckDb = 0.0f;
+        m.strip (0).duckKey = -1;
+        m.strip (0).mode = (int) mixer::TrackMode::hybrid;
+        m.setClips (1, {});
+
+        // An insert's Mix: half of the doubled sound and half of the dry.
+        m.setInserts (0, { { twice, false, 0.5f } });
+        settle();
+        check (near (l[300], 0.75, 1.0e-4), "mixer strip: an insert's mix keeps some of the dry sound");
+        m.setInserts (0, {});
+    }
+
     void testPatchBay()
     {
         using namespace patchbay;
@@ -3600,6 +3813,41 @@ namespace
             check (smallest > 0.0 && largest / smallest < phi::ratio * phi::ratio + 1.0e-6, "golden sequence is evenly spread");
         }
 
+        // The Φ random selector: each colour spreads evenly over its favourites, never deals
+        // the same one twice running (with three or more), and the colours don't move in
+        // lockstep, so every deal of 8 colours x 8 favourites is a new combination.
+        {
+            bool even = true, noRepeat = true, inRange = true;
+            for (int count = 1; count <= 8; ++count)
+                for (int colour = 0; colour < 8; ++colour)
+                {
+                    std::vector<int> hits ((size_t) count, 0);
+                    for (int n = 0; n < 89; ++n)
+                    {
+                        const auto d = phi::deal (n, colour, count, 0.3);
+                        inRange = inRange && d >= 0 && d < count;
+                        if (d >= 0 && d < count)
+                            ++hits[(size_t) d];
+                        if (count >= 3 && d == phi::deal (n + 1, colour, count, 0.3))
+                            noRepeat = false;
+                    }
+                    for (const auto h : hits)
+                        even = even && std::abs (h - 89.0 / count) < 4.0;
+                }
+            std::set<std::vector<int>> combinations;
+            for (int n = 0; n < 1000; ++n)
+            {
+                std::vector<int> c;
+                for (int colour = 0; colour < 8; ++colour)
+                    c.push_back (phi::deal (n, colour, 8, 0.3));
+                combinations.insert (c);
+            }
+            check (inRange && phi::deal (5, 0, 0) == 0, "phi deal stays in range");
+            check (even, "phi deal spreads evenly over the favourites");
+            check (noRepeat, "phi deal never repeats a favourite twice running");
+            check (combinations.size() == 1000, "phi deal gives a new combination every deal");
+        }
+
         // The Fibonacci word: hits on 1/φ of the steps, starting on step 0, never periodic.
         {
             const std::string word = "1101101011011010";
@@ -3664,6 +3912,74 @@ namespace
             float* t[] { tone.data() };
             eq.process (t, 1, 24000);
             check (near (rmsDb (tone, 12000) - before, 6.0, 0.1), "phi EQ boosts its band by 6 dB");
+        }
+
+        // The Φ EQ's grid, types, cuts and tilt.
+        {
+            check (near (phi::Eq::stepHz (4), phi::Eq::bandHz (1), 1.0e-9) && near (phi::Eq::stepHz (1) / phi::Eq::stepHz (0), std::pow (phi::ratio, 0.25), 1.0e-9)
+                   && phi::Eq::nearestStep (1000.0) == phi::Eq::nearestStep (phi::Eq::stepHz (phi::Eq::nearestStep (1000.0)))
+                   && phi::Eq::nearestStep (1.0e6) == phi::Eq::maxStep && phi::Eq::nearestStep (0.0) == phi::Eq::minStep,
+                   "phi EQ grid is quarter golden steps from 80 Hz");
+            check (near (phi::Eq::stepQ (2, false) / phi::Eq::stepQ (0, false), phi::ratio, 1.0e-9), "phi EQ widths are golden steps");
+
+            auto response = [&] (const phi::Eq::Settings& s, double hz)
+            {
+                phi::Eq e;
+                e.prepare (rate, 1);
+                e.set (s);
+                return e.responseDb (hz);
+            };
+            phi::Eq::Settings s;
+            s.bands[5].type = phi::Eq::Type::notch;
+            check (response (s, phi::Eq::bandHz (5)) < -40.0 && std::abs (response (s, phi::Eq::bandHz (2))) < 0.5, "phi EQ notch cuts only its frequency");
+            s = {};
+            s.bands[5].type = phi::Eq::Type::bandPass;
+            check (near (response (s, phi::Eq::bandHz (5)), 0.0, 0.05) && response (s, phi::Eq::bandHz (1)) < -12.0, "phi EQ band-pass keeps only its band");
+            s = {};
+            s.bands[0].gainDb = 6.0;
+            check (near (response (s, 25.0), 6.0, 0.3) && std::abs (response (s, 2000.0)) < 0.2, "phi EQ low shelf lifts the lows");
+            s = {};
+            s.bands[3].type = phi::Eq::Type::off;
+            s.bands[3].gainDb = 9.0;
+            check (std::abs (response (s, phi::Eq::bandHz (3))) < 1.0e-6, "phi EQ band switched off does nothing");
+
+            for (const auto slope : { 12, 24, 48 })
+            {
+                s = {};
+                s.lowCutHz = 200.0;
+                s.lowCutSlope = slope;
+                const auto octave = response (s, 100.0) - response (s, 50.0);
+                check (near (response (s, 200.0), -3.0, 0.1) && near (octave, (double) slope, slope * 0.1) && std::abs (response (s, 5000.0)) < 0.05,
+                       "phi EQ low cut is " + std::to_string (slope) + " dB an octave");
+                s = {};
+                s.highCutHz = 2000.0;
+                s.highCutSlope = slope;
+                check (near (response (s, 2000.0), -3.0, 0.1) && response (s, 8000.0) < -1.6 * slope && std::abs (response (s, 50.0)) < 0.05,
+                       "phi EQ high cut is " + std::to_string (slope) + " dB an octave");
+            }
+
+            s = {};
+            s.tiltDb = 6.0;
+            check (near (response (s, 20.0), -3.0, 0.3) && near (response (s, 18000.0), 3.0, 0.4) && std::abs (response (s, 1000.0)) < 0.1,
+                   "phi EQ tilt turns about 1 kHz");
+
+            // Moving one band leaves the others' sound running: no stage restarts but its own.
+            phi::Eq e;
+            e.prepare (rate, 1);
+            s = {};
+            s.bands[2].gainDb = 6.0;
+            e.set (s);
+            auto tone = sine (phi::Eq::bandHz (2), 9600);
+            float* t[] { tone.data() };
+            e.process (t, 1, 4800);
+            s.bands[8].gainDb = 3.0;
+            e.set (s);
+            float* rest[] { tone.data() + 4800 };
+            e.process (rest, 1, 4800);
+            float jump = 0.0f;
+            for (int i = 4790; i < 4810; ++i)
+                jump = std::max (jump, std::abs (tone[(size_t) i + 1] - tone[(size_t) i]));
+            check (jump < 0.2f, "phi EQ changes one band without a click in another");
         }
 
         // Φ Echo: an impulse comes back at t, tφ, tφ²..., each 1/φ quieter.
@@ -3914,6 +4230,110 @@ namespace
             check (toneDb (tamed, 24000, 1000.0) - toneDb (ringing, 24000, 1000.0) < -6.0, "phi de-resonator turns a resonance down");
             const auto plain = run (noise);
             check (std::abs (rmsDb (plain, 24000) - rmsDb (noise, 24000)) < 1.5, "phi de-resonator leaves noise nearly alone");
+
+            // Its window's picture: the cut is deepest at the resonance, and the tone stands out there.
+            {
+                phi::Deresonator r;
+                phi::Deresonator::Settings t;
+                t.depth = 1.0;
+                r.prepare (rate, 1);
+                r.set (t);
+                auto y = ringing;
+                float* p[] { y.data() };
+                r.process (p, 1, (int) y.size());
+                std::array<float, phi::Deresonator::pictureSize> level {}, cut {};
+                r.picture (level.data(), cut.data());
+                const auto deepest = (int) (std::min_element (cut.begin(), cut.end()) - cut.begin());
+                const auto loudest = (int) (std::max_element (level.begin(), level.end()) - level.begin());
+                check (std::abs (std::log2 (phi::Deresonator::pictureHz (deepest) / 1000.0)) < 0.15 && cut[(size_t) deepest] < -3.0f,
+                       "phi de-resonator's picture shows its cut at the resonance");
+                check (std::abs (std::log2 (phi::Deresonator::pictureHz (loudest) / 1000.0)) < 0.15 && level[(size_t) loudest] > -30.0f
+                           && level[(size_t) loudest] < 0.0f,
+                       "phi de-resonator's picture shows the tone's level in dB full scale");
+            }
+        }
+    }
+
+    void testMixAssist()
+    {
+        using mixassist::Role;
+        check (mixassist::guessRole ("Lead Vox") == Role::leadVocal, "mix assist: lead vox");
+        check (mixassist::guessRole ("BV 2") == Role::vocal, "mix assist: backing vocals");
+        check (mixassist::guessRole ("Vocals") == Role::leadVocal, "mix assist: a lone vocal leads");
+        check (mixassist::guessRole ("KICK") == Role::kick, "mix assist: kick");
+        check (mixassist::guessRole ("BA") == Role::bass, "mix assist: BA is bass");
+        check (mixassist::guessRole ("DR") == Role::drums, "mix assist: DR is drums");
+        check (mixassist::guessRole ("Gtr L") == Role::guitar, "mix assist: guitar");
+        check (mixassist::guessRole ("Strings") == Role::pad, "mix assist: strings are a pad");
+        check (mixassist::guessRole ("Track 3") == Role::other, "mix assist: an unknown name");
+        check (mixassist::roleOffsetDb (Role::leadVocal) > mixassist::roleOffsetDb (Role::pad), "mix assist: the lead above a pad");
+
+        // Pan laws as the mixer has them.
+        mixassist::Track mono, stereo;
+        mono.monoAudio = true;
+        double l = 0.0, r = 0.0;
+        mixassist::panGains (mono, 0.0, l, r);
+        check (near (l, std::sqrt (0.5), 1.0e-9) && near (r, std::sqrt (0.5), 1.0e-9), "mix assist: mono audio is equal power");
+        mixassist::panGains (stereo, 0.0, l, r);
+        check (l == 1.0 && r == 1.0, "mix assist: the rest is balance");
+        mixassist::panGains (stereo, -1.0, l, r);
+        check (l == 1.0 && r == 0.0, "mix assist: balance hard left");
+
+        auto track = [] (const char* name, double freq, double amp, bool monoAudio = false, double seconds = 40.0)
+        {
+            mixassist::Track t;
+            t.name = name;
+            t.role = mixassist::guessRole (name);
+            t.monoAudio = monoAudio;
+            t.stem = makeSine (2, (Frame) (48000 * seconds), freq, amp);
+            return t;
+        };
+
+        // Mixing: a mono sine at the centre is 3 dB down on each side.
+        {
+            std::vector<mixassist::Track> one { track ("Kick", 60.0, 0.5, true) };
+            const auto m = mixassist::mix (one, { 0.0 }, { 0.0 });
+            check (near (m->peakAbs (0, m->length()), 0.5f * std::sqrt (0.5f), 0.01), "mix assist: a mono stem mixes at equal power");
+        }
+
+        // Pans by rule: kick and bass in the middle, the rest spread both ways, a panned track kept.
+        {
+            std::vector<mixassist::Track> ts { track ("Kick", 60.0, 0.3, true), track ("Keys", 2000.0, 0.2, true),
+                                               track ("Gtr", 1000.0, 0.2, true), track ("Pad", 500.0, 0.2, true) };
+            ts[3].pan = -0.4;
+            std::vector<assist::Profile> ps;
+            for (auto& t : ts)
+                ps.push_back (assist::measure (*t.stem, 0, t.stem->length()));
+            const auto pans = mixassist::rulePans (ts, ps, true);
+            check (pans[0] == 0.0, "mix assist: the kick stays in the middle");
+            check (pans[1] * pans[2] < 0.0, "mix assist: two others go to opposite sides");
+            check (std::abs (pans[1]) >= std::abs (pans[2]), "mix assist: the brighter goes wider");
+            check (pans[3] == -0.4, "mix assist: a track you panned keeps its pan");
+        }
+
+        // A whole suggestion: the vocal far too quiet, the pad too loud, the mix too hot.
+        {
+            std::vector<mixassist::Track> ts { track ("Lead Vox", 1000.0, 0.05, true), track ("Kick", 60.0, 0.4, true),
+                                               track ("Bass", 120.0, 0.3, true), track ("Pad", 500.0, 0.5),
+                                               track ("Gtr", 1000.0, 0.05, true, 30.0) };
+            mixassist::Settings settings;
+            const auto s = mixassist::suggest (ts, settings);
+            check (s.faderDb.size() == ts.size() && s.evaluations > 0, "mix assist: a fader for every track");
+            check (s.after.valid && near (s.after.lufs, settings.mixLufs, 1.5), "mix assist: the mix lands near its loudness");
+            check (s.after.truePeakDb <= settings.ceilingDb + 0.5, "mix assist: the mix keeps its headroom");
+            check (s.levelAfter[0] - s.levelAfter[3] > s.levelBefore[0] - s.levelBefore[3] + 10.0, "mix assist: the vocal comes up over the pad");
+            double worst = 0.0;
+            for (size_t i = 0; i < ts.size(); ++i)
+                worst = std::max (worst, std::abs (s.levelAfter[i] - s.levelAim[i]));
+            check (worst < 2.0, "mix assist: every track near the level its role asks for");
+            check (s.pan[0] == 0.0 && s.pan[1] == 0.0 && s.pan[2] == 0.0, "mix assist: vocal, kick and bass centred");
+            const auto overlap = std::find_if (s.overlaps.begin(), s.overlaps.end(), [] (const mixassist::Overlap& o) { return o.hidden == 0 && o.hiding == 4; });
+            check (overlap != s.overlaps.end() && overlap->band == 5, "mix assist: the guitar hides the vocal at 1 kHz");
+
+            // A fader you lock stays.
+            ts[3].moveFader = false;
+            const auto locked = mixassist::suggest (ts, settings);
+            check (locked.faderDb[3] == 0.0, "mix assist: a locked fader stays");
         }
     }
 
@@ -3949,9 +4369,11 @@ int main()
     testMixer();
     testLauncher();
     testPatchBay();
+    testMixerStrip();
     testSpatialStudio();
     testPrismSplit();
     testMasterAssist();
+    testMixAssist();
     testSonify();
     testPhi();
     testPhiVoice();

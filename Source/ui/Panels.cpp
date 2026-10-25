@@ -5,6 +5,7 @@
 #include <QAction>
 #include <QLineEdit>
 #include "../core/Dsp.h"
+#include "../engine/X11Windows.h"
 #include "Theme.h"
 
 #include <QApplication>
@@ -14,6 +15,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QScreen>
 #include <QSettings>
 #include <QStackedWidget>
 #include <QStandardPaths>
@@ -401,7 +403,10 @@ void DockablePanel::setPoppedOut (bool popOut)
         return;
     }
 
-    const auto size = windowSize.isValid() ? windowSize : dockWidget->isVisible() ? dockWidget->size() : contentWidget->sizeHint();
+    // The first time, closed: a standard size, roomy enough for Simplest and the Slicer.
+    auto size = windowSize.isValid() ? windowSize : dockWidget->isVisible() ? dockWidget->size() : contentWidget->sizeHint().expandedTo (QSize (960, 620));
+    if (const auto* screen = mainWindow.screen())
+        size = size.boundedTo (screen->availableSize() * 0.9);
 
     // A parentless window, so tiling window managers treat it as a normal window.
     window = new QWidget (nullptr, Qt::Window);
@@ -422,6 +427,11 @@ void DockablePanel::setPoppedOut (bool popOut)
     dockWidget->hide();
     window->resize (size.expandedTo (QSize (200, 150)));
     show (true);
+    // On Hyprland it floats at that size, centred, rather than tiling (Super+F still takes it full screen).
+    QTimer::singleShot (400, window, [w = window]
+    {
+        x11::floatWindow (w->windowTitle().toStdString(), w->width(), w->height());
+    });
 }
 
 void DockablePanel::dockBack (bool keepVisible)

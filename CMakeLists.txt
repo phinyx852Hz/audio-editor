@@ -79,6 +79,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/Nyquist.cpp
     Source/core/Album.cpp
     Source/core/MasterAssist.cpp
+    Source/mixer/MixAssist.cpp
     Source/engine/AudioCapture.cpp
     Source/engine/AudioEngine.cpp
     Source/engine/BuiltinEffects.cpp
@@ -104,6 +105,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/MetadataEditor.cpp
     Source/ui/MainWindow.cpp
     Source/ui/PhiMark.cpp
+    Source/ui/PhiWindow.cpp
     Source/ui/GainHud.cpp
     Source/ui/LiveEdits.cpp
     Source/ui/Analysis.cpp
@@ -119,6 +121,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/DesktopShortcuts.cpp
     Source/ui/MasterPanel.cpp
     Source/ui/MasterAssistant.cpp
+    Source/ui/MixAssistant.cpp
     Source/ui/Panels.cpp
     Source/ui/RecordDialog.cpp
     Source/ui/Recovery.cpp
@@ -260,6 +263,10 @@ target_link_libraries(${APP_ID}
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags)
 
+# The stock plugins patched to take the PHI frame's colour as their background
+# find it with dlsym (Source/engine/StockFrame.cpp).
+target_link_options(${APP_ID} PRIVATE -Wl,--export-dynamic-symbol=phi_plugin_background)
+
 include(GNUInstallDirs)
 
 # Vamp analysis plugins (cmake/Vamp.cmake)
@@ -371,7 +378,8 @@ if(PHI_BUILD_TESTS)
         Source/core/PhiVoice.cpp
         Source/core/Nyquist.cpp
         Source/core/Album.cpp
-        Source/core/MasterAssist.cpp)
+        Source/core/MasterAssist.cpp
+        Source/mixer/MixAssist.cpp)
     target_link_libraries(phi-core-tests PRIVATE phi_nyquist phi_rubberband phi_mysofa)
     target_compile_definitions(phi-core-tests PRIVATE PHI_DEFAULT_HRTF="${PHI_DEFAULT_HRTF}")
     target_compile_definitions(phi-core-tests PRIVATE PHI_SHARE_SOURCE_DIR="${CMAKE_SOURCE_DIR}/share")
