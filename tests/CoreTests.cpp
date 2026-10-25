@@ -4454,6 +4454,43 @@ namespace
         check (ons == 11 && onChannel && written->ticksPerQuarter == 480 && written->channelsUsed == 4, "counterpoint: a voice as a MIDI file");
     }
 
+    // Loop recording: the keyboard's messages on the launch clock, and a loop launched on a
+    // frame gone by, in time with it.
+    void testLoopRecording()
+    {
+        const double rate = 48000.0;
+        mixer::Engine m;
+        m.prepare (rate);
+        m.setNumTracks (1);
+        m.tempo = 120.0;
+        std::vector<float> l (256), r (256);
+        auto run = [&] (int frames) { for (int done = 0; done < frames; done += 256) m.render (l.data(), r.data(), std::min (256, frames - done)); };
+        m.liveMidi (0x90, 60, 100);   // before recording: not kept
+        m.startRecording();
+        m.play();   // an empty mix plays on while recording
+        check (m.isRecording(), "loop recording: on");
+        run (5120);
+        m.liveMidi (0x91, 62, 90);
+        run (2560);
+        m.liveMidi (0x81, 62, 0);
+        const auto got = m.stopRecording();
+        check (! m.isRecording() && got.size() == 2 && got[0].status == 0x91 && got[0].data1 == 62 && got[0].clock == 5120 && got[1].clock == 7680,
+               "loop recording: what came while recording, on the launch clock");
+
+        AudioData::Builder b (1, rate);
+        std::vector<float> v (48000, 0.5f);
+        const float* one[1] = { v.data() };
+        b.append (one, 48000);
+        auto slot = std::make_shared<mixer::Slot>();
+        slot->clip = mixer::makeClip (mixer::makeAudioClip (*b.finish(), "dc.wav"), 0);
+        m.setSlot (0, 0, slot);
+        m.launchAt (0, 0, 7000);   // gone by
+        run (256);
+        const auto info = m.launchInfo (0);
+        check (info.playing == 0 && info.progress > 0.0f && std::abs (info.progress - (float) (m.launchClock() - 7000) / 48000.0f) < 1.0e-3f,
+               "loop recording: a launch on a frame gone by plays in time with it");
+    }
+
     // Φ Phaser: stages φ apart, a sweep that never repeats, and a response that matches what it does.
     void testPhiPhaser()
     {
@@ -5414,6 +5451,7 @@ int main()
     testPhiTuning();
     testTunings();
     testCounterpoint();
+    testLoopRecording();
     testPluginMeasure();
 
     if (failures == 0)

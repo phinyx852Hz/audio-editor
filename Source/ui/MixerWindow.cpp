@@ -4800,6 +4800,20 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     auto* saveButton = button (tr ("Save"), tr ("Save the project (Ctrl+S); Ctrl+Shift+S saves it under a new name"));
     auto* mixdownButton = button (tr ("Mix Down to Editor"), tr ("Render the whole mix, with the instruments' tails, into a new tab (Ctrl+Return)"));
     midiButton = button (tr ("MIDI..."), tr ("Choose the MIDI keyboards that play the armed track"));
+    recordButton = button (tr ("Rec Loop"), tr ("Record the keyboard on the armed track for the bars set beside it, from the next bar line "
+                                                "(at once when stopped), into its next empty slot from the cursor's scene. It stops by "
+                                                "itself and the clip loops; press again to cancel"));
+    recordButton->setCheckable (true);
+    recordBarsBox = new QSpinBox (this);
+    recordBarsBox->setRange (1, 64);
+    recordBarsBox->setSuffix (tr (" bars"));
+    recordBarsBox->setValue (appSettings().value (QStringLiteral ("mixer/recordBars"), 4).toInt());
+    recordBarsBox->setToolTip (tr ("How long a recorded loop is, in bars of 4/4 at the tempo"));
+    recordBarsBox->setFocusPolicy (Qt::ClickFocus);
+    autoCounterpointButton = button (tr ("+ Counterpoint"), tr ("Each loop recorded gets counterpoint as soon as it stops, with the Counterpoint "
+                                                                "dialog's last choices, looping with it on the tracks the last loop's voices went on"));
+    autoCounterpointButton->setCheckable (true);
+    autoCounterpointButton->setChecked (appSettings().value (QStringLiteral ("mixer/autoCounterpoint"), false).toBool());
     midiStatus = new QLabel (this);
 
     auto* top = new QHBoxLayout;
@@ -4819,6 +4833,9 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     top->addWidget (bypassSendsButton);
     top->addWidget (stripsButton);
     top->addWidget (midiButton);
+    top->addWidget (recordButton);
+    top->addWidget (recordBarsBox);
+    top->addWidget (autoCounterpointButton);
     top->addWidget (addButton);
     top->addWidget (removeButton);
     top->addWidget (openButton);
@@ -5163,6 +5180,32 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     connect (saveButton, &QPushButton::clicked, this, [this] { saveMix (false); });
     connect (mixdownButton, &QPushButton::clicked, this, [this] { Q_EMIT mixdownRequested(); });
     connect (midiButton, &QPushButton::clicked, this, [this] { Q_EMIT midiInputsRequested(); });
+    connect (recordButton, &QPushButton::clicked, this, [this] { toggleLoopRecording(); });
+    connect (recordBarsBox, &QSpinBox::valueChanged, this, [] (int bars) { appSettings().setValue (QStringLiteral ("mixer/recordBars"), bars); });
+    connect (autoCounterpointButton, &QPushButton::toggled, this, [] (bool on) { appSettings().setValue (QStringLiteral ("mixer/autoCounterpoint"), on); });
+    recordTimer.setInterval (5);
+    connect (&recordTimer, &QTimer::timeout, this, [this]
+    {
+        if (! engine.isPlaying())
+        {
+            // Stopped before the end: nothing kept.
+            recordTimer.stop();
+            engine.stopRecording();
+            recordButton->setChecked (false);
+            status->setText (tr ("Loop recording stopped with the transport; nothing was kept."));
+            return;
+        }
+        const auto now = engine.launchClock();
+        const auto barFrames = (double) (take.end - take.start) / std::max (1, recordBarsBox->value());
+        if (now < take.start)
+            status->setText (tr ("Rec Loop on track %1: waiting for the bar line...").arg (take.track + 1));
+        else
+            status->setText (tr ("Rec Loop on track %1: bar %2 of %3").arg (take.track + 1).arg ((int) ((double) (now - take.start) / barFrames) + 1)
+                                 .arg ((int) std::lround ((double) (take.end - take.start) / barFrames)));
+        // A few milliseconds early, so the loop is ready to start on the bar line itself.
+        if (now >= take.end - (Frame) (0.04 * rate()))
+            finishLoopRecording();
+    });
     connect (masterFader, &QSlider::valueChanged, this, [this] (int v)
     {
         engine.masterDb = faderDb (v);
@@ -5406,11 +5449,28 @@ void MixerWindow::counterpointShownMidi()
     settings.setValue (QStringLiteral ("counterpoint/mode"), chosen >= 0 ? QString::fromStdString (mixer::tuningSystems()[(size_t) chosen].plain) : QString());
     settings.setValue (QStringLiteral ("counterpoint/root"), rootChoice->currentIndex());
 
+    writeCounterpoint (track, clip, slot, scene, options, chosen >= 0 ? mixer::TuningChoice { chosen, rootChoice->currentIndex() } : mixer::TuningChoice {},
+                       tuning, -1);
+}
+
+void MixerWindow::writeCounterpoint (int track, const mixer::Clip& clip, mixer::SlotPtr slot, int scene, const counterpoint::Settings& options,
+                                     mixer::TuningChoice modeChoice, mixer::TuningChoice tuning, Frame launchAt)
+{
+    const auto title = tr ("Counterpoint");
+    auto song = clip.midi->song;
+    if (clip.reversed)
+        song = midifile::reversed (*song);   // written against the melody as it is heard
+    const auto melody = counterpoint::cantus (*song);
+    if (melody.empty())
+        return;
+    const bool live = launchAt >= 0;
+
     // Written on a worker: a long melody in the florid species takes a few seconds.
-    QProgressDialog progress (tr ("Writing counterpoint against %1...").arg (clipView->shownName()), QString(), 0, 0, this);
+    QProgressDialog progress (tr ("Writing counterpoint against %1...").arg (QFileInfo (QString::fromStdString (clip.midi->path)).completeBaseName()),
+                              QString(), 0, 0, this);
     progress.setWindowTitle (title);
     progress.setWindowModality (Qt::WindowModal);
-    progress.setMinimumDuration (300);
+    progress.setMinimumDuration (live ? 2000 : 300);
     QFutureWatcher<counterpoint::Result> watcher;
     QEventLoop loop;
     connect (&watcher, &QFutureWatcher<counterpoint::Result>::finished, &loop, &QEventLoop::quit);
@@ -5419,7 +5479,8 @@ void MixerWindow::counterpointShownMidi()
     progress.reset();
     const auto result = watcher.result();
 
-    // Each voice a MIDI file beside the mix, then a clip on a new track where this one is.
+    // Each voice a MIDI file beside the mix, then a clip on a new track where this one is. A
+    // loop's voices go on the tracks the last loop's went on, when they are still there.
     const auto base = editsFolder();
     QDir().mkpath (base);
     auto stem = QFileInfo (QString::fromStdString (clip.midi->path)).completeBaseName();
@@ -5434,13 +5495,22 @@ void MixerWindow::counterpointShownMidi()
             break;
         }
     const auto bpm = followTempoBox->isChecked() ? tempoBox->value() : 0.0;
-    remember();
+    if (! live)
+        remember();
     int made = 0;
-    for (size_t v = 0; v < result.voices.size() && engine.numTracks() < mixer::maxTracks; ++v)
+    for (size_t v = 0; v < result.voices.size(); ++v)
     {
         if (result.voices[v].empty())
             continue;
         const auto voiceName = QString::fromStdString (result.names[v]);
+        const auto trackName = tr ("%1 %2").arg (info[(size_t) track].name, voiceName);
+        int target = -1;
+        if (live)
+            for (int t = 0; t < engine.numTracks(); ++t)
+                if (t != track && info[(size_t) t].name == trackName)
+                    target = t;
+        if (target < 0 && engine.numTracks() >= mixer::maxTracks)
+            continue;
         const auto written = counterpoint::toSong (*song, result.voices[v], channel);
         QString file;
         for (int n = 1; file.isEmpty() || QFileInfo::exists (file); ++n)
@@ -5449,28 +5519,31 @@ void MixerWindow::counterpointShownMidi()
         std::string why;
         if (! midifile::write (*written, file.toStdString(), why))
         {
-            QMessageBox::warning (this, title, tr ("The new voice could not be saved to %1: %2").arg (file, QString::fromStdString (why)));
+            status->setText (tr ("The new voice could not be saved to %1: %2").arg (file, QString::fromStdString (why)));
             break;
         }
-        const auto target = engine.numTracks();
-        engine.setNumTracks (target + 1);
-        auto& to = engine.strip (target);
-        to.trimDb = 0.0f;
-        to.invertLeft = to.invertRight = false;
-        to.lowCut = to.highCut = false;
-        to.width = 1.0f;
-        to.delayMs = 0.0f;
-        to.faderDb = engine.strip (track).faderDb.load();
-        to.pan = 0.0f;
-        to.mute = to.solo = false;
-        to.transpose = 0;
-        to.channels = 0xFFFF;
-        engine.setInserts (target, {});
-        engine.setInstrument (target, nullptr);
-        engine.setClips (target, {});
-        info[(size_t) target].name = tr ("%1 %2").arg (info[(size_t) track].name, voiceName);
-        info[(size_t) target].colour = info[(size_t) track].colour;
-        info[(size_t) target].tuning = tuning;   // the PHI synth plays the new voices in the melody's tuning
+        if (target < 0)
+        {
+            target = engine.numTracks();
+            engine.setNumTracks (target + 1);
+            auto& to = engine.strip (target);
+            to.trimDb = 0.0f;
+            to.invertLeft = to.invertRight = false;
+            to.lowCut = to.highCut = false;
+            to.width = 1.0f;
+            to.delayMs = 0.0f;
+            to.faderDb = engine.strip (track).faderDb.load();
+            to.pan = 0.0f;
+            to.mute = to.solo = false;
+            to.transpose = 0;
+            to.channels = 0xFFFF;
+            engine.setInserts (target, {});
+            engine.setInstrument (target, nullptr);
+            engine.setClips (target, {});
+            info[(size_t) target].name = trackName;
+            info[(size_t) target].colour = info[(size_t) track].colour;
+            info[(size_t) target].tuning = tuning;   // the PHI synth plays the new voices in the melody's tuning
+        }
         if (slot != nullptr)
         {
             auto placed = std::make_shared<mixer::Slot> (*slot);
@@ -5480,6 +5553,8 @@ void MixerWindow::counterpointShownMidi()
             placed->clip.length = std::min (clip.length, placed->clip.midi->length - placed->clip.offset);
             slots[(size_t) target][(size_t) scene] = placed;
             engine.setSlot (target, scene, placed);
+            if (live)
+                engine.launchAt (target, scene, launchAt);
         }
         else
         {
@@ -5488,20 +5563,167 @@ void MixerWindow::counterpointShownMidi()
             placed.length = std::min (clip.length, placed.midi->length - placed.offset);
             editClips (target, { placed });
         }
-        setInstrumentKind (target, synthChoice, {});
+        if (engine.instrument (target) == nullptr)
+            setInstrumentKind (target, synthChoice, {});
         ++made;
     }
     rebuildStrips();
     grid->update();
     rack->refresh();
     changed();
-    const auto mode = chosen >= 0 ? tuningText ({ chosen, rootChoice->currentIndex() }) : tr ("the melody's mode");
-    auto text = tr ("%n new voice(s) in %1 on new tracks", "", made).arg (mode);
+    const auto mode = modeChoice.system >= 0 ? tuningText (modeChoice) : tr ("the melody's mode");
+    auto text = tr ("%n voice(s) of counterpoint in %1", "", made).arg (mode);
     if (made < (int) result.voices.size())
         text += tr ("; the mixer had room for %1 of %2").arg (made).arg (result.voices.size());
     if (result.bent > 0)
         text += tr ("; %n strict rule(s) bent where nothing else fitted", "", result.bent);
     status->setText (text);
+}
+
+void MixerWindow::toggleLoopRecording()
+{
+    if (recordTimer.isActive())
+    {
+        recordTimer.stop();
+        engine.stopRecording();
+        recordButton->setChecked (false);
+        status->setText (tr ("Loop recording cancelled."));
+        return;
+    }
+    const auto track = engine.liveTrack();
+    if (track < 0 || track >= engine.numTracks())
+    {
+        recordButton->setChecked (false);
+        status->setText (tr ("Arm a track for the MIDI keyboard first (R)."));
+        return;
+    }
+    // The track's next empty slot from the cursor's scene, a new scene when all are full.
+    int scene = -1;
+    for (int sc = std::clamp (cursorScene, 0, numScenes - 1); sc < numScenes && scene < 0; ++sc)
+        if (slots[(size_t) track][(size_t) sc] == nullptr)
+            scene = sc;
+    if (scene < 0 && numScenes < mixer::maxScenes)
+    {
+        scene = numScenes;
+        setScenes (numScenes + 1);
+    }
+    if (scene < 0)
+    {
+        recordButton->setChecked (false);
+        status->setText (tr ("Track %1 has no empty slot left for a loop.").arg (track + 1));
+        return;
+    }
+    take.track = track;
+    take.scene = scene;
+    take.bpm = std::clamp (engine.tempo.load(), 20.0, 999.0);
+    const auto bar = 4.0 * 60.0 / take.bpm * rate();
+    engine.startRecording();   // first, so an empty mix plays on
+    if (engine.isPlaying())
+        take.start = (Frame) std::llround (std::ceil ((double) engine.launchClock() / bar - 1.0e-9) * bar);
+    else
+    {
+        take.start = 0;
+        engine.play();   // the launch clock starts again at 0 with it
+        Q_EMIT playStarted();
+    }
+    take.end = take.start + (Frame) std::llround (recordBarsBox->value() * bar);
+    recordButton->setChecked (true);
+    recordTimer.start();
+    refreshTransport();
+}
+
+void MixerWindow::finishLoopRecording()
+{
+    recordTimer.stop();
+    const auto events = engine.stopRecording();
+    recordButton->setChecked (false);
+    const auto track = take.track, scene = take.scene;
+    if (track < 0 || track >= engine.numTracks())
+        return;
+
+    // On the bars from the take's start: a note a little early for the first beat is on it.
+    constexpr int ticksPerQuarter = 480;
+    const auto length = (int64_t) recordBarsBox->value() * 4 * ticksPerQuarter;
+    const auto framesPerTick = 60.0 / take.bpm * rate() / ticksPerQuarter;
+    const auto early = (Frame) (0.15 * rate());
+    auto song = std::make_shared<midifile::Song>();
+    song->ticksPerQuarter = ticksPerQuarter;
+    song->tempos.push_back ({ 0, 60.0e6 / take.bpm });
+    std::array<bool, 16 * 128> held {};
+    for (const auto& e : events)
+    {
+        if (e.clock < take.start - early)
+            continue;   // before the take
+        auto tick = std::clamp<int64_t> ((int64_t) std::llround ((double) (e.clock - take.start) / framesPerTick), 0, length);
+        const auto kind = e.status & 0xF0;
+        const auto key = (size_t) (e.status & 0x0F) * 128 + (e.data1 & 0x7F);
+        const bool on = kind == 0x90 && e.data2 > 0, off = kind == 0x80 || (kind == 0x90 && e.data2 == 0);
+        if (on && tick >= length)
+            continue;
+        if (off && ! held[key])
+            continue;   // its note began before the take
+        if (on)
+            held[key] = true;
+        if (off)
+            held[key] = false;
+        song->events.push_back ({ tick, e.status, e.data1, e.data2 });
+        if (on)
+            song->channelsUsed = (uint16_t) (song->channelsUsed | (1u << (e.status & 0x0F)));
+    }
+    // Notes still held end with the loop.
+    for (size_t key = 0; key < held.size(); ++key)
+        if (held[key])
+            song->events.push_back ({ length, (uint8_t) (0x80 | (key / 128)), (uint8_t) (key % 128), 0 });
+    std::stable_sort (song->events.begin(), song->events.end(), [] (const midifile::Event& a, const midifile::Event& b) { return a.tick < b.tick; });
+    song->lastTick = length;
+    if (song->noteCount() == 0)
+    {
+        status->setText (tr ("Nothing was played in the loop, so nothing was kept."));
+        return;
+    }
+
+    const auto base = editsFolder();
+    QDir().mkpath (base);
+    QString file;
+    for (int n = 1; file.isEmpty() || QFileInfo::exists (file); ++n)
+        file = QDir (base).filePath (tr ("%1 loop %2.mid").arg (info[(size_t) track].name).arg (n));
+    std::string why;
+    if (! midifile::write (*song, file.toStdString(), why))
+    {
+        status->setText (tr ("The loop could not be saved to %1: %2").arg (file, QString::fromStdString (why)));
+        return;
+    }
+    auto slot = std::make_shared<mixer::Slot>();
+    slot->clip = mixer::makeClip (launcherMidi (song, file.toStdString()), 0);
+    slots[(size_t) track][(size_t) scene] = slot;
+    engine.setSlot (track, scene, slot);
+    if (engine.instrument (track) == nullptr)
+        setInstrumentKind (track, synthChoice, {});
+    engine.launchAt (track, scene, take.end);
+    cursorScene = scene;
+    grid->update();
+    rack->refresh();
+    changed();
+    status->setText (tr ("Loop recorded into %1, %2").arg (trackName (track), sceneName (scene)));
+
+    if (! autoCounterpointButton->isChecked())
+        return;
+    // The Counterpoint dialog's last choices; its mode, else the track's tuning, else the melody's own.
+    auto settings = appSettings();
+    counterpoint::Settings options;
+    options.species = (counterpoint::Species) (std::clamp (settings.value (QStringLiteral ("counterpoint/species"), 0).toInt(), 0, 4) + 1);
+    options.voices = std::clamp (settings.value (QStringLiteral ("counterpoint/voices"), 1).toInt(), 1, 3);
+    options.placement = (counterpoint::Placement) std::clamp (settings.value (QStringLiteral ("counterpoint/place"), 0).toInt(), 0, 2);
+    options.allInSpecies = settings.value (QStringLiteral ("counterpoint/all"), false).toBool();
+    options.seed = (uint32_t) settings.value (QStringLiteral ("counterpoint/variation"), 1).toInt();
+    const auto tuning = mixer::tuningInForce (slot->tuning, sceneTunings[(size_t) scene], info[(size_t) track].tuning);
+    mixer::TuningChoice modeChoice { mixer::findTuning (settings.value (QStringLiteral ("counterpoint/mode")).toString().toStdString()),
+                                     settings.value (QStringLiteral ("counterpoint/root"), 0).toInt() };
+    if (modeChoice.system < 0)
+        modeChoice = tuning;
+    if (modeChoice.system >= 0)
+        options.mode = counterpoint::Mode::fromTuning (mixer::tuningSystems()[(size_t) modeChoice.system], modeChoice.root);
+    writeCounterpoint (track, slot->clip, slot, scene, options, modeChoice, tuning, take.end);
 }
 
 void MixerWindow::refreshMidiClipBox()
