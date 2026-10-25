@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-90.17 -90.17 798.37 1180.34" role="img" aria-label="Φ">
+  <title>Φ (PHI)</title>
+  <!-- PHI's Φ mark (U+03A6). An original drawing made from golden-ratio geometry, not taken or traced
+       from any font or existing artwork. Created 24 October 2026 for PHI by its author (phinyx852Hz),
+       who holds the copyright; drawn with Claude (Anthropic). See packaging/PHI-MARK.md.
+       Height 1000; ring 618 wide (1000/φ) and 382 tall (618/φ); stem 1000/φ⁵ wide, the ring that thick
+       at its sides and 1/φ of it at top and bottom; serifs φ² stems wide and 1/φ² of a stem tall. -->
+  <g fill="#0b0b0c">
+    <path fill-rule="evenodd" d="M0,500.00 a309.02,190.98 0 1,0 618.03,0 a309.02,190.98 0 1,0 -618.03,0 Z M90.17,500.00 a218.85,135.25 0 1,1 437.69,0 a218.85,135.25 0 1,1 -437.69,0 Z"/>
+    <path d="M263.93,0 h90.17 v1000.00 h-90.17 Z M190.98,0 h236.07 v34.44 h-236.07 Z M190.98,965.56 h236.07 v34.44 h-236.07 Z"/>
+  </g>
+</svg>

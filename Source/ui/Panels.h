@@ -168,7 +168,8 @@ private:
     float hold[maxChannels] {};          // held peak dB
     double holdAge[maxChannels] {};      // seconds since the hold was set
     float maxTruePeak = -200.0f, maxSamplePeak = -200.0f;
-    std::vector<double> powers;          // every 100 ms block since reset, for integrated loudness
+    std::vector<double> powers;          // the last 3 s of 100 ms blocks, for momentary and short-term
+    dsp::IntegratedLoudness loudness;    // since reset
     double momentary = -200.0, shortTerm = -200.0, integrated = -200.0;
     QElapsedTimer clock;
 };

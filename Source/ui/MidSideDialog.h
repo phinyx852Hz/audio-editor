@@ -9,6 +9,7 @@
 #include <functional>
 #include <vector>
 
+class QAbstractButton;
 class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
@@ -79,7 +80,7 @@ private:
     QDoubleSpinBox* rotationBox;
     QSpinBox* liftBox;
     QCheckBox* matchBox;
-    QCheckBox* goldenBox;
+    QAbstractButton* goldenBox;   // a Φ button
     QComboBox* listenBox;
     QLabel* readout;
     QCheckBox* previewBox;

@@ -341,5 +341,6 @@ void MainWindow::mixAssistant()
         return references[(size_t) row].original;
     };
     MixAssistant dialog (*mixerEngine, names, std::move (refs), [w] { w->togglePlay(); }, [w] { w->stripsChanged(); }, w);
+    dialog.applyEq = [w] (int track, const std::vector<std::pair<double, double>>& cuts) { return w->applyEqCuts (track, cuts); };
     dialog.exec();
 }

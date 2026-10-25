@@ -4,7 +4,10 @@
 #include "../core/Phi.h"
 
 #include <algorithm>
+#include <array>
+#include <atomic>
 #include <cmath>
+#include <complex>
 
 namespace
 {
@@ -28,32 +31,89 @@ namespace
         return r;
     }
 
+    // The Φ windows' pictures (DeviceDisplay): 128 points from 20 Hz to 20 kHz.
+    constexpr int displayPoints = 128;
+    double displayHz (int i) { return 20.0 * std::pow (1000.0, (double) i / (displayPoints - 1)); }
+
+    double magnitudeDb (const phi::Biquad& c, double hz, double rate)
+    {
+        const auto z1 = std::polar (1.0, -2.0 * juce::MathConstants<double>::pi * hz / rate), z2 = z1 * z1;
+        const auto h = (c.b0 + c.b1 * z1 + c.b2 * z2) / (1.0 + c.a1 * z1 + c.a2 * z2);
+        return 20.0 * std::log10 (std::abs (h) + 1.0e-12);
+    }
+
+    std::string decimal (double v, int decimals) { return juce::String (v, decimals).toStdString(); }
+    std::string hertz (double hz) { return hz < 1000.0 ? decimal (hz, hz < 100.0 ? 1 : 0) + " Hz" : decimal (hz / 1000.0, 2) + " kHz"; }
+
     //==========================================================================
-    // Φ EQ: twelve bands a golden ratio apart, from a Super Low shelf at 80 Hz
-    // through ten bells to a Super High shelf at 15.9 kHz.
+    // Φ EQ: twelve bands on a golden grid (80 Hz × φ^(n/4)), starting a golden ratio
+    // apart from a Super Low shelf at 80 Hz through ten bells to a Super High shelf at
+    // 15.9 kHz. Each band can move along the grid, be widened or narrowed in golden steps
+    // and be a bell, shelf, notch or band-pass; low and high cuts and a tilt besides.
+    // The first thirteen parameters (the gains and Output) are those of the first Φ EQ.
     class PhiEqProcessor final : public MasteringEffect
     {
     public:
         static constexpr const char* identifier = "phinyx:phi-eq";
+        static constexpr int numSteps = phi::Eq::maxStep - phi::Eq::minStep + 1;
 
         PhiEqProcessor() : MasteringEffect ("PHI_EQ")
         {
+            const juce::StringArray typeNames { "Bell", "Low Shelf", "High Shelf", "Notch", "Band-pass", "Off" };
+            const juce::StringArray slopeNames { "12 dB/oct", "24 dB/oct", "48 dB/oct" };
+            std::vector<std::unique_ptr<juce::RangedAudioParameter>> later;
             for (int b = 0; b < phi::Eq::numBands; ++b)
             {
-                const auto hz = phi::Eq::bandHz (b);
-                const auto name = b == 0                         ? juce::String ("Super Low")
-                                : b == phi::Eq::numBands - 1     ? juce::String ("Super High")
-                                : hz < 1000.0                    ? juce::String (juce::roundToInt (hz)) + " Hz"
-                                                                 : juce::String (hz / 1000.0, 1) + " kHz";
-                auto p = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "band" + juce::String (b), 1 }, name,
+                const auto name = "Band " + juce::String (b + 1);
+                const auto id = "band" + juce::String (b);
+                const auto first = phi::Eq::defaultBand (b);
+                auto g = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { id, 1 }, name + " Gain",
                     juce::NormalisableRange<float> (-12.0f, 12.0f, 0.1f), 0.0f, number (1, "dB"));
-                bands[(size_t) b] = p.get();
-                addHostedParameter (std::move (p));
+                auto t = std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { id + "Type", 1 }, name + " Type",
+                    typeNames, (int) first.type);
+                auto f = std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id + "Hz", 1 }, name + " Freq",
+                    phi::Eq::minStep, phi::Eq::maxStep, 4 * b, gridAttributes (phi::Eq::minStep, 0));
+                auto* type = t.get();
+                auto q = std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id + "Q", 1 }, name + " Q",
+                    phi::Eq::minQStep, phi::Eq::maxQStep, 0, juce::AudioParameterIntAttributes()
+                        .withStringFromValueFunction ([type] (int v, int) { return juce::String (phi::Eq::stepQ (v, isShelf (type->getIndex())), 2); })
+                        .withValueFromStringFunction ([type] (const juce::String& text)
+                        {
+                            const auto wanted = std::max (0.01, text.retainCharacters ("+-.0123456789eE").getDoubleValue());
+                            const auto base = phi::Eq::stepQ (0, isShelf (type->getIndex()));
+                            return (int) std::lround (2.0 * std::log (wanted / base) / std::log (phi::ratio));
+                        }));
+                gains[(size_t) b] = g.get();
+                bandHz[(size_t) b] = f.get();
+                bandQ[(size_t) b] = q.get();
+                types[(size_t) b] = type;
+                addHostedParameter (std::move (g));
+                later.push_back (std::move (f));
+                later.push_back (std::move (q));
+                later.push_back (std::move (t));
             }
             auto o = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "output", 1 }, "Output",
                 juce::NormalisableRange<float> (-12.0f, 12.0f, 0.1f), 0.0f, number (1, "dB"));
             output = o.get();
             addHostedParameter (std::move (o));
+            for (auto& p : later)
+                addHostedParameter (std::move (p));
+
+            auto tl = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "tilt", 1 }, "Tilt",
+                juce::NormalisableRange<float> (-6.0f, 6.0f, 0.1f), 0.0f, number (1, "dB"));
+            // The cuts: off at the end their name points to, then the grid.
+            auto lc = std::make_unique<juce::AudioParameterInt> (juce::ParameterID { "lowCut", 1 }, "Low Cut",
+                0, numSteps, 0, gridAttributes (phi::Eq::minStep - 1, -1));
+            auto ls = std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "lowCutSlope", 1 }, "Low Cut Slope", slopeNames, 1);
+            auto hc = std::make_unique<juce::AudioParameterInt> (juce::ParameterID { "highCut", 1 }, "High Cut",
+                0, numSteps, numSteps, gridAttributes (phi::Eq::minStep, 1));
+            auto hs = std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "highCutSlope", 1 }, "High Cut Slope", slopeNames, 1);
+            tilt = tl.get(); lowCut = lc.get(); lowSlope = ls.get(); highCut = hc.get(); highSlope = hs.get();
+            addHostedParameter (std::move (tl));
+            addHostedParameter (std::move (lc));
+            addHostedParameter (std::move (ls));
+            addHostedParameter (std::move (hc));
+            addHostedParameter (std::move (hs));
         }
 
         static juce::PluginDescription description()
@@ -67,7 +127,7 @@ namespace
         void prepareToPlay (double sampleRate, int) override
         {
             core.prepare (sampleRate, std::max (1, getTotalNumInputChannels()));
-            core.set (gains());
+            core.set (current());
             outputGain.reset (sampleRate, 0.03);
             outputGain.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (output->get()));
         }
@@ -75,23 +135,145 @@ namespace
         using AudioPluginInstance::processBlock;
         void processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override
         {
-            core.set (gains());
+            core.set (current());
             core.process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples());
             outputGain.setTargetValue (juce::Decibels::decibelsToGain (output->get()));
             outputGain.applyGain (buffer, buffer.getNumSamples());
         }
 
-    private:
-        std::array<double, phi::Eq::numBands> gains() const
+        DeviceDisplay display() override
         {
-            std::array<double, phi::Eq::numBands> g {};
+            // The response as set, plus the output gain, with a node for each band and cut.
+            DeviceDisplay d;
+            d.kind = DeviceDisplay::Kind::frequency;
+            d.lowDb = -15.0f;
+            d.highDb = 15.0f;
+            const auto s = current();
+            phi::Eq view;
+            view.prepare (48000.0, 1);
+            view.set (s);
+            const auto out = (double) output->get();
+            for (int i = 0; i < displayPoints; ++i)
+                d.front.push_back ((float) (view.responseDb (displayHz (i)) + out));
+            for (int step = phi::Eq::minStep; step <= phi::Eq::maxStep; ++step)
+                d.grid.push_back ((float) phi::Eq::stepHz (step));
+            for (const auto& t : types[0]->choices)
+                d.types.push_back (t.toStdString());
+
+            const auto params = getParameters();
+            auto index = [&] (juce::AudioProcessorParameter* p) { return params.indexOf (p); };
+            auto resetOf = [&] (std::initializer_list<juce::RangedAudioParameter*> ps)
+            {
+                std::vector<std::pair<int, float>> r;
+                for (auto* p : ps)
+                    r.emplace_back (index (p), p->getDefaultValue());
+                return r;
+            };
             for (int b = 0; b < phi::Eq::numBands; ++b)
-                g[(size_t) b] = bands[(size_t) b]->get();
-            return g;
+            {
+                const auto& band = s.bands[(size_t) b];
+                const bool hasGain = band.type == phi::Eq::Type::bell || isShelf ((int) band.type);
+                DeviceDisplay::Handle h;
+                h.hz = (float) band.hz;
+                h.db = (float) ((hasGain ? band.gainDb : band.type == phi::Eq::Type::off ? 0.0 : view.responseDb (band.hz)) + out);
+                h.hzParameter = index (bandHz[(size_t) b]);
+                h.dbParameter = hasGain ? index (gains[(size_t) b]) : -1;
+                h.qParameter = band.type == phi::Eq::Type::off ? -1 : index (bandQ[(size_t) b]);
+                h.typeParameter = index (types[(size_t) b]);
+                h.on = band.type != phi::Eq::Type::off;
+                h.label = std::to_string (b + 1);
+                h.reset = resetOf ({ gains[(size_t) b], bandHz[(size_t) b], bandQ[(size_t) b], types[(size_t) b] });
+                h.knobs = { index (gains[(size_t) b]), h.hzParameter, index (bandQ[(size_t) b]), h.typeParameter };
+                d.handles.push_back (h);
+            }
+            for (const bool low : { true, false })
+            {
+                DeviceDisplay::Handle h;
+                const auto hz = low ? s.lowCutHz : s.highCutHz;
+                h.on = hz > 0.0;
+                h.hz = (float) (h.on ? hz : low ? d.grid.front() : d.grid.back());
+                h.db = (float) (h.on ? view.responseDb (hz) + out : 0.0);
+                h.hzParameter = index (low ? lowCut : highCut);
+                h.offSide = low ? -1 : 1;
+                h.label = low ? "L" : "H";
+                h.reset = resetOf ({ low ? lowCut : highCut, low ? lowSlope : highSlope });
+                h.knobs = { h.hzParameter, index (low ? lowSlope : highSlope) };
+                d.handles.push_back (h);
+            }
+            for (auto* p : { (juce::RangedAudioParameter*) lowCut, (juce::RangedAudioParameter*) highCut,
+                             (juce::RangedAudioParameter*) tilt, (juce::RangedAudioParameter*) output })
+                d.knobs.push_back (index (p));
+            d.caption = "on the golden grid, 80 Hz × φ^(n/4)";
+            return d;
         }
 
-        std::array<juce::AudioParameterFloat*, phi::Eq::numBands> bands {};
+    private:
+        static bool isShelf (int type) { return type == (int) phi::Eq::Type::lowShelf || type == (int) phi::Eq::Type::highShelf; }
+
+        // A frequency on the grid, from the parameter's value: value + `first` is the step.
+        // `offSide` -1: 0 is off (a low cut); 1: the top is off (a high cut).
+        static juce::AudioParameterIntAttributes gridAttributes (int first, int offSide)
+        {
+            return juce::AudioParameterIntAttributes()
+                .withStringFromValueFunction ([first, offSide] (int v, int)
+                {
+                    if ((offSide < 0 && v == 0) || (offSide > 0 && v == numSteps))
+                        return juce::String ("Off");
+                    return juce::String (hertz (phi::Eq::stepHz (v + first)));
+                })
+                .withValueFromStringFunction ([first, offSide] (const juce::String& text)
+                {
+                    if (text.containsIgnoreCase ("off"))
+                        return offSide < 0 ? 0 : numSteps;
+                    auto hz = text.retainCharacters ("+-.0123456789eE").getDoubleValue();
+                    if (text.containsIgnoreCase ("k"))
+                        hz *= 1000.0;
+                    return phi::Eq::nearestStep (hz) - first;
+                });
+        }
+
+        static double cutHz (const juce::AudioParameterInt* p, bool low)
+        {
+            const auto v = p->get();
+            if (low ? v == 0 : v == numSteps)
+                return 0.0;
+            return phi::Eq::stepHz (v + (low ? phi::Eq::minStep - 1 : phi::Eq::minStep));
+        }
+
+        static int slopeOf (const juce::AudioParameterChoice* p)
+        {
+            static constexpr int slopes[] { 12, 24, 48 };
+            return slopes[std::clamp (p->getIndex(), 0, 2)];
+        }
+
+        phi::Eq::Settings current() const
+        {
+            phi::Eq::Settings s;
+            for (int b = 0; b < phi::Eq::numBands; ++b)
+            {
+                auto& band = s.bands[(size_t) b];
+                band.type = (phi::Eq::Type) std::clamp (types[(size_t) b]->getIndex(), 0, phi::Eq::numTypes - 1);
+                band.hz = phi::Eq::stepHz (bandHz[(size_t) b]->get());
+                band.q = phi::Eq::stepQ (bandQ[(size_t) b]->get(), isShelf ((int) band.type));
+                band.gainDb = gains[(size_t) b]->get();
+            }
+            s.lowCutHz = cutHz (lowCut, true);
+            s.lowCutSlope = slopeOf (lowSlope);
+            s.highCutHz = cutHz (highCut, false);
+            s.highCutSlope = slopeOf (highSlope);
+            s.tiltDb = tilt->get();
+            return s;
+        }
+
+        std::array<juce::AudioParameterFloat*, phi::Eq::numBands> gains {};
+        std::array<juce::AudioParameterInt*, phi::Eq::numBands> bandHz {}, bandQ {};
+        std::array<juce::AudioParameterChoice*, phi::Eq::numBands> types {};
         juce::AudioParameterFloat* output = nullptr;
+        juce::AudioParameterFloat* tilt = nullptr;
+        juce::AudioParameterInt* lowCut = nullptr;
+        juce::AudioParameterInt* highCut = nullptr;
+        juce::AudioParameterChoice* lowSlope = nullptr;
+        juce::AudioParameterChoice* highSlope = nullptr;
         phi::Eq core;
         juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> outputGain { 1.0f };
     };
@@ -145,6 +327,25 @@ namespace
         {
             core.set (current());
             core.process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples());
+        }
+
+        DeviceDisplay display() override
+        {
+            // The taps across time, each 1/φ further than the one before and Decay quieter.
+            DeviceDisplay d;
+            d.kind = DeviceDisplay::Kind::taps;
+            const auto s = current();
+            const auto span = phi::Echo::tapSeconds (s, s.taps - 1) * 1.1;
+            double level = 1.0;
+            for (int t = 0; t < s.taps; ++t)
+            {
+                d.front.push_back ((float) (phi::Echo::tapSeconds (s, t) / span));
+                d.front.push_back ((float) level);
+                level *= s.decay;
+            }
+            d.axis = "0 to " + decimal (span, 2) + " s";
+            d.caption = "taps at " + decimal (s.timeMs, 0) + " ms × φⁿ";
+            return d;
         }
 
     private:
@@ -213,6 +414,23 @@ namespace
             core.process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples());
         }
 
+        DeviceDisplay display() override
+        {
+            // How the tail dies away: silent for the pre-delay, then falling 60 dB in Decay.
+            DeviceDisplay d;
+            d.kind = DeviceDisplay::Kind::curve;
+            const auto s = current();
+            const auto span = s.preDelayMs / 1000.0 + s.decaySeconds * 1.2;
+            for (int i = 0; i < displayPoints; ++i)
+            {
+                const auto t = span * i / (displayPoints - 1) - s.preDelayMs / 1000.0;
+                d.front.push_back (t < 0.0 ? 0.0f : (float) std::max (0.0, 1.0 - t / s.decaySeconds));   // dB down, as a share of 60
+            }
+            d.axis = "0 to " + decimal (span, 1) + " s";
+            d.caption = "8 lines √φ apart · RT60 " + decimal (s.decaySeconds, 2) + " s";
+            return d;
+        }
+
     private:
         phi::Space::Settings current() const
         {
@@ -272,6 +490,20 @@ namespace
         {
             core.set (current());
             core.process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples());
+        }
+
+        DeviceDisplay display() override
+        {
+            // The LFO over ten of its slowest cycles: three sines at rate × 1, φ and φ², never repeating.
+            DeviceDisplay d;
+            d.kind = DeviceDisplay::Kind::curve;
+            const auto hz = std::max (0.01, (double) rate->get());
+            const auto span = 10.0 / hz;
+            for (int i = 0; i < displayPoints * 2; ++i)
+                d.front.push_back ((float) (0.5 + 0.5 * depth->get() / 100.0 * phi::Drift::lfo (span * i / (displayPoints * 2 - 1), hz, 0.0)));
+            d.axis = "0 to " + decimal (span, span < 10.0 ? 1 : 0) + " s";
+            d.caption = "LFOs at " + decimal (hz, 3) + " Hz × 1, φ, φ²";
+            return d;
         }
 
     private:
@@ -344,6 +576,25 @@ namespace
                 }
             core.set (current (bpm));
             core.process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples());
+            playing = core.currentStep();
+        }
+
+        DeviceDisplay display() override
+        {
+            // 34 steps of the pattern from the bar the playing step is in, the playing one marked.
+            DeviceDisplay d;
+            d.kind = DeviceDisplay::Kind::steps;
+            const auto s = current (tempo->get());
+            const auto now = playing.load();
+            const auto first = now - (now % 34 + 34) % 34;
+            for (std::int64_t n = first; n < first + 34; ++n)
+            {
+                d.front.push_back (phi::hit (n, phi::density (s.densityIndex), s.shift) ? 1.0f : 0.0f);
+                d.back.push_back (n == now ? 1.0f : 0.0f);
+            }
+            d.caption = "density 1/φ" + std::string (s.densityIndex == 0 ? "" : s.densityIndex == 1 ? "²" : s.densityIndex == 2 ? "³" : "⁴")
+                      + " · " + decimal (100.0 * phi::density (s.densityIndex), 1) + " % of steps";
+            return d;
         }
 
     private:
@@ -363,6 +614,7 @@ namespace
         juce::AudioParameterFloat *tempo = nullptr, *shift = nullptr, *depth = nullptr, *smooth = nullptr;
         juce::AudioParameterChoice *step = nullptr, *density = nullptr;
         phi::Rhythm core;
+        std::atomic<std::int64_t> playing { 0 };   // the step heard last, for the window
     };
 
     //==========================================================================
@@ -420,6 +672,26 @@ namespace
             core.process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples());
             outputGain.setTargetValue (juce::Decibels::decibelsToGain (output->get()));
             outputGain.applyGain (buffer, buffer.getNumSamples());
+        }
+
+        DeviceDisplay display() override
+        {
+            // The band-passes at root × φⁿ, summed.
+            DeviceDisplay d;
+            d.kind = DeviceDisplay::Kind::frequency;
+            d.lowDb = -48.0f;
+            d.highDb = 6.0f;
+            const auto s = current();
+            for (int i = 0; i < displayPoints; ++i)
+            {
+                double sum = 0.0;
+                for (int b = 0; b < s.bands; ++b)
+                    if (const auto hz = phi::Resonator::bandHz (s, b); hz < 20000.0)
+                        sum += std::pow (10.0, magnitudeDb (phi::Biquad::bandPass (hz, s.q, 48000.0), displayHz (i), 48000.0) / 10.0);
+                d.front.push_back ((float) (10.0 * std::log10 (sum + 1.0e-12)));
+            }
+            d.caption = "bands at " + hertz (s.rootHz) + " × φⁿ";
+            return d;
         }
 
     private:
@@ -488,6 +760,25 @@ namespace
             core.process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples());
         }
 
+        DeviceDisplay display() override
+        {
+            // The copies by pitch: the original, then × φ, φ², φ³ (8.33 semitones apart), each Decay quieter.
+            DeviceDisplay d;
+            d.kind = DeviceDisplay::Kind::taps;
+            const auto s = current();
+            const auto top = 12.0 * std::log2 (phi::power (phi::Stack::maxCopies)) * 1.08;
+            double level = 1.0;
+            for (int c = 0; c <= s.copies; ++c)
+            {
+                d.front.push_back ((float) (12.0 * std::log2 (phi::power (c)) / top));
+                d.front.push_back ((float) level);
+                level *= s.decay;
+            }
+            d.axis = "0 to " + decimal (top, 0) + " semitones up";
+            d.caption = "copies at × φⁿ, +8.33 semitones each";
+            return d;
+        }
+
     private:
         phi::Stack::Settings current() const
         {
@@ -547,6 +838,23 @@ namespace
         {
             core.set (current());
             core.process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples());
+            found = core.fundamental();
+        }
+
+        DeviceDisplay display() override
+        {
+            // The cut at fundamental × φ ÷ 2 × 10, following what it found.
+            DeviceDisplay d;
+            d.kind = DeviceDisplay::Kind::frequency;
+            d.lowDb = -18.0f;
+            d.highDb = 6.0f;
+            const auto s = current();
+            const auto fundamental = s.automatic ? found.load() : s.fundamentalHz;
+            const auto cut = phi::Biquad::bell (phi::Tame::cutHz (fundamental), s.q, s.depthDb, 48000.0);
+            for (int i = 0; i < displayPoints; ++i)
+                d.front.push_back ((float) magnitudeDb (cut, displayHz (i), 48000.0));
+            d.caption = "fundamental " + hertz (fundamental) + " → cut at " + hertz (phi::Tame::cutHz (fundamental));
+            return d;
         }
 
     private:
@@ -563,6 +871,7 @@ namespace
         juce::AudioParameterFloat *depth = nullptr, *fundamental = nullptr, *width = nullptr;
         juce::AudioParameterBool* automatic = nullptr;
         phi::Tame core;
+        std::atomic<double> found { 55.0 };   // the fundamental the cut follows, for the window
     };
 
     //==========================================================================
@@ -620,6 +929,22 @@ namespace
         {
             core.set (current());
             core.process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples());
+        }
+
+        DeviceDisplay display() override
+        {
+            // What it hears (grey) and what it takes away now (gold), live.
+            DeviceDisplay d;
+            d.kind = DeviceDisplay::Kind::frequency;
+            d.lowDb = -24.0f;
+            d.highDb = 0.0f;
+            std::array<float, phi::Deresonator::pictureSize> level {}, cut {};
+            core.picture (level.data(), cut.data());
+            d.back.assign (level.begin(), level.end());
+            d.front.assign (cut.begin(), cut.end());
+            d.caption = "deepest cut " + decimal (*std::min_element (cut.begin(), cut.end()), 1) + " dB · latency "
+                      + decimal (1000.0 * core.latency() / std::max (1.0, getSampleRate()), 1) + " ms";
+            return d;
         }
 
     private:

@@ -60,9 +60,10 @@ private:
 
 //==============================================================================
 InstrumentFrame::InstrumentFrame (juce::AudioProcessorEditor* e, const stock::Info& i)
-    : editor (e), bar (std::make_unique<Bar> (*this)), info (i)
+    : editor (e), scaler (*e), bar (std::make_unique<Bar> (*this)), info (i)
 {
     setOpaque (true);
+    getProperties().set ("ownOpacity", true);   // its bar sets it, not PHINYX's slider
     if (loadOpacity)
         opacity = std::clamp (loadOpacity (info.key), minOpacity, 1.0);
 
@@ -94,12 +95,18 @@ void InstrumentFrame::setOpacityValue (double value)
 void InstrumentFrame::applyOpacity()
 {
     if (auto* peer = getPeer())
-        x11::setOpacity (peer->getNativeHandle(), opacity);
+        x11::setOpacity (peer->getNativeHandle(), opacity, getTopLevelComponent()->getName().toStdString());
 }
 
 void InstrumentFrame::parentHierarchyChanged()
 {
     applyOpacity();
+    // Again once the window manager has the window (Hyprland finds it by its title).
+    juce::Timer::callAfterDelay (400, [f = juce::Component::SafePointer<InstrumentFrame> (this)]
+    {
+        if (f != nullptr)
+            f->applyOpacity();
+    });
 }
 
 void InstrumentFrame::paint (juce::Graphics& g)
@@ -119,14 +126,23 @@ void InstrumentFrame::resized()
     if (editor->isResizable())
         editor->setBounds (view.getLocalBounds());
     else
+    {
+        scaler.fit (view.getWidth(), view.getHeight());
         editor->setCentrePosition (view.getLocalBounds().getCentre());
+    }
+    embedded::follow (*editor);
 }
 
 // The view changed its own size (a resize button, a page with another size): the window follows.
 void InstrumentFrame::fitToEditor()
 {
-    if (fitting)
+    if (fitting || scaler.isScaling())
         return;
+    if (scaler.isScaled())
+    {
+        resized();   // scaled to the window: only placed again
+        return;
+    }
     juce::ScopedValueSetter<bool> busy (fitting, true);
     setSize (editor->getWidth(), editor->getHeight() + barHeight);
     editor->setTopLeftPosition (0, 0);

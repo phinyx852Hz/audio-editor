@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #pragma once
 
+#include "EmbeddedView.h"
 #include "StockPlugins.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -43,6 +44,7 @@ private:
 
     View view;
     std::unique_ptr<juce::AudioProcessorEditor> editor;
+    embedded::ScaleToFit scaler;   // an editor that cannot resize grows and shrinks with the window
     std::unique_ptr<Bar> bar;
     const stock::Info& info;
     double opacity = 1.0;

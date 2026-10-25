@@ -5,6 +5,7 @@
 #include <QAction>
 #include <QLineEdit>
 #include "../core/Dsp.h"
+#include "../engine/X11Windows.h"
 #include "Theme.h"
 
 #include <QApplication>
@@ -14,6 +15,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QScreen>
 #include <QSettings>
 #include <QStackedWidget>
 #include <QStandardPaths>
@@ -401,7 +403,10 @@ void DockablePanel::setPoppedOut (bool popOut)
         return;
     }
 
-    const auto size = windowSize.isValid() ? windowSize : dockWidget->isVisible() ? dockWidget->size() : contentWidget->sizeHint();
+    // The first time, closed: a standard size, roomy enough for Simplest and the Slicer.
+    auto size = windowSize.isValid() ? windowSize : dockWidget->isVisible() ? dockWidget->size() : contentWidget->sizeHint().expandedTo (QSize (960, 620));
+    if (const auto* screen = mainWindow.screen())
+        size = size.boundedTo (screen->availableSize() * 0.9);
 
     // A parentless window, so tiling window managers treat it as a normal window.
     window = new QWidget (nullptr, Qt::Window);
@@ -422,6 +427,11 @@ void DockablePanel::setPoppedOut (bool popOut)
     dockWidget->hide();
     window->resize (size.expandedTo (QSize (200, 150)));
     show (true);
+    // On Hyprland it floats at that size, centred, rather than tiling (Super+F still takes it full screen).
+    QTimer::singleShot (400, window, [w = window]
+    {
+        x11::floatWindow (w->windowTitle().toStdString(), w->width(), w->height());
+    });
 }
 
 void DockablePanel::dockBack (bool keepVisible)
@@ -573,6 +583,7 @@ void MeterPanel::reset()
     std::fill (std::begin (holdAge), std::end (holdAge), 0.0);
     maxTruePeak = maxSamplePeak = -200.0f;
     powers.clear();
+    loudness.reset();
     momentary = shortTerm = integrated = -200.0;
     update();
 }
@@ -580,6 +591,15 @@ void MeterPanel::reset()
 void MeterPanel::addBlocks (const std::vector<MeterBlock>& blocks)
 {
     const auto dt = clock.restart() / 1000.0;
+    // What is drawn, to repaint only when it changes: idle, the meters sit still and cost nothing.
+    const auto shown = [this]
+    {
+        std::vector<double> v { (double) numChannels, (double) maxTruePeak, (double) maxSamplePeak, momentary, shortTerm, integrated };
+        for (int ch = 0; ch < numChannels; ++ch)
+            v.insert (v.end(), { (double) level[ch], (double) hold[ch] });
+        return v;
+    };
+    const auto before = shown();
     constexpr float fallDbPerSecond = 24.0f;
     constexpr double holdSeconds = 2.0;
 
@@ -599,7 +619,10 @@ void MeterPanel::addBlocks (const std::vector<MeterBlock>& blocks)
         }
 
         powers.push_back (b.loudnessPower);
+        loudness.add (b.loudnessPower);
     }
+    if (powers.size() > 30)
+        powers.erase (powers.begin(), powers.end() - 30);
 
     for (int ch = 0; ch < numChannels; ++ch)
     {
@@ -627,10 +650,11 @@ void MeterPanel::addBlocks (const std::vector<MeterBlock>& blocks)
 
         momentary = lufs (meanOfLast (4));
         shortTerm = lufs (meanOfLast (30));
-        integrated = dsp::integratedLoudness (powers);
+        integrated = loudness.value();
     }
 
-    update();
+    if (shown() != before)
+        update();
 }
 
 void MeterPanel::paintEvent (QPaintEvent*)

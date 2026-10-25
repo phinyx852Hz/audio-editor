@@ -9,6 +9,7 @@
 #include "../sampler/SamplerEngine.h"
 #include "../sampler/SlicerEngine.h"
 #include "Brand.h"
+#include "PhiMark.h"
 #include "Settings.h"
 #include "FindPanel.h"
 #include "Visualizer.h"
@@ -41,6 +42,7 @@
 #include "MetadataEditor.h"
 #include "../core/Repair.h"
 #include "../engine/BuiltinEffects.h"
+#include "../engine/PluginWindow.h"
 #include "../engine/StockPlugins.h"
 #include "../engine/VampHost.h"
 #include "MasterAssistant.h"
@@ -819,10 +821,14 @@ void MainWindow::registerCommands()
     add ("help.menuBar", Category::help, tr ("Open &Menu Bar"), { KS (Qt::Key_F10) }, [this] { openMenuBar(); });
     add ("help.about", Category::help, tr ("&About " APP_DISPLAY_NAME), {}, [this]
     {
-        QMessageBox::about (this, tr ("About " APP_DISPLAY_NAME),
+        QMessageBox about (QMessageBox::NoIcon, tr ("About " APP_DISPLAY_NAME),
             tr ("<b>" APP_BRAND_NAME " " APP_VERSION "</b><p>Audio editor and mastering suite for Linux.</p>"
                 "<p>Free software under the GNU Affero General Public License v3.</p>"
-                "<p>Press Ctrl+Shift+P or F1 to search every command and shortcut.</p>"));
+                "<p>The Φ mark is PHI's own, drawn from the golden ratio.</p>"
+                "<p>Press Ctrl+Shift+P or F1 to search every command and shortcut.</p>"),
+            QMessageBox::Ok, this);
+        about.setIconPixmap (phimark::pixmap (96, phimark::Style::goldOnBlack, devicePixelRatioF()));
+        about.exec();
     });
 }
 
@@ -929,6 +935,7 @@ QSlider* MainWindow::makeOpacitySlider (QWidget* parent)
     slider->setToolTip (tr ("Window opacity (Ctrl+Alt+- and Ctrl+Alt+=)"));
     connect (slider, &QSlider::valueChanged, this, [this] (int v) { changeOpacity (v / 100.0, false); });
     opacitySliders.push_back (slider);
+    PluginWindow::setOpacityForAll (Theme::opacity());   // plugin windows open at the saved opacity
     return slider;
 }
 
@@ -956,6 +963,7 @@ void MainWindow::focusPanel (int direction)
 void MainWindow::changeOpacity (double value, bool announce)
 {
     Theme::setOpacity (value);
+    PluginWindow::setOpacityForAll (Theme::opacity());
     const auto percent = (int) std::lround (Theme::opacity() * 100.0);
 
     for (auto* s : opacitySliders)
@@ -1059,6 +1067,93 @@ void MainWindow::buildPanels()
         mixerWin->sendToLauncher (path, colour >= 0 ? findWidget->markName (set, colour) : QString(),
                                   colour >= 0 ? FindPanel::colour (colour) : QColor());
         return true;
+    };
+    // The Φ random selector: into a new scene when the clip launcher is shown, else onto the
+    // mixer's tracks (the mixer opens for it).
+    findWidget->phiDeal = [this] (const QStringList& files, const QStringList& instruments, const QStringList& names,
+                                  const QList<QColor>& colours, FindPanel::DealTo to, bool again)
+    {
+        const bool launcherUp = mixerWin != nullptr && mixerWin->isVisible() && mixerWin->launcherShown();
+        const auto launcher = to == FindPanel::DealTo::launcher || (to == FindPanel::DealTo::automatic && launcherUp);
+        showMixer();
+        if (launcher && ! mixerWin->launcherShown())
+            mixerWin->showLauncher (true);
+        if (! launcher && mixerWin->launcherShown())
+            mixerWin->showLauncher (false);
+        mixerWin->phiDeal (files, instruments, names, colours, launcher, again);
+    };
+    // A colour's favourite instruments: instrument plugins, and the stock instruments of the
+    // Sample and Synth menus (found among them by their file).
+    findWidget->instrumentOf = [this] (const QString& key) -> QString
+    {
+        const auto known = engine.knownInstruments();
+        if (key.startsWith (QStringLiteral ("plugin:")))
+        {
+            const auto id = key.mid (7).toStdString();
+            for (const auto& p : known)
+                if (p.id == id)
+                    return QString::fromStdString (p.id);
+            return {};
+        }
+        if (! key.startsWith (QStringLiteral ("command:instrument.")))
+            return {};
+        const auto* info = stock::instrument (key.mid (19).toLatin1().constData());
+        if (info == nullptr || info->file == nullptr)
+            return {};
+        for (const auto& p : known)
+            if (QString::fromStdString (p.file).contains (QString::fromUtf8 (info->file)))
+                return QString::fromStdString (p.id);
+        return {};
+    };
+    // A Prism of effects: one of each colour's favourite effects on a ray of its own, named
+    // for the colour, in parallel and each turned down so together they are as loud as one.
+    findWidget->phiPrism = [this] (const QStringList& effects, const QStringList& names, const QList<QColor>&)
+    {
+        int slot = -1;
+        for (int i = 0; i < AudioEngine::numMasterSlots && slot < 0; ++i)
+            if (engine.masterSlot (i).empty)
+                slot = i;
+        std::vector<std::pair<QString, QString>> rays;   // name, effect
+        for (int c = 0; c < (int) std::min (effects.size(), names.size()); ++c)
+            if (! effects[c].isEmpty())
+                rays.emplace_back (names[c], effects[c]);
+        if (rays.empty())
+        {
+            statusBar()->showMessage (tr ("Φ: no effects to deal. Mark effects with the Selector's colours first (1 to 8 on a plugin in the Find panel)."), 8000);
+            return;
+        }
+        if (slot < 0)
+        {
+            statusBar()->showMessage (tr ("All %1 Master Section slots are in use: remove a plugin first").arg (AudioEngine::numMasterSlots), 6000);
+            return;
+        }
+
+        QApplication::setOverrideCursor (Qt::WaitCursor);
+        auto error = engine.loadMasterPlugin (slot, "phinyx:prism");
+        const ChainPath prism { slot, {} };
+        QStringList failed;
+        if (error.empty())
+        {
+            engine.prismRename (prism, QStringLiteral ("Φ Prism").toStdString());
+            const auto gainDb = -20.0 * std::log10 ((double) rays.size());
+            for (int r = 0; r < (int) rays.size(); ++r)
+            {
+                if (r >= (int) engine.prismInfo (prism).rays.size() && engine.prismAddRay (prism) < 0)
+                    break;
+                engine.prismRenameRay (prism, r, rays[(size_t) r].first.toStdString());
+                engine.prismSetRayGain (prism, r, gainDb);
+                if (const auto why = engine.prismAddDevice (prism, r, 0, rays[(size_t) r].second.toStdString()); ! why.empty())
+                    failed << QString::fromStdString (why);
+            }
+        }
+        QApplication::restoreOverrideCursor();
+        masterWidget->refresh();
+        chainRow->rebuild();
+        if (! error.empty())
+            QMessageBox::warning (this, tr ("Φ Prism"), QString::fromStdString (error));
+        else
+            statusBar()->showMessage (failed.isEmpty() ? tr ("Φ dealt a Prism of %n effect(s) into slot %1", nullptr, (int) rays.size()).arg (slot + 1)
+                                                       : failed.join (QStringLiteral ("; ")), 8000);
     };
     connect (findWidget, &FindPanel::openRequested, this, [this] (const QString& path)
     {

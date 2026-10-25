@@ -109,6 +109,7 @@ private:
     };
 
     static constexpr int masterGain = -1, ditherDepth = -2, ditherNoise = -3;   // the master card's own knobs
+    static constexpr int slotMix = -4;   // every slot's dry/wet, last on its card
     void addKnob (int parameter, const QString& name, int steps);
     void setKnobFromEngine (Knob&);
     void knobMoved (const Knob&, int position);
