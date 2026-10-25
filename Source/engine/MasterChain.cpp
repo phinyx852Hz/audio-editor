@@ -1565,6 +1565,14 @@ MasterSlotInfo MasterChain::info (const ChainPath& path) const
     return place.owner != nullptr ? place.owner->deviceInfo (place.ray, place.device) : MasterSlotInfo {};
 }
 
+std::string MasterChain::state (const ChainPath& path) const
+{
+    juce::MemoryBlock block;
+    if (! call (locate (path), [&] (juce::AudioPluginInstance& p) { p.getStateInformation (block); }))
+        return {};
+    return block.toBase64Encoding().toStdString();
+}
+
 void MasterChain::setBypassed (const ChainPath& path, bool b)
 {
     if (path.topLevel())

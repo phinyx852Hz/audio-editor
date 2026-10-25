@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "core/PhiVoice.h"
+#include "engine/AnalyzeCommand.h"
 #include "engine/AudioEngine.h"
 #include "engine/MasterChain.h"
 #include "ui/Brand.h"
@@ -145,6 +146,12 @@ int main (int argc, char* argv[])
     // at exit, which would read as a failed scan although the list was written.
     if (argc == 5 && std::string (argv[1]) == MasterChain::scanOption)
         std::_Exit (MasterChain::scanInThisProcess (argv[2], argv[3], juce::File (argv[4])));
+    if (argc >= 2 && std::string (argv[1]) == analyzeOption)
+    {
+        const auto code = analyzePluginCommand (argc, argv);
+        std::fflush (nullptr);
+        std::_Exit (code);
+    }
 
     // The editor leaves the same way, for the same reason. Plugin libraries stay loaded
     // until PHI quits (see ClapFormat), so their static destructors and exit hooks would

@@ -36,6 +36,8 @@
 #include "../Source/core/Phi.h"
 #include "../Source/core/PhiDynamics.h"
 #include "../Source/core/PhiChorus.h"
+#include "../Source/core/PluginMeasure.h"
+#include "../Source/core/PhiForensics.h"
 
 #include <algorithm>
 #include <cmath>
@@ -4198,6 +4200,217 @@ namespace
         }
     }
 
+    // The Plugin Analyzer's measurements, on effects whose answers are known.
+    struct TestDevice : measure::Device
+    {
+        std::function<void (float*, float*, int)> fn;
+        std::function<void()> clear;
+        int latency = 0;
+        void reset() override { if (clear) clear(); }
+        void process (float* l, float* r, int n) override { fn (l, r, n); }
+        int reportedLatency() const override { return latency; }
+    };
+
+    measure::Settings quickSettings()
+    {
+        measure::Settings s;
+        s.fftOrder = 15;
+        s.aliasTones = { 1000.0, 10000.0 };
+        s.dynamicsStepDb = 4.0;
+        s.modulationSeconds = 6.0;
+        s.tailSeconds = 0.5;
+        return s;
+    }
+
+    void testPluginMeasure()
+    {
+        // A wire: flat, no delay, no distortion, no aliasing, no compression.
+        {
+            TestDevice wire;
+            wire.fn = [] (float*, float*, int) {};
+            const auto r = measure::run (wire, quickSettings());
+            double worst = 0.0;
+            for (std::size_t i = 0; i < r.hz.size(); ++i)
+                if (r.hz[i] > 30.0 && r.hz[i] < 20000.0)
+                    worst = std::max (worst, std::abs (r.magnitudeDb[0][i]));
+            check (r.hasLinear && worst < 0.1, "measure: a wire is flat within 0.1 dB (" + std::to_string (worst) + ")");
+            check (std::abs (r.measuredLatency) < 0.5, "measure: a wire has no latency");
+            check (r.thdPercent[0] < 0.001 && r.alias[1].aliasDb[0] < -120.0, "measure: a wire adds no harmonics or aliasing");
+            check (std::abs (r.ratio - 1.0) < 0.05 && ! r.gated && r.modulationDepthDb < 0.2, "measure: a wire neither compresses nor moves");
+        }
+
+        // A delay that says so: found where it says.
+        {
+            TestDevice delay;
+            std::array<std::vector<float>, 2> line { std::vector<float> (100, 0.0f), std::vector<float> (100, 0.0f) };
+            std::size_t at = 0;
+            delay.latency = 100;
+            delay.clear = [&] { for (auto& l : line) std::fill (l.begin(), l.end(), 0.0f); at = 0; };
+            delay.fn = [&] (float* l, float* r, int n)
+            {
+                for (int i = 0; i < n; ++i)
+                {
+                    std::swap (line[0][at], l[i]);
+                    std::swap (line[1][at], r[i]);
+                    at = (at + 1) % 100;
+                }
+            };
+            auto s = quickSettings();
+            s.harmonics = s.aliasing = s.dynamics = s.modulation = false;
+            const auto r = measure::run (delay, s);
+            check (std::abs (r.measuredLatency - 100.0) < 0.5, "measure: a 100-sample delay peaks at 100 (" + std::to_string (r.measuredLatency) + ")");
+            check (r.notes.empty(), "measure: a delay that reports its latency gets no warning");
+        }
+
+        // A bell of +6 dB at 1 kHz.
+        {
+            TestDevice bell;
+            // RBJ's peaking EQ.
+            struct Peaking
+            {
+                double b0, b1, b2, a1, a2, z1 = 0, z2 = 0;
+                Peaking()
+                {
+                    const auto A = std::pow (10.0, 6.0 / 40.0), w = 2.0 * 3.14159265358979 * 1000.0 / 48000.0, alpha = std::sin (w) / 2.0;
+                    const auto a0 = 1 + alpha / A;
+                    b0 = (1 + alpha * A) / a0; b1 = -2 * std::cos (w) / a0; b2 = (1 - alpha * A) / a0;
+                    a1 = -2 * std::cos (w) / a0; a2 = (1 - alpha / A) / a0;
+                }
+                float process (float x)
+                {
+                    const auto y = b0 * x + z1;
+                    z1 = b1 * x - a1 * y + z2;
+                    z2 = b2 * x - a2 * y;
+                    return (float) y;
+                }
+                void reset() { z1 = z2 = 0; }
+            };
+            Peaking filters[2];
+            bell.clear = [&] { for (auto& f : filters) f.reset(); };
+            bell.fn = [&] (float* l, float* r, int n)
+            {
+                for (int i = 0; i < n; ++i)
+                {
+                    l[i] = filters[0].process (l[i]);
+                    r[i] = filters[1].process (r[i]);
+                }
+            };
+            auto s = quickSettings();
+            s.harmonics = s.aliasing = s.dynamics = s.modulation = false;
+            const auto r = measure::run (bell, s);
+            const auto it = std::lower_bound (r.hz.begin(), r.hz.end(), 1000.0);
+            const auto db = r.magnitudeDb[0][(std::size_t) (it - r.hz.begin())];
+            check (std::abs (db - 6.0) < 0.3, "measure: a +6 dB bell reads +6 dB at 1 kHz (" + std::to_string (db) + ")");
+            const auto features = forensic::features (r);
+            const auto peak = std::find_if (features.begin(), features.end(), [] (const forensic::Feature& f) { return f.group == "frequency"; });
+            check (peak != features.end() && std::abs (peak->value - 1000.0) < 10.0, "forensic: finds the bell's peak at 1 kHz");
+        }
+
+        // A hard saturator with no oversampling: harmonics, odd ones above even, and aliasing at 10 kHz.
+        {
+            TestDevice drive;
+            drive.fn = [] (float* l, float* r, int n)
+            {
+                for (int i = 0; i < n; ++i)
+                {
+                    l[i] = std::tanh (8.0f * l[i]);
+                    r[i] = std::tanh (8.0f * r[i]);
+                }
+            };
+            auto s = quickSettings();
+            s.linear = s.dynamics = s.modulation = false;
+            const auto r = measure::run (drive, s);
+            check (r.thdPercent[0] > 10.0 && r.harmonicDb[0][2] > r.harmonicDb[0][1] + 20.0, "measure: tanh makes odd harmonics, not even ones");
+            check (r.alias[1].aliasDb[0] > -60.0 && r.alias[0].aliasDb[0] < r.alias[1].aliasDb[0], "measure: tanh aliases, more at 10 kHz than 1 kHz");
+        }
+
+        // A compressor of 4:1 above -20 dBFS (instant, on the peak level of the tone).
+        {
+            TestDevice comp;
+            double envelope = 0.0;
+            comp.clear = [&] { envelope = 0.0; };
+            comp.fn = [&] (float* l, float* r, int n)
+            {
+                for (int i = 0; i < n; ++i)
+                {
+                    const auto x = std::max (std::abs (l[i]), std::abs (r[i]));
+                    envelope = std::max ((double) x, envelope * 0.9995);   // peak hold, slow fall
+                    const auto db = 20.0 * std::log10 (std::max (envelope, 1.0e-9));
+                    const auto over = std::max (0.0, db + 20.0);
+                    const auto gain = std::pow (10.0, -(over - over / 4.0) / 20.0);
+                    l[i] = (float) (l[i] * gain);
+                    r[i] = (float) (r[i] * gain);
+                }
+            };
+            auto s = quickSettings();
+            s.linear = s.harmonics = s.aliasing = s.modulation = false;
+            const auto r = measure::run (comp, s);
+            check (std::abs (r.ratio - 4.0) < 0.4 && std::abs (r.thresholdDb + 20.0) <= 4.0,
+                   "measure: a 4:1 compressor reads 4:1 at -20 dBFS (" + std::to_string (r.ratio) + ", " + std::to_string (r.thresholdDb) + ")");
+        }
+
+        // A 2 Hz tremolo.
+        {
+            TestDevice tremolo;
+            std::int64_t t = 0;
+            tremolo.clear = [&] { t = 0; };
+            tremolo.fn = [&] (float* l, float* r, int n)
+            {
+                for (int i = 0; i < n; ++i, ++t)
+                {
+                    const auto g = (float) (0.75 + 0.25 * std::sin (2.0 * 3.14159265358979 * 2.0 * (double) t / 48000.0));
+                    l[i] *= g;
+                    r[i] *= g;
+                }
+            };
+            auto s = quickSettings();
+            s.linear = s.harmonics = s.aliasing = s.dynamics = false;
+            const auto r = measure::run (tremolo, s);
+            check (! r.modulationHz.empty() && std::abs (r.modulationHz.front() - 2.0) < 0.05, "measure: finds a 2 Hz tremolo");
+        }
+
+        // Echoes at 100 ms × φⁿ, each 1/φ quieter: forensic Φ should be sure. At 100 ms × 1.5ⁿ it should not.
+        auto echoes = [] (double base, double spacing, double fall)
+        {
+            auto device = std::make_shared<TestDevice>();
+            auto line = std::make_shared<std::vector<float>> (48000 * 2, 0.0f);
+            auto at = std::make_shared<std::size_t> (0);
+            device->clear = [line, at] { std::fill (line->begin(), line->end(), 0.0f); *at = 0; };
+            device->fn = [=] (float* l, float* r, int n)
+            {
+                const auto size = line->size();
+                for (int i = 0; i < n; ++i)
+                {
+                    (*line)[*at] = 0.5f * (l[i] + r[i]);
+                    float out = 0.0f, gain = 1.0f;
+                    double time = base;
+                    for (int tap = 0; tap < 4; ++tap, time *= spacing, gain *= (float) fall)
+                        out += gain * (*line)[(*at + size - (std::size_t) std::lround (time * 48.0)) % size];
+                    l[i] = r[i] = out;
+                    *at = (*at + 1) % size;
+                }
+            };
+            return device;
+        };
+        {
+            auto golden = echoes (100.0, phi::ratio, phi::inverse);
+            auto s = quickSettings();
+            s.harmonics = s.aliasing = s.dynamics = s.modulation = false;
+            s.tailSeconds = 1.0;
+            const auto report = forensic::analyse (measure::run (*golden, s));
+            check (report.verdict == forensic::Verdict::strong, "forensic: golden echoes are strong evidence (" + report.summary + ")");
+        }
+        {
+            auto plain = echoes (100.0, 1.5, 0.5);
+            auto s = quickSettings();
+            s.harmonics = s.aliasing = s.dynamics = s.modulation = false;
+            s.tailSeconds = 0.8;
+            const auto report = forensic::analyse (measure::run (*plain, s));
+            check (report.verdict != forensic::Verdict::strong && report.verdict != forensic::Verdict::suggestive,
+                   "forensic: echoes 3:2 apart are no evidence of φ (" + report.summary + ")");
+        }
+    }
+
     // The splash's sound: phase distortion, a patch per start, a granular reverb with a long tail.
     void testPhiVoice()
     {
@@ -4858,6 +5071,7 @@ int main()
     testPhiChorus();
     testPhiVoice();
     testPhiPhaser();
+    testPluginMeasure();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");

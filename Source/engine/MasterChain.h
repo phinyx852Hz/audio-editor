@@ -91,6 +91,7 @@ public:
     // The same for any place in the chain, inside Prisms too.
     MasterSlotInfo info (const ChainPath&) const;
     std::vector<PluginParameterInfo> parameters (const ChainPath&) const;
+    std::string state (const ChainPath&) const;   // its settings in base64 (as mixer::Effect::state); empty when it is not there or failed
     PluginParameterInfo parameter (const ChainPath&, int index) const;
     DeviceDisplay display (const ChainPath&) const;
     void setParameter (const ChainPath&, int index, float value);

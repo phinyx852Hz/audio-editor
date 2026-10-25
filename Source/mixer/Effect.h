@@ -19,6 +19,7 @@ namespace mixer
         virtual void prepare (double sampleRate, int maxBlock) = 0;
         virtual void process (float* left, float* right, int frames) = 0;   // audio thread
         virtual void reset() {}
+        virtual int latency() const { return 0; }   // samples it delays the sound by
         virtual bool hasWindow() const { return false; }
         virtual void showWindow() {}
         virtual std::string state() const { return {}; }
