@@ -280,6 +280,10 @@ private:
     void editShownMidi (const std::function<midifile::SongPtr (const midifile::Song&)>& edit, const QString& what);
     void refreshMidiClipBox();
     void phiShownMidi();   // Φ: the notes dealt out again, another order each time
+    // Counterpoint (owner, 2026-10-25): new voices against the clip's melody, in a species and a
+    // mode, raga or maqam (mixer/Counterpoint.h), each a MIDI file beside the mix and a clip on a
+    // new track, where the clip is on the timeline or in the same scene, in the clip's tuning.
+    void counterpointShownMidi();
     QString editsFolder() const;   // where edits of the mix's clips are saved
     // An audio clip shown: Paulstretch makes it the remembered number of times longer, with the
     // editor's Extreme Stretch settings, saved beside the mix (owner, 2026-10-25).

@@ -8,6 +8,7 @@
 #include "../Source/sampler/SlicerEngine.h"
 #include "../Source/mixer/MidiFile.h"
 #include "../Source/mixer/Tunings.h"
+#include "../Source/mixer/Counterpoint.h"
 #include "../Source/mixer/MixerEngine.h"
 #include "../Source/patchbay/PatchBay.h"
 #include "../Source/core/Ixml.h"
@@ -4245,6 +4246,214 @@ namespace
                "tunings: the clip's, else the scene's, else the track's");
     }
 
+    // Species counterpoint: Fux's rules kept against his own cantus firmus, in every species,
+    // in two to four parts, and in the modal systems beyond the church modes.
+    void testCounterpoint()
+    {
+        using namespace counterpoint;
+        // Fux's Dorian cantus firmus (Gradus ad Parnassum), a whole note a bar.
+        const int fux[] { 62, 65, 64, 62, 67, 65, 69, 67, 65, 64, 62 };
+        Line cf;
+        for (int i = 0; i < 11; ++i)
+            cf.push_back ({ i * 1920, (i + 1) * 1920, fux[i], 80 });
+        const auto dorian = Mode::fromTuning (mixer::tuningSystems()[(size_t) mixer::findTuning ("dorian")], 2);
+        check (dorian.valid() && dorian.ficta && dorian.scale[0] && dorian.scale[3] && ! dorian.scale[4], "counterpoint: a church mode's keys");
+
+        auto at = [] (const Line& l, int64_t t, int64_t* start = nullptr)
+        {
+            for (const auto& x : l)
+                if (x.start <= t && t < x.end)
+                {
+                    if (start != nullptr)
+                        *start = x.start;
+                    return x.pitch;
+                }
+            return -1;
+        };
+        auto dissonant = [] (int a, int b, int bass) { const auto i = std::abs (a - b) % 12; return i == 1 || i == 2 || i == 6 || i == 10 || i == 11 || (i == 5 && std::min (a, b) == bass); };
+        // The rules, checked from outside: no parallel fifths or octaves between any two voices,
+        // no dissonance struck on the beat, dissonances on the off-beats by step, suspensions
+        // falling a step, perfect consonances to begin and end.
+        auto keepsRules = [&] (const Result& r)
+        {
+            std::vector<Line> all { cf };
+            all.insert (all.end(), r.voices.begin(), r.voices.end());
+            std::set<int64_t> times;
+            for (const auto& l : all)
+                for (const auto& x : l)
+                    times.insert (x.start);
+            std::vector<int64_t> t (times.begin(), times.end());
+            for (size_t i = 0; i < t.size(); ++i)
+            {
+                std::vector<int> p;
+                std::vector<int64_t> started (all.size());
+                for (size_t a = 0; a < all.size(); ++a)
+                    p.push_back (at (all[a], t[i], &started[a]));
+                int bass = 999;
+                for (auto x : p)
+                    if (x >= 0)
+                        bass = std::min (bass, x);
+                const bool beat = t[i] % 1920 == 0;
+                for (size_t a = 0; a < all.size(); ++a)
+                    for (size_t b = a + 1; b < all.size(); ++b)
+                    {
+                        if (p[a] < 0 || p[b] < 0)
+                            continue;
+                        if (dissonant (p[a], p[b], bass) && beat && started[a] == t[i] && started[b] == t[i])
+                            return false;
+                        if (i > 0)
+                        {
+                            const auto qa = at (all[a], t[i - 1]), qb = at (all[b], t[i - 1]);
+                            auto kind = [] (int x) { x %= 12; return x == 0 ? 8 : x == 7 ? 5 : 0; };
+                            if (qa >= 0 && qb >= 0 && qa != p[a] && qb != p[b] && kind (std::abs (qa - qb)) != 0
+                                && kind (std::abs (qa - qb)) == kind (std::abs (p[a] - p[b])))
+                                return false;
+                        }
+                    }
+            }
+            for (const auto& v : r.voices)
+            {
+                if (v.empty())
+                    return false;
+                // Each new voice against the melody alone: weak-beat dissonances by step, suspensions resolved down.
+                for (size_t k = 0; k < v.size(); ++k)
+                {
+                    const auto c = at (cf, v[k].start);
+                    const auto lowest = std::min (c, v[k].pitch);
+                    if (c >= 0 && v.size() > 1 && r.voices.size() == 1 && dissonant (c, v[k].pitch, lowest))
+                    {
+                        if (v[k].start % 1920 == 0)
+                            return false;
+                        if (k == 0 || k + 1 >= v.size() || std::abs (v[k].pitch - v[k - 1].pitch) > 2 || std::abs (v[k + 1].pitch - v[k].pitch) > 2)
+                            return false;
+                    }
+                    // A note held over the bar line and dissonant there falls a step.
+                    for (int64_t bar = (v[k].start / 1920 + 1) * 1920; bar < v[k].end; bar += 1920)
+                        if (r.voices.size() == 1 && dissonant (at (cf, bar), v[k].pitch, std::min (at (cf, bar), v[k].pitch))
+                            && (k + 1 >= v.size() || v[k + 1].pitch >= v[k].pitch || v[k].pitch - v[k + 1].pitch > 2))
+                            return false;
+                }
+                const auto first = std::abs (v.front().pitch - at (cf, v.front().start)) % 12;
+                const auto last = std::abs (v.back().pitch - cf.back().pitch) % 12;
+                if (r.voices.size() == 1 && ((first != 0 && first != 7) || last != 0))
+                    return false;
+            }
+            return true;
+        };
+
+        bool allKept = true, noneBent = true;
+        for (int species = 1; species <= 5; ++species)
+            for (int place = 0; place < 3; ++place)
+                for (int voices = 1; voices <= 3; ++voices)
+                {
+                    Settings s;
+                    s.species = (Species) species;
+                    s.placement = (Placement) place;
+                    s.voices = voices;
+                    s.mode = dorian;
+                    const auto r = generate (cf, s);
+                    allKept = allKept && r.voices.size() == (size_t) voices && keepsRules (r);
+                    noneBent = noneBent && r.bent == 0;
+                }
+        check (allKept, "counterpoint: Fux's rules kept in every species, above, below and around, in two to four parts");
+        check (noneBent, "counterpoint: no rule bent against Fux's cantus firmus");
+
+        Settings first;
+        first.mode = dorian;
+        const auto one = generate (cf, first);
+        bool inMode = one.voices.size() == 1 && one.voices[0].size() == 11 && one.names[0] == "above";
+        for (size_t k = 0; inMode && k < one.voices[0].size(); ++k)
+        {
+            const auto key = ((one.voices[0][k].pitch - 2) % 12 + 12) % 12;
+            inMode = dorian.scale[(size_t) key] || (k == 9 && key == 11);   // C♯, the raised leading note, at the cadence only
+            inMode = inMode && one.voices[0][k].pitch > at (cf, one.voices[0][k].start) - 1;   // above the melody
+        }
+        check (inMode, "counterpoint: first species, a note a bar, in the mode and above");
+
+        Settings second = first;
+        second.species = Species::second;
+        check (generate (cf, second).voices[0].size() == 21, "counterpoint: second species, two notes a bar and a whole note to end");
+        Settings third = first;
+        third.species = Species::third;
+        check (generate (cf, third).voices[0].size() == 41, "counterpoint: third species, four notes a bar");
+        Settings fourth = first;
+        fourth.species = Species::fourth;
+        const auto tied = generate (cf, fourth).voices[0];
+        int over = 0;
+        for (const auto& x : tied)
+            over += x.start % 1920 != 0 && x.end - x.start == 1920 ? 1 : 0;
+        check (tied.front().start == 960 && over >= 6, "counterpoint: fourth species, notes tied over the bar line");
+
+        // Variations: the same seed the same lines, another seed others.
+        Settings a = third, b = third;
+        b.seed = 7;
+        const auto ra = generate (cf, a), rb = generate (cf, b), ra2 = generate (cf, a);
+        auto pitchesOf = [] (const Line& l) { std::vector<int> out; for (const auto& x : l) out.push_back (x.pitch); return out; };
+        check (pitchesOf (ra.voices[0]) == pitchesOf (ra2.voices[0]) && pitchesOf (ra.voices[0]) != pitchesOf (rb.voices[0]), "counterpoint: a variation number gives its own lines");
+
+        // A maqam: only its keys, with the neutral third heard as a third (Rāst on D: its E half-flat on F♯).
+        const auto rast = Mode::fromTuning (mixer::tuningSystems()[(size_t) mixer::findTuning ("rast")], 2);
+        Settings maqam;
+        maqam.mode = rast;
+        maqam.species = Species::third;
+        const auto rm = generate (cf, maqam);
+        bool rastKeys = rm.bent == 0 && ! rm.voices[0].empty();
+        for (const auto& x : rm.voices[0])
+            rastKeys = rastKeys && rast.scale[(size_t) (((x.pitch - 2) % 12 + 12) % 12)];
+        check (rastKeys && near (rast.keyCents[4], 350.0, 1.0e-9), "counterpoint: a maqam's keys, its quarter steps included");
+
+        // A raga's āroha: going up never lands on a note it leaves out.
+        auto bhairavi = Mode::fromTuning (mixer::tuningSystems()[(size_t) mixer::findTuning ("bhairavi")], 2);
+        bhairavi.up = bhairavi.scale;
+        bhairavi.up[1] = bhairavi.up[8] = false;   // no komal re or komal dha going up
+        Settings raga;
+        raga.mode = bhairavi;
+        raga.species = Species::third;
+        const auto rr = generate (cf, raga);
+        bool aroha = ! rr.voices[0].empty();
+        for (size_t k = 1; k < rr.voices[0].size(); ++k)
+        {
+            const auto key = ((rr.voices[0][k].pitch - 2) % 12 + 12) % 12;
+            if (rr.voices[0][k].pitch > rr.voices[0][k - 1].pitch)
+                aroha = aroha && key != 1 && key != 8;
+            aroha = aroha && bhairavi.scale[(size_t) key];
+        }
+        check (aroha, "counterpoint: a raga's notes, and its āroha going up");
+
+        // An equal temperament: the keys are its steps, 19 to the octave.
+        const auto nineteen = Mode::fromTuning (mixer::tuningSystems()[(size_t) mixer::findTuning ("19 equal steps")], 0);
+        Settings edo;
+        edo.mode = nineteen;
+        const auto re = generate (cf, edo);
+        check (nineteen.period == 19 && re.voices.size() == 1 && re.voices[0].size() == 11, "counterpoint: in 19 equal steps");
+
+        // The melody of a MIDI file: the top of a chord, a rest ending a phrase; and back to a file.
+        auto song = std::make_shared<midifile::Song>();
+        song->ticksPerQuarter = 480;
+        song->tempos.push_back ({ 0, 500000.0 });
+        auto add = [&] (int64_t on, int64_t off, uint8_t pitch) { song->events.push_back ({ on, 0x92, pitch, 100 }); song->events.push_back ({ off, 0x82, pitch, 0 }); };
+        add (0, 900, 60);
+        add (0, 900, 67);
+        add (960, 1900, 65);
+        add (2880, 3840, 64);
+        std::stable_sort (song->events.begin(), song->events.end(), [] (const midifile::Event& x, const midifile::Event& y) { return x.tick < y.tick; });
+        song->lastTick = 3840;
+        const auto melody = cantus (*song);
+        check (melody.size() == 3 && melody[0].pitch == 67 && melody[0].end == 960 && melody[1].end == 1900 && melody[2].start == 2880,
+               "counterpoint: the melody is the top line, held to the next note, a rest kept");
+        const auto guessed = guessMode (cf);
+        check (guessed.root == 2 && guessed.scale == dorian.scale, "counterpoint: the mode guessed from the melody");
+        const auto written = toSong (*song, one.voices[0], 2);
+        int ons = 0;
+        bool onChannel = true;
+        for (const auto& e : written->events)
+        {
+            ons += e.kind() == 0x90 ? 1 : 0;
+            onChannel = onChannel && e.channel() == 2;
+        }
+        check (ons == 11 && onChannel && written->ticksPerQuarter == 480 && written->channelsUsed == 4, "counterpoint: a voice as a MIDI file");
+    }
+
     // Φ Phaser: stages φ apart, a sweep that never repeats, and a response that matches what it does.
     void testPhiPhaser()
     {
@@ -5204,6 +5413,7 @@ int main()
     testPhiPhaser();
     testPhiTuning();
     testTunings();
+    testCounterpoint();
     testPluginMeasure();
 
     if (failures == 0)
