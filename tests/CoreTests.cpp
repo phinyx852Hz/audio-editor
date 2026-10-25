@@ -32,6 +32,7 @@
 #include "../Source/mixer/MixAssist.h"
 #include "../Source/core/Sonify.h"
 #include "../Source/core/Phi.h"
+#include "../Source/core/PhiDynamics.h"
 
 #include <algorithm>
 #include <cmath>
@@ -3721,6 +3722,147 @@ namespace
         }
     }
 
+    // The Φ dynamics: golden ratios, the two-stage release, flat multiband crossovers
+    // and a limiter that never passes its ceiling.
+    void testPhiDynamics()
+    {
+        const double rate = 48000.0;
+        const double golden = 1.6180339887498949;
+        auto near = [] (double a, double b, double tolerance) { return std::abs (a - b) <= tolerance; };
+        auto sine = [rate] (double hz, int frames, double amplitude)
+        {
+            std::vector<float> v ((size_t) frames);
+            for (int i = 0; i < frames; ++i)
+                v[(size_t) i] = (float) (amplitude * std::sin (2.0 * M_PI * hz * i / rate));
+            return v;
+        };
+        auto rmsDb = [] (const std::vector<float>& v, size_t from)
+        {
+            double sum = 0.0;
+            for (size_t i = from; i < v.size(); ++i)
+                sum += (double) v[i] * v[i];
+            return 10.0 * std::log10 (sum / (double) (v.size() - from) + 1.0e-30);
+        };
+
+        check (near (phi::ratioOf (2), golden, 1.0e-9) && near (phi::ratioOf (4), golden * golden, 1.0e-9), "phi ratios are powers of phi");
+
+        // The curve: above the knee, 6 dB more in gives 6/φ dB more out at φ:1.
+        {
+            phi::Compressor::Settings s;
+            check (near (phi::Compressor::curveDb (s, -6.0) - phi::Compressor::curveDb (s, -12.0), 6.0 / golden, 1.0e-6)
+                   && near (phi::Compressor::curveDb (s, -40.0), -40.0, 1.0e-9), "phi compressor curve");
+        }
+
+        // A steady square wave at -6 dBFS, 12 dB over a -18 dB threshold at φ:1, comes out
+        // 12 × (1 - 1/φ) = 4.58 dB down.
+        {
+            phi::Compressor c;
+            c.prepare (rate, 1);
+            c.set ({});
+            std::vector<float> x ((size_t) rate * 2);
+            for (size_t i = 0; i < x.size(); ++i)
+                x[i] = (i / 50) % 2 == 0 ? 0.5f : -0.5f;
+            float* io[] { x.data() };
+            c.process (io, 1, (int) x.size());
+            const auto outDb = 20.0 * std::log10 (std::abs (x.back()));
+            check (near (outDb, 20.0 * std::log10 (0.5) - 12.0 * (1.0 - 1.0 / golden), 0.1) && near (c.reductionDb(), 4.58, 0.1),
+                   "phi compressor reaches its ratio, got " + std::to_string (outDb));
+        }
+
+        // The golden release: after `release` ms, 1/φ of e^-φ plus 1/φ² of e^-(1/φ) is left.
+        {
+            phi::GoldenRelease r;
+            r.set (rate, 0.001, 100.0);
+            for (int i = 0; i < 1000; ++i)
+                r.next (10.0);
+            for (int i = 0; i < (int) (rate * 0.1); ++i)
+                r.next (0.0);
+            const auto expected = 10.0 * (std::exp (-golden) / golden + std::exp (-1.0 / golden) / (golden * golden));
+            check (near (r.current(), expected, 0.01 * expected), "phi release is golden two-stage, got " + std::to_string (r.current()));
+        }
+
+        // Φ Multiband sums back flat when nothing is compressed.
+        {
+            bool flat = true;
+            std::string worst;
+            for (const auto hz : { 40.0, 150.0, 209.0, 500.0, 887.0, 2000.0, 3760.0, 9000.0 })
+            {
+                phi::Multiband m;
+                phi::Multiband::Settings s;
+                for (auto& b : s.bands)
+                    b.thresholdDb = 0.0;
+                m.prepare (rate, 1);
+                m.set (s);
+                auto x = sine (hz, 48000, 0.1);
+                const auto before = rmsDb (x, 24000);
+                float* io[] { x.data() };
+                m.process (io, 1, (int) x.size());
+                if (! near (rmsDb (x, 24000), before, 0.02))
+                {
+                    flat = false;
+                    worst = std::to_string (hz);
+                }
+            }
+            check (flat, "phi multiband bands sum back flat" + (worst.empty() ? std::string() : ", not at " + worst + " Hz"));
+            check (near (phi::Multiband::crossoverHz (2), 80.0 * golden * golden, 1.0e-9), "phi multiband crossovers at 80 Hz x phi^n");
+
+            // Only the band over its threshold is turned down.
+            phi::Multiband::Settings s;
+            for (auto& b : s.bands)
+                b.thresholdDb = 0.0;
+            s.bands[3].thresholdDb = -40.0;
+            auto level = [&] (double hz)
+            {
+                phi::Multiband m;
+                m.prepare (rate, 1);
+                m.set (s);
+                auto x = sine (hz, 48000, 0.5);
+                const auto before = rmsDb (x, 24000);
+                float* io[] { x.data() };
+                m.process (io, 1, (int) x.size());
+                return rmsDb (x, 24000) - before;
+            };
+            check (std::abs (level (100.0)) < 0.3 && level (9000.0) < -6.0, "phi multiband compresses only its band");
+        }
+
+        // Φ Limiter: φ² ms ahead, never over the ceiling, and clean below it.
+        {
+            phi::Limiter l;
+            phi::Limiter::Settings s;
+            s.driveDb = 12.0;
+            s.ceilingDb = -1.0;
+            l.prepare (rate, 2);
+            l.set (s);
+            check (l.latency() == (int) std::lround (phi::Limiter::lookaheadMs * rate / 1000.0) + 6, "phi limiter latency");
+            std::mt19937 random (5);
+            std::normal_distribution<float> gauss (0.0f, 0.3f);
+            std::vector<float> a ((size_t) rate), b ((size_t) rate);
+            for (size_t i = 0; i < a.size(); ++i)
+            {
+                a[i] = gauss (random);
+                b[i] = gauss (random);
+            }
+            float* io[] { a.data(), b.data() };
+            l.process (io, 2, (int) a.size());
+            float peak = 0.0f;
+            for (size_t i = 0; i < a.size(); ++i)
+                peak = std::max ({ peak, std::abs (a[i]), std::abs (b[i]) });
+            check (peak <= (float) std::pow (10.0, -1.0 / 20.0) + 1.0e-6f && l.reductionDb() > 0.0, "phi limiter holds its ceiling");
+
+            phi::Limiter quiet;
+            quiet.prepare (rate, 1);
+            quiet.set ({});
+            const auto x = sine (440.0, 4800, 0.1);
+            auto y = x;
+            float* q[] { y.data() };
+            quiet.process (q, 1, (int) y.size());
+            double error = 0.0;
+            for (size_t i = (size_t) quiet.latency(); i < y.size(); ++i)
+                error = std::max (error, (double) std::abs (y[i] - x[i - (size_t) quiet.latency()]));
+            check (error < 1.0e-6, "phi limiter leaves quiet sound alone, only delayed");
+        }
+    }
+
     // The splash's sound: phase distortion, a patch per start, a granular reverb with a long tail.
     void testPhiVoice()
     {
@@ -4376,6 +4518,7 @@ int main()
     testMixAssist();
     testSonify();
     testPhi();
+    testPhiDynamics();
     testPhiVoice();
 
     if (failures == 0)
