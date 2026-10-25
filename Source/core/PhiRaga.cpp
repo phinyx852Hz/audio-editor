@@ -357,6 +357,76 @@ namespace phi
         return out;
     }
 
+    void RagaPlayer::setRaga (const Raga* r, int sa, double hz)
+    {
+        raga = r;
+        saKey = sa;
+        saHz = hz;
+        up = down = {};
+        if (raga == nullptr)
+            return;
+        for (const auto& s : raga->aroha)
+            up[(size_t) s.semitone] = true;
+        for (const auto& s : raga->avaroha)
+            down[(size_t) s.semitone] = true;
+        if (raga->aroha.empty())
+            up = raga->uses;
+        if (raga->avaroha.empty())
+            down = raga->uses;
+    }
+
+    RagaPlayer::Voice RagaPlayer::noteOn (int key)
+    {
+        Voice v;
+        v.inKey = key;
+        if (lastKey >= 0 && key != lastKey)
+            rising = key > lastKey;
+        lastKey = key;
+        if (raga == nullptr)
+        {
+            v.outKey = key;
+            v.svara = { ((key - saKey) % 12 + 12) % 12, (int) std::floor ((key - saKey) / 12.0) };
+            v.hz = saHz * std::pow (2.0, (key - saKey) / 12.0);
+            return v;
+        }
+        const auto& allowed = rising ? up : down;
+        const int step = rising ? 1 : -1;
+        int rel = key - saKey;
+        for (int distance = 0; distance < 12; ++distance)
+        {
+            const auto first = rel + distance * step, second = rel - distance * step;
+            if (allowed[(size_t) (((first % 12) + 12) % 12)])
+            {
+                rel = first;
+                break;
+            }
+            if (allowed[(size_t) (((second % 12) + 12) % 12)])
+            {
+                rel = second;
+                break;
+            }
+        }
+        v.outKey = saKey + rel;
+        v.svara = { ((rel % 12) + 12) % 12, (int) std::floor (rel / 12.0) };
+        v.hz = saHz * std::pow (2.0, v.svara.octave + raga->cents[(size_t) v.svara.semitone] / 1200.0);
+        if (const auto* swing = raga->andolanOn (v.svara.semitone))
+        {
+            v.swingCents = swing->depthCents;
+            v.swingHz = swing->rateHz;
+        }
+        return v;
+    }
+
+    double RagaPlayer::hzAt (const Voice& v, double seconds) const
+    {
+        if (v.swingCents <= 0.0 || ornaments <= 0.0)
+            return v.hz;
+        // Āndolan: from the svara down by its depth and back, slowly, as long as it is held.
+        constexpr double twoPi = 6.283185307179586;
+        const auto below = ornaments * v.swingCents * 0.5 * (1.0 - std::cos (twoPi * v.swingHz * seconds));
+        return v.hz * std::pow (2.0, -below / 1200.0);
+    }
+
     const std::vector<Raga>& builtInRagas()
     {
         static const auto all = []

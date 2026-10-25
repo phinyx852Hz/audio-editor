@@ -67,6 +67,42 @@ namespace phi
     std::vector<Raga> parseRagas (const std::string& text, std::vector<std::string>& errors);
     std::string writeRagas (const std::vector<Raga>&);   // the sheets again, as parseRagas reads them
 
+    // Plays keys as the raga: a key goes to the svara the raga uses in the direction the melody is
+    // moving (its āroha going up, its avaroha coming down), the nearest one when the key is not
+    // among them, ties going the way the melody moves; so khamāj plays N going up and n coming
+    // down from the same key. Each svara is tuned as the sheet says, and one sung with āndolan
+    // swings below its pitch. Not thread-safe: one player per voice allocator.
+    class RagaPlayer
+    {
+    public:
+        struct Voice
+        {
+            int inKey = -1;          // the key played
+            int outKey = -1;         // the key of the svara it became
+            Svara svara;             // that svara, its octave counted from the Sa key
+            double hz = 0.0;         // its pitch, before ornaments
+            double swingCents = 0.0, swingHz = 0.0;   // āndolan, 0 when none
+        };
+
+        // `raga` must outlive the player (or be set again); null plays keys as they are, in 12-TET.
+        void setRaga (const Raga* raga, int saKey = 60, double saHz = 261.6255653005986);
+        void setOrnaments (double amount) { ornaments = amount; }   // 0 none to 1 as the sheet says
+        Voice noteOn (int key);
+        void reset() { lastKey = -1; rising = true; }
+        // The voice's pitch `seconds` after it started, ornaments and all.
+        double hzAt (const Voice&, double seconds) const;
+        bool goingUp() const { return rising; }
+
+    private:
+        const Raga* raga = nullptr;
+        int saKey = 60;
+        double saHz = 261.6255653005986;
+        double ornaments = 1.0;
+        std::array<bool, 12> up {}, down {};
+        int lastKey = -1;
+        bool rising = true;
+    };
+
     // The sheets PHI comes with (PhiRagas.cpp).
     const std::vector<Raga>& builtInRagas();
     const std::string& builtInRagaSheets();

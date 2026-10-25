@@ -4227,6 +4227,29 @@ namespace
         // A dot below or above in the notation is the octave, as with , and '.
         phi::Phrase dots;
         check (phi::parsePhrase ("n\xcc\xa3 S R S\xcc\x87", dots) && dots == phi::Phrase { { 10, -1 }, { 0, 0 }, { 2, 0 }, { 0, 1 } }, "raga sheets: dotted notation");
+        // The player: khamāj's one key plays N going up and n coming down.
+        auto byPlain = [&] (const char* plain) -> const phi::Raga& { for (const auto& r : all) if (r.plain == plain) return r; return all[0]; };
+        phi::RagaPlayer player;
+        player.setRaga (&byPlain ("khamaj"), 60);
+        player.noteOn (67);
+        const auto upN = player.noteOn (70);
+        player.noteOn (72);
+        const auto downN = player.noteOn (70);
+        check (upN.outKey == 71 && upN.svara.semitone == 11 && downN.outKey == 70 && downN.svara.semitone == 10, "raga player: the svara for the direction");
+        // Bhūpālī has no ma: going up, ma becomes ga (the nearer svara, there being no tīvra ma).
+        player.setRaga (&byPlain ("bhupali"), 60);
+        player.reset();
+        check (player.noteOn (65).outKey == 64 && player.noteOn (78).outKey == 79 && player.noteOn (77).svara == phi::Svara { 4, 1 }, "raga player: keys outside the raga go to its nearest svara");
+        // Darbārī: ga at 32/27 above Sa, swinging 20 cents below and back at 0.5 Hz.
+        player.setRaga (&byPlain ("darbari kanada"), 62, 293.6647679174076);
+        player.reset();
+        const auto ga = player.noteOn (65);
+        check (near (ga.hz, 293.6647679174076 * 32.0 / 27.0, 1.0e-9) && near (player.hzAt (ga, 0.0), ga.hz, 1.0e-9)
+               && near (1200.0 * std::log2 (ga.hz / player.hzAt (ga, 1.0)), 20.0, 1.0e-9) && near (player.hzAt (ga, 2.0), ga.hz, 1.0e-9),
+               "raga player: tuned svaras, and andolan swings below and back");
+        player.setOrnaments (0.0);
+        check (near (player.hzAt (ga, 1.0), ga.hz, 1.0e-12) && player.noteOn (76).swingCents == 0.0, "raga player: ornaments off, and no andolan on Pa");
+
         std::vector<std::string> mistakes;
         const auto wrong = phi::parseRagas ("raga: test\nplain: test\nsvaras: S R G P D\naroha: S R m P\nraga: fine\nplain: fine\nsvaras: S P\nkey: x\n", mistakes);
         check (wrong.empty() && mistakes.size() == 2 && mistakes[0].find ("line 4") == 0 && mistakes[1].find ("line 8") == 0,
