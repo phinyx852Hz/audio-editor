@@ -154,4 +154,4 @@ The tests are in tests/CoreTests.cpp (`testLauncher`).
 Launch Styles (Trigger, Gate, Toggle, Repeat), Clip Actions with chances, scene tempo and time
 signature, MIDI learn and a generic pad layout with lights, audio clips stretched to the tempo,
 Record Launcher to Timeline; then independent columns, group scenes, Capture Scene, scene chains,
-Pick for me, recording into slots and effects in the rack.
+Pick for me and effects in the rack. Recording into slots is built: [recording.md](recording.md).

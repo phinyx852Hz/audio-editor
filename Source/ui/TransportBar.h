@@ -44,6 +44,8 @@ public:
     enum class Symbol { start, play, pause, stop, end, record, loop };
 
     TransportButton (Symbol, const QString& commandId, CommandRegistry&, QWidget* parent);
+    // One of its own (the mixer's transport): clicked() does what it does, `tip` names it.
+    TransportButton (Symbol, const QString& tip, QWidget* parent);
     void setSymbol (Symbol);
 
 protected:
@@ -53,7 +55,7 @@ protected:
 private:
     Symbol symbol;
     QString commandId;
-    CommandRegistry& commands;
+    CommandRegistry* commands = nullptr;
 };
 
 // The playback position as 00:00:00.000 (hours, minutes, seconds,

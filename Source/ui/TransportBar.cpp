@@ -28,12 +28,12 @@ namespace
 
 //==============================================================================
 TransportButton::TransportButton (Symbol s, const QString& id, CommandRegistry& registry, QWidget* parent)
-    : QToolButton (parent), symbol (s), commandId (id), commands (registry)
+    : QToolButton (parent), symbol (s), commandId (id), commands (&registry)
 {
     setFocusPolicy (Qt::NoFocus);   // the keyboard already has every one of these
     setAutoRaise (true);
     setFixedSize (s == Symbol::play ? 38 : 32, s == Symbol::play ? 38 : 32);
-    if (const auto* c = findCommand (commands, commandId))
+    if (const auto* c = findCommand (*commands, commandId))
     {
         setAccessibleName (c->name());
         connect (this, &QToolButton::clicked, c->action, &QAction::trigger);
@@ -43,6 +43,16 @@ TransportButton::TransportButton (Symbol s, const QString& id, CommandRegistry& 
             connect (c->action, &QAction::toggled, this, &QToolButton::setChecked);
         }
     }
+}
+
+TransportButton::TransportButton (Symbol s, const QString& tip, QWidget* parent)
+    : QToolButton (parent), symbol (s)
+{
+    setFocusPolicy (Qt::NoFocus);
+    setAutoRaise (true);
+    setFixedSize (s == Symbol::play ? 38 : 32, s == Symbol::play ? 38 : 32);
+    setToolTip (tip);
+    setAccessibleName (tip.section (QLatin1Char (' '), 0, 0));
 }
 
 void TransportButton::setSymbol (Symbol s)
@@ -57,9 +67,9 @@ void TransportButton::setSymbol (Symbol s)
 bool TransportButton::event (QEvent* e)
 {
     // Built when shown, so a changed keymap is always right.
-    if (e->type() == QEvent::ToolTip)
+    if (e->type() == QEvent::ToolTip && commands != nullptr)
     {
-        if (const auto* c = findCommand (commands, commandId))
+        if (const auto* c = findCommand (*commands, commandId))
         {
             auto name = c->name();
             if (commandId == QStringLiteral ("transport.playStop"))
@@ -122,6 +132,12 @@ void TransportButton::paintEvent (QPaintEvent*)
         case Symbol::record:
             g.setBrush (isEnabled() ? QColor (0xe0, 0x40, 0x40) : ink);
             g.drawEllipse (c, 1.5 * u, 1.5 * u);
+            if (isChecked())   // recording: a ring round it
+            {
+                g.setBrush (Qt::NoBrush);
+                g.setPen (QPen (QColor (0xe0, 0x40, 0x40), 0.4 * u));
+                g.drawEllipse (c, 2.4 * u, 2.4 * u);
+            }
             break;
         case Symbol::loop:
         {

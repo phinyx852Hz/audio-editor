@@ -55,6 +55,7 @@ target_sources(${APP_ID} PRIVATE
     Source/mixer/Counterpoint.cpp
     Source/mixer/Instruments.cpp
     Source/mixer/MixerEngine.cpp
+    Source/mixer/Recording.cpp
     Source/patchbay/PatchBay.cpp
     Source/core/Ixml.cpp
     Source/core/Metadata.cpp
@@ -152,6 +153,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/SamplerWindow.cpp
     Source/ui/SlicerWindow.cpp
     Source/ui/MixerWindow.cpp
+    Source/ui/MixerRecording.cpp
     Source/ui/MixerSection.cpp
     Source/ui/PanelNavigation.cpp
     Source/ui/PatchBayWindow.cpp
@@ -374,6 +376,7 @@ if(PHI_BUILD_TESTS)
         Source/mixer/Counterpoint.cpp
         Source/mixer/Instruments.cpp
         Source/mixer/MixerEngine.cpp
+        Source/mixer/Recording.cpp
         Source/patchbay/PatchBay.cpp
         Source/core/Ixml.cpp
         Source/core/Metadata.cpp

@@ -7,9 +7,11 @@
 #include "Settings.h"
 #include "SlicerWindow.h"
 #include "Theme.h"
+#include "TransportBar.h"
 #include "../core/Dsp.h"
 #include "../core/Phi.h"
 #include "../mixer/Counterpoint.h"
+#include "../engine/AudioCapture.h"
 #include "../engine/AudioEngine.h"
 
 #include <QCheckBox>
@@ -1744,7 +1746,7 @@ protected:
             loop.setAlpha (110);
             g.fillRect (QRectF (xOf (0.0), 0, xOf ((double) window.engine.length()) - xOf (0.0), rulerHeight), loop);
         }
-        const auto barFrames = 4.0 * beatFrames();
+        const auto barFrames = std::max (1, window.engine.beatsPerBar.load()) * beatFrames();
         int every = 1;
         while (every < 4096 && barFrames * every / framesPerPixel < 56.0)
             every *= 2;
@@ -1827,7 +1829,26 @@ protected:
                 live.insert (c.audio != nullptr ? (const void*) c.audio.get() : (const void*) c.midi.get());
                 drawClip (g, i, c, clipRect (i, list, k), lane, heard);
             }
-            if (list.empty() && rowH >= 30)
+            // A take onto the timeline: red from where it began to the playhead.
+            if (const auto take = window.engine.recordInfo (i); take.scene < 0 && take.state == mixer::RecordState::recording)
+            {
+                const auto from = xOf ((double) take.start), to = xOf ((double) window.engine.position());
+                QColor red (0xe0, 0x40, 0x40);
+                red.setAlpha (90);
+                g.fillRect (QRectF (std::min (from, to), lane.top(), std::abs (to - from), lane.height()), red);
+                g.setPen (QColor (0xe0, 0x40, 0x40));
+                g.setFont (smallFont());
+                g.drawText (QRectF (std::min (from, to) + 4, lane.top(), std::max (60.0, std::abs (to - from)), lane.height()),
+                            Qt::AlignVCenter | Qt::AlignLeft, MixerWindow::tr ("● Recording"));
+            }
+            else if (take.scene < 0 && take.state == mixer::RecordState::waiting)
+            {
+                g.setPen (QColor (0xe0, 0x40, 0x40));
+                g.setFont (smallFont());
+                g.drawText (lane.adjusted (8, 0, 0, 0), Qt::AlignVCenter | Qt::AlignLeft,
+                            window.engine.countingIn() ? MixerWindow::tr ("● Counting in...") : MixerWindow::tr ("● Waiting for the transport"));
+            }
+            if (list.empty() && rowH >= 30 && window.engine.recordInfo (i).state == mixer::RecordState::none)
             {
                 g.setPen (softer);
                 g.setFont (smallFont());
@@ -2022,7 +2043,7 @@ protected:
                 case Qt::Key_Left:
                 case Qt::Key_Right:
                 {
-                    const auto step = ctrl ? 4.0 * beatFrames() : beatFrames();
+                    const auto step = ctrl ? std::max (1, window.engine.beatsPerBar.load()) * beatFrames() : beatFrames();
                     const auto now = (double) window.engine.position();
                     const auto next = key == Qt::Key_Right ? (std::floor (now / step + 1.0e-6) + 1.0) * step
                                                            : (std::ceil (now / step - 1.0e-6) - 1.0) * step;
@@ -3202,10 +3223,20 @@ protected:
             p.drawRect (QRectF (r.center().x() - s * 0.5, r.center().y() - s * 0.5, s, s));
         };
 
+        const QColor red (0xe0, 0x40, 0x40);
+        auto dot = [&p] (const QRectF& r, const QColor& c)
+        {
+            const auto s = std::min (r.height(), r.width()) * 0.22;
+            p.setPen (Qt::NoPen);
+            p.setBrush (c);
+            p.drawEllipse (r.center(), s, s);
+        };
+        const auto armedTrack = window.engine.liveTrack();
         for (int t = 0; t < tracks; ++t)
         {
             const auto& info = window.info[(size_t) t];
             const auto launch = window.engine.launchInfo (t);
+            const auto take = window.engine.recordInfo (t);
             const auto head = headerRect (t);
             p.setPen (Qt::NoPen);
             p.setBrush (info.colour);
@@ -3228,7 +3259,30 @@ protected:
                 const auto r = slotRect (t, s);
                 const auto& slot = window.slots[(size_t) t][(size_t) s];
                 const bool playing = launch.playing == s, queued = launch.queued == s;
-                if (slot != nullptr)
+                const bool taking = take.scene == s && (take.state == mixer::RecordState::waiting || take.state == mixer::RecordState::recording);
+                if (taking)
+                {
+                    // A take: red, blinking while it waits for its first beat, filling as it records.
+                    const bool waiting = take.state == mixer::RecordState::waiting;
+                    p.setPen (QPen (red, 2));
+                    p.setBrush (waiting && blink ? Qt::NoBrush : QBrush (red.darker (160)));
+                    p.drawRoundedRect (QRectF (r).adjusted (0.5, 0.5, -0.5, -0.5), 3, 3);
+                    dot (QRectF (r.left(), r.top(), playWidth, r.height()), red.lighter (130));
+                    p.setFont (small);
+                    p.setPen (Qt::white);
+                    const auto bar = 60.0 / std::max (1.0, window.engine.tempo.load()) * window.rate() * std::max (1, window.engine.beatsPerBar.load());
+                    const auto label = waiting ? MixerWindow::tr ("Waiting...")
+                                     : take.length > 0 ? MixerWindow::tr ("Rec bar %1 of %2").arg ((int) ((double) take.recorded / bar) + 1).arg ((int) std::lround ((double) take.length / bar))
+                                                       : MixerWindow::tr ("Rec bar %1").arg ((int) ((double) take.recorded / bar) + 1);
+                    p.drawText (r.adjusted (playWidth, 0, -4, 0), Qt::AlignVCenter | Qt::AlignLeft, p.fontMetrics().elidedText (label, Qt::ElideRight, r.width() - playWidth - 4));
+                    if (! waiting && take.length > 0)
+                    {
+                        p.setPen (Qt::NoPen);
+                        p.setBrush (red.lighter (130));
+                        p.drawRect (QRectF (r.left() + 2, r.bottom() - 3, (r.width() - 4) * (double) take.progress, 3));
+                    }
+                }
+                else if (slot != nullptr)
                 {
                     auto fill = info.colour;
                     if (queued && blink)
@@ -3261,6 +3315,14 @@ protected:
                         p.setBrush (go);
                         p.drawRect (QRectF (r.left() + 2, r.bottom() - 3, (r.width() - 4) * (double) launch.progress, 3));
                     }
+                    if (playing && take.state == mixer::RecordState::overdubbing && take.scene == s)
+                    {
+                        // Overdubbing: a red edge, and its dot where the play button is.
+                        p.setPen (QPen (red, 2));
+                        p.setBrush (Qt::NoBrush);
+                        p.drawRoundedRect (QRectF (r).adjusted (1, 1, -1, -1), 3, 3);
+                        dot (QRectF (r.left(), r.top(), playWidth, r.height()), blink ? red : red.darker (130));
+                    }
                 }
                 else
                 {
@@ -3273,6 +3335,8 @@ protected:
                         p.setFont (small);
                         p.drawText (r, Qt::AlignCenter, MixerWindow::tr ("Loading..."));
                     }
+                    else if (t == armedTrack)
+                        dot (QRectF (r.left(), r.top(), playWidth, r.height()), red.darker (120));   // records into the slot
                     else if (launch.playing >= 0)
                         square (QRectF (r.left(), r.top(), playWidth, r.height()), mid);   // a scene launched here stops the track
                 }
@@ -3336,7 +3400,16 @@ protected:
                 else
                     window.showDevices();
                 if (hit.kind == Hit::play)
-                    window.launchSlot (hit.track, hit.scene);
+                {
+                    // The record dot: a take into the slot, on the armed track, or the take there stopped.
+                    const auto take = window.engine.recordInfo (hit.track);
+                    if (take.scene == hit.scene && take.state != mixer::RecordState::none)
+                        window.recordPressed();
+                    else if (window.slots[(size_t) hit.track][(size_t) hit.scene] == nullptr && hit.track == window.engine.liveTrack())
+                        window.recordSlot (hit.track, hit.scene);
+                    else
+                        window.launchSlot (hit.track, hit.scene);
+                }
                 break;
             case Hit::sceneCell:
                 window.moveCursor (window.selected < mixer::masterIndex ? window.selected : 0, hit.scene);
@@ -4748,16 +4821,6 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
         b->setToolTip (tip);
         return b;
     };
-    auto* toStartButton = button (QStringLiteral ("⏮"), tr ("To the start (Home)"));
-    playButton = button (tr ("Play"), tr ("Play or stop the mix (Space)"));
-    loopButton = button (tr ("Loop"), tr ("Play the whole mix over and over (L)"));
-    loopButton->setCheckable (true);
-    positionLabel = new QLabel (this);
-    positionLabel->setMinimumWidth (190);
-    auto mono = positionLabel->font();
-    mono.setFamily (QStringLiteral ("monospace"));
-    mono.setStyleHint (QFont::Monospace);
-    positionLabel->setFont (mono);
     tempoBox = new QDoubleSpinBox (this);
     tempoBox->setRange (20.0, 400.0);
     tempoBox->setDecimals (2);
@@ -4800,31 +4863,13 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     auto* saveButton = button (tr ("Save"), tr ("Save the project (Ctrl+S); Ctrl+Shift+S saves it under a new name"));
     auto* mixdownButton = button (tr ("Mix Down to Editor"), tr ("Render the whole mix, with the instruments' tails, into a new tab (Ctrl+Return)"));
     midiButton = button (tr ("MIDI..."), tr ("Choose the MIDI keyboards that play the armed track"));
-    recordButton = button (tr ("Rec Loop"), tr ("Record the keyboard on the armed track for the bars set beside it, from the next bar line "
-                                                "(at once when stopped), into its next empty slot from the cursor's scene. It stops by "
-                                                "itself and the clip loops; press again to cancel"));
-    recordButton->setCheckable (true);
-    recordBarsBox = new QSpinBox (this);
-    recordBarsBox->setRange (1, 64);
-    recordBarsBox->setSuffix (tr (" bars"));
-    recordBarsBox->setValue (appSettings().value (QStringLiteral ("mixer/recordBars"), 4).toInt());
-    recordBarsBox->setToolTip (tr ("How long a recorded loop is, in bars of 4/4 at the tempo"));
-    recordBarsBox->setFocusPolicy (Qt::ClickFocus);
-    autoCounterpointButton = button (tr ("+ Counterpoint"), tr ("Each loop recorded gets counterpoint as soon as it stops, with the Counterpoint "
-                                                                "dialog's last choices, looping with it on the tracks the last loop's voices went on"));
-    autoCounterpointButton->setCheckable (true);
-    autoCounterpointButton->setChecked (appSettings().value (QStringLiteral ("mixer/autoCounterpoint"), false).toBool());
     midiStatus = new QLabel (this);
 
+    // The transport, the same for the launcher and the tracks across time (owner, 2026-10-25:
+    // "a full transport like the audio editor in the mixer view"), takes the tempo and quantise.
+    auto* transportRow = buildTransport();
     auto* top = new QHBoxLayout;
-    top->addWidget (toStartButton);
-    top->addWidget (playButton);
-    top->addWidget (loopButton);
-    top->addWidget (positionLabel);
-    top->addWidget (tempoBox);
-    top->addWidget (followTempoBox);
     top->addWidget (launcherButton);
-    top->addWidget (quantiseBox);
     top->addWidget (scenesBox);
     top->addWidget (inspectorButton);
     top->addStretch (1);
@@ -4833,9 +4878,6 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     top->addWidget (bypassSendsButton);
     top->addWidget (stripsButton);
     top->addWidget (midiButton);
-    top->addWidget (recordButton);
-    top->addWidget (recordBarsBox);
-    top->addWidget (autoCounterpointButton);
     top->addWidget (addButton);
     top->addWidget (removeButton);
     top->addWidget (openButton);
@@ -5124,14 +5166,13 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     devicePanel->setFixedHeight (190);
 
     auto* layout = new QVBoxLayout (this);
+    layout->addWidget (transportRow);
     layout->addWidget (topScroll);
     layout->addWidget (sideSplitter, 1);
     layout->addWidget (devicePanel);
     layout->addLayout (bottom);
 
-    connect (toStartButton, &QPushButton::clicked, this, [this] { toStart(); });
-    connect (playButton, &QPushButton::clicked, this, [this] { togglePlay(); });
-    connect (loopButton, &QPushButton::toggled, this, [this] (bool on)
+    connect (loopButton, &QAbstractButton::toggled, this, [this] (bool on)
     {
         if (on)
             engine.setLoop (0, engine.length());
@@ -5180,32 +5221,6 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     connect (saveButton, &QPushButton::clicked, this, [this] { saveMix (false); });
     connect (mixdownButton, &QPushButton::clicked, this, [this] { Q_EMIT mixdownRequested(); });
     connect (midiButton, &QPushButton::clicked, this, [this] { Q_EMIT midiInputsRequested(); });
-    connect (recordButton, &QPushButton::clicked, this, [this] { toggleLoopRecording(); });
-    connect (recordBarsBox, &QSpinBox::valueChanged, this, [] (int bars) { appSettings().setValue (QStringLiteral ("mixer/recordBars"), bars); });
-    connect (autoCounterpointButton, &QPushButton::toggled, this, [] (bool on) { appSettings().setValue (QStringLiteral ("mixer/autoCounterpoint"), on); });
-    recordTimer.setInterval (5);
-    connect (&recordTimer, &QTimer::timeout, this, [this]
-    {
-        if (! engine.isPlaying())
-        {
-            // Stopped before the end: nothing kept.
-            recordTimer.stop();
-            engine.stopRecording();
-            recordButton->setChecked (false);
-            status->setText (tr ("Loop recording stopped with the transport; nothing was kept."));
-            return;
-        }
-        const auto now = engine.launchClock();
-        const auto barFrames = (double) (take.end - take.start) / std::max (1, recordBarsBox->value());
-        if (now < take.start)
-            status->setText (tr ("Rec Loop on track %1: waiting for the bar line...").arg (take.track + 1));
-        else
-            status->setText (tr ("Rec Loop on track %1: bar %2 of %3").arg (take.track + 1).arg ((int) ((double) (now - take.start) / barFrames) + 1)
-                                 .arg ((int) std::lround ((double) (take.end - take.start) / barFrames)));
-        // A few milliseconds early, so the loop is ready to start on the bar line itself.
-        if (now >= take.end - (Frame) (0.04 * rate()))
-            finishLoopRecording();
-    });
     connect (masterFader, &QSlider::valueChanged, this, [this] (int v)
     {
         engine.masterDb = faderDb (v);
@@ -5227,7 +5242,12 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     resize (1180, 860);
 }
 
-MixerWindow::~MixerWindow() = default;
+MixerWindow::~MixerWindow()
+{
+    engine.setInput (nullptr);   // the audio thread lets go of the audio input before it goes
+    if (capture != nullptr)
+        capture->stop();
+}
 
 double MixerWindow::rate() const { return engine.sampleRate(); }
 
@@ -5580,134 +5600,27 @@ void MixerWindow::writeCounterpoint (int track, const mixer::Clip& clip, mixer::
     status->setText (text);
 }
 
-void MixerWindow::toggleLoopRecording()
+void MixerWindow::refreshViews()
 {
-    if (recordTimer.isActive())
-    {
-        recordTimer.stop();
-        engine.stopRecording();
-        recordButton->setChecked (false);
-        status->setText (tr ("Loop recording cancelled."));
-        return;
-    }
-    const auto track = engine.liveTrack();
-    if (track < 0 || track >= engine.numTracks())
-    {
-        recordButton->setChecked (false);
-        status->setText (tr ("Arm a track for the MIDI keyboard first (R)."));
-        return;
-    }
-    // The track's next empty slot from the cursor's scene, a new scene when all are full.
-    int scene = -1;
-    for (int sc = std::clamp (cursorScene, 0, numScenes - 1); sc < numScenes && scene < 0; ++sc)
-        if (slots[(size_t) track][(size_t) sc] == nullptr)
-            scene = sc;
-    if (scene < 0 && numScenes < mixer::maxScenes)
-    {
-        scene = numScenes;
-        setScenes (numScenes + 1);
-    }
-    if (scene < 0)
-    {
-        recordButton->setChecked (false);
-        status->setText (tr ("Track %1 has no empty slot left for a loop.").arg (track + 1));
-        return;
-    }
-    take.track = track;
-    take.scene = scene;
-    take.bpm = std::clamp (engine.tempo.load(), 20.0, 999.0);
-    const auto bar = 4.0 * 60.0 / take.bpm * rate();
-    engine.startRecording();   // first, so an empty mix plays on
-    if (engine.isPlaying())
-        take.start = (Frame) std::llround (std::ceil ((double) engine.launchClock() / bar - 1.0e-9) * bar);
-    else
-    {
-        take.start = 0;
-        engine.play();   // the launch clock starts again at 0 with it
-        Q_EMIT playStarted();
-    }
-    take.end = take.start + (Frame) std::llround (recordBarsBox->value() * bar);
-    recordButton->setChecked (true);
-    recordTimer.start();
-    refreshTransport();
+    if (grid != nullptr)
+        grid->update();
+    if (lanes != nullptr)
+        lanes->update();
 }
 
-void MixerWindow::finishLoopRecording()
+void MixerWindow::say (const QString& text)
 {
-    recordTimer.stop();
-    const auto events = engine.stopRecording();
-    recordButton->setChecked (false);
-    const auto track = take.track, scene = take.scene;
-    if (track < 0 || track >= engine.numTracks())
-        return;
+    status->setText (text);
+}
 
-    // On the bars from the take's start: a note a little early for the first beat is on it.
-    constexpr int ticksPerQuarter = 480;
-    const auto length = (int64_t) recordBarsBox->value() * 4 * ticksPerQuarter;
-    const auto framesPerTick = 60.0 / take.bpm * rate() / ticksPerQuarter;
-    const auto early = (Frame) (0.15 * rate());
-    auto song = std::make_shared<midifile::Song>();
-    song->ticksPerQuarter = ticksPerQuarter;
-    song->tempos.push_back ({ 0, 60.0e6 / take.bpm });
-    std::array<bool, 16 * 128> held {};
-    for (const auto& e : events)
-    {
-        if (e.clock < take.start - early)
-            continue;   // before the take
-        auto tick = std::clamp<int64_t> ((int64_t) std::llround ((double) (e.clock - take.start) / framesPerTick), 0, length);
-        const auto kind = e.status & 0xF0;
-        const auto key = (size_t) (e.status & 0x0F) * 128 + (e.data1 & 0x7F);
-        const bool on = kind == 0x90 && e.data2 > 0, off = kind == 0x80 || (kind == 0x90 && e.data2 == 0);
-        if (on && tick >= length)
-            continue;
-        if (off && ! held[key])
-            continue;   // its note began before the take
-        if (on)
-            held[key] = true;
-        if (off)
-            held[key] = false;
-        song->events.push_back ({ tick, e.status, e.data1, e.data2 });
-        if (on)
-            song->channelsUsed = (uint16_t) (song->channelsUsed | (1u << (e.status & 0x0F)));
-    }
-    // Notes still held end with the loop.
-    for (size_t key = 0; key < held.size(); ++key)
-        if (held[key])
-            song->events.push_back ({ length, (uint8_t) (0x80 | (key / 128)), (uint8_t) (key % 128), 0 });
-    std::stable_sort (song->events.begin(), song->events.end(), [] (const midifile::Event& a, const midifile::Event& b) { return a.tick < b.tick; });
-    song->lastTick = length;
-    if (song->noteCount() == 0)
-    {
-        status->setText (tr ("Nothing was played in the loop, so nothing was kept."));
-        return;
-    }
-
-    const auto base = editsFolder();
-    QDir().mkpath (base);
-    QString file;
-    for (int n = 1; file.isEmpty() || QFileInfo::exists (file); ++n)
-        file = QDir (base).filePath (tr ("%1 loop %2.mid").arg (info[(size_t) track].name).arg (n));
-    std::string why;
-    if (! midifile::write (*song, file.toStdString(), why))
-    {
-        status->setText (tr ("The loop could not be saved to %1: %2").arg (file, QString::fromStdString (why)));
-        return;
-    }
-    auto slot = std::make_shared<mixer::Slot>();
-    slot->clip = mixer::makeClip (launcherMidi (song, file.toStdString()), 0);
-    slots[(size_t) track][(size_t) scene] = slot;
-    engine.setSlot (track, scene, slot);
+void MixerWindow::giveSynth (int track)
+{
     if (engine.instrument (track) == nullptr)
         setInstrumentKind (track, synthChoice, {});
-    engine.launchAt (track, scene, take.end);
-    cursorScene = scene;
-    grid->update();
-    rack->refresh();
-    changed();
-    status->setText (tr ("Loop recorded into %1, %2").arg (trackName (track), sceneName (scene)));
+}
 
-    if (! autoCounterpointButton->isChecked())
-        return;
+void MixerWindow::autoCounterpoint (int track, int scene, mixer::SlotPtr slot, Frame launchAt)
+{
     // The Counterpoint dialog's last choices; its mode, else the track's tuning, else the melody's own.
     auto settings = appSettings();
     counterpoint::Settings options;
@@ -5723,7 +5636,7 @@ void MixerWindow::finishLoopRecording()
         modeChoice = tuning;
     if (modeChoice.system >= 0)
         options.mode = counterpoint::Mode::fromTuning (mixer::tuningSystems()[(size_t) modeChoice.system], modeChoice.root);
-    writeCounterpoint (track, slot->clip, slot, scene, options, modeChoice, tuning, take.end);
+    writeCounterpoint (track, slot->clip, slot, scene, options, modeChoice, tuning, launchAt);
 }
 
 void MixerWindow::refreshMidiClipBox()
@@ -5972,6 +5885,7 @@ void MixerWindow::select (int index)
 void MixerWindow::tick()
 {
     applyTunings();   // launches happen with the mixer hidden too
+    keepRecorded();   // and takes end
     if (! isVisible())
         return;   // closed, or docked behind the editor: nothing to draw
     const auto now = QDateTime::currentMSecsSinceEpoch();
@@ -5998,21 +5912,19 @@ void MixerWindow::tick()
 
 void MixerWindow::refreshTransport()
 {
-    const auto r = rate();
-    const auto seconds = (double) engine.position() / r;
-    const auto beats = seconds * tempoBox->value() / 60.0;
-    const auto minutes = (int) (seconds / 60.0);
-    positionLabel->setText (QStringLiteral ("%1:%2  %3.%4  / %5:%6")
-                                .arg (minutes).arg (seconds - minutes * 60.0, 6, 'f', 3, QLatin1Char ('0'))
-                                .arg ((int) (beats / 4.0) + 1).arg ((int) std::fmod (beats, 4.0) + 1)
-                                .arg ((int) (engine.length() / r / 60.0))
-                                .arg (std::fmod ((double) engine.length() / r, 60.0), 4, 'f', 1, QLatin1Char ('0')));
-    playButton->setText (engine.isPlaying() ? tr ("Stop") : tr ("Play"));
+    // In the launcher, while clips play or record, the launch clock; else the timeline.
+    bool clocked = false;
+    if (launcherShown())
+        for (int t = 0; t < engine.numTracks() && ! clocked; ++t)
+            clocked = engine.launchInfo (t).playing >= 0 || (engine.recordInfo (t).state != mixer::RecordState::none && engine.recordInfo (t).scene >= 0);
+    showPosition (clocked ? engine.launchClock() : engine.position(), clocked);
+    static_cast<TransportButton*> (playButton)->setSymbol (engine.isPlaying() || engine.countingIn() ? TransportButton::Symbol::pause
+                                                                                                     : TransportButton::Symbol::play);
 }
 
 void MixerWindow::togglePlay()
 {
-    if (engine.isPlaying())
+    if (engine.isPlaying() || engine.countingIn())
         engine.stop();
     else
     {
@@ -6540,6 +6452,7 @@ void MixerWindow::editInstrument (int track)
 void MixerWindow::arm (int track)
 {
     engine.setLiveTrack (engine.liveTrack() == track ? -1 : track);
+    updateInput();   // an audio track armed hears its input
     for (int i = 0; i < mixer::maxTracks; ++i)
         strips[(size_t) i]->armButton->setChecked (engine.liveTrack() == i);
     const auto inst = engine.liveTrack() >= 0 ? engine.instrument (engine.liveTrack()) : nullptr;
@@ -7207,6 +7120,7 @@ void MixerWindow::keyPressEvent (QKeyEvent* e)
                 }
                 break;
             case Qt::Key_Y: redo(); return;
+            case Qt::Key_R: withShift ? captureMidi() : recordPressed(); return;
             case Qt::Key_Return:
             case Qt::Key_Enter: Q_EMIT mixdownRequested(); return;
             default: break;
@@ -7251,7 +7165,15 @@ void MixerWindow::keyPressEvent (QKeyEvent* e)
                 return;
             case Qt::Key_Space: togglePlay(); return;
             case Qt::Key_Home: toStart(); return;
+            case Qt::Key_End: engine.setPosition (engine.length()); refreshTransport(); return;
             case Qt::Key_L: loopButton->toggle(); return;
+            case Qt::Key_C:
+                if (! shift)
+                {
+                    clickButton->toggle();
+                    return;
+                }
+                break;
             case Qt::Key_V:
                 if (! shift)
                 {
@@ -7350,6 +7272,9 @@ bool MixerWindow::newMix()
         s.delayMs = 0.0f;
         s.width = 1.0f;
         s.mode = (int) mixer::TrackMode::hybrid;
+        s.input = mixer::Strip::inputAuto;
+        s.monitor = mixer::Strip::monitorAuto;
+        s.inputChannels = 0;
         s.audioLayerDb = s.instrumentLayerDb = 0.0f;
         s.duckDb = 0.0f;
         s.audioDucksInstrument = false;
@@ -7495,6 +7420,7 @@ bool MixerWindow::writeMix (const QString& file, QString& error)
             { "highCut", QJsonObject { { "on", s.highCut.load() }, { "hz", s.highCutHz.load() }, { "slope", s.highCutSlope.load() } } },
             { "delayMs", s.delayMs.load() }, { "width", s.width.load() }, { "inserts", insertsJson (i) },
             { "mode", s.mode.load() }, { "audioLayer", s.audioLayerDb.load() }, { "instrumentLayer", s.instrumentLayerDb.load() },
+            { "input", s.input.load() }, { "monitor", s.monitor.load() }, { "inputChannels", s.inputChannels.load() },
             { "duck", QJsonObject { { "db", s.duckDb.load() }, { "audioLeads", s.audioDucksInstrument.load() },
                                     { "attack", s.duckAttackMs.load() }, { "release", s.duckReleaseMs.load() },
                                     { "key", s.duckKey.load() }, { "below", s.duckBelowHz.load() } } },
@@ -7590,7 +7516,7 @@ bool MixerWindow::writeMix (const QString& file, QString& error)
     };
     // The phinyx keys are from before the rename to PHI; kept so every version reads every project.
     QJsonObject root {
-        { "phinyxProject", 1 }, { "phinyxMix", 3 }, { "tempo", tempoBox->value() }, { "midiFollowsTempo", followTempoBox->isChecked() },
+        { "phinyxProject", 1 }, { "phinyxMix", 3 }, { "tempo", tempoBox->value() }, { "beatsPerBar", beatsBox->value() }, { "midiFollowsTempo", followTempoBox->isChecked() },
         { "master", engine.masterDb.load() }, { "armed", engine.liveTrack() }, { "tracks", tracks }, { "launcher", launcher },
         { "returns", returnsJson() },
     };
@@ -7643,6 +7569,7 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
     {
         const QSignalBlocker a (tempoBox), b (followTempoBox);
         tempoBox->setValue (root.value ("tempo").toDouble (120.0));
+        beatsBox->setValue (std::clamp (root.value ("beatsPerBar").toInt (4), 1, 12));
         followTempoBox->setChecked (root.value ("midiFollowsTempo").toBool());
     }
     const auto tracks = root.value ("tracks").toArray();
@@ -7676,6 +7603,9 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
         s.width = (float) std::clamp (o.value ("width").toDouble (1.0), 0.0, 2.0);
         loadInserts (i, o.value ("inserts").toArray(), problems);
         s.mode = std::clamp (o.value ("mode").toInt(), 0, 2);
+        s.input = std::clamp (o.value ("input").toInt(), 0, 3);
+        s.monitor = std::clamp (o.value ("monitor").toInt(), 0, 2);
+        s.inputChannels = std::clamp (o.value ("inputChannels").toInt(), 0, 2);
         s.audioLayerDb = (float) o.value ("audioLayer").toDouble();
         s.instrumentLayerDb = (float) o.value ("instrumentLayer").toDouble();
         const auto duck = o.value ("duck").toObject();

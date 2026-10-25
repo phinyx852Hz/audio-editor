@@ -21,6 +21,7 @@
 
 class AudioEngine;
 class QSpinBox;
+class QAbstractButton;
 namespace counterpoint { struct Settings; }
 class StatusLine;
 class QScrollArea;
@@ -291,25 +292,50 @@ private:
     // frame of the launch clock with it.
     void writeCounterpoint (int track, const mixer::Clip& clip, mixer::SlotPtr slot, int scene, const counterpoint::Settings&,
                             mixer::TuningChoice modeChoice, mixer::TuningChoice tuning, Frame launchAt);
-    // Loop recording (owner, 2026-10-25: "play a melody into a clip with a pre-determined length
-    // that can be adjusted and the recording immediately stops, loops, and the new melody is
-    // generated"): Rec Loop records the keyboard on the armed track for so many bars, from the
-    // next bar line (at once when stopped), into the track's next empty slot from the cursor's
-    // scene; it stops by itself, the clip loops from the bar line it ended on and, with
-    // + Counterpoint on, the voices (the Counterpoint dialog's last choices) loop with it.
-    void toggleLoopRecording();
-    void finishLoopRecording();
-    QPushButton* recordButton = nullptr;
-    QSpinBox* recordBarsBox = nullptr;
-    QPushButton* autoCounterpointButton = nullptr;
-    QTimer recordTimer;
-    struct LoopTake
-    {
-        int track = -1, scene = -1;
-        Frame start = 0, end = 0;   // on the launch clock
-        double bpm = 120.0;
-    };
-    LoopTake take;
+    // Recording (docs/recording.md; owner, 2026-10-25: "play a melody into a clip with a
+    // pre-determined length that can be adjusted and the recording immediately stops, loops, and
+    // the new melody is generated", and "the main method super easy to learn with the options for
+    // the advanced performer"). The transport's Record (Ctrl+R) in the launcher steps the armed
+    // track through record, play, overdub and play again; in the tracks across time it records
+    // onto the armed track from the playhead until pressed again. A slot's record dot records into
+    // that slot. What the take does after (play, stop, record the next slot, add counterpoint),
+    // its length, quantise, count-in and the audio input are the transport's Record options.
+    QWidget* buildTransport();   // the transport row across the top, for both views
+    void recordPressed();
+    void recordSlot (int track, int scene);     // a take into the slot (an empty one, or replacing it)
+    void recordTimeline (int track);
+    void toggleOverdub (int track);
+    void captureMidi();                         // the last phrase played on the armed track, into its next empty slot
+    void keepRecorded();                        // each tick: the takes that ended, saved as files and placed
+    bool startTake (mixer::RecordRequest, QString& error);   // asks the engine, the input and the transport
+    mixer::RecordRequest recordRequest (int track, int scene) const;
+    void refreshRecording();                    // the Record button and the status line
+    void recordMenu (QPoint at);                // the advanced options
+    bool ensureInput (QString& error);          // the audio input running, when a track records or hears it
+    void updateInput();                         // started or stopped as the tracks need it
+    QString saveTake (const mixer::Recorded&, QString& error);   // the take's file beside the mix
+    int nextSlotFor (int track, int from) const;   // the first empty slot from `from`, a new scene when all are full
+    void say (const QString&);                  // on the status line
+    void refreshViews();                        // the launcher's grid and the tracks across time drawn again
+    void showPosition (Frame, bool launchClock);
+    void giveSynth (int track);                 // the Synth, for a track with MIDI and no instrument
+    // A loop just recorded gets counterpoint with the Counterpoint dialog's last choices, launched
+    // with it on `launchAt` of the launch clock.
+    void autoCounterpoint (int track, int scene, mixer::SlotPtr, Frame launchAt);
+    QAbstractButton* recordButton = nullptr;
+    QComboBox* recordLengthBox = nullptr;
+    QComboBox* countInBox = nullptr;
+    QAbstractButton* clickButton = nullptr;
+    QSpinBox* beatsBox = nullptr;               // the time signature's top
+    class PositionDisplay* positionDisplay = nullptr;
+    std::unique_ptr<class AudioCapture> capture;
+    std::unique_ptr<mixer::Input> captureInput;
+    QString inputSource;                        // the PipeWire source recorded from; empty: the first input
+    enum class After { play = 0, stop = 1, recordNext = 2, counterpoint = 3 };
+    After afterRecording = After::play;
+    double recordQuantise = 0.0;                // beats; 0 as played
+    int takeNumber = 1;
+    std::array<std::vector<uint32_t>, mixer::maxTracks> timelinePasses;   // a timeline take's clips so far, the newest kept
     QString editsFolder() const;   // where edits of the mix's clips are saved
     // An audio clip shown: Paulstretch makes it the remembered number of times longer, with the
     // editor's Extreme Stretch settings, saved beside the mix (owner, 2026-10-25).
@@ -429,9 +455,8 @@ private:
     QLabel* masterValue;
     QLabel* masterPeak;
     QWidget* masterStrip;
-    QPushButton* playButton;
-    QPushButton* loopButton;
-    QLabel* positionLabel;
+    QAbstractButton* playButton;
+    QAbstractButton* loopButton;
     QDoubleSpinBox* tempoBox;
     QCheckBox* followTempoBox;
     QLabel* midiStatus;

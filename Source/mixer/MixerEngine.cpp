@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 namespace mixer
 {
@@ -241,8 +242,14 @@ namespace mixer
     //==========================================================================
     Engine::Engine()
     {
-        for (auto* v : { &mixL, &mixR, &trackL, &trackR, &instL, &instR, &monoBuf, &outL, &outR, &sendPreL, &sendPreR, &audL, &audR, &dryL, &dryR, &duckGains })
+        for (auto* v : { &mixL, &mixR, &trackL, &trackR, &instL, &instR, &monoBuf, &outL, &outR, &sendPreL, &sendPreR, &audL, &audR, &dryL, &dryR, &duckGains,
+                         &inL, &inR })
             v->resize (block);
+        inputFifo.resize (2 * 16384);
+        inScratch.resize (2 * 4096);
+        recordedOut.reserve (64);
+        slotsOut.reserve (64);
+        marks.reserve (16384);
         for (auto& k : keyLevels)
             k.resize (block);
         for (int r = 0; r < numReturns; ++r)
@@ -507,6 +514,7 @@ namespace mixer
 
     void Engine::stop()
     {
+        countLeft = 0;
         if (playing.exchange (false))
             stopPending = true;
     }
@@ -773,22 +781,6 @@ namespace mixer
         const std::lock_guard<std::mutex> l (liveLock);
         if (liveQueue.size() < 1024)
             liveQueue.push_back ({ 0, status, data1, data2 });
-        if (recording.load())
-            recorded.push_back ({ clock.load(), status, data1, data2 });
-    }
-
-    void Engine::startRecording()
-    {
-        const std::lock_guard<std::mutex> l (liveLock);
-        recorded.clear();
-        recording = true;
-    }
-
-    std::vector<Engine::Recorded> Engine::stopRecording()
-    {
-        const std::lock_guard<std::mutex> l (liveLock);
-        recording = false;
-        return std::exchange (recorded, {});
     }
 
     void Engine::panic() { panicPending = true; }
@@ -857,14 +849,28 @@ namespace mixer
         }
         // The transport starts: so does the launch clock, with whatever was launched meanwhile.
         if (clockReset.exchange (false))
+            resetClock();
+
+        // The audio input that has come in, kept until its blocks use it; a little at most beyond
+        // this call, so its delay stays the same from take to take.
+        if (auto* in = input.load())
         {
-            clock = 0;
-            for (auto& t : lanes)
+            const auto capacity = inputFifo.size() / 2;
+            for (int got = 1; got > 0 && inputHave < capacity;)
             {
-                t.launchedAt = 0;
-                t.queuedAt = std::min<Frame> (t.queuedAt, 0);
+                got = in->read (inScratch.data(), (int) std::min (inScratch.size() / 2, capacity - inputHave));
+                std::copy (inScratch.begin(), inScratch.begin() + 2 * got, inputFifo.begin() + (std::ptrdiff_t) (2 * inputHave));
+                inputHave += (size_t) std::max (0, got);
+            }
+            const auto most = (size_t) (frames + 2048);
+            if (inputHave > most)
+            {
+                const auto drop = inputHave - most;
+                std::memmove (inputFifo.data(), inputFifo.data() + 2 * drop, most * 2 * sizeof (float));
+                inputHave = most;
             }
         }
+        const auto beatFrames = 60.0 / std::clamp (tempo.load(), 20.0, 999.0) * rate.load();
 
         int done = 0;
         while (done < frames)
@@ -872,33 +878,84 @@ namespace mixer
             const auto at = pos.load();
             const bool play = playing.load();
             auto n = std::min (block, frames - done);
+
+            // A count-in: the clicks alone, the instruments live, the transport still stopped.
+            if (const auto left0 = countLeft.load(); left0 > 0 && ! play)
+            {
+                n = (int) std::min<Frame> (n, left0);
+                takeInput (n);
+                renderBlock (outL.data(), outR.data(), n, at, false, true, done);
+                recordBlock (-left0, at, n, false);
+                click (outL.data(), outR.data(), n, countTotal - left0, beatFrames);
+                for (int k = 0; k < n; ++k)
+                {
+                    left[done + k] += outL[(size_t) k];
+                    right[done + k] += outR[(size_t) k];
+                }
+                liveTaken.clear();
+                liveClock += n;
+                done += n;
+                if (countLeft.fetch_sub (n) - n <= 0)
+                {
+                    countLeft = 0;
+                    stopPending = false;
+                    if (! playing.exchange (true))
+                        resetClock();
+                }
+                continue;
+            }
+            countLeft = 0;   // stopped meanwhile, or started without it
+
             const auto ls = loopStart.load(), le = loopEnd.load();
             const bool looping = le > ls;
             if (play && looping && at < le)
                 n = (int) std::min<Frame> (n, le - at);
-            // Launches start on their frame: the block ends where the next one is due.
+            // Launches start on their frame: the block ends where the next one is due. So do
+            // takes, and they end on theirs.
             takeLaunches (play);
             if (play)
                 for (int i = 0; i < maxTracks; ++i)
-                    if (const auto& t = lanes[(size_t) i]; t.queuedScene != -1)
-                        n = (int) std::min<Frame> (n, std::max<Frame> (1, t.queuedAt - clock.load()));
+                {
+                    const auto& t = lanes[(size_t) i];
+                    const auto now = clock.load();
+                    if (t.queuedScene != -1)
+                        n = (int) std::min<Frame> (n, std::max<Frame> (1, t.queuedAt - now));
+                    if (t.take.timeline)
+                        continue;
+                    if (t.take.state == RecordState::waiting && t.take.startAt > now)
+                        n = (int) std::min<Frame> (n, t.take.startAt - now);
+                    if (t.take.state == RecordState::recording && t.take.endAt > now)
+                        n = (int) std::min<Frame> (n, t.take.endAt - now);
+                }
+            takeInput (n);
+            const auto clockAt = clock.load();
             renderBlock (outL.data(), outR.data(), n, at, play, true, done);
+            recordBlock (clockAt, at, n, play);
             if (play)
                 clock += n;
             endPasses (n);
+            // The metronome on the launch clock while the launcher plays or records, else on the timeline.
+            if (play && metronome.load())
+            {
+                bool launcher = launcherBusy();
+                for (const auto& t : lanes)
+                    launcher = launcher || (t.take.state != RecordState::none && ! t.take.timeline);
+                click (outL.data(), outR.data(), n, launcher ? clockAt : at, beatFrames);
+            }
             for (int k = 0; k < n; ++k)
             {
                 left[done + k] += outL[(size_t) k];
                 right[done + k] += outR[(size_t) k];
             }
             liveTaken.clear();
+            liveClock += n;
             done += n;
             if (play)
             {
                 auto next = at + n;
                 if (looping && next >= le)
                     next = ls;   // the next block sees the jump
-                else if (! looping && next >= lengthLocked() && ! launcherBusy() && ! recording.load())   // a recording keeps time past the end
+                else if (! looping && next >= lengthLocked() && ! launcherBusy() && ! isRecording())   // a recording keeps time past the end
                 {
                     playing = false;
                     stopPending = true;
@@ -1096,6 +1153,20 @@ namespace mixer
                     }
                     hasMono = hasMono || a.mono;
                 }
+            // The audio input heard through the track: always, never, or while it is armed to record audio.
+            if (withLive && input.load() != nullptr)
+            {
+                const auto monitor = s.monitor.load();
+                if (monitor == Strip::monitorOn || (monitor == Strip::monitorAuto && i == armedTrack && recordsAudio (i)))
+                {
+                    const auto channels = s.inputChannels.load();
+                    for (int k = 0; k < frames; ++k)
+                    {
+                        audL[(size_t) k] += channels == 2 ? inR[(size_t) k] : inL[(size_t) k];
+                        audR[(size_t) k] += channels == 1 ? inL[(size_t) k] : inR[(size_t) k];
+                    }
+                }
+            }
             layers (i, t, s, mode, hasMono, frames, jumped);
             if (routed != nullptr)
                 routed->trackInput (i, blockOffset, instL.data(), instR.data(), frames);   // through the strip like the instrument

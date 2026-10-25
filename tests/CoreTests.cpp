@@ -4454,41 +4454,276 @@ namespace
         check (ons == 11 && onChannel && written->ticksPerQuarter == 480 && written->channelsUsed == 4, "counterpoint: a voice as a MIDI file");
     }
 
-    // Loop recording: the keyboard's messages on the launch clock, and a loop launched on a
-    // frame gone by, in time with it.
-    void testLoopRecording()
+    // Recording (docs/recording.md): slot takes that end by themselves and play on from that
+    // frame, quantised notes, the audio input with its delay, takes of no set length, the next
+    // take following on, overdub, timeline takes, the count-in, Capture, and a launch on a frame
+    // gone by.
+    void testRecording()
     {
         const double rate = 48000.0;
-        mixer::Engine m;
-        m.prepare (rate);
-        m.setNumTracks (1);
-        m.tempo = 120.0;
+        const Frame beat = 24000;   // at 120 BPM
+        struct Feed final : mixer::Input
+        {
+            int64_t sent = 0;
+            int pending = 0;
+            int read (float* io, int maxFrames) override
+            {
+                const auto n = std::min (maxFrames, pending);
+                for (int k = 0; k < n; ++k)
+                {
+                    io[2 * k] = (float) (sent + k) * 1.0e-6f;   // the stream's own frame, to see where it lands
+                    io[2 * k + 1] = -(float) (sent + k) * 1.0e-6f;
+                }
+                sent += n;
+                pending -= n;
+                return n;
+            }
+        };
+        auto setUp = [&] (mixer::Engine& m)
+        {
+            m.prepare (rate);
+            m.setNumTracks (2);
+            m.tempo = 120.0;
+            m.launchQuantise = 4.0;
+            m.setLiveTrack (0);
+            m.setInstrument (0, std::make_shared<mixer::Synth>());
+            m.setLoop (0, 400 * beat);   // an empty mix would stop at once
+        };
         std::vector<float> l (256), r (256);
-        auto run = [&] (int frames) { for (int done = 0; done < frames; done += 256) m.render (l.data(), r.data(), std::min (256, frames - done)); };
-        m.liveMidi (0x90, 60, 100);   // before recording: not kept
-        m.startRecording();
-        m.play();   // an empty mix plays on while recording
-        check (m.isRecording(), "loop recording: on");
-        run (5120);
-        m.liveMidi (0x91, 62, 90);
-        run (2560);
-        m.liveMidi (0x81, 62, 0);
-        const auto got = m.stopRecording();
-        check (! m.isRecording() && got.size() == 2 && got[0].status == 0x91 && got[0].data1 == 62 && got[0].clock == 5120 && got[1].clock == 7680,
-               "loop recording: what came while recording, on the launch clock");
+        auto run = [&] (mixer::Engine& m, Frame frames, Feed* feed = nullptr)
+        {
+            for (Frame done = 0; done < frames; done += 256)
+            {
+                const auto n = (int) std::min<Frame> (256, frames - done);
+                if (feed != nullptr)
+                    feed->pending += n;
+                std::fill (l.begin(), l.end(), 0.0f);
+                std::fill (r.begin(), r.end(), 0.0f);
+                m.render (l.data(), r.data(), n);
+            }
+        };
 
-        AudioData::Builder b (1, rate);
-        std::vector<float> v (48000, 0.5f);
-        const float* one[1] = { v.data() };
-        b.append (one, 48000);
-        auto slot = std::make_shared<mixer::Slot>();
-        slot->clip = mixer::makeClip (mixer::makeAudioClip (*b.finish(), "dc.wav"), 0);
-        m.setSlot (0, 0, slot);
-        m.launchAt (0, 0, 7000);   // gone by
-        run (256);
-        const auto info = m.launchInfo (0);
-        check (info.playing == 0 && info.progress > 0.0f && std::abs (info.progress - (float) (m.launchClock() - 7000) / 48000.0f) < 1.0e-3f,
-               "loop recording: a launch on a frame gone by plays in time with it");
+        {
+            // A bar of MIDI from a stopped transport: it starts at once, stops by itself and loops.
+            mixer::Engine m;
+            setUp (m);
+            mixer::RecordRequest q;
+            q.scene = 0;
+            q.beats = 4.0;
+            q.quantise = 1.0;
+            std::string error;
+            check (m.record (q, error) && m.recordInfo (0).state == mixer::RecordState::waiting, "recording: a slot take waits for the transport");
+            m.play();
+            run (m, 23040);
+            m.liveMidi (0x90, 60, 100);   // a little early for beat 2: quantised onto it
+            run (m, 12800);
+            m.liveMidi (0x80, 60, 0);
+            check (m.recordInfo (0).state == mixer::RecordState::recording && m.isRecording(), "recording: the take records");
+            run (m, 4 * beat - 35840 + 256);
+            const auto slot = m.slot (0, 0);
+            check (slot != nullptr && slot->clip.midi != nullptr && slot->clip.length == 4 * beat && m.recordInfo (0).state == mixer::RecordState::none,
+                   "recording: the take ends by itself at its length, in the slot");
+            const auto& ev = slot->clip.midi->events;
+            check (ev.size() == 2 && ev[0].frame == beat && ev[0].data1 == 60 && ev[1].frame == beat + 12800,
+                   "recording: a note on the beat it was nearest, its length kept");
+            const auto info = m.launchInfo (0);
+            check (info.playing == 0 && ! info.timeline && near (info.progress, 256.0 / (4.0 * beat), 1.0e-6), "recording: it plays on from the frame it ended");
+            const auto got = m.takeRecorded();
+            check (got.size() == 1 && got[0].scene == 0 && got[0].midi == slot->clip.midi && got[0].notes && got[0].length == 4 * beat,
+                   "recording: the take handed to the UI to keep");
+            auto song = mixer::songOf (*got[0].midi, rate, 120.0);
+            check (song->events.size() == 2 && song->events[0].tick == 480 && song->lastTick == 4 * 480, "recording: a take as a MIDI file");
+        }
+
+        {
+            // Audio: the input as it came, moved earlier by its delay, ending with the bar.
+            mixer::Engine m;
+            setUp (m);
+            m.setInstrument (0, nullptr);   // an audio track: records the input
+            Feed feed;
+            m.setInput (&feed);
+            m.inputLatencyMs = 10.0f;   // 480 frames
+            mixer::RecordRequest q;
+            q.scene = 1;
+            q.beats = 4.0;
+            q.midi = false;
+            q.audio = true;
+            std::string error;
+            check (m.record (q, error), "recording: an audio take");
+            m.play();
+            run (m, 4 * beat + 1024, &feed);
+            const auto slot = m.slot (0, 1);
+            check (slot != nullptr && slot->clip.audio != nullptr && slot->clip.length == 4 * beat, "recording: the audio take in the slot");
+            const auto& a = *slot->clip.audio;
+            check (near (a.left[0], 480.0e-6, 1.0e-7) && near (a.left[1000], 1480.0e-6, 1.0e-7) && near (a.right[1000], -1480.0e-6, 1.0e-7)
+                   && near (a.left[(size_t) (4 * beat - 1)], (4.0 * beat - 1.0 + 480.0) * 1.0e-6, 1.0e-6),
+                   "recording: the input moved earlier by its delay, the end filled in after the take");
+            check (m.takeRecorded().size() == 1, "recording: handed over once its late audio is in");
+            float loud = 0.0f;
+            run (m, 256, &feed);
+            for (auto v : l)
+                loud = std::max (loud, std::abs (v));
+            check (loud > 0.0f, "recording: the audio take plays");
+        }
+
+        {
+            // No set length: it ends on the next quantise after stopping; the next take follows on.
+            mixer::Engine m;
+            setUp (m);
+            mixer::RecordRequest q;
+            q.scene = 0;
+            q.beats = 0.0;
+            std::string error;
+            m.play();
+            run (m, 1024);
+            check (m.record (q, error), "recording: a take of no set length");
+            run (m, 4 * beat);   // waits for the bar, then records
+            m.liveMidi (0x90, 64, 90);
+            run (m, beat + beat / 2);
+            m.stopRecording (0);
+            run (m, 3 * beat + 1024);
+            const auto slot = m.slot (0, 0);
+            check (slot != nullptr && slot->clip.length == 4 * beat && m.launchInfo (0).playing == 0, "recording: stopped, it ends on the next bar");
+
+            mixer::RecordRequest a;
+            a.scene = 2;
+            a.beats = 4.0;
+            check (m.record (a, error), "recording: a fixed take");
+            run (m, 4 * beat);
+            mixer::RecordRequest b = a;
+            b.scene = 3;
+            check (m.record (b, error) && m.recordInfo (0).scene == 2, "recording: the next take asked for while one records");
+            run (m, 8 * beat);
+            check (m.slot (0, 2) != nullptr && m.slot (0, 3) != nullptr && m.slot (0, 3)->clip.length == 4 * beat
+                   && m.launchInfo (0).playing == 3 && m.recordInfo (0).state == mixer::RecordState::none,
+                   "recording: the next take starts the frame the first ends, and plays once done");
+        }
+
+        {
+            // Overdub: notes go into the playing clip where it has got to.
+            mixer::Engine m;
+            setUp (m);
+            auto clip = std::make_shared<mixer::MidiClip>();
+            clip->length = 4 * beat;
+            clip->events.reserve (64);
+            clip->events.push_back ({ 0, 0x90, 48, 100 });
+            clip->events.push_back ({ beat, 0x80, 48, 0 });
+            auto slot = std::make_shared<mixer::Slot>();
+            slot->clip = mixer::makeClip (mixer::MidiClipPtr (clip), 0);
+            m.setSlot (0, 0, slot);
+            m.launch (0, 0);
+            run (m, 4 * beat + 2 * beat);   // into the second pass, at beat 2
+            mixer::RecordRequest q;
+            q.scene = 0;
+            q.overdub = true;
+            q.overdubMidi = clip;
+            std::string error;
+            check (m.record (q, error) && m.recordInfo (0).state == mixer::RecordState::overdubbing, "recording: overdub");
+            m.liveMidi (0x90, 67, 80);
+            run (m, 3 * beat);   // over the loop's end
+            m.liveMidi (0x80, 67, 0);
+            run (m, 256);
+            m.stopRecording (0);
+            run (m, 256);
+            check (clip->events.size() == 4 && clip->events[2].frame == 2 * beat && clip->events[2].data1 == 67
+                   && clip->events[3].frame == 4 * beat - 1 && m.recordInfo (0).state == mixer::RecordState::none,
+                   "recording: an overdubbed note where the clip had got to, held over its end ending with it");
+            const auto got = m.takeRecorded();
+            check (got.size() == 1 && got[0].overdub && got[0].midi == clip, "recording: the overdub handed back to keep");
+        }
+
+        {
+            // The timeline: from where the transport is, a take per pass of a loop.
+            mixer::Engine m;
+            setUp (m);
+            Feed feed;
+            m.setInput (&feed);
+            m.inputLatencyMs = 0.0f;
+            m.setPosition (beat);
+            m.setLoop (beat, 5 * beat);
+            mixer::RecordRequest q;
+            q.scene = -1;
+            q.beats = 0.0;
+            q.audio = true;
+            std::string error;
+            check (m.record (q, error), "recording: a timeline take");
+            m.play();
+            run (m, beat, &feed);
+            m.liveMidi (0x90, 72, 100);
+            run (m, beat, &feed);
+            m.liveMidi (0x80, 72, 0);
+            run (m, 2 * beat + beat, &feed);   // over the loop into a second pass
+            auto got = m.takeRecorded();
+            m.stopRecording (0);
+            run (m, 256, &feed);
+            const auto more = m.takeRecorded();
+            got.insert (got.end(), more.begin(), more.end());
+            check (got.size() == 2 && got[0].start == beat && got[0].length == 4 * beat && got[1].start == beat && got[1].pass == 1,
+                   "recording: a take for each pass of the loop, from where it started");
+            check (got[0].midi != nullptr && got[0].notes && got[0].midi->events[0].frame == beat && got[0].audio != nullptr
+                   && near (got[0].audio->left[100], 100.0e-6, 1.0e-7) && got[1].midi == nullptr,
+                   "recording: its notes and audio from its start");
+        }
+
+        {
+            // The count-in, with the metronome.
+            mixer::Engine m;
+            setUp (m);
+            m.metronome = true;
+            m.playWithCountIn (1.0);
+            check (m.countingIn() && ! m.isPlaying(), "recording: counting in");
+            float loud = 0.0f;
+            for (Frame done = 0; done < 4 * beat - 256; done += 256)
+            {
+                run (m, 256);
+                for (auto v : l)
+                    loud = std::max (loud, std::abs (v));
+            }
+            check (loud > 0.1f && ! m.isPlaying(), "recording: clicks while counting in");
+            run (m, 512);
+            check (m.isPlaying() && ! m.countingIn() && m.launchClock() > 0 && m.launchClock() <= 512, "recording: the transport starts after the count-in");
+        }
+
+        {
+            // Capture: what was played without recording, in whole bars on the launch clock.
+            mixer::Engine m;
+            setUp (m);
+            m.play();
+            run (m, 9 * beat);
+            m.liveMidi (0x90, 60, 100);   // the second beat of the third bar
+            run (m, beat);
+            m.liveMidi (0x80, 60, 0);
+            m.liveMidi (0x90, 62, 100);
+            run (m, 4 * beat);
+            m.liveMidi (0x80, 62, 0);
+            run (m, 512);
+            Frame phase = -1;
+            const auto clip = m.capture (0, phase);
+            check (clip != nullptr && phase == 8 * beat && clip->length == 8 * beat && clip->events.size() == 4 && clip->events[0].frame == beat,
+                   "recording: Capture keeps the last phrase, two bars from its bar line");
+            Frame none = 0;
+            check (m.capture (1, none) == nullptr, "recording: nothing to capture on a track not played");
+        }
+
+        {
+            // A launch on a frame gone by plays in time with it.
+            mixer::Engine m;
+            setUp (m);
+            AudioData::Builder b (1, rate);
+            std::vector<float> v (48000, 0.5f);
+            const float* one[1] = { v.data() };
+            b.append (one, 48000);
+            auto slot = std::make_shared<mixer::Slot>();
+            slot->clip = mixer::makeClip (mixer::makeAudioClip (*b.finish(), "dc.wav"), 0);
+            m.setSlot (0, 0, slot);
+            m.play();
+            run (m, 7680);
+            m.launchAt (0, 0, 7000);   // gone by
+            run (m, 256);
+            const auto info = m.launchInfo (0);
+            check (info.playing == 0 && info.progress > 0.0f && std::abs (info.progress - (float) (m.launchClock() - 7000) / 48000.0f) < 1.0e-3f,
+                   "recording: a launch on a frame gone by plays in time with it");
+        }
     }
 
     // Φ Phaser: stages φ apart, a sweep that never repeats, and a response that matches what it does.
@@ -5451,7 +5686,7 @@ int main()
     testPhiTuning();
     testTunings();
     testCounterpoint();
-    testLoopRecording();
+    testRecording();
     testPluginMeasure();
 
     if (failures == 0)
