@@ -2,6 +2,7 @@
 #include "TimeStretch.h"
 
 #include "Dsp.h"
+#include "Paulstretch.h"
 #include "WarpEdit.h"
 
 #include <rubberband/RubberBandStretcher.h>
@@ -339,6 +340,7 @@ const char* timestretch::modeName (Mode m)
         case Mode::beatsNoLoop:  return "Beats, No Loop";
         case Mode::texture:      return "Texture";
         case Mode::smooth:       return "Smooth";
+        case Mode::ambient:      return "Ambient";
     }
     return "";
 }
@@ -357,6 +359,8 @@ const char* timestretch::modeDescription (Mode m)
         case Mode::beatsNoLoop:  return "As Beats, but a piece moved apart rings out and falls silent instead of looping.";
         case Mode::texture:      return "Overlapping grains, slightly scattered: pads, drones, noise and ambience.";
         case Mode::smooth:       return "A soft phase vocoder with long windows for sustained sounds without sharp hits.";
+        case Mode::ambient:      return "Paulstretch: smeared into a smooth, evolving wash. Made for huge stretches "
+                                        "(8 times and more) of pads, voices and drones; hits disappear.";
     }
     return "";
 }
@@ -364,7 +368,7 @@ const char* timestretch::modeDescription (Mode m)
 std::vector<timestretch::Mode> timestretch::modes()
 {
     return { Mode::fullMix, Mode::fullMixVoice, Mode::drums, Mode::beats, Mode::beatsNoLoop, Mode::melody,
-             Mode::texture, Mode::smooth, Mode::varispeed };
+             Mode::texture, Mode::smooth, Mode::ambient, Mode::varispeed };
 }
 
 namespace
@@ -445,7 +449,8 @@ namespace
         case Mode::varispeed:
         case Mode::beats:
         case Mode::beatsNoLoop:
-        case Mode::texture:      break;
+        case Mode::texture:
+        case Mode::ambient:      break;
     }
     const auto channels = audio.numChannels();
     const auto rate = audio.sampleRate();
@@ -744,6 +749,9 @@ AudioDataPtr timestretch::render (const AudioData& audio, Frame start, Frame end
     }
     if (mode == Mode::texture)
         return textureRender (audio, start, points, error, progress, cancel);
+    if (mode == Mode::ambient)
+        return paulstretch::render (audio, start, end, resultLength, {}, error, progress, cancel,
+                                    [&points] (double t) { return mapThrough (points, t, false); });
     if (points.size() == 2)
         return renderConstant (audio, start, end, resultLength, mode, error, progress, cancel);
 

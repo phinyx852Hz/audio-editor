@@ -22,6 +22,7 @@
 #include "../Source/core/Pitch.h"
 #include "../Source/core/PitchFix.h"
 #include "../Source/core/TimeStretch.h"
+#include "../Source/core/Paulstretch.h"
 #include "../Source/core/Quantize.h"
 #include "../Source/core/Binaural.h"
 #include "../Source/core/Ambisonics.h"
@@ -2936,8 +2937,8 @@ namespace
             }
         }
 
-        // Texture and Smooth: the lengths asked for, and a tone keeps about its level.
-        for (const auto mode : { timestretch::Mode::texture, timestretch::Mode::smooth })
+        // Texture, Smooth and Ambient: the lengths asked for, and a tone keeps about its level.
+        for (const auto mode : { timestretch::Mode::texture, timestretch::Mode::smooth, timestretch::Mode::ambient })
         {
             const auto out = timestretch::stretch (*stereo, 0, stereo->length(), 1.5, mode, error);
             check (out != nullptr && out->length() == 144000, std::string (timestretch::modeName (mode)) + " stretches to the length asked for");
@@ -2950,6 +2951,132 @@ namespace
                 const auto rms = std::sqrt (sum / 96000.0);
                 check (rms > 0.25 && rms < 0.5, std::string (timestretch::modeName (mode)) + " keeps the tone's level: " + std::to_string (rms));
             }
+        }
+
+        // Paulstretch: a chord of 220 Hz harmonics, 4 times as long, keeps its partials, level and
+        // channels; the spectral chain moves, keeps or removes partials as asked.
+        {
+            std::vector<float> chord (48000);
+            for (size_t i = 0; i < chord.size(); ++i)
+                for (int h = 1; h <= 8; ++h)
+                    chord[i] += (float) (0.1 * std::sin (2.0 * M_PI * 220.0 * h * (double) i / rate));
+            std::vector<float> fifth (48000);
+            for (size_t i = 0; i < fifth.size(); ++i)
+                fifth[i] = (float) (0.3 * std::sin (2.0 * M_PI * 330.0 * (double) i / rate));
+            const auto source = build ({ chord, fifth });
+            // The level within 10 Hz of `hz` in the middle half of x (a sine of amplitude a reads
+            // about a): the stretched partials are smeared over a few Hz, so their power is summed.
+            auto at = [&] (const std::vector<float>& x, double hz)
+            {
+                const auto from = x.size() / 4, to = 3 * x.size() / 4;
+                const auto step = rate / (double) (to - from);
+                double power = 0.0;
+                for (auto f = hz - 10.0; f <= hz + 10.0; f += step)
+                {
+                    const auto c = 2.0 * std::cos (2.0 * M_PI * f / rate);
+                    double s1 = 0.0, s2 = 0.0;
+                    for (size_t i = from; i < to; ++i)
+                    {
+                        const auto s0 = x[i] + c * s1 - s2;
+                        s2 = s1;
+                        s1 = s0;
+                    }
+                    const auto a = std::sqrt (std::max (0.0, s1 * s1 + s2 * s2 - c * s1 * s2)) / (double) (to - from) * 2.0;
+                    power += a * a;
+                }
+                return std::sqrt (power);
+            };
+            auto rmsOf = [] (const std::vector<float>& x)
+            {
+                double sum = 0.0;
+                for (size_t i = x.size() / 4; i < 3 * x.size() / 4; ++i)
+                    sum += (double) x[i] * x[i];
+                return std::sqrt (sum / (double) (x.size() / 2));
+            };
+            auto run = [&] (const paulstretch::Settings& settings, double ratio = 4.0)
+            {
+                return paulstretch::stretch (*source, 0, source->length(), ratio, settings, error);
+            };
+
+            const auto plain = run ({});
+            check (plain != nullptr && plain->length() == 192000, "Paulstretch gives exactly 4 times the length");
+            if (plain != nullptr)
+            {
+                const auto l = channel (*plain, 0), r = channel (*plain, 1);
+                check (std::abs (rmsOf (l) - 0.2) < 0.03, "Paulstretch keeps the level: " + std::to_string (rmsOf (l)));
+                check (at (l, 440.0) > 0.05 && at (l, 330.0) < 0.01 && at (r, 330.0) > 0.15 && at (r, 440.0) < 0.01,
+                       "Paulstretch keeps each channel's partials and nothing else");
+            }
+            paulstretch::Settings up;
+            up.pitchSemitones = 12.0;
+            if (const auto o = run (up))
+                check (at (channel (*o, 1), 660.0) > 0.15 && at (channel (*o, 1), 330.0) < 0.01, "pitch +12 moves 330 Hz to 660 Hz");
+            paulstretch::Settings shifted;
+            shifted.frequencyShiftHz = 100.0;
+            if (const auto o = run (shifted))
+                check (at (channel (*o, 1), 430.0) > 0.15 && at (channel (*o, 1), 330.0) < 0.01, "a 100 Hz shift moves 330 Hz to 430 Hz");
+            paulstretch::Settings harmonics;
+            harmonics.harmonics = 2;
+            harmonics.harmonicsHz = 220.0;
+            if (const auto o = run (harmonics))
+            {
+                const auto l = channel (*o, 0);
+                check (at (l, 440.0) > 0.05 && at (l, 660.0) < 0.01 && at (l, 1320.0) < 0.01, "two harmonics keep 220 and 440 Hz only");
+            }
+            paulstretch::Settings band;
+            band.lowHz = 500.0;
+            band.highHz = 1000.0;
+            if (const auto o = run (band))
+            {
+                const auto l = channel (*o, 0);
+                check (at (l, 660.0) > 0.05 && at (l, 440.0) < 0.01 && at (l, 1320.0) < 0.01, "the band filter keeps 500 Hz to 1 kHz");
+            }
+            band.bandStop = true;
+            if (const auto o = run (band))
+            {
+                const auto l = channel (*o, 0);
+                check (at (l, 660.0) < 0.01 && at (l, 440.0) > 0.05, "the band stop removes 500 Hz to 1 kHz");
+            }
+            paulstretch::Settings mix;
+            mix.ratioLevels = { 0, 1, 0, 0, 0, 0, 0, 0 };
+            if (const auto o = run (mix))
+                check (at (channel (*o, 1), 165.0) > 0.15 && at (channel (*o, 1), 330.0) < 0.01, "the ratio mix at ½ only moves 330 Hz to 165 Hz");
+            paulstretch::Settings noise;
+            noise.tonalNoise = -1.0;
+            if (const auto o = run (noise))
+                check (rmsOf (channel (*o, 0)) < 0.05, "noise only removes most of a chord");
+            const auto again = run ({});
+            if (plain != nullptr && again != nullptr)
+                check (channel (*plain, 0) == channel (*again, 0), "the same seed renders the same result");
+
+            // Keep Hits: clicks every half second, 8 times as long, sound for less of the time.
+            std::vector<float> clicks (96000);
+            for (int k = 0; k < 4; ++k)
+                for (int i = 0; i < 2000; ++i)
+                    clicks[(size_t) (k * 24000 + i)] = (float) (0.8 * std::exp (-i / 300.0) * std::sin (i * 0.3));
+            const auto hits = build ({ clicks });
+            auto active = [&] (double onsets)
+            {
+                paulstretch::Settings settings;
+                settings.onsets = onsets;
+                const auto o = paulstretch::stretch (*hits, 0, hits->length(), 8.0, settings, error);
+                int n = 0;
+                if (o != nullptr)
+                {
+                    const auto x = channel (*o, 0);
+                    for (size_t i = 0; i + 2400 <= x.size(); i += 2400)
+                    {
+                        double sum = 0.0;
+                        for (size_t j = i; j < i + 2400; ++j)
+                            sum += (double) x[j] * x[j];
+                        n += std::sqrt (sum / 2400.0) > 0.01;
+                    }
+                }
+                return n;
+            };
+            const auto smeared = active (0.0), kept = active (1.0);
+            check (kept < smeared * 0.8, "Keep Hits makes stretched clicks shorter: " + std::to_string (kept) + " of " + std::to_string (smeared));
+            check (paulstretch::stretch (*hits, 0, hits->length(), 100000.0, {}, error) == nullptr, "Paulstretch refuses results over an hour");
         }
     }
 

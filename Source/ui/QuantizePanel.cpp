@@ -284,6 +284,10 @@ QuantizePanel::QuantizePanel (QWidget* parent) : QWidget (parent)
     wGrid->addWidget (tempo, 4, 0, 1, 2);
     wGrid->addWidget (detect, 4, 2);
     wGrid->addWidget (setTempo, 4, 3);
+    auto* extreme = new QPushButton (tr ("E&xtreme Stretch (Paulstretch)..."), wBox);
+    extreme->setToolTip (tr ("Stretch the selection or the whole file 2 to 10000 times into a smooth, evolving wash, "
+                             "with PaulXStretch-style harmonics, ratio mix, spread, filter and more (Ctrl+Shift+X; X repeats it)"));
+    wGrid->addWidget (extreme, 5, 0, 1, 4);
     wGrid->setColumnStretch (1, 1);
     layout->addWidget (wBox);
 
@@ -348,6 +352,7 @@ QuantizePanel::QuantizePanel (QWidget* parent) : QWidget (parent)
     connect (shrink, &QPushButton::clicked, this, [this] { Q_EMIT stretchRequested (2.0); });
     connect (longer, &QPushButton::clicked, this, [this] { Q_EMIT stretchRequested (0.5); });
     connect (toTempo, &QPushButton::clicked, this, &QuantizePanel::stretchToTempoRequested);
+    connect (extreme, &QPushButton::clicked, this, &QuantizePanel::extremeStretchRequested);
     connect (detect, &QPushButton::clicked, this, &QuantizePanel::detectTempoRequested);
     connect (setTempo, &QPushButton::clicked, this, &QuantizePanel::setTempoRequested);
 }

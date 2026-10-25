@@ -9,6 +9,7 @@
 #include "TimeRuler.h"
 #include "TransportBar.h"
 #include "WaveformView.h"
+#include "../core/Paulstretch.h"
 #include "../core/TimeStretch.h"
 #include "../engine/VampHost.h"
 
@@ -24,15 +25,22 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
+#include <QGridLayout>
+#include <QGroupBox>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QSlider>
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QVBoxLayout>
 
+#include <array>
 #include <cmath>
+#include <string>
+#include <utility>
 
 namespace
 {
@@ -41,6 +49,55 @@ namespace
     QString bpmText (double bpm)
     {
         return QString::number (bpm, 'f', 2).remove (QRegularExpression (QStringLiteral ("\\.?0+$")));
+    }
+
+    // The Extreme Stretch settings, remembered between runs (the stretch itself is "extreme/ratio").
+    paulstretch::Settings loadExtremeSettings()
+    {
+        const auto st = appSettings();
+        auto v = [&st] (const char* key, double fallback) { return st.value (QStringLiteral ("extreme/") + QLatin1String (key), fallback).toDouble(); };
+        paulstretch::Settings p;
+        p.windowSeconds = v ("window", p.windowSeconds);
+        p.onsets = v ("onsets", p.onsets);
+        p.harmonics = (int) v ("harmonics", p.harmonics);
+        p.harmonicsHz = v ("harmonicsHz", p.harmonicsHz);
+        p.harmonicsCents = v ("harmonicsCents", p.harmonicsCents);
+        p.harmonicsSoft = v ("harmonicsSoft", 1.0) != 0.0;
+        p.tonalNoise = v ("tonalNoise", p.tonalNoise);
+        p.frequencyShiftHz = v ("shift", p.frequencyShiftHz);
+        p.pitchSemitones = v ("pitch", p.pitchSemitones);
+        for (size_t r = 0; r < p.ratioLevels.size(); ++r)
+            p.ratioLevels[r] = v (("ratioLevel" + std::to_string (r)).c_str(), p.ratioLevels[r]);
+        p.spreadOctaves = v ("spread", p.spreadOctaves);
+        p.lowHz = v ("lowHz", p.lowHz);
+        p.highHz = v ("highHz", p.highHz);
+        p.bandStop = v ("bandStop", 0.0) != 0.0;
+        p.highDamp = v ("highDamp", p.highDamp);
+        p.compress = v ("compress", p.compress);
+        return p;
+    }
+
+    void saveExtremeSettings (const paulstretch::Settings& p)
+    {
+        auto st = appSettings();
+        auto put = [&st] (const char* key, double value) { st.setValue (QStringLiteral ("extreme/") + QLatin1String (key), value); };
+        put ("window", p.windowSeconds);
+        put ("onsets", p.onsets);
+        put ("harmonics", p.harmonics);
+        put ("harmonicsHz", p.harmonicsHz);
+        put ("harmonicsCents", p.harmonicsCents);
+        put ("harmonicsSoft", p.harmonicsSoft ? 1.0 : 0.0);
+        put ("tonalNoise", p.tonalNoise);
+        put ("shift", p.frequencyShiftHz);
+        put ("pitch", p.pitchSemitones);
+        for (size_t r = 0; r < p.ratioLevels.size(); ++r)
+            put (("ratioLevel" + std::to_string (r)).c_str(), p.ratioLevels[r]);
+        put ("spread", p.spreadOctaves);
+        put ("lowHz", p.lowHz);
+        put ("highHz", p.highHz);
+        put ("bandStop", p.bandStop ? 1.0 : 0.0);
+        put ("highDamp", p.highDamp);
+        put ("compress", p.compress);
     }
 
     constexpr double longestLoop = 60.0;   // seconds: longer files are not detected on opening
@@ -191,6 +248,10 @@ void MainWindow::registerWarpCommands()
         ->setStatusTip (tr ("Make the selection or the whole file twice as long (half speed, half-time), keeping the pitch; press again for 4×, 8×..."));
     add ("warp.doubleSpeed", tr ("Shrink &÷2 (Half as Long)"), { KS (Qt::Key_Slash), KS (Qt::CTRL | Qt::ALT | Qt::Key_Up) }, [this] { stretchBy (2.0); })
         ->setStatusTip (tr ("Make the selection or the whole file half as long (double speed), keeping the pitch; press again for a quarter..."));
+    add ("warp.extremeStretch", tr ("E&xtreme Stretch (Paulstretch)..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_X) }, [this] { extremeStretch (false); })
+        ->setStatusTip (tr ("Stretch the selection or the whole file 2 to 10000 times into a smooth, evolving wash (Paulstretch)"));
+    add ("warp.extremeAgain", tr ("Extreme Stretch &Again"), { KS (Qt::Key_X) }, [this] { extremeStretch (true); })
+        ->setStatusTip (tr ("Paulstretch the selection or the whole file at once with the settings used last (Ctrl+Shift+X sets them)"));
     add ("warp.exportLoop", tr ("Export &Loop..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_L) }, [this] { exportLoop(); })
         ->setStatusTip (tr ("Save whole bars as a WAV loop with its tempo and loop points, for samplers and DAWs"));
     registerQuantizeCommands();
@@ -200,7 +261,7 @@ void MainWindow::updateWarpCommandStates()
 {
     const bool open = doc.isOpen() && ! loading && ! doc.isAlbum();
     const bool grid = open && doc.current().grid.isSet();
-    for (const auto* a : { "warp.detectGrid", "warp.setTempo", "warp.downbeat", "warp.stretch", "warp.doubleSpeed", "warp.halfSpeed" })
+    for (const auto* a : { "warp.detectGrid", "warp.setTempo", "warp.downbeat", "warp.stretch", "warp.doubleSpeed", "warp.halfSpeed", "warp.extremeStretch", "warp.extremeAgain" })
         commands.action (QString::fromLatin1 (a))->setEnabled (open);
     for (const auto* a : { "warp.halve", "warp.double", "warp.exportLoop" })
         commands.action (QString::fromLatin1 (a))->setEnabled (grid);
@@ -695,7 +756,6 @@ void MainWindow::stretchBy (double speed)
 void MainWindow::applyStretch (const QString& title, Frame s, Frame e, Frame target, int modeIndex, double newBpm)
 {
     const auto d = data();
-    const auto rate = d->sampleRate();
     const auto length = e - s;
     const bool whole = s == 0 && e == d->length();
     const auto m = (timestretch::Mode) modeIndex;
@@ -714,7 +774,16 @@ void MainWindow::applyStretch (const QString& title, Frame s, Frame e, Frame tar
             QMessageBox::warning (this, title, QString::fromStdString (error));
         return;
     }
+    putStretched (title + QStringLiteral (" (%1)").arg (tr (timestretch::modeName (m))), s, e, stretched, whole ? newBpm : 0.0);
+}
 
+void MainWindow::putStretched (const QString& description, Frame s, Frame e, AudioDataPtr stretched, double newBpm)
+{
+    const auto d = data();
+    const auto rate = d->sampleRate();
+    const auto length = e - s;
+    const auto target = stretched->length();
+    const bool whole = s == 0 && e == d->length();
     AudioData::Builder builder (d->numChannels(), rate);
     builder.appendShared (*d, 0, s);
     builder.appendShared (*stretched, 0, stretched->length());
@@ -733,11 +802,253 @@ void MainWindow::applyStretch (const QString& title, Frame s, Frame e, Frame tar
         state.grid.normalise();
         state.tags[tag::bpm] = bpmText (newBpm).toStdString();
     }
-    doc.apply ((title + QStringLiteral (" (%1)").arg (tr (timestretch::modeName (m)))).toStdString(), std::move (state));
+    doc.apply (description.toStdString(), std::move (state));
     if (hasSelection())
         selEnd = s + target;
     refreshFromDocument (true);
     statusBar()->showMessage (tr ("Stretched to %1 s").arg ((double) target / rate, 0, 'f', 3), 6000);
+}
+
+void MainWindow::extremeStretch (bool again)
+{
+    const auto d = data();
+    if (d == nullptr || refuseAlbumEdit())
+        return;
+    const auto title = tr ("Extreme Stretch");
+    const auto [s, e] = processRange();
+    const auto rate = d->sampleRate();
+    const auto length = e - s;
+    if (length < 2)
+        return;
+    auto ratio = appSettings().value (QStringLiteral ("extreme/ratio"), 8.0).toDouble();
+    auto ps = loadExtremeSettings();
+
+    const auto longest = paulstretch::maxResultFrames (rate);
+    if (! again)
+    {
+        QDialog dialog (this);
+        dialog.setWindowTitle (title);
+        auto* layout = new QVBoxLayout (&dialog);
+        auto* columns = new QHBoxLayout;
+        layout->addLayout (columns);
+        auto group = [&dialog] (const QString& name, QBoxLayout* column)
+        {
+            auto* box = new QGroupBox (name, &dialog);
+            auto* form = new QFormLayout (box);
+            column->addWidget (box);
+            return form;
+        };
+        auto* left = new QVBoxLayout, * right = new QVBoxLayout;
+        columns->addLayout (left);
+        columns->addLayout (right);
+        auto spin = [&dialog] (double lo, double hi, int decimals, const QString& suffix, double v, const QString& tip = {})
+        {
+            auto* box = new QDoubleSpinBox (&dialog);
+            box->setRange (lo, hi);
+            box->setDecimals (decimals);
+            box->setSuffix (suffix);
+            box->setValue (v);
+            box->setToolTip (tip);
+            return box;
+        };
+        auto slider = [&dialog] (int lo, int hi, double v, const QString& tip)
+        {
+            auto* sl = new QSlider (Qt::Horizontal, &dialog);
+            sl->setRange (lo, hi);
+            sl->setValue ((int) std::lround (v * 100.0));
+            sl->setToolTip (tip);
+            return sl;
+        };
+
+        auto* time = group (tr ("Time"), left);
+        auto* stretchBox = spin (1.0, 10000.0, 2, tr (" ×"), ratio, tr ("How many times longer the result is"));
+        auto* lengthBox = spin (0.0, 3600.0, 3, tr (" s"), (double) length / rate * ratio, tr ("The length of the result; sets the stretch"));
+        auto* windowBox = spin (0.01, 5.0, 3, tr (" s"), ps.windowSeconds,
+                                tr ("Longer windows smear more and sound smoother; shorter ones keep more detail but sound grainier"));
+        auto* onsets = slider (0, 100, ps.onsets, tr ("Hits pass at closer to normal speed and the rest is stretched more, so attacks blur less"));
+        time->addRow (tr ("&Stretch:"), stretchBox);
+        time->addRow (tr ("&Result length:"), lengthBox);
+        time->addRow (tr ("&Window:"), windowBox);
+        time->addRow (tr ("&Keep hits:"), onsets);
+
+        auto* pitch = group (tr ("Pitch"), left);
+        auto* pitchBox = spin (-24.0, 24.0, 2, tr (" semitones"), ps.pitchSemitones);
+        auto* shiftBox = spin (-1000.0, 1000.0, 1, tr (" Hz"), ps.frequencyShiftHz,
+                               tr ("The same number of Hz added to every partial: metallic, inharmonic"));
+        pitch->addRow (tr ("&Pitch:"), pitchBox);
+        pitch->addRow (tr ("&Frequency shift:"), shiftBox);
+        auto* mixRow = new QGridLayout;
+        std::array<QSpinBox*, 8> levels {};
+        const std::array<const char*, 8> ratioNames { "¼", "½", "⅔", "1", "1½", "2", "3", "4" };
+        for (size_t r = 0; r < levels.size(); ++r)
+        {
+            auto* level = new QSpinBox (&dialog);
+            level->setRange (0, 100);
+            level->setSuffix (QStringLiteral (" %"));
+            level->setValue ((int) std::lround (ps.ratioLevels[r] * 100.0));
+            level->setToolTip (tr ("The level of a copy at %1 times the pitch").arg (QString::fromUtf8 (ratioNames[r])));
+            auto* name = new QLabel (QString::fromUtf8 (ratioNames[r]) + QStringLiteral ("×"), &dialog);
+            name->setAlignment (Qt::AlignCenter);
+            mixRow->addWidget (name, (int) (r / 4) * 2, (int) (r % 4));
+            mixRow->addWidget (level, (int) (r / 4) * 2 + 1, (int) (r % 4));
+            levels[r] = level;
+        }
+        pitch->addRow (tr ("Ratio mix:"), mixRow);
+
+        auto* spectrum = group (tr ("Spectrum"), right);
+        auto* harmonics = new QSpinBox (&dialog);
+        harmonics->setRange (0, 100);
+        harmonics->setSpecialValueText (tr ("Off"));
+        harmonics->setValue (ps.harmonics);
+        harmonics->setToolTip (tr ("Keep only this many harmonics of the fundamental below: turns any sound into a chord-like tone"));
+        auto* harmonicsHz = spin (10.0, 5000.0, 1, tr (" Hz"), ps.harmonicsHz);
+        auto* harmonicsCents = spin (1.0, 1200.0, 0, tr (" cents"), ps.harmonicsCents, tr ("How wide each harmonic is"));
+        auto* soft = new QCheckBox (tr ("S&oft edges"), &dialog);
+        soft->setChecked (ps.harmonicsSoft);
+        auto* tonal = slider (-100, 100, ps.tonalNoise, tr ("Left keeps only the noise, right only the tones (the spectral peaks); centre keeps both"));
+        auto* spreadBox = spin (0.0, 2.0, 2, tr (" octaves"), ps.spreadOctaves,
+                                tr ("Each partial smeared over this range: a little is a chorus, a lot a wash of noise"));
+        spectrum->addRow (tr ("&Harmonics:"), harmonics);
+        spectrum->addRow (tr ("Fundamental:"), harmonicsHz);
+        spectrum->addRow (tr ("Width:"), harmonicsCents);
+        spectrum->addRow (QString(), soft);
+        spectrum->addRow (tr ("&Noise ↔ tones:"), tonal);
+        spectrum->addRow (tr ("Sp&read:"), spreadBox);
+
+        auto* filter = group (tr ("Filter and level"), right);
+        auto* filterOn = new QCheckBox (tr ("&Band filter"), &dialog);
+        filterOn->setChecked (ps.highHz > 0.0);
+        auto* lowBox = spin (0.0, 24000.0, 0, tr (" Hz"), ps.lowHz);
+        auto* highBox = spin (10.0, 24000.0, 0, tr (" Hz"), ps.highHz > 0.0 ? ps.highHz : 8000.0);
+        auto* stop = new QCheckBox (tr ("Remove the band instead"), &dialog);
+        stop->setChecked (ps.bandStop);
+        auto* damp = slider (0, 100, ps.highDamp, tr ("Rolls off the highs above 1 kHz, up to 6 dB an octave"));
+        auto* compress = slider (0, 100, ps.compress, tr ("Evens out loud and quiet moments"));
+        filter->addRow (filterOn);
+        filter->addRow (tr ("From:"), lowBox);
+        filter->addRow (tr ("To:"), highBox);
+        filter->addRow (QString(), stop);
+        filter->addRow (tr ("High &damping:"), damp);
+        filter->addRow (tr ("&Compressor:"), compress);
+        right->addStretch (1);
+
+        auto* summary = new QLabel (&dialog);
+        summary->setWordWrap (true);
+        layout->addWidget (summary);
+        auto* buttons = new QDialogButtonBox (QDialogButtonBox::Ok | QDialogButtonBox::Cancel | QDialogButtonBox::Reset, &dialog);
+        auto* ok = buttons->button (QDialogButtonBox::Ok);
+        ok->setText (tr ("Stretch"));
+        layout->addWidget (buttons);
+        connect (buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+        connect (buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+        auto describe = [&]
+        {
+            for (auto* w : std::initializer_list<QWidget*> { harmonicsHz, harmonicsCents, soft })
+                w->setEnabled (harmonics->value() > 0);
+            for (auto* w : std::initializer_list<QWidget*> { lowBox, highBox, stop })
+                w->setEnabled (filterOn->isChecked());
+            const auto n = (double) length * stretchBox->value();
+            const auto window = paulstretch::windowFrames (windowBox->value(), rate);
+            const bool tooLong = (Frame) std::llround (n) > longest;
+            ok->setEnabled (! tooLong);
+            summary->setText (tooLong ? tr ("The result would be longer than an hour; stretch less or select less.")
+                                      : tr ("%1 goes from %2 s to %3 s. Window: %4 ms. X repeats these settings on any selection.")
+                                            .arg (s == 0 && e == d->length() ? tr ("The whole file") : tr ("The selection"))
+                                            .arg ((double) length / rate, 0, 'f', 3).arg (n / rate, 0, 'f', 2)
+                                            .arg (1000.0 * window / rate, 0, 'f', 0));
+        };
+        bool linking = false;
+        connect (stretchBox, &QDoubleSpinBox::valueChanged, &dialog, [&]
+        {
+            if (! std::exchange (linking, true))
+                lengthBox->setValue ((double) length / rate * stretchBox->value());
+            linking = false;
+            describe();
+        });
+        connect (lengthBox, &QDoubleSpinBox::valueChanged, &dialog, [&]
+        {
+            if (! std::exchange (linking, true))
+                stretchBox->setValue (lengthBox->value() * rate / (double) length);
+            linking = false;
+            describe();
+        });
+        connect (windowBox, &QDoubleSpinBox::valueChanged, &dialog, describe);
+        connect (harmonics, &QSpinBox::valueChanged, &dialog, describe);
+        connect (filterOn, &QCheckBox::toggled, &dialog, describe);
+        auto apply = [&] (const paulstretch::Settings& v, double x)
+        {
+            stretchBox->setValue (x);
+            windowBox->setValue (v.windowSeconds);
+            onsets->setValue ((int) std::lround (v.onsets * 100.0));
+            pitchBox->setValue (v.pitchSemitones);
+            shiftBox->setValue (v.frequencyShiftHz);
+            for (size_t r = 0; r < levels.size(); ++r)
+                levels[r]->setValue ((int) std::lround (v.ratioLevels[r] * 100.0));
+            harmonics->setValue (v.harmonics);
+            harmonicsHz->setValue (v.harmonicsHz);
+            harmonicsCents->setValue (v.harmonicsCents);
+            soft->setChecked (v.harmonicsSoft);
+            tonal->setValue ((int) std::lround (v.tonalNoise * 100.0));
+            spreadBox->setValue (v.spreadOctaves);
+            filterOn->setChecked (v.highHz > 0.0);
+            lowBox->setValue (v.lowHz);
+            highBox->setValue (v.highHz > 0.0 ? v.highHz : 8000.0);
+            stop->setChecked (v.bandStop);
+            damp->setValue ((int) std::lround (v.highDamp * 100.0));
+            compress->setValue ((int) std::lround (v.compress * 100.0));
+        };
+        connect (buttons->button (QDialogButtonBox::Reset), &QPushButton::clicked, &dialog, [&] { apply ({}, 8.0); });
+        describe();
+        stretchBox->selectAll();
+        stretchBox->setFocus();
+        if (dialog.exec() != QDialog::Accepted)
+        {
+            waveform->setFocus();
+            return;
+        }
+        ratio = stretchBox->value();
+        ps.windowSeconds = windowBox->value();
+        ps.onsets = onsets->value() / 100.0;
+        ps.pitchSemitones = pitchBox->value();
+        ps.frequencyShiftHz = shiftBox->value();
+        for (size_t r = 0; r < levels.size(); ++r)
+            ps.ratioLevels[r] = levels[r]->value() / 100.0;
+        ps.harmonics = harmonics->value();
+        ps.harmonicsHz = harmonicsHz->value();
+        ps.harmonicsCents = harmonicsCents->value();
+        ps.harmonicsSoft = soft->isChecked();
+        ps.tonalNoise = tonal->value() / 100.0;
+        ps.spreadOctaves = spreadBox->value();
+        ps.lowHz = lowBox->value();
+        ps.highHz = filterOn->isChecked() ? highBox->value() : 0.0;
+        ps.bandStop = stop->isChecked();
+        ps.highDamp = damp->value() / 100.0;
+        ps.compress = compress->value() / 100.0;
+        appSettings().setValue (QStringLiteral ("extreme/ratio"), ratio);
+        saveExtremeSettings (ps);
+    }
+
+    const auto target = (Frame) std::llround ((double) length * ratio);
+    if (target > longest)
+    {
+        statusBar()->showMessage (tr ("At %1 × that would be longer than an hour; select less (Ctrl+Shift+X to change it)").arg (ratio), 5000);
+        return;
+    }
+    AudioDataPtr stretched;
+    std::string error;
+    const auto ran = runWithProgress (title, [&] (std::atomic<float>& progress, const std::atomic<bool>& cancel)
+    {
+        stretched = paulstretch::render (*d, s, e, target, ps, error, &progress, &cancel);
+    });
+    waveform->setFocus();
+    if (! ran || stretched == nullptr)
+    {
+        if (ran && error != "Cancelled.")
+            QMessageBox::warning (this, title, QString::fromStdString (error));
+        return;
+    }
+    putStretched (tr ("Extreme Stretch ×%1").arg (ratio), s, e, stretched, 0.0);
 }
 
 void MainWindow::duplicateSelection()

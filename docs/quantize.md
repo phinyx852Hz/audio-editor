@@ -73,6 +73,7 @@ quantize re-renders from the original audio, so nothing is ever stretched twice,
 | Melody | Single voices, bass, lead instruments. |
 | Texture | Overlapping, slightly scattered grains for pads, drones, noise and ambience. |
 | Smooth | A soft phase vocoder with long windows for sustained sounds. |
+| Ambient | Paulstretch: everything smeared into a smooth, evolving wash, for big stretches of pads, voices and drones; hits disappear. The Extreme Stretch button (`Ctrl+Shift+X`) goes up to 10,000 times with PaulXStretch's spectral controls. |
 | Varispeed | Speed and pitch change together, like tape (Live's Re-Pitch). |
 
 Changing the algorithm re-renders what is already warped.
