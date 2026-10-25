@@ -227,6 +227,22 @@ namespace dsp
     // Integrated loudness from 100 ms block powers (K-weighted, channel-weighted mean squares).
     double integratedLoudness (const std::vector<double>& blockPowers100ms);
 
+    // The same measure, fed one 100 ms block at a time, for meters that run for hours:
+    // only the gating blocks above the -70 LUFS absolute gate are kept (silence costs nothing).
+    class IntegratedLoudness
+    {
+    public:
+        void add (double blockPower);
+        double value() const;
+        void reset() { *this = {}; }
+
+    private:
+        std::array<double, 3> previous {};
+        size_t seen = 0;
+        std::vector<double> audible;   // 400 ms gating blocks above the absolute gate
+        double audibleSum = 0.0;
+    };
+
     // Adds triangular (TPDF) dither of one LSB at the given bit depth.
     void addTpdfDither (std::vector<std::vector<float>>& block, int bitDepth, std::mt19937& rng);
 }
