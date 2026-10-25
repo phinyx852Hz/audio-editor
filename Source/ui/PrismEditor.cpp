@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "PrismEditor.h"
+#include "PhiWindow.h"
 #include "ChainRow.h"
 #include "MasterPanel.h"
 #include "Potentiometer.h"
@@ -477,9 +478,7 @@ void PrismEditor::buildRay (int r, const PrismRayInfo& info)
                 enter (r, d);
             else
             {
-                auto* dialog = new ParameterDialog (engine, card->path(), window());
-                dialog->setAttribute (Qt::WA_DeleteOnClose);
-                dialog->show();
+                openParameterWindow (engine, card->path(), window());
             }
         });
         connect (card, &DeviceCard::windowRequested, this, [this, r, d] { openDevice (r, d); });
@@ -692,9 +691,7 @@ void PrismEditor::openDevice (int r, int d)
         engine.showChainWindow (path);
     else
     {
-        auto* dialog = new ParameterDialog (engine, path, window());
-        dialog->setAttribute (Qt::WA_DeleteOnClose);
-        dialog->show();
+        openParameterWindow (engine, path, window());
     }
 }
 

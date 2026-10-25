@@ -63,6 +63,19 @@ public:
     std::function<bool (const QString& path, int colour)> sendFile;
     void auditionEnded();   // the file played to its end or something else took the sound
 
+    // The Φ random selector (the Φ button on the Selector line): one of each colour's
+    // favourites in the set shown, picked by phi::deal, top colour first (empty: the
+    // colour has none), with the colours' names and colours. To the clip launcher or the
+    // mixer's tracks, a file and an instrument (a plugin id) per colour; for a Prism, an
+    // effect (a plugin id) per colour, one on each ray.
+    enum class DealTo { automatic, launcher, tracks, prism };
+    std::function<void (const QStringList& files, const QStringList& instruments, const QStringList& names,
+                        const QList<QColor>& colours, DealTo, bool again)> phiDeal;
+    std::function<void (const QStringList& effects, const QStringList& names, const QList<QColor>& colours)> phiPrism;
+    // The plugin id of the instrument an item's key stands for ("plugin:..." or
+    // "command:instrument...."), empty when it is not an instrument.
+    std::function<QString (const QString& key)> instrumentOf;
+
     void focusSearch();          // selects the search text, ready to type over
     bool searchIsReady() const;  // the search has the keyboard with nothing to keep: empty or all selected
     void reload();               // collects the items again and refilters
@@ -107,6 +120,8 @@ private:
     void loadSelector();
     void saveSelector() const;
     void chooseSet (int set);
+    void deal (DealTo, bool again);
+    void dealMenu (QWidget* on, const QPoint& at);
     void renameSet();
     void selectorMenu (QWidget* on, const QPoint& at);   // the sets, and renaming
     QHash<QString, int>& marks() { return sets[(size_t) setIndex].marks; }
@@ -141,4 +156,6 @@ private:
     void newSet();
     void deleteSet();
     void chooseColour (int colour);
+    qint64 deals = 0;        // Φ deals so far this session
+    double dealSeed = 0.0;   // where this session's golden walks start
 };

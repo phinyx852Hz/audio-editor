@@ -5,6 +5,7 @@
 
 #include <QWidget>
 
+class QAbstractButton;
 class QCheckBox;
 class QComboBox;
 class QLabel;
@@ -45,7 +46,8 @@ private:
     QComboBox *sources, *mode, *scale, *key, *targets;
     QSlider *quantize, *threshold;
     QSpinBox *tempo, *voices, *columns, *low, *high, *bend;
-    QCheckBox *drums, *fibonacci;
+    QCheckBox* drums;
+    QAbstractButton* fibonacci;   // a Φ button
     QLabel* note;
     bool quiet = false;
 };

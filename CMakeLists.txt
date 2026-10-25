@@ -75,6 +75,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/SpatialStudio.cpp
     Source/core/PrismSplit.cpp
     Source/core/Phi.cpp
+    Source/core/PhiVoice.cpp
     Source/core/Nyquist.cpp
     Source/core/Album.cpp
     Source/core/MasterAssist.cpp
@@ -103,6 +104,8 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/ExportDialog.cpp
     Source/ui/MetadataEditor.cpp
     Source/ui/MainWindow.cpp
+    Source/ui/PhiMark.cpp
+    Source/ui/PhiWindow.cpp
     Source/ui/GainHud.cpp
     Source/ui/LiveEdits.cpp
     Source/ui/Analysis.cpp
@@ -372,6 +375,7 @@ if(PHI_BUILD_TESTS)
     Source/core/SpatialStudio.cpp
         Source/core/PrismSplit.cpp
         Source/core/Phi.cpp
+        Source/core/PhiVoice.cpp
         Source/core/Nyquist.cpp
         Source/core/Album.cpp
         Source/core/MasterAssist.cpp

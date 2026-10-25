@@ -6,6 +6,7 @@
 #include "../core/Dsp.h"
 #include "../core/Metadata.h"
 #include "TagIO.h"
+#include "DeviceDisplay.h"
 
 #include <array>
 #include <atomic>
@@ -174,6 +175,10 @@ public:
     // stereo at deviceSampleRate(). Empty: none.
     void setInstrument (LiveRender render);
     bool hasInstrument() const;
+    // A sound played once on top of everything (the Φ synth's sound as the splash opens):
+    // `render` adds to left and right at deviceSampleRate() and returns false once it has ended.
+    using OneShot = std::function<bool (float* left, float* right, int numFrames)>;
+    void playOneShot (OneShot render);
     bool isPlaying() const;
     // Plays [start, end) over and over; end <= start turns looping off.
     void setLoop (Frame start, Frame end);
@@ -306,6 +311,7 @@ public:
     MasterSlotInfo chainDevice (const ChainPath&) const;
     std::vector<PluginParameterInfo> chainParameters (const ChainPath&) const;
     PluginParameterInfo chainParameter (const ChainPath&, int index) const;
+    DeviceDisplay chainDisplay (const ChainPath&) const;   // a Φ effect's picture; Kind::none for others
     void setChainParameter (const ChainPath&, int index, float normalisedValue);
     bool setChainParameterText (const ChainPath&, int index, const std::string& text);
     void setChainBypassed (const ChainPath&, bool);

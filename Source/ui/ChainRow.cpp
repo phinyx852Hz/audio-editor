@@ -3,6 +3,8 @@
 #include "MasterPanel.h"
 #include "PrismEditor.h"
 #include "Potentiometer.h"
+#include "PhiMark.h"
+#include "PhiWindow.h"
 #include "Theme.h"
 
 #include <QApplication>
@@ -115,6 +117,9 @@ DeviceCard::DeviceCard (AudioEngine& e, Kind k, ChainPath where, QWidget* parent
     title = new QLabel (this);
     title->setFont ([&] { auto f = font(); f.setBold (true); return f; }());
     header->addWidget (power);
+    const auto phiPlugin = k == Kind::plugin && phimark::isPhiPlugin (info.pluginId);
+    if (phiPlugin)
+        header->addWidget (new PhiMark (power->sizeHint().height(), this));
     header->addWidget (title, 1);
 
     if (k == Kind::plugin && place.topLevel())
@@ -150,8 +155,9 @@ DeviceCard::DeviceCard (AudioEngine& e, Kind k, ChainPath where, QWidget* parent
     }
     else if (k == Kind::plugin)
     {
-        title->setText (elided (QString::fromStdString (info.name), title->font(), 150));
-        title->setToolTip (QString::fromStdString (info.name));
+        const auto name = QString::fromStdString (info.name);
+        title->setText (elided (phiPlugin ? phimark::withoutPhi (name) : name, title->font(), 150));
+        title->setToolTip (name);
 
         // A stock plugin's main controls, the same as its window's footer; otherwise the first
         // few continuous parameters. Switches and the plugin's own bypass are left to Edit.
@@ -1313,9 +1319,7 @@ void ChainRow::editParameters (int slot)
     if (engine.masterSlot (slot).empty)
         return;
 
-    auto* dialog = new ParameterDialog (engine, slot, window());
-    dialog->setAttribute (Qt::WA_DeleteOnClose);
-    dialog->show();
+    openParameterWindow (engine, ChainPath { slot, {} }, window());
 }
 
 void ChainRow::showWindow (int slot)
@@ -1328,6 +1332,8 @@ void ChainRow::showWindow (int slot)
                                       : QString::fromStdString (error));
         Q_EMIT chainChanged();
     }
+    else if (phimark::isPhiPlugin (info.pluginId))
+        editParameters (slot);   // a Φ effect's window is its Φ window
     else if (engine.canShowPluginWindow (slot))
         engine.showPluginWindow (slot);
     else if (! info.empty)

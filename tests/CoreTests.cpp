@@ -26,6 +26,7 @@
 #include "../Source/core/Binaural.h"
 #include "../Source/core/Ambisonics.h"
 #include "../Source/core/SpatialStudio.h"
+#include "../Source/core/PhiVoice.h"
 #include "../Source/core/PrismSplit.h"
 #include "../Source/core/MasterAssist.h"
 #include "../Source/mixer/MixAssist.h"
@@ -39,6 +40,7 @@
 #include <functional>
 #include <iterator>
 #include <random>
+#include <set>
 #include <string>
 
 namespace
@@ -3719,6 +3721,76 @@ namespace
         }
     }
 
+    // The splash's sound: phase distortion, a patch per start, a granular reverb with a long tail.
+    void testPhiVoice()
+    {
+        // No distortion is a cosine; full distortion bends it but keeps it within ±1.
+        bool cosine = true, bounded = true;
+        for (int w = 0; w < (int) phi::PdWave::count; ++w)
+            for (int i = 0; i < 200; ++i)
+            {
+                const auto p = i / 200.0;
+                cosine = cosine && near (phi::pdWave ((phi::PdWave) w, p, 0.0), std::cos (6.283185307179586 * p), 1.0e-9);
+                for (double d : { 0.5, 1.0 })
+                    bounded = bounded && std::abs (phi::pdWave ((phi::PdWave) w, p, d)) <= 1.0 + 1.0e-9;
+            }
+        check (cosine, "phase distortion: no distortion is a cosine");
+        check (bounded, "phase distortion: every wave stays within full scale");
+        check (phi::pdWave (phi::PdWave::saw, 0.1, 1.0) < phi::pdWave (phi::PdWave::saw, 0.1, 0.0), "phase distortion: the saw falls sooner when bent");
+
+        // Successive starts get different patches, all within the space.
+        {
+            const auto a = phi::PdPatch::at (0, 0.3), b = phi::PdPatch::at (1, 0.3), c = phi::PdPatch::at (0, 0.3);
+            bool inside = true;
+            double moved = 0.0;
+            for (int i = 0; i < phi::PdPatch::dimensions; ++i)
+            {
+                inside = inside && a.values[(size_t) i] >= 0.0 && a.values[(size_t) i] < 1.0;
+                moved += std::abs (a.values[(size_t) i] - b.values[(size_t) i]);
+            }
+            check (inside && moved > 1.0 && a.values == c.values, "pd patch: each start a new point, the same for the same start");
+        }
+
+        // The reverb's tail: a short burst still rings 1.5 s later and has faded 60 dB by 2.5 s.
+        {
+            phi::GranularReverb reverb;
+            reverb.prepare (48000.0);
+            reverb.setMix (1.0);
+            std::vector<float> left (48000 * 4), right (48000 * 4);
+            for (int i = 0; i < 2400; ++i)
+                left[(size_t) i] = right[(size_t) i] = 0.5f * (float) std::sin (i * 0.05);
+            reverb.process (left.data(), right.data(), (int) left.size());
+            const auto levelDb = [&] (double from, double to)
+            {
+                double e = 0.0;
+                const auto a = (size_t) (from * 48000.0), b = (size_t) (to * 48000.0);
+                for (size_t i = a; i < b; ++i)
+                    e += left[i] * left[i] + right[i] * right[i];
+                return 10.0 * std::log10 (e / (double) (b - a) + 1.0e-30);
+            };
+            const auto early = levelDb (0.25, 0.5), late = levelDb (1.5, 1.75), gone = levelDb (2.75, 3.0);
+            check (late > early - 40.0, "granular reverb: the tail still rings after 1.5 s");
+            check (gone < early - 45.0, "granular reverb: the tail fades within about 2 s");
+        }
+
+        // The whole sound: ends by itself, never clips, and is not silent.
+        for (int launch = 0; launch < 6; ++launch)
+        {
+            phi::StartupSound sound (launch, 0.7);
+            sound.prepare (48000.0);
+            std::vector<float> left (48000 * 7), right (48000 * 7);
+            int at = 0;
+            while (at + 512 <= (int) left.size() && sound.render (left.data() + at, right.data() + at, 512))
+                at += 512;
+            float peak = 0.0f;
+            for (size_t i = 0; i < left.size(); ++i)
+                peak = std::max ({ peak, std::abs (left[i]), std::abs (right[i]) });
+            check (at < (int) left.size() - 512 && near (at / 48000.0, sound.lengthSeconds(), 0.05), "startup sound: ends after its length");
+            check (peak > 0.05f && peak < 0.9f, "startup sound: heard and not clipping");
+            check (std::abs (left.back()) < 1.0e-6f, "startup sound: silent at the end");
+        }
+    }
+
     // The Φ effects' core: golden numbers, rhythms and the four processors.
     void testPhi()
     {
@@ -3739,6 +3811,41 @@ namespace
                 largest = std::max (largest, v[i] - v[i - 1]);
             }
             check (smallest > 0.0 && largest / smallest < phi::ratio * phi::ratio + 1.0e-6, "golden sequence is evenly spread");
+        }
+
+        // The Φ random selector: each colour spreads evenly over its favourites, never deals
+        // the same one twice running (with three or more), and the colours don't move in
+        // lockstep, so every deal of 8 colours x 8 favourites is a new combination.
+        {
+            bool even = true, noRepeat = true, inRange = true;
+            for (int count = 1; count <= 8; ++count)
+                for (int colour = 0; colour < 8; ++colour)
+                {
+                    std::vector<int> hits ((size_t) count, 0);
+                    for (int n = 0; n < 89; ++n)
+                    {
+                        const auto d = phi::deal (n, colour, count, 0.3);
+                        inRange = inRange && d >= 0 && d < count;
+                        if (d >= 0 && d < count)
+                            ++hits[(size_t) d];
+                        if (count >= 3 && d == phi::deal (n + 1, colour, count, 0.3))
+                            noRepeat = false;
+                    }
+                    for (const auto h : hits)
+                        even = even && std::abs (h - 89.0 / count) < 4.0;
+                }
+            std::set<std::vector<int>> combinations;
+            for (int n = 0; n < 1000; ++n)
+            {
+                std::vector<int> c;
+                for (int colour = 0; colour < 8; ++colour)
+                    c.push_back (phi::deal (n, colour, 8, 0.3));
+                combinations.insert (c);
+            }
+            check (inRange && phi::deal (5, 0, 0) == 0, "phi deal stays in range");
+            check (even, "phi deal spreads evenly over the favourites");
+            check (noRepeat, "phi deal never repeats a favourite twice running");
+            check (combinations.size() == 1000, "phi deal gives a new combination every deal");
         }
 
         // The Fibonacci word: hits on 1/φ of the steps, starting on step 0, never periodic.
@@ -3805,6 +3912,74 @@ namespace
             float* t[] { tone.data() };
             eq.process (t, 1, 24000);
             check (near (rmsDb (tone, 12000) - before, 6.0, 0.1), "phi EQ boosts its band by 6 dB");
+        }
+
+        // The Φ EQ's grid, types, cuts and tilt.
+        {
+            check (near (phi::Eq::stepHz (4), phi::Eq::bandHz (1), 1.0e-9) && near (phi::Eq::stepHz (1) / phi::Eq::stepHz (0), std::pow (phi::ratio, 0.25), 1.0e-9)
+                   && phi::Eq::nearestStep (1000.0) == phi::Eq::nearestStep (phi::Eq::stepHz (phi::Eq::nearestStep (1000.0)))
+                   && phi::Eq::nearestStep (1.0e6) == phi::Eq::maxStep && phi::Eq::nearestStep (0.0) == phi::Eq::minStep,
+                   "phi EQ grid is quarter golden steps from 80 Hz");
+            check (near (phi::Eq::stepQ (2, false) / phi::Eq::stepQ (0, false), phi::ratio, 1.0e-9), "phi EQ widths are golden steps");
+
+            auto response = [&] (const phi::Eq::Settings& s, double hz)
+            {
+                phi::Eq e;
+                e.prepare (rate, 1);
+                e.set (s);
+                return e.responseDb (hz);
+            };
+            phi::Eq::Settings s;
+            s.bands[5].type = phi::Eq::Type::notch;
+            check (response (s, phi::Eq::bandHz (5)) < -40.0 && std::abs (response (s, phi::Eq::bandHz (2))) < 0.5, "phi EQ notch cuts only its frequency");
+            s = {};
+            s.bands[5].type = phi::Eq::Type::bandPass;
+            check (near (response (s, phi::Eq::bandHz (5)), 0.0, 0.05) && response (s, phi::Eq::bandHz (1)) < -12.0, "phi EQ band-pass keeps only its band");
+            s = {};
+            s.bands[0].gainDb = 6.0;
+            check (near (response (s, 25.0), 6.0, 0.3) && std::abs (response (s, 2000.0)) < 0.2, "phi EQ low shelf lifts the lows");
+            s = {};
+            s.bands[3].type = phi::Eq::Type::off;
+            s.bands[3].gainDb = 9.0;
+            check (std::abs (response (s, phi::Eq::bandHz (3))) < 1.0e-6, "phi EQ band switched off does nothing");
+
+            for (const auto slope : { 12, 24, 48 })
+            {
+                s = {};
+                s.lowCutHz = 200.0;
+                s.lowCutSlope = slope;
+                const auto octave = response (s, 100.0) - response (s, 50.0);
+                check (near (response (s, 200.0), -3.0, 0.1) && near (octave, (double) slope, slope * 0.1) && std::abs (response (s, 5000.0)) < 0.05,
+                       "phi EQ low cut is " + std::to_string (slope) + " dB an octave");
+                s = {};
+                s.highCutHz = 2000.0;
+                s.highCutSlope = slope;
+                check (near (response (s, 2000.0), -3.0, 0.1) && response (s, 8000.0) < -1.6 * slope && std::abs (response (s, 50.0)) < 0.05,
+                       "phi EQ high cut is " + std::to_string (slope) + " dB an octave");
+            }
+
+            s = {};
+            s.tiltDb = 6.0;
+            check (near (response (s, 20.0), -3.0, 0.3) && near (response (s, 18000.0), 3.0, 0.4) && std::abs (response (s, 1000.0)) < 0.1,
+                   "phi EQ tilt turns about 1 kHz");
+
+            // Moving one band leaves the others' sound running: no stage restarts but its own.
+            phi::Eq e;
+            e.prepare (rate, 1);
+            s = {};
+            s.bands[2].gainDb = 6.0;
+            e.set (s);
+            auto tone = sine (phi::Eq::bandHz (2), 9600);
+            float* t[] { tone.data() };
+            e.process (t, 1, 4800);
+            s.bands[8].gainDb = 3.0;
+            e.set (s);
+            float* rest[] { tone.data() + 4800 };
+            e.process (rest, 1, 4800);
+            float jump = 0.0f;
+            for (int i = 4790; i < 4810; ++i)
+                jump = std::max (jump, std::abs (tone[(size_t) i + 1] - tone[(size_t) i]));
+            check (jump < 0.2f, "phi EQ changes one band without a click in another");
         }
 
         // Φ Echo: an impulse comes back at t, tφ, tφ²..., each 1/φ quieter.
@@ -4055,6 +4230,27 @@ namespace
             check (toneDb (tamed, 24000, 1000.0) - toneDb (ringing, 24000, 1000.0) < -6.0, "phi de-resonator turns a resonance down");
             const auto plain = run (noise);
             check (std::abs (rmsDb (plain, 24000) - rmsDb (noise, 24000)) < 1.5, "phi de-resonator leaves noise nearly alone");
+
+            // Its window's picture: the cut is deepest at the resonance, and the tone stands out there.
+            {
+                phi::Deresonator r;
+                phi::Deresonator::Settings t;
+                t.depth = 1.0;
+                r.prepare (rate, 1);
+                r.set (t);
+                auto y = ringing;
+                float* p[] { y.data() };
+                r.process (p, 1, (int) y.size());
+                std::array<float, phi::Deresonator::pictureSize> level {}, cut {};
+                r.picture (level.data(), cut.data());
+                const auto deepest = (int) (std::min_element (cut.begin(), cut.end()) - cut.begin());
+                const auto loudest = (int) (std::max_element (level.begin(), level.end()) - level.begin());
+                check (std::abs (std::log2 (phi::Deresonator::pictureHz (deepest) / 1000.0)) < 0.15 && cut[(size_t) deepest] < -3.0f,
+                       "phi de-resonator's picture shows its cut at the resonance");
+                check (std::abs (std::log2 (phi::Deresonator::pictureHz (loudest) / 1000.0)) < 0.15 && level[(size_t) loudest] > -30.0f
+                           && level[(size_t) loudest] < 0.0f,
+                       "phi de-resonator's picture shows the tone's level in dB full scale");
+            }
         }
     }
 
@@ -4180,6 +4376,7 @@ int main()
     testMixAssist();
     testSonify();
     testPhi();
+    testPhiVoice();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");
