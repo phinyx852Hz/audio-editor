@@ -379,7 +379,30 @@ Device Chain and drag and drop (owner, 2026-10-25, "very close to Ableton's work
   plugins found) and Audio Effects (built-in, stock, then each plugin format). Drag one onto a
   track's strip, the Inspector or the Device Chain: an instrument takes the instrument's place
   (an Audio track becomes Inst, or Hybrid when it has audio clips), an effect joins the end of the
-  inserts. Enter or a double-click puts it on the selected track. Backspace goes back to the files. The Sampler and Slicer windows of the Sample menu
+  inserts. Enter or a double-click puts it on the selected track. Backspace goes back to the files.
+
+Fast MIDI edits (owner, 2026-10-25: "MIDI editing, but really fast"; "the idea is speed"):
+- No notes are picked or moved by hand. A MIDI clip picked (on the tracks or in the launcher) puts
+  a MIDI Clip section at the top of the Inspector, and R reverses the clip.
+- **Φ** deals the notes out again along the golden ratio. The pitches, velocities and lengths stay
+  the same, and so does the rhythm (the times notes start); which notes start at which of those
+  times changes, and a chord stays together. Every press gives another order.
+- **Duplicate** makes the clip twice as long, the two copies joined into one clip, so Φ then deals
+  across both.
+- **½** keeps every other note or chord, and **×2** plays each note twice in its own time, half as
+  long. Both can be pressed again.
+- **Sa** and **Mode or raga** move every note to the nearest note of a mode (Ionian to Locrian)
+  or one of the major Hindustani ragas: the ten thaats (Bilawal, Yaman, Khamaj, Kafi, Asavari,
+  Bhairavi, Bhairav, Marwa, Purvi, Todi), then Darbari Kanada, Jaunpuri, Bageshri, Bhimpalasi,
+  Desh, Bihag, Kedar, Miyan ki Malhar, Megh, Bhupali, Durga, Hamsadhwani, Malkauns, Jog, Ahir
+  Bhairav, Lalit, Puriya Dhanashri, Shree, Multani and Charukeshi. A note between two goes down,
+  and drums (channel 10) stay. Ragas that share their notes (Darbari, Jaunpuri, Asavari) are each
+  listed. A raga is taken as the notes it uses up and down; its own movement is not followed.
+- Each edit writes a new MIDI file (type 0) next to the mix, in "<mix> Edits", or in Music/PHI
+  Edits until the mix is saved. The clip plays it from the start, as it was heard (a reversed
+  clip is turned round first). Ctrl+Z undoes an edit on the tracks. The code is in
+  mixer/MidiFile.h (phiShuffle, duplicated, halfDensity, doubleDensity, toMode, scales), with
+  tests. The Sampler and Slicer windows of the Sample menu
 could dock into the mixer as track 1 (the other thread's docking work).
 
 Patchbay (2026-10-22, docs/patchbay.md): while the patchbay plays (it always does live), the

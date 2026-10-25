@@ -259,6 +259,17 @@ private:
     void showTimelineClip (int track, uint32_t id);
     void showSlotClip (int track, int scene);
     void updateDevicePanel();                    // shown unless the master is selected
+    // The MIDI clip shown (owner, 2026-10-25: "really fast MIDI editing", from the Inspector):
+    // R reverses it; Φ, Duplicate, ½, ×2 and a mode or raga make a new MIDI file beside the mix.
+    void reverseShownClip();
+    void editShownMidi (const std::function<midifile::SongPtr (const midifile::Song&)>& edit, const QString& what);
+    void refreshMidiClipBox();
+    QString editsFolder() const;   // where edits of the mix's clips are saved
+    QWidget* midiClipBox = nullptr;
+    QLabel* midiClipTitle = nullptr;
+    QComboBox* rootBox = nullptr;
+    QComboBox* scaleBox = nullptr;
+    int phiTurn = 0;
     // Q-Link (Cubase): with it on, a change to one of the picked strips goes to all of them;
     // Alt+Shift sends it to every track. `fn` gets each strip, and whether it is the one changed.
     void forLinked (int track, const std::function<void (mixer::Strip&, bool self)>& fn);

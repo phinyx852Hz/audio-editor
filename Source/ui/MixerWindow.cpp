@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MixerWindow.h"
+#include "PhiMark.h"
 #include "Potentiometer.h"
 #include "SamplerWindow.h"
 #include "Settings.h"
@@ -4317,6 +4318,10 @@ public:
     }
 
     int shownTrack() const { return track; }
+    uint32_t shownId() const { return id; }
+    int shownScene() const { return scene; }
+    bool showsMidi() const { return found && clip.isMidi(); }
+    QString shownName() const { return name; }
 
     // id: the clip on the track's timeline, or 0 with the scene of a launcher slot.
     void set (int t, uint32_t clipId, int s)
@@ -4750,6 +4755,80 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     inspectorLayout = new QVBoxLayout (inspectorArea);
     inspectorLayout->setContentsMargins (0, 0, 0, 0);
     inspectorLayout->setSpacing (4);
+    // A MIDI clip picked: its fast edits at the top (owner, 2026-10-25). No notes are picked or
+    // moved by hand; R reverses it.
+    midiClipBox = new QFrame (inspectorArea);
+    midiClipBox->setObjectName (QStringLiteral ("midiClipBox"));
+    midiClipBox->setStyleSheet (QStringLiteral ("QFrame#midiClipBox { border: 1px solid palette(mid); border-radius: 4px; }"));
+    {
+        auto* grid = new QGridLayout (midiClipBox);
+        grid->setContentsMargins (6, 6, 6, 6);
+        grid->setSpacing (4);
+        midiClipTitle = new QLabel (midiClipBox);
+        auto bold = midiClipTitle->font();
+        bold.setBold (true);
+        midiClipTitle->setFont (bold);
+        grid->addWidget (midiClipTitle, 0, 0, 1, 4);
+        auto* phi = new PhiButton (tr ("Φ: the notes' places dealt out again"), midiClipBox, false);
+        phi->setToolTip (tr ("Φ: the same pitches and the same rhythm, the notes dealt out again along the golden ratio. "
+                             "Again for another order"));
+        auto* duplicate = new QPushButton (tr ("Duplicate"), midiClipBox);
+        duplicate->setToolTip (tr ("The clip twice as long, the two joined into one, so Φ deals across both"));
+        auto* half = new QPushButton (QStringLiteral ("½"), midiClipBox);
+        half->setToolTip (tr ("Half the density: every other note or chord kept. Again for a quarter"));
+        auto* twice = new QPushButton (QStringLiteral ("×2"), midiClipBox);
+        twice->setToolTip (tr ("Double the density: each note played twice in its own time. Again for four times"));
+        grid->addWidget (phi, 1, 0);
+        grid->addWidget (duplicate, 1, 1);
+        grid->addWidget (half, 1, 2);
+        grid->addWidget (twice, 1, 3);
+        rootBox = new QComboBox (midiClipBox);
+        rootBox->setToolTip (tr ("The root, or Sa"));
+        for (const auto* n : { "C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B" })
+            rootBox->addItem (QString::fromLatin1 (n));
+        scaleBox = new QComboBox (midiClipBox);
+        scaleBox->setToolTip (tr ("Every note to the nearest of a mode or raga on the root (drums stay)"));
+        scaleBox->addItem (tr ("Mode or raga..."), -1);
+        QString family;
+        const auto& scales = midifile::scales();
+        for (int i = 0; i < (int) scales.size(); ++i)
+        {
+            if (family != QLatin1String (scales[(size_t) i].family))
+            {
+                scaleBox->insertSeparator (scaleBox->count());
+                family = QLatin1String (scales[(size_t) i].family);
+            }
+            scaleBox->addItem (QString::fromUtf8 (scales[(size_t) i].name), i);
+        }
+        grid->addWidget (new QLabel (tr ("Sa"), midiClipBox), 2, 0);
+        grid->addWidget (rootBox, 2, 1);
+        grid->addWidget (scaleBox, 2, 2, 1, 2);
+        auto* hint = new QLabel (tr ("R reverses it"), midiClipBox);
+        hint->setForegroundRole (QPalette::PlaceholderText);
+        grid->addWidget (hint, 3, 0, 1, 4);
+
+        connect (phi, &QToolButton::clicked, this, [this]
+        {
+            const auto turn = phiTurn++;
+            editShownMidi ([turn] (const midifile::Song& s) { return midifile::phiShuffle (s, turn); }, tr ("Φ: the notes dealt out again"));
+        });
+        connect (duplicate, &QPushButton::clicked, this, [this] { editShownMidi ([] (const midifile::Song& s) { return midifile::duplicated (s); }, tr ("Duplicated into one clip")); });
+        connect (half, &QPushButton::clicked, this, [this] { editShownMidi ([] (const midifile::Song& s) { return midifile::halfDensity (s); }, tr ("Half the density")); });
+        connect (twice, &QPushButton::clicked, this, [this] { editShownMidi ([] (const midifile::Song& s) { return midifile::doubleDensity (s); }, tr ("Double the density")); });
+        auto applyScale = [this]
+        {
+            const auto scale = scaleBox->currentData().toInt();
+            if (scale < 0)
+                return;
+            const auto root = rootBox->currentIndex();
+            editShownMidi ([root, scale] (const midifile::Song& s) { return midifile::toMode (s, root, scale); },
+                           tr ("In %1 on %2").arg (scaleBox->currentText(), rootBox->currentText()));
+        };
+        connect (scaleBox, &QComboBox::activated, this, applyScale);
+        connect (rootBox, &QComboBox::activated, this, applyScale);
+    }
+    midiClipBox->hide();
+    inspectorLayout->addWidget (midiClipBox);
     inspectorLayout->addWidget (rack);
     inspectorLayout->addStretch (1);
     inspectorScroll = new QScrollArea (this);
@@ -4945,7 +5024,7 @@ void MixerWindow::refreshInspector()
         if (inspectorStrip == nullptr && track >= 0)
         {
             inspectorStrip = new MixerStrip (*this, track, true);
-            inspectorLayout->insertWidget (0, inspectorStrip);
+            inspectorLayout->insertWidget (inspectorLayout->indexOf (midiClipBox) + 1, inspectorStrip);
         }
         if (inspectorStrip != nullptr)
         {
@@ -4959,7 +5038,130 @@ void MixerWindow::refreshInspector()
             showDevices();   // the clip went
         else if (! showingClip)
             devices->refresh();
+        refreshMidiClipBox();
     });
+}
+
+void MixerWindow::refreshMidiClipBox()
+{
+    if (midiClipBox == nullptr)
+        return;
+    const bool show = showingClip && clipView->showsMidi();
+    midiClipBox->setVisible (show);
+    if (show)
+        midiClipTitle->setText (tr ("MIDI Clip: %1").arg (clipView->shownName()));
+}
+
+QString MixerWindow::editsFolder() const
+{
+    // Beside the mix (in the Music folder until it is saved); the originals are left as they were.
+    return path.isEmpty() ? QDir (QStandardPaths::writableLocation (QStandardPaths::MusicLocation)).filePath (tr ("PHI Edits"))
+                          : QFileInfo (path).absoluteDir().filePath (QFileInfo (path).completeBaseName() + tr (" Edits"));
+}
+
+void MixerWindow::reverseShownClip()
+{
+    if (! showingClip)
+        return;
+    const auto track = clipView->shownTrack();
+    if (const auto id = clipView->shownId(); id != 0)
+    {
+        remember();
+        auto list = engine.clips (track);
+        for (auto& c : list)
+            if (c.id == id)
+            {
+                c.offset = c.sourceLength() - c.offset - c.length;
+                c.reversed = ! c.reversed;
+                if (c.midi != nullptr)
+                    c.midi = mixer::reverseMidi (*c.midi);
+            }
+        editClips (track, std::move (list));
+    }
+    else
+        editSlot (track, clipView->shownScene(), [] (mixer::Slot& x)
+        {
+            x.clip.reversed = ! x.clip.reversed;
+            if (x.clip.midi != nullptr)
+                x.clip.midi = mixer::reverseMidi (*x.clip.midi);
+        });
+    status->setText (tr ("Reversed (R again turns it back)"));
+    changed();
+}
+
+void MixerWindow::editShownMidi (const std::function<midifile::SongPtr (const midifile::Song&)>& edit, const QString& what)
+{
+    if (! showingClip || ! clipView->showsMidi())
+        return;
+    const auto track = clipView->shownTrack();
+    const auto id = clipView->shownId();
+    const auto scene = clipView->shownScene();
+    mixer::Clip clip;
+    if (id != 0)
+    {
+        for (const auto& c : engine.clips (track))
+            if (c.id == id)
+                clip = c;
+    }
+    else if (scene >= 0 && slots[(size_t) track][(size_t) scene] != nullptr)
+        clip = slots[(size_t) track][(size_t) scene]->clip;
+    if (clip.midi == nullptr || clip.midi->song == nullptr)
+        return;
+    auto song = clip.midi->song;
+    if (song->ticksPerQuarter <= 0)
+    {
+        status->setText (tr ("This MIDI file counts in SMPTE time, so it cannot be edited here."));
+        return;
+    }
+    // Edited as it is heard: a reversed clip is turned round first, and stays that way.
+    if (clip.reversed)
+        song = midifile::reversed (*song);
+    const auto edited = edit (*song);
+
+    const auto base = editsFolder();
+    QDir().mkpath (base);
+    auto stem = QFileInfo (QString::fromStdString (clip.midi->path)).completeBaseName();
+    if (stem.isEmpty())
+        stem = tr ("MIDI");
+    stem.replace (QRegularExpression (QStringLiteral ("[/\\\\:*?\"<>|]")), QStringLiteral ("_"));
+    stem.remove (QRegularExpression (QStringLiteral (" \\d+$")));   // "riff 3" becomes "riff 4", not "riff 3 2"
+    QString file;
+    for (int n = 2; file.isEmpty() || QFileInfo::exists (file); ++n)
+        file = QDir (base).filePath (QStringLiteral ("%1 %2.mid").arg (stem).arg (n));
+    std::string why;
+    if (! midifile::write (*edited, file.toStdString(), why))
+    {
+        status->setText (tr ("The edit could not be saved to %1: %2").arg (file, QString::fromStdString (why)));
+        return;
+    }
+    const auto bpm = followTempoBox->isChecked() ? tempoBox->value() : 0.0;
+    if (id != 0)
+    {
+        remember();
+        auto list = engine.clips (track);
+        for (auto& c : list)
+            if (c.id == id)
+            {
+                c.midi = mixer::placeMidi (edited, file.toStdString(), rate(), bpm);
+                c.offset = 0;
+                c.length = c.midi->length;
+                c.reversed = false;
+            }
+        editClips (track, std::move (list));
+        status->setText (tr ("%1 (Ctrl+Z puts it back)").arg (what));
+    }
+    else
+    {
+        editSlot (track, scene, [this, &edited, &file] (mixer::Slot& x)
+        {
+            x.clip.midi = launcherMidi (edited, file.toStdString());
+            x.clip.offset = 0;
+            x.clip.length = x.clip.midi->length;
+            x.clip.reversed = false;
+        });
+        status->setText (what);
+    }
+    changed();
 }
 
 bool MixerWindow::devicePanelShown() const { return devicePanel != nullptr && ! devicePanel->isHidden(); }
@@ -4968,6 +5170,7 @@ void MixerWindow::updateDevicePanel()
 {
     if (devicePanel == nullptr)
         return;
+    refreshMidiClipBox();
     const bool show = selected < mixer::masterIndex;
     if (devicePanel->isHidden() == show)
     {
@@ -6373,7 +6576,13 @@ void MixerWindow::keyPressEvent (QKeyEvent* e)
             {
                 case Qt::Key_M: strip->muteButton->toggle(); return;
                 case Qt::Key_S: strip->soloButton->toggle(); return;
-                case Qt::Key_R: arm (selected); return;
+                case Qt::Key_R:
+                    // A clip picked: R reverses it (owner, 2026-10-25); else it arms the track.
+                    if (showingClip)
+                        reverseShownClip();
+                    else
+                        arm (selected);
+                    return;
                 case Qt::Key_A: chooseAudio (selected); return;
                 case Qt::Key_I: chooseMidi (selected); return;
                 case Qt::Key_E: editInstrument (selected); return;
@@ -7208,8 +7417,7 @@ bool MixerWindow::replaceClipAudio (int track, uint32_t id, const AudioData& edi
     }
 
     // Saved beside the mix (in the Music folder until it is saved), the original left as it was.
-    const auto base = path.isEmpty() ? QDir (QStandardPaths::writableLocation (QStandardPaths::MusicLocation)).filePath (tr ("PHI Edits"))
-                                     : QFileInfo (path).absoluteDir().filePath (QFileInfo (path).completeBaseName() + tr (" Edits"));
+    const auto base = editsFolder();
     QDir().mkpath (base);
     auto stem = name;
     stem.replace (QRegularExpression (QStringLiteral ("[/\\\\:*?\"<>|]")), QStringLiteral ("_"));
