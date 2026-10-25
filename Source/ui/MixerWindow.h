@@ -175,6 +175,19 @@ public:
     // "instrument\n<id>", or "synth", "sampler", "slicer".
     static QString pluginMime() { return QStringLiteral ("application/x-phi-plugin"); }
 
+    // The column left of the tracks (owner, 2026-10-25): the Finder until a track is picked,
+    // then the Inspector in its place; Ctrl+F brings the Finder back. In the editor's place the
+    // Finder is the editor's Find panel (finderWanted shows or hides it); in a window of its
+    // own it is the mixer's browser.
+    void showSideFinder (bool finder);
+    bool sideFinderShown() const { return finderShown; }
+    void engageTrack();   // a track clicked or picked: the Inspector takes the Finder's place
+    // The parts of the mixer that take the keyboard when pointed at (Focus Follows Mouse).
+    QList<QWidget*> focusAreas() const;
+    // A sound from the editor into the launcher (owner, 2026-10-25): saved as a WAV beside the
+    // mix and put in the slot under the launcher's cursor, or the selected track's first empty one.
+    bool sendAudioToLauncher (const AudioData& sound, const QString& name, QString& error);
+
 Q_SIGNALS:
     void mixdownRequested();
     void midiInputsRequested();
@@ -183,6 +196,7 @@ Q_SIGNALS:
     void playStarted();   // so the main window makes sure the mixer is heard
     void editClipRequested (int track, quint32 clip);
     void devicePanelChanged();   // shown or hidden
+    void finderWanted (bool show);   // in the editor's place: the editor's Find panel shown or hidden
 
 protected:
     void keyPressEvent (class QKeyEvent*) override;
@@ -264,6 +278,7 @@ private:
     void reverseShownClip();
     void editShownMidi (const std::function<midifile::SongPtr (const midifile::Song&)>& edit, const QString& what);
     void refreshMidiClipBox();
+    void phiShownMidi();   // Φ: the notes dealt out again, another order each time
     QString editsFolder() const;   // where edits of the mix's clips are saved
     // An audio clip shown: Paulstretch makes it the remembered number of times longer, with the
     // editor's Extreme Stretch settings, saved beside the mix (owner, 2026-10-25).
@@ -347,7 +362,9 @@ private:
     QScrollArea* inspectorScroll = nullptr;
     MixerStrip* inspectorStrip = nullptr;   // the selected track's, rebuilt when the selection moves
     bool inspectorPending = false;
-    QSplitter* bottomSplitter = nullptr;     // everything above, the Device Chain below
+    QStackedWidget* sideStack = nullptr;     // the Finder (mixer's browser) or the Inspector
+    bool finderShown = true;
+    void toggleDevicePanel();   // Shift+Tab over the bottom panel: the Device Chain or the clip
     QStackedWidget* devicePanel = nullptr;
     TrackDevices* devices = nullptr;
     ClipView* clipView = nullptr;

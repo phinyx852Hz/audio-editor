@@ -77,6 +77,8 @@ void MainWindow::registerMixerCommands()
     });
     add ("mixer.mixdown", tr ("Mix &Down to Editor"), { KS (Qt::CTRL | Qt::Key_F3) }, [this] { mixDownToEditor(); })
         ->setStatusTip (tr ("Render the whole mix, with the instruments' tails, into a new stereo tab"));
+    add ("mixer.sendToLauncher", tr ("Send to Clip &Launcher"), { KS (Qt::ALT | Qt::Key_F3) }, [this] { sendToLauncher(); })
+        ->setStatusTip (tr ("The sound in the editor (or its selection) into the mixer's clip launcher, under its cursor or in the selected track's first empty slot"));
     add ("mixer.assistant", tr ("Mix &Assistant..."), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_X) }, [this] { mixAssistant(); })
         ->setStatusTip (tr ("Sets the faders and pans of the mix by what each track is, with headroom for mastering"));
 }
@@ -109,7 +111,16 @@ MixerWindow* MainWindow::mixerWindow()
         connect (mixerWin, &MixerWindow::playStarted, this, [this] { playInstruments(); });
         connect (mixerWin, &MixerWindow::editClipRequested, this, [this] (int track, quint32 clip) { editMixerClip (track, clip); });
         connect (mixerWin, &MixerWindow::devicePanelChanged, this, [this] { updateChainDock(); });
-        connect (centralStack, &QStackedWidget::currentChanged, this, [this] { updateChainDock(); });
+        connect (centralStack, &QStackedWidget::currentChanged, this, [this] { updateChainDock(); updateFindDock(); });
+        connect (mixerWin, &MixerWindow::finderWanted, this, [this] (bool show) { mixerFinder (show); });
+        // The Find panel closed by hand while it was the Finder: the Inspector takes its place.
+        connect (findPanel->dock(), &QDockWidget::visibilityChanged, mixerWin, [this] (bool visible)
+        {
+            if (! visible && ! hidingFindForMixer && mixerDocked() && centralStack->currentWidget() == mixerWin
+                && mixerWin->sideFinderShown() && ! findPanel->isShown())
+                mixerWin->showSideFinder (false);
+        });
+        focusFollowsMouse->addAreas (mixerWin->focusAreas());
         connect (mixerWin, &MixerWindow::closed, this, [this]
         {
             mixerEngine->panic();
@@ -233,9 +244,10 @@ void MainWindow::returnMixerEdits()
 
 void MainWindow::updateChainDock()
 {
+    // The mixer has its own along its bottom; the editor's would show twice.
     auto* dock = chainPanel->dock();
     const bool mixerOwns = mixerDocked() && centralStack->currentWidget() == mixerWin && mixerWin->devicePanelShown();
-    if (mixerOwns && ! chainPanel->isPoppedOut() && dock->isVisible() && ! dock->isFloating())
+    if (mixerOwns && ! chainPanel->isPoppedOut() && dock->isVisible())
     {
         chainHiddenForMixer = true;
         dock->hide();
@@ -245,6 +257,59 @@ void MainWindow::updateChainDock()
         chainHiddenForMixer = false;
         dock->show();
     }
+}
+
+void MainWindow::mixerFinder (bool show)
+{
+    if (! mixerDocked() || centralStack->currentWidget() != mixerWin)
+        return;
+    if (show)
+    {
+        findHiddenForMixer = false;
+        findPanel->show (true);
+        return;
+    }
+    if (findPanel->isShown())
+    {
+        findHiddenForMixer = true;
+        hidingFindForMixer = true;
+        findPanel->hide();
+        hidingFindForMixer = false;
+    }
+}
+
+void MainWindow::updateFindDock()
+{
+    const bool mixerInFront = mixerDocked() && centralStack->currentWidget() == mixerWin;
+    if (mixerInFront)
+        mixerWin->showSideFinder (mixerWin->sideFinderShown());
+    else if (findHiddenForMixer)
+    {
+        findHiddenForMixer = false;
+        findPanel->show (false);
+    }
+}
+
+void MainWindow::sendToLauncher()
+{
+    if (! doc.isOpen() || doc.isAlbum() || doc.current().data == nullptr)
+    {
+        statusBar()->showMessage (tr ("Open a sound first"), 5000);
+        return;
+    }
+    const auto& data = *doc.current().data;
+    const bool part = selEnd > selStart;
+    const auto sound = part ? data.slice (selStart, selEnd) : nullptr;
+    auto name = QFileInfo (QString::fromStdString (doc.path())).completeBaseName();
+    if (name.isEmpty())
+        name = tabName (doc);
+    if (part)
+        name += tr (" part");
+    auto* w = mixerWindow();
+    showMixer();
+    QString error;
+    if (! w->sendAudioToLauncher (part ? *sound : data, name, error))
+        QMessageBox::warning (w, tr ("Send to Clip Launcher"), error);
 }
 
 bool MainWindow::mixerDocked() const
@@ -274,6 +339,7 @@ void MainWindow::placeMixer (bool docked)
         }
         centralStack->setCurrentWidget (w);
         w->show();
+        w->showSideFinder (w->sideFinderShown());
         activateWindow();
         w->setFocus();
         midiTarget = 2;
@@ -286,7 +352,9 @@ void MainWindow::placeMixer (bool docked)
         showEditorPage();
         w->setParent (this, Qt::Window);
         w->setGeometry (area.adjusted (4, 4, -4, -4));
+        updateFindDock();
     }
+    w->showSideFinder (w->sideFinderShown());
     w->show();
     w->raise();
     w->activateWindow();

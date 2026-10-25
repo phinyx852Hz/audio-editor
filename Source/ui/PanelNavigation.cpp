@@ -74,6 +74,8 @@ void MainWindow::buildNavigation()
     auto areas = QList<QWidget*> { waveform, chainRow, masterWidget, markerList, historyList, diagnostics, findWidget, referencePanel,
                                    ambiSceneView, metersPanel->content(), samplerWin, slicerWin };
     focusFollowsMouse->setAreas (areas);
+    if (mixerWin != nullptr)
+        focusFollowsMouse->addAreas (mixerWin->focusAreas());
 
     setAcceptDrops (true);
 }
