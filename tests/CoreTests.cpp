@@ -22,11 +22,13 @@
 #include "../Source/core/Pitch.h"
 #include "../Source/core/PitchFix.h"
 #include "../Source/core/TimeStretch.h"
+#include "../Source/core/Paulstretch.h"
 #include "../Source/core/Quantize.h"
 #include "../Source/core/Binaural.h"
 #include "../Source/core/Ambisonics.h"
 #include "../Source/core/SpatialStudio.h"
 #include "../Source/core/PhiVoice.h"
+#include "../Source/core/PhiPhaser.h"
 #include "../Source/core/PrismSplit.h"
 #include "../Source/core/MasterAssist.h"
 #include "../Source/mixer/MixAssist.h"
@@ -1308,6 +1310,72 @@ namespace
         auto cut = w.bytes;
         cut.resize (cut.size() - 8);
         check (midifile::parse (cut.data(), cut.size(), error) != nullptr, "midi file: a truncated file still reads");
+    }
+
+    // The fast MIDI edits (owner, 2026-10-25): four quarter notes C D E G in one bar of 4/4.
+    void testMidiEdits()
+    {
+        auto song = std::make_shared<midifile::Song>();
+        song->ticksPerQuarter = 480;
+        song->tempos.push_back ({ 0, 500000.0 });
+        const uint8_t pitches[] { 60, 62, 64, 67 };
+        for (int i = 0; i < 4; ++i)
+        {
+            song->events.push_back ({ i * 480, 0x90, pitches[i], (uint8_t) (90 + i) });
+            song->events.push_back ({ i * 480 + 240, 0x80, pitches[i], 0 });
+        }
+        song->lastTick = 1680;
+        song->channelsUsed = 1;
+        auto notes = [] (const midifile::Song& s)
+        {
+            std::vector<std::pair<int64_t, int>> out;   // start, pitch
+            for (const auto& e : s.events)
+                if (e.kind() == 0x90 && e.data2 > 0)
+                    out.push_back ({ e.tick, e.data1 });
+            return out;
+        };
+        check (midifile::span (*song) == 1920, "midi edits: a loop is whole bars long");
+
+        // Written and read back the same.
+        std::string error;
+        const auto data = midifile::bytes (*song);
+        const auto again = midifile::parse (data.data(), data.size(), error);
+        check (again != nullptr && notes (*again) == notes (*song) && again->lastTick == 1680 && near (again->fileBpm(), 120.0, 1.0e-9),
+               "midi edits: a song written as a type 0 file reads back the same");
+
+        // Φ: the same starts and pitches, other pairs of them, and another order each turn.
+        const auto a = midifile::phiShuffle (*song, 0), b = midifile::phiShuffle (*song, 1);
+        auto starts = [&] (const midifile::Song& s) { std::vector<int64_t> v; for (auto& n : notes (s)) v.push_back (n.first); std::sort (v.begin(), v.end()); return v; };
+        auto pitchSet = [&] (const midifile::Song& s) { std::vector<int> v; for (auto& n : notes (s)) v.push_back (n.second); std::sort (v.begin(), v.end()); return v; };
+        check (starts (*a) == starts (*song) && pitchSet (*a) == pitchSet (*song) && notes (*a) != notes (*song),
+               "midi edits: phi keeps the rhythm and the pitches and moves the notes");
+        check (notes (*a) != notes (*b), "midi edits: phi again gives another order");
+        check (a->noteCount() == 4 && a->events.size() == 8, "midi edits: phi keeps every note with its note-off");
+
+        const auto twice = midifile::duplicated (*song);
+        check (twice->noteCount() == 8 && twice->lastTick == 3840 && notes (*twice)[4] == std::make_pair<int64_t, int> (1920, 60),
+               "midi edits: duplicated, the loop plays twice as one");
+        const auto half = midifile::halfDensity (*song);
+        check (notes (*half) == (std::vector<std::pair<int64_t, int>> { { 0, 60 }, { 960, 64 } }), "midi edits: half the density keeps every other note");
+        const auto dbl = midifile::doubleDensity (*song);
+        check (dbl->noteCount() == 8 && notes (*dbl)[1] == std::make_pair<int64_t, int> (120, 60), "midi edits: double the density plays each note twice");
+        const auto back = midifile::reversed (*song);
+        check (notes (*back).front() == std::make_pair<int64_t, int> (1440 - 1440 + 0, 67) || notes (*back).front().second == 67,
+               "midi edits: reversed, the last note comes first");
+
+        // D Dorian on C D E G: C goes down to B? No: C is in D Dorian (D E F G A B C), E stays, all stay.
+        const auto dorian = midifile::toMode (*song, 2, 1);
+        check (pitchSet (*dorian) == (std::vector<int> { 60, 62, 64, 67 }), "midi edits: notes already in the mode stay");
+        // C Phrygian (C Db Eb F G Ab Bb): D goes down to Db, E down to Eb.
+        const auto phrygian = midifile::toMode (*song, 0, 2);
+        check (pitchSet (*phrygian) == (std::vector<int> { 60, 61, 63, 67 }), "midi edits: notes move to the nearest of the mode, down when between");
+        // Ragas: Malkauns (S g m d n) on C, and Darbari and Jaunpuri listed with Asavari's notes.
+        const auto& scales = midifile::scales();
+        auto find = [&] (const std::string& name) { for (size_t i = 0; i < scales.size(); ++i) if (name == scales[i].name) return (int) i; return -1; };
+        const auto malkauns = find ("Malkauns");
+        check (malkauns >= 0 && pitchSet (*midifile::toMode (*song, 0, malkauns)) == (std::vector<int> { 60, 63, 63, 68 }), "midi edits: a raga's notes, pentatonic");
+        check (find ("Darbari Kanada") >= 0 && find ("Jaunpuri") >= 0 && scales[(size_t) find ("Darbari Kanada")].notes == scales[(size_t) find ("Asavari")].notes
+               && scales[(size_t) find ("Jaunpuri")].notes == scales[(size_t) find ("Asavari")].notes, "midi edits: ragas sharing their notes are each listed");
     }
 
     // An instrument that writes down what it was sent and plays a constant level while a note is held.
@@ -2938,8 +3006,8 @@ namespace
             }
         }
 
-        // Texture and Smooth: the lengths asked for, and a tone keeps about its level.
-        for (const auto mode : { timestretch::Mode::texture, timestretch::Mode::smooth })
+        // Texture, Smooth and Ambient: the lengths asked for, and a tone keeps about its level.
+        for (const auto mode : { timestretch::Mode::texture, timestretch::Mode::smooth, timestretch::Mode::ambient })
         {
             const auto out = timestretch::stretch (*stereo, 0, stereo->length(), 1.5, mode, error);
             check (out != nullptr && out->length() == 144000, std::string (timestretch::modeName (mode)) + " stretches to the length asked for");
@@ -2952,6 +3020,132 @@ namespace
                 const auto rms = std::sqrt (sum / 96000.0);
                 check (rms > 0.25 && rms < 0.5, std::string (timestretch::modeName (mode)) + " keeps the tone's level: " + std::to_string (rms));
             }
+        }
+
+        // Paulstretch: a chord of 220 Hz harmonics, 4 times as long, keeps its partials, level and
+        // channels; the spectral chain moves, keeps or removes partials as asked.
+        {
+            std::vector<float> chord (48000);
+            for (size_t i = 0; i < chord.size(); ++i)
+                for (int h = 1; h <= 8; ++h)
+                    chord[i] += (float) (0.1 * std::sin (2.0 * M_PI * 220.0 * h * (double) i / rate));
+            std::vector<float> fifth (48000);
+            for (size_t i = 0; i < fifth.size(); ++i)
+                fifth[i] = (float) (0.3 * std::sin (2.0 * M_PI * 330.0 * (double) i / rate));
+            const auto source = build ({ chord, fifth });
+            // The level within 10 Hz of `hz` in the middle half of x (a sine of amplitude a reads
+            // about a): the stretched partials are smeared over a few Hz, so their power is summed.
+            auto at = [&] (const std::vector<float>& x, double hz)
+            {
+                const auto from = x.size() / 4, to = 3 * x.size() / 4;
+                const auto step = rate / (double) (to - from);
+                double power = 0.0;
+                for (auto f = hz - 10.0; f <= hz + 10.0; f += step)
+                {
+                    const auto c = 2.0 * std::cos (2.0 * M_PI * f / rate);
+                    double s1 = 0.0, s2 = 0.0;
+                    for (size_t i = from; i < to; ++i)
+                    {
+                        const auto s0 = x[i] + c * s1 - s2;
+                        s2 = s1;
+                        s1 = s0;
+                    }
+                    const auto a = std::sqrt (std::max (0.0, s1 * s1 + s2 * s2 - c * s1 * s2)) / (double) (to - from) * 2.0;
+                    power += a * a;
+                }
+                return std::sqrt (power);
+            };
+            auto rmsOf = [] (const std::vector<float>& x)
+            {
+                double sum = 0.0;
+                for (size_t i = x.size() / 4; i < 3 * x.size() / 4; ++i)
+                    sum += (double) x[i] * x[i];
+                return std::sqrt (sum / (double) (x.size() / 2));
+            };
+            auto run = [&] (const paulstretch::Settings& settings, double ratio = 4.0)
+            {
+                return paulstretch::stretch (*source, 0, source->length(), ratio, settings, error);
+            };
+
+            const auto plain = run ({});
+            check (plain != nullptr && plain->length() == 192000, "Paulstretch gives exactly 4 times the length");
+            if (plain != nullptr)
+            {
+                const auto l = channel (*plain, 0), r = channel (*plain, 1);
+                check (std::abs (rmsOf (l) - 0.2) < 0.03, "Paulstretch keeps the level: " + std::to_string (rmsOf (l)));
+                check (at (l, 440.0) > 0.05 && at (l, 330.0) < 0.01 && at (r, 330.0) > 0.15 && at (r, 440.0) < 0.01,
+                       "Paulstretch keeps each channel's partials and nothing else");
+            }
+            paulstretch::Settings up;
+            up.pitchSemitones = 12.0;
+            if (const auto o = run (up))
+                check (at (channel (*o, 1), 660.0) > 0.15 && at (channel (*o, 1), 330.0) < 0.01, "pitch +12 moves 330 Hz to 660 Hz");
+            paulstretch::Settings shifted;
+            shifted.frequencyShiftHz = 100.0;
+            if (const auto o = run (shifted))
+                check (at (channel (*o, 1), 430.0) > 0.15 && at (channel (*o, 1), 330.0) < 0.01, "a 100 Hz shift moves 330 Hz to 430 Hz");
+            paulstretch::Settings harmonics;
+            harmonics.harmonics = 2;
+            harmonics.harmonicsHz = 220.0;
+            if (const auto o = run (harmonics))
+            {
+                const auto l = channel (*o, 0);
+                check (at (l, 440.0) > 0.05 && at (l, 660.0) < 0.01 && at (l, 1320.0) < 0.01, "two harmonics keep 220 and 440 Hz only");
+            }
+            paulstretch::Settings band;
+            band.lowHz = 500.0;
+            band.highHz = 1000.0;
+            if (const auto o = run (band))
+            {
+                const auto l = channel (*o, 0);
+                check (at (l, 660.0) > 0.05 && at (l, 440.0) < 0.01 && at (l, 1320.0) < 0.01, "the band filter keeps 500 Hz to 1 kHz");
+            }
+            band.bandStop = true;
+            if (const auto o = run (band))
+            {
+                const auto l = channel (*o, 0);
+                check (at (l, 660.0) < 0.01 && at (l, 440.0) > 0.05, "the band stop removes 500 Hz to 1 kHz");
+            }
+            paulstretch::Settings mix;
+            mix.ratioLevels = { 0, 1, 0, 0, 0, 0, 0, 0 };
+            if (const auto o = run (mix))
+                check (at (channel (*o, 1), 165.0) > 0.15 && at (channel (*o, 1), 330.0) < 0.01, "the ratio mix at ½ only moves 330 Hz to 165 Hz");
+            paulstretch::Settings noise;
+            noise.tonalNoise = -1.0;
+            if (const auto o = run (noise))
+                check (rmsOf (channel (*o, 0)) < 0.05, "noise only removes most of a chord");
+            const auto again = run ({});
+            if (plain != nullptr && again != nullptr)
+                check (channel (*plain, 0) == channel (*again, 0), "the same seed renders the same result");
+
+            // Keep Hits: clicks every half second, 8 times as long, sound for less of the time.
+            std::vector<float> clicks (96000);
+            for (int k = 0; k < 4; ++k)
+                for (int i = 0; i < 2000; ++i)
+                    clicks[(size_t) (k * 24000 + i)] = (float) (0.8 * std::exp (-i / 300.0) * std::sin (i * 0.3));
+            const auto hits = build ({ clicks });
+            auto active = [&] (double onsets)
+            {
+                paulstretch::Settings settings;
+                settings.onsets = onsets;
+                const auto o = paulstretch::stretch (*hits, 0, hits->length(), 8.0, settings, error);
+                int n = 0;
+                if (o != nullptr)
+                {
+                    const auto x = channel (*o, 0);
+                    for (size_t i = 0; i + 2400 <= x.size(); i += 2400)
+                    {
+                        double sum = 0.0;
+                        for (size_t j = i; j < i + 2400; ++j)
+                            sum += (double) x[j] * x[j];
+                        n += std::sqrt (sum / 2400.0) > 0.01;
+                    }
+                }
+                return n;
+            };
+            const auto smeared = active (0.0), kept = active (1.0);
+            check (kept < smeared * 0.8, "Keep Hits makes stretched clicks shorter: " + std::to_string (kept) + " of " + std::to_string (smeared));
+            check (paulstretch::stretch (*hits, 0, hits->length(), 100000.0, {}, error) == nullptr, "Paulstretch refuses results over an hour");
         }
     }
 
@@ -3918,6 +4112,92 @@ namespace
         check (delay > 0.0 && delay <= phi::Chorus::maxDelayMs, "phi chorus delays stay inside its line");
     }
 
+    // Φ Phaser: stages φ apart, a sweep that never repeats, and a response that matches what it does.
+    void testPhiPhaser()
+    {
+        phi::Phaser::Settings s;
+        check (near (phi::Phaser::stageHz (s, 3, 0.0) / phi::Phaser::stageHz (s, 2, 0.0), phi::ratio, 1.0e-9)
+               && near (phi::Phaser::stageHz (s, 2, 0.0), s.centreHz, 1.0e-9), "phi phaser: stages a golden ratio apart around the centre");
+        {
+            auto classic = s;
+            classic.spread = 0.0;
+            check (near (phi::Phaser::stageHz (classic, 0, 0.0), phi::Phaser::stageHz (classic, 4, 0.0), 1.0e-9), "phi phaser: no spread is a classic phaser");
+        }
+        bool bounded = true;
+        for (int i = 0; i < 1000; ++i)
+            bounded = bounded && std::abs (phi::Phaser::lfo (i * 0.037, 0.5, 0.0)) <= 1.0 + 1.0e-12;
+        check (bounded, "phi phaser: the LFOs stay within -1 and 1");
+        check (std::abs (phi::Phaser::lfo (0.3, 0.5, 0.0) - phi::Phaser::lfo (2.3, 0.5, 0.0)) > 0.01, "phi phaser: a slow cycle later the sweep is elsewhere");
+
+        // With the LFOs still, its impulse response is the response it draws.
+        {
+            auto still = s;
+            still.depth = 0.0;
+            phi::Phaser p;
+            p.prepare (48000.0, 2);
+            p.set (still);
+            p.reset();
+            const int n = 1 << 16;
+            std::vector<float> left ((size_t) n), right ((size_t) n);
+            left[0] = right[0] = 1.0f;
+            float* channels[] = { left.data(), right.data() };
+            p.process (channels, 2, n);
+            bool matches = true;
+            for (const double hz : { 300.0, 1000.0, 3000.0 })
+            {
+                double re = 0.0, im = 0.0;
+                for (int i = 0; i < n; ++i)
+                {
+                    re += left[(size_t) i] * std::cos (6.283185307179586 * hz * i / 48000.0);
+                    im -= left[(size_t) i] * std::sin (6.283185307179586 * hz * i / 48000.0);
+                }
+                matches = matches && near (10.0 * std::log10 (re * re + im * im), phi::Phaser::responseDb (still, hz, 48000.0), 0.1);
+            }
+            check (matches, "phi phaser: the drawn response is what it does");
+            double deepest = 0.0;
+            for (int i = 0; i < 400; ++i)
+                deepest = std::min (deepest, phi::Phaser::responseDb (still, 20.0 * std::pow (1000.0, i / 399.0), 48000.0));
+            check (deepest < -12.0, "phi phaser: it cuts notches");
+        }
+
+        // No mix leaves the sound alone; full feedback on 13 stages stays stable.
+        {
+            auto dry = s;
+            dry.mix = 0.0;
+            phi::Phaser p;
+            p.prepare (48000.0, 1);
+            p.set (dry);
+            p.reset();
+            std::vector<float> x (4800);
+            for (size_t i = 0; i < x.size(); ++i)
+                x[i] = (float) std::sin (i * 0.01);
+            auto y = x;
+            float* channels[] = { y.data() };
+            p.process (channels, 1, (int) y.size());
+            check (y == x, "phi phaser: no mix is the dry sound");
+
+            auto wild = s;
+            wild.stages = 13;
+            wild.feedback = -0.9;
+            wild.depth = 1.0;
+            wild.rateHz = 5.0;
+            p.set (wild);
+            float peak = 0.0f;
+            std::mt19937 noise (7);
+            std::uniform_real_distribution<float> uniform (-0.5f, 0.5f);
+            float* noisy[] = { x.data() };
+            for (int block = 0; block < 100; ++block)
+            {
+                for (auto& v : x)
+                    v = uniform (noise);
+                p.process (noisy, 1, (int) x.size());
+                for (const auto v : x)
+                    peak = std::max (peak, std::abs (v));
+            }
+            check (std::isfinite (peak) && peak < 4.0f, "phi phaser: stable with the most feedback");
+        }
+    }
+
     // The splash's sound: phase distortion, a patch per start, a granular reverb with a long tail.
     void testPhiVoice()
     {
@@ -4563,6 +4843,7 @@ int main()
     testMidSide();
     testSampler();
     testMidiFile();
+    testMidiEdits();
     testMixer();
     testLauncher();
     testPatchBay();
@@ -4576,6 +4857,7 @@ int main()
     testPhiDynamics();
     testPhiChorus();
     testPhiVoice();
+    testPhiPhaser();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");

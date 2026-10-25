@@ -68,6 +68,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/Pitch.cpp
     Source/core/PitchFix.cpp
     Source/core/TimeStretch.cpp
+    Source/core/Paulstretch.cpp
     Source/core/Quantize.cpp
     Source/core/Sonify.cpp
     Source/core/Binaural.cpp
@@ -78,6 +79,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/PhiDynamics.cpp
     Source/core/PhiChorus.cpp
     Source/core/PhiVoice.cpp
+    Source/core/PhiPhaser.cpp
     Source/core/Nyquist.cpp
     Source/core/Album.cpp
     Source/core/MasterAssist.cpp
@@ -341,6 +343,10 @@ install(FILES packaging/phi.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicol
 install(FILES packaging/phi.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(FILES packaging/phi-project.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/mime/packages)
 
+# phi_dsp: the Φ effects' DSP as a library of its own, for the PHI synth (Source/core/CMakeLists.txt).
+# Built here too, so a change that breaks it on its own shows at once.
+add_subdirectory(Source/core phi_dsp)
+
 # Core tests: plain C++, no JUCE or Qt. Run with ctest.
 option(PHI_BUILD_TESTS "Build the core tests" ON)
 if(PHI_BUILD_TESTS)
@@ -370,6 +376,7 @@ if(PHI_BUILD_TESTS)
         Source/core/Pitch.cpp
         Source/core/PitchFix.cpp
         Source/core/TimeStretch.cpp
+        Source/core/Paulstretch.cpp
     Source/core/Quantize.cpp
     Source/core/Sonify.cpp
     Source/core/Binaural.cpp
@@ -380,6 +387,7 @@ if(PHI_BUILD_TESTS)
         Source/core/PhiDynamics.cpp
         Source/core/PhiChorus.cpp
         Source/core/PhiVoice.cpp
+        Source/core/PhiPhaser.cpp
         Source/core/Nyquist.cpp
         Source/core/Album.cpp
         Source/core/MasterAssist.cpp

@@ -21,6 +21,9 @@ jobs:
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release | tee configure.log
           ! grep -q "building without recording" configure.log
+      - name: Mirror speexdsp
+        # gitlab.xiph.org (Cardinal's Rack submodule speexdsp) answers 502/504 at times; GitHub's mirror instead
+        run: git config --global url."https://github.com/xiph/speexdsp.git".insteadOf "https://gitlab.xiph.org/xiph/speexdsp.git"
       - name: Build
         run: cmake --build build
       - name: Test
@@ -49,6 +52,9 @@ jobs:
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release | tee configure.log
           ! grep -q "building without recording" configure.log
+      - name: Mirror speexdsp
+        # gitlab.xiph.org (Cardinal's Rack submodule speexdsp) answers 502/504 at times; GitHub's mirror instead
+        run: git config --global url."https://github.com/xiph/speexdsp.git".insteadOf "https://gitlab.xiph.org/xiph/speexdsp.git"
       - name: Build
         run: cmake --build build
       - name: Test

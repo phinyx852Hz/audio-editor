@@ -853,7 +853,7 @@ void MainWindow::buildMenus()
         { tr ("Spat&ial"),   { "spatial.binaural", "process.midSide", "process.stereoize", "-", "spatial.layout", "-", "spatial.studio", "-", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.speakerArrays", "spatial.fumaToAmbix", "spatial.ambixToFuma", "-", "view.ambiScene", "analyze.imagingView" } },
         { tr ("&Warp"),      { "warp.showGrid", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "-", "warp.detectGrid", "warp.autoDetect", "warp.setTempo", "warp.downbeat", "warp.halve", "warp.double", "-",
                                "warp.edit", "warp.previousHit", "warp.nextHit", "warp.toggleMarker", "warp.nudgeEarlier", "warp.nudgeLater", "-",
-                               "warp.quantizePanel", "warp.quantize", "warp.markersFromHits", "warp.sliceAtHits", "warp.resetWarp", "-", "warp.stretch", "warp.halfSpeed", "warp.doubleSpeed", "-", "warp.exportLoop" } },
+                               "warp.quantizePanel", "warp.quantize", "warp.markersFromHits", "warp.sliceAtHits", "warp.resetWarp", "-", "warp.stretch", "warp.halfSpeed", "warp.doubleSpeed", "warp.extremeStretch", "warp.extremeAgain", "-", "warp.exportLoop" } },
         { tr ("&Markers"),   { "marker.add", "marker.addRegion", "-", "marker.next", "marker.previous", "-", "marker.exportSlices", "warp.exportLoop", "marker.exportLabels", "-", "view.markers" } },
         { tr ("Al&bum"),   { "album.new", "album.addSongs", "-", "album.previousSong", "album.nextSong", "-",
                                "album.moveEarlier", "album.moveLater", "album.longerPause", "album.shorterPause", "-",
@@ -1051,6 +1051,8 @@ void MainWindow::buildPanels()
     setCorner (Qt::BottomRightCorner, Qt::BottomDockWidgetArea);
     chainPanel = new DockablePanel (*this, QStringLiteral ("chainPanel"), tr ("Device Chain"), chainRow, Qt::BottomDockWidgetArea);
     chainPanel->dock()->show();
+    // No title bar: the cards say what it is (owner, 2026-10-25). View still shows, hides and pops it out.
+    chainPanel->dock()->setTitleBarWidget (new QWidget (chainPanel->dock()));
 
     findWidget = new FindPanel (waveform, this);
     findWidget->collect = [this] { return findItems(); };
@@ -1065,7 +1067,7 @@ void MainWindow::buildPanels()
             return false;
         const auto set = findWidget->currentSet();
         mixerWin->sendToLauncher (path, colour >= 0 ? findWidget->markName (set, colour) : QString(),
-                                  colour >= 0 ? FindPanel::colour (colour) : QColor());
+                                  colour >= 0 ? findWidget->markColour (set, colour) : QColor());
         return true;
     };
     // The Φ random selector: into a new scene when the clip launcher is shown, else onto the
@@ -1418,6 +1420,8 @@ void MainWindow::restoreDockSizes()
 void MainWindow::saveLayout()
 {
     auto settings = appSettings();
+    if (chainHiddenForMixer)
+        chainPanel->dock()->show();   // saved as the user left it, not as the mixer hid it
 
     for (auto* p : panels)
     {
