@@ -2,7 +2,7 @@
 #pragma once
 
 // The modal tunings a clip, a scene or a track can play in (owner, 2026-10-25): the major
-// Hindustani ragas in just intonation, the church modes and their hypo-modes in Pythagorean
+// Hindustani ragas in just intonation (and each in 12-TET), the church modes and their hypo-modes in Pythagorean
 // tuning, jazz modes, Arabic maqams and Persian dastgahs with their quarter steps, and 2 to 21
 // equal steps to the octave. Names are transliterated (IAST for the ragas, IJMES for Arabic,
 // a common Persian romanisation), with a plain spelling beside each for searching and saving.
@@ -17,9 +17,9 @@ namespace mixer
 {
     struct TuningSystem
     {
-        std::string name;     // as shown: "Darbārī Kānaḍā", "Ḥijāz", "Rāst-Panjgāh"
-        std::string plain;    // ASCII, also the key a mix saves: "Darbari Kanada"
-        std::string family;   // "Raga", "Church mode", "Hypo-mode", "Jazz mode", "Maqam", "Dastgah", "Equal"
+        std::string name;     // as shown, all lower case (owner): "darbārī kānaḍā", "ḥijāz", "rāst-panjgāh"
+        std::string plain;    // ASCII, also the key a mix saves: "darbari kanada"
+        std::string family;   // "raga", "raga, equal tempered", "church mode", "hypo-mode", "jazz mode", "maqam", "dastgah", "equal"
         std::vector<double> cents;   // the degrees above the tonic, from 0, within the period
         int divisions = 0;           // an equal temperament: this many steps to the octave (else 0)
     };

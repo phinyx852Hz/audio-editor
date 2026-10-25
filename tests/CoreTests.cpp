@@ -4196,10 +4196,10 @@ namespace
         const auto& all = mixer::tuningSystems();
         auto get = [&] (const std::string& plain) -> const mixer::TuningSystem& { return all[(size_t) mixer::findTuning (plain)]; };
         bool known = true;
-        for (const char* plain : { "Bilaval", "Darbari Kanada", "Dorian", "Hypodorian", "Altered", "Rast", "Hijaz", "Shur", "Chahargah", "2 equal steps", "21 equal steps" })
+        for (const char* plain : { "bilaval", "darbari kanada", "dorian", "hypodorian", "altered", "rast", "hijaz", "shur", "chahargah", "2 equal steps", "21 equal steps" })
             known = known && mixer::findTuning (plain) >= 0;
-        check (known && mixer::findTuning ("No such tuning") == -1, "tunings: each family is listed, found by its plain name");
-        check (get ("Darbari Kanada").name == "Darbārī Kānaḍā" && get ("Hijaz").name == "Ḥijāz" && get ("Chahargah").name == "Čahārgāh", "tunings: transliterated names");
+        check (known && mixer::findTuning ("no such tuning") == -1, "tunings: each family is listed, found by its plain name");
+        check (get ("darbari kanada").name == "darbārī kānaḍā" && get ("hijaz").name == "ḥijāz" && get ("chahargah").name == "čahārgāh", "tunings: transliterated names");
         bool plainAscii = true, unique = true;
         for (size_t i = 0; i < all.size(); ++i)
         {
@@ -4208,21 +4208,30 @@ namespace
             unique = unique && mixer::findTuning (all[i].plain) == (int) i;
         }
         check (plainAscii && unique, "tunings: the saved names are ASCII and unique");
+        bool lower = true;
+        for (const auto& t : all)
+            for (auto c : t.name + t.plain)
+                lower = lower && ! (c >= 'A' && c <= 'Z');
+        check (lower && all[(size_t) mixer::findTuning ("yaman (kalyan)")].name == "yaman (kalyāṇ)", "tunings: names in lower case");
+        // Each raga has a 12-TET version: Pa at 700 cents, the svaras on the keys.
+        const auto et = mixer::keyCents (get ("darbari kanada (equal tempered)"));
+        check (near (et[7], 700.0, 1.0e-9) && near (et[3], 300.0, 1.0e-9) && get ("darbari kanada (equal tempered)").cents.size() == get ("darbari kanada").cents.size(),
+               "tunings: ragas in equal temperament too");
 
         // Rāst's E half-flat (350 cents) plays on E; the other keys stay in 12-TET.
-        const auto rast = mixer::keyCents (get ("Rast"));
+        const auto rast = mixer::keyCents (get ("rast"));
         check (near (rast[4], 350.0, 1.0e-9) && near (rast[3], 300.0, 1.0e-9) && near (rast[11], 1050.0, 1.0e-9) && near (rast[10], 1000.0, 1.0e-9), "tunings: a quarter step on its key");
         // Bilāval in just intonation: Pa at 3/2, Ga at 5/4; Darbārī's ati-komal ga at 32/27.
-        const auto bilaval = mixer::keyCents (get ("Bilaval"));
+        const auto bilaval = mixer::keyCents (get ("bilaval"));
         check (near (bilaval[7], 701.955, 1.0e-3) && near (bilaval[4], phi::Tuning::ratioToCents (1.25), 1.0e-9), "tunings: ragas in just intonation");
-        check (near (mixer::keyCents (get ("Darbari Kanada"))[3], phi::Tuning::ratioToCents (32.0 / 27.0), 1.0e-9), "tunings: a raga's own komal svara");
+        check (near (mixer::keyCents (get ("darbari kanada"))[3], phi::Tuning::ratioToCents (32.0 / 27.0), 1.0e-9), "tunings: a raga's own komal svara");
         // Hypodorian on A has A's (Aeolian) Pythagorean steps: a 9/8 then a 256/243 limma.
-        const auto hypo = mixer::keyCents (get ("Hypodorian"));
+        const auto hypo = mixer::keyCents (get ("hypodorian"));
         check (near (hypo[2], phi::Tuning::ratioToCents (9.0 / 8.0), 1.0e-9) && near (hypo[3] - hypo[2], phi::Tuning::ratioToCents (256.0 / 243.0), 1.0e-9),
                "tunings: hypo-modes in Pythagorean tuning");
 
         // On D, Rāst's E half-flat is key 66 (F#): 350 cents above D4.
-        const auto onD = mixer::makeTuning (get ("Rast"), 2);
+        const auto onD = mixer::makeTuning (get ("rast"), 2);
         check (near (onD.hz (62), 440.0 * std::pow (2.0, -7.0 / 12.0), 1.0e-9) && near (1200.0 * std::log2 (onD.hz (66) / onD.hz (62)), 350.0, 1.0e-6)
                && near (onD.hz (74), 2.0 * onD.hz (62), 1.0e-9), "tunings: a maqam on its root, repeating each octave");
         const auto five = mixer::makeTuning (get ("5 equal steps"), 0);

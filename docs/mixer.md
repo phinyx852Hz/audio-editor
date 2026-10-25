@@ -445,13 +445,13 @@ could be applied on the clip level, track level or scene level"):
   launched clip's tuning, else that scene's, else its own; with none it is 12-TET. The section says
   which tuning the track plays in now.
 - The systems (`Source/mixer/Tunings.h`): 30 Hindustani ragas in just intonation (five-limit
-  ratios, with Pythagorean komal svaras where the raga sings them low: Darbārī's ga and dha,
-  Toḍī's and Bhairav's re and dha); the six church modes and six hypo-modes in Pythagorean tuning
+  ratios, with Pythagorean komal svaras where the raga sings them low: darbārī's ga and dha,
+  toḍī's and bhairav's re and dha), and each of them again equal tempered; the six church modes and six hypo-modes in Pythagorean tuning
   (a hypo-mode's root is the bottom of its range, a fourth below the final); 13 jazz modes; nine
   maqams and seven dastgahs with quarter steps of 50 cents; and 2 to 21 equal steps to the octave.
-  Names are in IAST (ragas), IJMES (maqams) and a common Persian romanisation (dastgahs); a mix
-  saves the plain ASCII name beside each.
-- A scale's degrees play on the nearest keys from the root, a quarter step on the key above (Rāst's
+  Names are in IAST (ragas), IJMES (maqams) and a common Persian romanisation (dastgahs), all in
+  lower case (owner); a mix saves the plain ASCII name beside each.
+- A scale's degrees play on the nearest keys from the root, a quarter step on the key above (rāst's
   E half-flat on E); the keys between keep their 12-TET pitch. Equal steps run up and down the
   keys from the root.
 - The mixer hands the tuning to the track's instrument (`mixer::Instrument::setTuning`) whenever
