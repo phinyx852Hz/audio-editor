@@ -396,6 +396,20 @@ private:
     void curve (QPainter& g, const QRectF& r)
     {
         const auto inner = r.adjusted (0, large, 0, -large);
+        if (shown.back.size() > 1)
+        {
+            // A reference behind, in grey (a compressor's in = out).
+            QPainterPath reference;
+            for (size_t i = 0; i < shown.back.size(); ++i)
+            {
+                const QPointF p (inner.left() + inner.width() * (double) i / (double) (shown.back.size() - 1),
+                                 inner.bottom() - inner.height() * std::clamp (shown.back[i], 0.0f, 1.0f));
+                i == 0 ? reference.moveTo (p) : reference.lineTo (p);
+            }
+            g.setPen (QPen (QColor (0x3a, 0x37, 0x30), 1.0, Qt::DashLine));
+            g.setBrush (Qt::NoBrush);
+            g.drawPath (reference);
+        }
         QPainterPath path, fill;
         const auto n = shown.front.size();
         for (size_t i = 0; i < n; ++i)

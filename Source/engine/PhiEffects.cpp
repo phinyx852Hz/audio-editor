@@ -2,6 +2,8 @@
 #include "PhiEffects.h"
 #include "MasteringEffect.h"
 #include "../core/Phi.h"
+#include "../core/PhiChorus.h"
+#include "../core/PhiDynamics.h"
 #include "../core/PhiPhaser.h"
 
 #include <algorithm>
@@ -1065,6 +1067,461 @@ namespace
         juce::AudioParameterBool* delta = nullptr;
         phi::Deresonator core;
     };
+
+    //==========================================================================
+    // The Φ dynamics (core/PhiDynamics.h): golden ratios, the golden two-stage release.
+    juce::AudioParameterIntAttributes ratioAttributes()
+    {
+        return juce::AudioParameterIntAttributes()
+            .withStringFromValueFunction ([] (int v, int) { return juce::String (phi::ratioOf (v), 2) + ":1"; })
+            .withValueFromStringFunction ([] (const juce::String& t)
+            {
+                const auto r = std::max (1.0001, t.upToFirstOccurrenceOf (":", false, false).retainCharacters (".0123456789").getDoubleValue());
+                return std::clamp ((int) std::lround (2.0 * std::log (r) / std::log (phi::ratio)), 1, phi::maxRatioStep);
+            });
+    }
+
+    juce::AudioParameterFloatAttributes decibelAttributes()
+    {
+        return juce::AudioParameterFloatAttributes()
+            .withLabel ("dB")
+            .withStringFromValueFunction ([] (float v, int) { return juce::String (v, 1); })
+            .withValueFromStringFunction ([] (const juce::String& t) { return t.retainCharacters ("+-.0123456789eE").getFloatValue(); });
+    }
+
+    // dB of reduction as the captions show it: "-2.4", and "0.0" rather than "-0.0".
+    std::string reductionText (double db) { return db < 0.05 ? std::string ("0.0") : decimal (-db, 1); }
+
+    float defaultOf (const juce::AudioProcessorParameter* p) { return p->getDefaultValue(); }
+
+    std::unique_ptr<juce::AudioParameterFloat> decibels (const char* id, const char* name, float low, float high, float initial)
+    {
+        return std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { id, 1 }, name,
+            juce::NormalisableRange<float> (low, high, 0.1f), initial, decibelAttributes());
+    }
+
+    // The reduction history as a curve: 0 dB of reduction at the top, `rangeDb` at the bottom.
+    void reductionCurve (DeviceDisplay& d, const phi::ReductionHistory& h, float rangeDb)
+    {
+        std::array<float, phi::ReductionHistory::historySize> past {};
+        h.read (past.data());
+        for (const auto r : past)
+            d.front.push_back (std::clamp (1.0f - r / rangeDb, 0.0f, 1.0f));
+        d.axis = "the last " + decimal (phi::ReductionHistory::seconds, 0) + " s, 0 to -" + decimal (rangeDb, 0) + " dB";
+    }
+
+    //==========================================================================
+    // Φ Compressor: ratios φ^(n/2), 13 ms attack and 233 ms release (φ⁶ apart), the
+    // golden two-stage release, a φ⁴ dB knee.
+    class PhiCompressorProcessor final : public MasteringEffect
+    {
+    public:
+        static constexpr const char* identifier = "phinyx:phi-compressor";
+
+        PhiCompressorProcessor() : MasteringEffect ("PHI_COMPRESSOR")
+        {
+            auto t = decibels ("threshold", "Threshold", -60.0f, 0.0f, -18.0f);
+            auto r = std::make_unique<juce::AudioParameterInt> (juce::ParameterID { "ratio", 1 }, "Ratio", 1, phi::maxRatioStep, 2, ratioAttributes());
+            auto a = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "attack", 1 }, "Attack",
+                skewed (0.1f, 233.0f, 0.1f, 13.0f), 13.0f, number (1, "ms"));
+            auto l = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "release", 1 }, "Release",
+                skewed (5.0f, 2584.0f, 1.0f, 233.0f), 233.0f, number (0, "ms"));
+            auto k = decibels ("knee", "Knee", 0.0f, 24.0f, 6.9f);
+            auto m = decibels ("makeup", "Makeup", 0.0f, 24.0f, 0.0f);
+            auto x = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "mix", 1 }, "Mix",
+                juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 100.0f, percent());
+            threshold = t.get(); ratio = r.get(); attack = a.get(); release = l.get(); knee = k.get(); makeup = m.get(); mix = x.get();
+            addHostedParameter (std::move (t));
+            addHostedParameter (std::move (r));
+            addHostedParameter (std::move (a));
+            addHostedParameter (std::move (l));
+            addHostedParameter (std::move (k));
+            addHostedParameter (std::move (m));
+            addHostedParameter (std::move (x));
+        }
+
+        static juce::PluginDescription description()
+        {
+            return describe (named ("Φ Compressor"), identifier, "Dynamics", 0x50484943);   // "PHIC"
+        }
+        void fillInPluginDescription (juce::PluginDescription& d) const override { d = description(); }
+        const juce::String getName() const override { return named ("Φ Compressor"); }
+        double getTailLengthSeconds() const override { return 0.0; }
+
+        void prepareToPlay (double sampleRate, int) override
+        {
+            core.set (current());
+            core.prepare (sampleRate, std::max (1, getTotalNumInputChannels()));
+        }
+
+        using AudioPluginInstance::processBlock;
+        void processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override
+        {
+            core.set (current());
+            core.process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples());
+        }
+
+        DeviceDisplay display() override
+        {
+            // The curve, level in across and out up, from -60 to 0 dB; in grey, in = out.
+            DeviceDisplay d;
+            d.kind = DeviceDisplay::Kind::curve;
+            const auto s = current();
+            for (int i = 0; i < displayPoints; ++i)
+            {
+                const auto in = -60.0 + 60.0 * i / (displayPoints - 1);
+                d.front.push_back ((float) std::clamp ((phi::Compressor::curveDb (s, in) + 60.0) / 60.0, 0.0, 1.0));
+                d.back.push_back ((float) ((in + 60.0) / 60.0));
+            }
+            d.axis = "in and out, -60 to 0 dB";
+            d.caption = "reduction " + reductionText (core.reductionDb()) + " dB at " + juce::String (phi::ratioOf (s.ratioStep), 2).toStdString() + ":1";
+            return d;
+        }
+
+    private:
+        phi::Compressor::Settings current() const
+        {
+            phi::Compressor::Settings s;
+            s.thresholdDb = threshold->get();
+            s.ratioStep = ratio->get();
+            s.attackMs = attack->get();
+            s.releaseMs = release->get();
+            s.kneeDb = knee->get();
+            s.makeupDb = makeup->get();
+            s.mix = mix->get() / 100.0;
+            return s;
+        }
+
+        juce::AudioParameterFloat *threshold = nullptr, *attack = nullptr, *release = nullptr, *knee = nullptr, *makeup = nullptr, *mix = nullptr;
+        juce::AudioParameterInt* ratio = nullptr;
+        phi::Compressor core;
+    };
+
+    //==========================================================================
+    // Φ Multiband: four bands split at 80 Hz × φⁿ, each compressed on its own.
+    class PhiMultibandProcessor final : public MasteringEffect
+    {
+    public:
+        static constexpr const char* identifier = "phinyx:phi-multiband";
+        static constexpr int numBands = phi::Multiband::numBands;
+
+        PhiMultibandProcessor() : MasteringEffect ("PHI_MULTIBAND")
+        {
+            static constexpr const char* names[] { "Low", "Low Mid", "High Mid", "High" };
+            std::vector<std::unique_ptr<juce::RangedAudioParameter>> gainsLater;
+            for (int b = 0; b < numBands; ++b)
+            {
+                const auto id = juce::String ("band") + juce::String (b);
+                auto t = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { id + "Threshold", 1 }, juce::String (names[b]) + " Threshold",
+                    juce::NormalisableRange<float> (-60.0f, 0.0f, 0.1f), -18.0f, decibelAttributes());
+                auto g = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { id + "Gain", 1 }, juce::String (names[b]) + " Gain",
+                    juce::NormalisableRange<float> (-12.0f, 12.0f, 0.1f), 0.0f, decibelAttributes());
+                thresholds[(size_t) b] = t.get();
+                gains[(size_t) b] = g.get();
+                addHostedParameter (std::move (t));
+                gainsLater.push_back (std::move (g));
+            }
+            for (auto& g : gainsLater)
+                addHostedParameter (std::move (g));
+
+            auto r = std::make_unique<juce::AudioParameterInt> (juce::ParameterID { "ratio", 1 }, "Ratio", 1, phi::maxRatioStep, 2, ratioAttributes());
+            auto a = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "attack", 1 }, "Attack",
+                skewed (0.1f, 233.0f, 0.1f, 13.0f), 13.0f, number (1, "ms"));
+            auto l = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "release", 1 }, "Release",
+                skewed (5.0f, 2584.0f, 1.0f, 233.0f), 233.0f, number (0, "ms"));
+            auto x = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "mix", 1 }, "Mix",
+                juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 100.0f, percent());
+            ratio = r.get(); attack = a.get(); release = l.get(); mix = x.get();
+            addHostedParameter (std::move (r));
+            addHostedParameter (std::move (a));
+            addHostedParameter (std::move (l));
+            addHostedParameter (std::move (x));
+
+            const phi::Multiband::Settings defaults;
+            for (int c = 0; c < numBands - 1; ++c)
+            {
+                auto p = std::make_unique<juce::AudioParameterInt> (juce::ParameterID { "crossover" + juce::String (c + 1), 1 },
+                    "Crossover " + juce::String (c + 1), phi::Multiband::minCrossoverStep, phi::Multiband::maxCrossoverStep,
+                    defaults.crossoverSteps[(size_t) c], juce::AudioParameterIntAttributes()
+                        .withStringFromValueFunction ([] (int v, int) { return juce::String (hertz (phi::Multiband::crossoverHz (v))); })
+                        .withValueFromStringFunction ([] (const juce::String& t)
+                        {
+                            auto hz = std::max (1.0, t.retainCharacters (".0123456789").getDoubleValue());
+                            if (t.containsIgnoreCase ("k"))
+                                hz *= 1000.0;
+                            return std::clamp ((int) std::lround (std::log (hz / 80.0) / std::log (phi::ratio)),
+                                               phi::Multiband::minCrossoverStep, phi::Multiband::maxCrossoverStep);
+                        }));
+                crossovers[(size_t) c] = p.get();
+                addHostedParameter (std::move (p));
+            }
+        }
+
+        static juce::PluginDescription description()
+        {
+            return describe (named ("Φ Multiband"), identifier, "Dynamics", 0x5048494d);   // "PHIM"
+        }
+        void fillInPluginDescription (juce::PluginDescription& d) const override { d = description(); }
+        const juce::String getName() const override { return named ("Φ Multiband"); }
+        double getTailLengthSeconds() const override { return 0.01; }
+
+        void prepareToPlay (double sampleRate, int) override
+        {
+            core.prepare (sampleRate, std::max (1, getTotalNumInputChannels()));
+            core.set (current());
+        }
+
+        using AudioPluginInstance::processBlock;
+        void processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override
+        {
+            core.set (current());
+            core.process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples());
+        }
+
+        DeviceDisplay display() override
+        {
+            // Each band's gain less what it takes away now, across frequency, with a node
+            // for each band (up and down for its gain) and each crossover (across, on the grid).
+            DeviceDisplay d;
+            d.kind = DeviceDisplay::Kind::frequency;
+            d.lowDb = -15.0f;
+            d.highDb = 15.0f;
+            const auto s = current();
+            const auto hz = phi::Multiband::crossovers (s);
+            std::array<double, numBands> level {};
+            for (int b = 0; b < numBands; ++b)
+                level[(size_t) b] = s.bands[(size_t) b].gainDb - core.reductionDb (b) * s.mix;
+            for (int i = 0; i < displayPoints; ++i)
+            {
+                // Blended over half a golden step either side of each crossover.
+                const auto f = displayHz (i);
+                double v = level[0];
+                for (int c = 0; c < numBands - 1; ++c)
+                {
+                    const auto t = std::clamp (0.5 + std::log (f / hz[(size_t) c]) / std::log (phi::ratio), 0.0, 1.0);
+                    v += (level[(size_t) c + 1] - level[(size_t) c]) * t * t * (3.0 - 2.0 * t);
+                }
+                d.front.push_back ((float) v);
+            }
+            for (int step = phi::Multiband::minCrossoverStep; step <= phi::Multiband::maxCrossoverStep; ++step)
+                d.grid.push_back ((float) phi::Multiband::crossoverHz (step));
+
+            const auto params = getParameters();
+            auto index = [&] (juce::AudioProcessorParameter* p) { return params.indexOf (p); };
+            for (int b = 0; b < numBands; ++b)
+            {
+                const auto from = b == 0 ? 20.0 : hz[(size_t) b - 1], to = b == numBands - 1 ? 20000.0 : hz[(size_t) b];
+                DeviceDisplay::Handle h;
+                h.hz = (float) std::sqrt (from * to);
+                h.db = (float) s.bands[(size_t) b].gainDb;
+                h.dbParameter = index (gains[(size_t) b]);
+                h.label = std::to_string (b + 1);
+                h.reset = { { index (thresholds[(size_t) b]), defaultOf (thresholds[(size_t) b]) },
+                            { index (gains[(size_t) b]), defaultOf (gains[(size_t) b]) } };
+                h.knobs = { index (thresholds[(size_t) b]), index (gains[(size_t) b]) };
+                d.handles.push_back (h);
+            }
+            for (int c = 0; c < numBands - 1; ++c)
+            {
+                DeviceDisplay::Handle h;
+                h.hz = (float) phi::Multiband::crossoverHz (crossovers[(size_t) c]->get());
+                h.db = d.front[(size_t) std::clamp ((int) std::lround ((displayPoints - 1) * std::log (h.hz / 20.0) / std::log (1000.0)), 0, displayPoints - 1)];
+                h.hzParameter = index (crossovers[(size_t) c]);
+                h.label = "×";
+                h.reset = { { h.hzParameter, defaultOf (crossovers[(size_t) c]) } };
+                h.knobs = { h.hzParameter };
+                d.handles.push_back (h);
+            }
+            for (auto* p : { (juce::RangedAudioParameter*) ratio, (juce::RangedAudioParameter*) attack, (juce::RangedAudioParameter*) release, (juce::RangedAudioParameter*) mix })
+                d.knobs.push_back (index (p));
+
+            std::string taken;
+            for (int b = 0; b < numBands; ++b)
+                taken += (b == 0 ? "" : " · ") + reductionText (core.reductionDb (b));
+            d.caption = "reduction " + taken + " dB";
+            return d;
+        }
+
+    private:
+        phi::Multiband::Settings current() const
+        {
+            phi::Multiband::Settings s;
+            for (int b = 0; b < numBands; ++b)
+                s.bands[(size_t) b] = { thresholds[(size_t) b]->get(), gains[(size_t) b]->get() };
+            for (int c = 0; c < numBands - 1; ++c)
+                s.crossoverSteps[(size_t) c] = crossovers[(size_t) c]->get();
+            s.ratioStep = ratio->get();
+            s.attackMs = attack->get();
+            s.releaseMs = release->get();
+            s.mix = mix->get() / 100.0;
+            return s;
+        }
+
+        std::array<juce::AudioParameterFloat*, numBands> thresholds {}, gains {};
+        std::array<juce::AudioParameterInt*, numBands - 1> crossovers {};
+        juce::AudioParameterInt* ratio = nullptr;
+        juce::AudioParameterFloat *attack = nullptr, *release = nullptr, *mix = nullptr;
+        phi::Multiband core;
+    };
+
+    //==========================================================================
+    // Φ Limiter: true peak, φ² ms of look-ahead, the golden two-stage release.
+    class PhiLimiterProcessor final : public MasteringEffect
+    {
+    public:
+        static constexpr const char* identifier = "phinyx:phi-limiter";
+
+        PhiLimiterProcessor() : MasteringEffect ("PHI_LIMITER")
+        {
+            auto g = decibels ("drive", "Drive", 0.0f, 18.0f, 0.0f);
+            auto c = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "ceiling", 1 }, "Ceiling",
+                juce::NormalisableRange<float> (-12.0f, 0.0f, 0.1f), -1.0f, number (1, "dBTP"));
+            auto r = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "release", 1 }, "Release",
+                skewed (1.0f, 987.0f, 1.0f, 89.0f), 89.0f, number (0, "ms"));
+            drive = g.get(); ceiling = c.get(); release = r.get();
+            addHostedParameter (std::move (g));
+            addHostedParameter (std::move (c));
+            addHostedParameter (std::move (r));
+
+            core.prepare (48000.0, 2);
+            setLatencySamples (core.latency());
+        }
+
+        static juce::PluginDescription description()
+        {
+            return describe (named ("Φ Limiter"), identifier, "Dynamics", 0x5048494c);   // "PHIL"
+        }
+        void fillInPluginDescription (juce::PluginDescription& d) const override { d = description(); }
+        const juce::String getName() const override { return named ("Φ Limiter"); }
+        double getTailLengthSeconds() const override { return 0.01; }
+
+        void prepareToPlay (double sampleRate, int) override
+        {
+            core.set (current());
+            core.prepare (sampleRate, std::max (1, getTotalNumInputChannels()));
+            setLatencySamples (core.latency());
+        }
+
+        using AudioPluginInstance::processBlock;
+        void processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override
+        {
+            core.set (current());
+            core.process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples());
+        }
+
+        DeviceDisplay display() override
+        {
+            // The gain reduction of the last seconds, from the top down.
+            DeviceDisplay d;
+            d.kind = DeviceDisplay::Kind::curve;
+            reductionCurve (d, core.history(), 12.0f);
+            d.caption = "reduction " + reductionText (core.reductionDb()) + " dB · ceiling " + decimal (ceiling->get(), 1) + " dBTP";
+            return d;
+        }
+
+    private:
+        phi::Limiter::Settings current() const
+        {
+            phi::Limiter::Settings s;
+            s.driveDb = drive->get();
+            s.ceilingDb = ceiling->get();
+            s.releaseMs = release->get();
+            return s;
+        }
+
+        juce::AudioParameterFloat *drive = nullptr, *ceiling = nullptr, *release = nullptr;
+        phi::Limiter core;
+    };
+
+    //==========================================================================
+    // Φ Chorus: 2, 3, 5 or 8 voices, rates √φ apart, spread by the golden angle.
+    class PhiChorusProcessor final : public MasteringEffect
+    {
+    public:
+        static constexpr const char* identifier = "phinyx:phi-chorus";
+
+        PhiChorusProcessor() : MasteringEffect ("PHI_CHORUS")
+        {
+            auto r = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "rate", 1 }, "Rate",
+                skewed (0.05f, 5.0f, 0.001f, 0.618f), 0.618f, number (3, "Hz"));
+            auto d = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "depth", 1 }, "Depth",
+                juce::NormalisableRange<float> (0.0f, 10.0f, 0.001f), 2.618f, number (2, "ms"));
+            auto m = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "mix", 1 }, "Mix",
+                juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 38.2f, percent());
+            juce::StringArray counts;
+            for (const auto n : phi::Chorus::voiceCounts)
+                counts.add (juce::String (n));
+            auto v = std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "voices", 1 }, "Voices", counts, 2);
+            auto w = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "width", 1 }, "Width",
+                juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 100.0f, percent());
+            auto t = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "delay", 1 }, "Delay",
+                juce::NormalisableRange<float> (1.0f, 34.0f, 0.1f), 13.0f, number (1, "ms"));
+            rate = r.get(); depth = d.get(); mix = m.get(); voices = v.get(); width = w.get(); delay = t.get();
+            addHostedParameter (std::move (r));
+            addHostedParameter (std::move (d));
+            addHostedParameter (std::move (m));
+            addHostedParameter (std::move (v));
+            addHostedParameter (std::move (w));
+            addHostedParameter (std::move (t));
+        }
+
+        static juce::PluginDescription description()
+        {
+            return describe (named ("Φ Chorus"), identifier, "Modulation", 0x50484948);   // "PHIH"
+        }
+        void fillInPluginDescription (juce::PluginDescription& d) const override { d = description(); }
+        const juce::String getName() const override { return named ("Φ Chorus"); }
+        double getTailLengthSeconds() const override { return phi::Chorus::maxDelayMs / 1000.0; }
+
+        void prepareToPlay (double sampleRate, int) override
+        {
+            core.prepare (sampleRate, std::max (1, getTotalNumInputChannels()));
+            core.set (current());
+        }
+
+        using AudioPluginInstance::processBlock;
+        void processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override
+        {
+            core.set (current());
+            core.process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples());
+        }
+
+        DeviceDisplay display() override
+        {
+            // The voices where their delays are now, the middle one tallest, each further
+            // out a golden step shorter.
+            DeviceDisplay d;
+            d.kind = DeviceDisplay::Kind::taps;
+            const auto s = current();
+            const auto first = phi::Chorus::voiceDelayMs (s, 0), last = phi::Chorus::voiceDelayMs (s, s.voices - 1) + s.depthMs;
+            const auto margin = (last - first) * 0.08 + 0.1, from = std::max (0.0, first - margin), to = last + margin;
+            for (int v = 0; v < s.voices; ++v)
+            {
+                d.front.push_back ((float) std::clamp ((core.delayNowMs (v) - from) / (to - from), 0.0, 1.0));
+                d.front.push_back ((float) std::pow (phi::ratio, -std::abs (v - (s.voices - 1) / 2.0) / 2.0));
+            }
+            d.axis = decimal (from, 1) + " to " + decimal (to, 1) + " ms";
+            d.caption = std::to_string (s.voices) + " voices at " + decimal (s.rateHz, 3) + " Hz × √φⁿ";
+            return d;
+        }
+
+    private:
+        phi::Chorus::Settings current() const
+        {
+            phi::Chorus::Settings s;
+            s.rateHz = rate->get();
+            s.depthMs = depth->get();
+            s.mix = mix->get() / 100.0;
+            s.voices = phi::Chorus::voiceCounts[(size_t) std::clamp (voices->getIndex(), 0, 3)];
+            s.width = width->get() / 100.0;
+            s.delayMs = delay->get();
+            return s;
+        }
+
+        juce::AudioParameterFloat *rate = nullptr, *depth = nullptr, *mix = nullptr, *width = nullptr, *delay = nullptr;
+        juce::AudioParameterChoice* voices = nullptr;
+        phi::Chorus core;
+    };
 }
 
 namespace phifx
@@ -1073,7 +1530,9 @@ namespace phifx
     {
         return { PhiEqProcessor::description(), PhiEchoProcessor::description(), PhiSpaceProcessor::description(),
                  PhiDriftProcessor::description(), PhiPhaserProcessor::description(), PhiRhythmProcessor::description(), PhiResonatorProcessor::description(),
-                 PhiStackProcessor::description(), PhiTameProcessor::description(), PhiDeresonatorProcessor::description() };
+                 PhiStackProcessor::description(), PhiTameProcessor::description(), PhiDeresonatorProcessor::description(),
+                 PhiCompressorProcessor::description(), PhiMultibandProcessor::description(), PhiLimiterProcessor::description(),
+                 PhiChorusProcessor::description() };
     }
 
     std::unique_ptr<juce::AudioPluginInstance> create (const juce::PluginDescription& d)
@@ -1091,6 +1550,10 @@ namespace phifx
         if (id == PhiStackProcessor::identifier)       return std::make_unique<PhiStackProcessor>();
         if (id == PhiTameProcessor::identifier)        return std::make_unique<PhiTameProcessor>();
         if (id == PhiDeresonatorProcessor::identifier) return std::make_unique<PhiDeresonatorProcessor>();
+        if (id == PhiCompressorProcessor::identifier)  return std::make_unique<PhiCompressorProcessor>();
+        if (id == PhiMultibandProcessor::identifier)   return std::make_unique<PhiMultibandProcessor>();
+        if (id == PhiLimiterProcessor::identifier)     return std::make_unique<PhiLimiterProcessor>();
+        if (id == PhiChorusProcessor::identifier)      return std::make_unique<PhiChorusProcessor>();
         return nullptr;
     }
 }
