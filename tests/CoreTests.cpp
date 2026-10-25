@@ -29,6 +29,7 @@
 #include "../Source/core/SpatialStudio.h"
 #include "../Source/core/PhiVoice.h"
 #include "../Source/core/PhiPhaser.h"
+#include "../Source/core/PhiTuning.h"
 #include "../Source/core/PrismSplit.h"
 #include "../Source/core/MasterAssist.h"
 #include "../Source/mixer/MixAssist.h"
@@ -4112,6 +4113,81 @@ namespace
         check (delay > 0.0 && delay <= phi::Chorus::maxDelayMs, "phi chorus delays stay inside its line");
     }
 
+    // The PHI synth's tuning (keys to pitches, sent as MIDI Tuning Standard) and MPE.
+    void testPhiTuning()
+    {
+        const phi::Tuning standard;
+        check (near (standard.hz (69), 440.0, 1.0e-9) && near (standard.hz (60), 261.6255653, 1.0e-6), "tuning: 12-TET by default");
+        check (phi::Tuning::equal (12) == standard, "tuning: 12 equal steps is the default");
+        {
+            const auto five = phi::Tuning::equal (5, 60, 261.6255653005986);
+            check (near (five.hz (65), 2.0 * five.hz (60), 1.0e-9) && near (five.hz (61) / five.hz (60), std::pow (2.0, 0.2), 1.0e-12), "tuning: 5 equal steps to the octave");
+        }
+        {
+            // A just major scale: 1, 9/8, 5/4, 4/3, 3/2, 5/3, 15/8, on consecutive keys from C4.
+            std::vector<double> cents;
+            for (const double r : { 1.0, 9.0 / 8.0, 5.0 / 4.0, 4.0 / 3.0, 3.0 / 2.0, 5.0 / 3.0, 15.0 / 8.0 })
+                cents.push_back (phi::Tuning::ratioToCents (r));
+            const auto just = phi::Tuning::scale (cents, 1200.0, 60, 260.0);
+            check (near (just.hz (64) / just.hz (60), 1.5, 1.0e-12) && near (just.hz (67), 520.0, 1.0e-9)
+                   && near (just.hz (59), 260.0 * 15.0 / 16.0, 1.0e-9), "tuning: a just scale on consecutive keys, up and down");
+            check (near (phi::Tuning::ratioToCents (1.5), 701.955, 1.0e-3), "tuning: ratios to cents");
+
+            // Through MIDI Tuning Standard and back, within its resolution (100/16384 cent).
+            phi::Tuning back;
+            bool parsed = true;
+            for (const auto& m : just.toSysEx())
+                parsed = parsed && m.front() == 0xf0 && m.back() == 0xf7 && back.applySysEx (m.data(), (int) m.size());
+            bool close = parsed;
+            for (int k = 0; k < phi::Tuning::numKeys; ++k)
+                if (just.hz (k) > 8.2 && just.hz (k) < 12500.0)
+                    close = close && std::abs (1200.0 * std::log2 (back.hz (k) / just.hz (k))) < 0.01;
+            check (close, "tuning: survives MIDI Tuning Standard");
+            const std::uint8_t notTuning[] = { 0xf0, 0x7e, 0x7f, 0x06, 0x01, 0xf7 };
+            check (! back.applySysEx (notTuning, 6), "tuning: other SysEx is left alone");
+        }
+        {
+            // A quarter step: 50 cents above C4.
+            phi::Tuning t;
+            t.setHz (61, 261.6255653005986 * std::pow (2.0, 50.0 / 1200.0));
+            phi::Tuning back;
+            for (const auto& m : t.toSysEx())
+                back.applySysEx (m.data(), (int) m.size());
+            check (near (phi::Tuning::centsFromEqual (back.hz (61), 60), 50.0, 0.01), "tuning: a quarter step");
+        }
+
+        // MPE: each note bends, presses and slides on its own channel, plus the zone's master bend.
+        {
+            phi::Mpe mpe;
+            check (mpe.isMember (1) && mpe.isMember (15) && ! mpe.isMember (0), "mpe: lower zone with 15 members by default");
+            const auto on = mpe.handle (0x92, 60, 100);
+            check (on.kind == phi::Mpe::Kind::noteOn && on.channel == 2 && on.key == 60, "mpe: note on");
+            mpe.handle (0xe2, 0, 0x50);     // member bend: (0x50 << 7 - 8192) / 8192 × 48
+            mpe.handle (0xd2, 64, 0);       // pressure
+            mpe.handle (0xb2, 74, 127);     // timbre
+            mpe.handle (0xe3, 0, 0x60);     // another note's channel
+            const auto e = mpe.expression (2, 60);
+            check (near (e.bendSemitones, (0x50 * 128 - 8192) / 8192.0 * 48.0, 1.0e-9) && near (e.pressure, 64.0 / 127.0, 1.0e-9) && near (e.timbre, 1.0, 1.0e-9),
+                   "mpe: a note's own bend, pressure and timbre");
+            mpe.handle (0xe0, 0, 0x60);     // master bend, ±2
+            check (near (mpe.expression (2, 60).bendSemitones, e.bendSemitones + 1.0, 1.0e-9), "mpe: the master channel bends the whole zone");
+            check (near (mpe.noteHz (phi::Tuning::equal (24), 2, 60) / phi::Tuning::equal (24).hz (60),
+                         std::pow (2.0, mpe.expression (2, 60).bendSemitones / 12.0), 1.0e-12), "mpe: bends on top of the tuning");
+
+            // An MPE Configuration Message for 7 members in the lower zone frees channels 8 to 15.
+            mpe.handle (0xb0, 101, 0);
+            mpe.handle (0xb0, 100, 6);
+            mpe.handle (0xb0, 6, 7);
+            check (mpe.lowerZoneMembers() == 7 && mpe.isMember (7) && ! mpe.isMember (8), "mpe: zone set by its configuration message");
+            mpe.handle (0xb9, 101, 0);      // RPN 0 on an ordinary channel: bend range 12
+            mpe.handle (0xb9, 100, 0);
+            mpe.handle (0xb9, 6, 12);
+            mpe.handle (0xe9, 0x7f, 0x7f);
+            check (near (mpe.expression (9, 60).bendSemitones, 12.0 * 8191.0 / 8192.0, 1.0e-9), "mpe: an ordinary channel with its own bend range");
+            check (mpe.handle (0x82, 60, 0).kind == phi::Mpe::Kind::noteOff && mpe.handle (0x92, 61, 0).kind == phi::Mpe::Kind::noteOff, "mpe: note off, and note on at velocity 0");
+        }
+    }
+
     // Φ Phaser: stages φ apart, a sweep that never repeats, and a response that matches what it does.
     void testPhiPhaser()
     {
@@ -4858,6 +4934,7 @@ int main()
     testPhiChorus();
     testPhiVoice();
     testPhiPhaser();
+    testPhiTuning();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");
