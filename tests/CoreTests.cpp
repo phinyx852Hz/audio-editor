@@ -4250,6 +4250,31 @@ namespace
         check (near (ga.hz, 293.6647679174076 * 32.0 / 27.0, 1.0e-9) && near (player.hzAt (ga, 0.0), ga.hz, 1.0e-9)
                && near (1200.0 * std::log2 (ga.hz / player.hzAt (ga, 1.0)), 20.0, 1.0e-9) && near (player.hzAt (ga, 2.0), ga.hz, 1.0e-9),
                "raga player: tuned svaras, and andolan swings below and back");
+        // Mīṇḍ in khamāj from G up to S': through m, P, D and N (the āroha's), 0.4 s, then there.
+        player.setOrnaments (1.0);
+        player.setRaga (&byPlain ("khamaj"), 60);
+        player.reset();
+        const auto from = player.noteOn (64);
+        const auto pulled = player.glide (from, 72, 0.4);
+        check (pulled.pathCount == 6 && near (pulled.path[0], from.cents, 1.0e-9) && near (pulled.path[4], 1200.0 * std::log2 (15.0 / 8.0), 1.0e-9)
+               && near (pulled.approachSeconds(), 0.4, 1.0e-12) && near (player.hzAt (pulled, 0.0), from.hz, 1.0e-9)
+               && near (player.hzAt (pulled, 0.5), pulled.hz, 1.0e-9), "raga player: mind touches the svaras between");
+        bool rises = true;
+        for (double t = 0.0, last = 0.0; t < 0.4; t += 0.01)
+        {
+            const auto hz = player.hzAt (pulled, t);
+            rises = rises && hz >= last - 1.0e-9;
+            last = hz;
+        }
+        check (rises, "raga player: an upward mind only rises");
+        // Kaṇ: darbārī's ga touched from ma, then ga, then its āndolan.
+        player.setRaga (&byPlain ("darbari kanada"), 62, 293.6647679174076);
+        player.reset();
+        auto kanGa = player.noteOn (65);
+        player.addKan (kanGa);
+        check (kanGa.pathCount == 2 && near (player.hzAt (kanGa, 0.0), 293.6647679174076 * 4.0 / 3.0, 1.0e-9)
+               && near (player.hzAt (kanGa, 0.05), kanGa.hz, 1.0e-9) && near (1200.0 * std::log2 (kanGa.hz / player.hzAt (kanGa, 1.05)), 20.0, 1.0e-9),
+               "raga player: kan from the sheet, then andolan");
         player.setOrnaments (0.0);
         check (near (player.hzAt (ga, 1.0), ga.hz, 1.0e-12) && player.noteOn (76).swingCents == 0.0, "raga player: ornaments off, and no andolan on Pa");
 

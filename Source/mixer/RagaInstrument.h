@@ -22,6 +22,8 @@ namespace mixer
         double ornaments = 1.0;                // 0 plain svaras, 1 as the sheet says
         double jawari = 0.6;
         double tarab = 0.6;
+        bool meend = true;                     // legato (a key pressed while one is held) pulls the string: mīṇḍ
+        double meendSeconds = 0.3;
     };
 
     class RagaInstrument final : public NoteInstrument
@@ -64,7 +66,9 @@ namespace mixer
         phi::RagaPlayer player;
         phi::Sitar sitar;
         std::array<Held, phi::Sitar::maxPlayed> held {};
-        double rate = 48000.0, bend = 0.0;
-        int notesSinceChikari = 0;
+        double rate = 48000.0, bend = 0.0, meendTime = 0.3;
+        bool meendOn = true;
+        unsigned clock = 0;
+        std::array<unsigned, phi::Sitar::maxPlayed> startedAt {};
     };
 }

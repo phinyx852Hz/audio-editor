@@ -1634,6 +1634,13 @@ QDialog* ragaDialog (mixer::InstrumentPtr inst, const QString& title, QWidget* p
     auto* ornaments = percent (s.ornaments, QObject::tr ("How much of the sheet's ornaments (āndolan) it plays"));
     auto* jawari = percent (s.jawari, QObject::tr ("The bridge: open (khulā) to closed (band), more buzz"));
     auto* tarab = percent (s.tarab, QObject::tr ("The sympathetic strings, tuned to the raga"));
+    auto* meend = new QCheckBox (QString::fromUtf8 ("Legato plays mīṇḍ: a key pressed while another is held pulls the string"), d);
+    meend->setChecked (s.meend);
+    auto* meendTime = new QDoubleSpinBox (d);
+    meendTime->setRange (0.02, 3.0);
+    meendTime->setSingleStep (0.05);
+    meendTime->setSuffix (QObject::tr (" s"));
+    meendTime->setValue (s.meendSeconds);
     auto* now = new QLabel (d);
     now->setWordWrap (true);
     form->addRow (QObject::tr ("&Raga"), ragas);
@@ -1641,6 +1648,8 @@ QDialog* ragaDialog (mixer::InstrumentPtr inst, const QString& title, QWidget* p
     form->addRow (QObject::tr ("&Ornaments"), ornaments);
     form->addRow (QString::fromUtf8 ("&Jawārī"), jawari);
     form->addRow (QObject::tr ("&Tarab"), tarab);
+    form->addRow (meend);
+    form->addRow (QString::fromUtf8 ("&Mīṇḍ time"), meendTime);
     form->addRow (now);
     auto* help = new QLabel (QObject::tr ("Keys play the raga's svaras by the way the melody moves: its āroha going up, its avaroha coming down. "
                                           "Keys two octaves and more below Sa strike the chikārī."), d);
@@ -1655,6 +1664,8 @@ QDialog* ragaDialog (mixer::InstrumentPtr inst, const QString& title, QWidget* p
         n.ornaments = ornaments->value() / 100.0;
         n.jawari = jawari->value() / 100.0;
         n.tarab = tarab->value() / 100.0;
+        n.meend = meend->isChecked();
+        n.meendSeconds = meendTime->value();
         raga.setSettings (n);
         show();
         changed();
@@ -1666,6 +1677,8 @@ QDialog* ragaDialog (mixer::InstrumentPtr inst, const QString& title, QWidget* p
         QObject::connect (c, &QComboBox::currentIndexChanged, d, apply);
     for (auto* b : { ornaments, jawari, tarab })
         QObject::connect (b, &QSpinBox::valueChanged, d, apply);
+    QObject::connect (meend, &QCheckBox::toggled, d, apply);
+    QObject::connect (meendTime, &QDoubleSpinBox::valueChanged, d, apply);
     return d;
 }
 

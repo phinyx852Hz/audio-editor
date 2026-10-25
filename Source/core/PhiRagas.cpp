@@ -125,6 +125,7 @@ vadi: R
 samvadi: P
 pakad: g m R S | d n P
 andolan: g 20 0.5, d 20 0.5
+kan: m>g
 time: midnight
 rasa: grave
 
@@ -307,6 +308,7 @@ avaroha: S' n d n P m g m R S
 vadi: m
 samvadi: S
 andolan: g 20 0.5
+kan: m>g
 time: late night
 
 raga: nāyakī kānaḍā
@@ -318,6 +320,7 @@ avaroha: S' n P m P g m R S
 vadi: P
 samvadi: S
 andolan: g 20 0.5
+kan: m>g
 time: night
 
 raga: kāfī kānaḍā
@@ -329,6 +332,7 @@ avaroha: S' n D P m g m R S
 vadi: P
 samvadi: S
 andolan: g 20 0.5
+kan: m>g
 time: night
 
 raga: śahānā kānaḍā
@@ -340,6 +344,7 @@ avaroha: S' n P m P g m R S
 vadi: P
 samvadi: S
 andolan: g 20 0.5
+kan: m>g
 time: night
 
 raga: cārukeśī

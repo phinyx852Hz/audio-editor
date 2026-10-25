@@ -24,6 +24,7 @@ vadi: R
 samvadi: P
 pakad: g m R S | d n P
 andolan: g 20 0.5, d 20 0.5
+kan: m>g
 time: midnight
 ```
 
@@ -48,6 +49,10 @@ and again equal tempered.
 - **Keys outside the raga:** they go to the nearest svara, with ties going the way the melody moves.
 - **Tuning and āndolan:** each svara is tuned as its sheet says. A svara with āndolan swings below
   its pitch and back while held. Ornaments go from 0 (plain svaras) to 1 (as the sheet says).
+- **Mīṇḍ:** `glide` pulls a sounding string to a new svara, touching each of the raga's svaras on
+  the way (those it uses in that direction). On a track, a key pressed while another is held plays
+  mīṇḍ (legato), over the window's mīṇḍ time.
+- **Kaṇ:** a sheet's `kan: m>g` touches ma for an instant before ga, then ga and its āndolan.
 
 ## The sitar
 
@@ -80,7 +85,7 @@ PHI rāga is a built-in instrument, alongside Synth, Sampler and Slicer.
 
 ## Next
 
-- Mīṇḍ, kaṇ, khaṭkā, murkī, gamak, krintan and zamzama.
+- Khaṭkā, murkī, gamak, krintan and zamzama.
 - Avoided moves.
 - MPE in and out.
 - The tānpūrā.

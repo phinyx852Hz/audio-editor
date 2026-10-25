@@ -84,6 +84,8 @@ namespace mixer
         const auto saHz = keyHz (saKey);
         player.setRaga (&raga, saKey, saHz);
         player.setOrnaments (current.ornaments);
+        meendOn = current.meend;
+        meendTime = current.meendSeconds;
         sitar.setJawari (current.jawari);
         sitar.setTarabLevel (current.tarab);
         sitar.setChikari (saHz);
@@ -109,14 +111,32 @@ namespace mixer
                 sitar.strikeChikari (e.data2 / 127.0);
                 return;
             }
+            // Legato: the string still held is pulled to the new svara (mīṇḍ), not plucked again.
+            Held* last = nullptr;
+            for (auto& h : held)
+                if (h.string >= 0 && (last == nullptr || startedAt[(size_t) h.string] > startedAt[(size_t) last->string]))
+                    last = &h;
+            if (meendOn && last != nullptr)
+            {
+                // From where the string is now, mid-ornament or not.
+                auto from = last->voice;
+                from.cents = 1200.0 * std::log2 (player.hzAt (last->voice, last->seconds) / player.voiceSaHz());
+                last->voice = player.glide (from, e.data1, meendTime);
+                last->key = e.data1;
+                last->seconds = 0.0;
+                startedAt[(size_t) last->string] = ++clock;
+                return;
+            }
             Held h;
             h.key = e.data1;
             h.voice = player.noteOn (e.data1);
-            h.string = sitar.pluck (h.voice.hz, e.data2 / 127.0);
+            player.addKan (h.voice);
+            h.string = sitar.pluck (player.hzAt (h.voice, 0.0), e.data2 / 127.0);
             for (auto& other : held)
                 if (other.string == h.string)
                     other = {};
             held[(size_t) h.string] = h;
+            startedAt[(size_t) h.string] = ++clock;
         }
         else if (off)
         {
@@ -174,7 +194,8 @@ namespace mixer
     {
         const auto s = settings();
         std::ostringstream o;
-        o << "raga=" << s.raga << ";sa=" << s.sa << ";ornaments=" << s.ornaments << ";jawari=" << s.jawari << ";tarab=" << s.tarab;
+        o << "raga=" << s.raga << ";sa=" << s.sa << ";ornaments=" << s.ornaments << ";jawari=" << s.jawari << ";tarab=" << s.tarab
+          << ";meend=" << (s.meend ? 1 : 0) << ";meendSeconds=" << s.meendSeconds;
         return o.str();
     }
 
@@ -201,6 +222,10 @@ namespace mixer
                     s.jawari = std::stod (value);
                 else if (key == "tarab")
                     s.tarab = std::stod (value);
+                else if (key == "meend")
+                    s.meend = value != "0";
+                else if (key == "meendSeconds")
+                    s.meendSeconds = std::stod (value);
             }
             catch (...)
             {

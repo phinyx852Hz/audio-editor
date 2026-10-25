@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "PhiRaga.h"
 
+#include <algorithm>
 #include <cmath>
 #include <sstream>
 
@@ -163,6 +164,14 @@ namespace phi
         return out;
     }
 
+    int Raga::kanBefore (int semitone) const
+    {
+        for (const auto& [grace, target] : kan)
+            if (target == semitone)
+                return grace;
+        return -1;
+    }
+
     const Andolan* Raga::andolanOn (int semitone) const
     {
         for (const auto& a : andolan)
@@ -311,6 +320,16 @@ namespace phi
                     }
                     raga.andolan.push_back (a);
                 }
+            else if (key == "kan")
+                for (const auto& part : split (value, ','))
+                {
+                    const auto arrow = part.find ('>');
+                    int grace = -1, target = -1;
+                    if (arrow == std::string::npos)
+                        fail ("kan is a grace and the svara it graces: \"m>g\"");
+                    else if (oneSvara (trim (part.substr (0, arrow)), grace) && oneSvara (trim (part.substr (arrow + 1)), target))
+                        raga.kan.emplace_back (grace, target);
+                }
             else if (key == "time")
                 raga.time = value;
             else if (key == "rasa")
@@ -369,6 +388,13 @@ namespace phi
                            + number (r.andolan[i].depthCents) + " " + number (r.andolan[i].rateHz);
                 out += "\n";
             }
+            if (! r.kan.empty())
+            {
+                out += "kan: ";
+                for (size_t i = 0; i < r.kan.size(); ++i)
+                    out += (i > 0 ? ", " : "") + phraseText ({ Svara { r.kan[i].first, 0 } }) + ">" + phraseText ({ Svara { r.kan[i].second, 0 } });
+                out += "\n";
+            }
             if (! r.time.empty())
                 out += "time: " + r.time + "\n";
             if (! r.rasa.empty())
@@ -422,7 +448,8 @@ namespace phi
         }
         v.outKey = saKey + rel;
         v.svara = { ((rel % 12) + 12) % 12, (int) std::floor (rel / 12.0) };
-        v.hz = saHz * std::pow (2.0, v.svara.octave + raga->cents[(size_t) v.svara.semitone] / 1200.0);
+        v.cents = 1200.0 * v.svara.octave + raga->cents[(size_t) v.svara.semitone];
+        v.hz = saHz * std::pow (2.0, v.cents / 1200.0);
         if (const auto* swing = raga->andolanOn (v.svara.semitone))
         {
             v.swingCents = swing->depthCents;
@@ -431,8 +458,61 @@ namespace phi
         return v;
     }
 
+    RagaPlayer::Voice RagaPlayer::glide (const Voice& from, int key, double seconds)
+    {
+        auto v = noteOn (key);
+        if (raga == nullptr || ornaments <= 0.0)
+            return v;
+        // The path: from where the string is, through each svara of the raga between, to the new one.
+        const auto& allowed = rising ? up : down;
+        v.path[0] = from.cents;
+        v.pathCount = 1;
+        const int a = from.outKey - saKey, b = v.outKey - saKey, step = b > a ? 1 : -1;
+        for (int k = a + step; k != b && v.pathCount < Voice::maxPath - 1; k += step)
+        {
+            const auto semitone = ((k % 12) + 12) % 12;
+            if (allowed[(size_t) semitone])
+                v.path[(size_t) v.pathCount++] = 1200.0 * std::floor (k / 12.0) + raga->cents[(size_t) semitone];
+        }
+        v.path[(size_t) v.pathCount++] = v.cents;
+        v.stepSeconds = std::max (0.0, seconds) / (v.pathCount - 1);
+        v.hold = 0.25;   // a touch on each svara on the way
+        return v;
+    }
+
+    void RagaPlayer::addKan (Voice& v, double seconds) const
+    {
+        if (raga == nullptr || ornaments <= 0.0 || v.pathCount > 0)
+            return;
+        const auto grace = raga->kanBefore (v.svara.semitone);
+        if (grace < 0)
+            return;
+        // The grace's octave: the one nearest the svara.
+        auto cents = 1200.0 * v.svara.octave + raga->cents[(size_t) grace];
+        if (cents - v.cents > 600.0)
+            cents -= 1200.0;
+        else if (v.cents - cents > 600.0)
+            cents += 1200.0;
+        v.path[0] = cents;
+        v.path[1] = v.cents;
+        v.pathCount = 2;
+        v.stepSeconds = seconds;
+        v.hold = 0.7;
+    }
+
     double RagaPlayer::hzAt (const Voice& v, double seconds) const
     {
+        const auto approach = v.approachSeconds();
+        if (seconds < approach && v.stepSeconds > 0.0)
+        {
+            const auto position = seconds / v.stepSeconds;
+            const auto i = std::min ((int) position, v.pathCount - 2);
+            auto f = std::clamp ((position - i - v.hold) / (1.0 - v.hold), 0.0, 1.0);
+            f = f * f * (3.0 - 2.0 * f);
+            const auto cents = v.path[(size_t) i] + (v.path[(size_t) i + 1] - v.path[(size_t) i]) * f;
+            return saHz * std::pow (2.0, cents / 1200.0);
+        }
+        seconds -= approach;
         if (v.swingCents <= 0.0 || ornaments <= 0.0)
             return v.hz;
         // Āndolan: from the svara down by its depth and back, slowly, as long as it is held.

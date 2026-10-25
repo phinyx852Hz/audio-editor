@@ -16,12 +16,14 @@
 //     samvadi: P
 //     pakad: g m R S | d n P
 //     andolan: g 20 0.5, d 20 0.5
+//     kan: m>g
 //     time: late night
 //
 // Svaras are S r R g G m M P d D n N (lower case komal, M tīvra ma); "," after one is the lower
 // octave (mandra), "'" the upper (tār); a dot below or above (ṇ, Ṡ) is read the same way. A
 // svara's tuning is a ratio (g=32/27) or cents (g=294c) above Sa; one without is in five-limit
-// just intonation. Andolan is the svara, the swing's depth in cents and its rate in Hz.
+// just intonation. Andolan is the svara, the swing's depth in cents and its rate in Hz; kan
+// is a grace and the svara it graces (m>g: ga touched from ma).
 // Plain C++, in phi_dsp with the tunings, for the PHI synth.
 #include <array>
 #include <string>
@@ -56,6 +58,9 @@ namespace phi
         int vadi = -1, samvadi = -1;       // semitones, -1 not given
         std::vector<Phrase> pakad, chalan;
         std::vector<Andolan> andolan;
+        // Kaṇ: a svara touched for an instant before another (grace, then the svara it graces).
+        std::vector<std::pair<int, int>> kan;
+        int kanBefore (int semitone) const;   // the grace for this svara, or -1
         std::string time, rasa;
 
         std::vector<double> scaleCents() const;   // the svaras it uses, from Sa up
@@ -85,18 +90,33 @@ namespace phi
             int outKey = -1;         // the key of the svara it became
             Svara svara;             // that svara, its octave counted from the Sa key
             double hz = 0.0;         // its pitch, before ornaments
+            double cents = 0.0;      // the same, in cents above the Sa key
             double swingCents = 0.0, swingHz = 0.0;   // āndolan, 0 when none
+            // A way in: mīṇḍ (a glide through the svaras between, from the last note) or kaṇ (a
+            // grace held for an instant, then the svara). Cents above the Sa key, start to end.
+            static constexpr int maxPath = 16;
+            std::array<double, maxPath> path {};
+            int pathCount = 0;
+            double stepSeconds = 0.0;
+            double hold = 0.0;       // each step stays on its svara this fraction of its time
+            double approachSeconds() const { return pathCount > 1 ? stepSeconds * (pathCount - 1) : 0.0; }
         };
 
         // `raga` must outlive the player (or be set again); null plays keys as they are, in 12-TET.
         void setRaga (const Raga* raga, int saKey = 60, double saHz = 261.6255653005986);
         void setOrnaments (double amount) { ornaments = amount; }   // 0 none to 1 as the sheet says
         Voice noteOn (int key);
+        // Mīṇḍ: the string already sounding `from` is pulled to `key` over `seconds`, touching the
+        // raga's svaras between (those it uses in that direction).
+        Voice glide (const Voice& from, int key, double seconds);
+        // Kaṇ, when the sheet gives one for the svara: the grace for `seconds`, then the svara.
+        void addKan (Voice&, double seconds = 0.05) const;
         void reset() { lastKey = -1; rising = true; }
         // The voice's pitch `seconds` after it started, ornaments and all.
         double hzAt (const Voice&, double seconds) const;
         bool goingUp() const { return rising; }
         int voiceSaKey() const { return saKey; }
+        double voiceSaHz() const { return saHz; }
 
     private:
         const Raga* raga = nullptr;
