@@ -76,6 +76,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/PrismSplit.cpp
     Source/core/Phi.cpp
     Source/core/PhiDynamics.cpp
+    Source/core/PhiChorus.cpp
     Source/core/PhiVoice.cpp
     Source/core/Nyquist.cpp
     Source/core/Album.cpp
@@ -377,6 +378,7 @@ if(PHI_BUILD_TESTS)
         Source/core/PrismSplit.cpp
         Source/core/Phi.cpp
         Source/core/PhiDynamics.cpp
+        Source/core/PhiChorus.cpp
         Source/core/PhiVoice.cpp
         Source/core/Nyquist.cpp
         Source/core/Album.cpp

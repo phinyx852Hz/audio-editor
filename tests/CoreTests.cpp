@@ -33,6 +33,7 @@
 #include "../Source/core/Sonify.h"
 #include "../Source/core/Phi.h"
 #include "../Source/core/PhiDynamics.h"
+#include "../Source/core/PhiChorus.h"
 
 #include <algorithm>
 #include <cmath>
@@ -3863,6 +3864,60 @@ namespace
         }
     }
 
+    // Φ Chorus: rates √φ apart, voices spread by the golden angle, dry at no mix.
+    void testPhiChorus()
+    {
+        const double rate = 48000.0;
+        auto near = [] (double a, double b, double tolerance) { return std::abs (a - b) <= tolerance; };
+        phi::Chorus::Settings s;
+        bool golden = true, apart = true;
+        for (int v = 0; v + 1 < s.voices; ++v)
+        {
+            golden = golden && near (phi::Chorus::voiceRate (s, v + 1) / phi::Chorus::voiceRate (s, v), std::sqrt (phi::ratio), 1.0e-9);
+            for (int w = v + 1; w < s.voices; ++w)
+                apart = apart && std::abs (phi::Chorus::voicePan (s, v) - phi::Chorus::voicePan (s, w)) > 0.1;
+        }
+        check (golden, "phi chorus rates are a golden step apart");
+        check (apart, "phi chorus voices sit in different places");
+        check (near (phi::Chorus::voiceRate (s, 2), s.rateHz, 1.0e-9) && near (phi::Chorus::voiceDelayMs (s, 2), s.delayMs, 1.0e-9),
+               "phi chorus middle voice at the rate and delay");
+
+        auto run = [&] (const phi::Chorus::Settings& settings, std::vector<float>& a, std::vector<float>& b)
+        {
+            phi::Chorus c;
+            c.prepare (rate, 2);
+            c.set (settings);
+            float* io[] { a.data(), b.data() };
+            c.process (io, 2, (int) a.size());
+            return c.delayNowMs (0);
+        };
+        std::vector<float> a (48000), b (48000);
+        for (size_t i = 0; i < a.size(); ++i)
+            a[i] = b[i] = (float) (0.5 * std::sin (2.0 * M_PI * 440.0 * (double) i / rate));
+        auto dryA = a;
+        auto settings = s;
+        settings.mix = 0.0;
+        run (settings, a, b);
+        check (a == dryA, "phi chorus at no mix leaves the sound alone");
+
+        settings = s;
+        settings.voices = 8;
+        settings.depthMs = 10.0;
+        settings.delayMs = 34.0;
+        settings.mix = 1.0;
+        const auto delay = run (settings, a, b);
+        double energy = 0.0, difference = 0.0;
+        bool finite = true;
+        for (size_t i = 24000; i < a.size(); ++i)
+        {
+            finite = finite && std::isfinite (a[i]) && std::isfinite (b[i]);
+            energy += (double) a[i] * a[i];
+            difference += std::abs ((double) a[i] - b[i]);
+        }
+        check (finite && energy > 100.0 && difference > 1.0, "phi chorus sings, wider than mono, at its longest");
+        check (delay > 0.0 && delay <= phi::Chorus::maxDelayMs, "phi chorus delays stay inside its line");
+    }
+
     // The splash's sound: phase distortion, a patch per start, a granular reverb with a long tail.
     void testPhiVoice()
     {
@@ -4519,6 +4574,7 @@ int main()
     testSonify();
     testPhi();
     testPhiDynamics();
+    testPhiChorus();
     testPhiVoice();
 
     if (failures == 0)

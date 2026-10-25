@@ -2,6 +2,7 @@
 #include "PhiEffects.h"
 #include "MasteringEffect.h"
 #include "../core/Phi.h"
+#include "../core/PhiChorus.h"
 #include "../core/PhiDynamics.h"
 
 #include <algorithm>
@@ -1331,6 +1332,96 @@ namespace
         juce::AudioParameterFloat *drive = nullptr, *ceiling = nullptr, *release = nullptr;
         phi::Limiter core;
     };
+
+    //==========================================================================
+    // Φ Chorus: 2, 3, 5 or 8 voices, rates √φ apart, spread by the golden angle.
+    class PhiChorusProcessor final : public MasteringEffect
+    {
+    public:
+        static constexpr const char* identifier = "phinyx:phi-chorus";
+
+        PhiChorusProcessor() : MasteringEffect ("PHI_CHORUS")
+        {
+            auto r = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "rate", 1 }, "Rate",
+                skewed (0.05f, 5.0f, 0.001f, 0.618f), 0.618f, number (3, "Hz"));
+            auto d = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "depth", 1 }, "Depth",
+                juce::NormalisableRange<float> (0.0f, 10.0f, 0.001f), 2.618f, number (2, "ms"));
+            auto m = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "mix", 1 }, "Mix",
+                juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 38.2f, percent());
+            juce::StringArray counts;
+            for (const auto n : phi::Chorus::voiceCounts)
+                counts.add (juce::String (n));
+            auto v = std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "voices", 1 }, "Voices", counts, 2);
+            auto w = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "width", 1 }, "Width",
+                juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 100.0f, percent());
+            auto t = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "delay", 1 }, "Delay",
+                juce::NormalisableRange<float> (1.0f, 34.0f, 0.1f), 13.0f, number (1, "ms"));
+            rate = r.get(); depth = d.get(); mix = m.get(); voices = v.get(); width = w.get(); delay = t.get();
+            addHostedParameter (std::move (r));
+            addHostedParameter (std::move (d));
+            addHostedParameter (std::move (m));
+            addHostedParameter (std::move (v));
+            addHostedParameter (std::move (w));
+            addHostedParameter (std::move (t));
+        }
+
+        static juce::PluginDescription description()
+        {
+            return describe (named ("Φ Chorus"), identifier, "Modulation", 0x50484948);   // "PHIH"
+        }
+        void fillInPluginDescription (juce::PluginDescription& d) const override { d = description(); }
+        const juce::String getName() const override { return named ("Φ Chorus"); }
+        double getTailLengthSeconds() const override { return phi::Chorus::maxDelayMs / 1000.0; }
+
+        void prepareToPlay (double sampleRate, int) override
+        {
+            core.prepare (sampleRate, std::max (1, getTotalNumInputChannels()));
+            core.set (current());
+        }
+
+        using AudioPluginInstance::processBlock;
+        void processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override
+        {
+            core.set (current());
+            core.process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples());
+        }
+
+        DeviceDisplay display() override
+        {
+            // The voices where their delays are now, the middle one tallest, each further
+            // out a golden step shorter.
+            DeviceDisplay d;
+            d.kind = DeviceDisplay::Kind::taps;
+            const auto s = current();
+            const auto first = phi::Chorus::voiceDelayMs (s, 0), last = phi::Chorus::voiceDelayMs (s, s.voices - 1) + s.depthMs;
+            const auto margin = (last - first) * 0.08 + 0.1, from = std::max (0.0, first - margin), to = last + margin;
+            for (int v = 0; v < s.voices; ++v)
+            {
+                d.front.push_back ((float) std::clamp ((core.delayNowMs (v) - from) / (to - from), 0.0, 1.0));
+                d.front.push_back ((float) std::pow (phi::ratio, -std::abs (v - (s.voices - 1) / 2.0) / 2.0));
+            }
+            d.axis = decimal (from, 1) + " to " + decimal (to, 1) + " ms";
+            d.caption = std::to_string (s.voices) + " voices at " + decimal (s.rateHz, 3) + " Hz × √φⁿ";
+            return d;
+        }
+
+    private:
+        phi::Chorus::Settings current() const
+        {
+            phi::Chorus::Settings s;
+            s.rateHz = rate->get();
+            s.depthMs = depth->get();
+            s.mix = mix->get() / 100.0;
+            s.voices = phi::Chorus::voiceCounts[(size_t) std::clamp (voices->getIndex(), 0, 3)];
+            s.width = width->get() / 100.0;
+            s.delayMs = delay->get();
+            return s;
+        }
+
+        juce::AudioParameterFloat *rate = nullptr, *depth = nullptr, *mix = nullptr, *width = nullptr, *delay = nullptr;
+        juce::AudioParameterChoice* voices = nullptr;
+        phi::Chorus core;
+    };
 }
 
 namespace phifx
@@ -1340,7 +1431,8 @@ namespace phifx
         return { PhiEqProcessor::description(), PhiEchoProcessor::description(), PhiSpaceProcessor::description(),
                  PhiDriftProcessor::description(), PhiRhythmProcessor::description(), PhiResonatorProcessor::description(),
                  PhiStackProcessor::description(), PhiTameProcessor::description(), PhiDeresonatorProcessor::description(),
-                 PhiCompressorProcessor::description(), PhiMultibandProcessor::description(), PhiLimiterProcessor::description() };
+                 PhiCompressorProcessor::description(), PhiMultibandProcessor::description(), PhiLimiterProcessor::description(),
+                 PhiChorusProcessor::description() };
     }
 
     std::unique_ptr<juce::AudioPluginInstance> create (const juce::PluginDescription& d)
@@ -1360,6 +1452,7 @@ namespace phifx
         if (id == PhiCompressorProcessor::identifier)  return std::make_unique<PhiCompressorProcessor>();
         if (id == PhiMultibandProcessor::identifier)   return std::make_unique<PhiMultibandProcessor>();
         if (id == PhiLimiterProcessor::identifier)     return std::make_unique<PhiLimiterProcessor>();
+        if (id == PhiChorusProcessor::identifier)      return std::make_unique<PhiChorusProcessor>();
         return nullptr;
     }
 }
