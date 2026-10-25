@@ -402,7 +402,19 @@ Fast MIDI edits (owner, 2026-10-25: "MIDI editing, but really fast"; "the idea i
   Edits until the mix is saved. The clip plays it from the start, as it was heard (a reversed
   clip is turned round first). Ctrl+Z undoes an edit on the tracks. The code is in
   mixer/MidiFile.h (phiShuffle, duplicated, halfDensity, doubleDensity, toMode, scales), with
-  tests. The Sampler and Slicer windows of the Sample menu
+  tests.
+
+Paulstretch on an audio clip (owner, 2026-10-25: "a fast way to implement it ... in an audio clip
+on a horizontal track or a clip launcher clip"):
+- An audio clip picked (on the tracks or in the launcher) puts an Audio Clip section at the top of
+  the Inspector: **Paulstretch** and how many times longer. The ratio is the editor's Extreme
+  Stretch ratio (`extreme/ratio`), and the other settings are the ones Warp > Extreme Stretch last
+  used (`ExtremeSettings.h`), so a sound set up in the editor stretches the same way on a clip.
+- The clip is stretched as it plays (its part, reversed if it is), with progress and Cancel, and
+  saved as a 32-bit WAV, "<name> x<ratio>", in the same Edits folder. The clip then plays it from
+  the start; Ctrl+Z puts a track's clip back. A track clip that grows overlaps the clips after it.
+
+The Sampler and Slicer windows of the Sample menu
 could dock into the mixer as track 1 (the other thread's docking work).
 
 Patchbay (2026-10-22, docs/patchbay.md): while the patchbay plays (it always does live), the

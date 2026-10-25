@@ -3,6 +3,7 @@
 #include "PhiMark.h"
 #include "Potentiometer.h"
 #include "SamplerWindow.h"
+#include "ExtremeSettings.h"
 #include "Settings.h"
 #include "SlicerWindow.h"
 #include "Theme.h"
@@ -4829,6 +4830,34 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     }
     midiClipBox->hide();
     inspectorLayout->addWidget (midiClipBox);
+    // An audio clip picked: Paulstretch at the top, with the stretch the editor last used.
+    audioClipBox = new QFrame (inspectorArea);
+    audioClipBox->setObjectName (QStringLiteral ("audioClipBox"));
+    audioClipBox->setStyleSheet (QStringLiteral ("QFrame#audioClipBox { border: 1px solid palette(mid); border-radius: 4px; }"));
+    {
+        auto* grid = new QGridLayout (audioClipBox);
+        grid->setContentsMargins (6, 6, 6, 6);
+        grid->setSpacing (4);
+        audioClipTitle = new QLabel (audioClipBox);
+        auto bold = audioClipTitle->font();
+        bold.setBold (true);
+        audioClipTitle->setFont (bold);
+        grid->addWidget (audioClipTitle, 0, 0, 1, 2);
+        auto* stretch = new QPushButton (tr ("Paulstretch"), audioClipBox);
+        stretch->setToolTip (tr ("The clip as it plays, stretched this many times longer with the editor's Extreme Stretch "
+                                 "settings, saved beside the mix. Ctrl+Z puts a track's clip back"));
+        stretchRatioBox = new QDoubleSpinBox (audioClipBox);
+        stretchRatioBox->setRange (1.0, 10000.0);
+        stretchRatioBox->setDecimals (2);
+        stretchRatioBox->setSuffix (tr (" ×"));
+        stretchRatioBox->setValue (extremeRatio());
+        stretchRatioBox->setToolTip (tr ("How many times longer; shared with the editor's Extreme Stretch"));
+        grid->addWidget (stretch, 1, 0);
+        grid->addWidget (stretchRatioBox, 1, 1);
+        connect (stretch, &QPushButton::clicked, this, [this] { stretchShownAudio(); });
+    }
+    audioClipBox->hide();
+    inspectorLayout->addWidget (audioClipBox);
     inspectorLayout->addWidget (rack);
     inspectorLayout->addStretch (1);
     inspectorScroll = new QScrollArea (this);
@@ -5024,7 +5053,7 @@ void MixerWindow::refreshInspector()
         if (inspectorStrip == nullptr && track >= 0)
         {
             inspectorStrip = new MixerStrip (*this, track, true);
-            inspectorLayout->insertWidget (inspectorLayout->indexOf (midiClipBox) + 1, inspectorStrip);
+            inspectorLayout->insertWidget (inspectorLayout->indexOf (audioClipBox) + 1, inspectorStrip);
         }
         if (inspectorStrip != nullptr)
         {
@@ -5050,6 +5079,14 @@ void MixerWindow::refreshMidiClipBox()
     midiClipBox->setVisible (show);
     if (show)
         midiClipTitle->setText (tr ("MIDI Clip: %1").arg (clipView->shownName()));
+    const bool audio = showingClip && ! clipView->showsMidi();
+    audioClipBox->setVisible (audio);
+    if (audio)
+    {
+        audioClipTitle->setText (tr ("Audio Clip: %1").arg (clipView->shownName()));
+        const QSignalBlocker quiet (stretchRatioBox);
+        stretchRatioBox->setValue (extremeRatio());   // the editor may have changed it
+    }
 }
 
 QString MixerWindow::editsFolder() const
@@ -7379,15 +7416,11 @@ bool MixerWindow::focusNextPrevChild (bool)
 
 //==============================================================================
 // A clip edited in the editor: what it sounds like now, and the edit put back.
-AudioDataPtr MixerWindow::clipAudio (int track, uint32_t id, QString& name) const
+namespace
 {
-    if (track < 0 || track >= engine.numTracks())
-        return nullptr;
-    for (const auto& c : engine.clips (track))
+    // The part of an audio clip heard, the way it plays.
+    AudioDataPtr heardAudio (const mixer::Clip& c, double rate)
     {
-        if (c.id != id || c.audio == nullptr)
-            continue;
-        // The part heard, the way it plays.
         const auto& a = *c.audio;
         std::vector<float> left ((size_t) c.length), right ((size_t) c.length);
         for (Frame k = 0; k < c.length; ++k)
@@ -7397,33 +7430,35 @@ AudioDataPtr MixerWindow::clipAudio (int track, uint32_t id, QString& name) cons
             left[(size_t) k] = a.left[src];
             right[(size_t) k] = a.right[src];
         }
-        AudioData::Builder b (a.mono ? 1 : 2, rate());
+        AudioData::Builder b (a.mono ? 1 : 2, rate);
         const float* ptrs[2] = { left.data(), right.data() };
         b.append (ptrs, (int) c.length);
-        name = tr ("Track %1 %2").arg (track + 1).arg (QFileInfo (QString::fromStdString (a.path)).completeBaseName());
         return b.finish();
+    }
+}
+
+AudioDataPtr MixerWindow::clipAudio (int track, uint32_t id, QString& name) const
+{
+    if (track < 0 || track >= engine.numTracks())
+        return nullptr;
+    for (const auto& c : engine.clips (track))
+    {
+        if (c.id != id || c.audio == nullptr)
+            continue;
+        name = tr ("Track %1 %2").arg (track + 1).arg (QFileInfo (QString::fromStdString (c.audio->path)).completeBaseName());
+        return heardAudio (c, rate());
     }
     return nullptr;
 }
 
-bool MixerWindow::replaceClipAudio (int track, uint32_t id, const AudioData& edited, const QString& name, QString& error)
+mixer::AudioClipPtr MixerWindow::saveClipEdit (const AudioData& edited, const QString& name, QString& file, QString& error)
 {
-    if (track < 0 || track >= engine.numTracks())
-        return false;
-    auto list = engine.clips (track);
-    auto it = std::find_if (list.begin(), list.end(), [id] (const mixer::Clip& c) { return c.id == id; });
-    if (it == list.end())
-    {
-        error = tr ("The clip is no longer on track %1.").arg (track + 1);
-        return false;
-    }
-
     // Saved beside the mix (in the Music folder until it is saved), the original left as it was.
     const auto base = editsFolder();
     QDir().mkpath (base);
     auto stem = name;
     stem.replace (QRegularExpression (QStringLiteral ("[/\\\\:*?\"<>|]")), QStringLiteral ("_"));
-    auto file = QDir (base).filePath (stem + QStringLiteral (".wav"));
+    file = QDir (base).filePath (stem + QStringLiteral (".wav"));
     for (int n = 2; QFileInfo::exists (file); ++n)
         file = QDir (base).filePath (QStringLiteral ("%1 %2.wav").arg (stem).arg (n));
     SaveOptions options;
@@ -7439,12 +7474,127 @@ bool MixerWindow::replaceClipAudio (int track, uint32_t id, const AudioData& edi
     if (! AudioEngine::saveFile (file.toStdString(), *sound, {}, {}, options, why))
     {
         error = tr ("The edit could not be saved to %1: %2").arg (file, QString::fromStdString (why));
+        return nullptr;
+    }
+    const auto clip = mixer::makeAudioClip (*sound, file.toStdString());
+    audioCache[file] = clip;
+    return clip;
+}
+
+void MixerWindow::stretchShownAudio()
+{
+    if (! showingClip || clipView->showsMidi())
+        return;
+    const auto track = clipView->shownTrack();
+    const auto id = clipView->shownId();
+    const auto scene = clipView->shownScene();
+    mixer::Clip clip;
+    if (id != 0)
+    {
+        for (const auto& c : engine.clips (track))
+            if (c.id == id)
+                clip = c;
+    }
+    else if (scene >= 0 && slots[(size_t) track][(size_t) scene] != nullptr)
+        clip = slots[(size_t) track][(size_t) scene]->clip;
+    if (clip.audio == nullptr || clip.length < 2)
+        return;
+    const auto ratio = stretchRatioBox->value();
+    appSettings().setValue (QStringLiteral ("extreme/ratio"), ratio);
+    const auto sound = heardAudio (clip, rate());
+    const auto settings = loadExtremeSettings();
+    const auto title = tr ("Paulstretch");
+
+    auto progress = std::make_shared<std::atomic<float>> (0.0f);
+    auto cancel = std::make_shared<std::atomic<bool>> (false);
+    QProgressDialog dialog (tr ("Stretching %1 %2 times...").arg (clipView->shownName()).arg (ratio), tr ("Cancel"), 0, 1000, this);
+    dialog.setWindowTitle (title);
+    dialog.setWindowModality (Qt::WindowModal);
+    dialog.setMinimumDuration (300);
+    connect (&dialog, &QProgressDialog::canceled, this, [cancel] { cancel->store (true); });
+
+    struct Result { AudioDataPtr data; std::string error; };
+    QFutureWatcher<Result> watcher;
+    QEventLoop loop;
+    connect (&watcher, &QFutureWatcher<Result>::finished, &loop, &QEventLoop::quit);
+    QTimer poll;
+    connect (&poll, &QTimer::timeout, this, [&] { dialog.setValue ((int) (progress->load() * 1000.0f)); });
+    poll.start (50);
+    watcher.setFuture (QtConcurrent::run ([sound, ratio, settings, progress, cancel]
+    {
+        Result r;
+        r.data = paulstretch::stretch (*sound, 0, sound->length(), ratio, settings, r.error, progress.get(), cancel.get());
+        return r;
+    }));
+    loop.exec();
+    poll.stop();
+    dialog.reset();
+
+    const auto result = watcher.result();
+    if (result.data == nullptr)
+    {
+        if (! cancel->load())
+            QMessageBox::warning (this, title, result.error.empty() ? tr ("The clip could not be stretched.") : QString::fromStdString (result.error));
+        return;
+    }
+    auto stem = QFileInfo (QString::fromStdString (clip.audio->path)).completeBaseName();
+    if (stem.isEmpty())
+        stem = tr ("Clip");
+    stem.remove (QRegularExpression (QStringLiteral (" x[\\d.]+( \\d+)?$")));   // "pad x8" stretched again is "pad x4", not "pad x8 x4"
+    QString file, error;
+    const auto stretched = saveClipEdit (*result.data, QStringLiteral ("%1 x%2").arg (stem).arg (ratio), file, error);
+    if (stretched == nullptr)
+    {
+        QMessageBox::warning (this, title, error);
+        return;
+    }
+    if (id != 0)
+    {
+        remember();
+        auto list = engine.clips (track);
+        for (auto& c : list)
+            if (c.id == id)
+            {
+                c.audio = stretched;
+                c.offset = 0;
+                c.length = stretched->length();
+                c.reversed = false;
+            }
+        editClips (track, std::move (list));
+        status->setText (tr ("Stretched %1 times (%2); Ctrl+Z puts the clip back").arg (ratio).arg (file));
+    }
+    else
+    {
+        editSlot (track, scene, [&stretched] (mixer::Slot& x)
+        {
+            x.clip.audio = stretched;
+            x.clip.offset = 0;
+            x.clip.length = stretched->length();
+            x.clip.reversed = false;
+        });
+        status->setText (tr ("Stretched %1 times (%2)").arg (ratio).arg (file));
+    }
+    changed();
+}
+
+bool MixerWindow::replaceClipAudio (int track, uint32_t id, const AudioData& edited, const QString& name, QString& error)
+{
+    if (track < 0 || track >= engine.numTracks())
+        return false;
+    auto list = engine.clips (track);
+    auto it = std::find_if (list.begin(), list.end(), [id] (const mixer::Clip& c) { return c.id == id; });
+    if (it == list.end())
+    {
+        error = tr ("The clip is no longer on track %1.").arg (track + 1);
         return false;
     }
 
+    QString file;
+    const auto clip = saveClipEdit (edited, name, file, error);
+    if (clip == nullptr)
+        return false;
+
     remember();
-    const auto clip = mixer::makeAudioClip (*sound, file.toStdString());
-    audioCache[file] = clip;
     it->audio = clip;
     it->offset = 0;
     it->length = clip->length();

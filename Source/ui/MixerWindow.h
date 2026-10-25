@@ -265,6 +265,13 @@ private:
     void editShownMidi (const std::function<midifile::SongPtr (const midifile::Song&)>& edit, const QString& what);
     void refreshMidiClipBox();
     QString editsFolder() const;   // where edits of the mix's clips are saved
+    // An audio clip shown: Paulstretch makes it the remembered number of times longer, with the
+    // editor's Extreme Stretch settings, saved beside the mix (owner, 2026-10-25).
+    void stretchShownAudio();
+    mixer::AudioClipPtr saveClipEdit (const AudioData& edited, const QString& name, QString& file, QString& error);
+    QWidget* audioClipBox = nullptr;
+    QLabel* audioClipTitle = nullptr;
+    QDoubleSpinBox* stretchRatioBox = nullptr;
     QWidget* midiClipBox = nullptr;
     QLabel* midiClipTitle = nullptr;
     QComboBox* rootBox = nullptr;
