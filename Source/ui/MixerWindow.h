@@ -28,6 +28,7 @@ class QDoubleSpinBox;
 class QLabel;
 class QPushButton;
 class QHBoxLayout;
+class QVBoxLayout;
 class MixerStrip;
 class QSplitter;
 class TrackLanes;
@@ -284,7 +285,12 @@ private:
     std::array<std::array<mixer::SlotPtr, mixer::maxScenes>, mixer::maxTracks> slots {};   // as given to the engine
     QPushButton* launcherButton = nullptr;
     QPushButton* inspectorButton = nullptr;   // the launcher's rack, on the right, hidden until asked for
-    QWidget* rackArea = nullptr;
+    QWidget* inspectorArea = nullptr;
+    QVBoxLayout* inspectorLayout = nullptr;
+    QScrollArea* inspectorScroll = nullptr;
+    MixerStrip* inspectorStrip = nullptr;   // the selected track's, rebuilt when the selection moves
+    bool inspectorPending = false;
+    void refreshInspector();   // soon, once for any number of changes
     QScrollArea* gridScroll = nullptr;
     QByteArray timelineSplit;    // the splitter as the tracks across time had it
     bool launcherSplit = false;

@@ -360,8 +360,9 @@ Every control has a screen-reader name and announces its value.
 Next (owner, 2026-10-24): a
 Channel window (Pre and a Φ EQ with another track's spectrum to compare), loudness on the master,
 snapshots and mixer history, then In/Out routing (Ableton's Audio From and Audio To), live inputs
-and recording, thumbnails, templates and the spatial panner. No inspector: with 8 tracks the
-strips have the room. The Sampler and Slicer windows of the Sample menu
+and recording, thumbnails, templates and the spatial panner. The Inspector (owner, 2026-10-25) is a column at the mixer's
+left in both views with the selected track's mode, instrument, Pre, inserts, sends and width; the
+strips stay lean (four insert slots, sends, trim and pan, fader, name) in both views. The Sampler and Slicer windows of the Sample menu
 could dock into the mixer as track 1 (the other thread's docking work).
 
 Patchbay (2026-10-22, docs/patchbay.md): while the patchbay plays (it always does live), the

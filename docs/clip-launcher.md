@@ -28,10 +28,14 @@ Tab switches between the launcher and the tracks across time, as in Ableton (202
   stop button under its column. A clip is filled with its track's colour. A ⟲ in a track's header
   means it is off its timeline; clicking it goes back. The grid scrolls when the strips need the
   room.
-- **The Inspector** (the top bar's Inspector button, off to start): the selected track's rack on
-  the right. Its instrument (with Edit and the MIDI keyboard arm), the track (trim, transpose, MIDI
-  channels, polarity, Back to Timeline) and the clip in the slot under the cursor (loop, reverse,
-  its own launch quantise, choose a file, empty the slot).
+- **The Inspector** (owner, 2026-10-25; the top bar's Inspector button, on to start): one column
+  at the left of the mixer, in the launcher and in the tracks view alike. At the top the selected
+  track's name on its colour, then its mode (Audio, Inst, Hybrid) with the layer and Duck dials,
+  its instrument (with Edit, transpose, MIDI channel and the keyboard arm), Pre (polarity, low and
+  high cut, track delay), all its inserts, Send A and B, and width. In the launcher it also shows
+  the track's timeline follow (Back to Timeline) and the clip in the slot under the cursor (loop,
+  reverse, its own launch quantise, choose a file, empty the slot). The Strips button picks its
+  sections too.
 - **Below: the strips, made compact** (owner, 2026-10-25): four insert slots as tall as the clip
   slots, Send A and Send B above Trim and Pan, mute and solo, a shorter fader and meter with their
   values, and the track's name at the bottom in white on its colour. The full strips come back

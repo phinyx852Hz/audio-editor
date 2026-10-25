@@ -516,7 +516,8 @@ private:
 class MixerStrip final : public QFrame
 {
 public:
-    MixerStrip (MixerWindow& w, int i) : QFrame (&w), window (w), index (i)
+    // `inspector`: the selected track's deep settings in the Inspector, without the fader.
+    MixerStrip (MixerWindow& w, int i, bool inspector = false) : QFrame (&w), window (w), index (i), inspecting (inspector)
     {
         setFrameShape (QFrame::StyledPanel);
         setObjectName (QStringLiteral ("strip"));
@@ -706,7 +707,7 @@ public:
             return part;
         };
         trimPart = knobColumn (trimDial, trimLabel, MixerWindow::tr ("Trim"));
-        auto* panColumnPart = knobColumn (panDial, panLabel, MixerWindow::tr ("Pan"));
+        panColumnPart = knobColumn (panDial, panLabel, MixerWindow::tr ("Pan"));
         widthDial = new Potentiometer (this);
         widthDial->setRange (0, 200);
         widthDial->setFixedSize (knob, knob);
@@ -845,6 +846,16 @@ public:
         values->addWidget (peakValue);
         layout->addLayout (values);
         layout->addWidget (nameBox);
+        if (inspecting)
+        {
+            // The Inspector: its name on top, no fader (the strip has it).
+            layout->removeWidget (nameBox);
+            layout->insertWidget (1, nameBox);
+            for (QWidget* x : std::initializer_list<QWidget*> { muteButton, soloButton, fader, meter, faderValue, peakValue })
+                x->hide();
+            layout->addStretch (1);
+            setFrameShape (QFrame::NoFrame);
+        }
 
         // Changes go straight to the engine.
         QObject::connect (nameEdit, &QLineEdit::textEdited, this, [this] (const QString& t)
@@ -1042,6 +1053,28 @@ public:
     {
         const auto shown = window.stripSections;
         const auto mode = (mixer::TrackMode) strip().mode.load();
+        if (inspecting)
+        {
+            // Everything the strips leave out; the Strips menu picks the sections.
+            modePart->setVisible (true);
+            instrumentPart->setVisible ((shown & instrumentSection) != 0 && mode != mixer::TrackMode::audio);
+            layerPart->setVisible ((shown & instrumentSection) != 0);
+            audioLayerPart->setVisible (mode == mixer::TrackMode::hybrid);
+            instLayerPart->setVisible (mode == mixer::TrackMode::hybrid);
+            prePart->setVisible ((shown & preSection) != 0);
+            insertPart->setVisible ((shown & insertSection) != 0);
+            insertTitle->setVisible (true);
+            addInsertButton->setVisible (true);
+            sendPart->setVisible ((shown & sendSection) != 0);
+            panPart->setVisible ((shown & panSection) != 0);
+            trimPart->setVisible (false);
+            panColumnPart->setVisible (false);
+            widthPart->setVisible (true);
+            refreshInserts();
+            setMinimumWidth (180);
+            setMaximumWidth (QWIDGETSIZE_MAX);
+            return;
+        }
         instrumentPart->setVisible (! compact && (shown & instrumentSection) != 0 && mode != mixer::TrackMode::audio);
         // The duck in every mode (another track can key it); the layer levels only in a hybrid.
         layerPart->setVisible (! compact && (shown & instrumentSection) != 0);
@@ -1474,6 +1507,8 @@ public:
     const int index;
     bool updating = false;
     bool compact = false;
+    const bool inspecting;
+    QWidget* panColumnPart = nullptr;
     static constexpr int compactFader = 110, compactSlot = 18;
     QWidget* instrumentPart;
     QWidget* prePart;
@@ -3394,6 +3429,17 @@ public:
         form->addRow (followLabel);
         form->addRow (backButton);
         layout->addWidget (trackGroup);
+        // In the Inspector the strip above has the instrument, trim, transpose, MIDI channels and
+        // polarity; the rack keeps the launcher's part: the timeline and the clip.
+        instrumentGroup->hide();
+        colourBar->hide();
+        title->hide();
+        for (auto* row : std::initializer_list<QWidget*> { trimBox, transposeBox, channelsButton })
+            form->setRowVisible (row, false);
+        form->setRowVisible (polarity, false);
+        trackGroup->setTitle (MixerWindow::tr ("Launcher"));
+        setFrameShape (QFrame::NoFrame);
+        setMaximumWidth (QWIDGETSIZE_MAX);
 
         // The clip under the cursor.
         clipGroup = new QGroupBox (MixerWindow::tr ("Clip"), this);
@@ -3773,9 +3819,9 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     followTempoBox->setToolTip (tr ("Play the MIDI files at the mix's tempo instead of their own tempo maps"));
     launcherButton = button (tr ("Launcher"), tr ("The clip launcher in place of the tracks across time (Performance > Clip Launcher, F5; V goes back)"));
     launcherButton->setCheckable (true);
-    inspectorButton = button (tr ("Inspector"), tr ("The selected track's instrument, settings and clip, beside the launcher"));
+    inspectorButton = button (tr ("Inspector"), tr ("The Inspector, left of the strips: the selected track's mode, instrument, Pre, inserts, sends and width, and in the launcher its clip"));
     inspectorButton->setCheckable (true);
-    inspectorButton->setChecked (appSettings().value (QStringLiteral ("mixer/inspector"), false).toBool());
+    inspectorButton->setChecked (appSettings().value (QStringLiteral ("mixer/inspector"), true).toBool());
     quantiseBox = new QComboBox (this);
     quantiseBox->setFocusPolicy (Qt::NoFocus);
     for (int q = 0; q < numQuantise; ++q)
@@ -3789,7 +3835,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     scenesBox->setToolTip (tr ("How many scenes (rows) the launcher has"));
     stripSections = appSettings().value (QStringLiteral ("mixer/stripSections"), allSections).toInt() & allSections;
     wideStrips = appSettings().value (QStringLiteral ("mixer/wideStrips"), false).toBool();
-    auto* stripsButton = button (tr ("Strips"), tr ("Which sections the strips show (instrument, Pre, inserts, sends, trim and pan), and wide or narrow strips"));
+    auto* stripsButton = button (tr ("Strips"), tr ("Which sections the strips and the Inspector show (instrument, Pre, inserts, sends, trim and pan), and wide or narrow strips"));
     qLinkButton = button (tr ("Q-Link"), tr ("Q-Link: a change to one of the picked strips (Ctrl+click picks them) goes to all of them; "
                                              "Alt+Shift while changing one sends it to every track"));
     qLinkButton->setCheckable (true);
@@ -3904,15 +3950,6 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     launcherArea = new QWidget (this);
     auto* launcherRow = new QHBoxLayout (launcherArea);
     launcherRow->setContentsMargins (0, 0, 0, 0);
-    auto* rackScroll = new QScrollArea (launcherArea);
-    rackScroll->setWidget (rack);
-    rackScroll->setWidgetResizable (true);
-    rackScroll->setFrameShape (QFrame::NoFrame);
-    rackScroll->viewport()->setAutoFillBackground (false);
-    rackScroll->setFocusPolicy (Qt::NoFocus);
-    rackScroll->setHorizontalScrollBarPolicy (Qt::ScrollBarAlwaysOff);
-    rackScroll->setMinimumWidth (rack->minimumWidth() + 16);
-    rackScroll->setMaximumWidth (rack->maximumWidth() + 16);
     // The scenes scroll when the strips need the room (owner, 2026-10-25: more scenes, shorter strips).
     gridScroll = new QScrollArea (launcherArea);
     gridScroll->setWidget (grid);
@@ -3923,9 +3960,6 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     gridScroll->viewport()->setAutoFillBackground (false);
     gridScroll->setMinimumHeight (120);
     launcherRow->addWidget (gridScroll, 1);
-    launcherRow->addWidget (rackScroll);
-    rackArea = rackScroll;
-    rackArea->setVisible (appSettings().value (QStringLiteral ("mixer/inspector"), false).toBool());
     launcherArea->hide();
     upperArea = new QWidget (this);
     auto* upperLayout = new QVBoxLayout (upperArea);
@@ -3947,6 +3981,27 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     sideSplitter = new QSplitter (Qt::Horizontal, this);
     sideSplitter->setChildrenCollapsible (false);
     sideSplitter->addWidget (browser);
+    // The Inspector (owner, 2026-10-25): a column left of the tracks with the selected track's
+    // deep settings (mode, instrument, layers and duck, Pre, every insert, sends, width) and the
+    // clip under the launcher's cursor; the strips stay lean.
+    inspectorArea = new QWidget (this);
+    inspectorLayout = new QVBoxLayout (inspectorArea);
+    inspectorLayout->setContentsMargins (0, 0, 0, 0);
+    inspectorLayout->setSpacing (4);
+    inspectorLayout->addWidget (rack);
+    inspectorLayout->addStretch (1);
+    inspectorScroll = new QScrollArea (this);
+    inspectorScroll->setWidget (inspectorArea);
+    inspectorScroll->setWidgetResizable (true);
+    inspectorScroll->setFrameShape (QFrame::NoFrame);
+    inspectorScroll->setFocusPolicy (Qt::NoFocus);
+    inspectorScroll->setHorizontalScrollBarPolicy (Qt::ScrollBarAlwaysOff);
+    inspectorScroll->viewport()->setAutoFillBackground (false);
+    inspectorArea->setAutoFillBackground (false);
+    inspectorScroll->setMinimumWidth (200);
+    inspectorScroll->setMaximumWidth (300);
+    inspectorScroll->setVisible (appSettings().value (QStringLiteral ("mixer/inspector"), true).toBool());
+    sideSplitter->addWidget (inspectorScroll);
     sideSplitter->addWidget (splitter);
     sideSplitter->setStretchFactor (0, 0);
     sideSplitter->setStretchFactor (1, 1);
@@ -4009,9 +4064,9 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     connect (launcherButton, &QPushButton::toggled, this, [this] (bool on) { showLauncher (on); });
     connect (inspectorButton, &QPushButton::toggled, this, [this] (bool on)
     {
-        rackArea->setVisible (on);
+        inspectorScroll->setVisible (on);
         appSettings().setValue (QStringLiteral ("mixer/inspector"), on);
-        rack->refresh();
+        refreshInspector();
         setFocus();
     });
     connect (quantiseBox, &QComboBox::activated, this, [this] (int q)
@@ -4086,11 +4141,42 @@ void MixerWindow::rebuildStrips()
     }
     for (auto* r : returnStrips)
         r->refresh();
+    refreshInspector();
     if (selected < mixer::masterIndex && selected >= count)
         select (count - 1);
     if (grid != nullptr)
         grid->update();
     refreshTransport();
+}
+
+void MixerWindow::refreshInspector()
+{
+    if (inspectorPending || inspectorLayout == nullptr)
+        return;
+    inspectorPending = true;
+    QTimer::singleShot (0, this, [this]
+    {
+        inspectorPending = false;
+        const auto track = selected < mixer::masterIndex ? std::min (selected, engine.numTracks() - 1) : -1;
+        if (inspectorStrip != nullptr && inspectorStrip->index != track)
+        {
+            inspectorStrip->deleteLater();
+            inspectorStrip = nullptr;
+        }
+        if (inspectorStrip == nullptr && track >= 0)
+        {
+            inspectorStrip = new MixerStrip (*this, track, true);
+            inspectorLayout->insertWidget (0, inspectorStrip);
+        }
+        if (inspectorStrip != nullptr)
+        {
+            inspectorStrip->refresh();
+            inspectorStrip->applyLayout();
+        }
+        if (track >= 0)
+            strips[(size_t) track]->refresh();
+        rack->refresh();
+    });
 }
 
 void MixerWindow::select (int index)
@@ -4108,6 +4194,7 @@ void MixerWindow::select (int index)
         browser->showHint();
     if (rack != nullptr)
         rack->refresh();
+    refreshInspector();
     if (grid != nullptr)
         grid->update();
     masterStrip->setStyleSheet (selected == mixer::masterIndex
@@ -4966,6 +5053,7 @@ void MixerWindow::stripsMenu (QPoint at)
         appSettings().setValue (QStringLiteral ("mixer/wideStrips"), wideStrips);
         for (auto* strip : strips)
             strip->applyLayout();
+        refreshInspector();
     };
     for (const auto& [bit, text] : sections)
     {
@@ -5233,6 +5321,7 @@ void MixerWindow::stripsChanged()
 
 void MixerWindow::changed()
 {
+    refreshInspector();   // and the selected strip: either may have made the change
     if (restoring)
         return;
     modified = true;
@@ -6294,8 +6383,9 @@ void MixerWindow::showLauncher (bool on)
     updateUpperArea();
     // The launcher takes the browser's room; Ctrl+B still brings it back.
     browser->setVisible (! on && appSettings().value (QStringLiteral ("mixer/browser"), true).toBool());
+    // The strips stay lean in both views; the Inspector has the rest.
     for (auto* strip : strips)
-        strip->setCompact (on);
+        strip->setCompact (true);
     // The launcher's strips take only the height they need, the scenes the rest; the
     // tracks across time get their own split back.
     if (on && ! launcherSplit)
@@ -6317,7 +6407,7 @@ void MixerWindow::showLauncher (bool on)
         launcherSplit = false;
         splitter->restoreState (timelineSplit);
     }
-    for (auto* w : std::initializer_list<QWidget*> { quantiseBox, scenesBox, inspectorButton })
+    for (auto* w : std::initializer_list<QWidget*> { quantiseBox, scenesBox, (QWidget*) rack })
         w->setVisible (on);
     {
         const QSignalBlocker block (launcherButton);
