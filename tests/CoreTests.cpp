@@ -32,6 +32,7 @@
 #include "../Source/core/PhiPhaser.h"
 #include "../Source/core/PhiTuning.h"
 #include "../Source/core/PhiRaga.h"
+#include "../Source/core/PhiSitar.h"
 #include "../Source/core/PrismSplit.h"
 #include "../Source/core/MasterAssist.h"
 #include "../Source/mixer/MixAssist.h"
@@ -43,6 +44,7 @@
 #include "../Source/core/PhiForensics.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -4256,6 +4258,99 @@ namespace
                "raga sheets: a svara the raga lacks, or an unknown field, is reported by its line");
     }
 
+    // PHI rāga's sitar: in tune, sympathetic strings that answer only their own pitch, and cheap.
+    void testSitar()
+    {
+        constexpr double rate = 48000.0;
+        auto render = [] (phi::Sitar& sitar, int frames)
+        {
+            std::vector<float> l ((size_t) frames, 0.0f), r ((size_t) frames, 0.0f);
+            sitar.process (l.data(), r.data(), frames);
+            for (size_t i = 0; i < l.size(); ++i)
+                l[i] = 0.5f * (l[i] + r[i]);
+            return l;
+        };
+        auto pitch = [] (const std::vector<float>& x, size_t from, size_t count, double lowHz, double highHz)
+        {
+            double best = -1.0e30;
+            int bestLag = 0;
+            for (int lag = (int) (rate / highHz); lag <= (int) (rate / lowHz); ++lag)
+            {
+                double sum = 0.0;
+                for (size_t i = from; i < from + count; ++i)
+                    sum += (double) x[i] * x[i + (size_t) lag];
+                if (sum > best)
+                    best = sum, bestLag = lag;
+            }
+            return rate / bestLag;
+        };
+        auto energy = [] (const std::vector<float>& x, size_t from, size_t to)
+        {
+            double e = 0.0;
+            for (size_t i = from; i < to; ++i)
+                e += (double) x[i] * x[i];
+            return e;
+        };
+        {
+            phi::Sitar sitar;
+            sitar.prepare (rate);
+            sitar.setJawari (0.0);
+            sitar.pluck (220.0, 0.8);
+            const auto open = render (sitar, (int) rate);
+            const auto hz = pitch (open, 9600, 4800, 150.0, 300.0);
+            check (std::abs (1200.0 * std::log2 (hz / 220.0)) < 15.0, "sitar: an open bridge plays in tune");
+            bool finite = true;
+            for (auto v : open)
+                finite = finite && std::isfinite (v) && std::abs (v) < 4.0f;
+            check (finite && energy (open, 0, 4800) > 10.0 * energy (open, 43200, 48000), "sitar: bounded, and it dies away");
+        }
+        {
+            phi::Sitar sitar;
+            sitar.prepare (rate);
+            sitar.setJawari (0.7);
+            const auto string = sitar.pluck (220.0, 0.8);
+            auto buzz = render (sitar, (int) (0.5 * rate));
+            check (std::abs (1200.0 * std::log2 (pitch (buzz, 9600, 4800, 150.0, 300.0) / 220.0)) < 40.0, "sitar: in tune with the jawari");
+            // Pulled a whole tone (mīṇḍ), the string follows.
+            sitar.setHz (string, 246.94);
+            const auto pulled = render (sitar, (int) (0.5 * rate));
+            check (std::abs (1200.0 * std::log2 (pitch (pulled, 4800, 4800, 150.0, 300.0) / 246.94)) < 40.0, "sitar: the string bends to a new pitch");
+        }
+        {
+            // A tarab string at 220 Hz answers 220 Hz long after the played string is let go, and
+            // barely answers 233 Hz.
+            auto ring = [&] (double played)
+            {
+                phi::Sitar sitar;
+                sitar.prepare (rate);
+                sitar.setJawari (0.0);
+                sitar.setTarab ({ 220.0 });
+                const auto s = sitar.pluck (played, 0.9);
+                render (sitar, (int) (0.6 * rate));
+                sitar.release (s);
+                const auto after = render (sitar, (int) (2.0 * rate));
+                return energy (after, (size_t) (1.5 * rate), (size_t) (2.0 * rate));
+            };
+            const auto matched = ring (220.0), other = ring (233.08);
+            check (matched > 4.0 * other && matched > 0.0, "sitar: tarab rings in sympathy with its own pitch");
+        }
+        {
+            phi::Sitar sitar;
+            sitar.prepare (rate);
+            std::vector<double> tarab;
+            for (int i = 0; i < 13; ++i)
+                tarab.push_back (261.63 * std::pow (2.0, i / 12.0));
+            sitar.setTarab (tarab);
+            for (int i = 0; i < 4; ++i)
+                sitar.pluck (220.0 * (i + 1), 0.8);
+            const auto start = std::chrono::steady_clock::now();
+            render (sitar, (int) (5.0 * rate));
+            const auto seconds = std::chrono::duration<double> (std::chrono::steady_clock::now() - start).count();
+            check (seconds < 1.0, "sitar: 4 strings and 13 tarab render 5 s in under 1 s");
+            std::printf ("  sitar: 5 s of 4 strings and 13 tarab in %.3f s\n", seconds);
+        }
+    }
+
     // Modal tunings for the PHI synth: the systems, the keys they put their degrees on, and which
     // level's choice is in force.
     void testTunings()
@@ -5269,6 +5364,7 @@ int main()
     testPhiPhaser();
     testPhiTuning();
     testRagaSheets();
+    testSitar();
     testTunings();
     testPluginMeasure();
 
