@@ -555,13 +555,21 @@ namespace
         {
             input.getNextAudioBlock (info);
             std::unique_lock lock (mutex, std::try_to_lock);
-            if (! lock.owns_lock() || ! render)
+            if (! lock.owns_lock() || (! render && ! sounding))
                 return;
             auto* left = info.buffer->getWritePointer (0, info.startSample);
+            // Both add to left and right; once a one-shot has ended it is not called again.
+            const auto play = [this] (float* l, float* r, int n)
+            {
+                if (render)
+                    render (l, r, n);
+                if (sounding && ! oneShot (l, r, n))
+                    sounding = false;   // kept, so nothing is freed on the audio thread
+            };
             if (info.buffer->getNumChannels() < 2)
             {
                 scratch.assign ((size_t) info.numSamples * 2, 0.0f);
-                render (scratch.data(), scratch.data() + info.numSamples, info.numSamples);
+                play (scratch.data(), scratch.data() + info.numSamples, info.numSamples);
                 for (int i = 0; i < info.numSamples; ++i)
                     left[i] += 0.5f * (scratch[(size_t) i] + scratch[(size_t) (info.numSamples + i)]);
                 return;
@@ -569,7 +577,7 @@ namespace
             auto* right = info.buffer->getWritePointer (1, info.startSample);
             if (monoInput.load())
                 std::copy (left, left + info.numSamples, right);   // a mono file, heard on both sides
-            render (left, right, info.numSamples);
+            play (left, right, info.numSamples);
         }
 
         void set (AudioEngine::LiveRender r)
@@ -578,12 +586,20 @@ namespace
             render = std::move (r);
             active = (bool) render;
         }
+        void setOneShot (AudioEngine::OneShot s)
+        {
+            std::lock_guard lock (mutex);
+            oneShot = std::move (s);   // the one before is freed here, not on the audio thread
+            sounding = (bool) oneShot;
+        }
         std::atomic<bool> active { false }, monoInput { false };
 
     private:
         juce::AudioSource& input;
         std::mutex mutex;
         AudioEngine::LiveRender render;
+        AudioEngine::OneShot oneShot;
+        bool sounding = false;
         std::vector<float> scratch;
     };
 
@@ -839,6 +855,11 @@ void AudioEngine::setInstrument (LiveRender render)
 }
 
 bool AudioEngine::hasInstrument() const { return impl->instrument.active.load(); }
+
+void AudioEngine::playOneShot (OneShot render)
+{
+    impl->instrument.setOneShot (std::move (render));
+}
 
 void AudioEngine::updateInstrumentChannels()
 {

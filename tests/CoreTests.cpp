@@ -26,6 +26,7 @@
 #include "../Source/core/Binaural.h"
 #include "../Source/core/Ambisonics.h"
 #include "../Source/core/SpatialStudio.h"
+#include "../Source/core/PhiVoice.h"
 #include "../Source/core/PrismSplit.h"
 #include "../Source/core/MasterAssist.h"
 #include "../Source/mixer/MixAssist.h"
@@ -3720,6 +3721,76 @@ namespace
         }
     }
 
+    // The splash's sound: phase distortion, a patch per start, a granular reverb with a long tail.
+    void testPhiVoice()
+    {
+        // No distortion is a cosine; full distortion bends it but keeps it within ±1.
+        bool cosine = true, bounded = true;
+        for (int w = 0; w < (int) phi::PdWave::count; ++w)
+            for (int i = 0; i < 200; ++i)
+            {
+                const auto p = i / 200.0;
+                cosine = cosine && near (phi::pdWave ((phi::PdWave) w, p, 0.0), std::cos (6.283185307179586 * p), 1.0e-9);
+                for (double d : { 0.5, 1.0 })
+                    bounded = bounded && std::abs (phi::pdWave ((phi::PdWave) w, p, d)) <= 1.0 + 1.0e-9;
+            }
+        check (cosine, "phase distortion: no distortion is a cosine");
+        check (bounded, "phase distortion: every wave stays within full scale");
+        check (phi::pdWave (phi::PdWave::saw, 0.1, 1.0) < phi::pdWave (phi::PdWave::saw, 0.1, 0.0), "phase distortion: the saw falls sooner when bent");
+
+        // Successive starts get different patches, all within the space.
+        {
+            const auto a = phi::PdPatch::at (0, 0.3), b = phi::PdPatch::at (1, 0.3), c = phi::PdPatch::at (0, 0.3);
+            bool inside = true;
+            double moved = 0.0;
+            for (int i = 0; i < phi::PdPatch::dimensions; ++i)
+            {
+                inside = inside && a.values[(size_t) i] >= 0.0 && a.values[(size_t) i] < 1.0;
+                moved += std::abs (a.values[(size_t) i] - b.values[(size_t) i]);
+            }
+            check (inside && moved > 1.0 && a.values == c.values, "pd patch: each start a new point, the same for the same start");
+        }
+
+        // The reverb's tail: a short burst still rings 1.5 s later and has faded 60 dB by 2.5 s.
+        {
+            phi::GranularReverb reverb;
+            reverb.prepare (48000.0);
+            reverb.setMix (1.0);
+            std::vector<float> left (48000 * 4), right (48000 * 4);
+            for (int i = 0; i < 2400; ++i)
+                left[(size_t) i] = right[(size_t) i] = 0.5f * (float) std::sin (i * 0.05);
+            reverb.process (left.data(), right.data(), (int) left.size());
+            const auto levelDb = [&] (double from, double to)
+            {
+                double e = 0.0;
+                const auto a = (size_t) (from * 48000.0), b = (size_t) (to * 48000.0);
+                for (size_t i = a; i < b; ++i)
+                    e += left[i] * left[i] + right[i] * right[i];
+                return 10.0 * std::log10 (e / (double) (b - a) + 1.0e-30);
+            };
+            const auto early = levelDb (0.25, 0.5), late = levelDb (1.5, 1.75), gone = levelDb (2.75, 3.0);
+            check (late > early - 40.0, "granular reverb: the tail still rings after 1.5 s");
+            check (gone < early - 45.0, "granular reverb: the tail fades within about 2 s");
+        }
+
+        // The whole sound: ends by itself, never clips, and is not silent.
+        for (int launch = 0; launch < 6; ++launch)
+        {
+            phi::StartupSound sound (launch, 0.7);
+            sound.prepare (48000.0);
+            std::vector<float> left (48000 * 7), right (48000 * 7);
+            int at = 0;
+            while (at + 512 <= (int) left.size() && sound.render (left.data() + at, right.data() + at, 512))
+                at += 512;
+            float peak = 0.0f;
+            for (size_t i = 0; i < left.size(); ++i)
+                peak = std::max ({ peak, std::abs (left[i]), std::abs (right[i]) });
+            check (at < (int) left.size() - 512 && near (at / 48000.0, sound.lengthSeconds(), 0.05), "startup sound: ends after its length");
+            check (peak > 0.05f && peak < 0.9f, "startup sound: heard and not clipping");
+            check (std::abs (left.back()) < 1.0e-6f, "startup sound: silent at the end");
+        }
+    }
+
     // The Φ effects' core: golden numbers, rhythms and the four processors.
     void testPhi()
     {
@@ -4305,6 +4376,7 @@ int main()
     testMixAssist();
     testSonify();
     testPhi();
+    testPhiVoice();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");

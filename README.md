@@ -9,6 +9,14 @@ names). It was called PHINYX before; its first start under the new name moves th
 `~/.config/phinyx`, `~/.local/share/phinyx` and `~/.cache/phinyx` folders to `phi`, and
 projects, albums, batches and chains saved by PHINYX open as before.
 
+At start PHI shows the gold Φ on a black tile (not full screen) for at least 1.618 seconds,
+and plays a new sound each time: a chord on a small phase distortion voice, in the manner
+of Casio's CZ synths, with a patch from the next point of a golden sequence spread over its
+16 settings (wave, bend, envelopes, tuning, chord), so starts keep sounding different and
+never clump (the first start is always the same sound, picked for PHI); it rings out through a granular reverb with a tail of about 2 seconds. It is a
+stand-in for the Φ synth, PHI's own phase distortion synth, until that is bundled.
+`--no-splash` starts without either.
+
 Status: Phase 2 complete: a usable editor with markers, meters, spectrogram, themes, a plugin Master Section and a spectral repair lab. Not yet tested on real audio hardware. See the full plan in [docs/plan.md](docs/plan.md).
 
 Built with a Qt 6 interface (native Wayland) on top of a JUCE 8 audio engine.
