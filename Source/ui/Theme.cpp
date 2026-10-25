@@ -88,7 +88,22 @@ QStringList Theme::colorKeys()
 
 QVector<Theme> Theme::builtIns()
 {
+    // The first theme is the default.
     return {
+        // Gold on near-black, from the PHI manual's cover and figures. The default for new installs.
+        makeTheme (QStringLiteral ("PHI Gold"), true, {
+            { "window", "#121214" }, { "windowText", "#e8e4da" }, { "base", "#0b0b0c" }, { "alternateBase", "#17171a" },
+            { "text", "#e8e4da" }, { "placeholderText", "#8a7f63" }, { "button", "#1f1c15" }, { "buttonText", "#e8e4da" },
+            { "highlight", "#c8a24a" }, { "highlightedText", "#0b0b0c" }, { "accent", "#e9dcb6" }, { "mid", "#2c2b28" },
+            { "disabledText", "#6b665a" },
+            { "waveform", "#c8a24a" }, { "waveformBackground", "#0b0b0c" }, { "centerLine", "#2c2b28" },
+            { "selection", "#c8a24a40" }, { "cursor", "#f4ecd8" }, { "marker", "#e9dcb6" }, { "region", "#c0704a" },
+            { "meterBackground", "#080809" }, { "meterLow", "#9c7a2c" }, { "meterMid", "#d6b25c" }, { "meterHigh", "#c4553a" },
+            { "meterPeakHold", "#f4ecd8" }, { "scope", "#c8a24a" },
+            { "levelQuiet", "#6e5a2e" }, { "levelSoft", "#8a7f63" }, { "levelMedium", "#a89464" },
+            { "levelLoud", "#c8a24a" }, { "levelHot", "#e2b84e" }, { "levelPeak", "#c4553a" } },
+            { "#000000", "#1f1c15", "#4a3a17", "#7d6d48", "#9c7a2c", "#c8a24a", "#e9dcb6", "#fbfaf7" }),
+
         makeTheme (QStringLiteral ("PHI Dark"), true, {
             { "window", "#1e2128" }, { "windowText", "#dddddd" }, { "base", "#15171c" }, { "alternateBase", "#23262e" },
             { "text", "#dddddd" }, { "placeholderText", "#808080" }, { "button", "#2a2e37" }, { "buttonText", "#dddddd" },
@@ -153,12 +168,16 @@ bool Theme::loadFile (const QString& path, Theme& out, QString& error)
     }
 
     // Start from the named built-in so a theme only lists what it changes.
+    // "dark", "light" and "gold" are short for the built-in of that name; anything unknown starts from PHI Dark.
     const auto baseName = renamed (root.value (QStringLiteral ("base")).toString (QStringLiteral ("PHI Dark")));
     const auto bases = builtIns();
     auto base = bases.first();
     for (const auto& b : bases)
+        if (b.name.compare (QStringLiteral ("PHI Dark")) == 0)
+            base = b;
+    for (const auto& b : bases)
         if (b.name.compare (baseName, Qt::CaseInsensitive) == 0
-            || (baseName.compare (QStringLiteral ("light"), Qt::CaseInsensitive) == 0 && ! b.dark))
+            || b.name.compare (QStringLiteral ("PHI ") + baseName, Qt::CaseInsensitive) == 0)
             base = b;
 
     out = base;
