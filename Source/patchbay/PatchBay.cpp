@@ -475,6 +475,13 @@ namespace patchbay
             case Kind::mixBus:
             {
                 sumInputs (n, left, right);
+                // The mixer's returns, fed by the tracks' sends.
+                if (mix != nullptr)
+                    for (int i = 0; i < chunk; ++i)
+                    {
+                        left[i] += scratchL[(size_t) i];
+                        right[i] += scratchR[(size_t) i];
+                    }
                 const auto db = mix != nullptr ? mix->masterDb.load() : 0.0f;
                 const auto master = db <= -96.0f ? 0.0f : std::pow (10.0f, db / 20.0f);
                 const auto was = fresh ? master : lastMaster;

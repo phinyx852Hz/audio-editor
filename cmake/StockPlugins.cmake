@@ -4,7 +4,7 @@
 # listed under Built-in. Each is built from a pinned commit of its own
 # repository as a CLAP (or, for the JUCE ones, a VST3) and copied, with its
 # licence, into ${PHI_STOCK_DIR}. Their licences (AGPLv3, GPLv3, LGPLv3,
-# BSD-3-Clause) all allow this; credits are in Source/engine/StockPlugins.cpp
+# BSD-3-Clause, MIT) all allow this; credits are in Source/engine/StockPlugins.cpp
 # and README.md.
 #
 # Needs make, git, and the headers they use: cairo, libsndfile, X11, Xrandr,
@@ -178,6 +178,32 @@ else()
         list(APPEND stock_targets stock_${zl_name})
     endforeach()
 endif()
+
+# Airwindows Consolidated: every Airwindows effect by Chris Johnson (MIT) in one
+# plugin, by Paul Walker (MIT), as a JUCE VST3 (so the build is GPL-3.0, with
+# JUCE). Patched (cmake/airwindows/consolidated-phi.patch) so its background takes
+# the PHI frame's colour, the rest of its view as it is, and to pin
+# clap-juce-extensions, which its build fetches. Its own build brings its JUCE.
+# Its airwindows and Rack submodules are only for regenerating its sources and
+# for the VCV Rack module, so they are left out.
+set(airwindows_dir ${CMAKE_CURRENT_LIST_DIR}/airwindows)
+phi_stock_licence(AirwindowsConsolidated LICENSE.md res/LICENSE.gpl3 res/OFL.txt)
+ExternalProject_Add(stock_airwindows
+    GIT_REPOSITORY https://github.com/baconpaul/airwin2rack.git
+    GIT_TAG d8fe3010bc6dce91e30ee2f2ef15dd3683533a97
+    GIT_SUBMODULES ""
+    UPDATE_COMMAND ""
+    PATCH_COMMAND ${CMAKE_COMMAND} -DPATCH=${airwindows_dir}/consolidated-phi.patch -P ${CMAKE_CURRENT_LIST_DIR}/ApplyPatch.cmake
+    ${stock_one_at_a_time}
+    CMAKE_GENERATOR Ninja
+    CMAKE_ARGS -DCMAKE_BUILD_TYPE=Release -DBUILD_JUCE_PLUGIN=TRUE
+    BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target airwin-consolidated_VST3 --parallel ${PHI_STOCK_JOBS}
+    INSTALL_COMMAND ${CMAKE_COMMAND} -E rm -rf "${PHI_STOCK_DIR}/Airwindows Consolidated.vst3"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "<BINARY_DIR>/src-juce/airwin-consolidated_artefacts/Release/VST3/Airwindows Consolidated.vst3"
+            "${PHI_STOCK_DIR}/Airwindows Consolidated.vst3"
+        ${stock_licence_commands}
+        COMMAND ${CMAKE_COMMAND} -E copy ${airwindows_dir}/airwindows-LICENSE ${PHI_STOCK_DIR}/licenses/AirwindowsConsolidated/airwindows-LICENSE)
+list(APPEND stock_targets stock_airwindows)
 
 include(${CMAKE_CURRENT_LIST_DIR}/Instruments.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/Trackers.cmake)

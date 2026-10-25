@@ -1,6 +1,6 @@
 # PHI themes
 
-PHI ships with **PHI Dark** and **PHI Light**. Anyone can make more themes. A theme is a small JSON file
+PHI ships with **PHI Gold** (the default, gold on near-black like the PHI manual), **PHI Dark** and **PHI Light**. Anyone can make more themes. A theme is a small JSON file
 placed in
 
 ```
@@ -28,7 +28,8 @@ files with mistakes are listed with the reason they were skipped.
 ```
 
 - `name` (required): shown in the theme list. Must be unique.
-- `base`: the built-in theme to start from, `"dark"`/`"PHI Dark"` (default) or `"light"`/`"PHI Light"`.
+- `base`: the built-in theme to start from, `"dark"`/`"PHI Dark"` (default), `"light"`/`"PHI Light"`
+  or `"gold"`/`"PHI Gold"`.
   You only list the colours you change.
 - `colors`: any of the keys below. Values are `#RGB`, `#RRGGBB`, `#RRGGBBAA` (alpha last, as in CSS) or SVG
   colour names such as `"orange"`.

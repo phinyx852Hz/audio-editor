@@ -2,6 +2,7 @@
 #include "StockFrame.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 
 namespace
@@ -10,12 +11,25 @@ namespace
     std::uint32_t colourGeneration = 1;
 
     juce::Colour col (std::uint32_t argb) { return juce::Colour (argb); }
+
+    // The frame's background as it shows on screen (the window is opaque, so over black).
+    std::uint32_t shownBackground (std::uint32_t window) { return juce::Colours::black.overlaidWith (col (window)).getARGB(); }
+    std::atomic<std::uint32_t> pluginBackground { shownBackground (PluginFrameColours {}.window) };
+}
+
+// Stock plugins patched to fill their background with the frame's colour, so their
+// view looks see-through in it (Airwindows Consolidated), look this up with dlsym:
+// it is exported from the executable (CMakeLists.txt). 0xAARRGGBB, always opaque.
+extern "C" __attribute__ ((visibility ("default"))) std::uint32_t phi_plugin_background()
+{
+    return pluginBackground.load (std::memory_order_relaxed);
 }
 
 void StockFrame::setColours (const PluginFrameColours& c)
 {
     colours = c;
     ++colourGeneration;
+    pluginBackground.store (shownBackground (c.window), std::memory_order_relaxed);
 }
 
 const PluginFrameColours& StockFrame::currentColours() { return colours; }
@@ -232,7 +246,7 @@ private:
 //==============================================================================
 StockFrame::StockFrame (juce::AudioProcessorEditor* e, juce::AudioPluginInstance& plugin, const stock::Info& i,
                         const juce::String& pluginName, Hooks h)
-    : editor (e), info (i), name (pluginName), hooks (std::move (h)),
+    : editor (e), scaler (*e), info (i), name (pluginName), hooks (std::move (h)),
       inMeter (std::make_unique<Meter>()), outMeter (std::make_unique<Meter>())
 {
     setOpaque (true);
@@ -265,8 +279,13 @@ StockFrame::StockFrame (juce::AudioProcessorEditor* e, juce::AudioPluginInstance
     view.addAndMakeVisible (*editor);
     view.childResized = [this]
     {
-        // The plugin resized its own view.
-        if (! fitting)
+        // The plugin resized its own view: the window follows, unless the view
+        // is scaled to the window (then it is only placed again).
+        if (fitting || scaler.isScaling())
+            return;
+        if (scaler.isScaled())
+            resized();
+        else
             fitToEditor();
     };
     applyColours();
@@ -317,9 +336,12 @@ void StockFrame::resized()
     const auto inside = view.getLocalBounds();
     if (editor->isResizable())
         editor->setBounds (inside);
+    else
+        scaler.fit (inside.getWidth(), inside.getHeight());
     // Centred if it is smaller than its space, else from the top left.
     editor->setTopLeftPosition (std::max (0, (inside.getWidth() - editor->getWidth()) / 2),
                                 std::max (0, (inside.getHeight() - editor->getHeight()) / 2));
+    embedded::follow (*editor);
 }
 
 void StockFrame::paint (juce::Graphics& g)

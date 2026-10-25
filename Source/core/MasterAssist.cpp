@@ -137,6 +137,7 @@ namespace assist
         mean /= Profile::numBands;
         for (auto& b : p.bandsDb)
             b -= mean;
+        p.bandsMeanDb = mean;
 
         // Hop-overlapped sums count every sample about twice in both, so the ratio is right.
         if (channels > 1 && midEnergy > 0.0)
@@ -213,7 +214,7 @@ namespace assist
 
     double distance (const Profile& got, const Target& t) { return sumOfSquares (residuals (got, t)); }
 
-    AudioDataPtr excerpt (const AudioData& data, Frame start, Frame end, double seconds)
+    Windows excerptWindows (const AudioData& data, Frame start, Frame end, double seconds)
     {
         start = std::clamp<Frame> (start, 0, data.length());
         end = std::clamp<Frame> (end, start, data.length());
@@ -221,8 +222,9 @@ namespace assist
         const auto channels = data.numChannels();
         constexpr int windowSeconds = 6;
         const auto blockLength = (Frame) std::llround (rate);
+        const Windows whole { { start }, end - start };
         if ((double) (end - start) <= seconds * rate || blockLength < 1)
-            return data.slice (start, end);
+            return whole;
 
         // The energy of every second, then of every six seconds in a row.
         const auto numBlocks = (size_t) ((end - start) / blockLength);
@@ -239,7 +241,7 @@ namespace assist
                     energy[i] += (double) s * s;
         }
         if (numBlocks < (size_t) windowSeconds)
-            return data.slice (start, end);
+            return whole;
         std::vector<std::pair<double, size_t>> windows;
         for (size_t i = 0; i + windowSeconds <= numBlocks; ++i)
             windows.push_back ({ std::accumulate (energy.begin() + (long) i, energy.begin() + (long) (i + windowSeconds), 0.0), i });
@@ -267,16 +269,29 @@ namespace assist
         }
         std::sort (chosen.begin(), chosen.end());
 
+        Windows w;
+        w.length = (Frame) windowSeconds * blockLength;
+        for (const auto at : chosen)
+            w.starts.push_back (start + (Frame) at * blockLength);
+        return w;
+    }
+
+    AudioDataPtr cut (const AudioData& data, const Windows& w)
+    {
+        if (w.starts.size() == 1)
+            return data.slice (w.starts[0], w.starts[0] + w.length);
+        const auto rate = data.sampleRate();
+        const auto channels = data.numChannels();
         AudioData::Builder out (channels, rate);
-        const auto length = (Frame) windowSeconds * blockLength;
+        const auto length = w.length;
         const auto fade = (int) std::max (1.0, rate * 0.015);
         std::vector<std::vector<float>> piece ((size_t) channels, std::vector<float> ((size_t) length));
         std::vector<float*> piecePtrs;
         for (auto& c : piece)
             piecePtrs.push_back (c.data());
-        for (const auto at : chosen)
+        for (const auto at : w.starts)
         {
-            data.read (start + (Frame) at * blockLength, (int) length, piecePtrs.data());
+            data.read (at, (int) length, piecePtrs.data());
             for (auto& c : piece)
                 for (int i = 0; i < fade; ++i)
                 {
@@ -288,6 +303,11 @@ namespace assist
             out.append (in.data(), (int) length);
         }
         return out.finish();
+    }
+
+    AudioDataPtr excerpt (const AudioData& data, Frame start, Frame end, double seconds)
+    {
+        return cut (data, excerptWindows (data, start, end, seconds));
     }
 
     Role guessRole (const std::string& text)
@@ -513,12 +533,13 @@ namespace assist
                             jac[i * n + j] += miss * dx[j] / dxx;
                 }
                 const auto gain = result.error - trialError;
+                const auto previous = result.error;
                 x = trial;
                 r = rt;
                 result.values = x;
                 result.error = trialError;
                 lambda = std::max (lambda / 3.0, 1.0e-6);
-                if (gain < 1.0e-4 * std::max (1.0, result.startError))
+                if (gain < 1.0e-4 * std::max (1.0, previous))
                     break;
                 if (++acceptedSinceFull >= 3)
                 {

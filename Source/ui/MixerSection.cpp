@@ -3,6 +3,7 @@
 // with the Sampler and Slicer through the engine's instrument slot, played from the
 // MIDI inputs, and mixed down into a new tab of the editor.
 #include "MainWindow.h"
+#include "MixAssistant.h"
 #include "FindPanel.h"
 #include "MixerWindow.h"
 #include "Settings.h"
@@ -12,6 +13,7 @@
 
 #include <QApplication>
 #include <QEventLoop>
+#include <QFileInfo>
 #include <QFutureWatcher>
 #include <QMessageBox>
 #include <QProgressDialog>
@@ -73,6 +75,8 @@ void MainWindow::registerMixerCommands()
     });
     add ("mixer.mixdown", tr ("Mix &Down to Editor"), { KS (Qt::CTRL | Qt::Key_F3) }, [this] { mixDownToEditor(); })
         ->setStatusTip (tr ("Render the whole mix, with the instruments' tails, into a new stereo tab"));
+    add ("mixer.assistant", tr ("Mix &Assistant..."), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_X) }, [this] { mixAssistant(); })
+        ->setStatusTip (tr ("Sets the faders and pans of the mix by what each track is, with headroom for mastering"));
 }
 
 MixerWindow* MainWindow::mixerWindow()
@@ -312,4 +316,31 @@ void MainWindow::mixDownToEditor()
     raise();
     waveform->setFocus();
     statusBar()->showMessage (tr ("Mixed down %1 into a new tab").arg (w->mixName()), 8000);
+}
+
+void MainWindow::mixAssistant()
+{
+    auto* w = mixerWindow();
+    showMixer();
+    if (mixerEngine->length() <= 0)
+    {
+        QMessageBox::information (w, tr ("Mix Assistant"), tr ("Put an audio or MIDI file on a track first."));
+        return;
+    }
+    QStringList names;
+    for (int t = 0; t < mixerEngine->numTracks(); ++t)
+        names << w->trackName (t);
+    MixAssistant::References refs;
+    for (const auto& r : references)
+        refs.names << QFileInfo (r.path).fileName();
+    refs.current = currentReference;
+    refs.load = [this] (int row) -> AudioDataPtr
+    {
+        if (row < 0 || row >= (int) references.size() || ! loadReference (row))
+            return nullptr;
+        return references[(size_t) row].original;
+    };
+    MixAssistant dialog (*mixerEngine, names, std::move (refs), [w] { w->togglePlay(); }, [w] { w->stripsChanged(); }, w);
+    dialog.applyEq = [w] (int track, const std::vector<std::pair<double, double>>& cuts) { return w->applyEqCuts (track, cuts); };
+    dialog.exec();
 }

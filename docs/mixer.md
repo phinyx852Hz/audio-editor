@@ -215,8 +215,8 @@ Every control has a screen-reader name and announces its value.
 1. Engine: 8 tracks (audio file, MIDI file and instrument each) plus a master summing bus,
    with trim, polarity, pan, fader and meters, and Mix Down to Editor. **Built.**
 2. The window and the strips, keyboard first.
-3. Inserts, using the Master Section's chain code, then the two sends and the Reverb and
-   Delay returns.
+3. Inserts, using the Master Section's plugins, then the two sends and the Reverb and
+   Delay returns. **Inserts built** (2026-10-24).
 4. Thumbnail displays.
 5. Live inputs, record and monitoring.
 6. Instruments with MIDI keyboard input. **Built with step 1** (the unified track needs them).
@@ -290,8 +290,68 @@ Every control has a screen-reader name and announces its value.
   polarity, mute and solo, sample-accurate MIDI, transpose, channels, notes let go on a jump,
   the keyboard, meters, mixdown, serial clips, reversed audio and MIDI) and the Synth.
 
-Next: Pre (cuts, track delay), inserts, the A and B returns, thumbnails, live inputs and
-recording, templates, the spatial panner. The Sampler and Slicer windows of the Sample menu
+- The strip and inserts (step 3, 2026-10-24; owner: "a combo of the best features of Ableton
+  and Cubase... I like the insert slots of Cubase"; smaller pots, trim and pan side by side with
+  their values below). Each track goes through trim, polarity, low cut, high cut, its inserts,
+  width, pan and fader. `mixer::Strip` has the low and high cut (Butterworth, 12 or 24 dB an
+  octave, 20 Hz to 20 kHz, off by default), the track delay (±500 ms; the track's clips are read
+  that much earlier or later, so nothing is buffered and a negative delay works too) and the width
+  (0 to 200 %, mid/side, none on a track of mono files). `Engine::setInserts` gives a track up to 8
+  effects (`mixer::Effect`, `Source/mixer/Effect.h`, now shared with the patchbay's FX buses and
+  made by `AudioEngine::loadEffectPlugin`: built-in, Φ, stock, VST3, LV2, LADSPA, CLAP). A track
+  with no cuts, inserts or width keeps the gain-only path; otherwise mono files go on both sides,
+  through the cuts and inserts, and the pan after them stays equal power for a track of mono
+  files. Bounces have the cuts, inserts and width (before fader and pan); bouncing in place turns
+  them off (the inserts stay, bypassed) and resets the delay. Mute comes after the inserts.
+  The strip: Trim, Pan and Width pots (30 px) side by side with their values below; the Pre
+  section has ØL ØR, the LC and HC buttons (click: on or off; right-click: frequency and slope)
+  and Delay. Insert slots are always shown, Cubase style: at least 4, one empty after the last
+  used, up to 8; click an empty slot (or press Insert) for the effects menu, by format;
+  double-click opens the plugin's window or, for the built-in and Φ effects, a dialog of their
+  knobs; right-click bypasses, moves, replaces or removes; drag to reorder. The Strips button
+  shows or hides the Instrument, Pre, Inserts and Trim/Pan/Width sections on every strip and
+  makes the strips wide. Projects keep all of it (`lowCut`, `highCut`, `delayMs`, `width` and
+  `inserts` with each effect's id, state and bypass). The Mix Assistant's Apply EQ Cuts puts its
+  overlap cuts in a Φ EQ in the hiding track's inserts, on the nearest band.
+
+- Sends and returns (2026-10-24, owner: "how sends are structured in Ableton (super easy and
+  simple)"). `Strip::sendDb` and `sendPre` for A and B: post-fader (and pan) by default, or
+  after the inserts and width but before the fader; a muted track's sends are silent and bounces
+  have none. `Engine::setReturnEffect` and `returnStrip`: each return runs its effect on the sum
+  of its sends, then balance pan, fader and mute, into the master (with the patchbay, into its
+  Mix Bus); meters 9 and 10. The return strips sit between the tracks and the master: A Reverb
+  starts with Φ Space (1.8 s, fully wet), B Delay with Φ Echo (one tap, a dotted eighth at the
+  tempo, 30 % feedback, fully wet); right-click the effect to pick another. Send A and Send B
+  pots on every strip show their level in dB (right-click: pre-fader).
+- Cubase touches (from the owner's Chris Selim and Dom Sigalas videos): Q-Link (Ctrl+click
+  picks strips; with Q-Link on, a change to one goes to all of them, levels by the same amount);
+  Alt+Shift while changing a control sends it to every track; Bypass Inserts and Bypass Sends
+  for the whole mix (`Engine::bypassInserts`, `bypassSends`); meters coloured from -12 dB and
+  again from -6 dB.
+
+- Track modes (2026-10-24, owner: "audio only, instrument only, audio and instrument mixed into a
+  single wave form", and a kick sidechained into a drum loop on the same track). `Strip::mode`:
+  Hybrid (the default: the audio clips and the instrument as two layers, each with its own level,
+  `audioLayerDb` and `instrumentLayerDb`, the Audio and Inst pots), Audio (clips only) or
+  Instrument (no audio clips). Hybrid gives 8 tracks 16 sources. The Duck pot (0 to 48 dB) is a
+  peak-following sidechain: at -6 dBFS and above the key pushes the ducked sound down by the
+  whole amount, below that by its share. The key is one layer of a hybrid (the instrument ducks
+  the audio, or the audio the instrument) or another track (`duckKey`; it ducks all of this
+  one). Right-click the Duck pot for the key, attack and release, Only Below (`duckBelowHz`: a
+  12 dB/oct split, so only the lows duck and the highs pass, e.g. a loop's hats under a kick),
+  and three presets from the owner's Ableton video's ducking groups: Hard (24 dB, 120 ms
+  release), Soft (8 dB, 220 ms) and HF-Safe (12 dB below 150 Hz). Its label reads key→dB, e.g.
+  `I→12` or `3→24↓`. Clipping: the layers are summed in float before trim and the fader, so
+  nothing clips inside the strip; the meter's red zone shows a hot track and the Trim brings it
+  down.
+- Insert Mix: each insert has a dry/wet Mix (`Insert::mix`, right-click a slot: Mix...), for
+  parallel compression or saturation in one slot; a slot under 100 % shows its percentage.
+
+Next (owner, 2026-10-24): a
+Channel window (Pre and a Φ EQ with another track's spectrum to compare), loudness on the master,
+snapshots and mixer history, then In/Out routing (Ableton's Audio From and Audio To), live inputs
+and recording, thumbnails, templates and the spatial panner. No inspector: with 8 tracks the
+strips have the room. The Sampler and Slicer windows of the Sample menu
 could dock into the mixer as track 1 (the other thread's docking work).
 
 Patchbay (2026-10-22, docs/patchbay.md): while the patchbay plays (it always does live), the

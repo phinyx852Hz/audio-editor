@@ -2,6 +2,7 @@
 #pragma once
 
 #include <functional>
+#include <string>
 
 // Plugin windows are JUCE windows on X11 (XWayland on Wayland). These keep
 // PHI itself alive and recognisable there.
@@ -13,7 +14,13 @@ namespace x11
 
     // Sets a window's opacity, 0 to 1 (_NET_WM_WINDOW_OPACITY), for compositors
     // that honour it; JUCE's own setAlpha does nothing for a window on Linux.
-    void setOpacity (void* nativeWindowHandle, double opacity);
+    // Hyprland ignores that property, so there the window (found by its title)
+    // is given the opacity through Hyprland's own socket as well.
+    void setOpacity (void* nativeWindowHandle, double opacity, const std::string& title);
+
+    // On Hyprland, floats the window with this title at this size, centred, instead of
+    // tiling it. Elsewhere windows float anyway, at the size they were given.
+    void floatWindow (const std::string& title, int width, int height);
 
     // If the window manager kills a plugin window's X connection (a forced
     // close), Xlib would end the whole program. After this, only plugin
