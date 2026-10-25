@@ -86,6 +86,7 @@ Q_SIGNALS:
     void snapChanged();
     void stretchRequested (double speed);   // 2: half as long, 0.5: twice as long
     void stretchToTempoRequested();
+    void extremeStretchRequested();   // Paulstretch (Warp > Extreme Stretch)
     void detectTempoRequested();
     void setTempoRequested();
 

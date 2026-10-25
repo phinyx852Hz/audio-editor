@@ -29,9 +29,11 @@ namespace timestretch
     // from its new place at its own speed, its tail looped to fill a longer gap (Beats,
     // No Loop lets it ring out and fade instead), so hits stay exactly as recorded.
     // Texture overlaps short grains, scattered a little, for pads, drones and noise;
-    // Smooth is a softer phase vocoder for sustained sounds with no sharp hits.
+    // Smooth is a softer phase vocoder for sustained sounds with no sharp hits. Ambient
+    // is Paulstretch (core/Paulstretch.h): everything smeared into an evolving wash, for
+    // big ratios (Warp > Extreme Stretch goes far beyond 64 times and has its settings).
     // (The values are stored in settings and documents, so new modes go at the end.)
-    enum class Mode { drums, melody, fullMix, fullMixVoice, varispeed, beats, beatsNoLoop, texture, smooth };
+    enum class Mode { drums, melody, fullMix, fullMixVoice, varispeed, beats, beatsNoLoop, texture, smooth, ambient };
     const char* modeName (Mode);
     const char* modeDescription (Mode);
     std::vector<Mode> modes();

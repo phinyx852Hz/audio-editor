@@ -79,6 +79,7 @@ void MainWindow::buildQuantizePanel()
     connect (quantizeWidget, &QuantizePanel::snapChanged, this, [this] { refreshGrid(); });
     connect (quantizeWidget, &QuantizePanel::stretchRequested, this, [this] (double speed) { stretchBy (speed); });
     connect (quantizeWidget, &QuantizePanel::stretchToTempoRequested, this, [this] { stretchToTempo(); });
+    connect (quantizeWidget, &QuantizePanel::extremeStretchRequested, this, [this] { extremeStretch (false); });
     connect (quantizeWidget, &QuantizePanel::detectTempoRequested, this, [this] { detectBeatGrid(); });
     connect (quantizeWidget, &QuantizePanel::setTempoRequested, this, [this] { setTempoDialog(); });
     connect (waveform, &WaveformView::stretchDragged, this, [this] (Frame s, Frame e, Frame newEnd)

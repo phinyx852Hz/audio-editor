@@ -68,6 +68,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/Pitch.cpp
     Source/core/PitchFix.cpp
     Source/core/TimeStretch.cpp
+    Source/core/Paulstretch.cpp
     Source/core/Quantize.cpp
     Source/core/Sonify.cpp
     Source/core/Binaural.cpp
@@ -373,6 +374,7 @@ if(PHI_BUILD_TESTS)
         Source/core/Pitch.cpp
         Source/core/PitchFix.cpp
         Source/core/TimeStretch.cpp
+        Source/core/Paulstretch.cpp
     Source/core/Quantize.cpp
     Source/core/Sonify.cpp
     Source/core/Binaural.cpp

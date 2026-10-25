@@ -288,6 +288,9 @@ private:
     void setTempoDialog();
     void stretchToTempo();
     void stretchBy (double speed);
+    // Paulstretch on the selection or the whole file (WarpSection.cpp): the dialog, or
+    // `again` with the settings used last, at once.
+    void extremeStretch (bool again);
     // Live-style clip editing (WarpSection.cpp): the selection copied right after itself, or
     // dragged elsewhere, overwriting what is there; a moved selection leaves silence behind.
     void duplicateSelection();
@@ -301,6 +304,8 @@ private:
     void moveSelection (Frame from, Frame to, Frame start, bool copy);   // 2: double speed, 0.5: half speed
     // Replaces [s, e) with it stretched to `target` frames; on the whole file the grid takes `newBpm` (when > 0).
     void applyStretch (const QString& title, Frame s, Frame e, Frame target, int mode, double newBpm);
+    // Replaces [s, e) with `stretched`, moving the markers along (one undo step named `description`).
+    void putStretched (const QString& description, Frame s, Frame e, AudioDataPtr stretched, double newBpm);
     // Warp markers: shown and edited while warpEditing; the first move makes the document's warp.
     std::shared_ptr<const WarpEdit> currentWarp() const;
     void setWarpEditing (bool);
