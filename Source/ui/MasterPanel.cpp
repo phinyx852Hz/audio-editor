@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MasterPanel.h"
 #include "Panels.h"
+#include "PhiWindow.h"
 
 #include <QApplication>
 #include <QCheckBox>
@@ -264,9 +265,7 @@ void MasterPanel::editParameters (int slot)
     if (engine.masterSlot (slot).empty)
         return;
 
-    auto* dialog = new ParameterDialog (engine, slot, window());
-    dialog->setAttribute (Qt::WA_DeleteOnClose);
-    dialog->show();
+    openParameterWindow (engine, ChainPath { slot, {} }, window());
 }
 
 bool MasterPanel::eventFilter (QObject* watched, QEvent* e)

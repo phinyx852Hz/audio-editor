@@ -4,6 +4,7 @@
 #include "../core/Repair.h"
 #include "CommandRegistry.h"
 #include "DesktopShortcuts.h"
+#include "PhiMark.h"
 #include "Theme.h"
 #include "../engine/AudioEngine.h"
 #include "../engine/Codec.h"
@@ -613,7 +614,7 @@ QString NormalizeDialog::targetName() const
 
 StereoizeDialog::StereoizeDialog (const dsp::StereoizeSettings& initial, bool wholeFile, int fileChannels, QWidget* parent)
     : QDialog (parent), widthBox (new QSpinBox (this)), delayBox (new QDoubleSpinBox (this)), bassBox (new QSpinBox (this)),
-      goldenBox (new QCheckBox (tr ("Φ &golden ratio"), this))
+      goldenBox (new PhiButton (tr ("Golden ratio"), this))
 {
     setWindowTitle (tr ("Stereoize"));
 
@@ -651,7 +652,7 @@ StereoizeDialog::StereoizeDialog (const dsp::StereoizeSettings& initial, bool wh
     form->addRow (tr ("&Width:"), widthBox);
     form->addRow (tr ("&Delay:"), delayBox);
     form->addRow (tr ("Keep &bass centred below:"), bassBox);
-    form->addRow (QString(), goldenBox);
+    form->addRow (tr ("&Golden ratio:"), goldenBox);
 
     auto* buttons = new QDialogButtonBox (QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     auto* layout = new QVBoxLayout (this);

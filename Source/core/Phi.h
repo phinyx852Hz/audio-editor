@@ -10,6 +10,7 @@
 #include <array>
 #include <complex>
 #include <cstdint>
+#include <atomic>
 #include <memory>
 #include <vector>
 
@@ -28,6 +29,17 @@ namespace phi
     // evenly than random numbers, yet never repeats. 0 <= value < 1.
     double golden (std::int64_t n, double seed = 0.0);
 
+    // The Φ random selector: which of `count` favourites colour `colour` (0 to 7) deals on
+    // deal n. Each colour walks its favourites by a Kronecker sequence, frac (start + n α):
+    // the first colour by α = 1/φ, the golden sequence itself, the others by the fractional
+    // parts of √7, √13, √19, √29, √41, √89 and √73. Like φ these are quadratic irrationals,
+    // badly approximable by fractions, so each colour spreads evenly over its favourites
+    // and (with three or more) never deals the same one twice running. They differ because
+    // eight colours all stepping by 1/φ would move in lockstep: with 8 favourites each only
+    // 64 combinations would ever come up, where these give a different one every deal.
+    // Colours start golden (colour, seed) in. 0 <= result < count; 0 when count < 1.
+    int deal (std::int64_t n, int colour, int count, double seed = 0.0);
+
     // A Sturmian rhythm: step n is a hit when ceil ((n + 1) d - shift) differs
     // from ceil (n d - shift). With d = 1/φ this is the Fibonacci word
     // (1 1 0 1 1 0 1 0 1 1 0 1 1 0 1 0 ...): a pattern that never repeats but
@@ -39,19 +51,58 @@ namespace phi
     double density (int index);
 
     //==========================================================================
-    // Φ EQ: a Super Low shelf at 80 Hz, ten bells at 80 Hz × φⁿ (n = 1..10:
-    // 129 Hz to 9.8 kHz) and a Super High shelf at 80 Hz × φ¹¹ (15.9 kHz).
-    // Neighbouring bands are φ apart, and each bell is as wide as that step:
-    // Q = φ^1.5 (2.06).
+    // Φ EQ: twelve bands that start a golden ratio apart: a Super Low shelf at
+    // 80 Hz, ten bells at 80 Hz × φⁿ (n = 1..10: 129 Hz to 9.8 kHz) and a Super
+    // High shelf at 80 Hz × φ¹¹ (15.9 kHz), each bell as wide as that step
+    // (Q = φ^1.5, 2.06). Every band can be moved, narrowed or widened and made a
+    // bell, a shelf, a notch or a band-pass; Low and High Cut (Butterworth, 12, 24
+    // or 48 dB per octave) and Φ Tilt (a pair of shelves about 1 kHz) come after.
     class Eq
     {
     public:
         static constexpr int numBands = 12;   // Super Low, 10 bells, Super High
         static constexpr double baseHz = 80.0;
-        static double bandHz (int band);      // band 0 is Super Low, 11 Super High
+        static double bandHz (int band);      // where band starts: 0 is Super Low, 11 Super High
+
+        // The golden grid the bands and cuts sit on: 80 Hz × φ^(step / 4), a quarter of a
+        // golden ratio apart, from 18.9 Hz (step -12) to 20.2 kHz (step 46). Band b starts
+        // on step 4b. There is nothing between the steps: this EQ shapes by the golden
+        // ratio rather than hunting down a problem frequency (that is the De-resonator).
+        static constexpr int minStep = -12, maxStep = 46;
+        static double stepHz (int step);
+        static int nearestStep (double hz);
+        // Widths are golden too: the type's own width × φ^(qStep / 2), qStep -6 to 6.
+        static constexpr int minQStep = -6, maxQStep = 6;
+        static double stepQ (int qStep, bool shelf);
+
+        enum class Type { bell, lowShelf, highShelf, notch, bandPass, off };
+        static constexpr int numTypes = 6;
+        struct Band
+        {
+            Type type = Type::bell;
+            double hz = 1000.0;
+            double q = 2.058;
+            double gainDb = 0.0;
+            bool operator== (const Band&) const = default;
+        };
+        struct Settings
+        {
+            std::array<Band, numBands> bands = defaultBands();
+            double lowCutHz = 0.0;    // 0: off
+            int lowCutSlope = 12;     // dB per octave: 12, 24 or 48
+            double highCutHz = 0.0;   // 0: off
+            int highCutSlope = 12;
+            double tiltDb = 0.0;      // + brighter, - darker, about 1 kHz
+            bool operator== (const Settings&) const = default;
+        };
+        static std::array<Band, numBands> defaultBands();
+        static Band defaultBand (int band);
+        static constexpr double bellQ = 2.0581710272714924;   // φ^1.5: one golden step wide
+        static constexpr double shelfQ = 0.7071067811865476;
 
         void prepare (double sampleRate, int numChannels);
-        // Gains in dB per band; recalculates only the bands that changed.
+        void set (const Settings&);   // recalculates only when something changed
+        // Gains in dB per band, the bands where they start (the first Φ EQ).
         void set (const std::array<double, numBands>& gainsDb);
         void reset();
         void process (float* const* channels, int numChannels, int numFrames);
@@ -60,12 +111,18 @@ namespace phi
 
     private:
         struct Biquad { double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0; };
-        void design (int band);
+        void design();
+        void clear (int stage);
 
+        // Every filter has its own stages, which do nothing while it is off, so moving one
+        // never disturbs another: the bands, two cuts of up to 4 biquads, the tilt.
+        static constexpr int lowCutStage = numBands, highCutStage = lowCutStage + 4, tiltStage = highCutStage + 4;
+        static constexpr int maxStages = tiltStage + 2;
         double rate = 48000.0;
-        std::array<Biquad, numBands> coefs {};
-        std::array<double, numBands> gains {};
-        std::vector<std::array<std::array<double, 2>, numBands>> state;   // per channel and band: z1, z2
+        Settings settings;
+        std::array<Biquad, maxStages> coefs {};
+        std::array<bool, maxStages> used {}, wasUsed {};
+        std::vector<std::array<std::array<double, 2>, maxStages>> state;   // per channel and stage: z1, z2
     };
 
     //==========================================================================
@@ -383,6 +440,13 @@ namespace phi
         // The deepest cut of the last frame, in dB (0 or below).
         float deepestCutDb() const { return deepest; }
 
+        // For its window, from any thread: the last frame at pictureSize frequencies from
+        // 20 Hz to 20 kHz, a third of an octave apart and more: the level (dB, a full-scale
+        // sine at 0) and the cut (dB, 0 or below), the loudest and deepest of the bins near each.
+        static constexpr int pictureSize = 128;
+        static double pictureHz (int point);
+        void picture (float* levelDb, float* cutDb) const;
+
     private:
         void frame();
         void layout();
@@ -399,6 +463,7 @@ namespace phi
         std::vector<int> spanLow, spanHigh;
         double attack = 0.5, release = 0.5;
         float deepest = 0.0f;
+        std::array<std::atomic<float>, pictureSize> shownLevel {}, shownCut {};
     };
 }
 

@@ -6381,16 +6381,117 @@ void MixerWindow::placeLauncherMidi()
     grid->update();
 }
 
+int MixerWindow::trackFor (const QString& trackName, const QColor& colour) const
+{
+    for (int t = 0; t < engine.numTracks() && ! trackName.isEmpty(); ++t)
+        if (info[(size_t) t].name.trimmed().compare (trackName.trimmed(), Qt::CaseInsensitive) == 0)
+            return t;
+    for (int t = 0; t < engine.numTracks() && colour.isValid(); ++t)
+        if (info[(size_t) t].colour.rgb() == colour.rgb())
+            return t;
+    return -1;
+}
+
+void MixerWindow::phiDeal (const QStringList& files, const QStringList& instruments, const QStringList& names,
+                           const QList<QColor>& colours, bool launcher, bool again)
+{
+    // Which track each dealt file goes to. A colour with no track of its own gets the one a
+    // mix from the set would give it (the top colour on the last track), added when missing.
+    const auto count = std::min ({ (int) files.size(), (int) instruments.size(), (int) names.size(), (int) colours.size(), mixer::maxTracks });
+    std::vector<std::pair<int, QString>> deal;   // track, file
+    std::vector<std::pair<int, QString>> players;   // track, instrument
+    std::set<int> used;
+    bool added = false;
+    for (int c = 0; c < count; ++c)
+    {
+        if (files[c].isEmpty() && instruments[c].isEmpty())
+            continue;
+        auto track = trackFor (names[c], colours[c]);
+        if (track < 0)
+        {
+            track = count - 1 - c;
+            if (track >= engine.numTracks())
+            {
+                engine.setNumTracks (track + 1);
+                info[(size_t) track].name = names[c];
+                info[(size_t) track].colour = colours[c];
+                added = true;
+            }
+        }
+        if (track < 0 || used.count (track) != 0)
+            continue;
+        used.insert (track);
+        if (! instruments[c].isEmpty())
+            players.emplace_back (track, instruments[c]);
+        if (! files[c].isEmpty())
+            deal.emplace_back (track, files[c]);
+    }
+    if (added)
+        rebuildStrips();
+    if (deal.empty() && players.empty())
+    {
+        status->setText (tr ("Φ: nothing to deal. Mark sounds or instruments with the Selector's colours first (1 to 8 in the Find panel)."));
+        return;
+    }
+
+    // The instruments first, so the MIDI files dealt play on them.
+    for (const auto& [track, id] : players)
+        setInstrumentKind (track, firstPlugin, id);
+    if (! players.empty())
+        rack->refresh();
+    if (deal.empty())
+    {
+        status->setText (tr ("Φ dealt %n instrument(s)", nullptr, (int) players.size()));
+        return;
+    }
+
+    again = again && lastDeal.valid && lastDeal.launcher == launcher;
+    if (launcher)
+    {
+        // The first scene empty on every track dealt to, or the last deal's scene again.
+        auto scene = again ? lastDeal.scene : -1;
+        for (int s = 0; s < mixer::maxScenes && scene < 0; ++s)
+            if (std::all_of (deal.begin(), deal.end(), [&] (const auto& d)
+                             { return s >= numScenes || (slots[(size_t) d.first][(size_t) s] == nullptr && loadingSlots.count ({ d.first, s }) == 0); }))
+                scene = s;
+        if (scene < 0)
+        {
+            status->setText (tr ("Φ: all %1 scenes are full on these tracks. Empty a scene first.").arg (mixer::maxScenes));
+            return;
+        }
+        for (const auto& [track, file] : deal)
+            loadSlot (track, scene, file);
+        lastDeal = { true, true, scene, 0, {} };
+        moveCursor (deal.front().first, scene);
+        status->setText (tr ("Φ dealt %n sound(s) into %1", nullptr, (int) deal.size()).arg (sceneName (scene)));
+        return;
+    }
+
+    // Onto the tracks: all at one time, after everything already on them, so a second deal
+    // follows the first. Again: the clips go back to how they were, and this deal takes its place.
+    Frame at = 0;
+    if (again)
+    {
+        restore (lastDeal.before);
+        at = lastDeal.at;
+    }
+    else
+    {
+        remember();
+        for (const auto& d : deal)
+            for (const auto& clip : engine.clips (d.first))
+                at = std::max (at, clip.end());
+    }
+    lastDeal = { true, false, -1, at, snapshot() };
+    for (const auto& [track, file] : deal)
+        placeFiles (track, { file }, at, false);
+    status->setText (tr ("Φ dealt %n sound(s) onto the tracks", nullptr, (int) deal.size()));
+}
+
 void MixerWindow::sendToLauncher (const QString& file, const QString& trackName, const QColor& colour)
 {
     // The track with the Selector colour's name, else with its colour, else the selected one.
-    int track = -1;
-    for (int t = 0; t < engine.numTracks() && track < 0 && ! trackName.isEmpty(); ++t)
-        if (info[(size_t) t].name.trimmed().compare (trackName.trimmed(), Qt::CaseInsensitive) == 0)
-            track = t;
-    for (int t = 0; t < engine.numTracks() && track < 0 && colour.isValid(); ++t)
-        if (info[(size_t) t].colour.rgb() == colour.rgb())
-            track = t;
+    auto track = trackFor (trackName, colour);
     if (track < 0)
         track = selected < mixer::masterIndex ? selected : 0;
 

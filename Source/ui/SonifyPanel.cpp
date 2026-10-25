@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "SonifyPanel.h"
+#include "PhiMark.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -106,7 +107,7 @@ SonifyPanel::SonifyPanel (QWidget* parent, bool webPage) : QWidget (parent)
 
     drums = new QCheckBox (tr ("Drums"), this);
     drums->setToolTip (tr ("Change strikes General MIDI drums on channel 10: kick at the bottom, snare in the middle, hi-hat at the top"));
-    fibonacci = new QCheckBox (tr ("Φ rhythm"), this);
+    fibonacci = new PhiButton (tr ("Φ rhythm"), this);
     fibonacci->setToolTip (tr ("The drums play only on the 1s of the Fibonacci word (1011010110110...): a groove that never quite repeats"));
 
     quantize = new QSlider (Qt::Horizontal, this);
@@ -201,8 +202,8 @@ SonifyPanel::SonifyPanel (QWidget* parent, bool webPage) : QWidget (parent)
         connect (s, &QSlider::valueChanged, this, emitChanged);
     for (auto* s : { tempo, voices, columns, low, high, bend })
         connect (s, &QSpinBox::valueChanged, this, emitChanged);
-    for (auto* c : { drums, fibonacci })
-        connect (c, &QCheckBox::toggled, this, emitChanged);
+    connect (drums, &QCheckBox::toggled, this, emitChanged);
+    connect (fibonacci, &QAbstractButton::toggled, this, emitChanged);
     connect (mode, &QComboBox::currentIndexChanged, this, [this] { columns->setEnabled (mode->currentData().toInt() != (int) sonify::Mode::lanes); });
 
     setSettings ({});
