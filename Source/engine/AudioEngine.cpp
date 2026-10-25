@@ -1097,6 +1097,7 @@ bool AudioEngine::pluginWindowsLost() const                          { return x1
 void AudioEngine::showPluginWindow (int slot)                        { impl->master.showWindow (slot); }
 void AudioEngine::setPluginFrameColours (const PluginFrameColours& c) { StockFrame::setColours (c); }
 MasterSlotInfo AudioEngine::chainDevice (const ChainPath& p) const                      { return impl->master.info (p); }
+std::string AudioEngine::chainDeviceState (const ChainPath& p) const                    { return impl->master.state (p); }
 std::vector<PluginParameterInfo> AudioEngine::chainParameters (const ChainPath& p) const { return impl->master.parameters (p); }
 PluginParameterInfo AudioEngine::chainParameter (const ChainPath& p, int i) const       { return impl->master.parameter (p, i); }
 DeviceDisplay AudioEngine::chainDisplay (const ChainPath& p) const                       { return impl->master.display (p); }

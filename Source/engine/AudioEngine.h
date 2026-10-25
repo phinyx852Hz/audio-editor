@@ -309,6 +309,7 @@ public:
 
     // Any device in the chain, inside Prisms too (see ChainPath); a path with no steps is a slot.
     MasterSlotInfo chainDevice (const ChainPath&) const;
+    std::string chainDeviceState (const ChainPath&) const;   // its settings, as mixer::Effect::state (for a copy to measure)
     std::vector<PluginParameterInfo> chainParameters (const ChainPath&) const;
     PluginParameterInfo chainParameter (const ChainPath&, int index) const;
     DeviceDisplay chainDisplay (const ChainPath&) const;   // a Φ effect's picture; Kind::none for others
