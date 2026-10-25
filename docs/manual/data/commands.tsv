@@ -1,0 +1,304 @@
+file.open	File	Open	Ctrl+O
+file.record	File	Record	Ctrl+R
+file.save	File	Save	Ctrl+S
+file.saveAs	File	Save As	Ctrl+Shift+S
+file.export	File	Export	Ctrl+Alt+X
+file.metadata	File	Metadata	Ctrl+Alt+M
+file.close	File	Close	Ctrl+W / Meta+W
+file.nextTab	File	Next Tab	Ctrl+Tab / Ctrl+PgDown
+file.previousTab	File	Previous Tab	Ctrl+Shift+Backtab / Ctrl+Shift+Tab / Ctrl+PgUp
+file.quit	File	Quit	Ctrl+Q
+edit.undo	Edit	Undo	Ctrl+Z
+edit.redo	Edit	Redo	Ctrl+Shift+Z / Ctrl+Y
+edit.cut	Edit	Cut	Ctrl+X
+edit.copy	Edit	Copy	Ctrl+C
+edit.copyToNew	Edit	Copy to New	Shift+C
+edit.paste	Edit	Paste	Ctrl+V
+edit.delete	Edit	Delete	Del / Backspace
+edit.trim	Edit	Trim to Selection	Ctrl+T
+edit.insertSilence	Edit	Insert Silence	Ctrl+Alt+S
+select.all	Selection	Select All	Ctrl+A
+select.none	Selection	Select None	Esc
+select.back	Selection	Extend Selection Back	Shift+Left
+select.forward	Selection	Extend Selection Forward	Shift+Right
+select.backLarge	Selection	Extend Selection Back 1 s	Ctrl+Shift+Left / Shift+J
+select.forwardLarge	Selection	Extend Selection Forward 1 s	Ctrl+Shift+Right / Shift+L
+select.toStart	Selection	Extend Selection to Start	Shift+Home
+select.toEnd	Selection	Extend Selection to End	Shift+End
+process.gain	Process	Gain	Ctrl+G
+process.gainUp	Process	Gain Up 0.5 dB	Ctrl+Shift+Up
+process.gainDown	Process	Gain Down 0.5 dB	Ctrl+Shift+Down
+process.normalize	Process	Normalize	Ctrl+Shift+N
+process.fadeIn	Process	Fade In	Ctrl+Shift+I
+process.fadeOut	Process	Fade Out	Ctrl+Shift+O
+process.reverse	Process	Reverse	R / Ctrl+Shift+R
+process.invert	Process	Invert Polarity	Ctrl+Alt+I
+process.stereoize	Process	Stereoize	Ctrl+Alt+W
+process.midSide	Process	Mid/Side Width	Alt+Shift+W
+spatial.binaural	Spatial	Binaural	Ctrl+Alt+Shift+B
+spatial.layout	Spatial	Channel Layout	Ctrl+Alt+Shift+L
+spatial.studio	Spatial	Ambisonic Studio	Ctrl+Alt+Shift+H
+spatial.speakerArrays	Spatial	Speaker Arrays	
+spatial.encode	Spatial	Encode to Ambisonics	Ctrl+Alt+Shift+E
+spatial.rotate	Spatial	Rotate / Mirror Scene	Ctrl+Alt+Shift+Y
+spatial.decode	Spatial	Decode Ambisonics	Ctrl+Alt+Shift+D
+spatial.fumaToAmbix	Spatial	FuMa to AmbiX	
+spatial.ambixToFuma	Spatial	AmbiX to FuMa	
+view.ambiScene	Spatial	Ambisonic Scene	Ctrl+Alt+Shift+A
+process.convert	Process	Convert Sample Type	Ctrl+Alt+T
+repair.autoHeal	Repair	Auto Heal	Ctrl+U
+repair.spectralGain	Repair	Spectral Gain	Ctrl+Alt+G
+repair.learnNoise	Repair	Learn Noise Profile	Ctrl+Alt+N
+repair.noiseReduction	Repair	Noise Reduction	Ctrl+Alt+Shift+N
+repair.correctPitch	Repair	Correct Pitch	Ctrl+Alt+Shift+P
+repair.declick	Repair	DeClick	
+repair.declip	Repair	DeClip	
+repair.dehum	Repair	DeHum	
+repair.deess	Repair	DeEss	
+repair.frequencyRange	Repair	Frequency Range	Ctrl+Alt+F
+repair.allFrequencies	Repair	All Frequencies	Ctrl+Alt+Shift+F
+repair.toolBox	Repair	Box Selection Tool	V
+repair.toolLasso	Repair	Lasso Tool	O
+repair.toolBrush	Repair	Brush Tool	B
+repair.toolSpotHeal	Repair	Spot Healing Brush	H
+repair.brushSmaller	Repair	Smaller Brush	[
+repair.brushLarger	Repair	Larger Brush	]
+repair.addHarmonics	Repair	Add Harmonics	Ctrl+Alt+H
+view.diagnostics	Repair	Diagnostics Panel	Ctrl+Shift+D
+repair.findSimilar	Repair	Find Similar Sounds	Ctrl+Shift+F
+process.dcOffset	Process	Remove DC Offset	Ctrl+Alt+D
+process.fadeShape.linear	Process	Fade Shape: Linear	
+process.fadeShape.equalPower	Process	Fade Shape: Equal Power	
+process.fadeShape.exponential	Process	Fade Shape: Exponential	
+process.fadeShape.sCurve	Process	Fade Shape: S-Curve	
+marker.add	Markers	Add Marker	M
+marker.addRegion	Markers	Add Region from Selection	Shift+M
+marker.next	Markers	Go to Next Marker	'
+marker.previous	Markers	Go to Previous Marker	;
+analyze.loudness	Analyze	Loudness Statistics	Ctrl+Shift+A
+analyze.imagingView	Analyze	Next Imaging View	Ctrl+Alt+V
+analyze.resetMeters	Analyze	Reset Meters	Ctrl+Alt+R
+analyze.window	Analyze	Analysis Meters Window	Ctrl+Alt+A
+view.master	Master Section	Master Section	Ctrl+Shift+E
+master.addPlugin	Master Section	Add Plugin	Ctrl+Alt+E
+master.bypass	Master Section	Bypass Master Section	Ctrl+Shift+B
+master.render	Master Section	Render in Place	Ctrl+Shift+Return
+master.renderNew	Master Section	Render to New Tab	Ctrl+Alt+Shift+Return
+master.assistant	Master Section	Master Assistant	Alt+Shift+M
+master.scan	Master Section	Scan Plugins	Ctrl+Alt+Shift+S
+generate.tone	Effect	Tone	Ctrl+Shift+G
+generate.noise	Effect	Noise	Ctrl+Alt+Shift+G
+effect.repeat	Effect	Repeat Last Effect	Ctrl+Shift+Y
+tools.batch	Tools	Batch Processor	Ctrl+B
+tools.nyquistPrompt	Tools	Nyquist Prompt	Ctrl+Alt+Y
+tools.nyquistFolder	Tools	Open Nyquist Plug-ins Folder	
+tools.nyquistRescan	Tools	Rescan Nyquist Plug-ins	
+nyquist.spectraleditshelves	Effect	Spectral Edit Shelves	
+nyquist.studiofadeout	Effect	Studio Fade Out	
+nyquist.adjustable-fade	Effect	Adjustable Fade	
+nyquist.delay	Effect	Delay	
+nyquist.equalabel	Tools	Regular Interval Labels	
+nyquist.label-sounds	Analyze	Label Sounds	
+nyquist.legacy-limiter	Effect	Legacy Limiter	
+nyquist.noisegate	Effect	Noise Gate	
+nyquist.notch	Effect	Notch Filter	
+nyquist.nyquist-plug-in-installer	Tools	Nyquist Plugin Installer	
+nyquist.pluck	Generate	Pluck	
+nyquist.rhythmtrack	Generate	Rhythm Track	
+nyquist.rissetdrum	Generate	Risset Drum	
+nyquist.rms	Analyze	Measure RMS	
+nyquist.sample-data-export	Tools	Sample Data Export	
+nyquist.sample-data-import	Tools	Sample Data Import	
+nyquist.spectral-delete	Effect	Spectral Delete	
+nyquist.tremolo	Effect	Tremolo	
+album.new	Album	New Album	Ctrl+Alt+Shift+M
+album.addSongs	Album	Add Songs	Alt+Ins
+album.previousSong	Album	Previous Song	Alt+Left
+album.nextSong	Album	Next Song	Alt+Right
+album.moveEarlier	Album	Move Song Earlier	Alt+Shift+Left
+album.moveLater	Album	Move Song Later	Alt+Shift+Right
+album.longerPause	Album	Longer Pause Before Song	Alt+Up
+album.shorterPause	Album	Shorter Pause or Crossfade	Alt+Down
+album.songProperties	Album	Song Properties	Alt+Return
+album.removeSong	Album	Remove Song	Alt+Del
+album.openSong	Album	Open Song in Editor	Ctrl+Alt+Return
+album.properties	Album	Album Properties	Alt+Shift+Return
+album.export	Album	Export Album	Ctrl+Alt+Shift+X
+album.twoTracks	Album	Two Tracks (Songs Alternate)	Alt+Shift+T
+analyze.beats	Analyze	Mark Beats	Ctrl+Alt+B
+analyze.onsets	Analyze	Mark Onsets	Ctrl+Alt+Shift+O
+analyze.tempoKey	Analyze	Detect Tempo and Key	Ctrl+Alt+Shift+T
+analyze.vamp	Analyze	Vamp Plugins	Ctrl+Alt+Shift+V
+marker.exportSlices	Markers	Export Slices at Markers	
+marker.exportLabels	Markers	Export Markers as Labels	
+warp.showGrid	Warp	Show Beat Grid	Ctrl+J
+view.rulerTime	Warp	Ruler in Time	
+view.rulerBeats	Warp	Ruler in Bars and Beats	
+view.rulerBoth	Warp	Ruler in Time and Beats	
+warp.detectGrid	Warp	Detect Beat Grid	
+warp.autoDetect	Warp	Detect Tempo When Opening Loops	
+warp.setTempo	Warp	Set Tempo and Grid	Ctrl+Shift+J
+warp.downbeat	Warp	Bar 1 Starts at the Cursor	Ctrl+Alt+J
+warp.halve	Warp	Halve Grid Tempo	
+warp.double	Warp	Double Grid Tempo	
+warp.edit	Warp	Edit Warp Markers	Shift+W
+warp.previousHit	Warp	Previous Hit	,
+warp.nextHit	Warp	Next Hit	.
+warp.toggleMarker	Warp	Add or Remove Warp Marker	W
+warp.nudgeEarlier	Warp	Nudge Warp Marker Earlier	Ctrl+Alt+Left
+warp.nudgeLater	Warp	Nudge Warp Marker Later	Ctrl+Alt+Right
+warp.nudgeEarlierFine	Warp	Nudge Warp Marker 1 ms Earlier	Ctrl+Alt+Shift+Left
+warp.nudgeLaterFine	Warp	Nudge Warp Marker 1 ms Later	Ctrl+Alt+Shift+Right
+warp.quantize	Warp	Quantize	Q
+warp.stretch	Warp	Stretch to Tempo	Ctrl+Alt+Shift+J
+warp.halfSpeed	Warp	Stretch ×2 (Twice as Long)	* / Ctrl+Alt+Down
+warp.doubleSpeed	Warp	Shrink ÷2 (Half as Long)	/ / Ctrl+Alt+Up
+warp.exportLoop	Warp	Export Loop	Ctrl+Alt+L
+warp.quantizePanel	Warp	Quantize Panel	Shift+Q
+warp.resetWarp	Warp	Reset Warp	
+warp.markersFromHits	Warp	Warp Markers on Hits	
+warp.sliceAtHits	Warp	Slice at Hits	
+view.visualizer	View	Visualizer	Shift+F11
+view.visualizerFullScreen	View	Visualizer Full Screen	F11
+view.visualizerBehind	View	Visualizer Behind PHI	Ctrl+F11
+view.visualizerNext	View	Next Visualization	Alt+F11
+view.visualizerPrevious	View	Previous Visualization	Alt+Shift+F11
+view.visualizerChoose	View	Choose Visualization	Ctrl+Shift+F11
+view.rainTempo	View	Digital Rain Tempo	
+view.rainFollowsFile	View	Digital Rain Follows the File's Tempo	
+view.milkdropNext	View	Next MilkDrop Preset	Alt+F12
+view.milkdropPrevious	View	Previous MilkDrop Preset	Alt+Shift+F12
+view.milkdropChoose	View	Choose MilkDrop Preset	Ctrl+Shift+F12
+view.milkdropDownload	View	Download MilkDrop Presets	
+visualizer.bars	View	Visualizer: Bars	
+visualizer.radial	View	Visualizer: Radial	
+visualizer.circleWave	View	Visualizer: Circle Wave	
+visualizer.particles	View	Visualizer: Starfield	
+visualizer.ribbons	View	Visualizer: Ribbons	
+visualizer.rain	View	Visualizer: Digital Rain	
+visualizer.landscape	View	Visualizer: Spectral Landscape	
+visualizer.picture	View	Visualizer: Picture	
+visualizer.spectrum	View	Visualizer: Spectrum Analyzer	
+visualizer.octaves	View	Visualizer: Third-Octave Bands	
+visualizer.scope	View	Visualizer: Oscilloscope	
+visualizer.spectrogram	View	Visualizer: Spectrogram	
+visualizer.waterfall	View	Visualizer: Waterfall	
+visualizer.surface	View	Visualizer: 3D Spectrum	
+visualizer.milkdrop	View	Visualizer: MilkDrop	
+visualizer.sonify	View	Sonify the Visualizer	
+visualizer.sonifyFile	View	Sonify a Picture or Video	
+visualizer.sonifyCamera	View	Sonify a Camera	
+tracker.window	Tracker	Tracker1 (MilkyTracker)	Ctrl+Alt+Shift+K
+tracker.furnace	Tracker	Tracker2 (Furnace)	
+tracker.new	Tracker	New Song	
+tracker.open	Tracker	Open Module	
+tracker.save	Tracker	Save Song	
+tracker.saveAs	Tracker	Save Song As	
+tracker.loadSample	Tracker	Load Sample	
+tracker.playSong	Tracker	Play Song	
+tracker.playPattern	Tracker	Play Pattern	
+tracker.stop	Tracker	Stop Tracker	
+tracker.recordStereo	Tracker	Record to Editor (Stereo)	
+tracker.recordMulti	Tracker	Record to Editor (Multi-Channel)	
+tracker.resetTracks	Tracker	Spread Channels over the Tracks	
+tracker.about	Tracker	About the Trackers	
+performance.launcher	Performance	Clip Launcher	F5
+performance.record	Performance	Record Video	Ctrl+F12
+performance.stream	Performance	Go Live	Shift+F12
+performance.settings	Performance	Video and Stream Settings	
+performance.folder	Performance	Show Recordings Folder	
+sample.send	Sample	Send to Simplest	F7
+sample.window	Sample	Simplest	Shift+F7
+sample.refresh	Sample	Refresh from Editor	Ctrl+F7
+slice.send	Sample	Send to Slicer	F8
+slice.window	Sample	Slicer Window	Shift+F8
+slice.refresh	Sample	Refresh Slicer from Editor	Ctrl+F8
+sample.midiInputs	Sample	MIDI Inputs	
+sample.panic	Sample	All Notes Off	Shift+Esc
+instrument.granular	Sample	Granular (GRNLR)	
+instrument.retroSampler	Sample	Retro Sampler (Ami)	
+instrument.wavetable	Synth	Wavetable (Vaporizer2)	
+instrument.modular	Synth	Modular (Cardinal)	
+instrument.additive	Synth	Additive (Overtonium)	
+instrument.subtractive1	Synth	Subtractive1 mono (CA-72)	
+instrument.subtractive2	Synth	Subtractive2 poly (Helm)	
+instrument.fm	Synth	FM (OctaSine)	
+mixer.window	Mixer	Mixer	F3
+mixer.dock	Mixer	Undock / Dock Mixer	Ctrl+Shift+F3
+mixer.new	Mixer	New Project	
+mixer.newFromSet	Mixer	New Project from Selector Set	
+mixer.open	Mixer	Open Project	
+mixer.save	Mixer	Save Project	
+mixer.saveAs	Mixer	Save Project As	
+mixer.addTrack	Mixer	Add Track	
+mixer.removeTrack	Mixer	Remove Last Track	
+mixer.playStop	Mixer	Play or Stop the Mix	Shift+F3
+mixer.mixdown	Mixer	Mix Down to Editor	Ctrl+F3
+mixer.assistant	Mixer	Mix Assistant	Alt+Shift+X
+mixer.patchbay	Mixer	Patchbay	F4
+reference.toggle	References	Switch Between Your Audio and Reference	A
+reference.next	References	Next Reference	Shift+A
+reference.add	References	Add Reference	
+reference.match	References	Match Reference Loudness Again	
+view.references	References	References Panel	Ctrl+Alt+Shift+R
+tools.macroRecord	Tools	Record Macro	Ctrl+F9
+tools.macroApply	Tools	Apply Macro	F9
+tools.macros	Tools	Macros	Shift+F9
+tools.managePlugins	Tools	Manage Plug-ins	
+tools.resetConfig	Tools	Reset Configuration	
+transport.playStop	Transport	Play / Stop	Space
+transport.stop	Transport	Stop	K
+transport.loop	Transport	Loop Playback	Ctrl+L
+transport.start	Transport	Go to Start	Home
+transport.end	Transport	Go to End	End
+cursor.back	Transport	Cursor Back	Left
+cursor.forward	Transport	Cursor Forward	Right
+cursor.backLarge	Transport	Cursor Back 1 s	Ctrl+Left / J
+cursor.forwardLarge	Transport	Cursor Forward 1 s	Ctrl+Right / L
+view.zoomIn	View	Zoom In	Ctrl+= / + / =
+view.zoomOut	View	Zoom Out	Ctrl+- / -
+view.overview	View	Whole-File Overview	Ctrl+Alt+O
+view.gainKnob	View	Gain Knob	Ctrl+Alt+K
+view.cpuMeter	View	CPU Meter	
+view.levelColors	View	Colour Waveform by Level	Ctrl+Alt+Shift+W
+edit.snapZero	Edit	Snap to Zero Crossings	Ctrl+Alt+Z
+edit.snapGrid	Edit	Snap to Grid	Ctrl+4
+edit.split	Edit	Split	Ctrl+E
+edit.narrowGrid	Edit	Narrow Grid	Ctrl+1
+edit.widenGrid	Edit	Widen Grid	Ctrl+2
+edit.duplicate	Edit	Duplicate	Ctrl+D
+view.zoomFit	View	Zoom to Fit	Ctrl+0
+view.zoomSelection	View	Zoom to Selection	Z
+view.chain	Master Section	Device Chain	Ctrl+Shift+C
+view.find	View	Find	Ctrl+F
+view.history	View	History Panel	Ctrl+H
+view.markers	View	Markers Panel	Ctrl+Shift+M
+view.meters	View	Level Meters	Ctrl+Shift+L
+view.popOut	View	Pop Out / Dock Panel	Ctrl+Alt+P
+view.resetLayout	View	Reset Panel Layout	Ctrl+Alt+0
+view.spectral	View	Spectral Display	Shift+D
+view.blendSpectral	View	Blend Towards Spectrogram	Alt+Shift+Up
+view.blendWaveform	View	Blend Towards Waveform	Alt+Shift+Down
+view.pitchLine	View	Pitch Line	Shift+P
+view.spectrogramSettings	View	Spectrogram Settings	Alt+Shift+D
+view.verticalZoomIn	View	Zoom Vertically In	Alt+= / Alt++
+view.verticalZoomOut	View	Zoom Vertically Out	Alt+-
+view.verticalZoomReset	View	Reset Vertical Zoom	Alt+0
+view.opacityUp	View	More Opaque	Ctrl+Alt+= / Ctrl+Alt++ / Ctrl+Alt+Num++
+view.opacityDown	View	More Transparent	Ctrl+Alt+- / Ctrl+Alt+_ / Ctrl+Alt+Num+-
+view.opacityFull	View	Fully Opaque	
+view.focusFollowsMouse	View	Focus Follows Mouse	
+view.focusWaveform	View	Focus Waveform	Ctrl+F6
+view.nextPanel	View	Next Panel	F6
+view.previousPanel	View	Previous Panel	Shift+F6
+view.fullScreen	View	Full Screen	Meta+F
+options.separateOutputs	Options	Play Surround on Separate Outputs	
+options.audio	Options	Audio Settings	Ctrl+,
+options.interfaceMixer	Options	Audio Interface Mixer	Ctrl+Alt+Shift+I
+options.interfaceMixerProgram	Options	Audio Interface Mixer Program	
+options.keymap	Options	Keyboard Shortcuts	Ctrl+Shift+K
+options.waveformColors	Options	Waveform and Meter Colors	Ctrl+Shift+W
+options.theme	Options	Theme	Ctrl+Shift+T
+help.palette	Help	Command Palette	Ctrl+Shift+P / F1
+help.menuBar	Help	Open Menu Bar	F10
+help.about	Help	About PHI	
