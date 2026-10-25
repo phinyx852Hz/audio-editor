@@ -1051,6 +1051,8 @@ void MainWindow::buildPanels()
     setCorner (Qt::BottomRightCorner, Qt::BottomDockWidgetArea);
     chainPanel = new DockablePanel (*this, QStringLiteral ("chainPanel"), tr ("Device Chain"), chainRow, Qt::BottomDockWidgetArea);
     chainPanel->dock()->show();
+    // No title bar: the cards say what it is (owner, 2026-10-25). View still shows, hides and pops it out.
+    chainPanel->dock()->setTitleBarWidget (new QWidget (chainPanel->dock()));
 
     findWidget = new FindPanel (waveform, this);
     findWidget->collect = [this] { return findItems(); };
@@ -1065,7 +1067,7 @@ void MainWindow::buildPanels()
             return false;
         const auto set = findWidget->currentSet();
         mixerWin->sendToLauncher (path, colour >= 0 ? findWidget->markName (set, colour) : QString(),
-                                  colour >= 0 ? FindPanel::colour (colour) : QColor());
+                                  colour >= 0 ? findWidget->markColour (set, colour) : QColor());
         return true;
     };
     // The Φ random selector: into a new scene when the clip launcher is shown, else onto the
@@ -1418,6 +1420,8 @@ void MainWindow::restoreDockSizes()
 void MainWindow::saveLayout()
 {
     auto settings = appSettings();
+    if (chainHiddenForMixer)
+        chainPanel->dock()->show();   // saved as the user left it, not as the mixer hid it
 
     for (auto* p : panels)
     {

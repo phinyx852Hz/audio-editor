@@ -85,7 +85,7 @@ namespace mixer
     Clip makeClip (MidiClipPtr, Frame start);
 
     // The clip launcher: a slot for each track in each scene (a row of the grid).
-    constexpr int maxScenes = 16;
+    constexpr int maxScenes = 32;
     constexpr int stopQueued = -2;   // LaunchInfo::queued: the track stops at the next quantise
 
     // What a slot holds: a clip, and how it plays when launched.

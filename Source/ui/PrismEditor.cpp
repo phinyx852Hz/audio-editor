@@ -4,6 +4,7 @@
 #include "ChainRow.h"
 #include "MasterPanel.h"
 #include "Potentiometer.h"
+#include "Settings.h"
 #include "Theme.h"
 
 #include <QApplication>
@@ -946,11 +947,18 @@ void PrismEditor::popOut (QWidget* card)
     // Rises from the card: above it when there is room, kept inside the window.
     const auto x = std::clamp (from.left(), 12, std::max (12, parent->width() - w - 12));
     const auto y = std::clamp (from.top() - h - 10, 12, std::max (12, parent->height() - h - 12));
+    QRect to (x, y, w, h);
+    // Where it was left last time, floating over whatever is there (owner, 2026-10-25), as
+    // long as that is still inside the window.
+    if (const auto last = appSettings().value (QStringLiteral ("prism/place")).toRect();
+        last.isValid() && last.width() >= 420 && parent->rect().adjusted (-40, 0, 40, 0).contains (last.topLeft())
+        && last.right() <= parent->width() + 40 && last.top() + 40 <= parent->height())
+        to = QRect (last.topLeft(), QSize (std::min (last.width(), parent->width()), std::max (h, std::min (last.height(), parent->height()))));
 
     setGeometry (from);
     show();
     raise();
-    animateTo ({ x, y, w, h }, {});
+    animateTo (to, {});
     setFocus (Qt::OtherFocusReason);
 }
 
@@ -961,6 +969,7 @@ void PrismEditor::dock()
     closing = true;
     timer.stop();
     engine.prismLearnController (prismPath(), -1);
+    appSettings().setValue (QStringLiteral ("prism/place"), geometry());   // it opens there next time
     animateTo (cardRect(), [this]
     {
         hide();
@@ -975,6 +984,8 @@ void PrismEditor::dockNow()
         return;
     closing = true;
     timer.stop();
+    if (isVisible())
+        appSettings().setValue (QStringLiteral ("prism/place"), geometry());
     hide();
     Q_EMIT docked (false);
     deleteLater();

@@ -21,15 +21,34 @@ Performance > Clip Launcher (F5) opens the mixer with the launcher in its upper 
 tracks across time usually are. F5 again goes back to the editor. In the mixer, the Launcher button
 switches between the two, and V goes back to the tracks across time.
 
-- **Left: the rack** of the selected track. Its instrument (with Edit and the MIDI keyboard arm),
-  the track (trim, transpose, MIDI channels, polarity, Back to Timeline) and the clip in the slot
-  under the cursor (loop, reverse, its own launch quantise, choose a file, empty the slot).
-- **Middle: the grid.** Tracks across with their names and colours, scenes down. Each scene has a
-  launch button on the right; each track has a stop button under its column, and Stop All is under
-  the scenes. A ⟲ in a track's header means it is off its timeline; clicking it goes back.
-- **Below: the strips, made compact**: name, pan, mute and solo, fader and meter. The rest is in
-  the rack. The full strips come back with the tracks across time.
-- The top bar gains the launch quantise and the number of scenes (1 to 16, 8 to start).
+Tab switches between the launcher and the tracks across time, as in Ableton (2026-10-25).
+
+- **The grid.** The scenes on the left (owner, 2026-10-25), each with its launch button, and Stop
+  All under them; then the tracks across with their names and colours, scenes down, each with a
+  stop button under its column. A clip is filled with its track's colour. A ⟲ in a track's header
+  means it is off its timeline; clicking it goes back. The grid scrolls when the strips need the
+  room.
+- **The Inspector** (owner, 2026-10-25; the top bar's Inspector button, on to start): one column
+  at the left of the mixer, in the launcher and in the tracks view alike. At the top the selected
+  track's name on its colour, then its mode (Audio, Inst, Hybrid) with the layer and Duck dials,
+  its instrument (with Edit, transpose, MIDI channel and the keyboard arm), Pre (polarity, low and
+  high cut, track delay), all its inserts, Send A and B, and width. In the launcher it also shows
+  the track's timeline follow (Back to Timeline) and the clip in the slot under the cursor (loop,
+  reverse, its own launch quantise, choose a file, empty the slot). The Strips button picks its
+  sections too.
+- **The Device Chain** (owner, 2026-10-25) along the bottom, the whole width, as in Ableton: the
+  selected track's instrument, always first on the left, then its inserts left to right (up to
+  eight knobs each and Dry/Wet), then Add effect. Clicking a clip puts a drawing of it there
+  instead: an audio clip's waveform or a MIDI clip's notes in the track's colour, not editable.
+  An empty slot, a track's name or its strip brings the chain back. With the Master strip
+  selected it steps aside for the editor's own chain. More in mixer.md.
+- **Below: the strips, made compact** (owner, 2026-10-25): four insert slots as tall as the clip
+  slots, Send A and Send B above Trim and Pan, mute and solo, a shorter fader and meter with their
+  values, and the track's name at the bottom in white on its colour. The full strips come back
+  with the tracks across time.
+- In a see-through window only the track names and the clips stay solid.
+- The top bar gains the launch quantise, the number of scenes (1 to 32, 16 to start) and the
+  Inspector.
 
 ## The Selector
 
@@ -41,7 +60,7 @@ first empty slot of the track for its Selector colour, instead of opening it in 
 2. The track is the one named like that colour in the set chosen (DR, BA, PR... in Live
    Performance), else the one with that colour, else the selected track. A project made with
    Mixer > New Project from Selector Set has a track for every colour, named and coloured to match.
-3. The first empty slot from the top. A full column gets one more scene, up to 16.
+3. The first empty slot from the top. A full column gets one more scene, up to 32.
 4. The mixer follows: that track is selected (its strip, the rack) and the cursor is on the slot.
 
 So one pass down the Selector, one pick per colour, builds a scene across the tracks; picking again

@@ -20,12 +20,15 @@
 #include <tuple>
 
 class AudioEngine;
+class StatusLine;
+class QScrollArea;
 class QDialog;
 class QCheckBox;
 class QDoubleSpinBox;
 class QLabel;
 class QPushButton;
 class QHBoxLayout;
+class QVBoxLayout;
 class MixerStrip;
 class QSplitter;
 class TrackLanes;
@@ -33,6 +36,9 @@ class FileBrowser;
 class ClipGrid;
 class LauncherRack;
 class ReturnStripWidget;
+class TrackDevices;
+class ClipView;
+class QStackedWidget;
 class QComboBox;
 class QSpinBox;
 
@@ -96,6 +102,8 @@ public:
         std::function<QJsonObject()> projectState;
         std::function<void (const QJsonObject&)> setProjectState;
         std::function<void()> resetProject;
+        // The Selector set chosen in the Find panel, top to bottom: its names and colours.
+        std::function<void (QStringList& names, QList<QColor>& colours)> selectorSet;
     };
 
     MixerWindow (mixer::Engine&, AudioEngine&, Hooks, QWidget* parent);
@@ -112,6 +120,10 @@ public:
     // A new mix of 8 tracks named and coloured from the bottom of a Selector set up:
     // the last name and colour on track 1 (DR, BA, PR... for Live Performance).
     void newMixFromSet (const QString& setName, const QStringList& names, const QList<QColor>& colours);
+    // Names and colours the tracks from the Selector set, bottom up (owner, 2026-10-25: track 1
+    // is the set's bottom category, DR in Live Performance). A track renamed or recoloured by
+    // the user keeps what it was given.
+    void applySelectorSet();
     void openMix();
     bool openMixFile (const QString& path);   // asks first when the mix has unsaved changes
     bool saveMix (bool saveAs);
@@ -155,6 +167,14 @@ public:
     AudioDataPtr clipAudio (int track, uint32_t clip, QString& name) const;
     bool replaceClipAudio (int track, uint32_t clip, const AudioData& edited, const QString& name, QString& error);
 
+    // The Device Chain along the mixer's bottom (owner, 2026-10-25): the selected track's
+    // instrument and inserts, or the clip picked in the launcher or the tracks. Hidden while
+    // the Master strip is selected, so the editor's own chain can show.
+    bool devicePanelShown() const;
+    // What the browser's Instruments and Audio Effects lists drag: "effect\n<id>",
+    // "instrument\n<id>", or "synth", "sampler", "slicer".
+    static QString pluginMime() { return QStringLiteral ("application/x-phi-plugin"); }
+
 Q_SIGNALS:
     void mixdownRequested();
     void midiInputsRequested();
@@ -162,6 +182,7 @@ Q_SIGNALS:
     void closed();
     void playStarted();   // so the main window makes sure the mixer is heard
     void editClipRequested (int track, quint32 clip);
+    void devicePanelChanged();   // shown or hidden
 
 protected:
     void keyPressEvent (class QKeyEvent*) override;
@@ -176,6 +197,8 @@ private:
     friend class ClipGrid;
     friend class LauncherRack;
     friend class ReturnStripWidget;
+    friend class TrackDevices;
+    friend class ClipView;
 
     // What the window keeps about a track besides the engine's settings.
     struct TrackInfo
@@ -229,6 +252,24 @@ private:
     QJsonArray insertsJson (int track) const;
     void loadInserts (int track, const QJsonArray&, QStringList& problems);
     void stripsMenu (QPoint at);     // which sections the strips show, and how wide they are
+    // An instrument or effect dropped on a track (its strip, or the Device Chain): the
+    // instrument takes the instrument's place, an effect goes after the inserts.
+    bool dropPlugin (int track, const QByteArray& what);
+    void showDevices();                          // the selected track's chain in the Device Chain
+    void showTimelineClip (int track, uint32_t id);
+    void showSlotClip (int track, int scene);
+    void updateDevicePanel();                    // shown unless the master is selected
+    // The MIDI clip shown (owner, 2026-10-25: "really fast MIDI editing", from the Inspector):
+    // R reverses it; Φ, Duplicate, ½, ×2 and a mode or raga make a new MIDI file beside the mix.
+    void reverseShownClip();
+    void editShownMidi (const std::function<midifile::SongPtr (const midifile::Song&)>& edit, const QString& what);
+    void refreshMidiClipBox();
+    QString editsFolder() const;   // where edits of the mix's clips are saved
+    QWidget* midiClipBox = nullptr;
+    QLabel* midiClipTitle = nullptr;
+    QComboBox* rootBox = nullptr;
+    QComboBox* scaleBox = nullptr;
+    int phiTurn = 0;
     // Q-Link (Cubase): with it on, a change to one of the picked strips goes to all of them;
     // Alt+Shift sends it to every track. `fn` gets each strip, and whether it is the one changed.
     void forLinked (int track, const std::function<void (mixer::Strip&, bool self)>& fn);
@@ -243,7 +284,7 @@ private:
     void toggleLanes();              // the tracks across time, above the strips (V)
     void updateUpperArea();
     void toggleBrowser();            // the file browser on the left (Ctrl+B)
-    void cycleFocus (bool forward);  // F6, Tab: the browser, the tracks, the strips
+    void cycleFocus (bool forward);  // F6: the browser, the tracks, the strips
     // Renders the track (MIDI through its instrument, and its audio) to a WAV: in place
     // it becomes the track's audio, else it goes on a new track and this one is muted.
     void bounce (int track, bool inPlace);
@@ -281,6 +322,8 @@ private:
     AudioEngine& audio;
     Hooks hooks;
     std::array<TrackInfo, mixer::maxTracks> info;
+    std::pair<QString, QColor> defaultTrack (int track) const;   // from the Selector set, else "Track n"
+    std::array<std::pair<QString, QColor>, mixer::maxTracks> givenDefaults;   // what applySelectorSet last gave each track
     std::array<MixerStrip*, mixer::maxTracks> strips {};
     QWidget* stripArea;
     TrackLanes* lanes = nullptr;
@@ -291,9 +334,24 @@ private:
     QWidget* upperArea = nullptr;      // the tracks across time or the launcher, above the strips
     std::array<std::array<mixer::SlotPtr, mixer::maxScenes>, mixer::maxTracks> slots {};   // as given to the engine
     QPushButton* launcherButton = nullptr;
+    QPushButton* inspectorButton = nullptr;   // the launcher's rack, on the right, hidden until asked for
+    QWidget* inspectorArea = nullptr;
+    QVBoxLayout* inspectorLayout = nullptr;
+    QScrollArea* inspectorScroll = nullptr;
+    MixerStrip* inspectorStrip = nullptr;   // the selected track's, rebuilt when the selection moves
+    bool inspectorPending = false;
+    QSplitter* bottomSplitter = nullptr;     // everything above, the Device Chain below
+    QStackedWidget* devicePanel = nullptr;
+    TrackDevices* devices = nullptr;
+    ClipView* clipView = nullptr;
+    bool showingClip = false;
+    void refreshInspector();   // soon, once for any number of changes
+    QScrollArea* gridScroll = nullptr;
+    QByteArray timelineSplit;    // the splitter as the tracks across time had it
+    bool launcherSplit = false;
     QComboBox* quantiseBox = nullptr;
     QSpinBox* scenesBox = nullptr;
-    int numScenes = 8;
+    int numScenes = 16;
     int cursorScene = 0;
     std::array<QString, mixer::maxScenes> sceneNames;   // empty: "Scene n"
     std::set<std::pair<int, int>> loadingSlots;        // track and scene of files still loading
@@ -311,7 +369,8 @@ private:
     QDoubleSpinBox* tempoBox;
     QCheckBox* followTempoBox;
     QLabel* midiStatus;
-    QLabel* status;
+    QPushButton* midiButton = nullptr;
+    StatusLine* status;
     QTimer timer;
     qint64 lastTick = 0;
     int selected = 0;

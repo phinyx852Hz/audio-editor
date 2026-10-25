@@ -197,7 +197,8 @@ More templates can be added in the same way; each is a small file.
 | T | Step the thumbnail display |
 | V | Show or hide the tracks across time above the strips |
 | Ctrl+B | Show or hide the file browser |
-| F6, Tab | Next section: browser, tracks, strips (Shift: back) |
+| F6 | Next section: browser, tracks, strips (Shift: back) |
+| Tab | Switch between the clip launcher and the tracks across time (Ableton) |
 | Ctrl+Z, Ctrl+Shift+Z | Undo, redo clip edits |
 | B | Bounce in place: the track's sound (MIDI through its instrument, and its audio) becomes its audio |
 | Shift+B | Bounce to a new track and mute this one (not when all 8 tracks are in use) |
@@ -347,11 +348,61 @@ Every control has a screen-reader name and announces its value.
 - Insert Mix: each insert has a dry/wet Mix (`Insert::mix`, right-click a slot: Mix...), for
   parallel compression or saturation in one slot; a slot under 100 % shows its percentage.
 
+- Layout (owner, 2026-10-25): every strip's name is at the bottom, under the fader's value, in
+  white on the track's colour. The tracks follow the Selector set chosen in the Find panel, its
+  bottom category first (DR on track 1 in Live Performance), in its colours; a new project has a
+  track for each of its eight categories, and a track keeps a name or colour the user gave it.
+  The Selector's right-click menu makes new sets (New Set..., Delete Set) and changes any
+  category's colour for that set (Colour of...), saved in find.json with the names. The MIDI
+  inputs moved to the top bar's MIDI... button (its tooltip lists them); messages show for five
+  seconds and give their room back. The Device Chain has no title bar.
+
 Next (owner, 2026-10-24): a
 Channel window (Pre and a Φ EQ with another track's spectrum to compare), loudness on the master,
 snapshots and mixer history, then In/Out routing (Ableton's Audio From and Audio To), live inputs
-and recording, thumbnails, templates and the spatial panner. No inspector: with 8 tracks the
-strips have the room. The Sampler and Slicer windows of the Sample menu
+and recording, thumbnails, templates and the spatial panner. The Inspector (owner, 2026-10-25) is a column at the mixer's
+left in both views with the selected track's mode, instrument, Pre, inserts, sends and width; the
+strips stay lean (four insert slots, sends, trim and pan, fader, name) in both views.
+
+Device Chain and drag and drop (owner, 2026-10-25, "very close to Ableton's workflow"):
+- The mixer has its own Device Chain along its bottom, the whole width, in both views. It shows
+  the selected track: its instrument first on the left (Edit opens it, ▾ picks another), then its
+  inserts in the order they play, each with ⏻ (on or bypassed), Edit (its own window), up to
+  eight knobs from the effect and its Dry/Wet, five to a row. Right-click a card for the insert
+  menu (move, replace, remove). Add effect ends the row.
+- Clicking a clip on the tracks or in the launcher draws it there instead, read-only: an audio
+  clip's waveform (double-click to edit it in the editor) or a MIDI clip's notes on a piano roll,
+  in the track's colour. Clicking a track's strip, its name or an empty slot brings the chain back.
+- Picking the Master strip hides it; while the mixer is in the editor's place the editor's own
+  Device Chain (the master's) steps aside and comes back with the Master strip or the editor.
+- The browser's places list ends with Instruments (Synth, Sampler, Slicer and the instrument
+  plugins found) and Audio Effects (built-in, stock, then each plugin format). Drag one onto a
+  track's strip, the Inspector or the Device Chain: an instrument takes the instrument's place
+  (an Audio track becomes Inst, or Hybrid when it has audio clips), an effect joins the end of the
+  inserts. Enter or a double-click puts it on the selected track. Backspace goes back to the files.
+
+Fast MIDI edits (owner, 2026-10-25: "MIDI editing, but really fast"; "the idea is speed"):
+- No notes are picked or moved by hand. A MIDI clip picked (on the tracks or in the launcher) puts
+  a MIDI Clip section at the top of the Inspector, and R reverses the clip.
+- **Φ** deals the notes out again along the golden ratio. The pitches, velocities and lengths stay
+  the same, and so does the rhythm (the times notes start); which notes start at which of those
+  times changes, and a chord stays together. Every press gives another order.
+- **Duplicate** makes the clip twice as long, the two copies joined into one clip, so Φ then deals
+  across both.
+- **½** keeps every other note or chord, and **×2** plays each note twice in its own time, half as
+  long. Both can be pressed again.
+- **Sa** and **Mode or raga** move every note to the nearest note of a mode (Ionian to Locrian)
+  or one of the major Hindustani ragas: the ten thaats (Bilawal, Yaman, Khamaj, Kafi, Asavari,
+  Bhairavi, Bhairav, Marwa, Purvi, Todi), then Darbari Kanada, Jaunpuri, Bageshri, Bhimpalasi,
+  Desh, Bihag, Kedar, Miyan ki Malhar, Megh, Bhupali, Durga, Hamsadhwani, Malkauns, Jog, Ahir
+  Bhairav, Lalit, Puriya Dhanashri, Shree, Multani and Charukeshi. A note between two goes down,
+  and drums (channel 10) stay. Ragas that share their notes (Darbari, Jaunpuri, Asavari) are each
+  listed. A raga is taken as the notes it uses up and down; its own movement is not followed.
+- Each edit writes a new MIDI file (type 0) next to the mix, in "<mix> Edits", or in Music/PHI
+  Edits until the mix is saved. The clip plays it from the start, as it was heard (a reversed
+  clip is turned round first). Ctrl+Z undoes an edit on the tracks. The code is in
+  mixer/MidiFile.h (phiShuffle, duplicated, halfDensity, doubleDensity, toMode, scales), with
+  tests. The Sampler and Slicer windows of the Sample menu
 could dock into the mixer as track 1 (the other thread's docking work).
 
 Patchbay (2026-10-22, docs/patchbay.md): while the patchbay plays (it always does live), the

@@ -1308,6 +1308,72 @@ namespace
         check (midifile::parse (cut.data(), cut.size(), error) != nullptr, "midi file: a truncated file still reads");
     }
 
+    // The fast MIDI edits (owner, 2026-10-25): four quarter notes C D E G in one bar of 4/4.
+    void testMidiEdits()
+    {
+        auto song = std::make_shared<midifile::Song>();
+        song->ticksPerQuarter = 480;
+        song->tempos.push_back ({ 0, 500000.0 });
+        const uint8_t pitches[] { 60, 62, 64, 67 };
+        for (int i = 0; i < 4; ++i)
+        {
+            song->events.push_back ({ i * 480, 0x90, pitches[i], (uint8_t) (90 + i) });
+            song->events.push_back ({ i * 480 + 240, 0x80, pitches[i], 0 });
+        }
+        song->lastTick = 1680;
+        song->channelsUsed = 1;
+        auto notes = [] (const midifile::Song& s)
+        {
+            std::vector<std::pair<int64_t, int>> out;   // start, pitch
+            for (const auto& e : s.events)
+                if (e.kind() == 0x90 && e.data2 > 0)
+                    out.push_back ({ e.tick, e.data1 });
+            return out;
+        };
+        check (midifile::span (*song) == 1920, "midi edits: a loop is whole bars long");
+
+        // Written and read back the same.
+        std::string error;
+        const auto data = midifile::bytes (*song);
+        const auto again = midifile::parse (data.data(), data.size(), error);
+        check (again != nullptr && notes (*again) == notes (*song) && again->lastTick == 1680 && near (again->fileBpm(), 120.0, 1.0e-9),
+               "midi edits: a song written as a type 0 file reads back the same");
+
+        // Φ: the same starts and pitches, other pairs of them, and another order each turn.
+        const auto a = midifile::phiShuffle (*song, 0), b = midifile::phiShuffle (*song, 1);
+        auto starts = [&] (const midifile::Song& s) { std::vector<int64_t> v; for (auto& n : notes (s)) v.push_back (n.first); std::sort (v.begin(), v.end()); return v; };
+        auto pitchSet = [&] (const midifile::Song& s) { std::vector<int> v; for (auto& n : notes (s)) v.push_back (n.second); std::sort (v.begin(), v.end()); return v; };
+        check (starts (*a) == starts (*song) && pitchSet (*a) == pitchSet (*song) && notes (*a) != notes (*song),
+               "midi edits: phi keeps the rhythm and the pitches and moves the notes");
+        check (notes (*a) != notes (*b), "midi edits: phi again gives another order");
+        check (a->noteCount() == 4 && a->events.size() == 8, "midi edits: phi keeps every note with its note-off");
+
+        const auto twice = midifile::duplicated (*song);
+        check (twice->noteCount() == 8 && twice->lastTick == 3840 && notes (*twice)[4] == std::make_pair<int64_t, int> (1920, 60),
+               "midi edits: duplicated, the loop plays twice as one");
+        const auto half = midifile::halfDensity (*song);
+        check (notes (*half) == (std::vector<std::pair<int64_t, int>> { { 0, 60 }, { 960, 64 } }), "midi edits: half the density keeps every other note");
+        const auto dbl = midifile::doubleDensity (*song);
+        check (dbl->noteCount() == 8 && notes (*dbl)[1] == std::make_pair<int64_t, int> (120, 60), "midi edits: double the density plays each note twice");
+        const auto back = midifile::reversed (*song);
+        check (notes (*back).front() == std::make_pair<int64_t, int> (1440 - 1440 + 0, 67) || notes (*back).front().second == 67,
+               "midi edits: reversed, the last note comes first");
+
+        // D Dorian on C D E G: C goes down to B? No: C is in D Dorian (D E F G A B C), E stays, all stay.
+        const auto dorian = midifile::toMode (*song, 2, 1);
+        check (pitchSet (*dorian) == (std::vector<int> { 60, 62, 64, 67 }), "midi edits: notes already in the mode stay");
+        // C Phrygian (C Db Eb F G Ab Bb): D goes down to Db, E down to Eb.
+        const auto phrygian = midifile::toMode (*song, 0, 2);
+        check (pitchSet (*phrygian) == (std::vector<int> { 60, 61, 63, 67 }), "midi edits: notes move to the nearest of the mode, down when between");
+        // Ragas: Malkauns (S g m d n) on C, and Darbari and Jaunpuri listed with Asavari's notes.
+        const auto& scales = midifile::scales();
+        auto find = [&] (const std::string& name) { for (size_t i = 0; i < scales.size(); ++i) if (name == scales[i].name) return (int) i; return -1; };
+        const auto malkauns = find ("Malkauns");
+        check (malkauns >= 0 && pitchSet (*midifile::toMode (*song, 0, malkauns)) == (std::vector<int> { 60, 63, 63, 68 }), "midi edits: a raga's notes, pentatonic");
+        check (find ("Darbari Kanada") >= 0 && find ("Jaunpuri") >= 0 && scales[(size_t) find ("Darbari Kanada")].notes == scales[(size_t) find ("Asavari")].notes
+               && scales[(size_t) find ("Jaunpuri")].notes == scales[(size_t) find ("Asavari")].notes, "midi edits: ragas sharing their notes are each listed");
+    }
+
     // An instrument that writes down what it was sent and plays a constant level while a note is held.
     struct ProbeInstrument final : mixer::Instrument
     {
@@ -4366,6 +4432,7 @@ int main()
     testMidSide();
     testSampler();
     testMidiFile();
+    testMidiEdits();
     testMixer();
     testLauncher();
     testPatchBay();

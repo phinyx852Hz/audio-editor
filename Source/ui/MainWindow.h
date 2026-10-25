@@ -450,6 +450,10 @@ public:
     void placeMixer (bool docked);   // in the editor's place or in a window of its own, showing
 private:
     void showEditorPage();            // the editor back in front; a docked mixer steps aside
+    // A docked mixer in front shows the selected track's own Device Chain, so the editor's
+    // (the master's) steps aside until the Master strip is picked or the editor comes back.
+    void updateChainDock();
+    bool chainHiddenForMixer = false;
     class QStackedWidget* centralStack = nullptr;
     QWidget* editorPage = nullptr;
     bool mixerFullFromDock = false;   // Super+F took the docked mixer full screen; again puts it back

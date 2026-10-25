@@ -6,12 +6,14 @@
 #include "MixAssistant.h"
 #include "FindPanel.h"
 #include "MixerWindow.h"
+#include "Panels.h"
 #include "Settings.h"
 #include "../mixer/MixerEngine.h"
 #include "../sampler/SamplerEngine.h"
 #include "../sampler/SlicerEngine.h"
 
 #include <QApplication>
+#include <QDockWidget>
 #include <QEventLoop>
 #include <QFileInfo>
 #include <QFutureWatcher>
@@ -57,7 +59,7 @@ void MainWindow::registerMixerCommands()
         for (int c = 0; c < FindPanel::numColours; ++c)
         {
             names.push_back (findWidget->markName (set, c));
-            colours.push_back (FindPanel::colour (c));
+            colours.push_back (findWidget->markColour (set, c));
         }
         mixerWin->newMixFromSet (findWidget->setName (set), names, colours);
     })->setStatusTip (tr ("A new project of 8 tracks with the names and colours of the set chosen in the Find panel's Selector, from the bottom up"));
@@ -91,12 +93,23 @@ MixerWindow* MainWindow::mixerWindow()
         hooks.projectState = [this] { return projectState(); };
         hooks.setProjectState = [this] (const QJsonObject& project) { setProjectState (project); };
         hooks.resetProject = [this] { resetPatchBay(); };
+        hooks.selectorSet = [this] (QStringList& names, QList<QColor>& colours)
+        {
+            const auto set = findWidget->currentSet();
+            for (int c = 0; c < FindPanel::numColours; ++c)
+            {
+                names.push_back (findWidget->markName (set, c));
+                colours.push_back (findWidget->markColour (set, c));
+            }
+        };
         mixerWin = new MixerWindow (*mixerEngine, engine, std::move (hooks), this);
         connect (mixerWin, &MixerWindow::mixdownRequested, this, [this] { mixDownToEditor(); });
         connect (mixerWin, &MixerWindow::midiInputsRequested, this, [this] { midiInputsDialog(); });
         connect (mixerWin, &MixerWindow::activated, this, [this] { midiTarget = 2; });
         connect (mixerWin, &MixerWindow::playStarted, this, [this] { playInstruments(); });
         connect (mixerWin, &MixerWindow::editClipRequested, this, [this] (int track, quint32 clip) { editMixerClip (track, clip); });
+        connect (mixerWin, &MixerWindow::devicePanelChanged, this, [this] { updateChainDock(); });
+        connect (centralStack, &QStackedWidget::currentChanged, this, [this] { updateChainDock(); });
         connect (mixerWin, &MixerWindow::closed, this, [this]
         {
             mixerEngine->panic();
@@ -120,6 +133,9 @@ MixerWindow* MainWindow::mixerWindow()
                 midiTarget = 2;
         });
         mixerWin->restoreAutosave();
+        // The tracks follow the Selector set, bottom category first, as long as they keep its names.
+        mixerWin->applySelectorSet();
+        connect (findWidget, &FindPanel::setChanged, mixerWin, [this] { mixerWin->applySelectorSet(); });
         updateMidiStatus();
     }
     return mixerWin;
@@ -212,6 +228,22 @@ void MainWindow::returnMixerEdits()
         }
         doc.markSaved();   // it lives on in the mixer now
         closeTab();
+    }
+}
+
+void MainWindow::updateChainDock()
+{
+    auto* dock = chainPanel->dock();
+    const bool mixerOwns = mixerDocked() && centralStack->currentWidget() == mixerWin && mixerWin->devicePanelShown();
+    if (mixerOwns && ! chainPanel->isPoppedOut() && dock->isVisible() && ! dock->isFloating())
+    {
+        chainHiddenForMixer = true;
+        dock->hide();
+    }
+    else if (! mixerOwns && chainHiddenForMixer)
+    {
+        chainHiddenForMixer = false;
+        dock->show();
     }
 }
 

@@ -50,4 +50,38 @@ namespace midifile
 
     SongPtr parse (const uint8_t* data, size_t size, std::string& error);
     SongPtr read (const std::string& path, std::string& error);
+
+    // Written back as a type 0 file: the tempo map, the channel events and the end of track at
+    // lastTick. Files in SMPTE time are left alone (empty bytes, false).
+    std::vector<uint8_t> bytes (const Song&);
+    bool write (const Song&, const std::string& path, std::string& error);
+
+    // Fast edits (owner, 2026-10-25: "MIDI editing, but really fast"). Each gives a new song and
+    // leaves the one given alone. The notes are taken as they sound (an on and its off); the
+    // other channel events stay where they are. A loop is `span` long: lastTick, up to whole
+    // bars of 4/4.
+    int64_t span (const Song&);
+    SongPtr reversed (const Song&);          // mirrored over lastTick, as the mixer plays it reversed
+    // The notes' places in time dealt out again along the golden ratio: the same pitches,
+    // velocities and lengths, and the same rhythm (the times notes start), but which notes
+    // (chords stay together) start at which of those times changes. `turn` gives another
+    // order each time (0, 1, 2...).
+    SongPtr phiShuffle (const Song&, int turn);
+    SongPtr duplicated (const Song&);        // the loop twice, as one song twice as long
+    SongPtr halfDensity (const Song&);       // every other chord or note in time kept
+    SongPtr doubleDensity (const Song&);     // each note played twice in its own time, half as long
+    // Modal music (owner, 2026-10-25): the seven modes, then the major Hindustani ragas (the ten
+    // thaats among them) as the notes they use, both ways up and down; some share their notes
+    // (Darbari and Jaunpuri with Asavari), and each is listed by its own name. Bit n: n semitones
+    // above the root (Sa).
+    struct Scale
+    {
+        const char* name;
+        const char* family;   // "Mode" or "Raga"
+        uint16_t notes;
+    };
+    const std::vector<Scale>& scales();
+    // Every note moved to the nearest note of scales()[scale] on `root` (0 C .. 11 B), down when it
+    // is between two; drums (channel 10) left alone.
+    SongPtr toMode (const Song&, int root, int scale);
 }
