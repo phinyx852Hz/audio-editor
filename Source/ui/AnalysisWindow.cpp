@@ -161,6 +161,7 @@ namespace analysis
         int blockLength = 4800, blockFill = 0;
         double blockPower = 0.0;
         std::vector<double> blocks;
+        dsp::IntegratedLoudness loudness;   // the same blocks, gated as they come
         std::vector<float> momentaryHistory, shortHistory;   // LUFS, one per block
         double momentary = minusInfinity, shortTerm = minusInfinity, integrated = minusInfinity, range = 0.0;
         double maxMomentary = minusInfinity, maxShortTerm = minusInfinity;
@@ -274,6 +275,7 @@ namespace analysis
             blockFill = 0;
             blockPower = 0.0;
             blocks.clear();
+            loudness.reset();
             momentaryHistory.clear();
             shortHistory.clear();
             momentary = shortTerm = integrated = maxMomentary = maxShortTerm = minusInfinity;
@@ -341,6 +343,7 @@ namespace analysis
         void finishBlock()
         {
             blocks.push_back (blockPower / blockLength);
+            loudness.add (blocks.back());
             blockPower = 0.0;
             blockFill = 0;
 
@@ -358,7 +361,7 @@ namespace analysis
             if (blocks.size() >= 30)
                 maxShortTerm = std::max (maxShortTerm, shortTerm);
             if (blocks.size() % 5 == 0)
-                integrated = dsp::integratedLoudness (blocks);
+                integrated = loudness.value();
             if (blocks.size() % 10 == 0)
                 range = loudnessRange();
         }
@@ -668,7 +671,7 @@ namespace analysis
             s.add (left, right);
             s.update ((double) count / rate);
         }
-        s.integrated = dsp::integratedLoudness (s.blocks);
+        s.integrated = s.loudness.value();
         s.range = s.loudnessRange();
         const auto exact = dsp::measureLoudness (data, 0, length);   // every channel, weighted as BS.1770 says
         const auto monoCorrection = channels == 1 ? -3.0103 : 0.0;   // a mono channel counts once, not on both sides

@@ -77,6 +77,7 @@ private:
     double correlation = 0.0;    // smoothed
     double lissajousPeak = 0.0, lissajousZoom = 1.0;
     bool hasSignal = false;
+    int quietFrames = 0;         // in a row without signal; once everything has faded, nothing is redrawn
 
     // Binaural: per band, the direction (degrees, left negative), level (0 to 1) and coherence.
     static constexpr int numBands = 24;

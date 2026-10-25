@@ -4035,6 +4035,8 @@ void MixerWindow::select (int index)
 
 void MixerWindow::tick()
 {
+    if (! isVisible())
+        return;   // closed, or docked behind the editor: nothing to draw
     const auto now = QDateTime::currentMSecsSinceEpoch();
     const auto seconds = std::clamp ((double) (now - lastTick) / 1000.0, 0.0, 0.5);
     lastTick = now;

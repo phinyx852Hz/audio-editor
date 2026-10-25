@@ -599,25 +599,38 @@ namespace dsp
 
     double integratedLoudness (const std::vector<double>& blockPowers)
     {
+        IntegratedLoudness meter;
+        for (auto p : blockPowers)
+            meter.add (p);
+        return meter.value();
+    }
+
+    void IntegratedLoudness::add (double blockPower)
+    {
         // 400 ms gating blocks with 75% overlap = 4 consecutive 100 ms blocks.
-        std::vector<double> gating;
-        for (size_t i = 3; i < blockPowers.size(); ++i)
-            gating.push_back ((blockPowers[i] + blockPowers[i - 1] + blockPowers[i - 2] + blockPowers[i - 3]) / 4.0);
+        if (seen >= 3)
+        {
+            const auto gating = (blockPower + previous[0] + previous[1] + previous[2]) / 4.0;
+            if (gating > power (-70.0))
+            {
+                audible.push_back (gating);
+                audibleSum += gating;
+            }
+        }
+        previous = { blockPower, previous[0], previous[1] };
+        ++seen;
+    }
 
-        const auto absoluteGate = power (-70.0);
-        std::vector<double> aboveAbsolute;
-        std::copy_if (gating.begin(), gating.end(), std::back_inserter (aboveAbsolute),
-                      [&] (double p) { return p > absoluteGate; });
-
-        if (aboveAbsolute.empty())
+    double IntegratedLoudness::value() const
+    {
+        if (audible.empty())
             return -200.0;
 
-        const auto relativeGate = std::accumulate (aboveAbsolute.begin(), aboveAbsolute.end(), 0.0)
-                                  / (double) aboveAbsolute.size() * power (-10.0 - 0.691) / power (-0.691);
+        const auto relativeGate = audibleSum / (double) audible.size() * power (-10.0 - 0.691) / power (-0.691);
 
         double sum = 0.0;
         int count = 0;
-        for (auto p : aboveAbsolute)
+        for (auto p : audible)
             if (p > relativeGate) { sum += p; ++count; }
 
         return count > 0 ? lufsFromPower (sum / count) : -200.0;

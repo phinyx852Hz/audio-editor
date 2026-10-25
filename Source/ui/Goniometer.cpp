@@ -99,6 +99,7 @@ void Goniometer::reset()
     sideHistory.clear();
     correlation = 0.0;
     hasSignal = false;
+    quietFrames = 0;
     update();
 }
 
@@ -147,6 +148,10 @@ void Goniometer::addSamples (const std::vector<float>& left, const std::vector<f
         rr += (double) right[i] * right[i];
     }
     hasSignal = n > 0 && std::max (ll, rr) / (double) n > silence * silence;
+    // About 7 s at 30 frames a second, by when every view has fallen still (Polar Level's outline is the slowest).
+    quietFrames = hasSignal ? 0 : std::min (quietFrames + 1, 1000);
+    if (quietFrames > 200)
+        return;
     if (hasSignal)
     {
         const auto now = ll > 0.0 && rr > 0.0 ? lr / std::sqrt (ll * rr) : 0.0;

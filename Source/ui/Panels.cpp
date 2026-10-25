@@ -583,6 +583,7 @@ void MeterPanel::reset()
     std::fill (std::begin (holdAge), std::end (holdAge), 0.0);
     maxTruePeak = maxSamplePeak = -200.0f;
     powers.clear();
+    loudness.reset();
     momentary = shortTerm = integrated = -200.0;
     update();
 }
@@ -590,6 +591,15 @@ void MeterPanel::reset()
 void MeterPanel::addBlocks (const std::vector<MeterBlock>& blocks)
 {
     const auto dt = clock.restart() / 1000.0;
+    // What is drawn, to repaint only when it changes: idle, the meters sit still and cost nothing.
+    const auto shown = [this]
+    {
+        std::vector<double> v { (double) numChannels, (double) maxTruePeak, (double) maxSamplePeak, momentary, shortTerm, integrated };
+        for (int ch = 0; ch < numChannels; ++ch)
+            v.insert (v.end(), { (double) level[ch], (double) hold[ch] });
+        return v;
+    };
+    const auto before = shown();
     constexpr float fallDbPerSecond = 24.0f;
     constexpr double holdSeconds = 2.0;
 
@@ -609,7 +619,10 @@ void MeterPanel::addBlocks (const std::vector<MeterBlock>& blocks)
         }
 
         powers.push_back (b.loudnessPower);
+        loudness.add (b.loudnessPower);
     }
+    if (powers.size() > 30)
+        powers.erase (powers.begin(), powers.end() - 30);
 
     for (int ch = 0; ch < numChannels; ++ch)
     {
@@ -637,10 +650,11 @@ void MeterPanel::addBlocks (const std::vector<MeterBlock>& blocks)
 
         momentary = lufs (meanOfLast (4));
         shortTerm = lufs (meanOfLast (30));
-        integrated = dsp::integratedLoudness (powers);
+        integrated = loudness.value();
     }
 
-    update();
+    if (shown() != before)
+        update();
 }
 
 void MeterPanel::paintEvent (QPaintEvent*)
