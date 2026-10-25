@@ -30,6 +30,10 @@
 #include <QFileSystemModel>
 #include <QFileInfo>
 #include <QFormLayout>
+#include <QGridLayout>
+#include <QPainterPath>
+#include <QStackedWidget>
+#include <QToolButton>
 #include <QFrame>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -56,6 +60,7 @@
 #include <QSpinBox>
 #include <QStandardPaths>
 #include <QTreeView>
+#include <QTreeWidget>
 #include <QVBoxLayout>
 #include <QWheelEvent>
 #include <QtConcurrent>
@@ -1441,7 +1446,10 @@ protected:
         if (e->modifiers() & Qt::ControlModifier)
             window.pick (index, true);
         else
+        {
             window.select (index);
+            window.showDevices();   // a click on the strip brings its Device Chain back from a clip
+        }
         QFrame::mousePressEvent (e);
     }
 
@@ -1487,12 +1495,19 @@ protected:
 
     void dragEnterEvent (QDragEnterEvent* e) override
     {
-        if (e->mimeData()->hasUrls())
+        if (e->mimeData()->hasUrls() || e->mimeData()->hasFormat (MixerWindow::pluginMime()))
             e->acceptProposedAction();
     }
 
     void dropEvent (QDropEvent* e) override
     {
+        // An instrument or effect from the browser goes to its place (owner, 2026-10-25).
+        if (e->mimeData()->hasFormat (MixerWindow::pluginMime()))
+        {
+            if (window.dropPlugin (index, e->mimeData()->data (MixerWindow::pluginMime())))
+                e->acceptProposedAction();
+            return;
+        }
         QStringList files;
         for (const auto& url : e->mimeData()->urls())
             if (url.isLocalFile() && QFileInfo (url.toLocalFile()).isFile())
@@ -1837,6 +1852,8 @@ protected:
         moved = false;
         if (e->button() != Qt::LeftButton || pos.x() < headerWidth)
         {
+            if (e->button() == Qt::LeftButton)
+                window.showDevices();   // a track's name: its devices
             update();
             return;
         }
@@ -1865,6 +1882,7 @@ protected:
         before = window.snapshot();
         anchorId = hit.id;
         anchorTrack = hit.track;
+        window.showTimelineClip (hit.track, hit.id);   // drawn in the Device Chain's place
         copying = (e->modifiers() & Qt::ControlModifier) != 0;
         drag = hit.edge == Edge::start ? Drag::trimStart : hit.edge == Edge::end ? Drag::trimEnd : Drag::move;
         update();
@@ -2712,6 +2730,25 @@ private:
 // moves the playhead to its end, so files can be laid one after another; Shift+Enter
 // leaves the playhead. Enter on a folder opens it, Backspace goes up. Files drag onto
 // any track's row. 1-8 still pick the track and Space still plays.
+// The browser's Instruments and Audio Effects: dragged onto a strip or the Device Chain.
+class PluginTree final : public QTreeWidget
+{
+public:
+    using QTreeWidget::QTreeWidget;
+
+protected:
+    QStringList mimeTypes() const override { return { MixerWindow::pluginMime() }; }
+
+    QMimeData* mimeData (const QList<QTreeWidgetItem*>& items) const override
+    {
+        if (items.isEmpty() || items.front()->data (0, Qt::UserRole).toByteArray().isEmpty())
+            return nullptr;
+        auto* m = new QMimeData;
+        m->setData (MixerWindow::pluginMime(), items.front()->data (0, Qt::UserRole).toByteArray());
+        return m;
+    }
+};
+
 class FileBrowser final : public QWidget
 {
     // Arrow keys stay in the list even at its ends, rather than reaching the strips.
@@ -2784,6 +2821,18 @@ public:
         tree->installEventFilter (this);
         layout->addWidget (tree, 1);
 
+        // Or the instruments and effects (owner, 2026-10-25), to drag onto a strip or the
+        // Device Chain: an instrument takes the instrument's place, an effect joins the inserts.
+        plugins = new PluginTree (this);
+        plugins->setHeaderHidden (true);
+        plugins->setDragEnabled (true);
+        plugins->setDragDropMode (QAbstractItemView::DragOnly);
+        plugins->setSelectionMode (QAbstractItemView::SingleSelection);
+        plugins->setAccessibleName (MixerWindow::tr ("Instruments and effects"));
+        plugins->installEventFilter (this);
+        plugins->hide();
+        layout->addWidget (plugins, 1);
+
         hint = new QLabel (this);
         hint->setWordWrap (true);
         hint->setEnabled (false);
@@ -2793,8 +2842,20 @@ public:
         fillPlaces();
         setRoot (appSettings().value (QStringLiteral ("mixer/browserRoot"), window.folder()).toString());
 
-        QObject::connect (places, &QComboBox::activated, this, [this] (int i) { setRoot (places->itemData (i).toString()); tree->setFocus(); });
+        QObject::connect (places, &QComboBox::activated, this, [this] (int i)
+        {
+            const auto place = places->itemData (i).toString();
+            if (place.startsWith (QLatin1String ("plugins:")))
+            {
+                showPlugins (place.mid (8));
+                plugins->setFocus();
+                return;
+            }
+            setRoot (place);
+            tree->setFocus();
+        });
         QObject::connect (upButton, &QPushButton::clicked, this, [this] { goUp(); });
+        QObject::connect (plugins, &QTreeWidget::itemActivated, this, [this] (QTreeWidgetItem* item) { usePlugin (item); });
         QObject::connect (favouriteButton, &QPushButton::toggled, this, [this] (bool on)
         {
             favourites.removeAll (root);
@@ -2812,12 +2873,29 @@ public:
     void showHint()
     {
         const auto track = window.selected < mixer::masterIndex ? window.selected + 1 : 1;
-        hint->setText (MixerWindow::tr ("Enter puts the file on track %1 at the playhead").arg (track));
+        if (! pluginKind.isEmpty())
+            hint->setText (MixerWindow::tr ("Drag onto a strip or the Device Chain, or Enter puts it on track %1").arg (track));
+        else
+            hint->setText (MixerWindow::tr ("Enter puts the file on track %1 at the playhead").arg (track));
     }
 
 protected:
     bool eventFilter (QObject* o, QEvent* e) override
     {
+        if (o == plugins && e->type() == QEvent::KeyPress)
+        {
+            auto* k = static_cast<QKeyEvent*> (e);
+            if (k->key() == Qt::Key_Backspace)
+            {
+                goUp();
+                return true;
+            }
+            if (k->key() == Qt::Key_Return || k->key() == Qt::Key_Enter)
+            {
+                usePlugin (plugins->currentItem());
+                return true;
+            }
+        }
         if (o == tree && e->type() == QEvent::KeyPress)
         {
             auto* k = static_cast<QKeyEvent*> (e);
@@ -2869,7 +2947,12 @@ private:
         add (MixerWindow::tr ("Last used"), window.folder());
         for (const auto& f : favourites)
             add (QStringLiteral ("★ ") + QFileInfo (f).fileName(), f);
-        if (! root.isEmpty())
+        places->insertSeparator (places->count());
+        places->addItem (MixerWindow::tr ("Instruments"), QStringLiteral ("plugins:instruments"));
+        places->addItem (MixerWindow::tr ("Audio Effects"), QStringLiteral ("plugins:effects"));
+        if (! pluginKind.isEmpty())
+            places->setCurrentIndex (places->findData (QStringLiteral ("plugins:") + pluginKind));
+        else if (! root.isEmpty())
         {
             if (places->findData (root) < 0)
                 places->addItem (root, root);
@@ -2877,8 +2960,71 @@ private:
         }
     }
 
+    // The instruments (the built-in ones, then the plugins found) or the effects, by format.
+    void showPlugins (const QString& kind)
+    {
+        pluginKind = kind;
+        plugins->clear();
+        std::map<QString, QTreeWidgetItem*> groups;
+        auto group = [&] (const QString& name)
+        {
+            auto& g = groups[name];
+            if (g == nullptr)
+            {
+                g = new QTreeWidgetItem (plugins, { name });
+                g->setFlags (Qt::ItemIsEnabled);
+            }
+            return g;
+        };
+        auto add = [&] (const QString& groupName, const QString& name, const QByteArray& what)
+        {
+            auto* item = new QTreeWidgetItem (group (groupName), { name });
+            item->setData (0, Qt::UserRole, what);
+            item->setFlags (Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled);
+        };
+        if (kind == QLatin1String ("instruments"))
+        {
+            add (MixerWindow::tr ("Built-in"), MixerWindow::tr ("Synth"), "synth");
+            add (MixerWindow::tr ("Built-in"), MixerWindow::tr ("Sampler"), "sampler");
+            add (MixerWindow::tr ("Built-in"), MixerWindow::tr ("Slicer"), "slicer");
+            for (const auto& p : window.audio.knownInstruments())
+                add (QString::fromStdString (p.format), QString::fromStdString (p.name), "instrument\n" + QByteArray::fromStdString (p.id));
+        }
+        else
+        {
+            auto list = window.audio.knownPlugins();
+            std::sort (list.begin(), list.end(), [] (const PluginInfo& x, const PluginInfo& y)
+            {
+                return QString::fromStdString (x.name).compare (QString::fromStdString (y.name), Qt::CaseInsensitive) < 0;
+            });
+            group (QStringLiteral ("Built-in"));   // first
+            for (const auto& p : list)
+                add (QString::fromStdString (p.format), QString::fromStdString (p.name), "effect\n" + QByteArray::fromStdString (p.id));
+        }
+        plugins->expandAll();
+        if (plugins->topLevelItemCount() > 0 && plugins->topLevelItem (0)->childCount() > 0)
+            plugins->setCurrentItem (plugins->topLevelItem (0)->child (0));
+        tree->hide();
+        plugins->show();
+        favouriteButton->setEnabled (false);
+        fillPlaces();
+        showHint();
+    }
+
+    void usePlugin (QTreeWidgetItem* item)
+    {
+        if (item == nullptr || item->data (0, Qt::UserRole).toByteArray().isEmpty())
+            return;
+        const auto track = window.selected < mixer::masterIndex ? window.selected : 0;
+        window.dropPlugin (track, item->data (0, Qt::UserRole).toByteArray());
+    }
+
     void setRoot (const QString& folder)
     {
+        pluginKind.clear();
+        plugins->hide();
+        tree->show();
+        favouriteButton->setEnabled (true);
         root = QFileInfo (folder).isDir() ? QFileInfo (folder).absoluteFilePath() : QDir::homePath();
         tree->setRootIndex (model->index (root));
         appSettings().setValue (QStringLiteral ("mixer/browserRoot"), root);
@@ -2898,6 +3044,12 @@ private:
 
     void goUp()
     {
+        if (! pluginKind.isEmpty())
+        {
+            setRoot (root);   // back to the files
+            tree->setFocus();
+            return;
+        }
         QDir dir (root);
         const auto from = root;
         if (! dir.cdUp())
@@ -2929,6 +3081,8 @@ private:
     QPushButton* favouriteButton;
     QFileSystemModel* model;
     QTreeView* tree;
+    PluginTree* plugins;
+    QString pluginKind;   // "instruments" or "effects" while those show instead of the files
     QLabel* hint;
     QString root;
     QStringList favourites;
@@ -3143,14 +3297,18 @@ protected:
             return;   // the context menu
         switch (hit.kind)
         {
-            case Hit::header: window.select (hit.track); window.moveCursor (hit.track, window.cursorScene); break;
+            case Hit::header: window.select (hit.track); window.moveCursor (hit.track, window.cursorScene); window.showDevices(); break;
             case Hit::back: window.engine.backToTimeline (hit.track); break;
             case Hit::slotCell:
-                window.moveCursor (hit.track, hit.scene);
-                break;
             case Hit::play:
                 window.moveCursor (hit.track, hit.scene);
-                window.launchSlot (hit.track, hit.scene);
+                // A clip is drawn in the Device Chain's place; an empty slot shows the devices.
+                if (window.slots[(size_t) hit.track][(size_t) hit.scene] != nullptr)
+                    window.showSlotClip (hit.track, hit.scene);
+                else
+                    window.showDevices();
+                if (hit.kind == Hit::play)
+                    window.launchSlot (hit.track, hit.scene);
                 break;
             case Hit::sceneCell:
                 window.moveCursor (window.selected < mixer::masterIndex ? window.selected : 0, hit.scene);
@@ -3776,6 +3934,610 @@ private:
     QLabel* value;
 };
 
+//==============================================================================
+// The Device Chain (owner, 2026-10-25), along the mixer's bottom as in Ableton: the selected
+// track's instrument, always first on the left, then its inserts left to right, each with up
+// to eight knobs and its Dry/Wet, then a card that adds one. An instrument or effect dropped
+// here (or on a strip) goes to its place. A clip picked in the launcher or the tracks puts the
+// ClipView here instead; the Master strip hides it for the editor's own chain.
+class DeviceTile final : public QFrame
+{
+public:
+    DeviceTile (QWidget* parent, const QColor& c, bool add = false) : QFrame (parent), colour (c), adding (add)
+    {
+        setAttribute (Qt::WA_StyledBackground, false);
+        auto* outer = new QVBoxLayout (this);
+        outer->setContentsMargins (8, 8, 8, 6);
+        outer->setSpacing (4);
+        head = new QHBoxLayout;
+        head->setSpacing (4);
+        outer->addLayout (head);
+        body = new QGridLayout;
+        body->setHorizontalSpacing (2);
+        body->setVerticalSpacing (0);
+        outer->addLayout (body);
+        outer->addStretch (1);
+    }
+
+    QHBoxLayout* head;
+    QGridLayout* body;
+
+protected:
+    void paintEvent (QPaintEvent*) override
+    {
+        QPainter g (this);
+        g.setRenderHint (QPainter::Antialiasing);
+        const auto r = QRectF (rect()).adjusted (1.5, 1.5, -1.5, -1.5);
+        g.setPen (QPen (palette().color (QPalette::Mid), 1.0));
+        g.setBrush (palette().color (adding ? QPalette::Window : QPalette::Base));
+        g.drawRoundedRect (r, 6, 6);
+        if (! adding)
+        {
+            // The track's colour along the top, as on its strip's name.
+            g.setPen (Qt::NoPen);
+            g.setBrush (colour);
+            g.drawRoundedRect (QRectF (r.left() + 6, r.top() + 1, r.width() - 12, 3), 1.5, 1.5);
+        }
+    }
+
+private:
+    QColor colour;
+    bool adding;
+};
+
+class TrackDevices final : public QWidget
+{
+public:
+    explicit TrackDevices (MixerWindow& w) : QWidget (&w), window (w)
+    {
+        setAcceptDrops (true);
+        setAccessibleName (MixerWindow::tr ("Device Chain"));
+        auto* outer = new QHBoxLayout (this);
+        outer->setContentsMargins (0, 0, 0, 0);
+        scroll = new QScrollArea (this);
+        scroll->setWidgetResizable (true);
+        scroll->setFrameShape (QFrame::NoFrame);
+        scroll->setFocusPolicy (Qt::NoFocus);
+        scroll->setVerticalScrollBarPolicy (Qt::ScrollBarAsNeeded);
+        scroll->viewport()->setAutoFillBackground (false);
+        row = new QWidget;
+        row->setAutoFillBackground (false);
+        rowLayout = new QHBoxLayout (row);
+        rowLayout->setContentsMargins (6, 4, 6, 4);
+        rowLayout->setSpacing (6);
+        scroll->setWidget (row);
+        outer->addWidget (scroll);
+        setMinimumHeight (120);
+    }
+
+    // Rebuilt when the track's devices changed, else their knobs follow the engine.
+    void refresh()
+    {
+        const auto track = window.selected < mixer::masterIndex ? std::min (window.selected, window.engine.numTracks() - 1) : -1;
+        QString sig = QString::number (track);
+        if (track >= 0)
+        {
+            sig += QLatin1Char (':') + QString::number ((quintptr) window.engine.instrument (track).get());
+            for (const auto& x : window.engine.inserts (track))
+                sig += QLatin1Char (',') + QString::number ((quintptr) x.effect.get());
+            sig += QLatin1Char (':') + QString::number (window.engine.strip (track).mode.load()) + window.info[(size_t) track].colour.name();
+        }
+        if (sig != signature)
+        {
+            signature = sig;
+            rebuild (track);
+        }
+        sync();
+    }
+
+protected:
+    void dragEnterEvent (QDragEnterEvent* e) override
+    {
+        if (e->mimeData()->hasFormat (MixerWindow::pluginMime()) && window.selected < mixer::masterIndex)
+            e->acceptProposedAction();
+    }
+
+    void dropEvent (QDropEvent* e) override
+    {
+        if (window.dropPlugin (window.selected, e->mimeData()->data (MixerWindow::pluginMime())))
+            e->acceptProposedAction();
+    }
+
+private:
+    struct Knob
+    {
+        int insert = -1;
+        int parameter = -1;   // the effect's; -1 its Dry/Wet
+        int steps = 0;
+        QDial* dial = nullptr;
+        QLabel* value = nullptr;
+    };
+
+    static constexpr int knobsPerRow = 5, maxKnobs = 8, knobSize = 30, labelWidth = 50, resolution = 1000;
+
+    void clear()
+    {
+        knobs.clear();
+        powers.clear();
+        while (auto* item = rowLayout->takeAt (0))
+        {
+            if (auto* w = item->widget())
+                w->deleteLater();
+            delete item;
+        }
+    }
+
+    QLabel* smallLabel (const QString& text, QWidget* parent)
+    {
+        auto* l = new QLabel (text, parent);
+        auto f = l->font();
+        f.setPointSizeF (f.pointSizeF() * 0.85);
+        l->setFont (f);
+        l->setAlignment (Qt::AlignHCenter);
+        l->setFixedWidth (labelWidth);
+        return l;
+    }
+
+    void addKnob (DeviceTile* tile, int insert, int parameter, const QString& name, int steps)
+    {
+        const auto n = (int) std::count_if (knobs.begin(), knobs.end(), [insert] (const Knob& k) { return k.insert == insert; });
+        auto* column = new QWidget (tile);
+        auto* v = new QVBoxLayout (column);
+        v->setContentsMargins (0, 0, 0, 0);
+        v->setSpacing (0);
+        auto* label = smallLabel (QFontMetrics (font()).elidedText (name, Qt::ElideRight, labelWidth - 2), column);
+        label->setToolTip (name);
+        auto* pot = new Potentiometer (column);
+        pot->setFixedSize (knobSize, knobSize);
+        pot->setFocusPolicy (Qt::NoFocus);
+        pot->setWrapping (false);
+        pot->setAccessibleName (name);
+        pot->setRange (0, parameter < 0 ? 100 : steps > 1 ? steps - 1 : resolution);
+        auto* value = smallLabel ({}, column);
+        value->setForegroundRole (QPalette::PlaceholderText);
+        v->addWidget (label);
+        v->addWidget (pot, 0, Qt::AlignHCenter);
+        v->addWidget (value);
+        tile->body->addWidget (column, n / knobsPerRow, n % knobsPerRow);
+
+        Knob k { insert, parameter, steps, pot, value };
+        const auto index = knobs.size();
+        knobs.push_back (k);
+        QObject::connect (pot, &QDial::valueChanged, this, [this, index] (int position)
+        {
+            if (syncing)
+                return;
+            const auto& kn = knobs[index];
+            const auto list = window.engine.inserts (track);
+            if (kn.insert >= (int) list.size())
+                return;
+            if (kn.parameter < 0)
+                window.setInsertMix (track, kn.insert, (float) position / 100.0f);
+            else
+            {
+                const auto& fx = list[(size_t) kn.insert].effect;
+                fx->setParameter (kn.parameter, (float) position / (float) std::max (1, kn.dial->maximum()));
+                window.changed();
+            }
+        });
+        if (parameter < 0)
+            pot->setToolTip (MixerWindow::tr ("Dry/Wet: how much of the effect is heard against the sound going in (double-click: all wet)"));
+        pot->installEventFilter (this);
+        pot->setProperty ("knob", (int) index);
+    }
+
+    bool eventFilter (QObject* o, QEvent* e) override
+    {
+        if (e->type() == QEvent::MouseButtonDblClick)
+            if (const auto k = o->property ("knob"); k.isValid())
+            {
+                const auto& kn = knobs[(size_t) k.toInt()];
+                if (kn.parameter < 0)
+                    kn.dial->setValue (100);
+                return true;
+            }
+        return QWidget::eventFilter (o, e);
+    }
+
+    void rebuild (int t)
+    {
+        clear();
+        track = t;
+        if (track < 0)
+            return;
+        const auto colour = window.info[(size_t) track].colour;
+
+        // The instrument, first on the left.
+        {
+            auto* tile = new DeviceTile (row, colour);
+            const auto inst = window.engine.instrument (track);
+            const bool audioOnly = window.engine.strip (track).mode.load() == (int) mixer::TrackMode::audio;
+            auto* title = new QLabel (inst != nullptr ? QString::fromStdString (inst->name()) : MixerWindow::tr ("No instrument"), tile);
+            auto bold = title->font();
+            bold.setBold (true);
+            title->setFont (bold);
+            tile->head->addWidget (title, 1);
+            auto* edit = new QToolButton (tile);
+            edit->setText (MixerWindow::tr ("Edit"));
+            edit->setEnabled (inst != nullptr);
+            edit->setToolTip (MixerWindow::tr ("Open the instrument: the Synth's settings, the Sampler or Slicer, or the plugin's window"));
+            QObject::connect (edit, &QToolButton::clicked, this, [this] { window.editInstrument (track); });
+            tile->head->addWidget (edit);
+            auto* choose = new QToolButton (tile);
+            choose->setText (QStringLiteral ("▾"));
+            choose->setToolTip (MixerWindow::tr ("Choose the instrument"));
+            QObject::connect (choose, &QToolButton::clicked, this, [this, choose] { instrumentMenu (choose->mapToGlobal (QPoint (0, choose->height()))); });
+            tile->head->addWidget (choose);
+            auto* note = new QLabel (inst == nullptr ? MixerWindow::tr ("Drop an instrument here, or on the track's strip, to play its MIDI clips")
+                                     : audioOnly ? MixerWindow::tr ("The track plays only its audio: Inst or Hybrid in the Inspector lets this play")
+                                     : MixerWindow::tr ("Plays the MIDI clips and the keyboard. Drop another instrument here to replace it"), tile);
+            note->setWordWrap (true);
+            note->setForegroundRole (QPalette::PlaceholderText);
+            note->setFixedWidth (190);
+            tile->body->addWidget (note, 0, 0);
+            tile->setFixedWidth (220);
+            rowLayout->addWidget (tile);
+        }
+
+        // The inserts, in the order they play.
+        const auto list = window.engine.inserts (track);
+        for (int i = 0; i < (int) list.size(); ++i)
+        {
+            const auto& fx = list[(size_t) i].effect;
+            auto* tile = new DeviceTile (row, colour);
+            auto* power = new QToolButton (tile);
+            power->setCheckable (true);
+            power->setText (QStringLiteral ("⏻"));
+            power->setToolTip (MixerWindow::tr ("On, or bypassed"));
+            QObject::connect (power, &QToolButton::toggled, this, [this, i] (bool on)
+            {
+                if (! syncing)
+                    window.setInsertBypassed (track, i, ! on);
+            });
+            powers.push_back (power);
+            tile->head->addWidget (power);
+            auto* title = new QLabel (QString::fromStdString (fx->name()), tile);
+            auto bold = title->font();
+            bold.setBold (true);
+            title->setFont (bold);
+            tile->head->addWidget (title, 1);
+            auto* edit = new QToolButton (tile);
+            edit->setText (MixerWindow::tr ("Edit"));
+            edit->setToolTip (MixerWindow::tr ("All of its settings, in its own window"));
+            QObject::connect (edit, &QToolButton::clicked, this, [this, i] { window.editInsert (track, i); });
+            tile->head->addWidget (edit);
+            tile->setContextMenuPolicy (Qt::CustomContextMenu);
+            QObject::connect (tile, &QWidget::customContextMenuRequested, this, [this, i, tile] (QPoint at) { window.insertMenu (track, i, tile->mapToGlobal (at)); });
+
+            const auto params = fx->parameters();
+            int shown = 0;
+            for (int k = 0; k < (int) params.size() && shown < maxKnobs; ++k, ++shown)
+                addKnob (tile, i, k, QString::fromStdString (params[(size_t) k].name), params[(size_t) k].toggle ? 2 : params[(size_t) k].steps);
+            if (params.empty())
+            {
+                auto* note = new QLabel (MixerWindow::tr ("Its knobs are in its window: Edit"), tile);
+                note->setForegroundRole (QPalette::PlaceholderText);
+                tile->body->addWidget (note, 1, 0, 1, knobsPerRow);
+            }
+            addKnob (tile, i, -1, MixerWindow::tr ("Dry/Wet"), 0);
+            rowLayout->addWidget (tile);
+        }
+
+        // Then a card that adds an effect.
+        auto* adder = new DeviceTile (row, colour, true);
+        auto* add = new QPushButton (MixerWindow::tr ("+\nAdd effect"), adder);
+        add->setFlat (true);
+        add->setEnabled ((int) list.size() < mixer::maxInserts);
+        add->setToolTip (MixerWindow::tr ("Add an effect after the others (or drop one here from the browser's Audio Effects)"));
+        QObject::connect (add, &QPushButton::clicked, this, [this, add] { window.chooseInsert (track, -1, add->mapToGlobal (QPoint (0, add->height()))); });
+        adder->body->addWidget (add, 0, 0);
+        adder->setFixedWidth (110);
+        rowLayout->addWidget (adder);
+        rowLayout->addStretch (1);
+    }
+
+    void sync()
+    {
+        if (track < 0)
+            return;
+        syncing = true;
+        const auto list = window.engine.inserts (track);
+        for (size_t i = 0; i < powers.size() && i < list.size(); ++i)
+            powers[i]->setChecked (! list[i].bypassed);
+        std::vector<std::vector<mixer::Effect::Parameter>> params (list.size());
+        for (auto& kn : knobs)
+        {
+            if (kn.insert >= (int) list.size())
+                continue;
+            const auto& x = list[(size_t) kn.insert];
+            if (kn.parameter < 0)
+            {
+                if (! kn.dial->isSliderDown())
+                    kn.dial->setValue ((int) std::lround (x.mix * 100.0f));
+                kn.value->setText (x.mix >= 0.995f ? MixerWindow::tr ("Wet") : x.mix <= 0.005f ? MixerWindow::tr ("Dry")
+                                                    : QStringLiteral ("%1%").arg ((int) std::lround (x.mix * 100.0f)));
+                continue;
+            }
+            auto& p = params[(size_t) kn.insert];
+            if (p.empty())
+                p = x.effect->parameters();
+            if (kn.parameter >= (int) p.size())
+                continue;
+            const auto& par = p[(size_t) kn.parameter];
+            if (! kn.dial->isSliderDown())
+                kn.dial->setValue ((int) std::lround (par.value * kn.dial->maximum()));
+            kn.value->setText (QString::fromStdString (par.text));
+        }
+        syncing = false;
+    }
+
+    void instrumentMenu (QPoint at)
+    {
+        QMenu menu (this);
+        const auto choose = [this] (const QByteArray& what) { return [this, what] { window.dropPlugin (track, what); }; };
+        menu.addAction (MixerWindow::tr ("&Synth"), this, choose ("synth"));
+        menu.addAction (MixerWindow::tr ("S&ampler"), this, choose ("sampler"));
+        menu.addAction (MixerWindow::tr ("S&licer"), this, choose ("slicer"));
+        const auto plugins = window.audio.knownInstruments();
+        if (! plugins.empty())
+            menu.addSeparator();
+        for (const auto& p : plugins)
+            menu.addAction (QString::fromStdString (p.name) + QStringLiteral (" (") + QString::fromStdString (p.format) + QLatin1Char (')'),
+                            this, choose ("instrument\n" + QByteArray::fromStdString (p.id)));
+        if (window.engine.instrument (track) != nullptr)
+        {
+            menu.addSeparator();
+            menu.addAction (MixerWindow::tr ("&No Instrument"), this, [this] { window.setInstrumentKind (track, noInstrument, {}); window.devices->refresh(); });
+        }
+        menu.exec (at);
+    }
+
+    MixerWindow& window;
+    QScrollArea* scroll;
+    QWidget* row;
+    QHBoxLayout* rowLayout;
+    QString signature;
+    int track = -1;
+    std::vector<Knob> knobs;
+    std::vector<QToolButton*> powers;
+    bool syncing = false;
+};
+
+//==============================================================================
+// The clip picked in the launcher or the tracks, drawn in the Device Chain's place: an audio
+// clip's waveform, or a MIDI clip's notes, not to be edited here (double-click an audio clip of
+// the tracks to edit it in the editor).
+class ClipView final : public QWidget
+{
+public:
+    explicit ClipView (MixerWindow& w) : QWidget (&w), window (w)
+    {
+        setAccessibleName (MixerWindow::tr ("Clip"));
+        setMinimumHeight (120);
+    }
+
+    int shownTrack() const { return track; }
+
+    // id: the clip on the track's timeline, or 0 with the scene of a launcher slot.
+    void set (int t, uint32_t clipId, int s)
+    {
+        track = t;
+        id = clipId;
+        scene = s;
+        reload();
+    }
+
+    // Again from the mix (after an edit); false when the clip is gone.
+    bool reload()
+    {
+        found = false;
+        if (track < 0 || track >= window.engine.numTracks())
+            return false;
+        if (id != 0)
+        {
+            for (const auto& c : window.engine.clips (track))
+                if (c.id == id)
+                {
+                    clip = c;
+                    found = true;
+                    const auto path = c.audio != nullptr ? c.audio->path : c.midi != nullptr ? c.midi->path : std::string();
+                    name = QFileInfo (QString::fromStdString (path)).completeBaseName();
+                }
+        }
+        else if (scene >= 0 && scene < mixer::maxScenes)
+        {
+            if (const auto slot = window.slots[(size_t) track][(size_t) scene]; slot != nullptr)
+            {
+                clip = slot->clip;
+                found = true;
+                name = window.slotName (track, scene);
+            }
+        }
+        measure();
+        update();
+        return found;
+    }
+
+protected:
+    void paintEvent (QPaintEvent*) override
+    {
+        QPainter g (this);
+        g.setRenderHint (QPainter::Antialiasing);
+        const auto colour = track >= 0 ? window.info[(size_t) track].colour : palette().color (QPalette::Highlight);
+        const auto r = QRectF (rect()).adjusted (6.5, 4.5, -6.5, -4.5);
+        g.setPen (QPen (palette().color (QPalette::Mid), 1.0));
+        g.setBrush (palette().color (QPalette::Base));
+        g.drawRoundedRect (r, 6, 6);
+        if (! found)
+            return;
+
+        // Its name in white on the track's colour, then what it is.
+        const QRectF nameBox (r.left() + 8, r.top() + 6, std::min (260.0, r.width() - 16), 20);
+        g.setPen (Qt::NoPen);
+        g.setBrush (colour);
+        g.drawRoundedRect (nameBox, 3, 3);
+        g.setPen (Qt::white);
+        g.drawText (nameBox.adjusted (6, 0, -6, 0), Qt::AlignVCenter | Qt::AlignLeft,
+                    g.fontMetrics().elidedText (name, Qt::ElideRight, (int) nameBox.width() - 12));
+        const auto seconds = (double) clip.length / std::max (1.0, window.rate());
+        auto about = (clip.isMidi() ? MixerWindow::tr ("MIDI") : MixerWindow::tr ("Audio")) + QStringLiteral ("  ·  ")
+                     + QStringLiteral ("%1:%2").arg ((int) seconds / 60).arg (std::fmod (seconds, 60.0), 5, 'f', 2, QLatin1Char ('0'));
+        if (clip.reversed)
+            about += QStringLiteral ("  ·  ") + MixerWindow::tr ("reversed");
+        if (clip.muted)
+            about += QStringLiteral ("  ·  ") + MixerWindow::tr ("muted");
+        if (id != 0 && ! clip.isMidi())
+            about += QStringLiteral ("  ·  ") + MixerWindow::tr ("double-click to edit it in the editor");
+        g.setPen (palette().color (QPalette::PlaceholderText));
+        g.drawText (QRectF (nameBox.right() + 10, nameBox.top(), r.right() - nameBox.right() - 18, nameBox.height()), Qt::AlignVCenter | Qt::AlignLeft, about);
+
+        const auto area = QRectF (r.left() + 8, nameBox.bottom() + 8, r.width() - 16, r.bottom() - nameBox.bottom() - 14);
+        if (area.height() < 10 || area.width() < 10)
+            return;
+        if (clip.isMidi())
+            paintNotes (g, area, colour);
+        else
+        {
+            g.setPen (QPen (palette().color (QPalette::Mid), 1.0));
+            g.drawLine (QPointF (area.left(), area.center().y()), QPointF (area.right(), area.center().y()));
+            paintWave (g, area, colour);
+        }
+    }
+
+    void mouseDoubleClickEvent (QMouseEvent*) override
+    {
+        if (found && id != 0 && ! clip.isMidi())
+            Q_EMIT window.editClipRequested (track, id);
+    }
+
+private:
+    struct Note { Frame start, end; int pitch, velocity; };
+
+    // The heard part, in columns of peaks, or its notes.
+    void measure()
+    {
+        peaks.clear();
+        notes.clear();
+        if (! found || clip.length <= 0)
+            return;
+        if (clip.audio != nullptr)
+        {
+            const auto& a = *clip.audio;
+            const auto total = a.length();
+            constexpr int columns = 2048;
+            peaks.assign (columns, { 0.0f, 0.0f });
+            for (int c = 0; c < columns; ++c)
+            {
+                const auto from = clip.offset + clip.length * c / columns;
+                const auto to = std::max (from + 1, clip.offset + clip.length * (c + 1) / columns);
+                float lo = 0.0f, hi = 0.0f;
+                for (Frame f = from; f < to; f += std::max<Frame> (1, (to - from) / 64))
+                {
+                    const auto at = clip.reversed ? total - 1 - f : f;
+                    if (at < 0 || at >= total)
+                        continue;
+                    const auto v = 0.5f * (a.left[(size_t) at] + a.right[(size_t) at]);
+                    lo = std::min (lo, v);
+                    hi = std::max (hi, v);
+                }
+                peaks[(size_t) c] = { lo, hi };
+            }
+        }
+        else if (clip.midi != nullptr)
+        {
+            std::map<int, std::pair<Frame, int>> held;   // pitch and channel: started at, velocity
+            for (const auto& e : clip.midi->events)
+            {
+                const auto kind = e.status & 0xF0;
+                const auto key = (e.status & 0x0F) * 128 + e.data1;
+                if (kind == 0x90 && e.data2 > 0)
+                    held[key] = { e.frame, e.data2 };
+                else if (kind == 0x80 || (kind == 0x90 && e.data2 == 0))
+                    if (auto it = held.find (key); it != held.end())
+                    {
+                        notes.push_back ({ it->second.first, e.frame, e.data1, it->second.second });
+                        held.erase (it);
+                    }
+            }
+            for (const auto& [key, start] : held)
+                notes.push_back ({ start.first, clip.midi->length, key % 128, start.second });
+            const auto from = clip.offset, to = clip.offset + clip.length;
+            notes.erase (std::remove_if (notes.begin(), notes.end(), [&] (const Note& n) { return n.end <= from || n.start >= to; }), notes.end());
+        }
+    }
+
+    void paintWave (QPainter& g, const QRectF& area, const QColor& colour)
+    {
+        if (peaks.empty())
+            return;
+        const auto mid = area.center().y(), half = area.height() / 2.0;
+        QPainterPath path;
+        const auto n = (int) peaks.size();
+        const auto columns = std::max (1, (int) area.width());
+        for (int x = 0; x < columns; ++x)
+        {
+            const auto from = x * n / columns, to = std::max (from + 1, (x + 1) * n / columns);
+            float lo = 0.0f, hi = 0.0f;
+            for (int k = from; k < to && k < n; ++k)
+            {
+                lo = std::min (lo, peaks[(size_t) k].first);
+                hi = std::max (hi, peaks[(size_t) k].second);
+            }
+            path.addRect (QRectF (area.left() + x, mid - hi * half, 1.0, std::max (1.0, (double) (hi - lo) * half)));
+        }
+        g.setPen (Qt::NoPen);
+        g.setBrush (colour);
+        g.drawPath (path);
+    }
+
+    void paintNotes (QPainter& g, const QRectF& area, const QColor& colour)
+    {
+        if (notes.empty())
+        {
+            g.setPen (palette().color (QPalette::PlaceholderText));
+            g.drawText (area, Qt::AlignCenter, MixerWindow::tr ("No notes in the part heard"));
+            return;
+        }
+        int low = 127, high = 0;
+        for (const auto& n : notes)
+        {
+            low = std::min (low, n.pitch);
+            high = std::max (high, n.pitch);
+        }
+        low = std::max (0, low - 2);
+        high = std::min (127, high + 2);
+        const auto rows = high - low + 1;
+        const auto rowHeight = area.height() / rows;
+        // The black keys' rows a shade darker, as on a piano roll.
+        g.setPen (Qt::NoPen);
+        auto shade = palette().color (QPalette::Window);
+        shade.setAlphaF (0.6);
+        for (int p = low; p <= high; ++p)
+            if (const auto k = p % 12; k == 1 || k == 3 || k == 6 || k == 8 || k == 10)
+                g.fillRect (QRectF (area.left(), area.bottom() - (p - low + 1) * rowHeight, area.width(), rowHeight), shade);
+        const auto from = (double) clip.offset, span = std::max (1.0, (double) clip.length);
+        for (const auto& n : notes)
+        {
+            const auto x0 = area.left() + std::max (0.0, (n.start - from) / span) * area.width();
+            const auto x1 = area.left() + std::min (1.0, (n.end - from) / span) * area.width();
+            auto c = colour;
+            c.setAlphaF (0.45 + 0.55 * n.velocity / 127.0);
+            g.setBrush (c);
+            g.drawRoundedRect (QRectF (x0, area.bottom() - (n.pitch - low + 1) * rowHeight + 0.5, std::max (2.0, x1 - x0 - 1.0), std::max (1.5, rowHeight - 1.0)), 1.5, 1.5);
+        }
+    }
+
+    MixerWindow& window;
+    int track = -1;
+    uint32_t id = 0;
+    int scene = -1;
+    bool found = false;
+    mixer::Clip clip;
+    QString name;
+    std::vector<std::pair<float, float>> peaks;
+    std::vector<Note> notes;
+};
+
 MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* parent)
     : QWidget (parent, Qt::Window), engine (e), audio (a), hooks (std::move (h))
 {
@@ -4038,9 +4800,26 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     // Every MIDI input's name on one line would do the same.
     midiStatus->setWordWrap (true);
 
+    // The Device Chain along the bottom, the whole width (owner, 2026-10-25: as in Ableton):
+    // the selected track's instrument and inserts, or the clip picked.
+    devices = new TrackDevices (*this);
+    clipView = new ClipView (*this);
+    devicePanel = new QStackedWidget (this);
+    devicePanel->addWidget (devices);
+    devicePanel->addWidget (clipView);
+    devicePanel->setAutoFillBackground (false);
+    bottomSplitter = new QSplitter (Qt::Vertical, this);
+    bottomSplitter->setChildrenCollapsible (false);
+    bottomSplitter->addWidget (sideSplitter);
+    bottomSplitter->addWidget (devicePanel);
+    bottomSplitter->setStretchFactor (0, 1);
+    bottomSplitter->setStretchFactor (1, 0);
+    bottomSplitter->setSizes ({ 700, 190 });
+    bottomSplitter->restoreState (appSettings().value (QStringLiteral ("mixer/bottomSplitter")).toByteArray());
+
     auto* layout = new QVBoxLayout (this);
     layout->addWidget (topScroll);
-    layout->addWidget (sideSplitter, 1);
+    layout->addWidget (bottomSplitter, 1);
     layout->addLayout (bottom);
 
     connect (toStartButton, &QPushButton::clicked, this, [this] { toStart(); });
@@ -4176,7 +4955,93 @@ void MixerWindow::refreshInspector()
         if (track >= 0)
             strips[(size_t) track]->refresh();
         rack->refresh();
+        if (showingClip && ! clipView->reload())
+            showDevices();   // the clip went
+        else if (! showingClip)
+            devices->refresh();
     });
+}
+
+bool MixerWindow::devicePanelShown() const { return devicePanel != nullptr && ! devicePanel->isHidden(); }
+
+void MixerWindow::updateDevicePanel()
+{
+    if (devicePanel == nullptr)
+        return;
+    const bool show = selected < mixer::masterIndex;
+    if (devicePanel->isHidden() == show)
+    {
+        devicePanel->setVisible (show);
+        Q_EMIT devicePanelChanged();
+    }
+}
+
+void MixerWindow::showDevices()
+{
+    showingClip = false;
+    devicePanel->setCurrentWidget (devices);
+    devices->refresh();
+    updateDevicePanel();
+}
+
+void MixerWindow::showTimelineClip (int track, uint32_t id)
+{
+    if (track != selected)
+        select (track);
+    showingClip = true;
+    clipView->set (track, id, -1);
+    devicePanel->setCurrentWidget (clipView);
+    updateDevicePanel();
+}
+
+void MixerWindow::showSlotClip (int track, int scene)
+{
+    if (track != selected)
+        select (track);
+    showingClip = true;
+    clipView->set (track, 0, scene);
+    devicePanel->setCurrentWidget (clipView);
+    updateDevicePanel();
+}
+
+bool MixerWindow::dropPlugin (int track, const QByteArray& what)
+{
+    if (track < 0 || track >= engine.numTracks())
+        return false;
+    const auto parts = QString::fromUtf8 (what).split (QLatin1Char ('\n'));
+    const auto kind = parts.value (0);
+    const auto id = parts.value (1);
+    select (track);
+    if (kind == QLatin1String ("effect"))
+    {
+        if ((int) engine.inserts (track).size() >= mixer::maxInserts)
+        {
+            status->setText (tr ("Track %1 has all %2 inserts in use.").arg (track + 1).arg (mixer::maxInserts));
+            return false;
+        }
+        addInsert (track, id.toStdString());
+        showDevices();
+        return true;
+    }
+    const int choice = kind == QLatin1String ("synth") ? synthChoice : kind == QLatin1String ("sampler") ? samplerChoice
+                     : kind == QLatin1String ("slicer") ? slicerChoice : kind == QLatin1String ("instrument") ? firstPlugin : -1;
+    if (choice < 0)
+        return false;
+    // An audio track with an instrument dropped on it plays it: as a hybrid when it has audio.
+    auto& s = engine.strip (track);
+    if (s.mode.load() == (int) mixer::TrackMode::audio)
+    {
+        bool audioClips = false;
+        for (const auto& c : engine.clips (track))
+            audioClips = audioClips || c.audio != nullptr;
+        for (const auto& slot : slots[(size_t) track])
+            audioClips = audioClips || (slot != nullptr && slot->clip.audio != nullptr);
+        s.mode = (int) (audioClips ? mixer::TrackMode::hybrid : mixer::TrackMode::instrument);
+    }
+    setInstrumentKind (track, choice, id);
+    showDevices();
+    changed();
+    return true;
 }
 
 void MixerWindow::select (int index)
@@ -4186,6 +5051,13 @@ void MixerWindow::select (int index)
     selected = index;
     if (! picked.count (index))
         picked = { index };
+    // The clip shown belongs to the track that was selected; this one shows its devices.
+    if (showingClip && clipView->shownTrack() != index)
+    {
+        showingClip = false;
+        devicePanel->setCurrentWidget (devices);
+    }
+    updateDevicePanel();
     for (int i = 0; i < mixer::maxTracks; ++i)
         strips[(size_t) i]->setSelected (i == selected, picked.count (i) > 0);
     if (lanes != nullptr)
@@ -5530,6 +6402,7 @@ void MixerWindow::closeEvent (QCloseEvent* e)
     autosave();
     appSettings().setValue (QStringLiteral ("mixer/splitter"), launcherSplit ? timelineSplit : splitter->saveState());
     appSettings().setValue (QStringLiteral ("mixer/sideSplitter"), sideSplitter->saveState());
+    appSettings().setValue (QStringLiteral ("mixer/bottomSplitter"), bottomSplitter->saveState());
     QWidget::closeEvent (e);
     Q_EMIT closed();
 }

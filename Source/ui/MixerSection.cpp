@@ -6,12 +6,14 @@
 #include "MixAssistant.h"
 #include "FindPanel.h"
 #include "MixerWindow.h"
+#include "Panels.h"
 #include "Settings.h"
 #include "../mixer/MixerEngine.h"
 #include "../sampler/SamplerEngine.h"
 #include "../sampler/SlicerEngine.h"
 
 #include <QApplication>
+#include <QDockWidget>
 #include <QEventLoop>
 #include <QFileInfo>
 #include <QFutureWatcher>
@@ -106,6 +108,8 @@ MixerWindow* MainWindow::mixerWindow()
         connect (mixerWin, &MixerWindow::activated, this, [this] { midiTarget = 2; });
         connect (mixerWin, &MixerWindow::playStarted, this, [this] { playInstruments(); });
         connect (mixerWin, &MixerWindow::editClipRequested, this, [this] (int track, quint32 clip) { editMixerClip (track, clip); });
+        connect (mixerWin, &MixerWindow::devicePanelChanged, this, [this] { updateChainDock(); });
+        connect (centralStack, &QStackedWidget::currentChanged, this, [this] { updateChainDock(); });
         connect (mixerWin, &MixerWindow::closed, this, [this]
         {
             mixerEngine->panic();
@@ -224,6 +228,22 @@ void MainWindow::returnMixerEdits()
         }
         doc.markSaved();   // it lives on in the mixer now
         closeTab();
+    }
+}
+
+void MainWindow::updateChainDock()
+{
+    auto* dock = chainPanel->dock();
+    const bool mixerOwns = mixerDocked() && centralStack->currentWidget() == mixerWin && mixerWin->devicePanelShown();
+    if (mixerOwns && ! chainPanel->isPoppedOut() && dock->isVisible() && ! dock->isFloating())
+    {
+        chainHiddenForMixer = true;
+        dock->hide();
+    }
+    else if (! mixerOwns && chainHiddenForMixer)
+    {
+        chainHiddenForMixer = false;
+        dock->show();
     }
 }
 

@@ -1328,6 +1328,8 @@ void MainWindow::restoreDockSizes()
 void MainWindow::saveLayout()
 {
     auto settings = appSettings();
+    if (chainHiddenForMixer)
+        chainPanel->dock()->show();   // saved as the user left it, not as the mixer hid it
 
     for (auto* p : panels)
     {

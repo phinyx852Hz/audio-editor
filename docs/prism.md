@@ -50,7 +50,9 @@ The Prism rises out of its card as a floating panel over the window, and sinks b
 card when you are done: Esc, Dock, or Open on the card again. Its card stays lit while it is out.
 It is part of the main window rather than a window of its own, so it opens in the same place on
 every desktop (Wayland does not let a program place its own windows). Drag its header to move it,
-and the corner to resize it; it grows to show all its rays.
+and the corner to resize it; it grows to show all its rays. It opens again where it was left, at
+that size, floating over whatever is there (owner, 2026-10-25), as long as that place is still
+inside the window; else it rises from its card.
 
 Inside: the name (F2), the split and the crossovers along the top, the macros, then a row per ray
 with its gain, M, S and its devices as cards, ending with Add plugin. Plugins drag between rays.

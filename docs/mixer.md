@@ -362,7 +362,24 @@ Channel window (Pre and a Φ EQ with another track's spectrum to compare), loudn
 snapshots and mixer history, then In/Out routing (Ableton's Audio From and Audio To), live inputs
 and recording, thumbnails, templates and the spatial panner. The Inspector (owner, 2026-10-25) is a column at the mixer's
 left in both views with the selected track's mode, instrument, Pre, inserts, sends and width; the
-strips stay lean (four insert slots, sends, trim and pan, fader, name) in both views. The Sampler and Slicer windows of the Sample menu
+strips stay lean (four insert slots, sends, trim and pan, fader, name) in both views.
+
+Device Chain and drag and drop (owner, 2026-10-25, "very close to Ableton's workflow"):
+- The mixer has its own Device Chain along its bottom, the whole width, in both views. It shows
+  the selected track: its instrument first on the left (Edit opens it, ▾ picks another), then its
+  inserts in the order they play, each with ⏻ (on or bypassed), Edit (its own window), up to
+  eight knobs from the effect and its Dry/Wet, five to a row. Right-click a card for the insert
+  menu (move, replace, remove). Add effect ends the row.
+- Clicking a clip on the tracks or in the launcher draws it there instead, read-only: an audio
+  clip's waveform (double-click to edit it in the editor) or a MIDI clip's notes on a piano roll,
+  in the track's colour. Clicking a track's strip, its name or an empty slot brings the chain back.
+- Picking the Master strip hides it; while the mixer is in the editor's place the editor's own
+  Device Chain (the master's) steps aside and comes back with the Master strip or the editor.
+- The browser's places list ends with Instruments (Synth, Sampler, Slicer and the instrument
+  plugins found) and Audio Effects (built-in, stock, then each plugin format). Drag one onto a
+  track's strip, the Inspector or the Device Chain: an instrument takes the instrument's place
+  (an Audio track becomes Inst, or Hybrid when it has audio clips), an effect joins the end of the
+  inserts. Enter or a double-click puts it on the selected track. Backspace goes back to the files. The Sampler and Slicer windows of the Sample menu
 could dock into the mixer as track 1 (the other thread's docking work).
 
 Patchbay (2026-10-22, docs/patchbay.md): while the patchbay plays (it always does live), the

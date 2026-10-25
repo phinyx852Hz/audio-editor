@@ -36,6 +36,12 @@ Tab switches between the launcher and the tracks across time, as in Ableton (202
   the track's timeline follow (Back to Timeline) and the clip in the slot under the cursor (loop,
   reverse, its own launch quantise, choose a file, empty the slot). The Strips button picks its
   sections too.
+- **The Device Chain** (owner, 2026-10-25) along the bottom, the whole width, as in Ableton: the
+  selected track's instrument, always first on the left, then its inserts left to right (up to
+  eight knobs each and Dry/Wet), then Add effect. Clicking a clip puts a drawing of it there
+  instead: an audio clip's waveform or a MIDI clip's notes in the track's colour, not editable.
+  An empty slot, a track's name or its strip brings the chain back. With the Master strip
+  selected it steps aside for the editor's own chain. More in mixer.md.
 - **Below: the strips, made compact** (owner, 2026-10-25): four insert slots as tall as the clip
   slots, Send A and Send B above Trim and Pan, mute and solo, a shorter fader and meter with their
   values, and the track's name at the bottom in white on its colour. The full strips come back

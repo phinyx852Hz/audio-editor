@@ -36,6 +36,9 @@ class FileBrowser;
 class ClipGrid;
 class LauncherRack;
 class ReturnStripWidget;
+class TrackDevices;
+class ClipView;
+class QStackedWidget;
 class QComboBox;
 class QSpinBox;
 
@@ -155,6 +158,14 @@ public:
     AudioDataPtr clipAudio (int track, uint32_t clip, QString& name) const;
     bool replaceClipAudio (int track, uint32_t clip, const AudioData& edited, const QString& name, QString& error);
 
+    // The Device Chain along the mixer's bottom (owner, 2026-10-25): the selected track's
+    // instrument and inserts, or the clip picked in the launcher or the tracks. Hidden while
+    // the Master strip is selected, so the editor's own chain can show.
+    bool devicePanelShown() const;
+    // What the browser's Instruments and Audio Effects lists drag: "effect\n<id>",
+    // "instrument\n<id>", or "synth", "sampler", "slicer".
+    static QString pluginMime() { return QStringLiteral ("application/x-phi-plugin"); }
+
 Q_SIGNALS:
     void mixdownRequested();
     void midiInputsRequested();
@@ -162,6 +173,7 @@ Q_SIGNALS:
     void closed();
     void playStarted();   // so the main window makes sure the mixer is heard
     void editClipRequested (int track, quint32 clip);
+    void devicePanelChanged();   // shown or hidden
 
 protected:
     void keyPressEvent (class QKeyEvent*) override;
@@ -176,6 +188,8 @@ private:
     friend class ClipGrid;
     friend class LauncherRack;
     friend class ReturnStripWidget;
+    friend class TrackDevices;
+    friend class ClipView;
 
     // What the window keeps about a track besides the engine's settings.
     struct TrackInfo
@@ -229,6 +243,13 @@ private:
     QJsonArray insertsJson (int track) const;
     void loadInserts (int track, const QJsonArray&, QStringList& problems);
     void stripsMenu (QPoint at);     // which sections the strips show, and how wide they are
+    // An instrument or effect dropped on a track (its strip, or the Device Chain): the
+    // instrument takes the instrument's place, an effect goes after the inserts.
+    bool dropPlugin (int track, const QByteArray& what);
+    void showDevices();                          // the selected track's chain in the Device Chain
+    void showTimelineClip (int track, uint32_t id);
+    void showSlotClip (int track, int scene);
+    void updateDevicePanel();                    // shown unless the master is selected
     // Q-Link (Cubase): with it on, a change to one of the picked strips goes to all of them;
     // Alt+Shift sends it to every track. `fn` gets each strip, and whether it is the one changed.
     void forLinked (int track, const std::function<void (mixer::Strip&, bool self)>& fn);
@@ -290,6 +311,11 @@ private:
     QScrollArea* inspectorScroll = nullptr;
     MixerStrip* inspectorStrip = nullptr;   // the selected track's, rebuilt when the selection moves
     bool inspectorPending = false;
+    QSplitter* bottomSplitter = nullptr;     // everything above, the Device Chain below
+    QStackedWidget* devicePanel = nullptr;
+    TrackDevices* devices = nullptr;
+    ClipView* clipView = nullptr;
+    bool showingClip = false;
     void refreshInspector();   // soon, once for any number of changes
     QScrollArea* gridScroll = nullptr;
     QByteArray timelineSplit;    // the splitter as the tracks across time had it
