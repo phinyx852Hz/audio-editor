@@ -31,6 +31,7 @@
 #include "../Source/core/PhiVoice.h"
 #include "../Source/core/PhiPhaser.h"
 #include "../Source/core/PhiTuning.h"
+#include "../Source/core/PhiRaga.h"
 #include "../Source/core/PrismSplit.h"
 #include "../Source/core/MasterAssist.h"
 #include "../Source/mixer/MixAssist.h"
@@ -4191,6 +4192,47 @@ namespace
         }
     }
 
+    // PHI rāga's sheets: every built-in sheet reads cleanly, and a sheet survives writing out.
+    void testRagaSheets()
+    {
+        std::vector<std::string> errors;
+        const auto all = phi::parseRagas (phi::builtInRagaSheets(), errors);
+        check (errors.empty() && all.size() == 44 && phi::builtInRagas().size() == 44, "raga sheets: the 44 built-in sheets read without a mistake");
+        for (const auto& e : errors)
+            std::printf ("  %s\n", e.c_str());
+        bool complete = true;
+        for (const auto& r : all)
+            complete = complete && ! r.aroha.empty() && ! r.avaroha.empty() && r.vadi >= 0 && r.samvadi >= 0;
+        check (complete, "raga sheets: each has its aroha, avaroha, vadi and samvadi");
+
+        const auto* darbari = &all[0];
+        for (const auto& r : all)
+            if (r.plain == "darbari kanada")
+                darbari = &r;
+        check (darbari->name == "darbārī kānaḍā" && darbari->thaat == "āsāvarī" && near (darbari->cents[3], phi::Tuning::ratioToCents (32.0 / 27.0), 1.0e-9)
+               && near (darbari->cents[7], phi::Tuning::ratioToCents (1.5), 1.0e-9) && ! darbari->uses[4], "raga sheets: svaras and their tuning");
+        check (darbari->aroha.front() == phi::Svara { 10, -1 } && darbari->aroha.back() == phi::Svara { 0, 1 } && darbari->vadi == 2 && darbari->samvadi == 7,
+               "raga sheets: aroha with octave marks, vadi and samvadi");
+        const auto* swing = darbari->andolanOn (3);
+        check (swing != nullptr && near (swing->depthCents, 20.0, 1.0e-9) && darbari->andolanOn (2) == nullptr, "raga sheets: andolan on ga");
+
+        std::vector<std::string> again;
+        const auto back = phi::parseRagas (phi::writeRagas (all), again);
+        bool same = again.empty() && back.size() == all.size();
+        for (size_t i = 0; same && i < all.size(); ++i)
+            same = back[i].name == all[i].name && back[i].aroha == all[i].aroha && back[i].avaroha == all[i].avaroha && back[i].pakad == all[i].pakad
+                   && back[i].uses == all[i].uses && std::abs (back[i].cents[3] - all[i].cents[3]) < 1.0e-6 && back[i].andolan.size() == all[i].andolan.size();
+        check (same, "raga sheets: written out and read back the same");
+
+        // A dot below or above in the notation is the octave, as with , and '.
+        phi::Phrase dots;
+        check (phi::parsePhrase ("n\xcc\xa3 S R S\xcc\x87", dots) && dots == phi::Phrase { { 10, -1 }, { 0, 0 }, { 2, 0 }, { 0, 1 } }, "raga sheets: dotted notation");
+        std::vector<std::string> mistakes;
+        const auto wrong = phi::parseRagas ("raga: test\nplain: test\nsvaras: S R G P D\naroha: S R m P\nraga: fine\nplain: fine\nsvaras: S P\nkey: x\n", mistakes);
+        check (wrong.empty() && mistakes.size() == 2 && mistakes[0].find ("line 4") == 0 && mistakes[1].find ("line 8") == 0,
+               "raga sheets: a svara the raga lacks, or an unknown field, is reported by its line");
+    }
+
     // Modal tunings for the PHI synth: the systems, the keys they put their degrees on, and which
     // level's choice is in force.
     void testTunings()
@@ -5203,6 +5245,7 @@ int main()
     testPhiVoice();
     testPhiPhaser();
     testPhiTuning();
+    testRagaSheets();
     testTunings();
     testPluginMeasure();
 

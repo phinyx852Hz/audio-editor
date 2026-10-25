@@ -13,6 +13,8 @@ add_library(phi_dsp STATIC
     PhiDynamics.cpp
     PhiPhaser.cpp
     PhiTuning.cpp
+    PhiRaga.cpp
+    PhiRagas.cpp
     PhiVoice.cpp
     Fft.cpp)
 target_include_directories(phi_dsp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
