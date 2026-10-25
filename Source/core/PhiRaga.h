@@ -59,6 +59,10 @@ namespace phi
         std::string time, rasa;
 
         std::vector<double> scaleCents() const;   // the svaras it uses, from Sa up
+        // The svaras (semitones above Sa) used going up (in its āroha) and coming down (avaroha);
+        // all it uses when the sheet gives no āroha or avaroha.
+        std::array<bool, 12> upSet() const;
+        std::array<bool, 12> downSet() const;
         const Andolan* andolanOn (int semitone) const;
     };
 
@@ -92,6 +96,7 @@ namespace phi
         // The voice's pitch `seconds` after it started, ornaments and all.
         double hzAt (const Voice&, double seconds) const;
         bool goingUp() const { return rising; }
+        int voiceSaKey() const { return saKey; }
 
     private:
         const Raga* raga = nullptr;

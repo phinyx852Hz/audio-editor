@@ -8,6 +8,7 @@
 #include "../Source/sampler/SlicerEngine.h"
 #include "../Source/mixer/MidiFile.h"
 #include "../Source/mixer/Tunings.h"
+#include "../Source/mixer/RagaInstrument.h"
 #include "../Source/mixer/MixerEngine.h"
 #include "../Source/patchbay/PatchBay.h"
 #include "../Source/core/Ixml.h"
@@ -4333,6 +4334,29 @@ namespace
             };
             const auto matched = ring (220.0), other = ring (233.08);
             check (matched > 4.0 * other && matched > 0.0, "sitar: tarab rings in sympathy with its own pitch");
+        }
+        {
+            // PHI rāga on a track: its own raga, then the one the track's tuning puts in force.
+            mixer::RagaInstrument raga;
+            raga.setState ("raga=khamaj;sa=0;ornaments=1;jawari=0.6;tarab=0.6");
+            raga.prepare (rate, 512);
+            check (raga.playing() == "khamāj" && raga.state().find ("raga=khamaj;sa=0") == 0, "raga instrument: its own raga, saved in its state");
+            std::vector<float> l (24000, 0.0f), r (24000, 0.0f);
+            const mixer::NoteEvent on[] = { { 0, 0x90, 67, 100 }, { 12000, 0x90, 70, 100 } };
+            raga.process (on, 2, l.data(), r.data(), 24000);
+            bool finite = true;
+            for (auto v : l)
+                finite = finite && std::isfinite (v);
+            check (finite && energy (l, 12000, 24000) > 0.01, "raga instrument: plays the keys on the sitar");
+            const auto& sheets = phi::builtInRagas();
+            int darbari = -1;
+            for (size_t i = 0; i < sheets.size(); ++i)
+                if (sheets[i].plain == "darbari kanada")
+                    darbari = (int) i;
+            raga.setRaga (darbari, 2, true);
+            check (raga.playing() == "darbārī kānaḍā (equal tempered)", "raga instrument: the track's raga in force");
+            raga.setRaga (-1, 0, false);
+            check (raga.playing() == "khamāj", "raga instrument: back to its own raga");
         }
         {
             phi::Sitar sitar;

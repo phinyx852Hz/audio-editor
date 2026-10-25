@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MixerWindow.h"
+#include "../mixer/RagaInstrument.h"
+#include "../core/PhiRaga.h"
 #include "PhiMark.h"
 #include "Potentiometer.h"
 #include "SamplerWindow.h"
@@ -399,7 +401,7 @@ namespace
         return MixerWindow::tr ("PHI projects (*.phi *.phinyxmix);;All files (*)");
     }
 
-    enum Choice { noInstrument, synthChoice, samplerChoice, slicerChoice, firstPlugin };
+    enum Choice { noInstrument, synthChoice, samplerChoice, slicerChoice, ragaChoice, firstPlugin };
 }
 
 //==============================================================================
@@ -1037,7 +1039,8 @@ public:
         if (box->count() != firstPlugin + (int) plugins.size())
         {
             box->clear();
-            box->addItems ({ MixerWindow::tr ("No instrument"), MixerWindow::tr ("Synth"), MixerWindow::tr ("Sampler"), MixerWindow::tr ("Slicer") });
+            box->addItems ({ MixerWindow::tr ("No instrument"), MixerWindow::tr ("Synth"), MixerWindow::tr ("Sampler"), MixerWindow::tr ("Slicer"),
+                             QString::fromUtf8 ("PHI rāga") });
             for (const auto& p : plugins)
                 box->addItem (QString::fromStdString (p.name) + QStringLiteral (" (") + QString::fromStdString (p.format) + QStringLiteral (")"),
                               QString::fromStdString (p.id));
@@ -1050,6 +1053,7 @@ public:
                 case mixer::Instrument::Kind::synth:   choice = synthChoice; break;
                 case mixer::Instrument::Kind::sampler: choice = samplerChoice; break;
                 case mixer::Instrument::Kind::slicer:  choice = slicerChoice; break;
+                case mixer::Instrument::Kind::raga:    choice = ragaChoice; break;
                 case mixer::Instrument::Kind::plugin:
                 {
                     choice = box->findData (QString::fromStdString (AudioEngine::instrumentPluginId (*inst)));
@@ -1597,6 +1601,73 @@ public:
     QLabel* faderValue;
     QLabel* peakValue;
 };
+
+//==============================================================================
+// PHI rāga's window: its own raga (when the track's tuning is not a raga), Sa, and the sound.
+QDialog* ragaDialog (mixer::InstrumentPtr inst, const QString& title, QWidget* parent, std::function<void()> changed)
+{
+    auto& raga = static_cast<mixer::RagaInstrument&> (*inst);
+    auto* d = new QDialog (parent);
+    d->setAttribute (Qt::WA_DeleteOnClose);
+    d->setWindowTitle (QString::fromUtf8 ("PHI rāga: %1").arg (title));
+    auto* form = new QFormLayout (d);
+    const auto s = raga.settings();
+    auto* ragas = new QComboBox (d);
+    for (const auto& r : phi::builtInRagas())
+        ragas->addItem (QString::fromStdString (r.name), QString::fromStdString (r.plain));
+    ragas->setCurrentIndex (std::max (0, ragas->findData (QString::fromStdString (s.raga))));
+    ragas->setMaxVisibleItems (24);
+    ragas->setToolTip (QObject::tr ("The raga it plays when the track's tuning (Inspector) is not a raga"));
+    auto* sa = new QComboBox (d);
+    for (const auto* n : { "C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B" })
+        sa->addItem (QString::fromUtf8 (n));
+    sa->setCurrentIndex (s.sa);
+    auto percent = [d] (double v, const QString& tip)
+    {
+        auto* b = new QSpinBox (d);
+        b->setRange (0, 100);
+        b->setSuffix (QObject::tr (" %"));
+        b->setValue ((int) std::lround (v * 100.0));
+        b->setToolTip (tip);
+        return b;
+    };
+    auto* ornaments = percent (s.ornaments, QObject::tr ("How much of the sheet's ornaments (āndolan) it plays"));
+    auto* jawari = percent (s.jawari, QObject::tr ("The bridge: open (khulā) to closed (band), more buzz"));
+    auto* tarab = percent (s.tarab, QObject::tr ("The sympathetic strings, tuned to the raga"));
+    auto* now = new QLabel (d);
+    now->setWordWrap (true);
+    form->addRow (QObject::tr ("&Raga"), ragas);
+    form->addRow (QObject::tr ("&Sa"), sa);
+    form->addRow (QObject::tr ("&Ornaments"), ornaments);
+    form->addRow (QString::fromUtf8 ("&Jawārī"), jawari);
+    form->addRow (QObject::tr ("&Tarab"), tarab);
+    form->addRow (now);
+    auto* help = new QLabel (QObject::tr ("Keys play the raga's svaras by the way the melody moves: its āroha going up, its avaroha coming down. "
+                                          "Keys two octaves and more below Sa strike the chikārī."), d);
+    help->setWordWrap (true);
+    form->addRow (help);
+    auto show = [now, &raga] { now->setText (QObject::tr ("Playing %1.").arg (QString::fromStdString (raga.playing()))); };
+    auto apply = [=, &raga]
+    {
+        mixer::RagaSettings n;
+        n.raga = ragas->currentData().toString().toStdString();
+        n.sa = sa->currentIndex();
+        n.ornaments = ornaments->value() / 100.0;
+        n.jawari = jawari->value() / 100.0;
+        n.tarab = tarab->value() / 100.0;
+        raga.setSettings (n);
+        show();
+        changed();
+    };
+    show();
+    auto keep = std::make_shared<mixer::InstrumentPtr> (inst);
+    QObject::connect (d, &QObject::destroyed, d, [keep] { keep->reset(); });
+    for (auto* c : { ragas, sa })
+        QObject::connect (c, &QComboBox::currentIndexChanged, d, apply);
+    for (auto* b : { ornaments, jawari, tarab })
+        QObject::connect (b, &QSpinBox::valueChanged, d, apply);
+    return d;
+}
 
 //==============================================================================
 QDialog* synthDialog (mixer::InstrumentPtr inst, const QString& title, QWidget* parent, std::function<void()> changed)
@@ -3012,6 +3083,7 @@ private:
             add (MixerWindow::tr ("Built-in"), MixerWindow::tr ("Synth"), "synth");
             add (MixerWindow::tr ("Built-in"), MixerWindow::tr ("Sampler"), "sampler");
             add (MixerWindow::tr ("Built-in"), MixerWindow::tr ("Slicer"), "slicer");
+            add (MixerWindow::tr ("Built-in"), QString::fromUtf8 ("PHI rāga"), "raga");
             for (const auto& p : window.audio.knownInstruments())
                 add (QString::fromStdString (p.format), QString::fromStdString (p.name), "instrument\n" + QByteArray::fromStdString (p.id));
         }
@@ -4396,6 +4468,7 @@ private:
         menu.addAction (MixerWindow::tr ("&Synth"), this, choose ("synth"));
         menu.addAction (MixerWindow::tr ("S&ampler"), this, choose ("sampler"));
         menu.addAction (MixerWindow::tr ("S&licer"), this, choose ("slicer"));
+        menu.addAction (QString::fromUtf8 ("PHI &rāga"), this, choose ("raga"));
         const auto plugins = window.audio.knownInstruments();
         if (! plugins.empty())
             menu.addSeparator();
@@ -5444,7 +5517,8 @@ bool MixerWindow::dropPlugin (int track, const QByteArray& what)
         return true;
     }
     const int choice = kind == QLatin1String ("synth") ? synthChoice : kind == QLatin1String ("sampler") ? samplerChoice
-                     : kind == QLatin1String ("slicer") ? slicerChoice : kind == QLatin1String ("instrument") ? firstPlugin : -1;
+                     : kind == QLatin1String ("slicer") ? slicerChoice : kind == QLatin1String ("raga") ? ragaChoice
+                     : kind == QLatin1String ("instrument") ? firstPlugin : -1;
     if (choice < 0)
         return false;
     // An audio track with an instrument dropped on it plays it: as a hybrid when it has audio.
@@ -5880,6 +5954,7 @@ void MixerWindow::setInstrumentKind (int track, int choice, const QString& plugi
     switch (choice)
     {
         case synthChoice: made = std::make_shared<mixer::Synth>(); break;
+        case ragaChoice: made = std::make_shared<mixer::RagaInstrument>(); break;
         case samplerChoice:
         case slicerChoice:
             if (choice == samplerChoice)
@@ -6050,6 +6125,12 @@ void MixerWindow::editInstrument (int track)
         case mixer::Instrument::Kind::synth:
         {
             auto* d = synthDialog (inst, title, this, [this] { changed(); });
+            t.editor = d;
+            break;
+        }
+        case mixer::Instrument::Kind::raga:
+        {
+            auto* d = ragaDialog (inst, title, this, [this] { changed(); });
             t.editor = d;
             break;
         }
@@ -7068,6 +7149,9 @@ bool MixerWindow::writeMix (const QString& file, QString& error)
                 case mixer::Instrument::Kind::synth:
                     io = { { "kind", "synth" }, { "state", QString::fromStdString (inst->state()) } };
                     break;
+                case mixer::Instrument::Kind::raga:
+                    io = { { "kind", "raga" }, { "state", QString::fromStdString (inst->state()) } };
+                    break;
                 case mixer::Instrument::Kind::sampler:
                 {
                     auto& sm = static_cast<mixer::SamplerInstrument&> (*inst);
@@ -7220,9 +7304,9 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
 
         const auto io = o.value ("instrument").toObject();
         const auto kind = io.value ("kind").toString();
-        if (kind == QLatin1String ("synth"))
+        if (kind == QLatin1String ("synth") || kind == QLatin1String ("raga"))
         {
-            setInstrumentKind (i, synthChoice, {});
+            setInstrumentKind (i, kind == QLatin1String ("raga") ? ragaChoice : synthChoice, {});
             if (auto inst = engine.instrument (i))
                 inst->setState (io.value ("state").toString().toStdString());
         }
@@ -8130,6 +8214,23 @@ void MixerWindow::applyTunings()
             inst->setTuning (nullptr);
         else
             inst->setTuning (std::make_shared<const phi::Tuning> (mixer::makeTuning (mixer::tuningSystems()[(size_t) choice.system], choice.root)));
+        // A raga in force: PHI rāga plays it, by its sheet.
+        int raga = -1;
+        bool equal = false;
+        if (choice.system >= 0)
+        {
+            const auto& system = mixer::tuningSystems()[(size_t) choice.system];
+            if (system.family.rfind ("raga", 0) == 0)
+            {
+                equal = system.family != "raga";
+                const auto plain = equal ? system.plain.substr (0, system.plain.size() - std::string (" (equal tempered)").size()) : system.plain;
+                const auto& sheets = phi::builtInRagas();
+                for (size_t i = 0; i < sheets.size(); ++i)
+                    if (sheets[i].plain == plain)
+                        raga = (int) i;
+            }
+        }
+        inst->setRaga (raga, choice.root, equal);
     }
 }
 

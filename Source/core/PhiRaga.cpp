@@ -143,6 +143,26 @@ namespace phi
         return out;
     }
 
+    std::array<bool, 12> Raga::upSet() const
+    {
+        if (aroha.empty())
+            return uses;
+        std::array<bool, 12> out {};
+        for (const auto& s : aroha)
+            out[(size_t) s.semitone] = true;
+        return out;
+    }
+
+    std::array<bool, 12> Raga::downSet() const
+    {
+        if (avaroha.empty())
+            return uses;
+        std::array<bool, 12> out {};
+        for (const auto& s : avaroha)
+            out[(size_t) s.semitone] = true;
+        return out;
+    }
+
     const Andolan* Raga::andolanOn (int semitone) const
     {
         for (const auto& a : andolan)
@@ -365,14 +385,8 @@ namespace phi
         up = down = {};
         if (raga == nullptr)
             return;
-        for (const auto& s : raga->aroha)
-            up[(size_t) s.semitone] = true;
-        for (const auto& s : raga->avaroha)
-            down[(size_t) s.semitone] = true;
-        if (raga->aroha.empty())
-            up = raga->uses;
-        if (raga->avaroha.empty())
-            down = raga->uses;
+        up = raga->upSet();
+        down = raga->downSet();
     }
 
     RagaPlayer::Voice RagaPlayer::noteOn (int key)
