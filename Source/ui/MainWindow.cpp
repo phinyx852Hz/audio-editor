@@ -23,6 +23,7 @@
  #include "MilkDrop.h"
 #endif
 #include "AnalysisWindow.h"
+#include "PluginAnalyzer.h"
 #include "AmbiVisualizer.h"
 #include "Goniometer.h"
 #include "AmbiScene.h"
@@ -507,6 +508,14 @@ void MainWindow::registerCommands()
         }
     })->setStatusTip (tr ("Every meter in one window: loudness and its history, levels, spectrum, spectrogram, imaging, phase and amplitude statistics"));
 
+    add ("analyze.plugin", Category::analyze, tr ("Plugin &Analyzer..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_U) }, [this]
+    {
+        auto* w = pluginAnalyzer();
+        w->show();
+        w->raise();
+        w->activateWindow();
+    })->setStatusTip (tr ("What a plugin does to sound: frequency and phase, impulse, harmonics, aliasing, dynamics, modulation, and Forensic \u03a6"));
+
     add ("view.master", Category::master, tr ("&Master Section"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_E) },
          [this] { masterPanel->toggle(); lastPanel = masterPanel; });
     add ("master.addPlugin", Category::master, tr ("&Add Plugin..."), { KS (Qt::CTRL | Qt::ALT | Qt::Key_E) }, [this]
@@ -874,9 +883,9 @@ void MainWindow::buildMenus()
                                "album.moveEarlier", "album.moveLater", "album.longerPause", "album.shorterPause", "-",
                                "album.songProperties", "album.openSong", "album.removeSong", "-",
                                "album.properties", "album.twoTracks", "album.export" } },
-        { tr ("A&nalyze"),   { "analyze.loudness", "-", "analyze.beats", "analyze.onsets", "analyze.tempoKey", "analyze.vamp", "-", "analyze.window", "view.meters", "analyze.imagingView", "analyze.resetMeters", "-", "view.spectral", "-", "@nyquist.analyze" } },
+        { tr ("A&nalyze"),   { "analyze.loudness", "-", "analyze.beats", "analyze.onsets", "analyze.tempoKey", "analyze.vamp", "-", "analyze.window", "view.meters", "analyze.imagingView", "analyze.resetMeters", "-", "analyze.plugin", "-", "view.spectral", "-", "@nyquist.analyze" } },
         { tr ("Too&ls"),     { "tools.macroRecord", "tools.macroApply", "tools.macros", "-", "tools.batch", "-", "tools.managePlugins", "-", "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan", "-", "tools.resetConfig" } },
-        { tr ("Ma&ster"),    { "view.master", "view.chain", "master.addPlugin", "master.bypass", "-", "master.assistant", "-", "master.render", "master.renderNew", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
+        { tr ("Ma&ster"),    { "view.master", "view.chain", "master.addPlugin", "master.bypass", "analyze.plugin", "-", "master.assistant", "-", "master.render", "master.renderNew", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
         { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
         { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
@@ -1021,6 +1030,7 @@ void MainWindow::buildPanels()
 
     masterWidget = new MasterPanel (engine, waveform, this);
     connect (masterWidget, &MasterPanel::renderRequested, this, &MainWindow::renderInPlace);
+    connect (masterWidget, &MasterPanel::analyzeRequested, this, &MainWindow::analyzeSlot);
     connect (masterWidget, &MasterPanel::message, this, [this] (const QString& text)
     {
         if (! text.isEmpty())
@@ -1059,6 +1069,7 @@ void MainWindow::buildPanels()
         masterWidget->refresh();
         commands.action (QStringLiteral ("master.bypass"))->setChecked (engine.isMasterBypassed());
     });
+    connect (chainRow, &ChainRow::analyzeRequested, this, &MainWindow::analyzeSlot);
     connect (chainRow, &ChainRow::message, this, [this] (const QString& text) { statusBar()->showMessage (text, 6000); });
 
     // The chain row spans the whole width along the bottom, under the side panels.
@@ -4023,6 +4034,33 @@ void MainWindow::showBatch()
     batchWindow->show();
     batchWindow->raise();
     batchWindow->activateWindow();
+}
+
+PluginAnalyzer* MainWindow::pluginAnalyzer()
+{
+    if (pluginAnalyzerWin == nullptr)
+    {
+        pluginAnalyzerWin = new PluginAnalyzer (engine, this);
+        connect (pluginAnalyzerWin, &PluginAnalyzer::chainChanged, this, [this] { masterWidget->refresh(); chainRow->rebuild(); });
+        connect (pluginAnalyzerWin, &PluginAnalyzer::closed, this, [this]
+        {
+            activateWindow();
+            waveform->setFocus();
+        });
+    }
+    return pluginAnalyzerWin;
+}
+
+void MainWindow::analyzeSlot (int slot)
+{
+    auto* w = pluginAnalyzer();
+    if (slot >= 0)
+        w->analyseSlot (slot);
+    else
+        w->analyseMasterSection();
+    w->show();
+    w->raise();
+    w->activateWindow();
 }
 
 AnalysisWindow* MainWindow::analysisWindow()

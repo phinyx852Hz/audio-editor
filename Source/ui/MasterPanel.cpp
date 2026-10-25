@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MasterPanel.h"
+#include "AliasScope.h"
 #include "Panels.h"
 #include "PhiWindow.h"
 
@@ -37,7 +38,7 @@ MasterPanel::MasterPanel (AudioEngine& e, QWidget* home, QWidget* parent)
     slotList->setAccessibleDescription (tr ("Enter edits parameters or adds a plugin, Insert picks a plugin, Delete removes it, "
                                             "B bypasses, E opens the plugin's own window, Ctrl+Up and Ctrl+Down reorder."));
     slotList->installEventFilter (this);
-    slotList->installEventFilter (new NavigationKeyGuard (home, { Qt::Key_Delete, Qt::Key_Backspace, Qt::Key_Insert }, slotList));
+    slotList->installEventFilter (new NavigationKeyGuard (home, { Qt::Key_Delete, Qt::Key_Backspace, Qt::Key_Insert, Qt::Key_A }, slotList));
     setFocusProxy (slotList);
 
     gainBox->setRange (-60.0, 24.0);
@@ -70,7 +71,9 @@ MasterPanel::MasterPanel (AudioEngine& e, QWidget* home, QWidget* parent)
     auto* addButton = new QPushButton (tr ("&Add Plugin..."), this);
     auto* renderButton = new QPushButton (tr ("&Render in Place"), this);
     auto* scanButton = new QPushButton (tr ("&Scan Plugins"), this);
-    for (auto* b : { addButton, renderButton, scanButton })
+    auto* analyzeButton = new QPushButton (tr ("Anal&yze"), this);
+    analyzeButton->setToolTip (tr ("Measures the selected plugin (or the whole Master Section) in the Plugin Analyzer (A in the list)"));
+    for (auto* b : { addButton, renderButton, scanButton, analyzeButton })
         b->setAutoDefault (false);
 
     auto* gainRow = new QFormLayout;
@@ -86,6 +89,7 @@ MasterPanel::MasterPanel (AudioEngine& e, QWidget* home, QWidget* parent)
     buttons->addWidget (addButton);
     buttons->addWidget (renderButton);
     buttons->addWidget (scanButton);
+    buttons->addWidget (analyzeButton);
 
     auto* layout = new QVBoxLayout (this);
     layout->setContentsMargins (6, 6, 6, 6);
@@ -94,6 +98,14 @@ MasterPanel::MasterPanel (AudioEngine& e, QWidget* home, QWidget* parent)
     layout->addWidget (bypassBox);
     layout->addLayout (buttons);
     layout->addWidget (summary);
+    aliasScope = new AliasScope (engine, this);
+    layout->addWidget (aliasScope);
+    connect (aliasScope, &AliasScope::analyzeRequested, this, [this] { Q_EMIT analyzeRequested (-1); });
+    connect (analyzeButton, &QPushButton::clicked, this, [this]
+    {
+        const auto slot = currentSlot();
+        Q_EMIT analyzeRequested (slot >= 0 && ! engine.masterSlot (slot).empty ? slot : -1);
+    });
 
     connect (slotList, &QListWidget::itemActivated, this, [this] (QListWidgetItem*)
     {
@@ -306,6 +318,10 @@ bool MasterPanel::eventFilter (QObject* watched, QEvent* e)
                 refresh();
                 Q_EMIT message (tr ("Removed %1").arg (QString::fromStdString (info.name)));
             }
+            return true;
+
+        case Qt::Key_A:
+            Q_EMIT analyzeRequested (info.empty ? -1 : slot);
             return true;
 
         case Qt::Key_B:

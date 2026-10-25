@@ -1051,7 +1051,7 @@ bool ChainRow::handles (const QKeyEvent* k)
         case Qt::Key_Left: case Qt::Key_Right: case Qt::Key_Up: case Qt::Key_Down:
         case Qt::Key_Plus: case Qt::Key_Equal: case Qt::Key_Minus: case Qt::Key_PageUp: case Qt::Key_PageDown:
         case Qt::Key_Return: case Qt::Key_Enter: case Qt::Key_Insert: case Qt::Key_Delete: case Qt::Key_Backspace:
-        case Qt::Key_B: case Qt::Key_S: case Qt::Key_E: case Qt::Key_Escape:
+        case Qt::Key_A: case Qt::Key_B: case Qt::Key_S: case Qt::Key_E: case Qt::Key_Escape:
         case Qt::Key_F2: case Qt::Key_Period:
         case Qt::Key_0: case Qt::Key_1: case Qt::Key_2: case Qt::Key_3: case Qt::Key_4:
         case Qt::Key_5: case Qt::Key_6: case Qt::Key_7: case Qt::Key_8: case Qt::Key_9:
@@ -1183,6 +1183,7 @@ void ChainRow::keyPressEvent (QKeyEvent* k)
             break;
         }
 
+        case Qt::Key_A: Q_EMIT analyzeRequested (isPlugin ? card->slot() : -1); break;
         case Qt::Key_B: toggleBypass(); break;
         case Qt::Key_S: toggleSolo(); break;
         case Qt::Key_E:

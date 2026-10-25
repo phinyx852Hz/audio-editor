@@ -84,6 +84,8 @@ target_sources(${APP_ID} PRIVATE
     Source/core/Nyquist.cpp
     Source/core/Album.cpp
     Source/core/MasterAssist.cpp
+    Source/core/PluginMeasure.cpp
+    Source/core/PhiForensics.cpp
     Source/mixer/MixAssist.cpp
     Source/engine/AudioCapture.cpp
     Source/engine/AudioEngine.cpp
@@ -99,6 +101,8 @@ target_sources(${APP_ID} PRIVATE
     Source/engine/Prism.cpp
     Source/engine/PluginInstrument.cpp
     Source/engine/PluginEffect.cpp
+    Source/engine/PluginProbe.cpp
+    Source/engine/AnalyzeCommand.cpp
     Source/engine/StockFrame.cpp
     Source/engine/InstrumentFrame.cpp
     Source/engine/StockPlugins.cpp
@@ -114,6 +118,9 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/GainHud.cpp
     Source/ui/LiveEdits.cpp
     Source/ui/Analysis.cpp
+    Source/ui/AnalyzerPlot.cpp
+    Source/ui/PluginAnalyzer.cpp
+    Source/ui/AliasScope.cpp
     Source/ui/ReferencePanel.cpp
     Source/ui/ReferenceSection.cpp
     Source/ui/ExportSection.cpp
@@ -393,6 +400,8 @@ if(PHI_BUILD_TESTS)
         Source/core/Nyquist.cpp
         Source/core/Album.cpp
         Source/core/MasterAssist.cpp
+        Source/core/PluginMeasure.cpp
+        Source/core/PhiForensics.cpp
         Source/mixer/MixAssist.cpp)
     target_link_libraries(phi-core-tests PRIVATE phi_nyquist phi_rubberband phi_mysofa)
     target_compile_definitions(phi-core-tests PRIVATE PHI_DEFAULT_HRTF="${PHI_DEFAULT_HRTF}")

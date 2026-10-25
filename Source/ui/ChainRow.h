@@ -141,6 +141,7 @@ private:
 // or Page Up/Down) turn it, F2 or a digit types an exact value (so does a double
 // click), Enter edits all parameters, Insert adds a plugin after
 // the card, Delete removes it, B bypasses, S solos, E opens the plugin's window,
+// A measures it in the Plugin Analyzer (the whole Master Section from another card),
 // Ctrl+Left/Right moves the plugin, Esc returns to the waveform.
 // Shift+Left/Right picks several plugins; Ctrl+G groups them into a Prism and
 // Ctrl+Shift+G ungroups one. Enter on a Prism pops it out to edit (PrismEditor);
@@ -161,6 +162,7 @@ public:
 
 Q_SIGNALS:
     void chainChanged();
+    void analyzeRequested (int slot);   // A: the Plugin Analyzer on a slot, -1 the whole Master Section
     void message (const QString&);
 
 protected:

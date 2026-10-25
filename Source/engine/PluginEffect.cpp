@@ -75,6 +75,13 @@ namespace
 
         void reset() override { pendingReset = true; }
 
+        int latency() const override
+        {
+            int samples = 0;
+            const_cast<PluginEffect*> (this)->guard ([&] { samples = plugin->getLatencySamples(); });
+            return samples;
+        }
+
         bool hasWindow() const override
         {
             const auto* display = std::getenv ("DISPLAY");

@@ -504,6 +504,9 @@ private:
     class TrackerWindow* trackerWin = nullptr;
     class AnalysisWindow* analysisWindow();   // Analysis Meters, made when first opened
     class AnalysisWindow* analysisWin = nullptr;
+    class PluginAnalyzer* pluginAnalyzer();   // Plugin Analyzer, made when first opened
+    class PluginAnalyzer* pluginAnalyzerWin = nullptr;
+    void analyzeSlot (int slot);              // opens it on a Master Section slot (-1: the whole section)
     void feedAnalysisAmbisonics();
     const class AudioData* ambiFedData = nullptr;   // what the Ambisonics card last got
     Frame ambiFedAt = -1;
