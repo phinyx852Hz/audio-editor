@@ -3,6 +3,7 @@
 #include "PhiMark.h"
 #include "Potentiometer.h"
 #include "SamplerWindow.h"
+#include "ExtremeSettings.h"
 #include "Settings.h"
 #include "SlicerWindow.h"
 #include "Theme.h"
@@ -1449,6 +1450,7 @@ protected:
         else
         {
             window.select (index);
+            window.engageTrack();
             window.showDevices();   // a click on the strip brings its Device Chain back from a clip
         }
         QFrame::mousePressEvent (e);
@@ -1847,7 +1849,10 @@ protected:
         const auto pos = e->position();
         const int row = rowAt (pos.y());
         if (row >= 0 && pos.y() >= rulerHeight)
+        {
             window.select (row);
+            window.engageTrack();
+        }
         drag = Drag::none;
         pressPos = pos;
         moved = false;
@@ -3298,11 +3303,12 @@ protected:
             return;   // the context menu
         switch (hit.kind)
         {
-            case Hit::header: window.select (hit.track); window.moveCursor (hit.track, window.cursorScene); window.showDevices(); break;
+            case Hit::header: window.select (hit.track); window.engageTrack(); window.moveCursor (hit.track, window.cursorScene); window.showDevices(); break;
             case Hit::back: window.engine.backToTimeline (hit.track); break;
             case Hit::slotCell:
             case Hit::play:
                 window.moveCursor (hit.track, hit.scene);
+                window.engageTrack();
                 // A clip is drawn in the Device Chain's place; an empty slot shows the devices.
                 if (window.slots[(size_t) hit.track][(size_t) hit.scene] != nullptr)
                     window.showSlotClip (hit.track, hit.scene);
@@ -4007,6 +4013,7 @@ public:
         rowLayout->setContentsMargins (6, 4, 6, 4);
         rowLayout->setSpacing (6);
         scroll->setWidget (row);
+        row->setAutoFillBackground (false);   // setWidget turns it on; see-through like the strips
         outer->addWidget (scroll);
         setMinimumHeight (120);
     }
@@ -4315,6 +4322,13 @@ public:
     {
         setAccessibleName (MixerWindow::tr ("Clip"));
         setMinimumHeight (120);
+        // A MIDI clip's Φ right on its notes (owner, 2026-10-25): the same pitches, dealt out
+        // again in time, another order each press.
+        phi = new PhiButton (MixerWindow::tr ("Φ: the notes' places dealt out again"), this, false);
+        phi->setToolTip (MixerWindow::tr ("Φ: the same pitches and rhythm, the notes dealt out again along the golden ratio. Again for another order"));
+        phi->setFocusPolicy (Qt::NoFocus);
+        phi->hide();
+        QObject::connect (phi, &QToolButton::clicked, this, [this] { window.phiShownMidi(); });
     }
 
     int shownTrack() const { return track; }
@@ -4358,7 +4372,28 @@ public:
                 name = window.slotName (track, scene);
             }
         }
+        // A hybrid track's clip with the clip of the other kind it plays with: the one on the
+        // track that overlaps it most, drawn beside it (owner, 2026-10-25: "1/2 audio and 1/2 MIDI").
+        hasPartner = false;
+        if (found && id != 0 && window.engine.strip (track).mode.load() == (int) mixer::TrackMode::hybrid)
+        {
+            Frame most = 0;
+            for (const auto& c : window.engine.clips (track))
+            {
+                if (c.isMidi() == clip.isMidi() || c.muted)
+                    continue;
+                const auto overlap = std::min (c.end(), clip.end()) - std::max (c.start, clip.start);
+                if (overlap > most)
+                {
+                    most = overlap;
+                    partner = c;
+                    hasPartner = true;
+                }
+            }
+        }
         measure();
+        phi->setVisible (found && clip.isMidi());
+        placePhi();
         update();
         return found;
     }
@@ -4399,15 +4434,39 @@ protected:
         const auto area = QRectF (r.left() + 8, nameBox.bottom() + 8, r.width() - 16, r.bottom() - nameBox.bottom() - 14);
         if (area.height() < 10 || area.width() < 10)
             return;
-        if (clip.isMidi())
-            paintNotes (g, area, colour);
-        else
+        auto waveArea = area, notesArea = area;
+        if (hasPartner)
+        {
+            // Half each: the audio on the left, the MIDI on the right, each named.
+            const auto half = (area.width() - 12) / 2.0;
+            waveArea.setWidth (half);
+            notesArea.setLeft (area.right() - half);
+            g.setPen (QPen (palette().color (QPalette::Mid), 1.0));
+            g.drawLine (QPointF (area.center().x(), area.top()), QPointF (area.center().x(), area.bottom()));
+            const auto& partnerPath = partner.audio != nullptr ? partner.audio->path : partner.midi->path;
+            const auto other = QFileInfo (QString::fromStdString (partnerPath)).completeBaseName();
+            g.setPen (palette().color (QPalette::PlaceholderText));
+            const auto label = [&] (const QRectF& at, const QString& kind, const QString& who)
+            {
+                g.drawText (QRectF (at.left(), at.top(), at.width(), 14), Qt::AlignLeft | Qt::AlignVCenter,
+                            g.fontMetrics().elidedText (kind + QStringLiteral (": ") + who, Qt::ElideRight, (int) at.width()));
+            };
+            label (waveArea, MixerWindow::tr ("Audio"), clip.isMidi() ? other : name);
+            label (notesArea, MixerWindow::tr ("MIDI"), clip.isMidi() ? name : other);
+            waveArea.setTop (waveArea.top() + 16);
+            notesArea.setTop (notesArea.top() + 16);
+        }
+        if (! notes.empty() || notePart.midi != nullptr)
+            paintNotes (g, notesArea, colour);
+        if (wavePart.audio != nullptr)
         {
             g.setPen (QPen (palette().color (QPalette::Mid), 1.0));
-            g.drawLine (QPointF (area.left(), area.center().y()), QPointF (area.right(), area.center().y()));
-            paintWave (g, area, colour);
+            g.drawLine (QPointF (waveArea.left(), waveArea.center().y()), QPointF (waveArea.right(), waveArea.center().y()));
+            paintWave (g, waveArea, colour);
         }
     }
+
+    void resizeEvent (QResizeEvent*) override { placePhi(); }
 
     void mouseDoubleClickEvent (QMouseEvent*) override
     {
@@ -4423,10 +4482,15 @@ private:
     {
         peaks.clear();
         notes.clear();
+        wavePart = notePart = {};
         if (! found || clip.length <= 0)
             return;
-        if (clip.audio != nullptr)
+        (clip.isMidi() ? notePart : wavePart) = clip;
+        if (hasPartner)
+            (partner.isMidi() ? notePart : wavePart) = partner;
+        if (wavePart.audio != nullptr && wavePart.length > 0)
         {
+            const auto& clip = wavePart;
             const auto& a = *clip.audio;
             const auto total = a.length();
             constexpr int columns = 2048;
@@ -4448,8 +4512,9 @@ private:
                 peaks[(size_t) c] = { lo, hi };
             }
         }
-        else if (clip.midi != nullptr)
+        if (notePart.midi != nullptr)
         {
+            const auto& clip = notePart;
             std::map<int, std::pair<Frame, int>> held;   // pitch and channel: started at, velocity
             for (const auto& e : clip.midi->events)
             {
@@ -4520,7 +4585,7 @@ private:
         for (int p = low; p <= high; ++p)
             if (const auto k = p % 12; k == 1 || k == 3 || k == 6 || k == 8 || k == 10)
                 g.fillRect (QRectF (area.left(), area.bottom() - (p - low + 1) * rowHeight, area.width(), rowHeight), shade);
-        const auto from = (double) clip.offset, span = std::max (1.0, (double) clip.length);
+        const auto from = (double) notePart.offset, span = std::max (1.0, (double) notePart.length);
         for (const auto& n : notes)
         {
             const auto x0 = area.left() + std::max (0.0, (n.start - from) / span) * area.width();
@@ -4532,12 +4597,18 @@ private:
         }
     }
 
+    void placePhi() { phi->move (width() - phi->width() - 16, 9); }
+
     MixerWindow& window;
+    PhiButton* phi = nullptr;
     int track = -1;
     uint32_t id = 0;
     int scene = -1;
     bool found = false;
     mixer::Clip clip;
+    mixer::Clip partner;           // a hybrid track's clip of the other kind, beside it
+    bool hasPartner = false;
+    mixer::Clip wavePart, notePart;   // what is drawn: the audio and the MIDI
     QString name;
     std::vector<std::pair<float, float>> peaks;
     std::vector<Note> notes;
@@ -4588,7 +4659,8 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     launcherButton->setCheckable (true);
     inspectorButton = button (tr ("Inspector"), tr ("The Inspector, left of the strips: the selected track's mode, instrument, Pre, inserts, sends and width, and in the launcher its clip"));
     inspectorButton->setCheckable (true);
-    inspectorButton->setChecked (appSettings().value (QStringLiteral ("mixer/inspector"), true).toBool());
+    inspectorButton->setToolTip (tr ("The Inspector in the Finder's place, left of the tracks: the selected track's mode, instrument, Pre, "
+                                     "inserts, sends and width, and the clip picked. Picking a track shows it too; Ctrl+F brings the Finder back"));
     quantiseBox = new QComboBox (this);
     quantiseBox->setFocusPolicy (Qt::NoFocus);
     for (int q = 0; q < numQuantise; ++q)
@@ -4725,6 +4797,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     gridScroll->setFocusPolicy (Qt::NoFocus);
     gridScroll->setHorizontalScrollBarPolicy (Qt::ScrollBarAsNeeded);
     gridScroll->viewport()->setAutoFillBackground (false);
+    grid->setAutoFillBackground (false);   // setWidget turns it on; the grid fades its own background
     gridScroll->setMinimumHeight (120);
     launcherRow->addWidget (gridScroll, 1);
     launcherArea->hide();
@@ -4747,7 +4820,6 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     browser = new FileBrowser (*this);
     sideSplitter = new QSplitter (Qt::Horizontal, this);
     sideSplitter->setChildrenCollapsible (false);
-    sideSplitter->addWidget (browser);
     // The Inspector (owner, 2026-10-25): a column left of the tracks with the selected track's
     // deep settings (mode, instrument, layers and duck, Pre, every insert, sends, width) and the
     // clip under the launcher's cursor; the strips stay lean.
@@ -4807,11 +4879,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
         hint->setForegroundRole (QPalette::PlaceholderText);
         grid->addWidget (hint, 3, 0, 1, 4);
 
-        connect (phi, &QToolButton::clicked, this, [this]
-        {
-            const auto turn = phiTurn++;
-            editShownMidi ([turn] (const midifile::Song& s) { return midifile::phiShuffle (s, turn); }, tr ("Φ: the notes dealt out again"));
-        });
+        connect (phi, &QToolButton::clicked, this, [this] { phiShownMidi(); });
         connect (duplicate, &QPushButton::clicked, this, [this] { editShownMidi ([] (const midifile::Song& s) { return midifile::duplicated (s); }, tr ("Duplicated into one clip")); });
         connect (half, &QPushButton::clicked, this, [this] { editShownMidi ([] (const midifile::Song& s) { return midifile::halfDensity (s); }, tr ("Half the density")); });
         connect (twice, &QPushButton::clicked, this, [this] { editShownMidi ([] (const midifile::Song& s) { return midifile::doubleDensity (s); }, tr ("Double the density")); });
@@ -4829,6 +4897,34 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     }
     midiClipBox->hide();
     inspectorLayout->addWidget (midiClipBox);
+    // An audio clip picked: Paulstretch at the top, with the stretch the editor last used.
+    audioClipBox = new QFrame (inspectorArea);
+    audioClipBox->setObjectName (QStringLiteral ("audioClipBox"));
+    audioClipBox->setStyleSheet (QStringLiteral ("QFrame#audioClipBox { border: 1px solid palette(mid); border-radius: 4px; }"));
+    {
+        auto* grid = new QGridLayout (audioClipBox);
+        grid->setContentsMargins (6, 6, 6, 6);
+        grid->setSpacing (4);
+        audioClipTitle = new QLabel (audioClipBox);
+        auto bold = audioClipTitle->font();
+        bold.setBold (true);
+        audioClipTitle->setFont (bold);
+        grid->addWidget (audioClipTitle, 0, 0, 1, 2);
+        auto* stretch = new QPushButton (tr ("Paulstretch"), audioClipBox);
+        stretch->setToolTip (tr ("The clip as it plays, stretched this many times longer with the editor's Extreme Stretch "
+                                 "settings, saved beside the mix. Ctrl+Z puts a track's clip back"));
+        stretchRatioBox = new QDoubleSpinBox (audioClipBox);
+        stretchRatioBox->setRange (1.0, 10000.0);
+        stretchRatioBox->setDecimals (2);
+        stretchRatioBox->setSuffix (tr (" ×"));
+        stretchRatioBox->setValue (extremeRatio());
+        stretchRatioBox->setToolTip (tr ("How many times longer; shared with the editor's Extreme Stretch"));
+        grid->addWidget (stretch, 1, 0);
+        grid->addWidget (stretchRatioBox, 1, 1);
+        connect (stretch, &QPushButton::clicked, this, [this] { stretchShownAudio(); });
+    }
+    audioClipBox->hide();
+    inspectorLayout->addWidget (audioClipBox);
     inspectorLayout->addWidget (rack);
     inspectorLayout->addStretch (1);
     inspectorScroll = new QScrollArea (this);
@@ -4839,16 +4935,19 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     inspectorScroll->setHorizontalScrollBarPolicy (Qt::ScrollBarAlwaysOff);
     inspectorScroll->viewport()->setAutoFillBackground (false);
     inspectorArea->setAutoFillBackground (false);
-    inspectorScroll->setMinimumWidth (200);
-    inspectorScroll->setMaximumWidth (300);
-    inspectorScroll->setVisible (appSettings().value (QStringLiteral ("mixer/inspector"), true).toBool());
-    sideSplitter->addWidget (inspectorScroll);
+    // The Finder and the Inspector share one column, the same width in both views
+    // (owner, 2026-10-25: "a relatively static view").
+    sideStack = new QStackedWidget (this);
+    sideStack->addWidget (browser);
+    sideStack->addWidget (inspectorScroll);
+    sideStack->setMinimumWidth (270);
+    sideStack->setMaximumWidth (320);
+    sideSplitter->addWidget (sideStack);
     sideSplitter->addWidget (splitter);
     sideSplitter->setStretchFactor (0, 0);
     sideSplitter->setStretchFactor (1, 1);
-    sideSplitter->setSizes ({ 240, 1100 });
-    sideSplitter->restoreState (appSettings().value (QStringLiteral ("mixer/sideSplitter")).toByteArray());
-    browser->setVisible (appSettings().value (QStringLiteral ("mixer/browser"), true).toBool());
+    sideSplitter->setSizes ({ 260, 1100 });
+    sideSplitter->restoreState (appSettings().value (QStringLiteral ("mixer/sideColumn")).toByteArray());
 
     // F6 and Tab go round the browser, the tracks and the strips.
     auto* nextSection = new QShortcut (QKeySequence (Qt::Key_F6), this);
@@ -4887,18 +4986,13 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     devicePanel->addWidget (devices);
     devicePanel->addWidget (clipView);
     devicePanel->setAutoFillBackground (false);
-    bottomSplitter = new QSplitter (Qt::Vertical, this);
-    bottomSplitter->setChildrenCollapsible (false);
-    bottomSplitter->addWidget (sideSplitter);
-    bottomSplitter->addWidget (devicePanel);
-    bottomSplitter->setStretchFactor (0, 1);
-    bottomSplitter->setStretchFactor (1, 0);
-    bottomSplitter->setSizes ({ 700, 190 });
-    bottomSplitter->restoreState (appSettings().value (QStringLiteral ("mixer/bottomSplitter")).toByteArray());
+    // Fixed along the bottom (owner, 2026-10-25), see-through like the rest of the mixer.
+    devicePanel->setFixedHeight (190);
 
     auto* layout = new QVBoxLayout (this);
     layout->addWidget (topScroll);
-    layout->addWidget (bottomSplitter, 1);
+    layout->addWidget (sideSplitter, 1);
+    layout->addWidget (devicePanel);
     layout->addLayout (bottom);
 
     connect (toStartButton, &QPushButton::clicked, this, [this] { toStart(); });
@@ -4922,10 +5016,9 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     connect (launcherButton, &QPushButton::toggled, this, [this] (bool on) { showLauncher (on); });
     connect (inspectorButton, &QPushButton::toggled, this, [this] (bool on)
     {
-        inspectorScroll->setVisible (on);
-        appSettings().setValue (QStringLiteral ("mixer/inspector"), on);
-        refreshInspector();
-        setFocus();
+        showSideFinder (! on);
+        if (on)
+            setFocus();
     });
     connect (quantiseBox, &QComboBox::activated, this, [this] (int q)
     {
@@ -5024,7 +5117,7 @@ void MixerWindow::refreshInspector()
         if (inspectorStrip == nullptr && track >= 0)
         {
             inspectorStrip = new MixerStrip (*this, track, true);
-            inspectorLayout->insertWidget (inspectorLayout->indexOf (midiClipBox) + 1, inspectorStrip);
+            inspectorLayout->insertWidget (inspectorLayout->indexOf (audioClipBox) + 1, inspectorStrip);
         }
         if (inspectorStrip != nullptr)
         {
@@ -5042,6 +5135,12 @@ void MixerWindow::refreshInspector()
     });
 }
 
+void MixerWindow::phiShownMidi()
+{
+    const auto turn = phiTurn++;
+    editShownMidi ([turn] (const midifile::Song& s) { return midifile::phiShuffle (s, turn); }, tr ("Φ: the notes dealt out again"));
+}
+
 void MixerWindow::refreshMidiClipBox()
 {
     if (midiClipBox == nullptr)
@@ -5050,6 +5149,14 @@ void MixerWindow::refreshMidiClipBox()
     midiClipBox->setVisible (show);
     if (show)
         midiClipTitle->setText (tr ("MIDI Clip: %1").arg (clipView->shownName()));
+    const bool audio = showingClip && ! clipView->showsMidi();
+    audioClipBox->setVisible (audio);
+    if (audio)
+    {
+        audioClipTitle->setText (tr ("Audio Clip: %1").arg (clipView->shownName()));
+        const QSignalBlocker quiet (stretchRatioBox);
+        stretchRatioBox->setValue (extremeRatio());   // the editor may have changed it
+    }
 }
 
 QString MixerWindow::editsFolder() const
@@ -5171,7 +5278,7 @@ void MixerWindow::updateDevicePanel()
     if (devicePanel == nullptr)
         return;
     refreshMidiClipBox();
-    const bool show = selected < mixer::masterIndex;
+    const bool show = true;   // fixed along the bottom; the master's shows nothing to change
     if (devicePanel->isHidden() == show)
     {
         devicePanel->setVisible (show);
@@ -6506,6 +6613,7 @@ void MixerWindow::keyPressEvent (QKeyEvent* e)
             case Qt::Key_W: close(); return;
             case Qt::Key_Z: withShift ? redo() : undo(); return;
             case Qt::Key_B:
+            case Qt::Key_F:
                 if (! withShift)
                 {
                     toggleBrowser();
@@ -6523,7 +6631,10 @@ void MixerWindow::keyPressEvent (QKeyEvent* e)
         if (key >= Qt::Key_1 && key <= Qt::Key_8 && ! shift)
         {
             if (key - Qt::Key_1 < engine.numTracks())
+            {
                 select (key - Qt::Key_1);
+                engageTrack();
+            }
             return;
         }
         switch (key)
@@ -6612,8 +6723,7 @@ void MixerWindow::closeEvent (QCloseEvent* e)
             t.editor->close();
     autosave();
     appSettings().setValue (QStringLiteral ("mixer/splitter"), launcherSplit ? timelineSplit : splitter->saveState());
-    appSettings().setValue (QStringLiteral ("mixer/sideSplitter"), sideSplitter->saveState());
-    appSettings().setValue (QStringLiteral ("mixer/bottomSplitter"), bottomSplitter->saveState());
+    appSettings().setValue (QStringLiteral ("mixer/sideColumn"), sideSplitter->saveState());
     QWidget::closeEvent (e);
     Q_EMIT closed();
 }
@@ -7326,13 +7436,64 @@ void MixerWindow::updateUpperArea()
 
 void MixerWindow::toggleBrowser()
 {
-    browser->setVisible (browser->isHidden());
-    if (! launcherShown())
-        appSettings().setValue (QStringLiteral ("mixer/browser"), ! browser->isHidden());
-    if (browser->isVisible())
-        browser->view()->setFocus();
-    else
+    showSideFinder (! finderShown);
+    if (! finderShown)
         setFocus();
+}
+
+void MixerWindow::showSideFinder (bool finder)
+{
+    finderShown = finder;
+    if (inspectorButton != nullptr)
+    {
+        const QSignalBlocker quiet (inspectorButton);
+        inspectorButton->setChecked (! finder);
+    }
+    if (! isWindow())
+    {
+        // In the editor's place: the editor's Find panel is the Finder, beside the mixer.
+        sideStack->setCurrentWidget (inspectorScroll);
+        sideStack->setVisible (! finder);
+        Q_EMIT finderWanted (finder);
+    }
+    else
+    {
+        sideStack->show();
+        sideStack->setCurrentWidget (finder ? static_cast<QWidget*> (browser) : inspectorScroll);
+        if (finder && isVisible())
+            browser->view()->setFocus();
+    }
+    if (! finder)
+        refreshInspector();
+}
+
+void MixerWindow::engageTrack()
+{
+    if (finderShown)
+        showSideFinder (false);
+}
+
+QList<QWidget*> MixerWindow::focusAreas() const
+{
+    return { lanes, browser->view(), const_cast<MixerWindow*> (this) };
+}
+
+void MixerWindow::toggleDevicePanel()
+{
+    if (showingClip)
+    {
+        showDevices();
+        status->setText (tr ("The Device Chain (Shift+Tab over it goes back to the clip)"));
+    }
+    else if (clipView->shownTrack() == selected && clipView->reload())
+    {
+        showingClip = true;
+        devicePanel->setCurrentWidget (clipView);
+        updateDevicePanel();
+        status->setText (tr ("The clip (Shift+Tab over it goes back to the Device Chain)"));
+    }
+    else
+        status->setText (tr ("Click a clip of this track to show it here"));
 }
 
 // The sections in turn: the browser, the tracks across time, the strips (the window itself).
@@ -7362,8 +7523,14 @@ void MixerWindow::cycleFocus (bool forward)
 
 // Tab (and Shift+Tab) switch between the clip launcher and the tracks across time, as in
 // Ableton (owner, 2026-10-25); F6 still goes round the sections.
-bool MixerWindow::focusNextPrevChild (bool)
+bool MixerWindow::focusNextPrevChild (bool next)
 {
+    // Shift+Tab with the pointer over the bottom panel: the Device Chain or the clip.
+    if (! next && devicePanel->underMouse())
+    {
+        toggleDevicePanel();
+        return true;
+    }
     if (launcherShown())
     {
         showLauncher (false);
@@ -7379,15 +7546,11 @@ bool MixerWindow::focusNextPrevChild (bool)
 
 //==============================================================================
 // A clip edited in the editor: what it sounds like now, and the edit put back.
-AudioDataPtr MixerWindow::clipAudio (int track, uint32_t id, QString& name) const
+namespace
 {
-    if (track < 0 || track >= engine.numTracks())
-        return nullptr;
-    for (const auto& c : engine.clips (track))
+    // The part of an audio clip heard, the way it plays.
+    AudioDataPtr heardAudio (const mixer::Clip& c, double rate)
     {
-        if (c.id != id || c.audio == nullptr)
-            continue;
-        // The part heard, the way it plays.
         const auto& a = *c.audio;
         std::vector<float> left ((size_t) c.length), right ((size_t) c.length);
         for (Frame k = 0; k < c.length; ++k)
@@ -7397,33 +7560,35 @@ AudioDataPtr MixerWindow::clipAudio (int track, uint32_t id, QString& name) cons
             left[(size_t) k] = a.left[src];
             right[(size_t) k] = a.right[src];
         }
-        AudioData::Builder b (a.mono ? 1 : 2, rate());
+        AudioData::Builder b (a.mono ? 1 : 2, rate);
         const float* ptrs[2] = { left.data(), right.data() };
         b.append (ptrs, (int) c.length);
-        name = tr ("Track %1 %2").arg (track + 1).arg (QFileInfo (QString::fromStdString (a.path)).completeBaseName());
         return b.finish();
+    }
+}
+
+AudioDataPtr MixerWindow::clipAudio (int track, uint32_t id, QString& name) const
+{
+    if (track < 0 || track >= engine.numTracks())
+        return nullptr;
+    for (const auto& c : engine.clips (track))
+    {
+        if (c.id != id || c.audio == nullptr)
+            continue;
+        name = tr ("Track %1 %2").arg (track + 1).arg (QFileInfo (QString::fromStdString (c.audio->path)).completeBaseName());
+        return heardAudio (c, rate());
     }
     return nullptr;
 }
 
-bool MixerWindow::replaceClipAudio (int track, uint32_t id, const AudioData& edited, const QString& name, QString& error)
+mixer::AudioClipPtr MixerWindow::saveClipEdit (const AudioData& edited, const QString& name, QString& file, QString& error)
 {
-    if (track < 0 || track >= engine.numTracks())
-        return false;
-    auto list = engine.clips (track);
-    auto it = std::find_if (list.begin(), list.end(), [id] (const mixer::Clip& c) { return c.id == id; });
-    if (it == list.end())
-    {
-        error = tr ("The clip is no longer on track %1.").arg (track + 1);
-        return false;
-    }
-
     // Saved beside the mix (in the Music folder until it is saved), the original left as it was.
     const auto base = editsFolder();
     QDir().mkpath (base);
     auto stem = name;
     stem.replace (QRegularExpression (QStringLiteral ("[/\\\\:*?\"<>|]")), QStringLiteral ("_"));
-    auto file = QDir (base).filePath (stem + QStringLiteral (".wav"));
+    file = QDir (base).filePath (stem + QStringLiteral (".wav"));
     for (int n = 2; QFileInfo::exists (file); ++n)
         file = QDir (base).filePath (QStringLiteral ("%1 %2.wav").arg (stem).arg (n));
     SaveOptions options;
@@ -7439,12 +7604,152 @@ bool MixerWindow::replaceClipAudio (int track, uint32_t id, const AudioData& edi
     if (! AudioEngine::saveFile (file.toStdString(), *sound, {}, {}, options, why))
     {
         error = tr ("The edit could not be saved to %1: %2").arg (file, QString::fromStdString (why));
+        return nullptr;
+    }
+    const auto clip = mixer::makeAudioClip (*sound, file.toStdString());
+    audioCache[file] = clip;
+    return clip;
+}
+
+bool MixerWindow::sendAudioToLauncher (const AudioData& sound, const QString& name, QString& error)
+{
+    QString file;
+    if (saveClipEdit (sound, name, file, error) == nullptr)
+        return false;
+    // Under the launcher's cursor when that slot is free, else the track's first empty one.
+    const auto track = selected < mixer::masterIndex ? selected : 0;
+    auto scene = slots[(size_t) track][(size_t) cursorScene] == nullptr ? cursorScene : firstEmptyScene (track);
+    if (scene < 0)
+    {
+        if (numScenes >= mixer::maxScenes)
+        {
+            error = tr ("%1 is full: all %2 scenes have a clip. Empty a slot (Delete) first.").arg (trackName (track)).arg (mixer::maxScenes);
+            return false;
+        }
+        scene = numScenes;   // a scene more
+    }
+    if (! launcherShown())
+        showLauncher (true);
+    loadSlot (track, scene, file);
+    moveCursor (track, scene);
+    status->setText (tr ("%1 is in the launcher on %2 (%3)").arg (name, trackName (track), file));
+    return true;
+}
+
+void MixerWindow::stretchShownAudio()
+{
+    if (! showingClip || clipView->showsMidi())
+        return;
+    const auto track = clipView->shownTrack();
+    const auto id = clipView->shownId();
+    const auto scene = clipView->shownScene();
+    mixer::Clip clip;
+    if (id != 0)
+    {
+        for (const auto& c : engine.clips (track))
+            if (c.id == id)
+                clip = c;
+    }
+    else if (scene >= 0 && slots[(size_t) track][(size_t) scene] != nullptr)
+        clip = slots[(size_t) track][(size_t) scene]->clip;
+    if (clip.audio == nullptr || clip.length < 2)
+        return;
+    const auto ratio = stretchRatioBox->value();
+    appSettings().setValue (QStringLiteral ("extreme/ratio"), ratio);
+    const auto sound = heardAudio (clip, rate());
+    const auto settings = loadExtremeSettings();
+    const auto title = tr ("Paulstretch");
+
+    auto progress = std::make_shared<std::atomic<float>> (0.0f);
+    auto cancel = std::make_shared<std::atomic<bool>> (false);
+    QProgressDialog dialog (tr ("Stretching %1 %2 times...").arg (clipView->shownName()).arg (ratio), tr ("Cancel"), 0, 1000, this);
+    dialog.setWindowTitle (title);
+    dialog.setWindowModality (Qt::WindowModal);
+    dialog.setMinimumDuration (300);
+    connect (&dialog, &QProgressDialog::canceled, this, [cancel] { cancel->store (true); });
+
+    struct Result { AudioDataPtr data; std::string error; };
+    QFutureWatcher<Result> watcher;
+    QEventLoop loop;
+    connect (&watcher, &QFutureWatcher<Result>::finished, &loop, &QEventLoop::quit);
+    QTimer poll;
+    connect (&poll, &QTimer::timeout, this, [&] { dialog.setValue ((int) (progress->load() * 1000.0f)); });
+    poll.start (50);
+    watcher.setFuture (QtConcurrent::run ([sound, ratio, settings, progress, cancel]
+    {
+        Result r;
+        r.data = paulstretch::stretch (*sound, 0, sound->length(), ratio, settings, r.error, progress.get(), cancel.get());
+        return r;
+    }));
+    loop.exec();
+    poll.stop();
+    dialog.reset();
+
+    const auto result = watcher.result();
+    if (result.data == nullptr)
+    {
+        if (! cancel->load())
+            QMessageBox::warning (this, title, result.error.empty() ? tr ("The clip could not be stretched.") : QString::fromStdString (result.error));
+        return;
+    }
+    auto stem = QFileInfo (QString::fromStdString (clip.audio->path)).completeBaseName();
+    if (stem.isEmpty())
+        stem = tr ("Clip");
+    stem.remove (QRegularExpression (QStringLiteral (" x[\\d.]+( \\d+)?$")));   // "pad x8" stretched again is "pad x4", not "pad x8 x4"
+    QString file, error;
+    const auto stretched = saveClipEdit (*result.data, QStringLiteral ("%1 x%2").arg (stem).arg (ratio), file, error);
+    if (stretched == nullptr)
+    {
+        QMessageBox::warning (this, title, error);
+        return;
+    }
+    if (id != 0)
+    {
+        remember();
+        auto list = engine.clips (track);
+        for (auto& c : list)
+            if (c.id == id)
+            {
+                c.audio = stretched;
+                c.offset = 0;
+                c.length = stretched->length();
+                c.reversed = false;
+            }
+        editClips (track, std::move (list));
+        status->setText (tr ("Stretched %1 times (%2); Ctrl+Z puts the clip back").arg (ratio).arg (file));
+    }
+    else
+    {
+        editSlot (track, scene, [&stretched] (mixer::Slot& x)
+        {
+            x.clip.audio = stretched;
+            x.clip.offset = 0;
+            x.clip.length = stretched->length();
+            x.clip.reversed = false;
+        });
+        status->setText (tr ("Stretched %1 times (%2)").arg (ratio).arg (file));
+    }
+    changed();
+}
+
+bool MixerWindow::replaceClipAudio (int track, uint32_t id, const AudioData& edited, const QString& name, QString& error)
+{
+    if (track < 0 || track >= engine.numTracks())
+        return false;
+    auto list = engine.clips (track);
+    auto it = std::find_if (list.begin(), list.end(), [id] (const mixer::Clip& c) { return c.id == id; });
+    if (it == list.end())
+    {
+        error = tr ("The clip is no longer on track %1.").arg (track + 1);
         return false;
     }
 
+    QString file;
+    const auto clip = saveClipEdit (edited, name, file, error);
+    if (clip == nullptr)
+        return false;
+
     remember();
-    const auto clip = mixer::makeAudioClip (*sound, file.toStdString());
-    audioCache[file] = clip;
     it->audio = clip;
     it->offset = 0;
     it->length = clip->length();
@@ -7464,8 +7769,6 @@ void MixerWindow::showLauncher (bool on)
     else
         lanes->setVisible (appSettings().value (QStringLiteral ("mixer/lanes"), true).toBool());
     updateUpperArea();
-    // The launcher takes the browser's room; Ctrl+B still brings it back.
-    browser->setVisible (! on && appSettings().value (QStringLiteral ("mixer/browser"), true).toBool());
     // The strips stay lean in both views; the Inspector has the rest.
     for (auto* strip : strips)
         strip->setCompact (true);

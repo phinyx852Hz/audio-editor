@@ -196,7 +196,7 @@ More templates can be added in the same way; each is a small file.
 | M / S / R | Mute, solo, record |
 | T | Step the thumbnail display |
 | V | Show or hide the tracks across time above the strips |
-| Ctrl+B | Show or hide the file browser |
+| Ctrl+B, Ctrl+F | The Finder or the Inspector in the left column |
 | F6 | Next section: browser, tracks, strips (Shift: back) |
 | Tab | Switch between the clip launcher and the tracks across time (Ableton) |
 | Ctrl+Z, Ctrl+Shift+Z | Undo, redo clip edits |
@@ -373,8 +373,13 @@ Device Chain and drag and drop (owner, 2026-10-25, "very close to Ableton's work
 - Clicking a clip on the tracks or in the launcher draws it there instead, read-only: an audio
   clip's waveform (double-click to edit it in the editor) or a MIDI clip's notes on a piano roll,
   in the track's colour. Clicking a track's strip, its name or an empty slot brings the chain back.
-- Picking the Master strip hides it; while the mixer is in the editor's place the editor's own
-  Device Chain (the master's) steps aside and comes back with the Master strip or the editor.
+- It stays fixed along the bottom, the same height in both views, and is see-through when PHI is.
+  While the mixer is in the editor's place the editor's own Device Chain (the master's) steps
+  aside, so it is never shown twice, and comes back with the editor.
+- Shift+Tab with the pointer over it switches between the Device Chain and the clip last picked
+  on that track. A MIDI clip there has its own Φ button (top right), the same as the Inspector's.
+- A clip on a hybrid track's timeline is drawn with the clip of the other kind that overlaps it
+  most: the audio on the left half, the MIDI on the right.
 - The browser's places list ends with Instruments (Synth, Sampler, Slicer and the instrument
   plugins found) and Audio Effects (built-in, stock, then each plugin format). Drag one onto a
   track's strip, the Inspector or the Device Chain: an instrument takes the instrument's place
@@ -402,7 +407,38 @@ Fast MIDI edits (owner, 2026-10-25: "MIDI editing, but really fast"; "the idea i
   Edits until the mix is saved. The clip plays it from the start, as it was heard (a reversed
   clip is turned round first). Ctrl+Z undoes an edit on the tracks. The code is in
   mixer/MidiFile.h (phiShuffle, duplicated, halfDensity, doubleDensity, toMode, scales), with
-  tests. The Sampler and Slicer windows of the Sample menu
+  tests.
+
+The left column (owner, 2026-10-25: "a relatively static view of the mixer, clip launcher and
+horizontal track view"):
+- The Finder and the Inspector share one column, the same width in both views. The Finder shows
+  first; clicking a track (its strip, its row, its launcher column or a slot) or picking it with
+  1-8 puts the Inspector in its place. Ctrl+F (Edit > Find, also in View) brings the Finder back,
+  and again goes back to the Inspector; the Inspector button does the same.
+- In the editor's place the Finder is the editor's Find panel (search, Selector, places), and the
+  mixer's own browser is not shown; closing the Find panel shows the Inspector. In a window of its
+  own the mixer's browser is the Finder (Ctrl+B too).
+- With Focus Follows Mouse on (View), pointing at the tracks, the mixer's browser or the strips
+  gives them the keyboard, as with the editor's panels.
+
+Between the editor and the mixer (owner, 2026-10-25):
+- Mixer > Send to Clip Launcher (Alt+F3) puts the sound in the editor, or its selection, into the
+  launcher: saved as a WAV in the Edits folder, into the slot under the launcher's cursor when it
+  is empty, else the selected track's first empty slot (a scene is added when all are full).
+- Double-clicking an audio clip on the tracks opens it in the editor; Ctrl+S there puts the edit
+  back on the clip (Ctrl+Z in the mixer undoes it) and returns to the tracks. F3 still does too.
+
+Paulstretch on an audio clip (owner, 2026-10-25: "a fast way to implement it ... in an audio clip
+on a horizontal track or a clip launcher clip"):
+- An audio clip picked (on the tracks or in the launcher) puts an Audio Clip section at the top of
+  the Inspector: **Paulstretch** and how many times longer. The ratio is the editor's Extreme
+  Stretch ratio (`extreme/ratio`), and the other settings are the ones Warp > Extreme Stretch last
+  used (`ExtremeSettings.h`), so a sound set up in the editor stretches the same way on a clip.
+- The clip is stretched as it plays (its part, reversed if it is), with progress and Cancel, and
+  saved as a 32-bit WAV, "<name> x<ratio>", in the same Edits folder. The clip then plays it from
+  the start; Ctrl+Z puts a track's clip back. A track clip that grows overlaps the clips after it.
+
+The Sampler and Slicer windows of the Sample menu
 could dock into the mixer as track 1 (the other thread's docking work).
 
 Patchbay (2026-10-22, docs/patchbay.md): while the patchbay plays (it always does live), the

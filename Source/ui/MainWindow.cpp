@@ -678,6 +678,21 @@ void MainWindow::registerCommands()
          [this] { chainPanel->toggle(); });
     add ("view.find", Category::view, tr ("&Find..."), { KS (Qt::CTRL | Qt::Key_F) }, [this]
     {
+        // The mixer in the editor's place: the Finder and the Inspector take turns.
+        if (mixerDocked() && centralStack->currentWidget() == mixerWin)
+        {
+            if (mixerWin->sideFinderShown() && findPanel->isShown() && findWidget->searchIsReady())
+            {
+                mixerWin->showSideFinder (false);
+                mixerWin->setFocus (Qt::ShortcutFocusReason);
+                return;
+            }
+            mixerWin->showSideFinder (true);
+            findWidget->focusSearch();
+            QTimer::singleShot (0, findWidget, [this] { findWidget->focusSearch(); });
+            lastPanel = findPanel;
+            return;
+        }
         // Ctrl+F gets the search ready to type over; pressed again it hides the panel.
         if (findWidget->searchIsReady())
         {
@@ -846,7 +861,7 @@ void MainWindow::buildMenus()
     // Menu titles carry & mnemonics, so Alt+F, Alt+E, Alt+P, Alt+M, Alt+A... open them.
     const QList<QPair<QString, QStringList>> layout {
         { tr ("&File"),      { "file.open", "album.new", "file.record", "-", "file.save", "file.saveAs", "file.export", "-", "file.metadata", "-", "file.close", "file.nextTab", "file.previousTab", "-", "file.quit" } },
-        { tr ("&Edit"),      { "edit.undo", "edit.redo", "-", "edit.cut", "edit.copy", "edit.copyToNew", "edit.paste", "edit.delete", "-",
+        { tr ("&Edit"),      { "edit.undo", "edit.redo", "-", "view.find", "-", "edit.cut", "edit.copy", "edit.copyToNew", "edit.paste", "edit.delete", "-",
                                "edit.trim", "edit.insertSilence", "edit.split", "edit.duplicate", "-", "edit.snapZero", "edit.snapGrid", "edit.narrowGrid", "edit.widenGrid", "-", "select.all", "select.none", "-",
                                "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
                                "select.toStart", "select.toEnd" } },
@@ -881,7 +896,7 @@ void MainWindow::buildMenus()
                                "@visual.artistic", "@visual.science", "-", "@visual.milkdrop", "@visual.rain", "@visual.web", "@visual.sonify", "-",
                                "view.opacityUp", "view.opacityDown", "view.opacityFull" } },
         { tr ("Mi&xer"),     { "mixer.window", "mixer.dock", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
-                               "mixer.playStop", "mixer.mixdown", "-", "mixer.assistant" } },
+                               "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "-", "mixer.assistant" } },
         { tr ("S&ample"),    { "sample.send", "sample.window", "sample.refresh", "-", "slice.send", "slice.window", "slice.refresh", "-",
                                "instrument.granular", "instrument.retroSampler", "-", "sample.midiInputs", "sample.panic" } },
         { tr ("S&ynth"),     { "instrument.wavetable", "instrument.modular", "instrument.additive", "-",
@@ -1908,6 +1923,15 @@ bool MainWindow::save()
 {
     if (! doc.isOpen())
         return false;
+
+    // A clip opened from the mixer's tracks: Ctrl+S puts the edit back on its clip and
+    // returns to the tracks (owner, 2026-10-25).
+    if (tabs[(size_t) activeTab].mixerClip != 0 && mixerWin != nullptr)
+    {
+        showMixer();   // returns the edits and closes their tabs
+        mixerWin->showLauncher (false);
+        return true;
+    }
 
     if (doc.isAlbum())
     {
