@@ -23,6 +23,7 @@ class AudioEngine;
 class QSpinBox;
 class QAbstractButton;
 namespace counterpoint { struct Settings; }
+namespace control { struct State; struct Command; }
 class StatusLine;
 class QScrollArea;
 class QDialog;
@@ -190,6 +191,10 @@ public:
     // A sound from the editor into the launcher (owner, 2026-10-25): saved as a WAV beside the
     // mix and put in the slot under the launcher's cursor, or the selected track's first empty one.
     bool sendAudioToLauncher (const AudioData& sound, const QString& name, QString& error);
+    // Control surfaces and MIDI Learn (MixerControl.cpp, docs/control-surfaces.md): the mix as
+    // their lights show it, and what their pads, knobs and buttons ask for.
+    control::State surfaceState() const;
+    void surfaceCommand (const control::Command&);
 
 Q_SIGNALS:
     void mixdownRequested();
@@ -345,6 +350,7 @@ private:
     double recordQuantise = 0.0;                // beats; 0 as played
     int takeNumber = 1;
     std::array<std::vector<uint32_t>, mixer::maxTracks> timelinePasses;   // a timeline take's clips so far, the newest kept
+    std::vector<qint64> taps;      // Tap Tempo's last taps, in ms
     struct LayerTake { int scene = -1; bool audio = false; };
     std::array<LayerTake, mixer::maxTracks> layerTakes;   // the half a track is recording, for the grid
     QString editsFolder() const;   // where edits of the mix's clips are saved

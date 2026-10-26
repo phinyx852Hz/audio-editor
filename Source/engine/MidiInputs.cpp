@@ -8,24 +8,30 @@
 
 struct MidiInputs::Impl final : public juce::MidiInputCallback
 {
-    void handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMessage& m) override
+    void handleIncomingMidiMessage (juce::MidiInput* source, const juce::MidiMessage& m) override
     {
         std::lock_guard g (lock);
-        if (! handler)
-            return;
         const auto channel = m.getChannel();
+        int status = 0, a = 0, b = 0;
         if (m.isNoteOn())
-            handler (0x90, channel, m.getNoteNumber(), m.getVelocity());
+            status = 0x90, a = m.getNoteNumber(), b = m.getVelocity();
         else if (m.isNoteOff())
-            handler (0x80, channel, m.getNoteNumber(), m.getVelocity());
+            status = 0x80, a = m.getNoteNumber(), b = m.getVelocity();
         else if (m.isController())
-            handler (0xB0, channel, m.getControllerNumber(), m.getControllerValue());
+            status = 0xB0, a = m.getControllerNumber(), b = m.getControllerValue();
         else if (m.isPitchWheel())
-            handler (0xE0, channel, m.getPitchWheelValue(), 0);
+            status = 0xE0, a = m.getPitchWheelValue();
+        else
+            return;
+        if (filter && filter (source != nullptr ? source->getName().toStdString() : std::string(), status, channel, a, b))
+            return;
+        if (handler)
+            handler (status, channel, a, b);
     }
 
     std::mutex lock;
     Handler handler;
+    Filter filter;
     std::map<std::string, std::unique_ptr<juce::MidiInput>> devices;
 };
 
@@ -82,4 +88,10 @@ void MidiInputs::setHandler (Handler h)
 {
     std::lock_guard g (impl->lock);
     impl->handler = std::move (h);
+}
+
+void MidiInputs::setFilter (Filter f)
+{
+    std::lock_guard g (impl->lock);
+    impl->filter = std::move (f);
 }

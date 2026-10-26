@@ -51,3 +51,29 @@ Its `convertEffectsFromFT2` and `convertVolumeToEffect` are ported from there to
 `Source/tracker/TrackerEdit.cpp` follows MilkyTracker's `tracker/ModuleEditor.cpp`
 and `tracker/PatternEditor.cpp` (Copyright 2009 Peter Barth, GPL-3.0-or-later)
 for new songs, instrument and sample slots, note entry and block operations.
+
+## DrivenByMoss (control surfaces)
+
+`Source/control/Devices.cpp` and `Source/control/ControlSurface.h` port device
+facts from [DrivenByMoss](https://github.com/git-moss/DrivenByMoss) by Jürgen
+Moßgraber (© 2017-2026), licensed LGPL-3.0
+(http://www.gnu.org/licenses/lgpl-3.0.txt): the MIDI port names each device
+shows on Linux, the SysEx that puts Launchpads in programmer mode and Push into
+Live mode and writes its colour palette, the Launchkey's DAW-mode messages, the
+pad, button, knob and fader numbers, the Novation palette's layout and the LED
+channels for flashing and pulsing (from `de.mossgrabers.controller.novation.
+launchpad`, `.novation.launchkey` and `.ableton.push`). No Java source is
+included; the code is PHI's own. LGPL-3.0 lets it be conveyed under GPL-3.0 and
+so combined with PHI's AGPL-3.0.
+
+## Ardour (Push 2 and 3's display)
+
+`Source/engine/PushDisplay.h/.cpp` drive Push's display the way Ardour's Push 2
+support does (`libs/surfaces/push2/push2.cc` and `canvas.cc`,
+https://github.com/Ardour/ardour, by Paul Davis and Robin Gareus, © 2016-2026,
+licensed GPL-2.0-or-later): the USB vendor and product ids, claiming interface
+0, the 16-byte frame header, the BGR565 pixels in rows of 1024 with 64 of
+filler, sent unXORed to bulk endpoint 1 every 40 ms. No Ardour source is
+included; the code is PHI's own. GPL-2.0-or-later can be conveyed under GPL-3.0
+and so combined with PHI's AGPL-3.0. Ableton's Push 2 Display Interface Manual
+(https://github.com/Ableton/push-interface) documents the same protocol.

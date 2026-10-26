@@ -7,10 +7,11 @@ arch=('x86_64')
 url="https://github.com/phinyx852Hz/audio-editor"
 license=('AGPL-3.0-only' 'GPL-3.0-only' 'GPL-2.0-or-later' 'LGPL-3.0-or-later' 'BSD-3-Clause' 'MIT' 'Apache-2.0' 'OFL-1.1' 'LicenseRef-Nyquist')
 # ffmpeg encodes and decodes the compressed formats, taglib writes their tags
+# libusb drives Push 2 and 3's displays
 # libsndfile is for Nyquist and the stock plugins; cairo, libglvnd and the X libraries (xcb-util-wm for OctaSine), fftw (Vaporizer2) and curl (Overtonium) for the stock plugins
 depends=('qt6-base' 'qt6-wayland' 'alsa-lib' 'libpipewire' 'freetype2' 'fontconfig'
          'cairo' 'libsndfile' 'libglvnd' 'libx11' 'libxrandr' 'libxcursor' 'libxext' 'libxi'
-         'ffmpeg' 'taglib' 'xcb-util-wm' 'fftw' 'curl')
+         'ffmpeg' 'taglib' 'xcb-util-wm' 'fftw' 'curl' 'libusb')
 optdepends=('qt6-svg: the Φ logo on the windows'
             'pipewire-jack: JACK output through PipeWire (recommended; jack2 also works)'
             'realtime-privileges: realtime scheduling for audio threads'

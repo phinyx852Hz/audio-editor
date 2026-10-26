@@ -100,6 +100,11 @@ target_sources(${APP_ID} PRIVATE
     Source/engine/BuiltinEffects.cpp
     Source/engine/PhiEffects.cpp
     Source/engine/MidiInputs.cpp
+    Source/engine/ControlSurfaces.cpp
+    Source/engine/PushDisplay.cpp
+    Source/control/ControlSurface.cpp
+    Source/control/Devices.cpp
+    Source/control/MidiLearn.cpp
     Source/engine/ClapFormat.cpp
     Source/engine/Codec.cpp
     Source/engine/Export.cpp
@@ -159,6 +164,8 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/SlicerWindow.cpp
     Source/ui/MixerWindow.cpp
     Source/ui/MixerRecording.cpp
+    Source/ui/MixerControl.cpp
+    Source/ui/ControlSection.cpp
     Source/ui/MixerSection.cpp
     Source/ui/PanelNavigation.cpp
     Source/ui/PatchBayWindow.cpp
@@ -248,6 +255,19 @@ if(PIPEWIRE_FOUND)
 else()
     set(PHI_PIPEWIRE 0)
     message(STATUS "libpipewire-0.3 not found: building without recording")
+endif()
+
+# Push 2 and 3's display is driven over USB with libusb (docs/control-surfaces.md). Without
+# libusb-1.0 PHI still builds; Push's pads and buttons work and its display stays dark.
+if(PkgConfig_FOUND)
+    pkg_check_modules(LIBUSB QUIET IMPORTED_TARGET libusb-1.0)
+endif()
+if(LIBUSB_FOUND)
+    target_link_libraries(${APP_ID} PRIVATE PkgConfig::LIBUSB)
+    target_compile_definitions(${APP_ID} PRIVATE PHI_LIBUSB=1)
+else()
+    target_compile_definitions(${APP_ID} PRIVATE PHI_LIBUSB=0)
+    message(STATUS "libusb-1.0 not found: building without Push's display")
 endif()
 
 # Export and import of compressed formats (FFmpeg) and their tags (TagLib). The Performance
@@ -359,6 +379,8 @@ install(TARGETS ${APP_ID} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES packaging/phi.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
 install(FILES packaging/phi.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(FILES packaging/phi-project.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/mime/packages)
+# Access to Push 2 and 3 over USB for their displays (rules numbered under 73, for uaccess)
+install(FILES packaging/70-phi-push.rules DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/udev/rules.d)
 
 # phi_dsp: the Φ effects' DSP as a library of its own, for the PHI synth (Source/core/CMakeLists.txt).
 # Built here too, so a change that breaks it on its own shows at once.
@@ -383,6 +405,9 @@ if(PHI_BUILD_TESTS)
         Source/mixer/Instruments.cpp
         Source/mixer/MixerEngine.cpp
         Source/mixer/Recording.cpp
+        Source/control/ControlSurface.cpp
+        Source/control/Devices.cpp
+        Source/control/MidiLearn.cpp
         Source/mixer/DrumsToMidi.cpp
         Source/patchbay/PatchBay.cpp
         Source/core/Ixml.cpp

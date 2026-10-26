@@ -20,6 +20,8 @@ public:
     // status: 0x80 note off, 0x90 note on, 0xB0 controller, 0xE0 pitch bend (value 0..16383 in data1);
     // channel 1..16.
     using Handler = std::function<void (int status, int channel, int data1, int data2)>;
+    // Sees each message first, with the input's name: true keeps it from the handler (MIDI Learn).
+    using Filter = std::function<bool (const std::string& device, int status, int channel, int data1, int data2)>;
 
     MidiInputs();
     ~MidiInputs();
@@ -28,6 +30,7 @@ public:
     void open (const std::vector<std::string>& identifiers);   // closes the others
     std::vector<std::string> opened() const;
     void setHandler (Handler);
+    void setFilter (Filter);
 
 private:
     struct Impl;
