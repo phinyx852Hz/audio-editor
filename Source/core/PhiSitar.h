@@ -83,4 +83,30 @@ namespace phi
         };
         std::array<Resonance, 2> body;
     };
+
+    // The tānpūrā: four open strings plucked in turn, over and over, as the drone under the raga.
+    // The first string is Pa below Sa (or the raga's ma or ni when it has no Pa), then Sa twice,
+    // then kharaj Sa an octave below. A wide jawārī gives the long buzzing bloom. Plain C++.
+    class Tanpura
+    {
+    public:
+        void prepare (double sampleRate);
+        // The four strings' pitches: Sa, and the first string in cents above Sa (702 for Pa,
+        // 498 for ma, 1088 for ni), in the octave below Sa.
+        void tune (double saHz, double firstCents);
+        void setCycle (double seconds) { cycle = seconds; }   // one round of the four strings
+        void setLevel (double amount) { level = (float) amount; }
+        void setOn (bool on);
+        bool isOn() const { return on; }
+        void process (float* left, float* right, int frames);   // adds
+        void reset();
+
+    private:
+        std::array<SitarString, 4> strings;
+        std::array<double, 4> hz { 196.0, 261.6, 261.6, 130.8 };
+        double rate = 48000.0, cycle = 4.0, position = 0.0;
+        int next = 0;
+        float level = 0.5f;
+        bool on = false;
+    };
 }

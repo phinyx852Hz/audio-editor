@@ -91,15 +91,19 @@ PHI rāga is a built-in instrument, alongside Synth, Sampler and Slicer.
   - Ornaments
   - Jawārī
   - Tarab level
+  - Mīṇḍ on legato, and its time
+  - Tānpūrā on or off, its level and the time of one round
 - **Chikārī:** keys two octaves and more below Sa strike it.
-- **Pitch bend:** ±2 semitones.
+- **MPE:** MIDI is read as MPE, so each note bends on its own channel (±48 semitones on member
+  channels, as MPE sets). Plain MIDI on channel 1 bends every note ±2 semitones, as before.
+- **Tānpūrā:** four open strings plucked in turn through the first 60% of each round: Pa below Sa
+  (the raga's ma when it has no Pa, else its ni), Sa, Sa, then kharaj Sa an octave below, with a
+  wide jawārī. It is tuned with the raga and Sa, and costs nothing when off.
 - **Saving:** a mix saves it as `{"kind": "raga", "state": "raga=…;sa=…;…"}`.
 
 ## Next
 
-- Khaṭkā, murkī, gamak, krintan and zamzama.
 - Avoided moves.
-- MPE in and out.
-- The tānpūrā.
+- MPE out, so outside synths can play the raga's pitches and ornaments.
 - Up to 100 ragas from the teacher's sheets.
 - Editing the sheets inside PHI.

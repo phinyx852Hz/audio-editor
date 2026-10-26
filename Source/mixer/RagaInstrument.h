@@ -5,10 +5,13 @@
 // sitar. The raga is the one in force for the track when that is a raga (its clip's, else its
 // scene's, else its own tuning; Tunings.h), else the instrument's own choice. Keys become the
 // raga's svaras by the direction the melody moves (phi::RagaPlayer), tuned as its sheet says,
-// with āndolan where it calls for it; the tarab are retuned to the raga.
+// with āndolan where it calls for it; the tarab are retuned to the raga. MIDI is read as MPE, so
+// each note bends on its own channel (ordinary one-channel MIDI plays as before), and the
+// tānpūrā drone, when on, plays under it all.
 #include "Instruments.h"
 #include "../core/PhiRaga.h"
 #include "../core/PhiSitar.h"
+#include "../core/PhiTuning.h"
 
 #include <array>
 #include <mutex>
@@ -24,6 +27,9 @@ namespace mixer
         double tarab = 0.6;
         bool meend = true;                     // legato (a key pressed while one is held) pulls the string: mīṇḍ
         double meendSeconds = 0.3;
+        bool tanpura = false;                  // the tānpūrā drone, tuned to Sa and the raga
+        double tanpuraLevel = 0.5;
+        double tanpuraSeconds = 4.0;           // one round of its four strings
     };
 
     class RagaInstrument final : public NoteInstrument
@@ -53,7 +59,7 @@ namespace mixer
 
         struct Held
         {
-            int key = -1, string = -1;
+            int key = -1, string = -1, channel = 0;
             phi::RagaPlayer::Voice voice;
             double seconds = 0.0;
         };
@@ -65,8 +71,10 @@ namespace mixer
         phi::Raga raga;            // the audio thread's own copy
         phi::RagaPlayer player;
         phi::Sitar sitar;
+        phi::Tanpura tanpura;
+        phi::Mpe mpe;
         std::array<Held, phi::Sitar::maxPlayed> held {};
-        double rate = 48000.0, bend = 0.0, meendTime = 0.3;
+        double rate = 48000.0, meendTime = 0.3;
         bool meendOn = true;
         unsigned clock = 0;
         std::array<unsigned, phi::Sitar::maxPlayed> startedAt {};

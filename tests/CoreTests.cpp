@@ -4408,6 +4408,42 @@ namespace
             check (raga.playing() == "khamāj", "raga instrument: back to its own raga");
         }
         {
+            // MPE: a bend on another note's channel leaves Pa alone; one on its own moves it.
+            mixer::RagaInstrument raga;
+            raga.setState ("raga=khamaj;sa=0;ornaments=0;jawari=0;tarab=0");
+            raga.prepare (rate, 512);
+            const auto upOne = 8192 + 8192 / 48;   // a semitone at MPE's ±48 on a member channel
+            std::vector<float> l (24000, 0.0f), r (24000, 0.0f);
+            const mixer::NoteEvent first[] = { { 0, 0x92, 67, 100 }, { 0, 0xe1, (uint8_t) (upOne & 0x7f), (uint8_t) (upOne >> 7) } };
+            raga.process (first, 2, l.data(), r.data(), 24000);
+            const auto plain = pitch (l, 9600, 4800, 300.0, 500.0);
+            std::fill (l.begin(), l.end(), 0.0f);
+            std::fill (r.begin(), r.end(), 0.0f);
+            const mixer::NoteEvent bent[] = { { 0, 0xe2, (uint8_t) (upOne & 0x7f), (uint8_t) (upOne >> 7) } };
+            raga.process (bent, 1, l.data(), r.data(), 24000);
+            const auto moved = pitch (l, 9600, 4800, 300.0, 500.0);
+            check (std::abs (1200.0 * std::log2 (plain / (261.6255653 * 1.5))) < 15.0 && std::abs (1200.0 * std::log2 (moved / plain) - 100.0) < 20.0,
+                   "raga instrument: MPE bends each note on its own channel");
+        }
+        {
+            // The tānpūrā: silent until on, then Pa below Sa first, the round's four plucks, and
+            // the state keeps it.
+            mixer::RagaInstrument raga;
+            raga.setState ("raga=yaman (kalyan);sa=0;tarab=0;tanpura=1;tanpuraLevel=0.8;tanpuraSeconds=2");
+            raga.prepare (rate, 512);
+            std::vector<float> l ((size_t) (2.0 * rate), 0.0f), r = l;
+            raga.process (nullptr, 0, l.data(), r.data(), (int) l.size());
+            check (raga.state().find ("tanpura=1;tanpuraLevel=0.8;tanpuraSeconds=2") != std::string::npos
+                   && std::abs (1200.0 * std::log2 (pitch (l, 2400, 9600, 100.0, 300.0) / (261.6255653 * 0.75))) < 40.0
+                   && energy (l, (size_t) (0.4 * rate), (size_t) (0.45 * rate)) > 0.0 && energy (l, (size_t) (1.9 * rate), (size_t) (2.0 * rate)) > 0.0,
+                   "raga instrument: the tanpura drone, Pa first");
+            phi::Tanpura off;
+            off.prepare (rate);
+            std::vector<float> quiet (4800, 0.0f), quietR = quiet;
+            off.process (quiet.data(), quietR.data(), 4800);
+            check (energy (quiet, 0, 4800) == 0.0, "tanpura: silent and free when off");
+        }
+        {
             phi::Sitar sitar;
             sitar.prepare (rate);
             std::vector<double> tarab;

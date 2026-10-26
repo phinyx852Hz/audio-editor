@@ -16,6 +16,7 @@ namespace mixer
     {
         rate = sampleRate;
         sitar.prepare (rate);
+        tanpura.prepare (rate);
         std::lock_guard<std::mutex> l (lock);
         changed = true;
     }
@@ -96,19 +97,26 @@ namespace mixer
                 if (raga.uses[(size_t) s])
                     tarab.push_back (saHz * std::pow (2.0, octave + raga.cents[(size_t) s] / 1200.0));
         sitar.setTarab (tarab);
+        // The tānpūrā's first string: Pa, or the raga's ma, or its ni, when it has no Pa.
+        const int first = raga.uses[7] ? 7 : raga.uses[5] ? 5 : raga.uses[11] ? 11 : raga.uses[10] ? 10 : 7;
+        tanpura.tune (saHz, raga.uses[(size_t) first] ? raga.cents[(size_t) first] : phi::justCents (first));
+        tanpura.setLevel (current.tanpuraLevel);
+        tanpura.setCycle (current.tanpuraSeconds);
+        tanpura.setOn (current.tanpura);
     }
 
     void RagaInstrument::handle (const NoteEvent& e)
     {
         applyPending();
-        const auto type = e.status & 0xF0;
-        const bool on = type == 0x90 && e.data2 > 0, off = type == 0x80 || (type == 0x90 && e.data2 == 0);
-        if (on)
+        // MPE: each note's bend and pressure on its own channel; plain MIDI is the same, one channel.
+        const auto m = mpe.handle (e.status, e.data1, e.data2);
+        if (m.kind == phi::Mpe::Kind::noteOn)
         {
+            const auto velocity = std::max (1.0 / 127.0, m.velocity);
             // The lowest keys, two octaves and more below Sa, strike the chikārī.
-            if (e.data1 < player.voiceSaKey() - 24)
+            if (m.key < player.voiceSaKey() - 24)
             {
-                sitar.strikeChikari (e.data2 / 127.0);
+                sitar.strikeChikari (velocity);
                 return;
             }
             // Legato: the string still held is pulled to the new svara (mīṇḍ), not plucked again.
@@ -121,35 +129,35 @@ namespace mixer
                 // From where the string is now, mid-ornament or not.
                 auto from = last->voice;
                 from.cents = 1200.0 * std::log2 (player.hzAt (last->voice, last->seconds) / player.voiceSaHz());
-                last->voice = player.glide (from, e.data1, meendTime);
-                last->key = e.data1;
+                last->voice = player.glide (from, m.key, meendTime);
+                last->key = m.key;
+                last->channel = m.channel;
                 last->seconds = 0.0;
                 startedAt[(size_t) last->string] = ++clock;
                 return;
             }
             Held h;
-            h.key = e.data1;
-            h.voice = player.noteOn (e.data1);
+            h.key = m.key;
+            h.channel = m.channel;
+            h.voice = player.noteOn (m.key);
             player.ornament (h.voice);
-            h.string = sitar.pluck (player.hzAt (h.voice, 0.0), e.data2 / 127.0);
+            h.string = sitar.pluck (player.hzAt (h.voice, 0.0) * std::pow (2.0, mpe.expression (m.channel, m.key).bendSemitones / 12.0), velocity);
             for (auto& other : held)
                 if (other.string == h.string)
                     other = {};
             held[(size_t) h.string] = h;
             startedAt[(size_t) h.string] = ++clock;
         }
-        else if (off)
+        else if (m.kind == phi::Mpe::Kind::noteOff)
         {
             for (auto& h : held)
-                if (h.key == e.data1 && h.string >= 0)
+                if (h.key == m.key && h.channel == m.channel && h.string >= 0)
                 {
                     sitar.release (h.string);
                     h = {};
                 }
         }
-        else if (type == 0xE0)
-            bend = ((e.data2 << 7 | e.data1) - 8192) / 8192.0 * 2.0;   // ±2 semitones
-        else if (type == 0xB0 && (e.data1 == 120 || e.data1 == 123))
+        else if (m.kind == phi::Mpe::Kind::allNotesOff)
             releaseAll();
     }
 
@@ -157,17 +165,18 @@ namespace mixer
     {
         applyPending();
         constexpr int chunk = 32;   // ornaments move the pitch every 32 samples (under a millisecond)
-        const auto bendRatio = std::pow (2.0, bend / 12.0);
         for (int done = 0; done < frames; done += chunk)
         {
             const auto n = std::min (chunk, frames - done);
             for (auto& h : held)
                 if (h.string >= 0)
                 {
-                    sitar.setHz (h.string, player.hzAt (h.voice, h.seconds) * bendRatio);
+                    const auto bent = std::pow (2.0, mpe.expression (h.channel, h.key).bendSemitones / 12.0);
+                    sitar.setHz (h.string, player.hzAt (h.voice, h.seconds) * bent);
                     h.seconds += n / rate;
                 }
             sitar.process (left + done, right + done, n);
+            tanpura.process (left + done, right + done, n);
         }
     }
 
@@ -186,8 +195,9 @@ namespace mixer
     {
         held = {};
         sitar.reset();
+        tanpura.reset();
         player.reset();
-        bend = 0.0;
+        mpe.reset();
     }
 
     std::string RagaInstrument::state() const
@@ -195,7 +205,8 @@ namespace mixer
         const auto s = settings();
         std::ostringstream o;
         o << "raga=" << s.raga << ";sa=" << s.sa << ";ornaments=" << s.ornaments << ";jawari=" << s.jawari << ";tarab=" << s.tarab
-          << ";meend=" << (s.meend ? 1 : 0) << ";meendSeconds=" << s.meendSeconds;
+          << ";meend=" << (s.meend ? 1 : 0) << ";meendSeconds=" << s.meendSeconds << ";tanpura=" << (s.tanpura ? 1 : 0)
+          << ";tanpuraLevel=" << s.tanpuraLevel << ";tanpuraSeconds=" << s.tanpuraSeconds;
         return o.str();
     }
 
@@ -226,6 +237,12 @@ namespace mixer
                     s.meend = value != "0";
                 else if (key == "meendSeconds")
                     s.meendSeconds = std::stod (value);
+                else if (key == "tanpura")
+                    s.tanpura = value != "0";
+                else if (key == "tanpuraLevel")
+                    s.tanpuraLevel = std::stod (value);
+                else if (key == "tanpuraSeconds")
+                    s.tanpuraSeconds = std::stod (value);
             }
             catch (...)
             {

@@ -1631,7 +1631,7 @@ QDialog* ragaDialog (mixer::InstrumentPtr inst, const QString& title, QWidget* p
         b->setToolTip (tip);
         return b;
     };
-    auto* ornaments = percent (s.ornaments, QObject::tr ("How much of the sheet's ornaments (āndolan) it plays"));
+    auto* ornaments = percent (s.ornaments, QObject::tr ("How much of the sheet's ornaments (āndolan, kaṇ, khaṭkā, murkī, gamak...) it plays"));
     auto* jawari = percent (s.jawari, QObject::tr ("The bridge: open (khulā) to closed (band), more buzz"));
     auto* tarab = percent (s.tarab, QObject::tr ("The sympathetic strings, tuned to the raga"));
     auto* meend = new QCheckBox (QString::fromUtf8 ("Legato plays mīṇḍ: a key pressed while another is held pulls the string"), d);
@@ -1641,6 +1641,15 @@ QDialog* ragaDialog (mixer::InstrumentPtr inst, const QString& title, QWidget* p
     meendTime->setSingleStep (0.05);
     meendTime->setSuffix (QObject::tr (" s"));
     meendTime->setValue (s.meendSeconds);
+    auto* tanpura = new QCheckBox (QString::fromUtf8 ("Tānpūrā drone: Pa (or ma, or ni), Sa, Sa and kharaj Sa, over and over"), d);
+    tanpura->setChecked (s.tanpura);
+    auto* tanpuraLevel = percent (s.tanpuraLevel, QString::fromUtf8 ("The tānpūrā's level"));
+    auto* tanpuraTime = new QDoubleSpinBox (d);
+    tanpuraTime->setRange (1.0, 12.0);
+    tanpuraTime->setSingleStep (0.5);
+    tanpuraTime->setSuffix (QObject::tr (" s"));
+    tanpuraTime->setValue (s.tanpuraSeconds);
+    tanpuraTime->setToolTip (QObject::tr ("One round of its four strings"));
     auto* now = new QLabel (d);
     now->setWordWrap (true);
     form->addRow (QObject::tr ("&Raga"), ragas);
@@ -1650,9 +1659,12 @@ QDialog* ragaDialog (mixer::InstrumentPtr inst, const QString& title, QWidget* p
     form->addRow (QObject::tr ("&Tarab"), tarab);
     form->addRow (meend);
     form->addRow (QString::fromUtf8 ("&Mīṇḍ time"), meendTime);
+    form->addRow (tanpura);
+    form->addRow (QString::fromUtf8 ("Tānpūrā &level"), tanpuraLevel);
+    form->addRow (QString::fromUtf8 ("Tānpūrā r&ound"), tanpuraTime);
     form->addRow (now);
     auto* help = new QLabel (QObject::tr ("Keys play the raga's svaras by the way the melody moves: its āroha going up, its avaroha coming down. "
-                                          "Keys two octaves and more below Sa strike the chikārī."), d);
+                                          "Keys two octaves and more below Sa strike the chikārī. MPE controllers bend each note on its own."), d);
     help->setWordWrap (true);
     form->addRow (help);
     auto show = [now, &raga] { now->setText (QObject::tr ("Playing %1.").arg (QString::fromStdString (raga.playing()))); };
@@ -1666,6 +1678,9 @@ QDialog* ragaDialog (mixer::InstrumentPtr inst, const QString& title, QWidget* p
         n.tarab = tarab->value() / 100.0;
         n.meend = meend->isChecked();
         n.meendSeconds = meendTime->value();
+        n.tanpura = tanpura->isChecked();
+        n.tanpuraLevel = tanpuraLevel->value() / 100.0;
+        n.tanpuraSeconds = tanpuraTime->value();
         raga.setSettings (n);
         show();
         changed();
@@ -1675,10 +1690,12 @@ QDialog* ragaDialog (mixer::InstrumentPtr inst, const QString& title, QWidget* p
     QObject::connect (d, &QObject::destroyed, d, [keep] { keep->reset(); });
     for (auto* c : { ragas, sa })
         QObject::connect (c, &QComboBox::currentIndexChanged, d, apply);
-    for (auto* b : { ornaments, jawari, tarab })
+    for (auto* b : { ornaments, jawari, tarab, tanpuraLevel })
         QObject::connect (b, &QSpinBox::valueChanged, d, apply);
-    QObject::connect (meend, &QCheckBox::toggled, d, apply);
-    QObject::connect (meendTime, &QDoubleSpinBox::valueChanged, d, apply);
+    for (auto* c : { meend, tanpura })
+        QObject::connect (c, &QCheckBox::toggled, d, apply);
+    for (auto* b : { meendTime, tanpuraTime })
+        QObject::connect (b, &QDoubleSpinBox::valueChanged, d, apply);
     return d;
 }
 

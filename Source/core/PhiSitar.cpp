@@ -257,4 +257,72 @@ namespace phi
             right[n] += 0.5f * (wood + tarabLevel * (0.3f * tarabLeft + 0.7f * tarabRight));
         }
     }
+
+    void Tanpura::prepare (double sampleRate)
+    {
+        rate = sampleRate;
+        for (auto& s : strings)
+        {
+            s.prepare (rate);
+            s.setDecay (9.0);
+            s.setJawari (1.0);
+        }
+        reset();
+    }
+
+    void Tanpura::tune (double saHz, double firstCents)
+    {
+        hz = { saHz * std::pow (2.0, firstCents / 1200.0 - 1.0), saHz, saHz, saHz * 0.5 };
+        for (size_t i = 0; i < strings.size(); ++i)
+            if (! strings[i].ringing())
+                strings[i].tune (hz[i]);
+    }
+
+    void Tanpura::setOn (bool shouldBe)
+    {
+        if (shouldBe && ! on)
+        {
+            position = 0.0;
+            next = 0;
+        }
+        on = shouldBe;
+    }
+
+    void Tanpura::reset()
+    {
+        for (auto& s : strings)
+            s.silence();
+        position = 0.0;
+        next = 0;
+    }
+
+    void Tanpura::process (float* left, float* right, int frames)
+    {
+        bool any = on;
+        for (auto& s : strings)
+            any = any || s.ringing();
+        if (! any)
+            return;
+        // The four are plucked evenly through the first 60% of a round, kharaj Sa last and
+        // ringing longest, alone with the others for the rest of the round.
+        static constexpr double at[4] { 0.0, 0.2, 0.4, 0.6 };
+        const auto round = std::max (1.0, cycle) * rate;
+        for (int n = 0; n < frames; ++n)
+        {
+            if (on && position >= round)
+            {
+                position -= round;
+                next = 0;
+            }
+            if (on && next < 4 && position >= at[next] * round)
+            {
+                const auto i = (size_t) next++;
+                strings[i].pluck (hz[i], i == 3 ? 0.8 : 0.6, 0.25);   // soft, with the fingertip
+            }
+            position += 1.0;
+            const auto a = strings[0].tick(), b = strings[1].tick(), c = strings[2].tick(), d = strings[3].tick();
+            left[n] += level * 0.3f * (a + 0.8f * b + 0.5f * c + 0.7f * d);
+            right[n] += level * 0.3f * (0.6f * a + 0.5f * b + 0.8f * c + 0.7f * d);
+        }
+    }
 }
