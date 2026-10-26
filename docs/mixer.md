@@ -396,12 +396,12 @@ Fast MIDI edits (owner, 2026-10-25: "MIDI editing, but really fast"; "the idea i
   across both.
 - **½** keeps every other note or chord, and **×2** plays each note twice in its own time, half as
   long. Both can be pressed again.
-- **Sa** and **Mode or raga** move every note to the nearest note of a mode (Ionian to Locrian)
-  or one of the major Hindustani ragas: the ten thaats (Bilawal, Yaman, Khamaj, Kafi, Asavari,
-  Bhairavi, Bhairav, Marwa, Purvi, Todi), then Darbari Kanada, Jaunpuri, Bageshri, Bhimpalasi,
-  Desh, Bihag, Kedar, Miyan ki Malhar, Megh, Bhupali, Durga, Hamsadhwani, Malkauns, Jog, Ahir
-  Bhairav, Lalit, Puriya Dhanashri, Shree, Multani and Charukeshi. A note between two goes down,
-  and drums (channel 10) stay. Ragas that share their notes (Darbari, Jaunpuri, Asavari) are each
+- **Sa** and **Mode or raga** move every note to the nearest note of a mode (ionian to locrian)
+  or one of the major Hindustani ragas: the ten thaats (bilāval, yaman, khamāj, kāfī, āsāvarī,
+  bhairavī, bhairav, mārvā, pūrvī, toḍī), then darbārī kānaḍā, jaunpurī, bāgeśrī, bhīmpalāsī,
+  deś, bihāg, kedār, miyāṅ kī malhār, megh, bhūpālī, durgā, haṃsadhvani, mālkauns, jog, ahīr
+  bhairav, lalit, pūriyā dhanāśrī, śrī, multānī and cārukeśī. A note between two goes down,
+  and drums (channel 10) stay. Ragas that share their notes (darbārī kānaḍā, jaunpurī, āsāvarī) are each
   listed. A raga is taken as the notes it uses up and down; its own movement is not followed.
 - The box beside the raga offers a **hypo** range (owner, 2026-10-26): Sa stays the final, and
   every note is folded by octaves into the octave from the fifth (Pa, a fourth below Sa, up to Pa)
@@ -555,7 +555,7 @@ could be applied on the clip level, track level or scene level"):
   [east-asian-tunings.md](east-asian-tunings.md)); and 2 to 21 equal steps to the octave.
   A pathet is the laras's tones in use, read from a gong tone it rests on (sléndro nem on 2, sanga
   on 5, manyura on 6; pélog lima on 1, nem on 6, barang on 2).
-  Names are in IAST (ragas), IJMES (maqams), a common Persian romanisation (dastgahs),
+  Names are in IAST (ragas), IJMES (maqams), the Encyclopædia Iranica's romanisation (dastgahs),
   Indonesian spelling (gamelan), pinyin with its tones, Hepburn and McCune-Reischauer, all in lower case (owner); a mix saves the plain ASCII name beside
   each. The clip **Mode or raga...** snap list has the gamelan scales too, on their nearest keys.
 - The Shona tunings (owner, 2026-10-26: "mode and tuning systems from Zimbabwe, especially from

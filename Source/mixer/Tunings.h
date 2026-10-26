@@ -8,7 +8,7 @@
 // tunings of Zimbabwe in their measured cents, Chinese lü and modes from the treatises (and in
 // 12-TET), Japanese gagaku and folk modes, and Korean court modes and folk tori (2026-10-26), and
 // 2 to 21 equal steps to the octave. Names are transliterated (IAST for the ragas, IJMES for
-// Arabic, a common Persian romanisation, Indonesian spelling for gamelan, pinyin with its tones,
+// Arabic, Encyclopædia Iranica's for Persian, Indonesian spelling for gamelan, pinyin with its tones,
 // Hepburn, McCune-Reischauer), with a plain spelling beside each for searching and saving.
 // The PHI synth plays them (mixer::Instrument::setTuning); other instruments stay in 12-TET.
 #include "../core/PhiTuning.h"

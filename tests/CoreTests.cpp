@@ -1386,10 +1386,10 @@ namespace
         // Ragas: Malkauns (S g m d n) on C, and Darbari and Jaunpuri listed with Asavari's notes.
         const auto& scales = midifile::scales();
         auto find = [&] (const std::string& name) { for (size_t i = 0; i < scales.size(); ++i) if (name == scales[i].name) return (int) i; return -1; };
-        const auto malkauns = find ("Malkauns");
+        const auto malkauns = find ("mālkauns");
         check (malkauns >= 0 && pitchSet (*midifile::toMode (*song, 0, malkauns)) == (std::vector<int> { 60, 63, 63, 68 }), "midi edits: a raga's notes, pentatonic");
-        // Hypo: Bhupali (S R G P D) on C from the fifth folds every note into G3..G4 (55..67), Sa kept.
-        const auto bhupali = find ("Bhupali");
+        // Hypo: bhūpālī (S R G P D) on C from the fifth folds every note into G3..G4 (55..67), Sa kept.
+        const auto bhupali = find ("bhūpālī");
         check (bhupali >= 0 && mixer::hypoFamily (scales[(size_t) bhupali].family) && mixer::hasHypo (scales[(size_t) bhupali].notes, mixer::Hypo::fifth)
                && ! mixer::hasHypo (scales[(size_t) bhupali].notes, mixer::Hypo::fourth) && ! mixer::hypoFamily (scales[0].family),
                "midi edits: hypo for a raga with the degree, not the church modes");
@@ -1403,9 +1403,9 @@ namespace
         }
         check (pitchSet (*midifile::inRange (*midifile::toMode (*wide, 0, bhupali), 0, 5)) == (std::vector<int> { 60, 60, 62, 64 }),
                "midi edits: a hypo range, notes folded into the octave from the fifth below");
-        check (find ("Darbari Kanada") >= 0 && find ("Jaunpuri") >= 0 && scales[(size_t) find ("Darbari Kanada")].notes == scales[(size_t) find ("Asavari")].notes
-               && scales[(size_t) find ("Jaunpuri")].notes == scales[(size_t) find ("Asavari")].notes, "midi edits: ragas sharing their notes are each listed");
-        check (find ("nyamaropa") >= 0 && scales[(size_t) find ("nyamaropa")].notes == scales[(size_t) find ("Mixolydian")].notes
+        check (find ("darbārī kānaḍā") >= 0 && find ("jaunpurī") >= 0 && scales[(size_t) find ("darbārī kānaḍā")].notes == scales[(size_t) find ("āsāvarī")].notes
+               && scales[(size_t) find ("jaunpurī")].notes == scales[(size_t) find ("āsāvarī")].notes, "midi edits: ragas sharing their notes are each listed");
+        check (find ("nyamaropa") >= 0 && scales[(size_t) find ("nyamaropa")].notes == scales[(size_t) find ("mixolydian")].notes
                && find ("matepe") >= 0, "midi edits: the Shona mbira tunings on the keys");
     }
 
