@@ -1999,6 +1999,27 @@ vadi: P
 samvadi: r
 pakad: r g P D n D P g r S
 time: morning
+
+# rāg darpaṇ: made for PHI by the owner and Claude (2026-10-26), after Faqīrullāh's Rāg Darpaṇ
+# (1666), which mirrored Man Singh Tomar's Mānakutūhala into Persian. A mirror: its svaras
+# reflect about Sa and Ma (r and N, G and d), the lower half climbing ½ 1½ 1 and the upper
+# 1 1½ ½, each with the ḥijāz step; Ma sits at the octave's middle (600 cents), the mirror's
+# plane, and any phrase may be answered by its reflection. Its rasa follows Faqīrullāh: love
+# that stirs tender longing in the heart, the vāsakasajjā nāyikā at her mirror at dusk.
+raga: darpaṇ
+plain: darpan
+thaat: pūrvī
+svaras: S r=16/15 G=5/4 M=600c d=8/5 N=15/8
+aroha: S r G M G M d N S'
+avaroha: S' N d M d M G r S
+vadi: M
+samvadi: S
+pakad: G M d M G | r G M d N d M G r
+andolan: d 15 0.4
+kan: S>N
+gamak: M 3
+time: dusk
+rasa: śṛṅgāra in separation (vipralambha)
 )sheets";
         return sheets;
     }
