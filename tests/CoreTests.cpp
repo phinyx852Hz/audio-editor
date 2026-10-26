@@ -4224,7 +4224,8 @@ namespace
         bool same = again.empty() && back.size() == all.size();
         for (size_t i = 0; same && i < all.size(); ++i)
             same = back[i].name == all[i].name && back[i].aroha == all[i].aroha && back[i].avaroha == all[i].avaroha && back[i].pakad == all[i].pakad
-                   && back[i].uses == all[i].uses && std::abs (back[i].cents[3] - all[i].cents[3]) < 1.0e-6 && back[i].andolan.size() == all[i].andolan.size();
+                   && back[i].uses == all[i].uses && std::abs (back[i].cents[3] - all[i].cents[3]) < 1.0e-6 && back[i].andolan.size() == all[i].andolan.size()
+                   && back[i].murki == all[i].murki && back[i].khatka == all[i].khatka && back[i].gamak.size() == all[i].gamak.size();
         check (same, "raga sheets: written out and read back the same");
 
         // A dot below or above in the notation is the octave, as with , and '.
@@ -4275,6 +4276,29 @@ namespace
         check (kanGa.pathCount == 2 && near (player.hzAt (kanGa, 0.0), 293.6647679174076 * 4.0 / 3.0, 1.0e-9)
                && near (player.hzAt (kanGa, 0.05), kanGa.hz, 1.0e-9) && near (1200.0 * std::log2 (kanGa.hz / player.hzAt (kanGa, 1.05)), 20.0, 1.0e-9),
                "raga player: kan from the sheet, then andolan");
+        // Khamāj's murkī on ga: ga, ma, ga, re, ga, quickly; then ga as it is.
+        player.setRaga (&byPlain ("khamaj"), 60);
+        player.reset();
+        auto murki = player.noteOn (64);
+        player.ornament (murki);
+        const auto cents = [&] (const phi::RagaPlayer::Voice& v, double t) { return 1200.0 * std::log2 (player.hzAt (v, t) / player.voiceSaHz()); };
+        check (byPlain ("khamaj").ornamentOn (4) == phi::Ornament::murki && murki.pathCount == 5 && near (cents (murki, 0.03 * 1.4), 1200.0 * std::log2 (4.0 / 3.0), 1.0e-6)
+               && near (cents (murki, 0.03 * 3.4), 1200.0 * std::log2 (9.0 / 8.0), 1.0e-6) && near (cents (murki, 0.2), murki.cents, 1.0e-9),
+               "raga player: murki turns about the svara, then holds it");
+        // Krintan, khaṭkā and zamzama from the neighbours, at half speed taking twice as long.
+        auto krintan = player.noteOn (64), khatka = krintan, zamzama = krintan;
+        player.ornament (krintan, phi::Ornament::krintan);
+        player.ornament (khatka, phi::Ornament::khatka, 2.0);
+        player.ornament (zamzama, phi::Ornament::zamzama);
+        check (near (krintan.path[0], 700.0 + 1.955, 0.01) && krintan.pathCount == 3 && near (khatka.path[0], 1200.0 * std::log2 (4.0 / 3.0), 1.0e-9)
+               && near (khatka.path[2], 1200.0 * std::log2 (9.0 / 8.0), 1.0e-9) && near (khatka.approachSeconds(), 0.27, 1.0e-12) && zamzama.pathCount == 6,
+               "raga player: krintan, khatka and zamzama");
+        // Mālkauns's gamak on komal dha: shaken up to komal ni (9/8 above) and back, five times a second.
+        player.setRaga (&byPlain ("malkauns"), 60);
+        player.reset();
+        const auto dha = player.noteOn (68);
+        check (near (dha.gamakHz, 5.0, 1.0e-12) && near (cents (dha, 0.1), dha.cents + dha.gamakCents, 1.0e-6) && near (cents (dha, 0.2), dha.cents, 1.0e-6)
+               && near (dha.gamakCents, 1200.0 * std::log2 ((9.0 / 5.0) / (8.0 / 5.0)), 1.0e-6), "raga player: gamak to the svara above");
         player.setOrnaments (0.0);
         check (near (player.hzAt (ga, 1.0), ga.hz, 1.0e-12) && player.noteOn (76).swingCents == 0.0, "raga player: ornaments off, and no andolan on Pa");
 

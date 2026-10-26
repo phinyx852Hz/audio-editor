@@ -17,13 +17,16 @@
 //     pakad: g m R S | d n P
 //     andolan: g 20 0.5, d 20 0.5
 //     kan: m>g
+//     murki: n
+//     gamak: P 5
 //     time: late night
 //
 // Svaras are S r R g G m M P d D n N (lower case komal, M tīvra ma); "," after one is the lower
 // octave (mandra), "'" the upper (tār); a dot below or above (ṇ, Ṡ) is read the same way. A
 // svara's tuning is a ratio (g=32/27) or cents (g=294c) above Sa; one without is in five-limit
 // just intonation. Andolan is the svara, the swing's depth in cents and its rate in Hz; kan
-// is a grace and the svara it graces (m>g: ga touched from ma).
+// is a grace and the svara it graces (m>g: ga touched from ma). Khaṭkā, murkī, krintan and zamzama
+// list the svaras struck with that ornament; gamak is a svara and the rate of its shake in Hz.
 // Plain C++, in phi_dsp with the tunings, for the PHI synth.
 #include <array>
 #include <string>
@@ -47,6 +50,24 @@ namespace phi
         double rateHz = 0.5;
     };
 
+    // The ornaments a svara is struck with, each a quick path into it. Neighbours are the raga's
+    // svaras either side of it.
+    enum class Ornament
+    {
+        none,
+        kan,       // the sheet's grace, then the svara
+        khatka,    // a forceful turn: the svara above, the svara, the one below, the svara
+        murki,     // a light, quicker turn: the svara, above, the svara, below, the svara
+        krintan,   // pulled off: two svaras above, one above, the svara, each struck on its fret
+        zamzama    // hammered and pulled: above, the svara, above, the svara, below, the svara
+    };
+
+    struct Gamak
+    {
+        int semitone = 0;
+        double rateHz = 5.0;   // the shake to the svara above and back
+    };
+
     struct Raga
     {
         std::string name;    // IAST, lower case (owner): "darbārī kānaḍā"
@@ -61,6 +82,11 @@ namespace phi
         // Kaṇ: a svara touched for an instant before another (grace, then the svara it graces).
         std::vector<std::pair<int, int>> kan;
         int kanBefore (int semitone) const;   // the grace for this svara, or -1
+        std::vector<int> khatka, murki, krintan, zamzama;   // svaras struck with each
+        std::vector<Gamak> gamak;
+        const Gamak* gamakOn (int semitone) const;
+        // The ornament the sheet gives this svara: khaṭkā, murkī, krintan, zamzama, then kaṇ.
+        Ornament ornamentOn (int semitone) const;
         std::string time, rasa;
 
         std::vector<double> scaleCents() const;   // the svaras it uses, from Sa up
@@ -92,6 +118,7 @@ namespace phi
             double hz = 0.0;         // its pitch, before ornaments
             double cents = 0.0;      // the same, in cents above the Sa key
             double swingCents = 0.0, swingHz = 0.0;   // āndolan, 0 when none
+            double gamakCents = 0.0, gamakHz = 0.0;   // gamak: up to the svara above, 0 when none
             // A way in: mīṇḍ (a glide through the svaras between, from the last note) or kaṇ (a
             // grace held for an instant, then the svara). Cents above the Sa key, start to end.
             static constexpr int maxPath = 16;
@@ -111,6 +138,10 @@ namespace phi
         Voice glide (const Voice& from, int key, double seconds);
         // Kaṇ, when the sheet gives one for the svara: the grace for `seconds`, then the svara.
         void addKan (Voice&, double seconds = 0.05) const;
+        // The sheet's ornament for the svara (Raga::ornamentOn), as its quick path in; `speed`
+        // scales each step's time (1 as written, 2 twice as slow). Nothing on a voice with a path.
+        void ornament (Voice&, double speed = 1.0) const;
+        void ornament (Voice&, Ornament, double speed = 1.0) const;
         void reset() { lastKey = -1; rising = true; }
         // The voice's pitch `seconds` after it started, ornaments and all.
         double hzAt (const Voice&, double seconds) const;
@@ -119,6 +150,7 @@ namespace phi
         double voiceSaHz() const { return saHz; }
 
     private:
+        double neighbour (const Voice&, int direction, int count = 1) const;   // cents, from the Sa key
         const Raga* raga = nullptr;
         int saKey = 60;
         double saHz = 261.6255653005986;

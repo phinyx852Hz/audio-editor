@@ -172,6 +172,28 @@ namespace phi
         return -1;
     }
 
+    const Gamak* Raga::gamakOn (int semitone) const
+    {
+        for (const auto& g : gamak)
+            if (g.semitone == semitone)
+                return &g;
+        return nullptr;
+    }
+
+    Ornament Raga::ornamentOn (int semitone) const
+    {
+        const auto has = [&] (const std::vector<int>& list) { return std::find (list.begin(), list.end(), semitone) != list.end(); };
+        if (has (khatka))
+            return Ornament::khatka;
+        if (has (murki))
+            return Ornament::murki;
+        if (has (krintan))
+            return Ornament::krintan;
+        if (has (zamzama))
+            return Ornament::zamzama;
+        return kanBefore (semitone) >= 0 ? Ornament::kan : Ornament::none;
+    }
+
     const Andolan* Raga::andolanOn (int semitone) const
     {
         for (const auto& a : andolan)
@@ -330,6 +352,32 @@ namespace phi
                     else if (oneSvara (trim (part.substr (0, arrow)), grace) && oneSvara (trim (part.substr (arrow + 1)), target))
                         raga.kan.emplace_back (grace, target);
                 }
+            else if (key == "khatka" || key == "murki" || key == "krintan" || key == "zamzama")
+            {
+                auto& list = key == "khatka" ? raga.khatka : key == "murki" ? raga.murki : key == "krintan" ? raga.krintan : raga.zamzama;
+                for (const auto& part : split (value, ','))
+                    if (int semitone = -1; oneSvara (part, semitone))
+                        list.push_back (semitone);
+            }
+            else if (key == "gamak")
+                for (const auto& part : split (value, ','))
+                {
+                    const auto words = split (part, ' ');
+                    Gamak g;
+                    if (words.empty() || ! oneSvara (words[0], g.semitone))
+                        continue;
+                    try
+                    {
+                        if (words.size() > 1)
+                            g.rateHz = std::stod (words[1]);
+                    }
+                    catch (...)
+                    {
+                        fail ("gamak is a svara and its rate in Hz: \"P 5\"");
+                        continue;
+                    }
+                    raga.gamak.push_back (g);
+                }
             else if (key == "time")
                 raga.time = value;
             else if (key == "rasa")
@@ -395,6 +443,26 @@ namespace phi
                     out += (i > 0 ? ", " : "") + phraseText ({ Svara { r.kan[i].first, 0 } }) + ">" + phraseText ({ Svara { r.kan[i].second, 0 } });
                 out += "\n";
             }
+            auto svaras = [&] (const char* key, const std::vector<int>& list)
+            {
+                if (list.empty())
+                    return;
+                out += std::string (key) + ": ";
+                for (size_t i = 0; i < list.size(); ++i)
+                    out += (i > 0 ? ", " : "") + phraseText ({ Svara { list[i], 0 } });
+                out += "\n";
+            };
+            svaras ("khatka", r.khatka);
+            svaras ("murki", r.murki);
+            svaras ("krintan", r.krintan);
+            svaras ("zamzama", r.zamzama);
+            if (! r.gamak.empty())
+            {
+                out += "gamak: ";
+                for (size_t i = 0; i < r.gamak.size(); ++i)
+                    out += (i > 0 ? ", " : "") + phraseText ({ Svara { r.gamak[i].semitone, 0 } }) + " " + number (r.gamak[i].rateHz);
+                out += "\n";
+            }
             if (! r.time.empty())
                 out += "time: " + r.time + "\n";
             if (! r.rasa.empty())
@@ -455,6 +523,11 @@ namespace phi
             v.swingCents = swing->depthCents;
             v.swingHz = swing->rateHz;
         }
+        if (const auto* shake = raga->gamakOn (v.svara.semitone))
+        {
+            v.gamakCents = std::max (0.0, neighbour (v, 1) - v.cents);
+            v.gamakHz = shake->rateHz;
+        }
         return v;
     }
 
@@ -500,6 +573,49 @@ namespace phi
         v.hold = 0.7;
     }
 
+    double RagaPlayer::neighbour (const Voice& v, int direction, int count) const
+    {
+        int k = v.outKey - saKey;
+        for (int found = 0, steps = 0; found < count && steps < 24; ++steps)
+        {
+            k += direction;
+            if (raga->uses[(size_t) (((k % 12) + 12) % 12)])
+                ++found;
+        }
+        return 1200.0 * std::floor (k / 12.0) + raga->cents[(size_t) (((k % 12) + 12) % 12)];
+    }
+
+    void RagaPlayer::ornament (Voice& v, double speed) const
+    {
+        if (raga != nullptr)
+            ornament (v, raga->ornamentOn (v.svara.semitone), speed);
+    }
+
+    void RagaPlayer::ornament (Voice& v, Ornament kind, double speed) const
+    {
+        if (raga == nullptr || ornaments <= 0.0 || v.pathCount > 0 || kind == Ornament::none)
+            return;
+        if (kind == Ornament::kan)
+            return addKan (v, 0.05 * speed);
+        const auto at = v.cents, above = neighbour (v, 1), below = neighbour (v, -1);
+        auto set = [&] (std::initializer_list<double> path, double step, double hold)
+        {
+            v.pathCount = 0;
+            for (auto c : path)
+                v.path[(size_t) v.pathCount++] = c;
+            v.stepSeconds = step * speed;
+            v.hold = hold;
+        };
+        switch (kind)
+        {
+            case Ornament::khatka:  set ({ above, at, below, at }, 0.045, 0.6); break;
+            case Ornament::murki:   set ({ at, above, at, below, at }, 0.03, 0.5); break;
+            case Ornament::krintan: set ({ neighbour (v, 1, 2), above, at }, 0.06, 0.9); break;
+            case Ornament::zamzama: set ({ above, at, above, at, below, at }, 0.04, 0.85); break;
+            default: break;
+        }
+    }
+
     double RagaPlayer::hzAt (const Voice& v, double seconds) const
     {
         const auto approach = v.approachSeconds();
@@ -513,10 +629,18 @@ namespace phi
             return saHz * std::pow (2.0, cents / 1200.0);
         }
         seconds -= approach;
-        if (v.swingCents <= 0.0 || ornaments <= 0.0)
+        constexpr double twoPi = 6.283185307179586;
+        if (ornaments <= 0.0)
+            return v.hz;
+        if (v.gamakCents > 0.0)
+        {
+            // Gamak: shaken up to the svara above and back, as long as it is held.
+            const auto above = ornaments * v.gamakCents * 0.5 * (1.0 - std::cos (twoPi * v.gamakHz * seconds));
+            return v.hz * std::pow (2.0, above / 1200.0);
+        }
+        if (v.swingCents <= 0.0)
             return v.hz;
         // Āndolan: from the svara down by its depth and back, slowly, as long as it is held.
-        constexpr double twoPi = 6.283185307179586;
         const auto below = ornaments * v.swingCents * 0.5 * (1.0 - std::cos (twoPi * v.swingHz * seconds));
         return v.hz * std::pow (2.0, -below / 1200.0);
     }

@@ -40,6 +40,7 @@ avaroha: S' n D P m G R S
 vadi: G
 samvadi: n
 pakad: n D m P D | m G
+murki: G, n
 time: late evening
 
 raga: kāfī
@@ -51,6 +52,7 @@ avaroha: S' n D P m g R S
 vadi: P
 samvadi: S
 pakad: S S R R g g m m P
+murki: g
 time: night
 
 raga: āsāvarī
@@ -71,6 +73,7 @@ aroha: S r g m P d n S'
 avaroha: S' n d P m g r S
 vadi: m
 samvadi: S
+murki: g
 time: morning
 
 raga: bhairav
@@ -167,6 +170,7 @@ aroha: S R m P N S'
 avaroha: S' n D P m G R G N, S
 vadi: R
 samvadi: P
+murki: R
 time: night
 
 raga: bihāg
@@ -177,6 +181,7 @@ aroha: N, S G m P N S'
 avaroha: S' N D P M P G m G R S
 vadi: G
 samvadi: N
+khatka: G
 time: night
 
 raga: kedār
@@ -247,6 +252,7 @@ aroha: S g m d n S'
 avaroha: S' n d m g S
 vadi: m
 samvadi: S
+gamak: d 5
 time: late night
 
 raga: jog
@@ -384,6 +390,7 @@ aroha: D, S R m P D S'
 avaroha: S' n D P m G R S
 vadi: G
 samvadi: n
+murki: G
 time: night
 
 raga: janasammohinī

@@ -130,7 +130,7 @@ namespace mixer
             Held h;
             h.key = e.data1;
             h.voice = player.noteOn (e.data1);
-            player.addKan (h.voice);
+            player.ornament (h.voice);
             h.string = sitar.pluck (player.hzAt (h.voice, 0.0), e.data2 / 127.0);
             for (auto& other : held)
                 if (other.string == h.string)

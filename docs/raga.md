@@ -53,6 +53,18 @@ and again equal tempered.
   the way (those it uses in that direction). On a track, a key pressed while another is held plays
   mīṇḍ (legato), over the window's mīṇḍ time.
 - **Kaṇ:** a sheet's `kan: m>g` touches ma for an instant before ga, then ga and its āndolan.
+- **Struck ornaments:** a sheet lists the svaras struck with each, as `khatka: G`, `murki: G, n`,
+  `krintan: P` or `zamzama: R`. Each is a quick path into the svara through its neighbours in the
+  raga, then the svara held:
+  - khaṭkā: above, the svara, below, the svara (forceful, 45 ms a step);
+  - murkī: the svara, above, the svara, below, the svara (light, 30 ms a step);
+  - krintan: two above, one above, the svara, each a pull-off onto its fret;
+  - zamzama: above, the svara, above, the svara, below, the svara, hammered and pulled.
+
+  A svara with more than one takes the first of khaṭkā, murkī, krintan, zamzama, kaṇ. Mīṇḍ
+  (legato) replaces them.
+- **Gamak:** `gamak: d 5` shakes komal dha up to the next svara of the raga and back five times a
+  second while it is held, in place of āndolan.
 
 ## The sitar
 
