@@ -4,7 +4,7 @@ A Hindustani raga instrument (owner, 2026-10-25; the plan is the "PHI rāga" doc
 owner and their sitar teacher). Plain C++ in phi_dsp, so the PHI synth can use it too:
 
 - `Source/core/PhiRaga.h`: the raga sheets and the raga player.
-- `Source/core/PhiRagas.cpp`: the sheets PHI comes with (75 ragas, the owner's and their teacher's lists).
+- `Source/core/PhiRagas.cpp`: the sheets PHI comes with (174 ragas: the owner's and their teacher's lists, and the 100 of Ghulām Ḥaidar's Sau Achhūp Rāg).
 - `Source/core/PhiSitar.h`: the sitar voice.
 - `Source/mixer/RagaInstrument.h`: PHI rāga as an instrument on a mixer track.
 
