@@ -219,7 +219,7 @@ Every control has a screen-reader name and announces its value.
 3. Inserts, using the Master Section's plugins, then the two sends and the Reverb and
    Delay returns. **Inserts built** (2026-10-24).
 4. Thumbnail displays.
-5. Live inputs, record and monitoring.
+5. Live inputs, record and monitoring (built 2026-10-25: [recording.md](recording.md)).
 6. Instruments with MIDI keyboard input. **Built with step 1** (the unified track needs them).
 7. The spatial panner and surround or ambisonic masters.
 
@@ -444,17 +444,11 @@ beyond the church modes):
   timeline at its start, or in the same scene of the launcher), in the tuning the melody plays in.
   The mixer's 8 tracks are the limit. The code is in mixer/Counterpoint.h, with tests.
 - Live loops (owner, 2026-10-25: "play a melody into a clip with a pre-determined length that can
-  be adjusted and the recording immediately stops, loops, and the new melody is generated"):
-  **Rec Loop** records the MIDI keyboard on the armed track for the bars set beside it (1 to 64,
-  4/4 at the tempo), from the next bar line, or at once when the transport is stopped (it then
-  starts). The take goes into the track's next empty slot from the cursor's scene (a new scene
-  when all are full), stops by itself and loops from the bar line it ended on. With
-  **+ Counterpoint** on, the voices are written at once with the Counterpoint dialog's last
+  be adjusted and the recording immediately stops, loops, and the new melody is generated"): record
+  into a slot with **Rec 4 Bars** (or any length) and the Record Options' **After a Take: Play It
+  and Add Counterpoint**. The voices are written at once with the Counterpoint dialog's last
   choices (its mode, else the track's tuning, else the melody's own) and loop with it, on the
-  tracks the last loop's voices went on. A note up to 0.15 s early for the first beat goes on it;
-  notes still held end with the loop. Stopping the transport cancels the take. The engine keeps
-  the keyboard's messages on the launch clock (Engine::startRecording, stopRecording) and
-  launches the loop on a given clock frame (launchAt).
+  tracks the last loop's voices went on. Recording itself is in [recording.md](recording.md).
 
 The left column (owner, 2026-10-25: "a relatively static view of the mixer, clip launcher and
 horizontal track view"):

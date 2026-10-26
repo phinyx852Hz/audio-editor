@@ -42,6 +42,9 @@ Tab switches between the launcher and the tracks across time, as in Ableton (202
   instead: an audio clip's waveform or a MIDI clip's notes in the track's colour, not editable.
   An empty slot, a track's name or its strip brings the chain back. With the Master strip
   selected it steps aside for the editor's own chain. More in mixer.md.
+- **Two layers in a slot** (owner, 2026-10-26): a clip tall enough is drawn in halves, the MIDI's
+  notes on top and the audio's waveform below; the scenes scroll to keep the clips that tall, and
+  the mixer below keeps its height. Recording a layer: [recording.md](recording.md).
 - **Below: the strips, made compact** (owner, 2026-10-25): four insert slots as tall as the clip
   slots, Send A and Send B above Trim and Pan, mute and solo, a shorter fader and meter with their
   values, and the track's name at the bottom in white on its colour. The full strips come back
@@ -154,4 +157,4 @@ The tests are in tests/CoreTests.cpp (`testLauncher`).
 Launch Styles (Trigger, Gate, Toggle, Repeat), Clip Actions with chances, scene tempo and time
 signature, MIDI learn and a generic pad layout with lights, audio clips stretched to the tempo,
 Record Launcher to Timeline; then independent columns, group scenes, Capture Scene, scene chains,
-Pick for me, recording into slots and effects in the rack.
+Pick for me and effects in the rack. Recording into slots is built: [recording.md](recording.md).

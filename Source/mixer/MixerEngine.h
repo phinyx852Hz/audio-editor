@@ -58,6 +58,8 @@ namespace mixer
     };
     using MidiClipPtr = std::shared_ptr<const MidiClip>;
     MidiClipPtr placeMidi (midifile::SongPtr, const std::string& path, double sampleRate, double bpm);
+    // A clip of frames (a take) as a MIDI file at a fixed tempo, 480 ticks a quarter, as long as the clip.
+    midifile::SongPtr songOf (const MidiClip&, double sampleRate, double bpm);
 
     // A clip on a track's timeline: an audio file or a MIDI file (one of the two),
     // the part of it heard, and where that part starts.
@@ -109,6 +111,65 @@ namespace mixer
         bool timeline = true;      // the track plays its timeline clips, not the launcher
     };
 
+    // Recording (docs/recording.md). The audio input, read on the audio thread each block:
+    // as many stereo frames as have come in, up to maxFrames, interleaved.
+    class Input
+    {
+    public:
+        virtual ~Input() = default;
+        virtual int read (float* interleaved, int maxFrames) = 0;
+    };
+
+    // A take asked for: on a track, into a slot or onto the timeline.
+    struct RecordRequest
+    {
+        int track = 0;
+        int scene = -1;              // the slot; -1 the timeline, from where the transport is
+        double beats = 16.0;         // how long; 0 until stopRecording
+        bool midi = true, audio = false;   // what it records: the keyboard, the audio input
+        bool fromInstrument = false; // the audio from the track's own instrument (before its strip), not the input
+        // Into the slot's playing clip, pass after pass, until stopRecording. The UI gives the
+        // clip to write into (its own copy, already in the slot): overdubAudio or overdubMidi.
+        bool overdub = false;
+        std::shared_ptr<AudioClip> overdubAudio;
+        std::shared_ptr<MidiClip> overdubMidi;
+        // A layer (owner, 2026-10-26): the slot's clip gets its other half, audio under MIDI or
+        // MIDI over audio, one pass of the loop long, so both play together. The UI puts the new,
+        // empty layer in the slot first and gives it here as overdubAudio or overdubMidi. It
+        // starts on the quantise (the slot is launched for it if it is not playing) and ends by
+        // itself.
+        bool layer = false;
+        bool playAfter = true;       // a slot's take loops from the frame it ends on, else the track stops
+        double quantise = 0.0;       // the notes onto this grid, in beats; 0 as played
+        double maxSeconds = 120.0;   // the room a take of no set length has (the timeline's has no end)
+    };
+
+    enum class RecordState { none, waiting, recording, overdubbing };
+    struct RecordInfo
+    {
+        RecordState state = RecordState::none;
+        int scene = -1;              // the slot, -1 the timeline
+        float progress = 0.0f;       // through a take of set length, 0..1
+        Frame recorded = 0;          // frames so far
+        Frame length = 0;            // the take's, 0 none set
+        Frame start = 0;             // where it began: on the timeline, or on the launch clock
+    };
+
+    // A take that ended. A slot's is in the slot already (playing, when asked); the UI saves it
+    // as files and gives the clips their paths (and the MIDI its song), which the audio thread
+    // never reads. A timeline take's clips are for the UI to place, at `start`.
+    struct Recorded
+    {
+        int track = 0, scene = -1;
+        bool overdub = false;
+        bool layer = false;   // the slot's other layer (RecordRequest::layer)
+        AudioClipPtr audio;   // null: none recorded
+        MidiClipPtr midi;     // null: none recorded
+        Frame start = 0, length = 0;
+        int pass = 0;                // a timeline take over a loop: each pass is a take of its own
+        bool notes = false;          // the MIDI has a note in it
+    };
+
     // What a track plays (owner, 2026-10-24): its audio clips only, its instrument only (the
     // MIDI clips and the keyboard), or both as two layers, each with its own level, one of
     // which can duck the other (a kick on the instrument pumping a drum loop in the audio).
@@ -148,6 +209,14 @@ namespace mixer
         // then after the inserts and width but before the fader. Muting the track mutes them.
         std::array<std::atomic<float>, numReturns> sendDb { -100.0f, -100.0f };   // -inf (below -96) .. 0
         std::array<std::atomic<bool>, numReturns> sendPre { false, false };
+        // Recording: what a take on the track records (InputKind), and whether the audio input is
+        // heard through the track (Monitor: auto while the track is armed and records audio).
+        // inputInstrument: the track's own instrument, played from the keyboard, recorded as audio.
+        enum InputKind { inputAuto = 0, inputMidi = 1, inputAudio = 2, inputBoth = 3, inputInstrument = 4 };
+        enum Monitor { monitorAuto = 0, monitorOn = 1, monitorOff = 2 };
+        std::atomic<int> input { inputAuto };       // auto: the keyboard with an instrument (not an Audio track), else the audio input
+        std::atomic<int> monitor { monitorAuto };
+        std::atomic<int> inputChannels { 0 };       // 0 the stereo pair, 1 the left alone, 2 the right alone (both sides)
     };
 
     // A return's controls: its effect (fully wet) is set on the engine.
@@ -265,16 +334,40 @@ namespace mixer
         int liveTrack() const { return armed.load(); }
         void liveMidi (uint8_t status, uint8_t data1, uint8_t data2);
         void panic();   // every instrument silent
-        // Recording what the keyboard plays (owner, 2026-10-25: loops for live counterpoint),
-        // each message on the launch clock (to a block) when it came. Any thread.
-        struct Recorded
-        {
-            Frame clock = 0;
-            uint8_t status = 0, data1 = 0, data2 = 0;
-        };
-        void startRecording();
-        std::vector<Recorded> stopRecording();   // what came since, in order
-        bool isRecording() const { return recording.load(); }
+        // Recording (docs/recording.md): a track records what the MIDI keyboard plays on it and
+        // what comes in at the audio input, into a launcher slot or onto its timeline. Everything
+        // is decided on the audio thread, to the frame: a slot's take starts on the quantise,
+        // stops by itself at its length and plays on from that very frame. The UI asks with
+        // record(), which allocates the take's room first, and keeps what comes back from
+        // takeRecorded() as files.
+        void setInput (Input*);   // null: no audio input; returns once the audio thread has let go of the last
+        bool record (const RecordRequest&, std::string& error);   // UI thread
+        // A slot's take of no set length ends at the next quantise (its length whole quantise
+        // steps); one of set length ends by itself, and no next take follows it; an overdub or a
+        // timeline take ends at once. -1: every track.
+        void stopRecording (int track);
+        RecordInfo recordInfo (int track) const;
+        bool isRecording() const;   // a take waits, records or overdubs on any track
+        std::vector<Recorded> takeRecorded();   // the takes that ended since, oldest first; UI thread
+        // The audio input arrives this much later than it was played (the device's delay):
+        // takes are moved earlier by it. Milliseconds.
+        std::atomic<float> inputLatencyMs { 10.0f };
+        // Capture (Ableton's Capture MIDI): the keyboard is always kept, armed or not, recording
+        // or not. capture() makes a clip of the last phrase played on the track (back to a rest
+        // of two bars): with the transport playing, whole bars on the launch clock (1, 2, 4, 8,
+        // 16 or 32 of them) and `phase` the clock frame its start fell on, for launchAt; stopped,
+        // from its first note to whole bars after it. Null when nothing was played. UI thread.
+        MidiClipPtr capture (int track, Frame& phase);
+
+        // The metronome: a click on each beat while the transport plays (the first of each bar
+        // higher), and during a count-in. Not in mix downs.
+        std::atomic<bool> metronome { false };
+        std::atomic<float> metronomeDb { -6.0f };
+        std::atomic<int> beatsPerBar { 4 };   // the time signature's top; quantise stays in beats
+        // play() after a count-in of so many bars of clicks (0: none); the transport is still
+        // stopped meanwhile. countingIn() says it is counting.
+        void playWithCountIn (double bars);
+        bool countingIn() const { return countLeft.load() > 0; }
 
         Meter takeMeter (int index);   // a track (0..7), the master (8) or a return (9, 10), after the fader
 
@@ -353,6 +446,41 @@ namespace mixer
             float duckEnvelope = 0.0f;
             Cut duckSplit;                    // its low-pass, below which the duck works
             float duckState[5][2] {};         // per ducked side: the instrument's, the audio's, mono
+
+            // Recording: the take on this track, made in record() and run on the audio thread.
+            struct Take
+            {
+                RecordRequest request;
+                RecordState state = RecordState::none;
+                bool timeline = false;
+                std::shared_ptr<AudioClip> audio;   // a slot's sound, written as it comes, with room for all of it
+                std::shared_ptr<MidiClip> midi;     // its notes, with room reserved
+                std::shared_ptr<Slot> slot;         // what the slot gets once it ends
+                Frame startAt = -1;                 // on the launch clock (a slot) or the timeline; -1 once the transport starts
+                Frame length = 0;                   // frames; 0 until stopped
+                Frame endAt = -1;                   // once known
+                Frame lastPos = -1;                 // a timeline take: where the last block ended (else a new pass)
+                bool stopAsked = false;
+                bool notes = false;
+                int pass = 0;
+                Frame phase = 0;                    // a layer: where in the loop it began
+                std::array<std::array<Frame, 128>, 16> on;      // notes held: where they began in the take, -1 none
+                std::array<std::array<Frame, 128>, 16> shift;   // and how far quantising (or playing early) moved them
+                Frame room = 0;                     // frames the take has room for
+                // The next take, asked for while this one records: it starts the frame this one ends.
+                int nextScene = -1;
+                std::shared_ptr<AudioClip> nextAudio;
+                std::shared_ptr<MidiClip> nextMidi;
+                std::shared_ptr<Slot> nextSlot;
+                // The audio of a take that has ended, still coming in late by the input's delay.
+                std::shared_ptr<AudioClip> tailAudio;
+                Frame tailStart = 0, tailTo = -1, tailLength = 0;
+                int tailChannels = 0;
+                Recorded done;                      // for the UI once liveLock is free (and the tail is in)
+                SlotPtr replaced;                   // the slot it took the place of, freed by the UI
+                bool reporting = false;
+            };
+            Take take;
         };
         struct LaunchRequest
         {
@@ -371,6 +499,31 @@ namespace mixer
         {
             std::atomic<float> peak[2], rms[2];
         };
+        struct RecordShared
+        {
+            std::atomic<int> state { 0 }, scene { -1 };
+            std::atomic<float> progress { 0.0f };
+            std::atomic<Frame> recorded { 0 }, length { 0 }, start { 0 };
+        };
+        // A timeline take goes to the UI as it comes: its audio through a ring, its notes and
+        // its passes as marks, gathered in takeRecorded().
+        struct Mark
+        {
+            enum Kind : uint8_t { note, pass, end } kind = note;
+            int track = 0;
+            Frame frame = 0;        // on the timeline
+            int64_t audioAt = 0;    // frames of the take's audio sent before it
+            uint8_t status = 0, data1 = 0, data2 = 0;
+        };
+        // The keyboard as played, for capture().
+        struct Kept
+        {
+            Frame live = 0, clock = 0;
+            uint32_t epoch = 0;     // which run of the transport `clock` belongs to; playing or not
+            bool playing = false;
+            int track = 0;
+            uint8_t status = 0, data1 = 0, data2 = 0;
+        };
 
         // One block of up to `block` frames at `at`; the lock must be held.
         void renderBlock (float* left, float* right, int frames, Frame at, bool play, bool withLive, int blockOffset = 0);
@@ -387,6 +540,16 @@ namespace mixer
         bool launcherBusy() const;
         void meter (int index, const float* left, const float* right, int frames);
         void layers (int index, Track&, const Strip&, TrackMode, bool hasMono, int frames, bool jumped);
+        // Recording, on the audio thread with the lock held.
+        bool recordsAudio (int track) const;
+        void endLayer (int track, Track::Take&, Frame length);   // for the UI, with what it has (0: nothing)
+        void takeInput (int frames);                       // the next block's audio input into inL and inR
+        void recordBlock (Frame clockAt, Frame posAt, int frames, bool play);
+        void recordNote (Track&, Frame frame, const NoteEvent&, Frame length);   // into a slot take's clip
+        void finishSlotTake (int index, Track&);
+        void report (int index, Track&);                   // the take's Recorded to the UI, when liveLock is free
+        void click (float* left, float* right, int frames, Frame from, double beatFrames);
+        void resetClock();
 
         mutable std::mutex lock;   // tracks: held by render and by changes
         std::atomic<double> rate { 48000.0 };
@@ -410,8 +573,40 @@ namespace mixer
         std::atomic<int> armed { 0 };
         std::mutex liveLock;
         std::vector<NoteEvent> liveQueue, liveTaken;
-        std::atomic<bool> recording { false };
-        std::vector<Recorded> recorded;                      // under liveLock
+        std::atomic<Input*> input { nullptr };
+        std::vector<float> inputFifo;                         // stereo, interleaved: what came in and is not yet used
+        size_t inputHave = 0;
+        std::vector<float> inL, inR, inScratch;               // the block's input
+        // Each track's instrument as it sounded in the block, for a take that records it as audio.
+        std::array<std::array<float, block>, maxTracks> sourceL {}, sourceR {};
+        std::array<RecordShared, maxTracks> recordShared {};
+        std::vector<Recorded> recordedOut;                    // under liveLock: takes that ended
+        std::vector<SlotPtr> slotsOut;                        // under liveLock: slots a take took the place of, freed by the UI
+        // The timeline take's stream: a ring the audio thread writes and the UI reads.
+        std::vector<float> streamRing;
+        std::atomic<uint64_t> streamWritten { 0 }, streamRead { 0 };
+        std::vector<Mark> marks;                              // under liveLock
+        uint64_t streamSent = 0;                              // audio thread: frames written into the ring for the take
+        // The UI's side of a timeline take, filled in takeRecorded().
+        struct Gathered
+        {
+            int track = -1;
+            std::vector<float> audio;                         // stereo, interleaved, from the take's first frame
+            std::vector<Mark> marks;
+            bool audioOn = false, midiOn = false;
+            bool fromInstrument = false;                      // no input delay, both sides
+            double quantise = 0.0;
+        };
+        Gathered gathered;
+        std::array<Kept, 8192> kept {};                       // a ring, written under the lock
+        size_t keptNext = 0;
+        Frame liveClock = 0;                                  // frames rendered since the start
+        uint32_t epoch = 0;
+        std::atomic<Frame> countLeft { 0 };
+        Frame countTotal = 0;
+        float clickPhase = 0.0f;
+        int clickAt = -1;                                     // frames into the click sounding, -1 none
+        float clickHz = 1000.0f, clickGain = 0.0f;
         std::atomic<bool> panicPending { false };
 
         std::vector<LaunchRequest> launchQueue, launchTaken;   // launchQueue under liveLock
