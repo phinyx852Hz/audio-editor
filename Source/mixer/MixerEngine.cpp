@@ -565,6 +565,20 @@ namespace mixer
             play();
     }
 
+    void Engine::launchAt (int track, int scene, Frame clockFrame)
+    {
+        if (track < 0 || track >= maxTracks || scene < 0 || scene >= maxScenes)
+            return;
+        if (! playing.load())
+        {
+            launch (track, scene);
+            return;
+        }
+        const std::lock_guard<std::mutex> l (liveLock);
+        if (launchQueue.size() < 256)
+            launchQueue.push_back ({ track, scene, false, false, std::max<Frame> (0, clockFrame) });
+    }
+
     void Engine::launchScene (int scene)
     {
         if (scene < 0 || scene >= maxScenes)
@@ -646,7 +660,8 @@ namespace mixer
             }
             t.queued = s;
             t.queuedScene = r.scene;
-            t.queuedAt = r.now || ! play ? now : quantiseFrom (s->quantise < 0.0 ? launchQuantise.load() : s->quantise);
+            t.queuedAt = r.at >= 0 && play ? r.at
+                       : r.now || ! play ? now : quantiseFrom (s->quantise < 0.0 ? launchQuantise.load() : s->quantise);
         }
         launchTaken.clear();
 
@@ -664,7 +679,7 @@ namespace mixer
             {
                 t.playing = t.queued;
                 t.playingScene = t.queuedScene;
-                t.launchedAt = now;
+                t.launchedAt = t.queuedAt;   // now, or a launchAt's frame gone by
                 t.timeline = false;
             }
             t.queued = nullptr;
@@ -758,6 +773,22 @@ namespace mixer
         const std::lock_guard<std::mutex> l (liveLock);
         if (liveQueue.size() < 1024)
             liveQueue.push_back ({ 0, status, data1, data2 });
+        if (recording.load())
+            recorded.push_back ({ clock.load(), status, data1, data2 });
+    }
+
+    void Engine::startRecording()
+    {
+        const std::lock_guard<std::mutex> l (liveLock);
+        recorded.clear();
+        recording = true;
+    }
+
+    std::vector<Engine::Recorded> Engine::stopRecording()
+    {
+        const std::lock_guard<std::mutex> l (liveLock);
+        recording = false;
+        return std::exchange (recorded, {});
     }
 
     void Engine::panic() { panicPending = true; }
@@ -867,7 +898,7 @@ namespace mixer
                 auto next = at + n;
                 if (looping && next >= le)
                     next = ls;   // the next block sees the jump
-                else if (! looping && next >= lengthLocked() && ! launcherBusy())
+                else if (! looping && next >= lengthLocked() && ! launcherBusy() && ! recording.load())   // a recording keeps time past the end
                 {
                     playing = false;
                     stopPending = true;
