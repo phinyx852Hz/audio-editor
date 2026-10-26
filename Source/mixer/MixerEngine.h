@@ -19,6 +19,7 @@
 
 #include <array>
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -332,7 +333,11 @@ namespace mixer
         // A MIDI keyboard plays the armed track's instrument (-1: none). Any thread.
         void setLiveTrack (int track) { armed = track; }
         int liveTrack() const { return armed.load(); }
-        void liveMidi (uint8_t status, uint8_t data1, uint8_t data2);
+        // `heard` false: not shown to the live listener (the MIDI editor's own auditions and playback).
+        void liveMidi (uint8_t status, uint8_t data1, uint8_t data2, bool heard = true);
+        // Sees each message liveMidi() is given, on the thread that gives it (the MIDI thread):
+        // the MIDI editor's step input. Null for none. Any thread.
+        void setLiveListener (std::function<void (uint8_t, uint8_t, uint8_t)>);
         void panic();   // every instrument silent
         // Recording (docs/recording.md): a track records what the MIDI keyboard plays on it and
         // what comes in at the audio input, into a launcher slot or onto its timeline. Everything
@@ -573,6 +578,8 @@ namespace mixer
         std::atomic<int> armed { 0 };
         std::mutex liveLock;
         std::vector<NoteEvent> liveQueue, liveTaken;
+        std::mutex listenerLock;
+        std::function<void (uint8_t, uint8_t, uint8_t)> liveListener;   // under listenerLock
         std::atomic<Input*> input { nullptr };
         std::vector<float> inputFifo;                         // stereo, interleaved: what came in and is not yet used
         size_t inputHave = 0;

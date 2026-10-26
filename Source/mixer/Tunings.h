@@ -30,6 +30,9 @@ namespace mixer
                               // "korean folk mode", "equal"
         std::vector<double> cents;   // the degrees above the tonic, from 0, within the period
         int divisions = 0;           // an equal temperament: this many steps to the octave (else 0)
+        // The tradition's name for each degree, when the family's own names (NoteEditor.cpp) can't
+        // be worked out from the cents: the kepatihan number of each gamelan tone. Else empty.
+        std::vector<std::string> names;
     };
 
     const std::vector<TuningSystem>& tuningSystems();

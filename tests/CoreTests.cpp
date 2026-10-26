@@ -8,6 +8,8 @@
 #include "../Source/sampler/SlicerEngine.h"
 #include "../Source/mixer/MidiFile.h"
 #include "../Source/mixer/Tunings.h"
+#include "../Source/mixer/NoteEditor.h"
+#include "../Source/core/Scala.h"
 #include "../Source/mixer/RagaInstrument.h"
 #include "../Source/mixer/Counterpoint.h"
 #include "../Source/mixer/MixerEngine.h"
@@ -56,6 +58,7 @@
 #include <fstream>
 #include <functional>
 #include <iterator>
+#include <map>
 #include <random>
 #include <set>
 #include <string>
@@ -6317,6 +6320,185 @@ namespace
         }
     }
 
+    void testScala()
+    {
+        using namespace phi::scala;
+        std::string error;
+        Scale s;
+        const char* meantone =
+            "! meantone.scl\n!\n1/4-comma meantone\n 4\n!\n 193.15686\n 5/4 major third\n 3/2\n 2/1\n";
+        check (parseScl (meantone, s, error) && s.size() == 4 && s.description == "1/4-comma meantone", "scala: a .scl is read");
+        check (near (s.cents[1], 386.3137, 0.001) && near (s.period(), 1200.0, 1.0e-9), "scala: ratios read as cents");
+        check (s.degrees().size() == 4 && s.degrees()[0] == 0.0, "scala: the degrees within the period, the tonic first");
+        Scale back;
+        check (parseScl (writeScl (s, "meantone.scl"), back, error) && back.text[1] == "5/4" && near (back.cents[0], s.cents[0], 1.0e-4),
+               "scala: written back, a ratio stays a ratio");
+        check (! parseScl ("x\n 3\n 100.0\n", s, error) && ! error.empty(), "scala: a count the pitches don't match is refused");
+        check (! parseScl ("x\n 1\n -3/2\n", s, error), "scala: a negative ratio is refused");
+
+        // A linear map: key 60 the tonic at middle C; each key the next degree.
+        Scale twelve = fromCents ({ 0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100 });
+        const auto map = linearMap (60);
+        check (near (keyHz (twelve, map, 69), 440.0, 1.0e-6) && near (keyHz (twelve, map, 48), 130.8128, 1.0e-3),
+               "scala: twelve equal steps on a linear map is 12-TET");
+        Scale five = fromCents ({ 0, 240, 480, 720, 960 });
+        const auto t = toTuning (five, linearMap (60));
+        check (near (t.hz (65) / t.hz (60), 2.0, 1.0e-9) && near (phi::Tuning::ratioToCents (t.hz (61) / t.hz (60)), 240.0, 1.0e-6),
+               "scala: five steps a key, the octave five keys up");
+
+        KeyboardMap kbm;
+        const char* whiteKeys = "! white.kbm\n12\n0\n127\n60\n69\n440.0\n7\n0\nx\n1\nx\n2\n3\nx\n4\nx\n5\nx\n6\n";
+        check (parseKbm (whiteKeys, kbm, error) && kbm.size == 12 && kbm.mapping[1] == -1 && kbm.mapping[11] == 6, "scala: a .kbm is read");
+        Scale seven = fromCents ({ 0, 200, 400, 500, 700, 900, 1100 });
+        check (keyHz (seven, kbm, 61) == 0.0 && near (keyHz (seven, kbm, 72) / keyHz (seven, kbm, 60), 2.0, 1.0e-9)
+                   && near (keyHz (seven, kbm, 69), 440.0, 1.0e-9),
+               "scala: a mapped key plays its degree, an x plays nothing, the reference key its frequency");
+        KeyboardMap again;
+        check (parseKbm (writeKbm (kbm), again, error) && again.mapping == kbm.mapping && again.octaveDegree == 7, "scala: a .kbm written back");
+    }
+
+    void testNoteEditor()
+    {
+        using namespace noteedit;
+        // A pitch system from a maqam, and its names.
+        const auto rast = mixer::findTuning ("rast");
+        check (rast >= 0, "note editor: rast is a tuning");
+        const auto r = fromTuning (mixer::tuningSystems()[(size_t) rast], 0);
+        check (r.size() == 7 && near (r.pitchOf (2), 6350.0, 1.0e-9) && near (r.pitchOf (7), 7200.0, 1.0e-9) && near (r.pitchOf (-1), 5850.0, 1.0e-9),
+               "note editor: rast's degrees from C, up and down");
+        check (r.nearestStep (6340.0) == 2 && r.nearestStep (7190.0) == 7 && r.nearestStep (5000.0) < 0, "note editor: the nearest degree");
+        check (label (r, 2, Naming::tradition) == "E½♭4", "note editor: a maqam's neutral third spelled E half-flat: " + label (r, 2, Naming::tradition));
+        check (letterName (6000.0 + 1050.0, true) == "B½♭4" && letterName (6450.0, true) == "E½♯4", "note editor: quarter-tone letters");
+        check (letterName (6914.0, false) == "A4 +14", "note editor: a letter and the cents off it");
+        const auto steps = r.steps (6000.0, 7200.0);
+        check (steps.size() == 8 && steps.front() == 0 && steps.back() == 7, "note editor: the rows of an octave");
+
+        const auto yaman = mixer::findTuning ("yaman (kalyan)");
+        check (yaman >= 0, "note editor: yaman is a tuning");
+        if (yaman >= 0)
+        {
+            const auto y = fromTuning (mixer::tuningSystems()[(size_t) yaman], 2);
+            check (label (y, 0, Naming::tradition) == "S" && label (y, 3, Naming::tradition) == "M"
+                       && label (y, 7, Naming::tradition) == "S\xCC\x87" && label (y, -1, Naming::tradition) == "N\xCC\xA3",
+                   "note editor: sargam, tīvra ma, a dot above and below for the octave");
+        }
+        const auto slendro = mixer::findTuning ("slendro");
+        check (slendro >= 0 && label (fromTuning (mixer::tuningSystems()[(size_t) slendro], 0), 3, Naming::tradition) == "5",
+               "note editor: sléndro's tones by their kepatihan numbers (no 4)");
+        const auto gong = mixer::findTuning ("shang");
+        check (gong >= 0 && label (fromTuning (mixer::tuningSystems()[(size_t) gong], 2), 0, Naming::tradition).rfind ("shāng", 0) == 0,
+               "note editor: the shāng mode starts on shāng");
+        check (label (twelveTet(), 13, Naming::degrees) == "2'" && label (twelveTet(), 1, Naming::letters) == "C♯4", "note editor: degrees and letters");
+
+        // Decode and encode: MPE keeps a pitch between the keys and comes back the same.
+        Sequence s;
+        s.notes.push_back ({ 0, 480, 6350.0, 100 });
+        s.notes.push_back ({ 0, 480, 6700.0, 90 });
+        s.notes.push_back ({ 480, 240, 7050.0, 80 });
+        s.notes.push_back ({ 480, 240, 3600.0, 110, 64, 9 });   // a drum
+        check (suggestedEncoding (s) == Encoding::mpe, "note editor: notes between keys want MPE");
+        const auto mpe = encode (s, {});
+        check (mpe.clashes == 0 && mpe.song->noteCount() == 4, "note editor: MPE, a channel a note");
+        {
+            phi::Mpe zone;
+            std::map<int, double> heard;
+            for (const auto& e : mpe.song->events)
+            {
+                const auto m = zone.handle (e.status, e.data1, e.data2);
+                if (m.kind == phi::Mpe::Kind::noteOn && m.channel != 9)
+                    heard[(int) std::lround (100.0 * (m.key + zone.expression (m.channel).bendSemitones))] = 1;
+            }
+            check (heard.count (6350) && heard.count (6700) && heard.count (7050), "note editor: an MPE synth hears each pitch");
+        }
+        auto back = decode (*mpe.song);
+        check (back.notes.size() == 4, "note editor: decoded, every note");
+        bool same = back.notes.size() == 4;
+        s.sort();   // in the order decode() gives: by start, then pitch
+        for (size_t i = 0; same && i < 4; ++i)
+            same = near (back.notes[i].pitch, s.notes[i].pitch, 0.6) && back.notes[i].length == s.notes[i].length;
+        check (same, "note editor: MPE round trip keeps pitch and length");
+        check (back.other.empty(), "note editor: the MPE set-up and the notes' bends are not left as events");
+        {
+            const auto bytes = midifile::bytes (*mpe.song);
+            std::string why;
+            const auto file = midifile::parse (bytes.data(), bytes.size(), why);
+            const auto again = file != nullptr ? decode (*file) : Sequence {};
+            check (again.notes.size() == 4 && near (again.notes[1].pitch, s.notes[1].pitch, 0.6) && again.other.empty(),
+                   "note editor: an MPE clip written as a .mid and read back");
+        }
+        const auto drum = std::find_if (back.notes.begin(), back.notes.end(), [] (const Note& n) { return n.channel == 9; });
+        check (drum != back.notes.end() && drum->pitch == 3600.0, "note editor: drums stay on channel 10");
+
+        EncodeOptions shared;
+        shared.encoding = Encoding::bendChannels;
+        shared.bendRange = 2.0;
+        Sequence chord;
+        for (int i = 0; i < 6; ++i)
+            chord.notes.push_back ({ 0, 480, 6000.0 + 200.0 * i + (i % 2 ? 50.0 : 0.0) });
+        const auto bend = encode (chord, shared);
+        check (bend.channels == 2 && decode (*bend.song).notes.size() == 6, "note editor: notes bent alike share a channel");
+        const auto keys = encode (chord, { Encoding::keys });
+        check (keys.channels == 1 && decode (*keys.song).notes[1].pitch == 6300.0, "note editor: keys, each note on its nearest key");
+
+        // Edits.
+        Sequence q;
+        q.notes.push_back ({ 10, 100, 6000.0 });
+        q.notes.push_back ({ 130, 100, 6200.0 });
+        q.notes.push_back ({ 250, 300, 6400.0 });
+        quantizeStarts (q, 120);
+        check (q.notes[0].start == 0 && q.notes[1].start == 120 && q.notes[2].start == 240, "note editor: quantised to the grid");
+        legato (q);
+        check (q.notes[0].length == 120 && q.notes[1].length == 120, "note editor: legato");
+        q.notes[1].selected = true;
+        transposeSteps (q, twelveTet(), 2);
+        check (q.notes[1].pitch == 6400.0 && q.notes[0].pitch == 6000.0, "note editor: only the picked note moves");
+        selectAll (q, false);
+        transposeSteps (q, r, 1);   // into rast, a degree up
+        check (near (q.notes[0].pitch, 6200.0, 1e-9) && near (q.notes[2].pitch, 6500.0, 1e-9), "note editor: a degree up in rast");
+        splitAt (q, 300);
+        check (q.notes.size() == 4, "note editor: split");
+        glue (q);
+        check (q.notes.size() == 3, "note editor: glued again");
+        rampVelocity (q, 40, 120);
+        check (q.notes.front().velocity == 40 && q.notes.back().velocity == 120, "note editor: velocity ramp");
+
+        // Restyle: C major's degrees into sléndro keep the line rising.
+        Sequence melody;
+        for (int i = 0; i < 8; ++i)
+            melody.notes.push_back ({ i * 120, 120, 6000.0 + (double[]) { 0, 200, 400, 500, 700, 900, 1100, 1200 }[i] });
+        const auto key = detectKey (melody);
+        check (key.root == 0 && ! key.minor, "note editor: C major found");
+        const auto ionian = fromTuning (mixer::tuningSystems()[(size_t) mixer::findTuning ("ionian")], 0);
+        const auto to = fromTuning (mixer::tuningSystems()[(size_t) slendro], 0);
+        restyle (melody, ionian, to);
+        bool rising = true;
+        for (size_t i = 1; i < melody.notes.size(); ++i)
+            rising = rising && melody.notes[i].pitch > melody.notes[i - 1].pitch;
+        check (rising && near (melody.notes[5].pitch, 7200.0, 1e-6), "note editor: restyled by degree, the contour kept");
+
+        // Step input: three notes, a rest, a chord.
+        Sequence st;
+        StepInput in;
+        stepNote (st, in, 6000.0);
+        stepNote (st, in, 6200.0);
+        stepRest (st, in);
+        in.chord = true;
+        stepNote (st, in, 6400.0);
+        stepNote (st, in, 6700.0);
+        check (st.notes.size() == 4 && st.notes[2].start == 360 && st.notes[3].start == 360 && in.position == 360, "note editor: step input");
+        in.chord = false;
+        stepRest (st, in);
+        stepBack (st, in);
+        check (st.notes.size() == 2 && in.position == 360, "note editor: step back deletes the step's notes");
+
+        // A controller lane.
+        drawLane (st, 1, 0, 0, 480, 0, 127, 120);
+        const auto pts = lanePoints (st, 1, 0);
+        check (pts.size() == 5 && pts.front().value == 0 && pts.back().value == 127, "note editor: a modulation ramp drawn");
+        eraseLane (st, 1, 0, 0, 240);
+        check (lanePoints (st, 1, 0).size() == 2, "note editor: part of a lane erased");
+    }
+
 int main()
 {
     testStorage();
@@ -6365,6 +6547,8 @@ int main()
     testRagaSheets();
     testSitar();
     testTunings();
+    testScala();
+    testNoteEditor();
     testCounterpoint();
     testRecording();
     testControlSurfaces();
