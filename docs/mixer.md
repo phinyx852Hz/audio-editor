@@ -397,18 +397,44 @@ Fast MIDI edits (owner, 2026-10-25: "MIDI editing, but really fast"; "the idea i
   across both.
 - **½** keeps every other note or chord, and **×2** plays each note twice in its own time, half as
   long. Both can be pressed again.
-- **Sa** and **Mode or raga** move every note to the nearest note of a mode (Ionian to Locrian)
-  or one of the major Hindustani ragas: the ten thaats (Bilawal, Yaman, Khamaj, Kafi, Asavari,
-  Bhairavi, Bhairav, Marwa, Purvi, Todi), then Darbari Kanada, Jaunpuri, Bageshri, Bhimpalasi,
-  Desh, Bihag, Kedar, Miyan ki Malhar, Megh, Bhupali, Durga, Hamsadhwani, Malkauns, Jog, Ahir
-  Bhairav, Lalit, Puriya Dhanashri, Shree, Multani and Charukeshi. A note between two goes down,
-  and drums (channel 10) stay. Ragas that share their notes (Darbari, Jaunpuri, Asavari) are each
+- **Sa** and **Mode or raga** move every note to the nearest note of a mode (ionian to locrian)
+  or one of the major Hindustani ragas: the ten thaats (bilāval, yaman, khamāj, kāfī, āsāvarī,
+  bhairavī, bhairav, mārvā, pūrvī, toḍī), then darbārī kānaḍā, jaunpurī, bāgeśrī, bhīmpalāsī,
+  deś, bihāg, kedār, miyāṅ kī malhār, megh, bhūpālī, durgā, haṃsadhvani, mālkauns, jog, ahīr
+  bhairav, lalit, pūriyā dhanāśrī, śrī, multānī and cārukeśī. A note between two goes down,
+  and drums (channel 10) stay. Ragas that share their notes (darbārī kānaḍā, jaunpurī, āsāvarī) are each
   listed. A raga is taken as the notes it uses up and down; its own movement is not followed.
+- The box beside the raga offers a **hypo** range (owner, 2026-10-26): Sa stays the final, and
+  every note is folded by octaves into the octave from the fifth (Pa, a fourth below Sa, up to Pa)
+  or from the fourth (Ma, a fifth below Sa, up to Ma), the one nearest the clip's middle. It is
+  offered for the ragas that have that svara. The church modes (Ionian to Locrian) don't offer
+  it: their hypo-modes are among the tunings.
 - Each edit writes a new MIDI file (type 0) next to the mix, in "<mix> Edits", or in Music/PHI
   Edits until the mix is saved. The clip plays it from the start, as it was heard (a reversed
   clip is turned round first). Ctrl+Z undoes an edit on the tracks. The code is in
   mixer/MidiFile.h (phiShuffle, duplicated, halfDensity, doubleDensity, toMode, scales), with
   tests.
+
+The Mode menu (owner, 2026-10-26: "I love mode being its own thing"; every name in it lower
+case, in proper transliteration):
+- One mode for everything: it lists every mode and raga the tunings have, by tradition (church,
+  jazz, rāga, maqām, dastgāh, and east asian, gamelan and mbira as those tunings arrive; a
+  tradition it does not know yet gets a submenu of its own). A long list, the rāgas, comes in
+  alphabetical parts. The equal temperaments are tunings, not modes, so they stay in the
+  Tuning boxes.
+- **final** is the final, sa or tonic. **range** is authentic, or hypo from the fifth or from the
+  fourth where the mode has that degree; for a church mode, hypo from the fifth is its hypo-mode
+  (picking hypodorian in the church list does the same: dorian, hypo from the fifth, final kept).
+  **equal tempered** has the PHI synth play a rāga's 12-TET twin.
+- The mode chosen is what the Counterpoint and Fugue dialogs open on when the clip has no tuning
+  of its own. **tune the track** sets the selected track's tuning to it (a hypo-mode on the bottom
+  of its range, hypodorian on A for a final on D); **notes into the mode** moves the MIDI clip
+  shown in the Device Chain into its keys and range; **counterpoint...** and **fugue...** open those dialogs.
+- Kept in settings.ini as mode/system (the plain name), mode/final, mode/hypo and mode/equal.
+  Code: ui/ModeSection.cpp, mixer::modeKeys, midifile::toKeys.
+- With 23 menus the bar puts 2 px between titles instead of Fusion's 7, so at 1280 px wide every
+  menu stays in view up to a 10 pt font (1204 px at 10 pt DejaVu Sans; 1345 px at 11 pt, when the
+  last ones go behind the » button).
 
 Counterpoint (owner, 2026-10-25: an automatic MIDI counterpoint generator, in modal systems
 beyond the church modes):
@@ -439,6 +465,14 @@ beyond the church modes):
   an equal temperament each key is one step. Church modes raise the note a whole step below a
   cadence's arrival (musica ficta). A raga can carry its āroha and avaroha (the notes used going
   up and coming down); the tunings list has none yet, so a raga uses its notes both ways.
+- **Range** (hypo, owner 2026-10-26): for a raga, maqam or dastgah, the new voices can keep to a
+  hypo range with the same tonic, as the Gregorian plagal modes do. *From the fifth* is the octave
+  from a fourth below the tonic (Pa, the dominant, up to Pa); *from the fourth* the octave from a
+  fifth below (Ma up to Ma). Each voice takes the octave of that range nearest where it would sit,
+  and may go a step past either end. It is offered only when the mode has a fifth or fourth within
+  30 cents of a pure one (Huzām has no fifth, Bhūpālī no fourth). The church modes don't offer it,
+  since they have their own hypo-modes in the list, and neither do jazz modes or equal steps, which
+  have no tonic-dominant hierarchy. The automatic counterpoint uses the dialog's last choice.
 - Variation: another number writes other lines that keep the same rules; the same number writes
   the same lines.
 - Each voice is a MIDI file (type 0, the melody's tempo map and channel) next to the mix, and a
@@ -451,6 +485,45 @@ beyond the church modes):
   and Add Counterpoint**. The voices are written at once with the Counterpoint dialog's last
   choices (its mode, else the track's tuning, else the melody's own) and loop with it, on the
   tracks the last loop's voices went on. Recording itself is in [recording.md](recording.md).
+
+Fugue (owner, 2026-10-26: "a fugue generator based on open source software", "for the mixer view
+only", "using all mode types"):
+- **Fugue...** in the MIDI Clip section, beside Counterpoint, writes a fugue of 2 to 4 voices on
+  the clip's melody as its subject: its first phrase (up to a rest of an eighth or more), at most
+  four bars. Two voices are upper and lower; three soprano, alto and bass; four add the tenor.
+- The open-source generators surveyed (2026-10-26): sepiks-ai/fugue-structure, Baroque_fugue
+  (StrachNaWroble), the openDAW MCP's create_fugue and ethan-pronev/Fugue-Generator write fugues
+  but carry no licence, so none of their code can be used; the licensed ones (Melodizer, GPL-3.0;
+  foox and CounterPointer, MIT; Strasheela; FuX) write species counterpoint only, which PHI already
+  does. The fugue is our own code: the plan takes the textbook form those projects follow
+  (subject, tonal or real answer, countersubject, episodes from the subject's head in sequence,
+  stretto, inversion), and the free voices are written by the counterpoint search above.
+- The plan: the exposition, the alto first with the subject, the soprano with the answer at the
+  fifth, then the bass (and tenor), each a voice's length after the one before. The answer is
+  tonal (the tonic and dominant of the subject's head answer each other) or real (every note a
+  fifth up); both move by the mode's degrees, so they stay in the mode. The voice that had the
+  subject goes on in a countersubject, written against the answer, which comes back in another
+  voice against each later entry where it fits (moved by the mode's degrees and octaves, kept
+  only where it sounds well against the entry). Then 0 to 4 middle entries on the mediant,
+  submediant, subdominant and supertonic, each after an episode: the subject's head (its first
+  bar or third) in sequence, three steps down or up, in one voice. Every other middle entry can
+  be upside down. Then a last episode and the stretto: every voice enters again, each before the
+  one before has finished, as close as they sound well together (within half the subject if they
+  can); without it, a last entry in the bass. The close holds the tonic in the bass for a bar.
+- The free voices: wherever a voice that has come in has nothing given, it is written by the
+  counterpoint search against everything sounding, in the chosen species against the beat (a
+  half note under a subject of quarters and longer, else a quarter): note against note, two,
+  four, syncopated, or florid (the default). Each free stretch leads out of the voice's last note
+  and into its next, and the last ends as a cadence. A raga's āroha and avaroha are kept by
+  every line, the subject's own entries too.
+- The mode: as for Counterpoint, any of the tunings on a root, or the subject's own; the clip's
+  tuning is offered first. Variation: another number writes other free voices and countersubject
+  on the same plan.
+- Each voice is a MIDI file next to the mix ("<clip> fugue soprano.mid"), and a clip on a new
+  track with the Synth, where the clip is (on the timeline at its start, or in the same scene),
+  the whole fugue long, in the tuning the subject plays in. The status line gives the bars, the
+  middle entries, the stretto's distance and any strict rule bent. The code is in mixer/Fugue.h
+  (and FreePart in mixer/Counterpoint.h), with tests.
 
 The left column (owner, 2026-10-25: "a relatively static view of the mixer, clip launcher and
 horizontal track view"):
@@ -504,7 +577,7 @@ could be applied on the clip level, track level or scene level"):
   [east-asian-tunings.md](east-asian-tunings.md)); and 2 to 21 equal steps to the octave.
   A pathet is the laras's tones in use, read from a gong tone it rests on (sléndro nem on 2, sanga
   on 5, manyura on 6; pélog lima on 1, nem on 6, barang on 2).
-  Names are in IAST (ragas), IJMES (maqams), a common Persian romanisation (dastgahs),
+  Names are in IAST (ragas), IJMES (maqams), the Encyclopædia Iranica's romanisation (dastgahs),
   Indonesian spelling (gamelan), pinyin with its tones, Hepburn and McCune-Reischauer, all in lower case (owner); a mix saves the plain ASCII name beside
   each. The clip **Mode or raga...** snap list has the gamelan scales too, on their nearest keys.
 - The Shona tunings (owner, 2026-10-26: "mode and tuning systems from Zimbabwe, especially from

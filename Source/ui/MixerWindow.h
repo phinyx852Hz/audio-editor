@@ -196,6 +196,16 @@ public:
     control::State surfaceState() const;
     void surfaceCommand (const control::Command&);
 
+    // The Mode menu (ModeSection.cpp, owner 2026-10-26): the selected track tuned to a mode
+    // (its clips' and scenes' own tunings left as they are), and the MIDI clip shown in the
+    // Device Chain moved into the mode's keys, folded into a hypo range `below` keys under
+    // the root when that is not 0. False when there is no track, or no MIDI clip shown.
+    bool tuneSelectedTrack (mixer::TuningChoice);
+    bool modeShownMidi (int root, uint16_t keys, int below, const QString& what);
+    bool showsMidiClip() const;
+    void counterpointShown() { counterpointShownMidi(); }
+    void fugueShown() { fugueShownMidi(); }
+
 Q_SIGNALS:
     void mixdownRequested();
     void midiInputsRequested();
@@ -298,6 +308,11 @@ private:
     // frame of the launch clock with it.
     void writeCounterpoint (int track, const mixer::Clip& clip, mixer::SlotPtr slot, int scene, const counterpoint::Settings&,
                             mixer::TuningChoice modeChoice, mixer::TuningChoice tuning, Frame launchAt);
+    // Fugue (owner, 2026-10-26; MixerFugue.cpp): a fugue of two to four voices on the clip's
+    // melody as its subject, in any mode, raga, maqam or equal temperament (mixer/Fugue.h), each
+    // voice a MIDI file beside the mix and a clip on a new track, where the clip is.
+    void fugueShownMidi();
+    bool writeFugue (int track, const mixer::Clip& clip, mixer::SlotPtr slot, int scene);   // true if it made any
     // Recording (docs/recording.md; owner, 2026-10-25: "play a melody into a clip with a
     // pre-determined length that can be adjusted and the recording immediately stops, loops, and
     // the new melody is generated", and "the main method super easy to learn with the options for
@@ -366,6 +381,7 @@ private:
     QLabel* midiClipTitle = nullptr;
     QComboBox* rootBox = nullptr;
     QComboBox* scaleBox = nullptr;
+    QComboBox* hypoBox = nullptr;   // the scale's range: authentic, or a hypo range
     int phiTurn = 0;
     // Q-Link (Cubase): with it on, a change to one of the picked strips goes to all of them;
     // Alt+Shift sends it to every track. `fn` gets each strip, and whether it is the one changed.

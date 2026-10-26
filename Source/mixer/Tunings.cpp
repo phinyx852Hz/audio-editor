@@ -358,6 +358,14 @@ namespace mixer
         return -1;
     }
 
+    uint16_t modeKeys (const TuningSystem& t)
+    {
+        uint16_t keys = 0;
+        for (auto c : t.cents)
+            keys |= (uint16_t) (1u << (((int) std::floor (c / 100.0 + 0.5) % 12 + 12) % 12));
+        return keys;
+    }
+
     std::array<double, 12> keyCents (const TuningSystem& t)
     {
         std::array<double, 12> out;
@@ -395,5 +403,36 @@ namespace mixer
         if (scene.system >= 0)
             return scene;
         return track;
+    }
+
+    bool hypoFamily (const std::string& family)
+    {
+        for (const char* f : { "raga", "raga, equal tempered", "maqam", "dastgah", "Raga" })
+            if (family == f)
+                return true;
+        return false;
+    }
+
+    bool hasHypo (const std::vector<double>& degrees, Hypo h)
+    {
+        if (h == Hypo::none)
+            return true;
+        const auto want = h == Hypo::fifth ? cents (3.0 / 2) : cents (4.0 / 3);
+        return std::any_of (degrees.begin(), degrees.end(), [want] (double c) { return std::abs (c - want) <= 30.0; });
+    }
+
+    bool hasHypo (uint16_t notes, Hypo h)
+    {
+        return h == Hypo::none || (notes & (1u << (h == Hypo::fifth ? 7 : 5))) != 0;
+    }
+
+    bool hasHypo (const TuningSystem& t, Hypo h)
+    {
+        return h == Hypo::none || (t.divisions == 0 && hypoFamily (t.family) && hasHypo (t.cents, h));
+    }
+
+    int hypoBelow (Hypo h)
+    {
+        return h == Hypo::fifth ? 5 : h == Hypo::fourth ? 7 : 0;
     }
 }

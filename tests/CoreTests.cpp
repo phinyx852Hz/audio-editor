@@ -12,6 +12,7 @@
 #include "../Source/core/Scala.h"
 #include "../Source/mixer/RagaInstrument.h"
 #include "../Source/mixer/Counterpoint.h"
+#include "../Source/mixer/Fugue.h"
 #include "../Source/mixer/MixerEngine.h"
 #include "../Source/mixer/DrumsToMidi.h"
 #include "../Source/patchbay/PatchBay.h"
@@ -1385,14 +1386,30 @@ namespace
         // C Phrygian (C Db Eb F G Ab Bb): D goes down to Db, E down to Eb.
         const auto phrygian = midifile::toMode (*song, 0, 2);
         check (pitchSet (*phrygian) == (std::vector<int> { 60, 61, 63, 67 }), "midi edits: notes move to the nearest of the mode, down when between");
+        check (pitchSet (*midifile::toKeys (*song, 0, 0b010110101011)) == pitchSet (*phrygian), "midi edits: any set of keys, as the Mode menu gives");
         // Ragas: Malkauns (S g m d n) on C, and Darbari and Jaunpuri listed with Asavari's notes.
         const auto& scales = midifile::scales();
         auto find = [&] (const std::string& name) { for (size_t i = 0; i < scales.size(); ++i) if (name == scales[i].name) return (int) i; return -1; };
-        const auto malkauns = find ("Malkauns");
+        const auto malkauns = find ("mālkauns");
         check (malkauns >= 0 && pitchSet (*midifile::toMode (*song, 0, malkauns)) == (std::vector<int> { 60, 63, 63, 68 }), "midi edits: a raga's notes, pentatonic");
-        check (find ("Darbari Kanada") >= 0 && find ("Jaunpuri") >= 0 && scales[(size_t) find ("Darbari Kanada")].notes == scales[(size_t) find ("Asavari")].notes
-               && scales[(size_t) find ("Jaunpuri")].notes == scales[(size_t) find ("Asavari")].notes, "midi edits: ragas sharing their notes are each listed");
-        check (find ("nyamaropa") >= 0 && scales[(size_t) find ("nyamaropa")].notes == scales[(size_t) find ("Mixolydian")].notes
+        // Hypo: bhūpālī (S R G P D) on C from the fifth folds every note into G3..G4 (55..67), Sa kept.
+        const auto bhupali = find ("bhūpālī");
+        check (bhupali >= 0 && mixer::hypoFamily (scales[(size_t) bhupali].family) && mixer::hasHypo (scales[(size_t) bhupali].notes, mixer::Hypo::fifth)
+               && ! mixer::hasHypo (scales[(size_t) bhupali].notes, mixer::Hypo::fourth) && ! mixer::hypoFamily (scales[0].family),
+               "midi edits: hypo for a raga with the degree, not the church modes");
+        auto wide = std::make_shared<midifile::Song> (*song);
+        wide->events.clear();
+        const uint8_t spread[] { 48, 60, 62, 76 };
+        for (int i = 0; i < 4; ++i)
+        {
+            wide->events.push_back ({ i * 480, 0x90, spread[i], 90 });
+            wide->events.push_back ({ i * 480 + 240, 0x80, spread[i], 0 });
+        }
+        check (pitchSet (*midifile::inRange (*midifile::toMode (*wide, 0, bhupali), 0, 5)) == (std::vector<int> { 60, 60, 62, 64 }),
+               "midi edits: a hypo range, notes folded into the octave from the fifth below");
+        check (find ("darbārī kānaḍā") >= 0 && find ("jaunpurī") >= 0 && scales[(size_t) find ("darbārī kānaḍā")].notes == scales[(size_t) find ("āsāvarī")].notes
+               && scales[(size_t) find ("jaunpurī")].notes == scales[(size_t) find ("āsāvarī")].notes, "midi edits: ragas sharing their notes are each listed");
+        check (find ("nyamaropa") >= 0 && scales[(size_t) find ("nyamaropa")].notes == scales[(size_t) find ("mixolydian")].notes
                && find ("matepe") >= 0, "midi edits: the Shona mbira tunings on the keys");
     }
 
@@ -4519,6 +4536,19 @@ namespace
         const auto bilaval = mixer::keyCents (get ("bilaval"));
         check (near (bilaval[7], 701.955, 1.0e-3) && near (bilaval[4], phi::Tuning::ratioToCents (1.25), 1.0e-9), "tunings: ragas in just intonation");
         check (near (mixer::keyCents (get ("darbari kanada"))[3], phi::Tuning::ratioToCents (32.0 / 27.0), 1.0e-9), "tunings: a raga's own komal svara");
+        // Hypo ranges: for ragas, maqams and dastgahs with that degree; not the church modes (they
+        // have their hypo-modes), jazz modes or equal steps.
+        using mixer::Hypo;
+        check (mixer::hasHypo (get ("bilaval"), Hypo::fifth) && mixer::hasHypo (get ("bilaval"), Hypo::fourth)
+               && mixer::hasHypo (get ("rast"), Hypo::fifth) && mixer::hasHypo (get ("shur"), Hypo::fourth)
+               && mixer::hasHypo (get ("bilaval (equal tempered)"), Hypo::fifth), "tunings: hypo for a tonic with its fifth and fourth");
+        check (! mixer::hasHypo (get ("dorian"), Hypo::fifth) && ! mixer::hasHypo (get ("hypodorian"), Hypo::fifth) && ! mixer::hasHypo (get ("altered"), Hypo::fourth)
+               && ! mixer::hasHypo (get ("12 equal steps"), Hypo::fifth) && ! mixer::hasHypo (get ("huzam"), Hypo::fifth),
+               "tunings: no hypo for the church modes, jazz modes, equal steps, or a mode without the degree");
+        check (mixer::hypoBelow (Hypo::fifth) == 5 && mixer::hypoBelow (Hypo::fourth) == 7 && mixer::hypoBelow (Hypo::none) == 0, "tunings: a hypo range's bottom");
+        // The Mode menu's keys: dorian's seven, and rāst's half-flat third and seventh on E and B.
+        check (mixer::modeKeys (get ("dorian")) == 0b011010101101 && mixer::modeKeys (get ("rast")) == 0b101010110101,
+               "tunings: the keys a mode has a degree on");
         // Hypodorian on A has A's (Aeolian) Pythagorean steps: a 9/8 then a 256/243 limma.
         const auto hypo = mixer::keyCents (get ("hypodorian"));
         check (near (hypo[2], phi::Tuning::ratioToCents (9.0 / 8.0), 1.0e-9) && near (hypo[3] - hypo[2], phi::Tuning::ratioToCents (256.0 / 243.0), 1.0e-9),
@@ -4775,6 +4805,14 @@ namespace
         for (const auto& x : rm.voices[0])
             rastKeys = rastKeys && rast.scale[(size_t) (((x.pitch - 2) % 12 + 12) % 12)];
         check (rastKeys && near (rast.keyCents[4], 350.0, 1.0e-9), "counterpoint: a maqam's keys, its quarter steps included");
+        // Hypo: Rāst on D from the fifth keeps the voice above to the octave A..A (69..81), a step past each end.
+        auto plagal = maqam;
+        plagal.mode.below = mixer::hypoBelow (mixer::Hypo::fifth);
+        const auto rp = generate (cf, plagal);
+        bool inPlagal = ! rp.voices[0].empty() && rp.voices[0].back().pitch % 12 == 2;
+        for (const auto& x : rp.voices[0])
+            inPlagal = inPlagal && x.pitch >= 67 && x.pitch <= 83 && rast.scale[(size_t) (((x.pitch - 2) % 12 + 12) % 12)];
+        check (inPlagal, "counterpoint: a hypo range, the final kept");
 
         // A raga's āroha: going up never lands on a note it leaves out.
         auto bhairavi = Mode::fromTuning (mixer::tuningSystems()[(size_t) mixer::findTuning ("bhairavi")], 2);
@@ -4826,6 +4864,168 @@ namespace
             onChannel = onChannel && e.channel() == 2;
         }
         check (ons == 11 && onChannel && written->ticksPerQuarter == 480 && written->channelsUsed == 4, "counterpoint: a voice as a MIDI file");
+    }
+
+    // Fugue: the plan (exposition, countersubject, episodes, middle entries, stretto, close),
+    // the tonal answer, the rules kept between the voices, and every family of modes.
+    void testFugue()
+    {
+        using namespace counterpoint;
+        auto modeOf = [] (const char* plain, int root) { return Mode::fromTuning (mixer::tuningSystems()[(size_t) mixer::findTuning (plain)], root); };
+        // A subject by degrees of a mode from its tonic, in quarters and halves (480 a quarter).
+        auto subjectIn = [] (const Mode& m)
+        {
+            std::vector<int> notes;
+            for (int p = 0; p < 128; ++p)
+                if (m.scale[(size_t) (((p - 60 - m.root) % m.period + m.period) % m.period)])
+                    notes.push_back (p);
+            const auto tonic = (int) (std::lower_bound (notes.begin(), notes.end(), 60 + m.root) - notes.begin());
+            const int degrees[] { 0, 4, 3, 2, 1, 0, 1, 2, 3, 2, 1, 0 }, beats[] { 2, 2, 1, 1, 1, 1, 1, 1, 2, 1, 1, 4 };
+            Line l;
+            int64_t t = 0;
+            for (int i = 0; i < 12; ++i)
+            {
+                l.push_back ({ t, t + beats[i] * 480, notes[(size_t) (tonic + degrees[i])], 90 });
+                t += beats[i] * 480;
+            }
+            return l;
+        };
+        const auto dorian = modeOf ("dorian", 2);
+        const auto subject = subjectIn (dorian);   // D A G F E D E F G F E D
+
+        fugue::Settings three;
+        three.mode = dorian;
+        const auto r = fugue::generate (subject, 480, three);
+        std::vector<std::string> plan;
+        for (const auto& x : r.plan)
+            plan.push_back (x.what);
+        auto count = [&] (const std::string& what) { return std::count (plan.begin(), plan.end(), what); };
+        check (r.voices.size() == 3 && r.names == std::vector<std::string> { "soprano", "alto", "bass" }
+               && plan.size() > 4 && plan[0] == "subject" && plan[1] == "answer" && plan[2] == "countersubject"
+               && count ("episode") == 3 && count ("middle entry") == 2 && count ("stretto") == 3 && plan.back() == "close",
+               "fugue: exposition, countersubject, episodes, two middle entries, a stretto and the close");
+        check (r.plan[0].voice == 1 && r.plan[1].voice == 0 && r.plan[1].start == 8640 && r.strettoDelay > 0 && r.strettoDelay <= 4320,
+               "fugue: the alto enters first, the soprano answers, the stretto's entries overlap");
+        // The tonal answer: the dominant A answered by the tonic D, then the rest at the fifth.
+        int64_t answerAt = r.plan[1].start;
+        std::vector<int> answer;
+        for (const auto& x : r.voices[0])
+            if (x.start >= answerAt && x.start < answerAt + 8640)
+                answer.push_back (x.pitch);
+        check (answer.size() == 12 && answer[0] == 69 && answer[1] == 74 && answer[2] == 74 && answer[11] == 69,
+               "fugue: a tonal answer at the fifth, tonic and dominant answering each other");
+        fugue::Settings real = three;
+        real.answer = fugue::Answer::real;
+        const auto rr = fugue::generate (subject, 480, real);
+        int64_t realAt = rr.plan[1].start;
+        int firstReal = -1, secondReal = -1;
+        for (const auto& x : rr.voices[0])
+            if (x.start == realAt)
+                firstReal = x.pitch;
+            else if (x.start == realAt + 960)
+                secondReal = x.pitch;
+        check (firstReal == 69 && secondReal == 76, "fugue: a real answer, every note a fifth up in the mode");
+
+        // The rules between every two voices: no parallel fifths or octaves, nothing dissonant
+        // struck together on the beat, in two and three voices.
+        auto at = [] (const Line& l, int64_t t, bool* starts = nullptr)
+        {
+            for (const auto& x : l)
+                if (x.start <= t && t < x.end)
+                {
+                    if (starts != nullptr)
+                        *starts = x.start == t;
+                    return x.pitch;
+                }
+            return -1;
+        };
+        bool kept = true;
+        for (int voices = 2; voices <= 3; ++voices)
+        {
+            fugue::Settings s = three;
+            s.voices = voices;
+            const auto f = fugue::generate (subject, 480, s);
+            std::set<int64_t> times;
+            for (const auto& v : f.voices)
+                for (const auto& x : v)
+                    times.insert (x.start);
+            const std::vector<int64_t> t (times.begin(), times.end());
+            int broken = 0;
+            for (size_t i = 1; i < t.size(); ++i)
+                for (size_t a = 0; a < f.voices.size(); ++a)
+                    for (size_t b = a + 1; b < f.voices.size(); ++b)
+                    {
+                        bool sa = false, sb = false;
+                        const auto pa = at (f.voices[a], t[i], &sa), pb = at (f.voices[b], t[i], &sb);
+                        const auto qa = at (f.voices[a], t[i - 1]), qb = at (f.voices[b], t[i - 1]);
+                        if (pa < 0 || pb < 0)
+                            continue;
+                        auto kind = [] (int x) { x = std::abs (x) % 12; return x == 0 ? 8 : x == 7 ? 5 : 0; };
+                        if (qa >= 0 && qb >= 0 && qa != pa && qb != pb && kind (pa - pb) != 0 && kind (pa - pb) == kind (qa - qb))
+                            ++broken;
+                        const auto iv = std::abs (pa - pb) % 12;
+                        if (t[i] % 960 == 0 && sa && sb && (iv == 1 || iv == 2 || iv == 6 || iv == 10 || iv == 11))
+                            ++broken;
+                    }
+            kept = kept && broken == 0 && f.bent == 0 && f.voices.size() == (size_t) voices;
+        }
+        check (kept, "fugue: no parallel fifths or octaves and no dissonance struck on the beat, in two and three voices");
+
+        // Four voices, with the middle entries inverted and no stretto.
+        fugue::Settings four = three;
+        four.voices = 4;
+        four.inversion = true;
+        four.stretto = false;
+        const auto r4 = fugue::generate (subject, 480, four);
+        int inverted = 0, final = 0;
+        for (const auto& x : r4.plan)
+        {
+            inverted += x.what == "middle entry, inverted" ? 1 : 0;
+            final += x.what == "final entry" && x.voice == 3 ? 1 : 0;
+        }
+        check (r4.voices.size() == 4 && r4.names[2] == "tenor" && inverted == 1 && final == 1 && r4.strettoDelay == 0,
+               "fugue: four voices, an inverted middle entry, the last entry in the bass");
+
+        // Every family of modes: each voice in the mode's notes (the church modes' raised
+        // leading note at a cadence aside), and a raga's āroha kept going up.
+        bool inMode = true;
+        for (const char* plain : { "yaman (kalyan)", "bhairavi (equal tempered)", "phrygian", "hypolydian", "altered", "blues", "rast", "segah", "19 equal steps" })
+        {
+            fugue::Settings s;
+            s.mode = modeOf (plain, 2);
+            const auto f = fugue::generate (subjectIn (s.mode), 480, s);
+            inMode = inMode && f.voices.size() == 3 && f.end > 0;
+            for (const auto& v : f.voices)
+            {
+                inMode = inMode && ! v.empty();
+                for (const auto& x : v)
+                    inMode = inMode && (s.mode.ficta || s.mode.scale[(size_t) (((x.pitch - 62) % s.mode.period + s.mode.period) % s.mode.period)]);
+            }
+        }
+        check (inMode, "fugue: in ragas, church and jazz modes, maqams, dastgahs and equal steps, each voice in the mode");
+        auto bhairavi = modeOf ("bhairavi", 2);
+        bhairavi.up = bhairavi.scale;
+        bhairavi.up[1] = bhairavi.up[8] = false;   // no komal re or komal dha going up
+        fugue::Settings raga;
+        raga.mode = bhairavi;
+        const auto rg = fugue::generate (subjectIn (bhairavi), 480, raga);
+        int wrongWay = 0;
+        for (const auto& v : rg.voices)
+            for (size_t k = 1; k < v.size(); ++k)
+            {
+                const auto key = ((v[k].pitch - 2) % 12 + 12) % 12;
+                wrongWay += v[k].pitch > v[k - 1].pitch && (key == 1 || key == 8) ? 1 : 0;
+            }
+        check (wrongWay <= rg.bent, "fugue: a raga's āroha kept going up");
+
+        // The subject in a melody: its first phrase, cut at a rest, at most four bars.
+        Line melody { { 0, 480, 62, 90 }, { 480, 960, 64, 90 }, { 960, 1920, 65, 90 }, { 2880, 3840, 67, 90 } };
+        check (fugue::subject (melody, 480).size() == 3, "fugue: the subject is the melody's first phrase");
+        Line long_;
+        for (int i = 0; i < 40; ++i)
+            long_.push_back ({ i * 480, (i + 1) * 480, 60 + i % 5, 90 });
+        check (fugue::subject (long_, 480).size() == 16 && fugue::subject ({ { 0, 480, 60, 90 } }, 480).empty(),
+               "fugue: a subject of four bars at most, two notes at least");
     }
 
     // Recording (docs/recording.md): slot takes that end by themselves and play on from that
@@ -6550,6 +6750,7 @@ int main()
     testScala();
     testNoteEditor();
     testCounterpoint();
+    testFugue();
     testRecording();
     testControlSurfaces();
     testDrumsToMidi();

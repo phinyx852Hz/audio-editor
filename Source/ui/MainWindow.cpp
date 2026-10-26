@@ -84,10 +84,12 @@
 #include <QUrl>
 #include <QMessageBox>
 #include <QProgressDialog>
+#include <QProxyStyle>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QEventLoop>
 #include <QStatusBar>
+#include <QStyleFactory>
 #include <QTabBar>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -572,6 +574,7 @@ void MainWindow::registerCommands()
     registerSamplerCommands();
     registerInstrumentCommands();
     registerMixerCommands();
+    registerModeCommands();
     registerControlCommands();
     registerPatchBayCommands();
     registerReferenceCommands();
@@ -909,12 +912,28 @@ void MainWindow::buildMenus()
         { tr ("S&ynth"),     { "instrument.wavetable", "instrument.modular", "instrument.additive", "-",
                                "instrument.subtractive1", "instrument.subtractive2", "instrument.fm", "-",
                                "sample.midiInputs", "sample.panic" } },
+        { tr ("Mo&de"),      { "@mode" } },
         { tr ("Trac&ker"),   { "tracker.window", "tracker.furnace", "-", "tracker.new", "tracker.open", "tracker.save", "tracker.saveAs", "tracker.loadSample", "-", "tracker.playSong", "tracker.playPattern", "tracker.stop", "-",
                                "tracker.recordStereo", "tracker.recordMulti", "-", "tracker.resetTracks", "tracker.about" } },
         { tr ("Performan&ce"), { "performance.launcher", "-", "control.surfaces", "control.learn", "-", "performance.record", "performance.stream", "-", "performance.settings", "performance.folder" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "-", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
     };
+
+    // 23 menus (owner, 2026-10-26: "what happens when we load PHI on a small screen"): Fusion
+    // puts 7 px between titles, and at 1280 px wide with a 10 pt font the last ones went behind
+    // the » button. 2 px keeps them all in view there (1204 px at 10 pt DejaVu Sans).
+    struct TightMenuBar : QProxyStyle
+    {
+        using QProxyStyle::QProxyStyle;
+        int pixelMetric (PixelMetric metric, const QStyleOption* option, const QWidget* widget) const override
+        {
+            return metric == PM_MenuBarItemSpacing ? 2 : QProxyStyle::pixelMetric (metric, option, widget);
+        }
+    };
+    auto* tight = new TightMenuBar (QStyleFactory::create (QStringLiteral ("Fusion")));
+    tight->setParent (menuBar());
+    menuBar()->setStyle (tight);
 
     for (const auto& [title, ids] : layout)
     {
@@ -925,6 +944,12 @@ void MainWindow::buildMenus()
                 menu->addSeparator();
             else if (id.startsWith (QLatin1String ("@visual.")))
                 addVisualizerSubmenu (menu, id.mid (8));
+            else if (id == QLatin1String ("@mode"))
+            {
+                // Built as it opens, so its ticks follow the mode chosen and the mixer's state.
+                connect (menu, &QMenu::aboutToShow, this, [this, menu] { fillModeMenu (menu); });
+                fillModeMenu (menu);
+            }
             else if (id == QLatin1String ("@nyquist.generate"))
                 generateMenu = menu->addMenu (tr ("&Generate"));
             else if (id.startsWith (QLatin1Char ('@')))

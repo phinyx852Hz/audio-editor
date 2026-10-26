@@ -8,12 +8,13 @@
 // tunings of Zimbabwe in their measured cents, Chinese lü and modes from the treatises (and in
 // 12-TET), Japanese gagaku and folk modes, and Korean court modes and folk tori (2026-10-26), and
 // 2 to 21 equal steps to the octave. Names are transliterated (IAST for the ragas, IJMES for
-// Arabic, a common Persian romanisation, Indonesian spelling for gamelan, pinyin with its tones,
+// Arabic, Encyclopædia Iranica's for Persian, Indonesian spelling for gamelan, pinyin with its tones,
 // Hepburn, McCune-Reischauer), with a plain spelling beside each for searching and saving.
 // The PHI synth plays them (mixer::Instrument::setTuning); other instruments stay in 12-TET.
 #include "../core/PhiTuning.h"
 
 #include <array>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -43,6 +44,8 @@ namespace mixer
     // key above, as E half-flat is spelled on E) plays that degree; the others stay where 12-TET
     // has them.
     std::array<double, 12> keyCents (const TuningSystem&);
+    // The keys it has a degree on, as keyCents rounds them (bit n: n semitones above the root).
+    uint16_t modeKeys (const TuningSystem&);
 
     // The tuning for an instrument: `root` 0 (C) to 11 (B) is the tonic, Sa or the final, at its
     // 12-TET pitch with A4 at 440 Hz. An equal temperament walks its steps up and down the keys
@@ -59,4 +62,18 @@ namespace mixer
     };
     // The clip's, else the scene's, else the track's.
     TuningChoice tuningInForce (const TuningChoice& clip, const TuningChoice& scene, const TuningChoice& track);
+
+    // Hypo (owner, 2026-10-26): a mode's range moved off its final, the final kept, as the
+    // Gregorian plagal modes do: from the fifth (the octave from a fourth below the final) or
+    // from the fourth (the octave from a fifth below it). For the traditions built on a tonic
+    // and its fifth or fourth (ragas' Sa with Pa or Ma, a maqam's tonic and ghammāz, a dastgah's
+    // shāhed) that have no plagal forms of their own: the church modes have their hypo-modes,
+    // and jazz modes and equal steps no such hierarchy.
+    enum class Hypo { none, fifth, fourth };
+    bool hypoFamily (const std::string& family);   // a TuningSystem's, or a midifile::Scale's
+    // The mode has that degree: a fifth or fourth within 30 cents of a pure one.
+    bool hasHypo (const std::vector<double>& cents, Hypo);
+    bool hasHypo (uint16_t notes, Hypo);           // a midifile::Scale's notes
+    bool hasHypo (const TuningSystem&, Hypo);      // its family, and the degree
+    int hypoBelow (Hypo);   // keys from the bottom of the range up to the final: 5, 7 (none 0)
 }

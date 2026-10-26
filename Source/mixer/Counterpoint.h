@@ -39,6 +39,10 @@ namespace counterpoint
         std::vector<bool> scale;          // the keys of the period the mode uses
         std::vector<bool> up, down;       // a raga's āroha and avaroha (empty: the scale both ways)
         bool ficta = false;               // at a cadence, the note a whole step below where it lands may be raised
+        // A hypo range (mixer::Hypo): each new voice keeps to the octave that starts this many keys
+        // below a final (the root), the one nearest where it would sit, and a step past either
+        // end. 0: the voices' usual register around the melody.
+        int below = 0;
 
         static Mode chromatic (int root);   // every key, in 12-TET
         // A tuning system of mixer/Tunings.h on `root` (0 C .. 11 B), as its keys play it.
@@ -81,6 +85,27 @@ namespace counterpoint
     };
 
     Result generate (const Line& cantus, const Settings&);
+
+    // A free part, as a fugue's voices are written (mixer/Fugue.h): one voice against lines
+    // already fixed, in `species`, a bar of it to each note of `grid`. A grid note given a
+    // pitch in `pinned` (-1: free) is that note as it is, held, and is left out of the line,
+    // so the part leads out of and into the voice's own material. Each run of grid notes
+    // without a gap is a phrase; only the last, with `cadence`, ends by the rules of an ending.
+    // The first of `against` is heard as the melody (a grid note's pitch is what it sounds).
+    struct FreePart
+    {
+        Line grid;
+        std::vector<int> pinned;           // one for each grid note, or empty
+        std::vector<Line> against;
+        std::vector<int> ranks;            // one for each of `against`: higher is above, as `rank`
+        int rank = 0;
+        Species species = Species::fifth;
+        int centre = 60, range = 9;        // the keys the part keeps to: centre - range .. centre + range
+        int parts = 2;                     // the voices in all, this one too
+        bool lowest = false;               // the bass: a fourth above it is a dissonance
+        bool cadence = false;
+    };
+    Line freeVoice (const FreePart&, const Mode&, uint32_t seed, int& bent);
 
     // A voice as a type 0 MIDI file with `like`'s timing and tempo map, on `channel`.
     midifile::SongPtr toSong (const midifile::Song& like, const Line&, int channel);

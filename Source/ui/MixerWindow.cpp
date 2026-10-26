@@ -5331,13 +5331,39 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
             }
             scaleBox->addItem (QString::fromUtf8 (scales[(size_t) i].name), i);
         }
+        // Hypo (owner, 2026-10-26): a raga's notes folded into the octave from below its Sa, Sa kept.
+        hypoBox = new QComboBox (midiClipBox);
+        hypoBox->setToolTip (tr ("The range: as played, or a hypo range with the same Sa: every note folded into the octave "
+                                 "from the fifth (Pa, a fourth below Sa) or from the fourth (Ma, a fifth below). "
+                                 "For the ragas that have that svara"));
+        auto refreshHypo = [this]
+        {
+            const auto scale = scaleBox->currentData().toInt();
+            const auto chosen = hypoBox->currentData().toInt();
+            hypoBox->clear();
+            hypoBox->addItem (tr ("Authentic"), (int) mixer::Hypo::none);
+            const auto& list = midifile::scales();
+            if (scale >= 0 && mixer::hypoFamily (list[(size_t) scale].family))
+                for (auto h : { mixer::Hypo::fifth, mixer::Hypo::fourth })
+                    if (mixer::hasHypo (list[(size_t) scale].notes, h))
+                        hypoBox->addItem (h == mixer::Hypo::fifth ? tr ("Hypo from the 5th") : tr ("Hypo from the 4th"), (int) h);
+            hypoBox->setCurrentIndex (std::max (0, hypoBox->findData (chosen)));
+            hypoBox->setEnabled (hypoBox->count() > 1);
+        };
+        refreshHypo();
         grid->addWidget (new QLabel (tr ("Sa"), midiClipBox), 2, 0);
         grid->addWidget (rootBox, 2, 1);
-        grid->addWidget (scaleBox, 2, 2, 1, 2);
+        grid->addWidget (scaleBox, 2, 2);
+        grid->addWidget (hypoBox, 2, 3);
         auto* counterpoint = new QPushButton (tr ("Counterpoint..."), midiClipBox);
         counterpoint->setToolTip (tr ("New voices against this melody, by Fux's species of counterpoint, in a mode, raga or "
                                       "maqam, each a clip on a new track"));
-        grid->addWidget (counterpoint, 3, 0, 1, 4);
+        grid->addWidget (counterpoint, 3, 0, 1, 2);
+        auto* fugue = new QPushButton (tr ("Fugue..."), midiClipBox);
+        fugue->setToolTip (tr ("A fugue on this melody as its subject: two to four voices entering in turn, a countersubject, "
+                               "episodes and a stretto, in any mode, raga or maqam, each voice a clip on a new track"));
+        grid->addWidget (fugue, 3, 2, 1, 2);
+        connect (fugue, &QPushButton::clicked, this, [this] { fugueShownMidi(); });
         auto* notesButton = new QPushButton (tr ("Edit Notes..."), midiClipBox);
         notesButton->setToolTip (tr ("The MIDI editor: the notes on a piano roll in 12-TET, or in a mode, raga, maqam, laras or Scala "
                                      "scale, with step input, quantise, restyle and MPE"));
@@ -5358,11 +5384,15 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
             if (scale < 0)
                 return;
             const auto root = rootBox->currentIndex();
-            editShownMidi ([root, scale] (const midifile::Song& s) { return midifile::toMode (s, root, scale); },
-                           tr ("In %1 on %2").arg (scaleBox->currentText(), rootBox->currentText()));
+            const auto below = mixer::hypoBelow ((mixer::Hypo) hypoBox->currentData().toInt());
+            editShownMidi ([root, scale, below] (const midifile::Song& s)
+                           { return below > 0 ? midifile::inRange (*midifile::toMode (s, root, scale), root, below) : midifile::toMode (s, root, scale); },
+                           below > 0 ? tr ("In %1 on %2, %3").arg (scaleBox->currentText(), rootBox->currentText(), hypoBox->currentText().toLower())
+                                     : tr ("In %1 on %2").arg (scaleBox->currentText(), rootBox->currentText()));
         };
-        connect (scaleBox, &QComboBox::activated, this, applyScale);
+        connect (scaleBox, &QComboBox::activated, this, [refreshHypo, applyScale] { refreshHypo(); applyScale(); });
         connect (rootBox, &QComboBox::activated, this, applyScale);
+        connect (hypoBox, &QComboBox::activated, this, applyScale);
     }
     midiClipBox->hide();
     inspectorLayout->addWidget (midiClipBox);
@@ -5785,7 +5815,27 @@ void MixerWindow::counterpointShownMidi()
     }
     modeBox->setCurrentIndex (std::max (0, modeBox->findData (system)));
     rootChoice->setCurrentIndex (std::clamp (root, 0, 11));
-    auto rootRow = [&] { rootChoice->setEnabled (modeBox->currentData().toInt() >= 0); };
+    // Hypo (owner, 2026-10-26): for a raga, maqam or dastgah with a fifth or fourth, the new
+    // voices kept to the octave from below the tonic; the church modes have their own hypo-modes.
+    auto* hypoChoice = new QComboBox (&dialog);
+    hypoChoice->setToolTip (tr ("The new voices' range: around the melody as usual, or a hypo range with the same tonic, "
+                                "the octave from the fifth (a fourth below the tonic) or from the fourth (a fifth below). "
+                                "For ragas, maqams and dastgahs with that degree; the church modes have their hypo-modes in the list"));
+    auto lastHypo = settings.value (QStringLiteral ("counterpoint/hypo"), 0).toInt();
+    auto rootRow = [&]
+    {
+        const auto system = modeBox->currentData().toInt();
+        rootChoice->setEnabled (system >= 0);
+        if (hypoChoice->count() > 0)
+            lastHypo = hypoChoice->currentData().toInt();
+        hypoChoice->clear();
+        hypoChoice->addItem (tr ("Authentic range"), (int) mixer::Hypo::none);
+        for (auto h : { mixer::Hypo::fifth, mixer::Hypo::fourth })
+            if (system >= 0 && mixer::hasHypo (mixer::tuningSystems()[(size_t) system], h))
+                hypoChoice->addItem (h == mixer::Hypo::fifth ? tr ("Hypo, from the fifth") : tr ("Hypo, from the fourth"), (int) h);
+        hypoChoice->setCurrentIndex (std::max (0, hypoChoice->findData (lastHypo)));
+        hypoChoice->setEnabled (hypoChoice->count() > 1);
+    };
     connect (modeBox, &QComboBox::currentIndexChanged, &dialog, rootRow);
     rootRow();
 
@@ -5797,6 +5847,7 @@ void MixerWindow::counterpointShownMidi()
     form->addRow (tr ("Where"), placeBox);
     form->addRow (QString(), allBox);
     form->addRow (tr ("Mode"), modeRow);
+    form->addRow (tr ("Range"), hypoChoice);
     form->addRow (tr ("Variation"), variation);
     auto* note = new QLabel (tr ("The melody is %1 notes: each new voice goes on a new track, a clip beside this one.").arg (melody.size()), &dialog);
     note->setWordWrap (true);
@@ -5817,9 +5868,14 @@ void MixerWindow::counterpointShownMidi()
     options.allInSpecies = allBox->isChecked();
     options.seed = (uint32_t) variation->value();
     const auto chosen = modeBox->currentData().toInt();
+    const auto hypo = (mixer::Hypo) hypoChoice->currentData().toInt();
     if (chosen >= 0)
+    {
         options.mode = counterpoint::Mode::fromTuning (mixer::tuningSystems()[(size_t) chosen], rootChoice->currentIndex());
+        options.mode.below = mixer::hypoBelow (hypo);
+    }
     settings.setValue (QStringLiteral ("counterpoint/species"), speciesBox->currentIndex());
+    settings.setValue (QStringLiteral ("counterpoint/hypo"), (int) hypo);
     settings.setValue (QStringLiteral ("counterpoint/voices"), options.voices);
     settings.setValue (QStringLiteral ("counterpoint/place"), placeBox->currentIndex());
     settings.setValue (QStringLiteral ("counterpoint/all"), options.allInSpecies);
@@ -5829,6 +5885,31 @@ void MixerWindow::counterpointShownMidi()
 
     writeCounterpoint (track, clip, slot, scene, options, chosen >= 0 ? mixer::TuningChoice { chosen, rootChoice->currentIndex() } : mixer::TuningChoice {},
                        tuning, -1);
+}
+
+void MixerWindow::fugueShownMidi()
+{
+    if (! showingClip || ! clipView->showsMidi())
+        return;
+    const auto track = clipView->shownTrack();
+    const auto id = clipView->shownId();
+    const auto scene = clipView->shownScene();
+    mixer::Clip clip;
+    mixer::SlotPtr slot;
+    if (id != 0)
+    {
+        for (const auto& c : engine.clips (track))
+            if (c.id == id)
+                clip = c;
+    }
+    else if (scene >= 0 && (slot = slots[(size_t) track][(size_t) scene]) != nullptr)
+        clip = slot->clip;
+    if (clip.midi == nullptr || clip.midi->song == nullptr || ! writeFugue (track, clip, slot, scene))
+        return;
+    rebuildStrips();
+    grid->update();
+    rack->refresh();
+    changed();
 }
 
 void MixerWindow::writeCounterpoint (int track, const mixer::Clip& clip, mixer::SlotPtr slot, int scene, const counterpoint::Settings& options,
@@ -6003,7 +6084,13 @@ void MixerWindow::autoCounterpoint (int track, int scene, mixer::SlotPtr slot, F
     if (modeChoice.system < 0)
         modeChoice = tuning;
     if (modeChoice.system >= 0)
-        options.mode = counterpoint::Mode::fromTuning (mixer::tuningSystems()[(size_t) modeChoice.system], modeChoice.root);
+    {
+        const auto& system = mixer::tuningSystems()[(size_t) modeChoice.system];
+        options.mode = counterpoint::Mode::fromTuning (system, modeChoice.root);
+        const auto hypo = (mixer::Hypo) settings.value (QStringLiteral ("counterpoint/hypo"), 0).toInt();
+        if (mixer::hasHypo (system, hypo))
+            options.mode.below = mixer::hypoBelow (hypo);
+    }
     writeCounterpoint (track, slot->clip, slot, scene, options, modeChoice, tuning, launchAt);
 }
 
@@ -6065,6 +6152,36 @@ void MixerWindow::reverseShownClip()
 namespace layers
 {
     std::shared_ptr<mixer::AudioClip> flatAudio (const mixer::Clip&);   // MixerRecording.cpp
+}
+
+bool MixerWindow::showsMidiClip() const
+{
+    return showingClip && clipView->showsMidi();
+}
+
+bool MixerWindow::modeShownMidi (int root, uint16_t keys, int below, const QString& what)
+{
+    if (! showsMidiClip())
+        return false;
+    editShownMidi ([root, keys, below] (const midifile::Song& s)
+                   { return below > 0 ? midifile::inRange (*midifile::toKeys (s, root, keys), root, below) : midifile::toKeys (s, root, keys); },
+                   what);
+    return true;
+}
+
+bool MixerWindow::tuneSelectedTrack (mixer::TuningChoice choice)
+{
+    if (selected >= mixer::masterIndex || selected >= engine.numTracks())
+        return false;
+    info[(size_t) selected].tuning = choice;
+    changed();
+    applyTunings();
+    if (inspectorStrip != nullptr)
+        inspectorStrip->refresh();
+    if (auto* strip = strips[(size_t) selected])
+        strip->refresh();
+    say (tr ("%1 tuned to %2").arg (trackName (selected), tuningText (choice)));
+    return true;
 }
 
 void MixerWindow::editShownMidi (const std::function<midifile::SongPtr (const midifile::Song&)>& edit, const QString& what)

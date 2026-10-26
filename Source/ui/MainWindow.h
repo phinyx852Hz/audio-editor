@@ -442,6 +442,10 @@ private:
     // The Mixer (MixerSection.cpp, docs/mixer.md): 8 tracks, each with an audio file,
     // a MIDI file and an instrument; heard through engine.setInstrument with the Sampler.
     void registerMixerCommands();
+    // The Mode menu (ModeSection.cpp, docs/mixer.md): one mode, from every tradition PHI
+    // has, for the MIDI clip, counterpoint, the fugue and the PHI synth's tuning together.
+    void registerModeCommands();
+    void fillModeMenu (QMenu*);
     // Control surfaces and MIDI Learn (ControlSection.cpp, docs/control-surfaces.md): Launchpads,
     // Launchkeys and Push play the mixer's launcher, strips and transport, lit in the tracks'
     // colours; any other controller's knobs and buttons are mapped by MIDI Learn.
