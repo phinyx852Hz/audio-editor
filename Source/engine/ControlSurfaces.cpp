@@ -191,6 +191,24 @@ std::vector<std::string> ControlSurfaces::claimedInputs() const
     return ids;
 }
 
+ControlSurfaces::PushShown ControlSurfaces::push() const
+{
+    PushShown p;
+    for (const auto& [kind, o] : impl->open)
+        if (kind == "push2" || kind == "push3")
+        {
+            std::lock_guard g (o->lock);
+            if (const auto* pads = dynamic_cast<const control::PadSurface*> (o->surface.get()))
+            {
+                p.open = true;
+                p.view = pads->view();
+                p.knobs = pads->knobs();
+                p.sceneOffset = pads->sceneOffset();
+            }
+        }
+    return p;
+}
+
 std::vector<control::Command> ControlSurfaces::takeCommands()
 {
     std::lock_guard g (impl->commandsLock);

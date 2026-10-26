@@ -48,7 +48,7 @@ namespace timestretch { class SegmentCache; }
 namespace sampler { class Engine; }
 namespace slicer { class Engine; }
 namespace mixer { class Engine; }
-namespace control { class Learn; struct Command; }
+namespace control { class Learn; struct Command; struct State; }
 namespace patchbay { class PatchBay; }
 namespace perf { class Recorder; class Camera; class VideoFile; }
 namespace sonify { class Sonifier; struct Message; struct Picture; }
@@ -451,7 +451,9 @@ private:
     void controlTick();                                // their commands done, their lights sent
     void controlCommand (const control::Command&);
     void saveMidiMappings();
+    void drawPushDisplay (const control::State&);      // Push 2 or 3's screen, over USB
     std::unique_ptr<class ControlSurfaces> surfaces;
+    std::unique_ptr<class PushDisplay> pushDisplay;
     std::unique_ptr<control::Learn> midiLearn;
     QTimer controlTimer;
     int controlTicks = 0;

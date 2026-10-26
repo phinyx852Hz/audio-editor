@@ -40,6 +40,7 @@ namespace control
         float volume = 0.0f;      // the fader as unitFromDb
         float pan = 0.0f;         // -1..1
         std::array<float, 2> send {};   // A and B, as unitFromDb
+        std::string name, clip;   // the track's name and its playing clip's (Push's display)
     };
 
     struct State
@@ -148,6 +149,7 @@ namespace control
         enum class View { session, note, mixer };
         enum class Knobs { volume, pan, sendA, sendB };
         View view() const { return shown; }
+        Knobs knobs() const { return knobMode; }
         int sceneOffset() const { return offset; }
 
     protected:

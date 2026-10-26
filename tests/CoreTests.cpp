@@ -44,6 +44,7 @@
 #include "../Source/core/PhiForensics.h"
 #include "../Source/control/ControlSurface.h"
 #include "../Source/control/MidiLearn.h"
+#include "../Source/engine/PushDisplay.h"
 
 #include <algorithm>
 #include <cmath>
@@ -5804,6 +5805,9 @@ namespace
     void testControlSurfaces()
     {
         using namespace control;
+        check (PushDisplay::bgr565 (0xFFFF0000) == 0x001F && PushDisplay::bgr565 (0xFF00FF00) == 0x07E0 && PushDisplay::bgr565 (0xFF0000FF) == 0xF800
+                   && PushDisplay::bgr565 (0xFFFFFFFF) == 0xFFFF,
+               "control: Push's display takes red low, then green, then blue (BGR565)");
         check (std::abs (unitFromDb (0.0f) - 0.8409f) < 0.001f, "control: 0 dB where the mixer's fader has it");
         check (std::abs (dbFromUnit (unitFromDb (-12.0f)) + 12.0f) < 0.01f && unitFromDb (-120.0f) == 0.0f && dbFromUnit (1.0f) > 5.9f,
                "control: fader units and dB both ways");

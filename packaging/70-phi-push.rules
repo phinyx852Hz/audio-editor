@@ -1,0 +1,4 @@
+# Lets the person at the computer reach Ableton Push 2 and 3 over USB, so that PHI can drive
+# their displays (docs/control-surfaces.md). Pads, buttons and encoders need no rule: they are MIDI.
+SUBSYSTEM=="usb", ATTR{idVendor}=="2982", ATTR{idProduct}=="1967", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="2982", ATTR{idProduct}=="1969", TAG+="uaccess"

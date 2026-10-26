@@ -8,21 +8,28 @@
 #include "../control/MidiLearn.h"
 #include "../engine/ControlSurfaces.h"
 #include "../engine/MidiInputs.h"
+#include "../engine/PushDisplay.h"
 
 #include <QComboBox>
 #include <QDialogButtonBox>
+#include <QFontMetrics>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLabel>
 #include <QListWidget>
+#include <QPainter>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QTableWidget>
 #include <QVBoxLayout>
+
+#include <algorithm>
+#include <cmath>
 
 namespace
 {
@@ -158,7 +165,149 @@ void MainWindow::controlTick()
     // Plugged in and taken out: looked for every two seconds.
     if (++controlTicks % 60 == 0 && surfaces->scan())
         openMidiInputs();
-    surfaces->refresh (mixerWin != nullptr ? mixerWin->surfaceState() : control::State {});
+    const auto state = mixerWin != nullptr ? mixerWin->surfaceState() : control::State {};
+    surfaces->refresh (state);
+
+    // Push's display: opened while a Push is in use (tried again every two seconds until it
+    // opens), drawn 15 times a second.
+    const bool push = surfaces->push().open;
+    if (pushDisplay != nullptr && (! push || pushDisplay->failed()))
+        pushDisplay = nullptr;
+    if (push && pushDisplay == nullptr && PushDisplay::available() && (controlTicks % 60 == 1 || controlTicks < 3))
+    {
+        auto display = std::make_unique<PushDisplay>();
+        if (display->open())
+            pushDisplay = std::move (display);
+    }
+    if (pushDisplay != nullptr && controlTicks % 2 == 0)
+        drawPushDisplay (state);
+}
+
+void MainWindow::drawPushDisplay (const control::State& state)
+{
+    using Knobs = control::PadSurface::Knobs;
+    using View = control::PadSurface::View;
+    const auto shown = surfaces->push();
+    static QImage image (PushDisplay::width, PushDisplay::height, QImage::Format_ARGB32);
+    image.fill (QColor (0, 0, 0));
+    QPainter p (&image);
+    p.setRenderHint (QPainter::Antialiasing);
+    auto font = [&p] (int px, bool bold = false)
+    {
+        QFont f = p.font();
+        f.setPixelSize (px);
+        f.setBold (bold);
+        p.setFont (f);
+    };
+    constexpr int column = PushDisplay::width / 8;
+
+    // Along the top: the view, what the encoders turn, the scenes shown, and the transport.
+    const auto knobName = shown.knobs == Knobs::volume ? tr ("Volume") : shown.knobs == Knobs::pan ? tr ("Pan")
+                        : shown.knobs == Knobs::sendA ? tr ("Send A") : tr ("Send B");
+    const auto viewName = shown.view == View::session ? tr ("Session: scenes %1-%2").arg (shown.sceneOffset + 1).arg (shown.sceneOffset + 8)
+                        : shown.view == View::note ? tr ("Note") : tr ("Mixer");
+    p.fillRect (0, 0, PushDisplay::width, 20, QColor (28, 28, 28));
+    font (13, true);
+    p.setPen (QColor (230, 230, 230));
+    p.drawText (QRect (8, 0, 600, 20), Qt::AlignVCenter | Qt::AlignLeft, QStringLiteral ("PHI   %1   %2").arg (viewName, knobName));
+    QString transport = QStringLiteral ("%1 BPM").arg (state.tempo, 0, 'f', 2);
+    if (state.metronome)
+        transport.prepend (tr ("Click   "));
+    p.drawText (QRect (PushDisplay::width - 400, 0, 392, 20), Qt::AlignVCenter | Qt::AlignRight, transport);
+    if (state.playing)
+    {
+        p.setBrush (QColor (60, 200, 90));
+        p.setPen (Qt::NoPen);
+        const QPointF play[] = { { 760.0, 5.0 }, { 760.0, 15.0 }, { 769.0, 10.0 } };
+        p.drawPolygon (play, 3);
+    }
+    if (state.recording)
+    {
+        p.setBrush (QColor (230, 40, 40));
+        p.setPen (Qt::NoPen);
+        p.drawEllipse (QPointF (745.0, 10.0), 5.0, 5.0);
+    }
+
+    for (int t = 0; t < 8; ++t)
+    {
+        const int x = t * column;
+        if (t >= state.tracks)
+            continue;
+        const auto& track = state.track[(size_t) t];
+        const QColor colour = QColor::fromRgb (track.rgb);
+        const bool selected = state.selected == t;
+        if (selected)
+            p.fillRect (x + 1, 20, column - 2, 112, QColor (36, 36, 36));
+
+        // Arm, mute, solo and play, over the encoders.
+        font (11, true);
+        int bx = x + 6;
+        auto badge = [&] (const QString& text, QColor bg)
+        {
+            const int w = QFontMetrics (p.font()).horizontalAdvance (text) + 8;
+            p.setPen (Qt::NoPen);
+            p.setBrush (bg);
+            p.drawRoundedRect (QRectF (bx, 25, w, 15), 3, 3);
+            p.setPen (QColor (0, 0, 0));
+            p.drawText (QRect (bx, 25, w, 15), Qt::AlignCenter, text);
+            bx += w + 4;
+        };
+        if (track.armed)
+            badge (tr ("ARM"), QColor (230, 50, 50));
+        if (track.mute)
+            badge (tr ("M"), QColor (240, 190, 40));
+        if (track.solo)
+            badge (tr ("S"), QColor (70, 150, 240));
+        if (track.playing)
+            badge (QStringLiteral ("\u25B6"), QColor (60, 200, 90));
+
+        // What the encoder above turns: its value in words, then as a bar.
+        const float unit = shown.knobs == Knobs::volume ? track.volume : shown.knobs == Knobs::pan ? track.pan
+                         : track.send[shown.knobs == Knobs::sendA ? 0 : 1];
+        QString value;
+        if (shown.knobs == Knobs::pan)
+        {
+            const int amount = (int) std::lround (std::abs (track.pan) * 100.0f);
+            value = amount == 0 ? tr ("C") : QStringLiteral ("%1 %2").arg (track.pan < 0.0f ? tr ("L") : tr ("R")).arg (amount);
+        }
+        else
+        {
+            const float db = control::dbFromUnit (unit);
+            value = db <= -99.0f ? tr ("-inf dB") : QStringLiteral ("%1 dB").arg (db, 0, 'f', 1);
+        }
+        font (14);
+        p.setPen (QColor (220, 220, 220));
+        p.drawText (QRect (x + 6, 44, column - 12, 20), Qt::AlignVCenter | Qt::AlignLeft, value);
+        const QRectF bar (x + 8, 70, column - 16, 10);
+        p.setPen (Qt::NoPen);
+        p.setBrush (QColor (60, 60, 60));
+        p.drawRoundedRect (bar, 3, 3);
+        p.setBrush (colour);
+        if (shown.knobs == Knobs::pan)
+        {
+            const double mid = bar.center().x(), to = mid + track.pan * bar.width() / 2.0;
+            p.drawRect (QRectF (std::min (mid, to), bar.top(), std::max (2.0, std::abs (to - mid)), bar.height()));
+        }
+        else
+            p.drawRoundedRect (QRectF (bar.left(), bar.top(), bar.width() * std::clamp (unit, 0.0f, 1.0f), bar.height()), 3, 3);
+
+        // The clip playing.
+        font (13);
+        p.setPen (track.clip.empty() ? QColor (110, 110, 110) : QColor (235, 235, 235));
+        const auto clip = track.clip.empty() ? tr ("no clip") : QString::fromStdString (track.clip);
+        p.drawText (QRect (x + 6, 92, column - 12, 30), Qt::AlignVCenter | Qt::AlignLeft,
+                    QFontMetrics (p.font()).elidedText (clip, Qt::ElideRight, column - 12));
+
+        // The track's name in its colour, over the button that selects it.
+        p.fillRect (x + 2, 134, column - 4, 26, selected ? colour : colour.darker (300));
+        font (14, true);
+        p.setPen (selected ? (colour.lightness() > 140 ? QColor (0, 0, 0) : QColor (255, 255, 255)) : QColor (235, 235, 235));
+        const auto name = track.name.empty() ? tr ("Track %1").arg (t + 1) : QString::fromStdString (track.name);
+        p.drawText (QRect (x + 6, 134, column - 12, 26), Qt::AlignVCenter | Qt::AlignLeft,
+                    QFontMetrics (p.font()).elidedText (name, Qt::ElideRight, column - 12));
+    }
+    p.end();
+    pushDisplay->setFrame (reinterpret_cast<const uint32_t*> (image.constBits()), (int) (image.bytesPerLine() / 4));
 }
 
 void MainWindow::saveMidiMappings()
@@ -194,7 +343,11 @@ void MainWindow::controlSurfacesDialog()
         for (const auto& f : surfaces->found())
         {
             const auto port = QString::fromStdString (f.inputName.empty() ? f.outputName : f.inputName);
-            const auto state = ! f.enabled ? tr ("off: a plain MIDI controller") : f.open ? tr ("connected through %1").arg (port) : tr ("could not be opened");
+            auto state = ! f.enabled ? tr ("off: a plain MIDI controller") : f.open ? tr ("connected through %1").arg (port) : tr ("could not be opened");
+            if (f.open && (f.kind == "push2" || f.kind == "push3"))
+                state += pushDisplay != nullptr ? tr ("; display on")
+                       : ! PushDisplay::available() ? tr ("; display off (PHI was built without libusb)")
+                       : tr ("; display off: no USB access to it (see the udev rule in docs/control-surfaces.md)");
             auto* item = new QListWidgetItem (QStringLiteral ("%1: %2").arg (QString::fromStdString (f.name), state), list);
             item->setData (Qt::UserRole, QString::fromStdString (f.kind));
             item->setFlags (item->flags() | Qt::ItemIsUserCheckable);
@@ -240,6 +393,12 @@ void MainWindow::controlSurfacesDialog()
     {
         if (surfaces->scan())
             openMidiInputs();
+        if (pushDisplay == nullptr && surfaces->push().open)
+        {
+            auto display = std::make_unique<PushDisplay>();
+            if (display->open())
+                pushDisplay = std::move (display);
+        }
         fill();
     });
     connect (learn, &QPushButton::clicked, &dialog, [this, &dialog]

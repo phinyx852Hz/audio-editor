@@ -7,6 +7,7 @@
 #include "SlicerWindow.h"
 #include "../engine/MidiInputs.h"
 #include "../engine/ControlSurfaces.h"
+#include "../engine/PushDisplay.h"
 #include "../control/MidiLearn.h"
 #include "../sampler/SamplerEngine.h"
 #include "../sampler/SlicerEngine.h"
@@ -319,6 +320,7 @@ MainWindow::~MainWindow()
     delete mixerWin;             // before the mixer's engine and its instruments
     mixerWin = nullptr;
     controlTimer.stop();
+    pushDisplay = nullptr;
     surfaces = nullptr;          // dark, and back to their own modes
     midiInputs = nullptr;
     delete batchWindow;   // stops its workers while the engine they render through still exists

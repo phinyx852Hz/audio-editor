@@ -79,8 +79,26 @@ turn volume, pan, send A or send B (Mix steps through them; Shift turns them fin
 encoder the master fader, the tempo encoder the tempo (Shift: tenths). Play (Shift: Stop), Record
 (Shift: Capture), Metronome, Tap Tempo, Undo (Shift: Redo), the arrows, Octave, Scale (in key or
 chromatic), Mute, Solo and Stop Clip work as above. Push 3 uses the same messages; it has not been
-tried. **The Push display** stays dark for now: it is driven over USB rather than MIDI (libusb,
-960x160 pixels, documented by Ableton) and comes next.
+tried.
+
+**The display** shows, along the top, the view (and in Session the scenes on the pads), what the
+encoders turn, recording, playing, the click and the tempo. Under each encoder is its track's
+value (dB, or pan), as words and a bar in the track's colour, with ARM, M, S and a play mark for the
+track's state; then the clip it plays; then, over the button that selects it, the track's name in
+its colour (filled in for the selected track, which is also lit behind). It is redrawn 15 times a
+second and sent 25 times a second, as Ardour does.
+
+The display is driven over USB rather than MIDI, with libusb, as Ableton's Push 2 Display
+Interface Manual and Ardour's Push 2 support describe (`third_party/README.md`). A program needs
+access to the USB device for that, which Linux gives through a udev rule. PHI installs one
+(`packaging/70-phi-push.rules`, into `/usr/lib/udev/rules.d`); built by hand, copy it there and
+replug Push, or run `sudo udevadm control --reload && sudo udevadm trigger`. Its lines are:
+
+    SUBSYSTEM=="usb", ATTR{idVendor}=="2982", ATTR{idProduct}=="1967", TAG+="uaccess"
+    SUBSYSTEM=="usb", ATTR{idVendor}=="2982", ATTR{idProduct}=="1969", TAG+="uaccess"
+
+(1967 is Push 2, 1969 Push 3.) Control Surfaces says whether the display is on, and why not if it
+is not. Without the rule, or in a PHI built without libusb, everything but the display works.
 
 ## MIDI Learn
 
@@ -107,6 +125,9 @@ offset 64, or sign and magnitude). Mappings are kept in PHI's settings.
 - `Source/control/MidiLearn.h/.cpp`: the mappings.
 - `Source/engine/ControlSurfaces.h/.cpp`: the ports (JUCE): found, opened, read on the MIDI thread
   and written from the UI.
+- `Source/engine/PushDisplay.h/.cpp`: Push's display over USB (libusb, optional at build time:
+  `PHI_LIBUSB`), sent from its own thread. `MainWindow::drawPushDisplay` (ControlSection.cpp) draws
+  it with QPainter.
 - `Source/ui/ControlSection.cpp`: the menu commands, the dialogs and the timer (30 a second: the
   surfaces' commands, then their lights). `Source/ui/MixerControl.cpp`: the mixer as they see it
   and what their commands do to it.

@@ -38,6 +38,16 @@ public:
     std::vector<Found> found() const;
     std::vector<std::string> claimedInputs() const;   // identifiers to keep out of MidiInputs
 
+    // A Push in use, as its display shows it: its view, what its encoders turn, the first scene shown.
+    struct PushShown
+    {
+        bool open = false;
+        control::PadSurface::View view = control::PadSurface::View::session;
+        control::PadSurface::Knobs knobs = control::PadSurface::Knobs::volume;
+        int sceneOffset = 0;
+    };
+    PushShown push() const;
+
     std::vector<control::Command> takeCommands();   // UI thread
     void refresh (const control::State&);           // UI thread: the lights
     void closeAll();                                // dark, and back to their own modes

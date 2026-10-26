@@ -31,6 +31,9 @@ control::State MixerWindow::surfaceState() const
         out.rgb = info[(size_t) t].colour.rgb() & 0xFFFFFF;
         out.volume = control::unitFromDb (strip.faderDb.load());
         out.pan = strip.pan.load();
+        out.name = trackName (t).toStdString();
+        if (launch.playing >= 0 && launch.playing < numScenes)
+            out.clip = slotName (t, launch.playing).toStdString();
         for (size_t k = 0; k < out.send.size(); ++k)
             out.send[k] = control::unitFromDb (strip.sendDb[k].load());
         for (int sc = 0; sc < control::maxScenes && sc < mixer::maxScenes; ++sc)

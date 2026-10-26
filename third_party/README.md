@@ -65,3 +65,15 @@ channels for flashing and pulsing (from `de.mossgrabers.controller.novation.
 launchpad`, `.novation.launchkey` and `.ableton.push`). No Java source is
 included; the code is PHI's own. LGPL-3.0 lets it be conveyed under GPL-3.0 and
 so combined with PHI's AGPL-3.0.
+
+## Ardour (Push 2 and 3's display)
+
+`Source/engine/PushDisplay.h/.cpp` drive Push's display the way Ardour's Push 2
+support does (`libs/surfaces/push2/push2.cc` and `canvas.cc`,
+https://github.com/Ardour/ardour, by Paul Davis and Robin Gareus, © 2016-2026,
+licensed GPL-2.0-or-later): the USB vendor and product ids, claiming interface
+0, the 16-byte frame header, the BGR565 pixels in rows of 1024 with 64 of
+filler, sent unXORed to bulk endpoint 1 every 40 ms. No Ardour source is
+included; the code is PHI's own. GPL-2.0-or-later can be conveyed under GPL-3.0
+and so combined with PHI's AGPL-3.0. Ableton's Push 2 Display Interface Manual
+(https://github.com/Ableton/push-interface) documents the same protocol.
