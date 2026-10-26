@@ -396,12 +396,12 @@ Fast MIDI edits (owner, 2026-10-25: "MIDI editing, but really fast"; "the idea i
   across both.
 - **½** keeps every other note or chord, and **×2** plays each note twice in its own time, half as
   long. Both can be pressed again.
-- **Sa** and **Mode or raga** move every note to the nearest note of a mode (Ionian to Locrian)
-  or one of the major Hindustani ragas: the ten thaats (Bilawal, Yaman, Khamaj, Kafi, Asavari,
-  Bhairavi, Bhairav, Marwa, Purvi, Todi), then Darbari Kanada, Jaunpuri, Bageshri, Bhimpalasi,
-  Desh, Bihag, Kedar, Miyan ki Malhar, Megh, Bhupali, Durga, Hamsadhwani, Malkauns, Jog, Ahir
-  Bhairav, Lalit, Puriya Dhanashri, Shree, Multani and Charukeshi. A note between two goes down,
-  and drums (channel 10) stay. Ragas that share their notes (Darbari, Jaunpuri, Asavari) are each
+- **Sa** and **Mode or raga** move every note to the nearest note of a mode (ionian to locrian)
+  or one of the major Hindustani ragas: the ten thaats (bilāval, yaman, khamāj, kāfī, āsāvarī,
+  bhairavī, bhairav, mārvā, pūrvī, toḍī), then darbārī kānaḍā, jaunpurī, bāgeśrī, bhīmpalāsī,
+  deś, bihāg, kedār, miyāṅ kī malhār, megh, bhūpālī, durgā, haṃsadhvani, mālkauns, jog, ahīr
+  bhairav, lalit, pūriyā dhanāśrī, śrī, multānī and cārukeśī. A note between two goes down,
+  and drums (channel 10) stay. Ragas that share their notes (darbārī kānaḍā, jaunpurī, āsāvarī) are each
   listed. A raga is taken as the notes it uses up and down; its own movement is not followed.
 - Each edit writes a new MIDI file (type 0) next to the mix, in "<mix> Edits", or in Music/PHI
   Edits until the mix is saved. The clip plays it from the start, as it was heard (a reversed
@@ -490,7 +490,7 @@ could be applied on the clip level, track level or scene level"):
   toḍī's and bhairav's re and dha), and each of them again equal tempered; the six church modes and six hypo-modes in Pythagorean tuning
   (a hypo-mode's root is the bottom of its range, a fourth below the final); 13 jazz modes; nine
   maqams and seven dastgahs with quarter steps of 50 cents; and 2 to 21 equal steps to the octave.
-  Names are in IAST (ragas), IJMES (maqams) and a common Persian romanisation (dastgahs), all in
+  Names are in IAST (ragas), IJMES (maqams) and the Encyclopædia Iranica's romanisation (dastgahs), all in
   lower case (owner); a mix saves the plain ASCII name beside each.
 - A scale's degrees play on the nearest keys from the root, a quarter step on the key above (rāst's
   E half-flat on E); the keys between keep their 12-TET pitch. Equal steps run up and down the

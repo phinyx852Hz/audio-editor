@@ -1385,10 +1385,10 @@ namespace
         // Ragas: Malkauns (S g m d n) on C, and Darbari and Jaunpuri listed with Asavari's notes.
         const auto& scales = midifile::scales();
         auto find = [&] (const std::string& name) { for (size_t i = 0; i < scales.size(); ++i) if (name == scales[i].name) return (int) i; return -1; };
-        const auto malkauns = find ("Malkauns");
+        const auto malkauns = find ("mālkauns");
         check (malkauns >= 0 && pitchSet (*midifile::toMode (*song, 0, malkauns)) == (std::vector<int> { 60, 63, 63, 68 }), "midi edits: a raga's notes, pentatonic");
-        check (find ("Darbari Kanada") >= 0 && find ("Jaunpuri") >= 0 && scales[(size_t) find ("Darbari Kanada")].notes == scales[(size_t) find ("Asavari")].notes
-               && scales[(size_t) find ("Jaunpuri")].notes == scales[(size_t) find ("Asavari")].notes, "midi edits: ragas sharing their notes are each listed");
+        check (find ("darbārī kānaḍā") >= 0 && find ("jaunpurī") >= 0 && scales[(size_t) find ("darbārī kānaḍā")].notes == scales[(size_t) find ("āsāvarī")].notes
+               && scales[(size_t) find ("jaunpurī")].notes == scales[(size_t) find ("āsāvarī")].notes, "midi edits: ragas sharing their notes are each listed");
     }
 
     // An instrument that writes down what it was sent and plays a constant level while a note is held.

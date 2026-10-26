@@ -5,7 +5,7 @@
 // Hindustani ragas in just intonation (and each in 12-TET), the church modes and their hypo-modes in Pythagorean
 // tuning, jazz modes, Arabic maqams and Persian dastgahs with their quarter steps, and 2 to 21
 // equal steps to the octave. Names are transliterated (IAST for the ragas, IJMES for Arabic,
-// a common Persian romanisation), with a plain spelling beside each for searching and saving.
+// Encyclopædia Iranica's for Persian), with a plain spelling beside each for searching and saving.
 // The PHI synth plays them (mixer::Instrument::setTuning); other instruments stay in 12-TET.
 #include "../core/PhiTuning.h"
 
