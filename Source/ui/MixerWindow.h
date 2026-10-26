@@ -204,6 +204,7 @@ public:
     bool modeShownMidi (int root, uint16_t keys, int below, const QString& what);
     bool showsMidiClip() const;
     void counterpointShown() { counterpointShownMidi(); }
+    void fugueShown() { fugueShownMidi(); }
 
 Q_SIGNALS:
     void mixdownRequested();
