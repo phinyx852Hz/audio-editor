@@ -6092,6 +6092,27 @@ bool MixerWindow::tuneSelectedTrack (mixer::TuningChoice choice)
     return true;
 }
 
+bool MixerWindow::addRhythm (const midifile::Song& song, const QString& stem)
+{
+    if (selected >= mixer::masterIndex || selected >= engine.numTracks())
+        return false;
+    const auto base = editsFolder();
+    QDir().mkpath (base);
+    auto name = stem;
+    name.replace (QRegularExpression (QStringLiteral ("[/\\\\:*?\"<>|]")), QStringLiteral ("_"));
+    QString file;
+    for (int n = 1; file.isEmpty() || QFileInfo::exists (file); ++n)
+        file = QDir (base).filePath (QStringLiteral ("%1 %2.mid").arg (name).arg (n));
+    std::string why;
+    if (! midifile::write (song, file.toStdString(), why))
+    {
+        say (tr ("The rhythm could not be saved to %1: %2").arg (file, QString::fromStdString (why)));
+        return true;
+    }
+    addFiles (selected, { file }, engine.position());
+    return true;
+}
+
 void MixerWindow::editShownMidi (const std::function<midifile::SongPtr (const midifile::Song&)>& edit, const QString& what)
 {
     if (! showingClip || ! clipView->showsMidi())

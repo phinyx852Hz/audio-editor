@@ -204,6 +204,10 @@ public:
     bool modeShownMidi (int root, uint16_t keys, int below, const QString& what);
     bool showsMidiClip() const;
     void counterpointShown() { counterpointShownMidi(); }
+    // A rhythm from the Mode menu's rhythmic modes (RhythmSection.cpp): saved as a MIDI file
+    // with the mix's edits, `stem` naming it, and placed on the selected track at the playhead,
+    // the Synth's drum kit playing it when the track has no instrument. False with no track.
+    bool addRhythm (const midifile::Song&, const QString& stem);
 
 Q_SIGNALS:
     void mixdownRequested();
