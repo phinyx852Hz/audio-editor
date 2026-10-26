@@ -1390,6 +1390,8 @@ namespace
         check (malkauns >= 0 && pitchSet (*midifile::toMode (*song, 0, malkauns)) == (std::vector<int> { 60, 63, 63, 68 }), "midi edits: a raga's notes, pentatonic");
         check (find ("Darbari Kanada") >= 0 && find ("Jaunpuri") >= 0 && scales[(size_t) find ("Darbari Kanada")].notes == scales[(size_t) find ("Asavari")].notes
                && scales[(size_t) find ("Jaunpuri")].notes == scales[(size_t) find ("Asavari")].notes, "midi edits: ragas sharing their notes are each listed");
+        check (find ("nyamaropa") >= 0 && scales[(size_t) find ("nyamaropa")].notes == scales[(size_t) find ("Mixolydian")].notes
+               && find ("matepe") >= 0, "midi edits: the Shona mbira tunings on the keys");
     }
 
     // An instrument that writes down what it was sent and plays a constant level while a note is held.
@@ -4206,9 +4208,22 @@ namespace
     {
         std::vector<std::string> errors;
         const auto all = phi::parseRagas (phi::builtInRagaSheets(), errors);
-        check (errors.empty() && all.size() == 74 && phi::builtInRagas().size() == 74, "raga sheets: the 74 built-in sheets read without a mistake");
+        check (errors.empty() && all.size() == 175 && phi::builtInRagas().size() == 175, "raga sheets: the 175 built-in sheets read without a mistake");
         for (const auto& e : errors)
             std::printf ("  %s\n", e.c_str());
+        // Darpaṇ, made for PHI, is a mirror: each svara's reflection about Sa (and Ma) is one of its
+        // svaras, tuned so, and its avaroha is its āroha reflected.
+        for (const auto& r : all)
+            if (r.plain == "darpan")
+            {
+                bool mirrored = near (r.cents[6], 600.0, 1.0e-9) && r.aroha.size() == r.avaroha.size();
+                for (int k = 1; k < 12; ++k)
+                    mirrored = mirrored && r.uses[(size_t) k] == r.uses[(size_t) (12 - k)]
+                               && (! r.uses[(size_t) k] || near (r.cents[(size_t) k] + r.cents[(size_t) (12 - k)], 1200.0, 1.0e-6));
+                for (size_t i = 0; mirrored && i < r.aroha.size(); ++i)
+                    mirrored = (12 - r.aroha[i].key()) % 12 == ((r.avaroha[i].key() % 12) + 12) % 12;
+                check (mirrored, "raga sheets: darpan is its own mirror");
+            }
         bool complete = true;
         for (const auto& r : all)
             complete = complete && ! r.aroha.empty() && ! r.avaroha.empty() && r.vadi >= 0 && r.samvadi >= 0;
@@ -4473,7 +4488,7 @@ namespace
         const auto& all = mixer::tuningSystems();
         auto get = [&] (const std::string& plain) -> const mixer::TuningSystem& { return all[(size_t) mixer::findTuning (plain)]; };
         bool known = true;
-        for (const char* plain : { "bilaval", "darbari kanada", "dorian", "hypodorian", "altered", "rast", "hijaz", "shur", "chahargah", "2 equal steps", "21 equal steps" })
+        for (const char* plain : { "bilaval", "darbari kanada", "dorian", "hypodorian", "altered", "rast", "hijaz", "shur", "chahargah", "slendro", "pelog", "selisir", "salendro", "nyamaropa", "nyunga nyunga", "matepe (saini madera)", "2 equal steps", "21 equal steps" })
             known = known && mixer::findTuning (plain) >= 0;
         check (known && mixer::findTuning ("no such tuning") == -1, "tunings: each family is listed, found by its plain name");
         check (get ("darbari kanada").name == "darbārī kānaḍā" && get ("hijaz").name == "ḥijāz" && get ("chahargah").name == "čahārgāh", "tunings: transliterated names");
@@ -4511,8 +4526,91 @@ namespace
         const auto onD = mixer::makeTuning (get ("rast"), 2);
         check (near (onD.hz (62), 440.0 * std::pow (2.0, -7.0 / 12.0), 1.0e-9) && near (1200.0 * std::log2 (onD.hz (66) / onD.hz (62)), 350.0, 1.0e-6)
                && near (onD.hz (74), 2.0 * onD.hz (62), 1.0e-9), "tunings: a maqam on its root, repeating each octave");
+        // Gamelan: sléndro's five near-equal steps on five keys, pélog's seven uneven ones, and a
+        // pathet read from its gong tone. The snap-to-scale list has them on the same keys.
+        const auto slendro = mixer::keyCents (get ("slendro"));
+        check (get ("slendro").name == "sléndro" && get ("pelog pathet barang").name == "pélog pathet barang" && get ("slendro").cents.size() == 5
+               && near (slendro[2], 231.0, 1.0e-9) && near (slendro[10], 955.0, 1.0e-9) && near (slendro[1], 100.0, 1.0e-9), "tunings: sléndro in its own cents");
+        check (get ("pelog").cents.size() == 7 && near (mixer::keyCents (get ("pelog"))[5], 539.0, 1.0e-9)
+               && near (get ("slendro pathet sanga").cents[1], 955.0 - 717.0, 1.0e-9) && near (get ("pelog pathet nem").cents[1], 1200.0 - 785.0, 1.0e-9),
+               "tunings: pélog, and pathet from their gong tone");
+        check (get ("selisir").family == "balinese gamelan" && get ("degung").family == "sundanese gamelan" && get ("patutan tembung").cents.size() == 5,
+               "tunings: Balinese and Sundanese gamelan");
+        {
+            const auto& snap = midifile::scales();
+            bool same = true;
+            for (auto [scale, plain] : { std::pair { "sléndro", "slendro pathet manyura" }, { "pélog", "pelog" }, { "pélog pathet lima", "pelog pathet lima" },
+                                         { "pélog pathet nem", "pelog pathet nem" }, { "pélog pathet barang", "pelog pathet barang" },
+                                         { "selisir", "selisir" }, { "degung", "degung" } })
+            {
+                uint16_t bits = 0;
+                for (auto c : get (plain).cents)
+                    bits = (uint16_t) (bits | (1u << (((int) std::floor (c / 100.0 + 0.5)) % 12)));
+                bool found = false;
+                for (const auto& sc : snap)
+                    found = found || (std::string (sc.name) == scale && sc.notes == bits);
+                same = same && found;
+            }
+            check (same, "tunings: gamelan in the snap-to-scale list on their keys");
+        }
+        // Shona mbira: nyamaropa's measured gamut, the other tunings its rotations, Madera's
+        // matepe from Tracey's frequencies; none of them 12-TET.
+        const auto nyamaropa = mixer::keyCents (get ("nyamaropa"));
+        check (near (nyamaropa[2], 177.0, 1.0e-9) && near (nyamaropa[10], 1015.0, 1.0e-9) && near (nyamaropa[11], 1100.0, 1.0e-9),
+               "tunings: nyamaropa's measured cents, Mixolydian's keys");
+        const auto& gamut = get ("nyamaropa").cents;
+        bool rotations = true;
+        for (auto [plain, start] : { std::pair { "dambatsoko", 3 }, { "katsanzaira", 4 }, { "mavembe (gandanga)", 5 }, { "dindinyongwe", 2 } })
+            for (size_t i = 0; i < 7; ++i)
+                rotations = rotations && near (get (plain).cents[i], std::fmod (gamut[(start + i) % 7] - gamut[(size_t) start] + 1200.0, 1200.0), 1.0e-9);
+        check (rotations && near (mixer::keyCents (get ("mavembe (gandanga)"))[1], 135.0, 1.0e-9), "tunings: the mbira tunings are one gamut from other keys");
+        check (get ("nyunga nyunga").cents.size() == 6 && near (mixer::keyCents (get ("saungweme"))[3], 1200.0 * 2 / 7, 1.0e-9)
+               && near (mixer::keyCents (get ("matepe (saini madera)"))[2], phi::Tuning::ratioToCents (240.0 / 216.0), 1.0e-9),
+               "tunings: nyunga nyunga's six tones, saungweme's equal sevenths, Madera's matepe");
         const auto five = mixer::makeTuning (get ("5 equal steps"), 0);
         check (near (five.hz (65), 2.0 * five.hz (60), 1.0e-9) && near (five.hz (60), 261.6255653005986, 1.0e-9), "tunings: equal steps from the root");
+
+        // Chinese and Japanese systems. The twelve lü by sanfen sunyi: linzhong a pure fifth,
+        // zhonglü (the last) a Pythagorean comma above 4/3, on F's key.
+        bool eastAsian = true;
+        for (const char* plain : { "shier lu (sanfen sunyi)", "jing fang 60 lu", "cai yuanding 18 lu", "he chengtian xinlu", "zhu zaiyu xinfa milu",
+                                   "chunlu wusheng (qin)", "gong", "yu", "yayue shang", "yanyue zhi", "gong (equal tempered)", "yifan (guangdong)",
+                                   "zhongsan zhongliu (chaozhou)", "ichikotsucho", "banshikicho", "miyako-bushi (in)", "ryukyu", "hirajoshi" })
+            eastAsian = eastAsian && mixer::findTuning (plain) >= 0;
+        check (eastAsian && get ("jue").name == "jué" && get ("hyojo").name == "hyōjō", "tunings: Chinese and Japanese systems, by their plain names");
+        const auto lu = mixer::keyCents (get ("shier lu (sanfen sunyi)"));
+        check (near (lu[7], 701.955, 1.0e-3) && near (lu[5], phi::Tuning::ratioToCents (177147.0 / 131072.0), 1.0e-6), "tunings: the twelve lü by sanfen sunyi");
+        // The five modes: gong's jue a Pythagorean third (81/64); yu (on la) has a minor third
+        // (32/27) and no second; in 12-TET, yu is 0 3 5 7 10.
+        check (near (mixer::keyCents (get ("gong"))[4], phi::Tuning::ratioToCents (81.0 / 64.0), 1.0e-9)
+               && get ("yu").cents.size() == 5 && near (get ("yu").cents[1], phi::Tuning::ratioToCents (32.0 / 27.0), 1.0e-9)
+               && get ("yu (equal tempered)").cents == std::vector<double> ({ 0, 300, 500, 700, 1000 }), "tunings: the five Chinese modes");
+        // Yanyue on gong has qingjue (4/3) and run (16/9); yayue has bianzhi (729/512).
+        const auto yanyue = get ("yanyue gong").cents, yayue = get ("yayue gong").cents;
+        check (yanyue.size() == 7 && near (yanyue[3], phi::Tuning::ratioToCents (4.0 / 3.0), 1.0e-9) && near (yanyue[6], phi::Tuning::ratioToCents (16.0 / 9.0), 1.0e-9)
+               && near (yayue[3], phi::Tuning::ratioToCents (729.0 / 512.0), 1.0e-9), "tunings: the seven-note Chinese scales");
+        // He Chengtian's lü close the circle: each within 8 cents of 12-TET (sanfen sunyi's zhonglü
+        // is 21.5 cents off).
+        bool closes = get ("he chengtian xinlu").cents.size() == 12;
+        for (size_t i = 0; closes && i < 12; ++i)
+            closes = std::abs (get ("he chengtian xinlu").cents[i] - 100.0 * (double) i) < 8.0;
+        check (closes, "tunings: He Chengtian's lü near equal");
+        // Jing Fang's 60 lü play a degree a key: seyu, the 54th fifth, is 3.6 cents above huangzhong.
+        const auto jing = mixer::makeTuning (get ("jing fang 60 lu"), 0);
+        check (near (jing.hz (120), 2.0 * jing.hz (60), 1.0e-9) && near (1200.0 * std::log2 (jing.hz (61) / jing.hz (60)), 3.615, 1.0e-3),
+               "tunings: Jing Fang's 60 lü, a degree a key");
+        check (counterpoint::Mode::fromTuning (get ("jing fang 60 lu"), 0).valid() && counterpoint::Mode::fromTuning (get ("jing fang 60 lu"), 0).period == 60,
+               "tunings: a long scale's degrees as counterpoint's keys");
+        // Gagaku: hyōjō is ritsu (Dorian), sōjō ryo (Lydian), both Pythagorean.
+        check (near (mixer::keyCents (get ("hyojo"))[3], phi::Tuning::ratioToCents (32.0 / 27.0), 1.0e-9)
+               && near (mixer::keyCents (get ("sojo"))[6], phi::Tuning::ratioToCents (729.0 / 512.0), 1.0e-9), "tunings: ritsu and ryo");
+
+        // Korean: p'yŏngjo on sol has a Pythagorean whole tone and fourth; kyemyŏnjo on la a
+        // minor third of 32/27; the tori in 12-TET.
+        check (get ("pyeongjo").name == "p'yŏngjo" && near (get ("pyeongjo").cents[2], phi::Tuning::ratioToCents (4.0 / 3.0), 1.0e-9)
+               && near (get ("gyemyeonjo").cents[1], phi::Tuning::ratioToCents (32.0 / 27.0), 1.0e-9)
+               && get ("menaritori").cents == std::vector<double> ({ 0, 300, 500, 800, 1000 }) && mixer::findTuning ("sibi-yul (sambun sonik)") >= 0,
+               "tunings: Korean modes and tori");
 
         const mixer::TuningChoice none, clip { 3, 0 }, scene { 5, 2 }, track { 7, 4 };
         check (mixer::tuningInForce (clip, scene, track) == clip && mixer::tuningInForce (none, scene, track) == scene
