@@ -155,3 +155,7 @@ Launch Styles (Trigger, Gate, Toggle, Repeat), Clip Actions with chances, scene 
 signature, MIDI learn and a generic pad layout with lights, audio clips stretched to the tempo,
 Record Launcher to Timeline; then independent columns, group scenes, Capture Scene, scene chains,
 Pick for me and effects in the rack. Recording into slots is built: [recording.md](recording.md).
+
+## Control surfaces
+
+Launchpads, Launchkeys and Push 2 and 3 play the launcher from their pads, lit in the tracks' colours, and any controller can be mapped by MIDI Learn: [control-surfaces.md](control-surfaces.md).

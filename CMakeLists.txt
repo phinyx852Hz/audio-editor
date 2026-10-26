@@ -95,6 +95,10 @@ target_sources(${APP_ID} PRIVATE
     Source/engine/BuiltinEffects.cpp
     Source/engine/PhiEffects.cpp
     Source/engine/MidiInputs.cpp
+    Source/engine/ControlSurfaces.cpp
+    Source/control/ControlSurface.cpp
+    Source/control/Devices.cpp
+    Source/control/MidiLearn.cpp
     Source/engine/ClapFormat.cpp
     Source/engine/Codec.cpp
     Source/engine/Export.cpp
@@ -154,6 +158,8 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/SlicerWindow.cpp
     Source/ui/MixerWindow.cpp
     Source/ui/MixerRecording.cpp
+    Source/ui/MixerControl.cpp
+    Source/ui/ControlSection.cpp
     Source/ui/MixerSection.cpp
     Source/ui/PanelNavigation.cpp
     Source/ui/PatchBayWindow.cpp
@@ -377,6 +383,9 @@ if(PHI_BUILD_TESTS)
         Source/mixer/Instruments.cpp
         Source/mixer/MixerEngine.cpp
         Source/mixer/Recording.cpp
+        Source/control/ControlSurface.cpp
+        Source/control/Devices.cpp
+        Source/control/MidiLearn.cpp
         Source/patchbay/PatchBay.cpp
         Source/core/Ixml.cpp
         Source/core/Metadata.cpp

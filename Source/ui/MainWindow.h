@@ -18,6 +18,7 @@
 #include "../engine/Export.h"
 #include "WaveformView.h"
 
+#include <QDialog>
 #include <QElapsedTimer>
 #include <QFutureWatcher>
 #include <QHash>
@@ -47,6 +48,7 @@ namespace timestretch { class SegmentCache; }
 namespace sampler { class Engine; }
 namespace slicer { class Engine; }
 namespace mixer { class Engine; }
+namespace control { class Learn; struct Command; }
 namespace patchbay { class PatchBay; }
 namespace perf { class Recorder; class Camera; class VideoFile; }
 namespace sonify { class Sonifier; struct Message; struct Picture; }
@@ -440,6 +442,21 @@ private:
     // The Mixer (MixerSection.cpp, docs/mixer.md): 8 tracks, each with an audio file,
     // a MIDI file and an instrument; heard through engine.setInstrument with the Sampler.
     void registerMixerCommands();
+    // Control surfaces and MIDI Learn (ControlSection.cpp, docs/control-surfaces.md): Launchpads,
+    // Launchkeys and Push play the mixer's launcher, strips and transport, lit in the tracks'
+    // colours; any other controller's knobs and buttons are mapped by MIDI Learn.
+    void registerControlCommands();
+    void controlSurfacesDialog();
+    void midiLearnDialog();
+    void controlTick();                                // their commands done, their lights sent
+    void controlCommand (const control::Command&);
+    void saveMidiMappings();
+    std::unique_ptr<class ControlSurfaces> surfaces;
+    std::unique_ptr<control::Learn> midiLearn;
+    QTimer controlTimer;
+    int controlTicks = 0;
+    QPointer<QDialog> learnDialog;
+    std::function<void()> learnDialogRefresh;          // the open MIDI Learn dialog's list, again
     class MixerWindow* mixerWindow();
     void showMixer();
     void editMixerClip (int track, quint32 clip);
