@@ -431,8 +431,8 @@ beyond the church modes):
   nothing that keeps the strict rules, all are written again with another seed. Only when nothing
   fits is a strict rule bent, and the status line says how many.
 - The mode: any of the tunings (church modes and hypo-modes, jazz modes, ragas, maqams and
-  dastgahs, gamelan laras and pathet, 2 to 21 equal steps), on a root, or the melody's own (the diatonic mode on its last
-  note that holds all its notes). The voices use only the mode's keys, and consonance is judged
+  dastgahs, gamelan laras and pathet, Shona mbira tunings, 2 to 21 equal steps), on a root, or the
+  melody's own (the diatonic mode on its last note that holds all its notes). The voices use only the mode's keys, and consonance is judged
   by the cents the tuning plays: a maqam's neutral third or sixth counts as a third or sixth; in
   an equal temperament each key is one step. Church modes raise the note a whole step below a
   cadence's arrival (musica ficta). A raga can carry its āroha and avaroha (the notes used going
@@ -493,12 +493,34 @@ could be applied on the clip level, track level or scene level"):
   (no two gamelan are tuned alike, so each is an average): Javanese sléndro and its pathet nem,
   sanga and manyura, pélog and its pathet lima, nem and barang (from Surjodiningrat, Sudarjana and
   Susanto's 1972 survey), Balinese selisir as gong kebyar tunes it, the saih pitu and its patutan
-  tembung and sunaren, and Sundanese salendro and degung; and 2 to 21 equal steps to the octave.
+  tembung and sunaren, and Sundanese salendro and degung; the Shona mbira tunings of Zimbabwe (below); and 2 to 21 equal
+  steps to the octave.
   A pathet is the laras's tones in use, read from a gong tone it rests on (sléndro nem on 2, sanga
   on 5, manyura on 6; pélog lima on 1, nem on 6, barang on 2).
   Names are in IAST (ragas), IJMES (maqams), a common Persian romanisation (dastgahs) and
   Indonesian spelling (gamelan), all in lower case (owner); a mix saves the plain ASCII name beside
   each. The clip **Mode or raga...** snap list has the gamelan scales too, on their nearest keys.
+- The Shona tunings (owner, 2026-10-26: "mode and tuning systems from Zimbabwe, especially from
+  the Shona people"), in their own cents rather than 12-TET:
+  - Mbira dzavadzimu: one heptatonic gamut read from different keys, as Garikayi Tirikoti's mbira
+    orchestra plays one scale from seven starting notes. **nyamaropa** (near Mixolydian; the
+    gamut, a Shona mbira measured by McNeil and Mitran, J. Acoust. Soc. Am. 123, 2008: steps of
+    177, 193, 125, 190, 195, 135 and 185 cents), **dambatsoko** (the Mujuru family's, near
+    Ionian), **katsanzaira** (near Dorian), **mavembe (gandanga)** (near Phrygian) and
+    **dindinyongwe** (near Locrian) are its rotations. **nyamaropa (berliner)** is one player's
+    nyamaropa from Berliner's measurements (The Soul of Mbira, 1978, via Rechberger), and
+    **saungweme** (Simboti Mukuwurirwa's flattened whole tone) is seven equal steps of 171 cents
+    on the keys. Nemakonde (a low mavembe), mazingizi (katsanzaira an octave down) and dongonda
+    (the right hand an octave down) share those intervals, so they are not listed again.
+  - Nyunga nyunga, the 15-key karimba taught at Kwanongoma: six tones, the gamut without its
+    fourth; **nyunga nyunga (kwanongoma)** as Kwanongoma's instruments are tuned, in 12-TET, and
+    **nyunga nyunga** from dambatsoko's gamut.
+  - Matepe (hera) of the Korekore and Sena on the Mozambique border: **matepe (saini madera)**,
+    Saini Madera's instrument as Andrew Tracey measured it in 1969 (African Music 4(4), 1970),
+    near seven equal steps: 0, 182, 360, 498, 680, 845 and 1032 cents.
+  - Real mbira vary by maker and player (Berliner found Gondo's octaves wide and Mude's narrow),
+    and their octaves stretch; these play each octave at 1200 cents. The MIDI clip's "Mode or
+    raga" list has the same tunings as the keys they play on.
 - A scale's degrees play on the nearest keys from the root, a quarter step on the key above (rāst's
   E half-flat on E); the keys between keep their 12-TET pitch. Equal steps run up and down the
   keys from the root.

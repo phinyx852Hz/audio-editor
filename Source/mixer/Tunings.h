@@ -4,10 +4,10 @@
 // The modal tunings a clip, a scene or a track can play in (owner, 2026-10-25): the major
 // Hindustani ragas in just intonation (and each in 12-TET), the church modes and their hypo-modes in Pythagorean
 // tuning, jazz modes, Arabic maqams and Persian dastgahs with their quarter steps, Javanese,
-// Balinese and Sundanese gamelan laras and their pathet in measured cents, and 2 to 21 equal
-// steps to the octave. Names are transliterated (IAST for the ragas, IJMES for Arabic, a common
-// Persian romanisation, Indonesian spelling for gamelan), with a plain spelling beside each for
-// searching and saving.
+// Balinese and Sundanese gamelan laras and their pathet in measured cents, the Shona mbira
+// tunings of Zimbabwe in their measured cents, and 2 to 21 equal steps to the octave. Names are
+// transliterated (IAST for the ragas, IJMES for Arabic, a common Persian romanisation, Indonesian
+// spelling for gamelan), with a plain spelling beside each for searching and saving.
 // The PHI synth plays them (mixer::Instrument::setTuning); other instruments stay in 12-TET.
 #include "../core/PhiTuning.h"
 
@@ -22,7 +22,8 @@ namespace mixer
         std::string name;     // as shown, all lower case (owner): "darbārī kānaḍā", "ḥijāz", "rāst-panjgāh"
         std::string plain;    // ASCII, also the key a mix saves: "darbari kanada"
         std::string family;   // "raga", "raga, equal tempered", "church mode", "hypo-mode", "jazz mode", "maqam", "dastgah",
-                              // "javanese gamelan", "balinese gamelan", "sundanese gamelan", "equal"
+                              // "javanese gamelan", "balinese gamelan", "sundanese gamelan", "mbira dzavadzimu",
+                              // "nyunga nyunga", "matepe", "equal"
         std::vector<double> cents;   // the degrees above the tonic, from 0, within the period
         int divisions = 0;           // an equal temperament: this many steps to the octave (else 0)
     };

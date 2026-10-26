@@ -1389,6 +1389,8 @@ namespace
         check (malkauns >= 0 && pitchSet (*midifile::toMode (*song, 0, malkauns)) == (std::vector<int> { 60, 63, 63, 68 }), "midi edits: a raga's notes, pentatonic");
         check (find ("Darbari Kanada") >= 0 && find ("Jaunpuri") >= 0 && scales[(size_t) find ("Darbari Kanada")].notes == scales[(size_t) find ("Asavari")].notes
                && scales[(size_t) find ("Jaunpuri")].notes == scales[(size_t) find ("Asavari")].notes, "midi edits: ragas sharing their notes are each listed");
+        check (find ("nyamaropa") >= 0 && scales[(size_t) find ("nyamaropa")].notes == scales[(size_t) find ("Mixolydian")].notes
+               && find ("matepe") >= 0, "midi edits: the Shona mbira tunings on the keys");
     }
 
     // An instrument that writes down what it was sent and plays a constant level while a note is held.
@@ -4485,7 +4487,7 @@ namespace
         const auto& all = mixer::tuningSystems();
         auto get = [&] (const std::string& plain) -> const mixer::TuningSystem& { return all[(size_t) mixer::findTuning (plain)]; };
         bool known = true;
-        for (const char* plain : { "bilaval", "darbari kanada", "dorian", "hypodorian", "altered", "rast", "hijaz", "shur", "chahargah", "slendro", "pelog", "selisir", "salendro", "2 equal steps", "21 equal steps" })
+        for (const char* plain : { "bilaval", "darbari kanada", "dorian", "hypodorian", "altered", "rast", "hijaz", "shur", "chahargah", "slendro", "pelog", "selisir", "salendro", "nyamaropa", "nyunga nyunga", "matepe (saini madera)", "2 equal steps", "21 equal steps" })
             known = known && mixer::findTuning (plain) >= 0;
         check (known && mixer::findTuning ("no such tuning") == -1, "tunings: each family is listed, found by its plain name");
         check (get ("darbari kanada").name == "darbārī kānaḍā" && get ("hijaz").name == "ḥijāz" && get ("chahargah").name == "čahārgāh", "tunings: transliterated names");
@@ -4550,6 +4552,20 @@ namespace
             }
             check (same, "tunings: gamelan in the snap-to-scale list on their keys");
         }
+        // Shona mbira: nyamaropa's measured gamut, the other tunings its rotations, Madera's
+        // matepe from Tracey's frequencies; none of them 12-TET.
+        const auto nyamaropa = mixer::keyCents (get ("nyamaropa"));
+        check (near (nyamaropa[2], 177.0, 1.0e-9) && near (nyamaropa[10], 1015.0, 1.0e-9) && near (nyamaropa[11], 1100.0, 1.0e-9),
+               "tunings: nyamaropa's measured cents, Mixolydian's keys");
+        const auto& gamut = get ("nyamaropa").cents;
+        bool rotations = true;
+        for (auto [plain, start] : { std::pair { "dambatsoko", 3 }, { "katsanzaira", 4 }, { "mavembe (gandanga)", 5 }, { "dindinyongwe", 2 } })
+            for (size_t i = 0; i < 7; ++i)
+                rotations = rotations && near (get (plain).cents[i], std::fmod (gamut[(start + i) % 7] - gamut[(size_t) start] + 1200.0, 1200.0), 1.0e-9);
+        check (rotations && near (mixer::keyCents (get ("mavembe (gandanga)"))[1], 135.0, 1.0e-9), "tunings: the mbira tunings are one gamut from other keys");
+        check (get ("nyunga nyunga").cents.size() == 6 && near (mixer::keyCents (get ("saungweme"))[3], 1200.0 * 2 / 7, 1.0e-9)
+               && near (mixer::keyCents (get ("matepe (saini madera)"))[2], phi::Tuning::ratioToCents (240.0 / 216.0), 1.0e-9),
+               "tunings: nyunga nyunga's six tones, saungweme's equal sevenths, Madera's matepe");
         const auto five = mixer::makeTuning (get ("5 equal steps"), 0);
         check (near (five.hz (65), 2.0 * five.hz (60), 1.0e-9) && near (five.hz (60), 261.6255653005986, 1.0e-9), "tunings: equal steps from the root");
 

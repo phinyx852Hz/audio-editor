@@ -611,6 +611,15 @@ namespace midifile
             { "pélog pathet barang", "Gamelan", bits ({ 0, 1, 6, 7, 8 }) },
             { "selisir", "Gamelan", bits ({ 0, 1, 3, 7, 8 }) },
             { "degung", "Gamelan", bits ({ 0, 1, 3, 7, 8 }) },
+            // Shona mbira tunings (mixer/Tunings.cpp has their cents), as the keys they play on; Shona
+            // names in lower case, as the tunings have them (owner).
+            { "nyamaropa", "Mbira", bits ({ 0, 2, 4, 5, 7, 9, 10 }) },
+            { "dambatsoko", "Mbira", bits ({ 0, 2, 4, 5, 7, 9, 11 }) },
+            { "katsanzaira", "Mbira", bits ({ 0, 2, 3, 5, 7, 9, 10 }) },
+            { "mavembe (gandanga)", "Mbira", bits ({ 0, 1, 3, 5, 7, 8, 10 }) },
+            { "dindinyongwe", "Mbira", bits ({ 0, 1, 3, 5, 6, 8, 10 }) },
+            { "nyunga nyunga", "Mbira", bits ({ 0, 2, 4, 7, 9, 11 }) },
+            { "matepe", "Mbira", bits ({ 0, 2, 4, 5, 7, 8, 10 }) },
         };
         return all;
     }

@@ -27,6 +27,18 @@ namespace mixer
             return out;
         }
 
+        // A scale read from its `start`th degree, as a new tonic.
+        std::vector<double> rotate (const std::vector<double>& c, size_t start)
+        {
+            std::vector<double> out;
+            for (size_t i = 0; i < c.size(); ++i)
+            {
+                auto d = c[(start + i) % c.size()] - c[start];
+                out.push_back (d < 0 ? d + 1200.0 : d);
+            }
+            return out;
+        }
+
         std::vector<double> semitones (std::initializer_list<int> steps)
         {
             std::vector<double> out;
@@ -139,6 +151,51 @@ namespace mixer
             // C B G F E), from la upward.
             all.push_back ({ "salendro", "salendro", "sundanese gamelan", { 0, 240, 480, 720, 960 }, 0 });
             all.push_back ({ "degung", "degung", "sundanese gamelan", { 0, 100, 300, 700, 800 }, 0 });
+            // Shona mbira (owner, 2026-10-26: "mode and tuning systems from Zimbabwe, especially from
+            // the Shona people"). Mbira dzavadzimu tunings are one heptatonic gamut read from
+            // different keys, as Garikayi Tirikoti's mbira orchestra plays one scale from seven
+            // starting notes: nyamaropa is near Mixolydian, dambatsoko (the Mujuru family's) near
+            // Ionian, katsanzaira near Dorian, mavembe or gandanga near Phrygian, dindinyongwe
+            // near Locrian. The gamut is a Shona mbira dzavadzimu in nyamaropa's shape measured by
+            // McNeil and Mitran (J. Acoust. Soc. Am. 123, 2008), steps of 177, 193, 125, 190, 195,
+            // 135 and 185 cents; the others are its rotations.
+            const auto mbira = [&] (std::string name, std::string plain, const char* family, std::vector<double> c)
+            { all.push_back ({ std::move (name), std::move (plain), family, std::move (c), 0 }); };
+            const std::vector<double> nyamaropa { 0, 177, 370, 495, 685, 880, 1015 };
+            mbira ("nyamaropa", "nyamaropa", "mbira dzavadzimu", nyamaropa);
+            mbira ("dambatsoko", "dambatsoko", "mbira dzavadzimu", rotate (nyamaropa, 3));
+            mbira ("katsanzaira", "katsanzaira", "mbira dzavadzimu", rotate (nyamaropa, 4));
+            mbira ("mavembe (gandanga)", "mavembe (gandanga)", "mbira dzavadzimu", rotate (nyamaropa, 5));
+            mbira ("dindinyongwe", "dindinyongwe", "mbira dzavadzimu", rotate (nyamaropa, 2));
+            // A player's own nyamaropa, from Berliner's measurements (The Soul of Mbira, 1978, via
+            // Rechberger's Scales and Modes Around the World): wider seconds, a low seventh.
+            mbira ("nyamaropa (berliner)", "nyamaropa (berliner)", "mbira dzavadzimu", { 0, 196, 377, 506, 676, 877, 1050 });
+            // Saungweme (the maker Simboti Mukuwurirwa's): a flattened whole tone, close to seven
+            // equal steps, here exactly so.
+            {
+                std::vector<double> c;
+                for (int i = 0; i < 7; ++i)
+                    c.push_back (1200.0 * i / 7);
+                mbira ("saungweme", "saungweme", "mbira dzavadzimu", std::move (c));
+            }
+            // Nyunga nyunga (the 15-key karimba of Manicaland, taught at Kwanongoma): six tones, the
+            // gamut without its fourth. Kwanongoma's instruments are in F, in 12-TET; the other
+            // is dambatsoko's gamut without its fourth.
+            mbira ("nyunga nyunga (kwanongoma)", "nyunga nyunga (kwanongoma)", "nyunga nyunga", { 0, 200, 400, 700, 900, 1100 });
+            {
+                auto c = rotate (nyamaropa, 3);
+                c.erase (c.begin() + 3);
+                mbira ("nyunga nyunga", "nyunga nyunga", "nyunga nyunga", std::move (c));
+            }
+            // Matepe (hera), of the Korekore and Sena on the Mozambique border: Saini Madera's
+            // instrument as Andrew Tracey measured it in June 1969 (African Music 4(4), 1970), its
+            // right hand from C at 216 vibrations a second, near seven equal steps.
+            {
+                std::vector<double> c;
+                for (double hz : { 216.0, 240.0, 266.0, 288.0, 320.0, 352.0, 392.0 })
+                    c.push_back (cents (hz / 216.0));
+                mbira ("matepe (saini madera)", "matepe (saini madera)", "matepe", std::move (c));
+            }
 
             for (int n = 2; n <= 21; ++n)
             {
