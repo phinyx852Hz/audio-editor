@@ -4205,9 +4205,22 @@ namespace
     {
         std::vector<std::string> errors;
         const auto all = phi::parseRagas (phi::builtInRagaSheets(), errors);
-        check (errors.empty() && all.size() == 174 && phi::builtInRagas().size() == 174, "raga sheets: the 174 built-in sheets read without a mistake");
+        check (errors.empty() && all.size() == 175 && phi::builtInRagas().size() == 175, "raga sheets: the 175 built-in sheets read without a mistake");
         for (const auto& e : errors)
             std::printf ("  %s\n", e.c_str());
+        // Darpaṇ, made for PHI, is a mirror: each svara's reflection about Sa (and Ma) is one of its
+        // svaras, tuned so, and its avaroha is its āroha reflected.
+        for (const auto& r : all)
+            if (r.plain == "darpan")
+            {
+                bool mirrored = near (r.cents[6], 600.0, 1.0e-9) && r.aroha.size() == r.avaroha.size();
+                for (int k = 1; k < 12; ++k)
+                    mirrored = mirrored && r.uses[(size_t) k] == r.uses[(size_t) (12 - k)]
+                               && (! r.uses[(size_t) k] || near (r.cents[(size_t) k] + r.cents[(size_t) (12 - k)], 1200.0, 1.0e-6));
+                for (size_t i = 0; mirrored && i < r.aroha.size(); ++i)
+                    mirrored = (12 - r.aroha[i].key()) % 12 == ((r.avaroha[i].key() % 12) + 12) % 12;
+                check (mirrored, "raga sheets: darpan is its own mirror");
+            }
         bool complete = true;
         for (const auto& r : all)
             complete = complete && ! r.aroha.empty() && ! r.avaroha.empty() && r.vadi >= 0 && r.samvadi >= 0;
