@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The raga sheets PHI comes with (format in PhiRaga.h). The list is the owner's (2026-10-25), with
-// their teacher's additions (2026-10-26). The
+// their teacher's additions (2026-10-26). Madh kauns is #16 of Ghulām Ḥaidar's Sau Achhūp Rāg (1983):
+// Mālkauns with shuddh ga, which it takes mostly going up. The
 // tuning of each is as agreed; the āroha, avaroha, vādī, samvādī, pakaḍ and āndolan are a first
 // draft for the owner and their teacher to correct.
 #include "PhiRaga.h"
@@ -797,6 +798,16 @@ vadi: m
 samvadi: S
 pakad: S D, P, D, S | P, D, r r S
 time: morning
+
+raga: madh kauns
+plain: madh kauns
+thaat: none
+svaras: S g G m d n
+aroha: S G m d n S'
+avaroha: S' n d m G m g S
+vadi: m
+samvadi: S
+pakad: G m d m G g S
 )sheets";
         return sheets;
     }
