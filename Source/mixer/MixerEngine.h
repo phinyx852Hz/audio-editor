@@ -127,11 +127,18 @@ namespace mixer
         int scene = -1;              // the slot; -1 the timeline, from where the transport is
         double beats = 16.0;         // how long; 0 until stopRecording
         bool midi = true, audio = false;   // what it records: the keyboard, the audio input
+        bool fromInstrument = false; // the audio from the track's own instrument (before its strip), not the input
         // Into the slot's playing clip, pass after pass, until stopRecording. The UI gives the
         // clip to write into (its own copy, already in the slot): overdubAudio or overdubMidi.
         bool overdub = false;
         std::shared_ptr<AudioClip> overdubAudio;
         std::shared_ptr<MidiClip> overdubMidi;
+        // A layer (owner, 2026-10-26): the slot's clip gets its other half, audio under MIDI or
+        // MIDI over audio, one pass of the loop long, so both play together. The UI puts the new,
+        // empty layer in the slot first and gives it here as overdubAudio or overdubMidi. It
+        // starts on the quantise (the slot is launched for it if it is not playing) and ends by
+        // itself.
+        bool layer = false;
         bool playAfter = true;       // a slot's take loops from the frame it ends on, else the track stops
         double quantise = 0.0;       // the notes onto this grid, in beats; 0 as played
         double maxSeconds = 120.0;   // the room a take of no set length has (the timeline's has no end)
@@ -155,6 +162,7 @@ namespace mixer
     {
         int track = 0, scene = -1;
         bool overdub = false;
+        bool layer = false;   // the slot's other layer (RecordRequest::layer)
         AudioClipPtr audio;   // null: none recorded
         MidiClipPtr midi;     // null: none recorded
         Frame start = 0, length = 0;
@@ -203,7 +211,8 @@ namespace mixer
         std::array<std::atomic<bool>, numReturns> sendPre { false, false };
         // Recording: what a take on the track records (InputKind), and whether the audio input is
         // heard through the track (Monitor: auto while the track is armed and records audio).
-        enum InputKind { inputAuto = 0, inputMidi = 1, inputAudio = 2, inputBoth = 3 };
+        // inputInstrument: the track's own instrument, played from the keyboard, recorded as audio.
+        enum InputKind { inputAuto = 0, inputMidi = 1, inputAudio = 2, inputBoth = 3, inputInstrument = 4 };
         enum Monitor { monitorAuto = 0, monitorOn = 1, monitorOff = 2 };
         std::atomic<int> input { inputAuto };       // auto: the keyboard with an instrument (not an Audio track), else the audio input
         std::atomic<int> monitor { monitorAuto };
@@ -454,6 +463,7 @@ namespace mixer
                 bool stopAsked = false;
                 bool notes = false;
                 int pass = 0;
+                Frame phase = 0;                    // a layer: where in the loop it began
                 std::array<std::array<Frame, 128>, 16> on;      // notes held: where they began in the take, -1 none
                 std::array<std::array<Frame, 128>, 16> shift;   // and how far quantising (or playing early) moved them
                 Frame room = 0;                     // frames the take has room for
@@ -532,6 +542,7 @@ namespace mixer
         void layers (int index, Track&, const Strip&, TrackMode, bool hasMono, int frames, bool jumped);
         // Recording, on the audio thread with the lock held.
         bool recordsAudio (int track) const;
+        void endLayer (int track, Track::Take&, Frame length);   // for the UI, with what it has (0: nothing)
         void takeInput (int frames);                       // the next block's audio input into inL and inR
         void recordBlock (Frame clockAt, Frame posAt, int frames, bool play);
         void recordNote (Track&, Frame frame, const NoteEvent&, Frame length);   // into a slot take's clip
@@ -566,6 +577,8 @@ namespace mixer
         std::vector<float> inputFifo;                         // stereo, interleaved: what came in and is not yet used
         size_t inputHave = 0;
         std::vector<float> inL, inR, inScratch;               // the block's input
+        // Each track's instrument as it sounded in the block, for a take that records it as audio.
+        std::array<std::array<float, block>, maxTracks> sourceL {}, sourceR {};
         std::array<RecordShared, maxTracks> recordShared {};
         std::vector<Recorded> recordedOut;                    // under liveLock: takes that ended
         std::vector<SlotPtr> slotsOut;                        // under liveLock: slots a take took the place of, freed by the UI
@@ -581,6 +594,7 @@ namespace mixer
             std::vector<float> audio;                         // stereo, interleaved, from the take's first frame
             std::vector<Mark> marks;
             bool audioOn = false, midiOn = false;
+            bool fromInstrument = false;                      // no input delay, both sides
             double quantise = 0.0;
         };
         Gathered gathered;

@@ -1119,6 +1119,12 @@ namespace mixer
             std::fill (instR.begin(), instR.begin() + frames, 0.0f);
             if (t.instrument != nullptr)
                 t.instrument->process (events.data(), (int) events.size(), instL.data(), instR.data(), frames);
+            // A take of the instrument as audio gets it as it is made, before the strip.
+            if (withLive && t.take.request.fromInstrument && t.take.state != RecordState::none)
+            {
+                std::copy (instL.begin(), instL.begin() + frames, sourceL[(size_t) i].begin());
+                std::copy (instR.begin(), instR.begin() + frames, sourceR[(size_t) i].begin());
+            }
 
             // The audio clips: stereo ones join the instrument (both are balanced), mono ones
             // go apart to be panned with equal power. A short fade at each edge keeps a

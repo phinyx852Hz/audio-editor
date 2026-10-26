@@ -3259,7 +3259,9 @@ protected:
                 const auto r = slotRect (t, s);
                 const auto& slot = window.slots[(size_t) t][(size_t) s];
                 const bool playing = launch.playing == s, queued = launch.queued == s;
-                const bool taking = take.scene == s && (take.state == mixer::RecordState::waiting || take.state == mixer::RecordState::recording);
+                const bool active = take.scene == s && (take.state == mixer::RecordState::waiting || take.state == mixer::RecordState::recording);
+                const bool layering = active && window.layerTakes[(size_t) t].scene == s && slot != nullptr;
+                const bool taking = active && ! layering;
                 if (taking)
                 {
                     // A take: red, blinking while it waits for its first beat, filling as it records.
@@ -3296,19 +3298,62 @@ protected:
                         triangle (play, go.darker (110));
                     else
                         triangle (play, ink);
-                    p.setFont (font());
-                    p.setPen (ink);
-                    auto name = window.slotName (t, s);
-                    if (! slot->loop)
-                        name = QStringLiteral ("→ ") + name;   // plays once
                     QString right;
                     if (playing && launch.passes > 0)
                         right = QStringLiteral ("×%1").arg (launch.passes + 1);
-                    const auto rightWidth = right.isEmpty() ? 0 : p.fontMetrics().horizontalAdvance (right) + 6;
-                    p.drawText (r.adjusted (playWidth, 0, -4 - rightWidth, 0), Qt::AlignVCenter | Qt::AlignLeft,
-                                p.fontMetrics().elidedText (name, Qt::ElideRight, r.width() - playWidth - 6 - rightWidth));
-                    if (! right.isEmpty())
-                        p.drawText (r.adjusted (0, 0, -4, 0), Qt::AlignVCenter | Qt::AlignRight, right);
+                    auto name = window.slotName (t, s);
+                    if (! slot->loop)
+                        name = QStringLiteral ("→ ") + name;   // plays once
+                    if (splitSlots())
+                    {
+                        // Two halves (owner, 2026-10-26): the MIDI layer's notes on top, the audio's
+                        // waveform below, the name over them; an empty half on the armed track has
+                        // its record dot.
+                        auto faint = ink;
+                        faint.setAlpha (110);
+                        const auto top = halfRect (t, s, false), bottom = halfRect (t, s, true);
+                        drawNotes (p, top, slot->clip, faint);
+                        drawWave (p, bottom, slot->clip, faint);
+                        p.setPen (QPen (faint, 1, Qt::DotLine));
+                        p.drawLine (QPointF (top.left(), top.bottom()), QPointF (top.right(), top.bottom()));
+                        for (const bool audio : { false, true })
+                        {
+                            const auto half = audio ? bottom : top;
+                            const bool empty = audio ? slot->clip.audio == nullptr : slot->clip.midi == nullptr;
+                            if (layering && window.layerTakes[(size_t) t].audio == audio)
+                            {
+                                const bool waiting = take.state == mixer::RecordState::waiting;
+                                auto glow = red;
+                                glow.setAlpha (waiting && blink ? 60 : 150);
+                                p.setPen (Qt::NoPen);
+                                p.setBrush (glow);
+                                p.drawRect (half);
+                                p.setBrush (red.lighter (130));
+                                if (! waiting)
+                                    p.drawRect (QRectF (half.left(), half.bottom() - 2, half.width() * (double) take.progress, 2));
+                                dot (layerDotRect (t, s, audio), Qt::white);
+                            }
+                            else if (empty && t == armedTrack && take.state == mixer::RecordState::none)
+                                dot (layerDotRect (t, s, audio), red.darker (120));   // records this layer
+                        }
+                        p.setFont (small);
+                        p.setPen (ink);
+                        const auto rightWidth = right.isEmpty() ? 0 : p.fontMetrics().horizontalAdvance (right) + 4;
+                        p.drawText (top.adjusted (2, 0, -rightWidth - top.height(), 0), Qt::AlignVCenter | Qt::AlignLeft,
+                                    p.fontMetrics().elidedText (name, Qt::ElideRight, (int) top.width() - rightWidth - (int) top.height() - 2));
+                        if (! right.isEmpty())
+                            p.drawText (top.adjusted (0, 0, -top.height(), 0), Qt::AlignVCenter | Qt::AlignRight, right);
+                    }
+                    else
+                    {
+                        p.setFont (font());
+                        p.setPen (ink);
+                        const auto rightWidth = right.isEmpty() ? 0 : p.fontMetrics().horizontalAdvance (right) + 6;
+                        p.drawText (r.adjusted (playWidth, 0, -4 - rightWidth, 0), Qt::AlignVCenter | Qt::AlignLeft,
+                                    p.fontMetrics().elidedText (name, Qt::ElideRight, r.width() - playWidth - 6 - rightWidth));
+                        if (! right.isEmpty())
+                            p.drawText (r.adjusted (0, 0, -4, 0), Qt::AlignVCenter | Qt::AlignRight, right);
+                    }
                     if (playing)
                     {
                         p.setPen (Qt::NoPen);
@@ -3410,6 +3455,13 @@ protected:
                     else
                         window.launchSlot (hit.track, hit.scene);
                 }
+                break;
+            case Hit::layer:
+                window.moveCursor (hit.track, hit.scene);
+                if (window.engine.recordInfo (hit.track).state != mixer::RecordState::none)
+                    window.recordPressed();   // the layer recording there: cancelled, or left to end
+                else
+                    window.recordLayer (hit.track, hit.scene, hit.audio);
                 break;
             case Hit::sceneCell:
                 window.moveCursor (window.selected < mixer::masterIndex ? window.selected : 0, hit.scene);
@@ -3533,19 +3585,34 @@ protected:
 private:
     struct Hit
     {
-        enum Kind { none, header, back, slotCell, play, sceneCell, stop, stopAll } kind = none;
+        enum Kind { none, header, back, slotCell, play, layer, sceneCell, stop, stopAll } kind = none;
         int track = -1, scene = -1;
+        bool audio = false;   // a layer's half: the audio's (below), else the MIDI's
     };
 
-    static constexpr int margin = 4, headerHeight = 24, stopHeight = 24, sceneWidth = 130, minRow = 17, playWidth = 20;
+    static constexpr int margin = 4, headerHeight = 24, stopHeight = 24, sceneWidth = 130, minRow = 44, playWidth = 20;
+    static constexpr int maxRow = 64, splitFrom = 24;   // a slot this tall or more shows its two layers
     // Columns keep one standard width (eight tracks fit in about 1100 px) rather than
     // stretching across the window; narrower when the room runs out.
-    static constexpr int maxColumn = 120;
+    static constexpr int maxColumn = 150;
 
     int columnWidth() const { return std::clamp ((width() - 2 * margin - sceneWidth) / std::max (1, window.engine.numTracks()), 40, maxColumn); }
     int rowHeight() const
     {
-        return std::clamp ((height() - 2 * margin - headerHeight - stopHeight) / std::max (1, window.numScenes), minRow, 40);
+        return std::clamp ((height() - 2 * margin - headerHeight - stopHeight) / std::max (1, window.numScenes), minRow, maxRow);
+    }
+    bool splitSlots() const { return rowHeight() - 4 >= splitFrom; }
+    // A slot's halves: the MIDI layer on top, the audio below.
+    QRectF halfRect (int t, int s, bool audio) const
+    {
+        const QRectF body = QRectF (slotRect (t, s)).adjusted (playWidth, 2, -2, -4);
+        const auto h = body.height() / 2.0;
+        return { body.left(), audio ? body.top() + h : body.top(), body.width(), h };
+    }
+    QRectF layerDotRect (int t, int s, bool audio) const
+    {
+        const auto half = halfRect (t, s, audio);
+        return { half.right() - half.height(), half.top(), half.height(), half.height() };
     }
     // The scenes on the left (owner, 2026-10-25), the tracks to their right.
     int trackLeft() const { return margin + sceneWidth; }
@@ -3580,7 +3647,17 @@ private:
                 return { Hit::stop, t, -1 };
             for (int s = 0; s < window.numScenes; ++s)
                 if (const auto r = slotRect (t, s); r.contains (at))
-                    return { at.x() < r.left() + playWidth && window.slots[(size_t) t][(size_t) s] != nullptr ? Hit::play : Hit::slotCell, t, s };
+                {
+                    const auto& slot = window.slots[(size_t) t][(size_t) s];
+                    if (slot != nullptr && splitSlots() && t == window.engine.liveTrack())
+                        for (const bool audio : { false, true })
+                            if (layerDotRect (t, s, audio).contains (at)
+                                && ((audio ? slot->clip.audio == nullptr : slot->clip.midi == nullptr)
+                                    || (window.layerTakes[(size_t) t].scene == s && window.layerTakes[(size_t) t].audio == audio)))
+                                return { Hit::layer, t, s, audio };
+                    const bool dot = slot != nullptr || t == window.engine.liveTrack() || window.engine.recordInfo (t).scene == s;
+                    return { at.x() < r.left() + playWidth && dot ? Hit::play : Hit::slotCell, t, s };
+                }
         }
         for (int s = 0; s < window.numScenes; ++s)
             if (sceneRect (s).contains (at))
@@ -3588,6 +3665,69 @@ private:
         if (stopAllRect().contains (at))
             hit.kind = Hit::stopAll;
         return hit;
+    }
+
+    // A layer's picture, small: the notes by pitch, the sound's peaks.
+    static void drawNotes (QPainter& p, const QRectF& r, const mixer::Clip& c, const QColor& ink)
+    {
+        if (c.midi == nullptr || c.length <= 0)
+            return;
+        const auto& events = c.midi->events;
+        int low = 127, high = 0;
+        for (const auto& e : events)
+            if (((e.status & 0xF0) == 0x90 && e.data2 > 0) && e.frame >= c.offset && e.frame < c.offset + c.length)
+            {
+                low = std::min (low, (int) e.data1);
+                high = std::max (high, (int) e.data1);
+            }
+        if (low > high)
+            return;
+        const auto span = std::max (1, high - low);
+        const auto x = [&] (Frame f) { return r.left() + r.width() * (double) std::clamp<Frame> (f - c.offset, 0, c.length) / (double) c.length; };
+        const auto lane = std::max (1.0, std::min (3.0, r.height() / (span + 1)));
+        p.setPen (Qt::NoPen);
+        p.setBrush (ink);
+        std::array<std::array<Frame, 128>, 16> on;
+        for (auto& ch : on)
+            ch.fill (-1);
+        for (const auto& e : events)
+        {
+            const auto ch = (size_t) (e.status & 0x0F), key = (size_t) (e.data1 & 0x7F);
+            if (((e.status & 0xF0) == 0x90 && e.data2 > 0))
+                on[ch][key] = e.frame;
+            else if (((e.status & 0xF0) == 0x80 || ((e.status & 0xF0) == 0x90 && e.data2 == 0)) && on[ch][key] >= 0)
+            {
+                const auto y = r.bottom() - lane - (r.height() - lane) * (double) ((int) key - low) / (double) span;
+                const auto from = x (on[ch][key]), to = x (e.frame);
+                if (to > from)
+                    p.drawRect (QRectF (from, y, std::max (1.0, to - from), lane));
+                on[ch][key] = -1;
+            }
+        }
+    }
+
+    static void drawWave (QPainter& p, const QRectF& r, const mixer::Clip& c, const QColor& ink)
+    {
+        if (c.audio == nullptr || c.length <= 0 || r.width() < 2)
+            return;
+        const auto& a = *c.audio;
+        const auto last = a.length() - 1;
+        const auto columns = (int) r.width();
+        const auto mid = r.center().y();
+        p.setPen (QPen (ink, 1));
+        for (int k = 0; k < columns; ++k)
+        {
+            const auto from = (Frame) ((double) c.length * k / columns), to = (Frame) ((double) c.length * (k + 1) / columns);
+            const auto step = std::max<Frame> (1, (to - from) / 24);   // a few samples a column are enough to see
+            float peak = 0.0f;
+            for (auto f = from; f < to; f += step)
+            {
+                const auto src = (size_t) std::clamp<Frame> (c.reversed ? last - (c.offset + f) : c.offset + f, 0, last);
+                peak = std::max ({ peak, std::abs (a.left[src]), std::abs (a.right[src]) });
+            }
+            const auto h = std::max (0.5, std::min (1.0, (double) peak) * r.height() * 0.5);
+            p.drawLine (QPointF (r.left() + k + 0.5, mid - h), QPointF (r.left() + k + 0.5, mid + h));
+        }
     }
 
     void launchScene (int scene)
@@ -4605,7 +4745,9 @@ protected:
         g.drawText (nameBox.adjusted (6, 0, -6, 0), Qt::AlignVCenter | Qt::AlignLeft,
                     g.fontMetrics().elidedText (name, Qt::ElideRight, (int) nameBox.width() - 12));
         const auto seconds = (double) clip.length / std::max (1.0, window.rate());
-        auto about = (clip.isMidi() ? MixerWindow::tr ("MIDI") : MixerWindow::tr ("Audio")) + QStringLiteral ("  ·  ")
+        auto about = (clip.audio != nullptr && clip.midi != nullptr ? MixerWindow::tr ("MIDI over audio")
+                      : clip.isMidi()                              ? MixerWindow::tr ("MIDI")
+                                                                   : MixerWindow::tr ("Audio")) + QStringLiteral ("  ·  ")
                      + QStringLiteral ("%1:%2").arg ((int) seconds / 60).arg (std::fmod (seconds, 60.0), 5, 'f', 2, QLatin1Char ('0'));
         if (clip.reversed)
             about += QStringLiteral ("  ·  ") + MixerWindow::tr ("reversed");
@@ -4620,7 +4762,24 @@ protected:
         if (area.height() < 10 || area.width() < 10)
             return;
         auto waveArea = area, notesArea = area;
-        if (hasPartner)
+        if (clip.audio != nullptr && clip.midi != nullptr)
+        {
+            // A slot's two layers, as in the grid: the MIDI on top, the audio below, each named.
+            const auto half = (area.height() - 8) / 2.0;
+            notesArea.setHeight (half);
+            waveArea.setTop (area.bottom() - half);
+            g.setPen (QPen (palette().color (QPalette::Mid), 1.0, Qt::DotLine));
+            g.drawLine (QPointF (area.left(), area.center().y()), QPointF (area.right(), area.center().y()));
+            g.setPen (palette().color (QPalette::PlaceholderText));
+            const auto file = [] (const std::string& path) { return QFileInfo (QString::fromStdString (path)).completeBaseName(); };
+            g.drawText (QRectF (notesArea.left(), notesArea.top(), notesArea.width(), 14), Qt::AlignLeft | Qt::AlignVCenter,
+                        MixerWindow::tr ("MIDI: %1").arg (file (clip.midi->path)));
+            g.drawText (QRectF (waveArea.left(), waveArea.top(), waveArea.width(), 14), Qt::AlignLeft | Qt::AlignVCenter,
+                        MixerWindow::tr ("Audio: %1").arg (file (clip.audio->path)));
+            notesArea.setTop (notesArea.top() + 16);
+            waveArea.setTop (waveArea.top() + 16);
+        }
+        else if (hasPartner)
         {
             // Half each: the audio on the left, the MIDI on the right, each named.
             const auto half = (area.width() - 12) / 2.0;
@@ -4670,7 +4829,10 @@ private:
         wavePart = notePart = {};
         if (! found || clip.length <= 0)
             return;
-        (clip.isMidi() ? notePart : wavePart) = clip;
+        if (clip.audio != nullptr)
+            wavePart = clip;
+        if (clip.midi != nullptr)
+            notePart = clip;   // a slot with both layers fills both
         if (hasPartner)
             (partner.isMidi() ? notePart : wavePart) = partner;
         if (wavePart.audio != nullptr && wavePart.length > 0)
@@ -5613,6 +5775,16 @@ void MixerWindow::say (const QString& text)
     status->setText (text);
 }
 
+void MixerWindow::giveBothLayers (int track)
+{
+    auto& s = engine.strip (track);
+    if (s.mode.load() == (int) mixer::TrackMode::hybrid)
+        return;
+    s.mode = (int) mixer::TrackMode::hybrid;
+    strips[(size_t) track]->refresh();
+    rack->refresh();
+}
+
 void MixerWindow::giveSynth (int track)
 {
     if (engine.instrument (track) == nullptr)
@@ -5694,6 +5866,11 @@ void MixerWindow::reverseShownClip()
     changed();
 }
 
+namespace layers
+{
+    std::shared_ptr<mixer::AudioClip> flatAudio (const mixer::Clip&);   // MixerRecording.cpp
+}
+
 void MixerWindow::editShownMidi (const std::function<midifile::SongPtr (const midifile::Song&)>& edit, const QString& what)
 {
     if (! showingClip || ! clipView->showsMidi())
@@ -5759,9 +5936,12 @@ void MixerWindow::editShownMidi (const std::function<midifile::SongPtr (const mi
     {
         editSlot (track, scene, [this, &edited, &file] (mixer::Slot& x)
         {
+            // Only the MIDI layer changes: an audio layer under it keeps the loop's length.
+            if (x.clip.audio != nullptr && (x.clip.offset != 0 || x.clip.reversed))
+                x.clip.audio = layers::flatAudio (x.clip);
             x.clip.midi = launcherMidi (edited, file.toStdString());
+            x.clip.length = x.clip.audio != nullptr ? std::min (x.clip.length, x.clip.audio->length()) : x.clip.midi->length;
             x.clip.offset = 0;
-            x.clip.length = x.clip.midi->length;
             x.clip.reversed = false;
         });
         status->setText (what);
@@ -7230,7 +7410,7 @@ void MixerWindow::closeEvent (QCloseEvent* e)
         if (t.editor != nullptr)
             t.editor->close();
     autosave();
-    appSettings().setValue (QStringLiteral ("mixer/splitter"), launcherSplit ? timelineSplit : splitter->saveState());
+    appSettings().setValue (QStringLiteral ("mixer/splitter"), splitter->saveState());
     appSettings().setValue (QStringLiteral ("mixer/sideColumn"), sideSplitter->saveState());
     QWidget::closeEvent (e);
     Q_EMIT closed();
@@ -7499,11 +7679,14 @@ bool MixerWindow::writeMix (const QString& file, QString& error)
             {
                 const auto& c = slot->clip;
                 const auto source = c.audio != nullptr ? c.audio->path : c.midi->path;
-                slotList.append (QJsonObject {
-                    { "track", t }, { "scene", sc }, { "kind", c.isMidi() ? "midi" : "audio" }, { "file", storedPath (QString::fromStdString (source), base) },
+                QJsonObject o {
+                    { "track", t }, { "scene", sc }, { "kind", c.audio != nullptr ? "audio" : "midi" }, { "file", storedPath (QString::fromStdString (source), base) },
                     { "offset", (double) c.offset / rate() }, { "length", (double) c.length / rate() }, { "reversed", c.reversed },
                     { "loop", slot->loop }, { "quantise", slot->quantise }, { "tuning", tuningJson (slot->tuning) },
-                });
+                };
+                if (c.audio != nullptr && c.midi != nullptr && ! c.midi->path.empty())
+                    o.insert ("midiLayer", storedPath (QString::fromStdString (c.midi->path), base));   // both layers
+                slotList.append (o);
             }
     QJsonArray names, tunings;
     for (const auto& name : sceneNames)
@@ -7603,7 +7786,7 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
         s.width = (float) std::clamp (o.value ("width").toDouble (1.0), 0.0, 2.0);
         loadInserts (i, o.value ("inserts").toArray(), problems);
         s.mode = std::clamp (o.value ("mode").toInt(), 0, 2);
-        s.input = std::clamp (o.value ("input").toInt(), 0, 3);
+        s.input = std::clamp (o.value ("input").toInt(), 0, (int) mixer::Strip::inputInstrument);
         s.monitor = std::clamp (o.value ("monitor").toInt(), 0, 2);
         s.inputChannels = std::clamp (o.value ("inputChannels").toInt(), 0, 2);
         s.audioLayerDb = (float) o.value ("audioLayer").toDouble();
@@ -7755,7 +7938,8 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
             like.clip.offset = (Frame) std::llround (o.value ("offset").toDouble() * r);
             like.clip.length = (Frame) std::llround (o.value ("length").toDouble() * r);
             like.clip.reversed = o.value ("reversed").toBool();
-            loadSlot (t, sc, source, like);
+            const auto layer = o.contains ("midiLayer") ? resolvedPath (o.value ("midiLayer").toString(), base) : QString();
+            loadSlot (t, sc, source, like, layer);
         }
     }
     engine.masterDb = (float) root.value ("master").toDouble();
@@ -8299,27 +8483,8 @@ void MixerWindow::showLauncher (bool on)
     // The strips stay lean in both views; the Inspector has the rest.
     for (auto* strip : strips)
         strip->setCompact (true);
-    // The launcher's strips take only the height they need, the scenes the rest; the
-    // tracks across time get their own split back.
-    if (on && ! launcherSplit)
-    {
-        timelineSplit = splitter->saveState();
-        launcherSplit = true;
-        // After the strips have laid out their compact sections.
-        QTimer::singleShot (0, this, [this]
-        {
-            if (! launcherSplit)
-                return;
-            const auto need = strips.empty() ? 320 : strips.front()->minimumSizeHint().height() + 12;
-            const auto total = splitter->height();
-            splitter->setSizes ({ total - need, need });
-        });
-    }
-    else if (! on && launcherSplit)
-    {
-        launcherSplit = false;
-        splitter->restoreState (timelineSplit);
-    }
+    // The mixer keeps its height in both views (owner, 2026-10-26); the scenes scroll above it,
+    // their clips tall enough to show both layers.
     for (auto* w : std::initializer_list<QWidget*> { quantiseBox, scenesBox, (QWidget*) rack })
         w->setVisible (on);
     {
@@ -8424,16 +8589,28 @@ mixer::MidiClipPtr MixerWindow::launcherMidi (midifile::SongPtr song, const std:
     return whole;
 }
 
-void MixerWindow::loadSlot (int track, int scene, const QString& file, mixer::Slot like)
+void MixerWindow::loadSlot (int track, int scene, const QString& file, mixer::Slot like, const QString& midiLayer)
 {
     if (track < 0 || track >= engine.numTracks() || scene < 0 || scene >= mixer::maxScenes)
         return;
     if (scene >= numScenes)
         setScenes (scene + 1);
     const bool fromFile = restoring;   // a project being opened: not a change to it
-    auto place = [this, track, scene, like, fromFile, name = QFileInfo (file).fileName()] (mixer::Clip clip)
+    auto place = [this, track, scene, like, fromFile, midiLayer, name = QFileInfo (file).fileName()] (mixer::Clip clip)
     {
         loadingSlots.erase ({ track, scene });
+        // A MIDI layer over the audio: its notes from the start of the audio, as recorded.
+        if (! midiLayer.isEmpty() && clip.audio != nullptr)
+        {
+            std::string why;
+            if (auto song = midifile::read (midiLayer.toStdString(), why))
+            {
+                auto midi = launcherMidi (song, midiLayer.toStdString());
+                clip.midi = like.clip.reversed ? mixer::reverseMidi (*midi) : midi;
+            }
+            else
+                status->setText (tr ("%1 could not be read: %2").arg (QFileInfo (midiLayer).fileName(), QString::fromStdString (why)));
+        }
         auto slot = std::make_shared<mixer::Slot> (like);
         const auto source = clip.sourceLength();
         clip.offset = std::clamp<Frame> (like.clip.offset, 0, std::max<Frame> (0, source - 1));

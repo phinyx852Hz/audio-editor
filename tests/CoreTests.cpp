@@ -4724,6 +4724,100 @@ namespace
             check (info.playing == 0 && info.progress > 0.0f && std::abs (info.progress - (float) (m.launchClock() - 7000) / 48000.0f) < 1.0e-3f,
                    "recording: a launch on a frame gone by plays in time with it");
         }
+
+        {
+            // A MIDI layer over a two-bar audio loop: one pass, round from where it began.
+            mixer::Engine m;
+            setUp (m);
+            auto sound = std::make_shared<mixer::AudioClip>();
+            sound->left.assign ((size_t) (8 * beat), 0.25f);
+            sound->right = sound->left;
+            auto slot = std::make_shared<mixer::Slot>();
+            slot->clip = mixer::makeClip (mixer::AudioClipPtr (sound), 0);
+            m.setSlot (0, 0, slot);
+            m.launch (0, 0);
+            run (m, 1024);
+            auto notes = std::make_shared<mixer::MidiClip>();
+            notes->events.reserve (64);
+            notes->length = 8 * beat;
+            auto layered = std::make_shared<mixer::Slot> (*slot);
+            layered->clip.midi = notes;
+            m.setSlot (0, 0, layered);
+            mixer::RecordRequest q;
+            q.scene = 0;
+            q.layer = true;
+            q.overdubMidi = notes;
+            std::string error;
+            check (m.record (q, error) && m.recordInfo (0).state == mixer::RecordState::waiting, "recording: a layer waits for the quantise");
+            run (m, 5 * beat - 1024);
+            check (m.recordInfo (0).state == mixer::RecordState::recording && m.launchInfo (0).playing == 0, "recording: the layer records, the loop playing on");
+            m.liveMidi (0x90, 62, 100);
+            run (m, beat / 2);
+            m.liveMidi (0x80, 62, 0);
+            run (m, 7 * beat);
+            const auto now = m.slot (0, 0);
+            check (now != nullptr && now->clip.audio == slot->clip.audio && now->clip.midi == notes && now->clip.length == 8 * beat
+                   && m.recordInfo (0).state == mixer::RecordState::none && m.launchInfo (0).playing == 0,
+                   "recording: the layer ends by itself after one pass; both play on");
+            check (notes->events.size() == 2 && notes->events[0].frame == 5 * beat && notes->events[1].frame == 5 * beat + beat / 2,
+                   "recording: the layer's notes round the loop from where it began");
+            const auto got = m.takeRecorded();
+            check (got.size() == 1 && got[0].layer && got[0].midi == notes && got[0].notes && got[0].length == 8 * beat, "recording: the layer handed to the UI");
+
+            // Cancelled before it begins: handed back with nothing in it.
+            auto more = std::make_shared<mixer::AudioClip>();
+            more->left.assign ((size_t) (8 * beat), 0.0f);
+            more->right = more->left;
+            auto withBoth = std::make_shared<mixer::Slot>();
+            withBoth->clip = mixer::makeClip (mixer::MidiClipPtr (notes), 0);
+            withBoth->clip.audio = more;
+            m.setSlot (0, 1, withBoth);
+            mixer::RecordRequest c;
+            c.scene = 1;
+            c.layer = true;
+            c.midi = false;
+            c.audio = true;
+            c.overdubAudio = more;
+            check (m.record (c, error), "recording: an audio layer for a slot not playing");
+            m.stopRecording (0);
+            run (m, 256);
+            const auto back = m.takeRecorded();
+            check (back.size() == 1 && back[0].layer && back[0].length == 0 && back[0].audio == more, "recording: a layer cancelled, handed back to take out");
+        }
+
+        {
+            // The track's instrument recorded as audio: as it sounds, with no input delay.
+            mixer::Engine m;
+            setUp (m);
+            m.inputLatencyMs = 10.0f;
+            mixer::RecordRequest q;
+            q.scene = 0;
+            q.beats = 4.0;
+            q.midi = false;
+            q.audio = true;
+            q.fromInstrument = true;
+            std::string error;
+            check (m.record (q, error), "recording: the instrument as audio");
+            m.play();
+            m.liveMidi (0x90, 69, 110);
+            run (m, beat);
+            m.liveMidi (0x80, 69, 0);
+            run (m, 3 * beat + 256);
+            const auto slot = m.slot (0, 0);
+            check (slot != nullptr && slot->clip.audio != nullptr && ! slot->clip.audio->mono && slot->clip.length == 4 * beat
+                   && slot->clip.midi == nullptr, "recording: the instrument's take is a stereo audio clip");
+            float early = 0.0f, late = 0.0f;
+            for (Frame f = 0; f < 480; ++f)
+                early = std::max (early, std::abs (slot->clip.audio->left[(size_t) f]));
+            for (Frame f = 3 * beat; f < 4 * beat; ++f)
+                late = std::max (late, std::abs (slot->clip.audio->left[(size_t) f]));
+            check (early > 0.001f && late < early, "recording: the note from its first frame, not moved by the input's delay");
+            mixer::RecordRequest none = q;
+            none.scene = 1;
+            m.setInstrument (1, nullptr);
+            none.track = 1;
+            check (! m.record (none, error), "recording: a track with no instrument cannot record it");
+        }
     }
 
     // Φ Phaser: stages φ apart, a sweep that never repeats, and a response that matches what it does.
