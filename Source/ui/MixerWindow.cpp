@@ -534,8 +534,12 @@ public:
         QObject::connect (&timer, &QTimer::timeout, this, [this] { QLabel::clear(); hide(); });
     }
 
+    std::function<void (const QString&)> echo;   // the same text elsewhere too
+
     void setText (const QString& text)
     {
+        if (echo)
+            echo (text);
         QLabel::setText (text);
         setVisible (! text.isEmpty());
         if (! text.isEmpty())
@@ -1791,10 +1795,12 @@ QDialog* synthDialog (mixer::InstrumentPtr inst, const QString& title, QWidget* 
 // the focus): Left/Right move the playhead a beat (Ctrl a bar), Up/Down pick the track,
 // Delete removes the selected clips, Ctrl+E splits at the playhead, Ctrl+D duplicates,
 // Shift+M mutes them, G turns the grid on and off. Ctrl+wheel zooms, the wheel scrolls.
+// `one`: the editor's single track (MixerWindow::editorTrack), its row the whole height.
 class TrackLanes final : public QWidget
 {
 public:
-    explicit TrackLanes (MixerWindow& w) : QWidget (&w), window (w)
+    explicit TrackLanes (MixerWindow& w, bool one = false, QWidget* parent = nullptr)
+        : QWidget (parent != nullptr ? parent : &w), window (w), single (one)
     {
         setAcceptDrops (true);
         setFocusPolicy (Qt::ClickFocus);
@@ -1882,9 +1888,9 @@ protected:
             anySolo = anySolo || window.engine.strip (i).solo.load();
         const auto rowH = rowHeight();
         std::set<const void*> live;
-        for (int i = 0; i < count; ++i)
+        for (int i = firstRow(); i < firstRow() + rowCount(); ++i)
         {
-            const QRect row (0, rulerHeight + i * rowH, width(), rowH);
+            const QRect row (0, rowTop (i), width(), rowH);
             const auto& s = window.engine.strip (i);
             const auto colour = window.info[(size_t) i].colour;
             const bool heard = ! s.mute.load() && (! anySolo || s.solo.load());
@@ -1968,7 +1974,7 @@ protected:
         if (px >= headerWidth && px <= width())
         {
             g.setPen (QPen (Theme::current().color (QStringLiteral ("highlight")), 1.5));
-            g.drawLine (QPointF (px, 0), QPointF (px, rulerHeight + count * rowH));
+            g.drawLine (QPointF (px, 0), QPointF (px, rulerHeight + rowCount() * rowH));
         }
         if (dropHint.x() >= headerWidth)
         {
@@ -1977,7 +1983,7 @@ protected:
             if (row >= 0)
             {
                 g.setPen (QPen (Theme::current().color (QStringLiteral ("highlight")), 2.0));
-                g.drawLine (QPointF (x, rulerHeight + row * rowH), QPointF (x, rulerHeight + (row + 1) * rowH));
+                g.drawLine (QPointF (x, rowTop (row)), QPointF (x, rowTop (row) + rowH));
             }
         }
         if (hasFocus())
@@ -1990,6 +1996,8 @@ protected:
     void mousePressEvent (QMouseEvent* e) override
     {
         setFocus();
+        if (single)
+            Q_EMIT window.activated();
         const auto pos = e->position();
         const int row = rowAt (pos.y());
         if (row >= 0 && pos.y() >= rulerHeight)
@@ -2235,6 +2243,7 @@ protected:
             const auto list = window.engine.clips (row);
             menu.addAction (MixerWindow::tr ("Drums to &MIDI"), this, [this, row, id = hit.id] { window.drumsToMidi (row, id, -1); })
                 ->setEnabled (std::any_of (list.begin(), list.end(), [id = hit.id] (const mixer::Clip& c) { return c.id == id && c.audio != nullptr; }));
+            menu.addAction (MixerWindow::tr ("Send to Clip &Launcher"), this, [this, row, id = hit.id] { window.clipToLauncher (row, id); });
         }
         else
         {
@@ -2293,7 +2302,14 @@ protected:
             return;
         window.select (row);
         const auto free = (e->modifiers() & Qt::ShiftModifier) != 0;
-        window.addFiles (row, files, snapped (frameAt (std::max ((double) headerWidth, e->position().x())), free));
+        const auto at = snapped (frameAt (std::max ((double) headerWidth, e->position().x())), free);
+        if (single && files.size() == 1 && window.audioIntoMidiTrack (row, files.front(), -1, at))
+        {
+            e->acceptProposedAction();
+            update();
+            return;
+        }
+        window.addFiles (row, files, at);
         e->acceptProposedAction();
         update();
     }
@@ -2344,14 +2360,21 @@ private:
     double beatFrames() const { return 60.0 / window.tempoBox->value() * window.rate(); }
     int timelineWidth() const { return std::max (1, width() - headerWidth); }
 
+    // The rows shown: every track, or the editor's one.
+    int firstRow() const { return single ? window.editorTrack() : 0; }
+    int rowCount() const { return single ? 1 : window.engine.numTracks(); }
+    int rowTop (int track) const { return rulerHeight + (track - firstRow()) * rowHeight(); }
+
     int rowHeight() const
     {
-        const auto count = std::max (1, window.engine.numTracks());
-        return std::clamp ((height() - rulerHeight) / count, 22, 140);
+        const auto count = std::max (1, rowCount());
+        return std::clamp ((height() - rulerHeight) / count, 22, single ? 600 : 140);
     }
 
     int rowAt (double y) const
     {
+        if (single)
+            return firstRow();
         if (y < rulerHeight)
             return window.selected < mixer::masterIndex ? window.selected : -1;
         const auto row = (int) ((y - rulerHeight) / rowHeight());
@@ -2436,7 +2459,7 @@ private:
         const auto layer = layers (list, count)[k];
         const auto rowH = (double) rowHeight();
         const auto height = (rowH - 5.0) / count;
-        const auto top = rulerHeight + track * rowH + 2.0 + layer * height;
+        const auto top = rowTop (track) + 2.0 + layer * height;
         const auto& c = list[k];
         return { xOf ((double) c.start), top, std::max (2.0, (double) c.length / framesPerPixel), height - (count > 1 ? 1.0 : 0.0) };
     }
@@ -2858,6 +2881,7 @@ private:
     }
 
     MixerWindow& window;
+    bool single = false;           // the editor's one track
     std::map<const void*, Picture> pictures;
     std::set<uint32_t> selection;
     bool fit = true;
@@ -3278,10 +3302,13 @@ namespace
     QColor inkOn (const QColor& c) { return c.lightnessF() > 0.55 ? QColor (17, 17, 17) : QColor (244, 244, 244); }
 }
 
+// `one`: the editor's single track (MixerWindow::editorTrack), its slots left to right, the
+// track's name and stop button on their left, and no scenes.
 class ClipGrid final : public QWidget
 {
 public:
-    explicit ClipGrid (MixerWindow& w) : QWidget (&w), window (w)
+    explicit ClipGrid (MixerWindow& w, bool one = false, QWidget* parent = nullptr)
+        : QWidget (parent != nullptr ? parent : &w), window (w), single (one)
     {
         setAcceptDrops (true);
         setFocusPolicy (Qt::NoFocus);
@@ -3289,9 +3316,23 @@ public:
         updateMinimum();
     }
 
-    QSize sizeHint() const override { return { 8 * maxColumn + sceneWidth + 2 * margin, headerHeight + stopHeight + window.numScenes * 30 + 2 * margin }; }
-    void updateMinimum() { setMinimumHeight (headerHeight + stopHeight + window.numScenes * minRow + 2 * margin); }
+    QSize sizeHint() const override
+    {
+        if (single)
+            return { sceneWidth + window.numScenes * singleColumn + 2 * margin, 104 };
+        return { 8 * maxColumn + sceneWidth + 2 * margin, headerHeight + stopHeight + window.numScenes * 30 + 2 * margin };
+    }
+    void updateMinimum()
+    {
+        if (single)
+        {
+            setMinimumSize (sceneWidth + window.numScenes * singleColumn + 2 * margin, minRow + 2 * margin);
+            return;
+        }
+        setMinimumHeight (headerHeight + stopHeight + window.numScenes * minRow + 2 * margin);
+    }
     QRect sceneArea (int scene) const { return sceneRect (std::clamp (scene, 0, std::max (0, window.numScenes - 1))); }
+    QRect slotArea (int scene) const { return slotRect (firstTrack(), std::clamp (scene, 0, std::max (0, window.numScenes - 1))); }
 
 protected:
     void paintEvent (QPaintEvent*) override
@@ -3339,7 +3380,7 @@ protected:
             p.drawEllipse (r.center(), s, s);
         };
         const auto armedTrack = window.engine.liveTrack();
-        for (int t = 0; t < tracks; ++t)
+        for (int t = firstTrack(); t < firstTrack() + trackCount(); ++t)
         {
             const auto& info = window.info[(size_t) t];
             const auto launch = window.engine.launchInfo (t);
@@ -3514,6 +3555,8 @@ protected:
             p.drawRoundedRect (QRectF (stop).adjusted (0.5, 0.5, -0.5, -0.5), 3, 3);
             square (stop, launch.playing >= 0 ? text : disabled);
         }
+        if (single)
+            return;   // the scenes are the mixer's
 
         // The scenes, and Stop All.
         p.setFont (bold);
@@ -3542,6 +3585,8 @@ protected:
 
     void mousePressEvent (QMouseEvent* e) override
     {
+        if (single)
+            Q_EMIT window.activated();   // the keyboard to the mixer's armed track
         const auto hit = hitAt (e->position().toPoint());
         if (e->button() == Qt::RightButton)
             return;   // the context menu
@@ -3586,7 +3631,8 @@ protected:
             case Hit::stopAll: window.engine.stopAll(); break;
             case Hit::none: break;
         }
-        window.setFocus();
+        if (! single)
+            window.setFocus();
         update();
     }
 
@@ -3654,6 +3700,8 @@ protected:
             }
             menu.addAction (MixerWindow::tr ("Drums to &MIDI"), this, [this, t, s] { window.drumsToMidi (t, 0, s); })
                 ->setEnabled (slot->clip.audio != nullptr && slot->clip.midi == nullptr);
+            menu.addAction (MixerWindow::tr ("Send to &Timeline"), this, [this, t, s] { window.slotToTimeline (t, s); })
+                ->setStatusTip (MixerWindow::tr ("A copy of the clip on the track's timeline at the playhead"));
             menu.addSeparator();
         }
         menu.addAction (MixerWindow::tr ("Choose &File..."), this, [this, t, s] { chooseFile (t, s); });
@@ -3687,6 +3735,11 @@ protected:
         {
             if (! url.isLocalFile() || ! QFileInfo (url.toLocalFile()).isFile())
                 continue;
+            if (single && window.audioIntoMidiTrack (hit.track, url.toLocalFile(), scene, 0))
+            {
+                e->acceptProposedAction();
+                return;
+            }
             if (scene < 0)
                 break;
             // A file of the other kind on a clip of one kind joins it as its other layer.
@@ -3719,10 +3772,20 @@ private:
     // Columns keep one standard width (eight tracks fit in about 1100 px) rather than
     // stretching across the window; narrower when the room runs out.
     static constexpr int maxColumn = 150;
+    static constexpr int singleColumn = 150;   // a slot's width in the editor's one row
 
-    int columnWidth() const { return std::clamp ((width() - 2 * margin - sceneWidth) / std::max (1, window.engine.numTracks()), 40, maxColumn); }
+    int firstTrack() const { return single ? window.editorTrack() : 0; }
+    int trackCount() const { return single ? 1 : window.engine.numTracks(); }
+    int columnWidth() const
+    {
+        if (single)
+            return std::max (singleColumn, (width() - 2 * margin - sceneWidth) / std::max (1, window.numScenes));
+        return std::clamp ((width() - 2 * margin - sceneWidth) / std::max (1, window.engine.numTracks()), 40, maxColumn);
+    }
     int rowHeight() const
     {
+        if (single)
+            return std::clamp (height() - 2 * margin, minRow, 400);
         return std::clamp ((height() - 2 * margin - headerHeight - stopHeight) / std::max (1, window.numScenes), minRow, maxRow);
     }
     bool splitSlots() const { return rowHeight() - 4 >= splitFrom; }
@@ -3739,29 +3802,46 @@ private:
         return { half.right() - half.height(), half.top(), half.height(), half.height() };
     }
     // The scenes on the left (owner, 2026-10-25), the tracks to their right.
+    // In the editor's one row the track's name and stop are where the scenes would be.
     int trackLeft() const { return margin + sceneWidth; }
-    QRect headerRect (int t) const { return { trackLeft() + t * columnWidth() + 1, margin, columnWidth() - 2, headerHeight - 3 }; }
+    QRect headerRect (int t) const
+    {
+        if (single)
+            return { margin + 1, margin + 2, sceneWidth - 6, headerHeight - 3 };
+        return { trackLeft() + t * columnWidth() + 1, margin, columnWidth() - 2, headerHeight - 3 };
+    }
     QRect backRect (int t) const { const auto h = headerRect (t); return { h.right() - 22, h.top(), 22, h.height() }; }
     QRect slotRect (int t, int s) const
     {
+        if (single)
+            return QRect (trackLeft() + s * columnWidth(), margin, columnWidth(), rowHeight()).adjusted (2, 2, -2, -2);
         return QRect (trackLeft() + t * columnWidth(), margin + headerHeight + s * rowHeight(), columnWidth(), rowHeight()).adjusted (2, 2, -2, -2);
     }
     QRect stopRect (int t) const
     {
+        if (single)
+            return QRect (margin, margin + headerHeight, sceneWidth - 4, stopHeight).adjusted (1, 3, -1, -1);
         return QRect (trackLeft() + t * columnWidth(), margin + headerHeight + window.numScenes * rowHeight(), columnWidth(), stopHeight).adjusted (2, 3, -2, -1);
     }
     int sceneLeft() const { return margin; }
-    QRect sceneHeaderRect() const { return { sceneLeft(), margin, sceneWidth, headerHeight - 3 }; }
-    QRect sceneRect (int s) const { return QRect (sceneLeft(), margin + headerHeight + s * rowHeight(), sceneWidth, rowHeight()).adjusted (2, 2, -4, -2); }
+    QRect sceneHeaderRect() const { return single ? QRect() : QRect (sceneLeft(), margin, sceneWidth, headerHeight - 3); }
+    QRect sceneRect (int s) const
+    {
+        if (single)
+            return {};
+        return QRect (sceneLeft(), margin + headerHeight + s * rowHeight(), sceneWidth, rowHeight()).adjusted (2, 2, -4, -2);
+    }
     QRect stopAllRect() const
     {
+        if (single)
+            return {};
         return QRect (sceneLeft(), margin + headerHeight + window.numScenes * rowHeight(), sceneWidth, stopHeight).adjusted (2, 3, -4, -1);
     }
 
     Hit hitAt (QPoint at) const
     {
         Hit hit;
-        for (int t = 0; t < window.engine.numTracks(); ++t)
+        for (int t = firstTrack(); t < firstTrack() + trackCount(); ++t)
         {
             if (backRect (t).contains (at) && ! window.engine.launchInfo (t).timeline)
                 return { Hit::back, t, -1 };
@@ -3868,10 +3948,12 @@ private:
                                                         MixerWindow::tr ("Audio and MIDI files (*.wav *.flac *.aif *.aiff *.mp3 *.ogg *.opus *.m4a *.mid *.midi);;All files (*)"));
         if (! file.isEmpty())
             window.loadSlot (t, s, file);
-        window.setFocus();
+        if (! single)
+            window.setFocus();
     }
 
     MixerWindow& window;
+    bool single = false;
 };
 
 // The selected track's devices, on the launcher's left: its instrument, the track's own
@@ -4768,7 +4850,7 @@ private:
 class ClipView final : public QWidget
 {
 public:
-    explicit ClipView (MixerWindow& w) : QWidget (&w), window (w)
+    explicit ClipView (MixerWindow& w, QWidget* parent = nullptr) : QWidget (parent != nullptr ? parent : &w), window (w)
     {
         setAccessibleName (MixerWindow::tr ("Clip"));
         setMinimumHeight (120);
@@ -5086,6 +5168,684 @@ private:
     std::vector<Note> notes;
 };
 
+//==============================================================================
+// The editor's track (owner, 2026-10-26: "the main editor view is for a single instance, a
+// single track in horizontal view, not just for audio editing"): one track of the mix under the
+// editor's waveform, Audio only, MIDI only or Audio + MIDI, with the mixer's clip recording and
+// editing. Along the top the track, its kind, its instrument, arm, record and play; then its
+// launcher slots left to right; then its clips across time; then the clip picked, with the MIDI
+// tools that make new MIDI (Φ, Duplicate, ½, ×2, Reverse, a mode or raga, Counterpoint: no note
+// editing) or the audio's (Paulstretch, Drums to MIDI). A clip goes from the launcher to the
+// timeline and back. A track of two kinds is not saved from here: Render to Editor makes it one
+// sound in a tab of its own, for the mastering chain.
+class EditorTrack final : public QFrame
+{
+public:
+    EditorTrack (MixerWindow& w, QWidget* parent) : QFrame (parent), window (w)
+    {
+        setObjectName (QStringLiteral ("editorTrack"));
+        setFrameShape (QFrame::NoFrame);
+        setAccessibleName (MixerWindow::tr ("The editor's track"));
+        setFocusPolicy (Qt::ClickFocus);
+        auto* layout = new QVBoxLayout (this);
+        layout->setContentsMargins (4, 4, 4, 2);
+        layout->setSpacing (3);
+
+        // The bar.
+        auto* bar = new QHBoxLayout;
+        bar->setSpacing (4);
+        trackBox = new QComboBox (this);
+        trackBox->setFocusPolicy (Qt::NoFocus);
+        trackBox->setToolTip (MixerWindow::tr ("The track of the project the editor shows (the mixer shows them all)"));
+        trackBox->setMinimumContentsLength (12);
+        QObject::connect (trackBox, &QComboBox::activated, this, [this] (int index) { window.select (index); refresh(); });
+        bar->addWidget (trackBox);
+
+        const char* kindNames[] = { QT_TRANSLATE_NOOP ("MixerWindow", "Audio + MIDI"), QT_TRANSLATE_NOOP ("MixerWindow", "Audio"),
+                                    QT_TRANSLATE_NOOP ("MixerWindow", "MIDI") };
+        const char* kindTips[] = {
+            QT_TRANSLATE_NOOP ("MixerWindow", "Audio and MIDI: the audio clips and the instrument together, each layer with its own level; a clip can hold both"),
+            QT_TRANSLATE_NOOP ("MixerWindow", "Audio only: the track's audio clips play, and Record records the audio input"),
+            QT_TRANSLATE_NOOP ("MixerWindow", "MIDI only: the instrument plays the MIDI clips and the keyboard, and Record records MIDI"),
+        };
+        for (int m : { 1, 2, 0 })
+        {
+            auto* b = new QToolButton (this);
+            b->setText (MixerWindow::tr (kindNames[m]));
+            b->setToolTip (MixerWindow::tr (kindTips[m]));
+            b->setCheckable (true);
+            b->setAutoRaise (true);
+            b->setFocusPolicy (Qt::NoFocus);
+            kindButtons[(size_t) m] = b;
+            bar->addWidget (b);
+            QObject::connect (b, &QToolButton::clicked, this, [this, m] { setKind (m); });
+        }
+        bar->addSpacing (6);
+        instrumentButton = new QPushButton (this);
+        instrumentButton->setFocusPolicy (Qt::NoFocus);
+        instrumentButton->setToolTip (MixerWindow::tr ("What the MIDI clips and the keyboard play: the Synth, a Sampler, a Slicer, PHI rāga or a plugin"));
+        QObject::connect (instrumentButton, &QPushButton::clicked, this, [this] { instrumentMenu(); });
+        bar->addWidget (instrumentButton);
+        editButton = new QPushButton (MixerWindow::tr ("Edit"), this);
+        editButton->setFocusPolicy (Qt::NoFocus);
+        editButton->setToolTip (MixerWindow::tr ("The instrument's window"));
+        QObject::connect (editButton, &QPushButton::clicked, this, [this] { window.editInstrument (track()); });
+        bar->addWidget (editButton);
+        bar->addSpacing (6);
+
+        armButton = new QToolButton (this);
+        armButton->setText (MixerWindow::tr ("● Arm"));
+        armButton->setCheckable (true);
+        armButton->setAutoRaise (true);
+        armButton->setFocusPolicy (Qt::NoFocus);
+        armButton->setToolTip (MixerWindow::tr ("The track gets the MIDI keyboard and the audio input, and records"));
+        QObject::connect (armButton, &QToolButton::clicked, this, [this] { window.arm (track()); Q_EMIT window.activated(); refresh(); });
+        bar->addWidget (armButton);
+        recordButton = new TransportButton (TransportButton::Symbol::record, MixerWindow::tr ("Record on the track"), this);
+        recordButton->setFocusPolicy (Qt::NoFocus);
+        QObject::connect (recordButton, &QToolButton::clicked, this, [this] { record(); });
+        bar->addWidget (recordButton);
+        intoBox = new QComboBox (this);
+        intoBox->setFocusPolicy (Qt::NoFocus);
+        intoBox->addItem (MixerWindow::tr ("into the Launcher"));
+        intoBox->addItem (MixerWindow::tr ("onto the Timeline"));
+        intoBox->setToolTip (MixerWindow::tr ("Where Record puts the take: the next empty slot (with the mixer's length, quantise and count-in), "
+                                              "or the timeline from the playhead"));
+        intoBox->setCurrentIndex (appSettings().value (QStringLiteral ("editorTrack/recordInto"), 0).toInt() == 1 ? 1 : 0);
+        QObject::connect (intoBox, &QComboBox::activated, this, [] (int index) { appSettings().setValue (QStringLiteral ("editorTrack/recordInto"), index); });
+        bar->addWidget (intoBox);
+        playButton = new TransportButton (TransportButton::Symbol::play, MixerWindow::tr ("Play or stop the mix (Shift+F3)"), this);
+        playButton->setFocusPolicy (Qt::NoFocus);
+        QObject::connect (playButton, &QToolButton::clicked, this, [this] { Q_EMIT window.activated(); window.togglePlay(); });
+        bar->addWidget (playButton);
+        auto* stop = new QToolButton (this);
+        stop->setText (MixerWindow::tr ("■ Track"));
+        stop->setAutoRaise (true);
+        stop->setFocusPolicy (Qt::NoFocus);
+        stop->setToolTip (MixerWindow::tr ("Stops the track's launcher clip; ⟲ plays its timeline again"));
+        QObject::connect (stop, &QToolButton::clicked, this, [this] { window.engine.stopTrack (track()); });
+        bar->addWidget (stop);
+        auto* back = new QToolButton (this);
+        back->setText (QStringLiteral ("⟲"));
+        back->setAutoRaise (true);
+        back->setFocusPolicy (Qt::NoFocus);
+        back->setToolTip (MixerWindow::tr ("Back to the timeline: the track plays its clips across time again"));
+        QObject::connect (back, &QToolButton::clicked, this, [this] { window.engine.backToTimeline (track()); });
+        bar->addWidget (back);
+        bar->addStretch (1);
+        launcherButton = new QToolButton (this);
+        launcherButton->setText (MixerWindow::tr ("Launcher"));
+        launcherButton->setCheckable (true);
+        launcherButton->setAutoRaise (true);
+        launcherButton->setFocusPolicy (Qt::NoFocus);
+        launcherButton->setChecked (appSettings().value (QStringLiteral ("editorTrack/launcher"), true).toBool());
+        launcherButton->setToolTip (MixerWindow::tr ("The track's clip launcher slots, left to right"));
+        bar->addWidget (launcherButton);
+        auto* render = new QPushButton (MixerWindow::tr ("Render to Editor"), this);
+        render->setFocusPolicy (Qt::NoFocus);
+        render->setToolTip (MixerWindow::tr ("The track as it sounds (its MIDI through its instrument, and its audio) into a new tab of the editor, "
+                                             "one sound for the mastering chain"));
+        QObject::connect (render, &QPushButton::clicked, this, [this] { Q_EMIT window.trackToEditorRequested (track()); });
+        bar->addWidget (render);
+        layout->addLayout (bar);
+
+        // The launcher's row, the timeline and the clip, one above the other.
+        auto* split = new QSplitter (Qt::Vertical, this);
+        split->setChildrenCollapsible (false);
+        gridScroll = new QScrollArea (split);
+        gridScroll->setFrameShape (QFrame::NoFrame);
+        gridScroll->setWidgetResizable (true);
+        gridScroll->setVerticalScrollBarPolicy (Qt::ScrollBarAlwaysOff);
+        grid = new ClipGrid (window, true, gridScroll);
+        gridScroll->setWidget (grid);
+        gridScroll->setMinimumHeight (64);
+        gridScroll->setVisible (launcherButton->isChecked());
+        QObject::connect (launcherButton, &QToolButton::toggled, this, [this] (bool on)
+        {
+            gridScroll->setVisible (on);
+            appSettings().setValue (QStringLiteral ("editorTrack/launcher"), on);
+        });
+        lanes = new TrackLanes (window, true, split);
+        lanes->setMinimumHeight (70);
+
+        auto* clipArea = new QWidget (split);
+        auto* clipRow = new QHBoxLayout (clipArea);
+        clipRow->setContentsMargins (0, 0, 0, 0);
+        clipRow->setSpacing (4);
+        clip = new ClipView (window, clipArea);
+        clip->setMinimumHeight (90);
+        clipRow->addWidget (clip, 1);
+        tools = new QWidget (clipArea);
+        auto* toolGrid = new QGridLayout (tools);
+        toolGrid->setContentsMargins (0, 4, 4, 4);
+        toolGrid->setSpacing (3);
+        clipRow->addWidget (tools);
+        buildTools (toolGrid);
+        split->addWidget (gridScroll);
+        split->addWidget (lanes);
+        split->addWidget (clipArea);
+        split->setStretchFactor (0, 1);
+        split->setStretchFactor (1, 3);
+        split->setStretchFactor (2, 2);
+        layout->addWidget (split, 1);
+
+        hint = new QLabel (this);
+        hint->setForegroundRole (QPalette::PlaceholderText);
+        hint->setWordWrap (true);
+        layout->addWidget (hint);
+        hintTimer.setSingleShot (true);
+        QObject::connect (&hintTimer, &QTimer::timeout, this, [this] { hint->setText (MixerWindow::tr (defaultHint)); });
+        hint->setText (MixerWindow::tr (defaultHint));
+
+        timer.setInterval (33);
+        QObject::connect (&timer, &QTimer::timeout, this, [this] { tick(); });
+        refresh();
+    }
+
+    void say (const QString& text)
+    {
+        if (text.isEmpty())
+            return;
+        hint->setText (text);
+        hintTimer.start (6000);
+    }
+
+    // The track's name, kind, instrument and buttons as the mix has them.
+    void refresh()
+    {
+        const auto t = track();
+        {
+            const QSignalBlocker quiet (trackBox);
+            trackBox->clear();
+            for (int i = 0; i < window.engine.numTracks(); ++i)
+            {
+                QPixmap swatch (10, 10);
+                swatch.fill (window.info[(size_t) i].colour);
+                trackBox->addItem (QIcon (swatch), QStringLiteral ("%1  %2").arg (i + 1).arg (window.info[(size_t) i].name));
+            }
+            trackBox->setCurrentIndex (t);
+        }
+        const auto mode = window.engine.strip (t).mode.load();
+        for (int m = 0; m < 3; ++m)
+            kindButtons[(size_t) m]->setChecked (m == mode);
+        const auto inst = window.engine.instrument (t);
+        instrumentButton->setText (inst != nullptr ? QString::fromStdString (inst->name()) + QStringLiteral (" ▾") : MixerWindow::tr ("Instrument ▾"));
+        instrumentButton->setEnabled (mode != (int) mixer::TrackMode::audio);
+        editButton->setEnabled (inst != nullptr && mode != (int) mixer::TrackMode::audio);
+        armButton->setChecked (window.engine.liveTrack() == t);
+        grid->updateMinimum();
+        grid->updateGeometry();
+        refreshClip();
+    }
+
+protected:
+    void showEvent (QShowEvent* e) override
+    {
+        QFrame::showEvent (e);
+        refresh();
+        timer.start();
+    }
+
+    void hideEvent (QHideEvent* e) override
+    {
+        timer.stop();
+        QFrame::hideEvent (e);
+    }
+
+    void keyPressEvent (QKeyEvent* e) override
+    {
+        // The mixer's few keys that make sense for one track.
+        const auto mods = e->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier);
+        if (mods == Qt::NoModifier && e->key() == Qt::Key_R && window.showingClip && window.clipView->shownTrack() == track())
+        {
+            window.reverseShownClip();
+            return;
+        }
+        if (mods == Qt::ControlModifier && e->key() == Qt::Key_Z)
+        {
+            window.undo();
+            return;
+        }
+        if (mods == (Qt::ControlModifier | Qt::ShiftModifier) && e->key() == Qt::Key_Z)
+        {
+            window.redo();
+            return;
+        }
+        QFrame::keyPressEvent (e);
+    }
+
+private:
+    static constexpr const char* defaultHint = QT_TRANSLATE_NOOP ("MixerWindow",
+        "Drop audio or MIDI files on a slot or the timeline. Arm and Record to play into the track; a slot's dot records into it. "
+        "Right-click a clip to send it to the launcher or the timeline.");
+
+    int track() const { return window.editorTrack(); }
+
+    void setKind (int m)
+    {
+        auto& s = window.engine.strip (track());
+        s.mode = m;
+        if (m != (int) mixer::TrackMode::audio)
+            window.giveSynth (track());   // MIDI needs something to play it
+        window.strips[(size_t) track()]->refresh();
+        window.rack->refresh();
+        window.changed();
+        refresh();
+    }
+
+    void instrumentMenu()
+    {
+        QMenu menu (this);
+        const auto t = track();
+        const auto choose = [this, t] (const QByteArray& what) { return [this, t, what] { window.dropPlugin (t, what); refresh(); }; };
+        menu.addAction (MixerWindow::tr ("&Synth"), this, choose ("synth"));
+        menu.addAction (MixerWindow::tr ("S&ampler"), this, choose ("sampler"));
+        menu.addAction (MixerWindow::tr ("S&licer"), this, choose ("slicer"));
+        menu.addAction (QString::fromUtf8 ("PHI &rāga"), this, choose ("raga"));
+        const auto plugins = window.audio.knownInstruments();
+        if (! plugins.empty())
+            menu.addSeparator();
+        for (const auto& p : plugins)
+            menu.addAction (QString::fromStdString (p.name) + QStringLiteral (" (") + QString::fromStdString (p.format) + QLatin1Char (')'),
+                            this, choose ("instrument\n" + QByteArray::fromStdString (p.id)));
+        if (window.engine.instrument (t) != nullptr)
+        {
+            menu.addSeparator();
+            menu.addAction (MixerWindow::tr ("&No Instrument"), this, [this, t] { window.setInstrumentKind (t, noInstrument, {}); refresh(); });
+        }
+        menu.exec (instrumentButton->mapToGlobal (QPoint (0, instrumentButton->height())));
+    }
+
+    // Record on this track: armed first, then the mixer's Record, into the launcher or the timeline.
+    void record()
+    {
+        const auto t = track();
+        Q_EMIT window.activated();
+        if (window.engine.liveTrack() != t && window.engine.recordInfo (t).state == mixer::RecordState::none)
+            window.arm (t);
+        window.recordPressed (intoBox->currentIndex() == 0 ? 1 : 0);
+        refresh();
+    }
+
+    QPushButton* tool (const QString& text, const QString& tip, std::function<void()> fn)
+    {
+        auto* b = new QPushButton (text, tools);
+        b->setToolTip (tip);
+        b->setFocusPolicy (Qt::NoFocus);
+        QObject::connect (b, &QPushButton::clicked, this, [this, fn = std::move (fn)] { fn(); refreshClip(); });
+        return b;
+    }
+
+    void buildTools (QGridLayout* g)
+    {
+        title = new QLabel (tools);
+        auto bold = title->font();
+        bold.setBold (true);
+        title->setFont (bold);
+        g->addWidget (title, 0, 0, 1, 4);
+
+        // MIDI: new MIDI from the clip's, never its notes edited one by one.
+        midiTools = new QWidget (tools);
+        auto* m = new QGridLayout (midiTools);
+        m->setContentsMargins (0, 0, 0, 0);
+        m->setSpacing (3);
+        auto* phi = new PhiButton (MixerWindow::tr ("Φ: the notes' places dealt out again"), midiTools, false);
+        phi->setToolTip (MixerWindow::tr ("Φ: the same pitches and the same rhythm, the notes dealt out again along the golden ratio. Again for another order"));
+        phi->setFocusPolicy (Qt::NoFocus);
+        QObject::connect (phi, &QToolButton::clicked, this, [this] { window.phiShownMidi(); refreshClip(); });
+        m->addWidget (phi, 0, 0);
+        m->addWidget (tool (MixerWindow::tr ("Duplicate"), MixerWindow::tr ("The clip twice as long, the two joined into one, so Φ deals across both"),
+                            [this] { window.editShownMidi ([] (const midifile::Song& s) { return midifile::duplicated (s); }, MixerWindow::tr ("Duplicated into one clip")); }),
+                      0, 1);
+        m->addWidget (tool (QStringLiteral ("½"), MixerWindow::tr ("Half the density: every other note or chord kept. Again for a quarter"),
+                            [this] { window.editShownMidi ([] (const midifile::Song& s) { return midifile::halfDensity (s); }, MixerWindow::tr ("Half the density")); }),
+                      0, 2);
+        m->addWidget (tool (QStringLiteral ("×2"), MixerWindow::tr ("Double the density: each note played twice in its own time. Again for four times"),
+                            [this] { window.editShownMidi ([] (const midifile::Song& s) { return midifile::doubleDensity (s); }, MixerWindow::tr ("Double the density")); }),
+                      0, 3);
+        rootBox = new QComboBox (midiTools);
+        rootBox->setFocusPolicy (Qt::NoFocus);
+        rootBox->setToolTip (MixerWindow::tr ("The root, or Sa"));
+        for (const auto* n : { "C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B" })
+            rootBox->addItem (QString::fromLatin1 (n));
+        scaleBox = new QComboBox (midiTools);
+        scaleBox->setFocusPolicy (Qt::NoFocus);
+        scaleBox->setToolTip (MixerWindow::tr ("Every note to the nearest of a mode or raga on the root (drums stay)"));
+        scaleBox->addItem (MixerWindow::tr ("Mode or raga..."), -1);
+        QString family;
+        const auto& scales = midifile::scales();
+        for (int i = 0; i < (int) scales.size(); ++i)
+        {
+            if (family != QLatin1String (scales[(size_t) i].family))
+            {
+                scaleBox->insertSeparator (scaleBox->count());
+                family = QLatin1String (scales[(size_t) i].family);
+            }
+            scaleBox->addItem (QString::fromUtf8 (scales[(size_t) i].name), i);
+        }
+        auto applyScale = [this]
+        {
+            const auto scale = scaleBox->currentData().toInt();
+            if (scale < 0)
+                return;
+            const auto root = rootBox->currentIndex();
+            window.editShownMidi ([root, scale] (const midifile::Song& s) { return midifile::toMode (s, root, scale); },
+                                  MixerWindow::tr ("In %1 on %2").arg (scaleBox->currentText(), rootBox->currentText()));
+            refreshClip();
+        };
+        QObject::connect (scaleBox, &QComboBox::activated, this, applyScale);
+        QObject::connect (rootBox, &QComboBox::activated, this, applyScale);
+        m->addWidget (rootBox, 1, 0);
+        m->addWidget (scaleBox, 1, 1, 1, 3);
+        m->addWidget (tool (MixerWindow::tr ("Reverse"), MixerWindow::tr ("Plays it backwards (R); again turns it back"), [this] { window.reverseShownClip(); }), 2, 0, 1, 2);
+        // How many parts, chosen before Counterpoint (owner, 2026-10-26: up to four): the melody
+        // and one to three new voices. The Counterpoint window starts from them.
+        partsBox = new QComboBox (midiTools);
+        partsBox->setFocusPolicy (Qt::NoFocus);
+        partsBox->setToolTip (MixerWindow::tr ("The parts Counterpoint writes in: the melody and one, two or three new voices, each on a new track"));
+        for (int parts = 2; parts <= 4; ++parts)
+            partsBox->addItem (MixerWindow::tr ("%1 parts").arg (parts));
+        allBox = new QCheckBox (MixerWindow::tr ("Every voice in the species"), midiTools);
+        allBox->setFocusPolicy (Qt::NoFocus);
+        allBox->setToolTip (MixerWindow::tr ("Off: as Fux writes in three and four parts, the nearest voice takes the species and the others go note against note"));
+        m->addWidget (partsBox, 2, 2, 1, 2);
+        m->addWidget (allBox, 3, 0, 1, 2);
+        m->addWidget (tool (MixerWindow::tr ("Counterpoint..."), MixerWindow::tr ("New voices against this melody, by Fux's species of counterpoint, in a mode, raga or maqam, each a clip on a new track"),
+                            [this]
+                            {
+                                auto settings = appSettings();
+                                settings.setValue (QStringLiteral ("counterpoint/voices"), partsBox->currentIndex() + 1);
+                                settings.setValue (QStringLiteral ("counterpoint/all"), allBox->isChecked());
+                                window.counterpointShownMidi();
+                                loadParts();   // what the window was left with
+                            }),
+                      3, 2, 1, 2);
+        loadParts();
+        g->addWidget (midiTools, 1, 0, 1, 4);
+
+        // Audio: the stretch, the drums as MIDI, the editor.
+        audioTools = new QWidget (tools);
+        auto* a = new QGridLayout (audioTools);
+        a->setContentsMargins (0, 0, 0, 0);
+        a->setSpacing (3);
+        a->addWidget (tool (MixerWindow::tr ("Paulstretch"), MixerWindow::tr ("The clip as it plays, stretched with the editor's Extreme Stretch settings, saved beside the mix"),
+                            [this] { window.stretchShownAudio(); }),
+                      0, 0);
+        a->addWidget (tool (MixerWindow::tr ("Drums to MIDI"), MixerWindow::tr ("Each hit as a note of the drum kit, a MIDI layer over the clip for the track's instrument"),
+                            [this] { window.drumsToMidi (window.clipView->shownTrack(), window.clipView->shownId(), window.clipView->shownScene()); }),
+                      0, 1);
+        a->addWidget (tool (MixerWindow::tr ("Reverse"), MixerWindow::tr ("Plays it backwards (R); again turns it back"), [this] { window.reverseShownClip(); }), 1, 0);
+        editAudio = tool (MixerWindow::tr ("Edit in Editor"), MixerWindow::tr ("The clip in a tab of the editor; Ctrl+S or F3 puts the edit back on its clip"),
+                          [this] { Q_EMIT window.editClipRequested (window.clipView->shownTrack(), window.clipView->shownId()); });
+        a->addWidget (editAudio, 1, 1);
+        g->addWidget (audioTools, 2, 0, 1, 4);
+
+        // Between the launcher and the timeline (owner, 2026-10-26).
+        sendButton = tool (QString(), QString(), [this]
+        {
+            if (! window.showingClip)
+                return;
+            const auto t = window.clipView->shownTrack();
+            if (window.clipView->shownId() != 0)
+                window.clipToLauncher (t, window.clipView->shownId());
+            else
+                window.slotToTimeline (t, window.clipView->shownScene());
+        });
+        g->addWidget (sendButton, 3, 0, 1, 4);
+        g->setRowStretch (4, 1);
+    }
+
+    void loadParts()
+    {
+        const auto settings = appSettings();
+        partsBox->setCurrentIndex (std::clamp (settings.value (QStringLiteral ("counterpoint/voices"), 1).toInt(), 1, 3) - 1);
+        allBox->setChecked (settings.value (QStringLiteral ("counterpoint/all"), false).toBool());
+    }
+
+    // The clip picked (in the editor's track or the mixer) when it is this track's.
+    void refreshClip()
+    {
+        const bool ours = window.showingClip && window.clipView->shownTrack() == track() && window.clipView->reload();
+        const auto key = std::make_tuple (ours ? track() : -1, ours ? window.clipView->shownId() : 0u, ours ? window.clipView->shownScene() : -1);
+        if (key != shown || ! ours)
+        {
+            shown = key;
+            clip->set (std::get<0> (key), std::get<1> (key), std::get<2> (key));
+        }
+        else
+            clip->reload();
+        const bool midi = ours && window.clipView->showsMidi();
+        tools->setVisible (ours);
+        midiTools->setVisible (midi);
+        audioTools->setVisible (ours && ! midi);
+        editAudio->setVisible (ours && window.clipView->shownId() != 0);
+        if (ours)
+        {
+            title->setText ((midi ? MixerWindow::tr ("MIDI Clip: %1") : MixerWindow::tr ("Audio Clip: %1")).arg (window.clipView->shownName()));
+            const bool onTimeline = window.clipView->shownId() != 0;
+            sendButton->setText (onTimeline ? MixerWindow::tr ("Send to Clip Launcher") : MixerWindow::tr ("Send to Timeline"));
+            sendButton->setToolTip (onTimeline ? MixerWindow::tr ("A copy of the clip into the track's first empty slot")
+                                               : MixerWindow::tr ("A copy of the slot's clip onto the timeline at the playhead (both layers of a mixed clip)"));
+        }
+    }
+
+    void tick()
+    {
+        const auto t = track();
+        if (trackBox->currentIndex() != t || trackBox->count() != window.engine.numTracks())
+            refresh();
+        armButton->setChecked (window.engine.liveTrack() == t);
+        const auto take = window.engine.recordInfo (t);
+        recordButton->setChecked (take.state != mixer::RecordState::none);
+        static_cast<TransportButton*> (playButton)->setSymbol (window.engine.isPlaying() || window.engine.countingIn() ? TransportButton::Symbol::pause
+                                                                                                                       : TransportButton::Symbol::play);
+        if (gridScroll->isVisible())
+            grid->update();
+        lanes->follow();
+        lanes->update();
+        if (++slow % 30 == 0 && ! trackBox->view()->isVisible())
+            refresh();   // names and colours changed in the mixer
+        else if (slow % 10 == 0)
+            refreshClip();
+    }
+
+    MixerWindow& window;
+    QComboBox* trackBox;
+    std::array<QToolButton*, 3> kindButtons {};
+    QPushButton* instrumentButton;
+    QPushButton* editButton;
+    QToolButton* armButton;
+    TransportButton* recordButton;
+    QComboBox* intoBox;
+    TransportButton* playButton;
+    QToolButton* launcherButton;
+    QScrollArea* gridScroll;
+    ClipGrid* grid;
+    TrackLanes* lanes;
+    ClipView* clip;
+    QWidget* tools;
+    QLabel* title = nullptr;
+    QWidget* midiTools = nullptr;
+    QWidget* audioTools = nullptr;
+    QPushButton* editAudio = nullptr;
+    QPushButton* sendButton = nullptr;
+    QComboBox* rootBox = nullptr;
+    QComboBox* scaleBox = nullptr;
+    QComboBox* partsBox = nullptr;
+    QCheckBox* allBox = nullptr;
+    QLabel* hint;
+    QTimer hintTimer;
+    QTimer timer;
+    std::tuple<int, uint32_t, int> shown { -1, 0u, -1 };
+    int slow = 0;
+};
+
+QWidget* MixerWindow::editorTrackView (QWidget* parent)
+{
+    if (editorView == nullptr)
+        editorView = new EditorTrack (*this, parent);
+    return editorView;
+}
+
+int MixerWindow::editorTrack() const
+{
+    return std::clamp (shownTrack, 0, std::max (0, engine.numTracks() - 1));
+}
+
+void MixerWindow::refreshEditorTrack()
+{
+    if (editorView != nullptr)
+        editorView->refresh();
+}
+
+// A launcher slot's clip onto the timeline at the playhead: a mixed clip as its two layers,
+// the audio and the MIDI starting together, which a track of both kinds plays as one.
+void MixerWindow::slotToTimeline (int track, int scene)
+{
+    if (track < 0 || track >= engine.numTracks() || scene < 0 || scene >= mixer::maxScenes)
+        return;
+    const auto slot = slots[(size_t) track][(size_t) scene];
+    if (slot == nullptr)
+        return;
+    remember();
+    auto list = engine.clips (track);
+    const auto at = engine.position();
+    const bool both = slot->clip.audio != nullptr && slot->clip.midi != nullptr;
+    for (const bool sound : { true, false })
+    {
+        auto c = slot->clip;
+        if (sound ? c.audio == nullptr : c.midi == nullptr)
+            continue;
+        if (sound)
+            c.midi = nullptr;
+        else
+            c.audio = nullptr;
+        c.start = at;
+        c.id = 0;
+        c.muted = false;
+        list.push_back (c);
+    }
+    editClips (track, std::move (list));
+    if (both)
+        giveBothLayers (track);
+    changed();
+    status->setText (tr ("%1 is on %2's timeline at %3%4").arg (slotName (track, scene), trackName (track), timeText ((double) at / rate()),
+                                                                engine.launchInfo (track).timeline ? QString() : tr (" (⟲ plays the timeline again)")));
+}
+
+// A timeline clip into the track's first empty slot, a loop of its length.
+void MixerWindow::clipToLauncher (int track, uint32_t id)
+{
+    if (track < 0 || track >= engine.numTracks())
+        return;
+    mixer::Clip clip;
+    for (const auto& c : engine.clips (track))
+        if (c.id == id)
+            clip = c;
+    if (clip.audio == nullptr && clip.midi == nullptr)
+        return;
+    const auto scene = nextSlotFor (track, 0);
+    if (scene < 0)
+    {
+        status->setText (tr ("%1 has no empty slot left: all %2 scenes have a clip.").arg (trackName (track)).arg (mixer::maxScenes));
+        return;
+    }
+    if (scene >= numScenes)
+        setScenes (scene + 1);
+    auto slot = std::make_shared<mixer::Slot>();
+    clip.start = 0;
+    clip.id = 0;
+    clip.muted = false;
+    slot->clip = clip;
+    slots[(size_t) track][(size_t) scene] = slot;
+    engine.setSlot (track, scene, slot);
+    changed();
+    grid->update();
+    rack->refresh();
+    moveCursor (track, scene);
+    status->setText (tr ("%1 is in the launcher on %2, %3").arg (slotName (track, scene), trackName (track), sceneName (scene)));
+}
+
+// A sound from the editor onto the editor's track at the playhead, saved as a WAV beside the mix.
+bool MixerWindow::sendAudioToTimeline (const AudioData& sound, const QString& name, QString& error)
+{
+    QString file;
+    const auto clip = saveClipEdit (sound, name, file, error);
+    if (clip == nullptr)
+        return false;
+    const auto track = editorTrack();
+    remember();
+    addClip (track, mixer::makeClip (clip, engine.position()));
+    if (engine.strip (track).mode.load() == (int) mixer::TrackMode::instrument)
+        giveBothLayers (track);   // a MIDI track with audio put on it plays both
+    changed();
+    status->setText (tr ("%1 is on %2's timeline at %3 (%4)").arg (name, trackName (track), timeText ((double) engine.position() / rate()), file));
+    return true;
+}
+
+// An audio file dropped on the editor's track while it is MIDI only (owner, 2026-10-26): its drums
+// as MIDI, the track staying MIDI only (the audio silent under the notes), or the audio itself,
+// the track then Audio + MIDI. Into `scene`'s slot, or onto the timeline at `at` (scene -1).
+// False when it is not that case, and the drop goes on as usual.
+bool MixerWindow::audioIntoMidiTrack (int track, const QString& file, int scene, Frame at)
+{
+    if (track < 0 || track >= engine.numTracks() || isMidiFile (file)
+        || engine.strip (track).mode.load() != (int) mixer::TrackMode::instrument)
+        return false;
+    QMenu menu (editorView != nullptr ? static_cast<QWidget*> (editorView) : this);
+    auto* asMidi = menu.addAction (tr ("Drums to &MIDI: the track stays MIDI only"));
+    auto* asAudio = menu.addAction (tr ("As &Audio: the track becomes Audio + MIDI"));
+    menu.addSeparator();
+    menu.addAction (tr ("Cancel"));
+    const auto* chosen = menu.exec (QCursor::pos());
+    if (chosen == asAudio)
+    {
+        giveBothLayers (track);
+        refreshEditorTrack();
+        return false;   // the usual drop, now heard
+    }
+    if (chosen != asMidi)
+        return true;
+    if (scene >= 0 && slots[(size_t) track][(size_t) std::clamp (scene, 0, mixer::maxScenes - 1)] != nullptr)
+        scene = nextSlotFor (track, scene);
+    if (scene >= mixer::maxScenes)
+        return true;
+    QPointer<MixerWindow> self (this);
+    if (scene >= 0)
+        loadingSlots.insert ({ track, scene });
+    decodeAudio (track, file, [self, track, scene, at] (mixer::AudioClipPtr sound)
+    {
+        if (self == nullptr)
+            return;
+        if (scene >= 0)
+            self->loadingSlots.erase ({ track, scene });
+        if (sound == nullptr)
+            return;
+        if (scene >= 0)
+        {
+            if (scene >= self->numScenes)
+                self->setScenes (scene + 1);
+            auto slot = std::make_shared<mixer::Slot>();
+            slot->clip = mixer::makeClip (sound, 0);
+            self->slots[(size_t) track][(size_t) scene] = slot;
+            self->engine.setSlot (track, scene, slot);
+            self->changed();
+            self->drumsToMidi (track, 0, scene);
+        }
+        else
+        {
+            self->remember();
+            self->addClip (track, mixer::makeClip (sound, at));
+            self->drumsToMidi (track, self->nextClipId - 1, -1);
+        }
+        self->engine.strip (track).mode = (int) mixer::TrackMode::instrument;   // drumsToMidi gave it both
+        self->strips[(size_t) track]->refresh();
+        self->rack->refresh();
+        self->refreshEditorTrack();
+    });
+    return true;
+}
+
 MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* parent)
     : QWidget (parent, Qt::Window), engine (e), audio (a), hooks (std::move (h))
 {
@@ -5358,14 +6118,19 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
         counterpoint->setToolTip (tr ("New voices against this melody, by Fux's species of counterpoint, in a mode, raga or "
                                       "maqam, each a clip on a new track"));
         grid->addWidget (counterpoint, 3, 0, 1, 2);
+        auto* fugue = new QPushButton (tr ("Fugue..."), midiClipBox);
+        fugue->setToolTip (tr ("A fugue on this melody as its subject: two to four voices entering in turn, a countersubject, "
+                               "episodes and a stretto, in any mode, raga or maqam, each voice a clip on a new track"));
+        grid->addWidget (fugue, 3, 2, 1, 2);
+        connect (fugue, &QPushButton::clicked, this, [this] { fugueShownMidi(); });
         auto* stochastic = new QPushButton (tr ("stochasticize..."), midiClipBox);
         stochastic->setToolTip (tr ("A new line by Xenakis's methods: an st cloud or markov screens, its pitches and rhythm through "
                                     "sieves taken from the mode, a rhythmic mode or this clip"));
-        grid->addWidget (stochastic, 3, 2, 1, 2);
+        grid->addWidget (stochastic, 4, 0, 1, 2);
         connect (stochastic, &QPushButton::clicked, this, [this] { stochasticizeShownMidi(); });
         auto* hint = new QLabel (tr ("R reverses it"), midiClipBox);
         hint->setForegroundRole (QPalette::PlaceholderText);
-        grid->addWidget (hint, 4, 0, 1, 4);
+        grid->addWidget (hint, 5, 0, 1, 4);
         connect (counterpoint, &QPushButton::clicked, this, [this] { counterpointShownMidi(); });
 
         connect (phi, &QToolButton::clicked, this, [this] { phiShownMidi(); });
@@ -5458,6 +6223,12 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     connect (previousSection, &QShortcut::activated, this, [this] { cycleFocus (false); });
 
     status = new StatusLine (this);
+    status->echo = [this] (const QString& text)
+    {
+        if (editorView != nullptr)
+            editorView->say (text);
+        Q_EMIT message (text);
+    };
     auto* bottom = new QHBoxLayout;
     bottom->addWidget (status, 1);
     midiStatus->hide();   // its text is the MIDI Inputs button's tooltip
@@ -5823,6 +6594,31 @@ void MixerWindow::counterpointShownMidi()
 
     writeCounterpoint (track, clip, slot, scene, options, chosen >= 0 ? mixer::TuningChoice { chosen, rootChoice->currentIndex() } : mixer::TuningChoice {},
                        tuning, -1);
+}
+
+void MixerWindow::fugueShownMidi()
+{
+    if (! showingClip || ! clipView->showsMidi())
+        return;
+    const auto track = clipView->shownTrack();
+    const auto id = clipView->shownId();
+    const auto scene = clipView->shownScene();
+    mixer::Clip clip;
+    mixer::SlotPtr slot;
+    if (id != 0)
+    {
+        for (const auto& c : engine.clips (track))
+            if (c.id == id)
+                clip = c;
+    }
+    else if (scene >= 0 && (slot = slots[(size_t) track][(size_t) scene]) != nullptr)
+        clip = slot->clip;
+    if (clip.midi == nullptr || clip.midi->song == nullptr || ! writeFugue (track, clip, slot, scene))
+        return;
+    rebuildStrips();
+    grid->update();
+    rack->refresh();
+    changed();
 }
 
 void MixerWindow::writeCounterpoint (int track, const mixer::Clip& clip, mixer::SlotPtr slot, int scene, const counterpoint::Settings& options,
@@ -6321,6 +7117,11 @@ void MixerWindow::select (int index)
     if (index < mixer::masterIndex)
         index = std::clamp (index, 0, engine.numTracks() - 1);
     selected = index;
+    if (index < mixer::masterIndex && index != shownTrack)
+    {
+        shownTrack = index;
+        refreshEditorTrack();
+    }
     if (! picked.count (index))
         picked = { index };
     // The clip shown belongs to the track that was selected; this one shows its devices.
