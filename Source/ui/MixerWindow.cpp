@@ -2235,6 +2235,11 @@ protected:
             const auto list = window.engine.clips (row);
             menu.addAction (MixerWindow::tr ("Drums to &MIDI"), this, [this, row, id = hit.id] { window.drumsToMidi (row, id, -1); })
                 ->setEnabled (std::any_of (list.begin(), list.end(), [id = hit.id] (const mixer::Clip& c) { return c.id == id && c.audio != nullptr; }));
+            Frame from = 0;
+            for (const auto& c : list)
+                if (c.id == hit.id)
+                    from = c.start;
+            menu.addAction (MixerWindow::tr ("minimalize from here..."), this, [this, from] { window.minimalizeTimeline (from); });
         }
         else
         {
@@ -2252,6 +2257,7 @@ protected:
                 if (! file.isEmpty())
                     window.addFiles (row, { file }, at);
             });
+            menu.addAction (MixerWindow::tr ("minimalize from here..."), this, [this, at] { window.minimalizeTimeline (at); });
         }
         menu.addSeparator();
         auto* grid = menu.addAction (MixerWindow::tr ("Snap to the &Grid (G)"), this, [this] { toggleSnap(); });
@@ -3613,6 +3619,9 @@ protected:
         {
             menu.addAction (MixerWindow::tr ("&Launch Scene (Shift+Enter)"), this, [this, s = hit.scene] { launchScene (s); });
             menu.addAction (MixerWindow::tr ("&Rename Scene..."), this, [this, s = hit.scene] { window.renameScene (s); });
+            menu.addSeparator();
+            // Reich's and Glass's processes on the scene, onto the timeline (mixer/Minimalize.h).
+            menu.addAction (MixerWindow::tr ("minimalize..."), this, [this, s = hit.scene] { window.minimalizeScene (s); });
             menu.exec (e->globalPos());
             return;
         }

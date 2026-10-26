@@ -23,6 +23,7 @@ class AudioEngine;
 class QSpinBox;
 class QAbstractButton;
 namespace counterpoint { struct Settings; }
+namespace minimalize { struct Part; }
 namespace control { struct State; struct Command; }
 class StatusLine;
 class QScrollArea;
@@ -297,6 +298,15 @@ private:
     // frame of the launch clock with it.
     void writeCounterpoint (int track, const mixer::Clip& clip, mixer::SlotPtr slot, int scene, const counterpoint::Settings&,
                             mixer::TuningChoice modeChoice, mixer::TuningChoice tuning, Frame launchAt);
+    // Minimalize (owner, 2026-10-26; mixer/Minimalize.h): an arrangement by Reich's and Glass's
+    // processes, from a scene's MIDI slots or from the timeline at `from` on (cubify's
+    // arrangement, a Φ deal), placed after everything on the tracks, all starting together;
+    // new voices (phase copies, canons, a pulse) on the free tracks.
+    void minimalizeScene (int scene);
+    void minimalizeTimeline (Frame from);
+    // `parts` (one cell each: a slot's loop, or the whole stretch of the timeline, which the
+    // dialog cuts into sections) come from `tracks`, at `bpm`.
+    void arrangeMinimal (const std::vector<int>& tracks, std::vector<minimalize::Part> parts, double bpm, bool timeline, const QString& what);
     // Recording (docs/recording.md; owner, 2026-10-25: "play a melody into a clip with a
     // pre-determined length that can be adjusted and the recording immediately stops, loops, and
     // the new melody is generated", and "the main method super easy to learn with the options for
