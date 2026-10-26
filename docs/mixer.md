@@ -429,7 +429,7 @@ case, in proper transliteration):
 - The mode chosen is what the Counterpoint and Fugue dialogs open on when the clip has no tuning
   of its own. **tune the track** sets the selected track's tuning to it (a hypo-mode on the bottom
   of its range, hypodorian on A for a final on D); **notes into the mode** moves the MIDI clip
-  shown in the Device Chain into its keys and range; **counterpoint...** opens Counterpoint, and
+  shown in the Device Chain into its keys and range; **counterpoint...** and **fugue...** open those dialogs, and
   **stochasticize...** opens [stochasticize](stochastic.md), its pitch sieve ready to fill from the mode.
 - Kept in settings.ini as mode/system (the plain name), mode/final, mode/hypo and mode/equal.
   Code: ui/ModeSection.cpp, mixer::modeKeys, midifile::toKeys.
