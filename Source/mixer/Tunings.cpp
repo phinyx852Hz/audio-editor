@@ -3,7 +3,9 @@
 
 #include "../core/PhiRaga.h"
 
+#include <algorithm>
 #include <cmath>
+#include <map>
 
 namespace mixer
 {
@@ -109,6 +111,46 @@ namespace mixer
             cents50 ("navā", "nava", "dastgah", { 0, 200, 350, 500, 700, 800, 1000 });
             cents50 ("rāst-panjgāh", "rast-panjgah", "dastgah", { 0, 200, 400, 500, 700, 900, 1000 });
 
+            // Indonesian gamelan. No two gamelan are tuned alike, so each laras is an average of
+            // measured sets: Javanese sléndro and pélog from Surjodiningrat, Sudarjana and Susanto's
+            // survey of the Central Javanese gamelan (1972), Balinese selisir from gong kebyar. A
+            // pathet or patutan is the laras's tones in use, read from a gong tone it rests on.
+            // Tones are numbered as the kepatihan notation numbers them (sléndro has no 4).
+            const std::map<int, double> slendro { { 1, 0.0 }, { 2, 231.0 }, { 3, 474.0 }, { 5, 717.0 }, { 6, 955.0 } };
+            const std::map<int, double> pelog { { 1, 0.0 }, { 2, 120.0 }, { 3, 258.0 }, { 4, 539.0 },
+                                                { 5, 675.0 }, { 6, 785.0 }, { 7, 943.0 } };
+            const auto laras = [&] (std::string name, std::string plain, const char* family, const std::map<int, double>& tones,
+                                    std::initializer_list<int> use, int from)
+            {
+                std::vector<double> c;
+                for (auto tone : use)
+                {
+                    auto d = tones.at (tone) - tones.at (from);
+                    c.push_back (d < 0 ? d + 1200.0 : d);
+                }
+                std::sort (c.begin(), c.end());
+                all.push_back ({ std::move (name), std::move (plain), family, std::move (c), 0 });
+            };
+            laras ("sléndro", "slendro", "javanese gamelan", slendro, { 1, 2, 3, 5, 6 }, 1);
+            laras ("sléndro pathet nem", "slendro pathet nem", "javanese gamelan", slendro, { 1, 2, 3, 5, 6 }, 2);
+            laras ("sléndro pathet sanga", "slendro pathet sanga", "javanese gamelan", slendro, { 1, 2, 3, 5, 6 }, 5);
+            laras ("sléndro pathet manyura", "slendro pathet manyura", "javanese gamelan", slendro, { 1, 2, 3, 5, 6 }, 6);
+            laras ("pélog", "pelog", "javanese gamelan", pelog, { 1, 2, 3, 4, 5, 6, 7 }, 1);
+            laras ("pélog pathet lima", "pelog pathet lima", "javanese gamelan", pelog, { 1, 2, 3, 5, 6 }, 1);
+            laras ("pélog pathet nem", "pelog pathet nem", "javanese gamelan", pelog, { 1, 2, 3, 5, 6 }, 6);
+            laras ("pélog pathet barang", "pelog pathet barang", "javanese gamelan", pelog, { 2, 3, 5, 6, 7 }, 2);
+            // Bali: gong kebyar's five-tone pélog (ding dong deng dung dang), then the patutan of the
+            // seven-tone saih pitu of the semar pagulingan, read on the Javanese pélog above.
+            const std::map<int, double> kebyar { { 1, 0.0 }, { 2, 128.0 }, { 3, 266.0 }, { 5, 674.0 }, { 6, 786.0 } };
+            laras ("selisir", "selisir", "balinese gamelan", kebyar, { 1, 2, 3, 5, 6 }, 1);
+            laras ("saih pitu", "saih pitu", "balinese gamelan", pelog, { 1, 2, 3, 4, 5, 6, 7 }, 1);
+            laras ("patutan tembung", "patutan tembung", "balinese gamelan", pelog, { 4, 5, 6, 1, 2 }, 4);
+            laras ("patutan sunaren", "patutan sunaren", "balinese gamelan", pelog, { 5, 6, 7, 2, 3 }, 5);
+            // Sunda: salendro in its theory's five equal steps; degung, the Sundanese five-tone pélog,
+            // in its common reading on the keys (da mi na ti la, numbered 1 to 5 from the top, as
+            // C B G F E), from la upward.
+            all.push_back ({ "salendro", "salendro", "sundanese gamelan", { 0, 240, 480, 720, 960 }, 0 });
+            all.push_back ({ "degung", "degung", "sundanese gamelan", { 0, 100, 300, 700, 800 }, 0 });
             // Shona mbira (owner, 2026-10-26: "mode and tuning systems from Zimbabwe, especially from
             // the Shona people"). Mbira dzavadzimu tunings are one heptatonic gamut read from
             // different keys, as Garikayi Tirikoti's mbira orchestra plays one scale from seven

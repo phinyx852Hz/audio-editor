@@ -431,8 +431,8 @@ beyond the church modes):
   nothing that keeps the strict rules, all are written again with another seed. Only when nothing
   fits is a strict rule bent, and the status line says how many.
 - The mode: any of the tunings (church modes and hypo-modes, jazz modes, ragas, maqams and
-  dastgahs, Shona mbira tunings, 2 to 21 equal steps), on a root, or the melody's own (the
-  diatonic mode on its last note that holds all its notes). The voices use only the mode's keys, and consonance is judged
+  dastgahs, gamelan laras and pathet, Shona mbira tunings, 2 to 21 equal steps), on a root, or the
+  melody's own (the diatonic mode on its last note that holds all its notes). The voices use only the mode's keys, and consonance is judged
   by the cents the tuning plays: a maqam's neutral third or sixth counts as a third or sixth; in
   an equal temperament each key is one step. Church modes raise the note a whole step below a
   cadence's arrival (musica ficta). A raga can carry its āroha and avaroha (the notes used going
@@ -485,14 +485,21 @@ could be applied on the clip level, track level or scene level"):
   scene under the launcher's cursor, and for the clip in the slot under it. A track plays in its
   launched clip's tuning, else that scene's, else its own; with none it is 12-TET. The section says
   which tuning the track plays in now.
-- The systems (`Source/mixer/Tunings.h`): 74 Hindustani ragas in just intonation (five-limit
+- The systems (`Source/mixer/Tunings.h`): 175 Hindustani ragas in just intonation (five-limit
   ratios, with Pythagorean komal svaras where the raga sings them low: darbārī's ga and dha, the other kānaḍās' ga,
   toḍī's and bhairav's re and dha), and each of them again equal tempered; the six church modes and six hypo-modes in Pythagorean tuning
   (a hypo-mode's root is the bottom of its range, a fourth below the final); 13 jazz modes; nine
-  maqams and seven dastgahs with quarter steps of 50 cents; the Shona mbira tunings of Zimbabwe
-  (below); and 2 to 21 equal steps to the octave.
-  Names are in IAST (ragas), IJMES (maqams) and a common Persian romanisation (dastgahs), all in
-  lower case (owner); a mix saves the plain ASCII name beside each.
+  maqams and seven dastgahs with quarter steps of 50 cents; Indonesian gamelan in measured cents
+  (no two gamelan are tuned alike, so each is an average): Javanese sléndro and its pathet nem,
+  sanga and manyura, pélog and its pathet lima, nem and barang (from Surjodiningrat, Sudarjana and
+  Susanto's 1972 survey), Balinese selisir as gong kebyar tunes it, the saih pitu and its patutan
+  tembung and sunaren, and Sundanese salendro and degung; the Shona mbira tunings of Zimbabwe (below); and 2 to 21 equal
+  steps to the octave.
+  A pathet is the laras's tones in use, read from a gong tone it rests on (sléndro nem on 2, sanga
+  on 5, manyura on 6; pélog lima on 1, nem on 6, barang on 2).
+  Names are in IAST (ragas), IJMES (maqams), a common Persian romanisation (dastgahs) and
+  Indonesian spelling (gamelan), all in lower case (owner); a mix saves the plain ASCII name beside
+  each. The clip **Mode or raga...** snap list has the gamelan scales too, on their nearest keys.
 - The Shona tunings (owner, 2026-10-26: "mode and tuning systems from Zimbabwe, especially from
   the Shona people"), in their own cents rather than 12-TET:
   - Mbira dzavadzimu: one heptatonic gamut read from different keys, as Garikayi Tirikoti's mbira
