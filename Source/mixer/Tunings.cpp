@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "Tunings.h"
 
+#include "../core/PhiRaga.h"
+
 #include <cmath>
 
 namespace mixer
@@ -8,25 +10,6 @@ namespace mixer
     namespace
     {
         double cents (double ratio) { return phi::Tuning::ratioToCents (ratio); }
-
-        // A raga in just intonation: its svaras (semitones above Sa), each at the five-limit
-        // ratio Hindustani practice gives it, unless the raga bends it (`bent`, semitone -> ratio).
-        TuningSystem raga (std::string name, std::string plain, std::initializer_list<int> svaras,
-                           std::initializer_list<std::pair<int, double>> bent = {})
-        {
-            static const double just[12] { 1.0, 16.0 / 15, 9.0 / 8, 6.0 / 5, 5.0 / 4, 4.0 / 3,
-                                           45.0 / 32, 3.0 / 2, 8.0 / 5, 5.0 / 3, 9.0 / 5, 15.0 / 8 };
-            TuningSystem t { std::move (name), std::move (plain), "raga", {}, 0 };
-            for (auto s : svaras)
-            {
-                auto ratio = just[s];
-                for (auto& [at, r] : bent)
-                    if (at == s)
-                        ratio = r;
-                t.cents.push_back (cents (ratio));
-            }
-            return t;
-        }
 
         // The white notes in Pythagorean tuning (chains of 3/2), read from the `start`th of them.
         std::vector<double> pythagorean (int start)
@@ -53,58 +36,10 @@ namespace mixer
         std::vector<TuningSystem> build()
         {
             std::vector<TuningSystem> all;
-            // Ragas (IAST). Komal svaras that the raga sings low take their Pythagorean ratio:
-            // darbārī's ati-komal ga and dha, the kānaḍās' ga, toḍī's and bhairav's low re and dha.
-            const auto r = [&] (const char* name, const char* plain, std::initializer_list<int> svaras,
-                                std::initializer_list<std::pair<int, double>> bent = {})
-            { all.push_back (raga (name, plain, svaras, bent)); };
-            const double re81 = 256.0 / 243, ga27 = 32.0 / 27, dha81 = 128.0 / 81;
-            r ("bilāval", "bilaval", { 0, 2, 4, 5, 7, 9, 11 });
-            r ("yaman (kalyāṇ)", "yaman (kalyan)", { 0, 2, 4, 6, 7, 9, 11 });
-            r ("khamāj", "khamaj", { 0, 2, 4, 5, 7, 9, 10 });
-            r ("kāfī", "kafi", { 0, 2, 3, 5, 7, 9, 10 });
-            r ("āsāvarī", "asavari", { 0, 2, 3, 5, 7, 8, 10 });
-            r ("bhairavī", "bhairavi", { 0, 1, 3, 5, 7, 8, 10 });
-            r ("bhairav", "bhairav", { 0, 1, 4, 5, 7, 8, 11 }, { { 1, re81 }, { 8, dha81 } });
-            r ("mārvā", "marva", { 0, 1, 4, 6, 9, 11 });
-            r ("pūrvī", "purvi", { 0, 1, 4, 6, 7, 8, 11 });
-            r ("toḍī", "todi", { 0, 1, 3, 6, 7, 8, 11 }, { { 1, re81 }, { 3, ga27 }, { 6, 729.0 / 512 }, { 8, dha81 } });
-            r ("darbārī kānaḍā", "darbari kanada", { 0, 2, 3, 5, 7, 8, 10 }, { { 3, ga27 }, { 8, dha81 } });
-            r ("jaunpurī", "jaunpuri", { 0, 2, 3, 5, 7, 8, 10 });
-            r ("bāgeśrī", "bageshri", { 0, 2, 3, 5, 7, 9, 10 });
-            r ("bhīmpalāsī", "bhimpalasi", { 0, 2, 3, 5, 7, 9, 10 });
-            r ("deś", "desh", { 0, 2, 4, 5, 7, 9, 10, 11 });
-            r ("bihāg", "bihag", { 0, 2, 4, 5, 6, 7, 9, 11 });
-            r ("kedār", "kedar", { 0, 2, 4, 5, 6, 7, 9, 11 });
-            r ("miyāṅ kī malhār", "miyan ki malhar", { 0, 2, 3, 5, 7, 9, 10, 11 });
-            r ("megh", "megh", { 0, 2, 5, 7, 10 });
-            r ("bhūpālī", "bhupali", { 0, 2, 4, 7, 9 });
-            r ("durgā", "durga", { 0, 2, 5, 7, 9 });
-            r ("haṃsadhvani", "hamsadhvani", { 0, 2, 4, 7, 11 });
-            r ("mālkauns", "malkauns", { 0, 3, 5, 8, 10 });
-            r ("jog", "jog", { 0, 3, 4, 5, 7, 10 });
-            r ("jogkauns", "jogkauns", { 0, 3, 4, 5, 8, 10 });   // jog's two ga over mālkauns
-            r ("ahīr bhairav", "ahir bhairav", { 0, 1, 4, 5, 7, 9, 10 });
-            r ("lalit", "lalit", { 0, 1, 4, 5, 6, 8, 11 });
-            r ("pūriyā dhanāśrī", "puriya dhanashri", { 0, 1, 4, 6, 7, 8, 11 });
-            r ("śrī", "shri", { 0, 1, 4, 6, 7, 8, 11 });
-            r ("kaunsī kānaḍā", "kaunsi kanada", { 0, 2, 3, 5, 7, 8, 10 }, { { 3, ga27 } });   // mālkauns with the kānaḍā ga
-            // More of the kānaḍā family (owner, 2026-10-25), each with the kānaḍā ga.
-            r ("nāyakī kānaḍā", "nayaki kanada", { 0, 2, 3, 5, 7, 10 }, { { 3, ga27 } });
-            r ("kāfī kānaḍā", "kafi kanada", { 0, 2, 3, 5, 7, 9, 10 }, { { 3, ga27 } });
-            r ("śahānā kānaḍā", "shahana kanada", { 0, 2, 3, 5, 7, 9, 10 }, { { 3, ga27 } });
-            r ("cārukeśī", "charukeshi", { 0, 2, 4, 5, 7, 8, 10 });
-            // Added by the owner, 2026-10-25.
-            r ("sampūrṇ mālkauns", "sampurn malkauns", { 0, 2, 3, 5, 7, 8, 10 });
-            r ("jhiñjhoṭī", "jhinjhoti", { 0, 2, 4, 5, 7, 9, 10 });
-            r ("janasammohinī", "janasammohini", { 0, 2, 4, 7, 9, 10 });
-            r ("bilāskhānī toḍī", "bilaskhani todi", { 0, 1, 3, 5, 7, 8, 10 }, { { 1, re81 }, { 3, ga27 }, { 8, dha81 } });
-            r ("miyāṅ kī toḍī", "miyan ki todi", { 0, 1, 3, 6, 7, 8, 11 }, { { 1, re81 }, { 3, ga27 }, { 6, 729.0 / 512 }, { 8, dha81 } });
-            r ("naṭ bhairav", "nat bhairav", { 0, 2, 4, 5, 7, 8, 11 });
-            r ("śuddh sāraṅg", "shuddh sarang", { 0, 2, 5, 6, 7, 9, 11 });
-            r ("śyām kalyāṇ", "shyam kalyan", { 0, 2, 4, 5, 6, 7, 9, 11 });
-            r ("śyām kauns", "shyam kauns", { 0, 3, 5, 7, 8, 10 });
-            r ("bairāgī bhairav", "bairagi bhairav", { 0, 1, 5, 7, 10 }, { { 1, re81 } });
+            // Ragas, from the raga sheets (PhiRagas.cpp): each in its own tuning, just intonation
+            // with the Pythagorean komal svaras the raga sings low.
+            for (const auto& raga : phi::builtInRagas())
+                all.push_back ({ raga.name, raga.plain, "raga", raga.scaleCents(), 0 });
             // Each raga again in 12-TET, its svaras on the piano's keys.
             for (size_t i = 0, ragas = all.size(); i < ragas; ++i)
             {
