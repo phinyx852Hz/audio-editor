@@ -297,6 +297,11 @@ private:
     // frame of the launch clock with it.
     void writeCounterpoint (int track, const mixer::Clip& clip, mixer::SlotPtr slot, int scene, const counterpoint::Settings&,
                             mixer::TuningChoice modeChoice, mixer::TuningChoice tuning, Frame launchAt);
+    // Fugue (owner, 2026-10-26; MixerFugue.cpp): a fugue of two to four voices on the clip's
+    // melody as its subject, in any mode, raga, maqam or equal temperament (mixer/Fugue.h), each
+    // voice a MIDI file beside the mix and a clip on a new track, where the clip is.
+    void fugueShownMidi();
+    bool writeFugue (int track, const mixer::Clip& clip, mixer::SlotPtr slot, int scene);   // true if it made any
     // Recording (docs/recording.md; owner, 2026-10-25: "play a melody into a clip with a
     // pre-determined length that can be adjusted and the recording immediately stops, loops, and
     // the new melody is generated", and "the main method super easy to learn with the options for
