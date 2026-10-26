@@ -72,12 +72,12 @@ namespace midifile
     SongPtr doubleDensity (const Song&);     // each note played twice in its own time, half as long
     // Modal music (owner, 2026-10-25): the seven modes, then the major Hindustani ragas (the ten
     // thaats among them) as the notes they use, both ways up and down; some share their notes
-    // (Darbari and Jaunpuri with Asavari), and each is listed by its own name. Bit n: n semitones
-    // above the root (Sa).
+    // (Darbari and Jaunpuri with Asavari), and each is listed by its own name; then the gamelan
+    // laras and pathet on their nearest keys. Bit n: n semitones above the root (Sa).
     struct Scale
     {
         const char* name;
-        const char* family;   // "Mode" or "Raga"
+        const char* family;   // "Mode", "Raga" or "Gamelan"
         uint16_t notes;
     };
     const std::vector<Scale>& scales();

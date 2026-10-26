@@ -431,7 +431,7 @@ beyond the church modes):
   nothing that keeps the strict rules, all are written again with another seed. Only when nothing
   fits is a strict rule bent, and the status line says how many.
 - The mode: any of the tunings (church modes and hypo-modes, jazz modes, ragas, maqams and
-  dastgahs, 2 to 21 equal steps), on a root, or the melody's own (the diatonic mode on its last
+  dastgahs, gamelan laras and pathet, 2 to 21 equal steps), on a root, or the melody's own (the diatonic mode on its last
   note that holds all its notes). The voices use only the mode's keys, and consonance is judged
   by the cents the tuning plays: a maqam's neutral third or sixth counts as a third or sixth; in
   an equal temperament each key is one step. Church modes raise the note a whole step below a
@@ -489,9 +489,16 @@ could be applied on the clip level, track level or scene level"):
   ratios, with Pythagorean komal svaras where the raga sings them low: darbārī's ga and dha, the other kānaḍās' ga,
   toḍī's and bhairav's re and dha), and each of them again equal tempered; the six church modes and six hypo-modes in Pythagorean tuning
   (a hypo-mode's root is the bottom of its range, a fourth below the final); 13 jazz modes; nine
-  maqams and seven dastgahs with quarter steps of 50 cents; and 2 to 21 equal steps to the octave.
-  Names are in IAST (ragas), IJMES (maqams) and a common Persian romanisation (dastgahs), all in
-  lower case (owner); a mix saves the plain ASCII name beside each.
+  maqams and seven dastgahs with quarter steps of 50 cents; Indonesian gamelan in measured cents
+  (no two gamelan are tuned alike, so each is an average): Javanese sléndro and its pathet nem,
+  sanga and manyura, pélog and its pathet lima, nem and barang (from Surjodiningrat, Sudarjana and
+  Susanto's 1972 survey), Balinese selisir as gong kebyar tunes it, the saih pitu and its patutan
+  tembung and sunaren, and Sundanese salendro and degung; and 2 to 21 equal steps to the octave.
+  A pathet is the laras's tones in use, read from a gong tone it rests on (sléndro nem on 2, sanga
+  on 5, manyura on 6; pélog lima on 1, nem on 6, barang on 2).
+  Names are in IAST (ragas), IJMES (maqams), a common Persian romanisation (dastgahs) and
+  Indonesian spelling (gamelan), all in lower case (owner); a mix saves the plain ASCII name beside
+  each. The clip **Mode or raga...** snap list has the gamelan scales too, on their nearest keys.
 - A scale's degrees play on the nearest keys from the root, a quarter step on the key above (rāst's
   E half-flat on E); the keys between keep their 12-TET pitch. Equal steps run up and down the
   keys from the root.
