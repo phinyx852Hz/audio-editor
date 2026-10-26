@@ -7731,6 +7731,53 @@ namespace
         check (soundingAt (st, 0).size() == 1 && soundingAt (st, 100000).empty(), "note editor: what sounds at a tick");
         const auto use = degreeUsage (st, twelveTet());
         check (use.size() == 12 && use[0] == 120.0 && use[2] == 120.0, "note editor: how long each degree sounds");
+
+        // Pitch curves: a glide written, sent as MPE bends, and read back as the same curve.
+        Sequence g;
+        g.notes.push_back ({ 0, 480, 6000.0, 100 });
+        g.notes.push_back ({ 480, 480, 6700.0, 100 });
+        g.notes[0].selected = true;
+        glideToNext (g, twelveTet(), 0.5, false);
+        check (g.notes[0].curve.size() == 3 && near (g.notes[0].bendAt (240), 0.0, 1.0e-9) && near (g.notes[0].bendAt (480), 700.0, 1.0e-9)
+                   && near (g.notes[0].bendAt (360), 350.0, 1.0) && g.notes[1].curve.empty(),
+               "note editor: a glide to the next note from halfway");
+        const auto curvedBack = decode (*encode (g, {}).song);
+        check (curvedBack.notes.size() == 2 && ! curvedBack.notes[0].curve.empty() && near (curvedBack.notes[0].bendAt (470), 700.0 * 470.0 / 480.0 * 2.0 - 700.0, 12.0)
+                   && near (curvedBack.notes[0].bendAt (100), 0.0, 1.0) && near (curvedBack.notes[1].pitch, 6700.0, 0.1) && curvedBack.notes[1].curve.empty(),
+               "note editor: a curve through MPE and back");
+        auto crowd = g;
+        crowd.notes.push_back ({ 100, 100, 6000.0, 100 });
+        const auto withBends = encode (crowd, { Encoding::bendChannels, 2.0, true });
+        int bendsOn = 0;
+        for (const auto& e : withBends.song->events)
+            bendsOn += e.kind() == 0xE0 ? 1 : 0;
+        const auto crowdBack = decode (*withBends.song);
+        check (bendsOn >= 10 && crowdBack.notes.size() == 3 && crowdBack.notes[1].start == 100 && crowdBack.notes[1].channel != crowdBack.notes[0].channel,
+               "note editor: a curved note keeps its channel to itself");
+        glideToNext (g, twelveTet(), 0.0, true);
+        check (near (g.notes[0].bendAt (480 / 7), 100.0, 1.0e-9), "note editor: mīṇḍ touches each degree on the way");
+        splitAt (g, 240);
+        check (g.notes.size() == 3 && near (g.notes[1].bendAt (0), g.notes[0].bendAt (240), 1.0e-9), "note editor: a split curve carries on where it was cut");
+        glue (g);
+        check (g.notes.size() == 2 && near (g.notes[0].bendAt (480), 700.0, 1.0e-9), "note editor: glued back, the curve whole");
+        g.notes[0].selected = true;
+        turn (g, r, { 0, 1, 0, -1, 0 }, 40);
+        check (near (g.notes[0].bendAt (45), 200.0, 1.0e-9) && near (g.notes[0].bendAt (125), -150.0, 1.0e-9) && near (g.notes[0].bendAt (479), 0.0, 1.0e-9),
+               "note editor: murkī, a degree of rast above and below");
+        kan (g, r, 1, 30);
+        check (near (g.notes[0].bendAt (0), 200.0, 1.0e-9) && near (g.notes[0].bendAt (30), 0.0, 1.0e-9), "note editor: kaṇ");
+        swing (g, 30.0, 4.0, 120.0, true);
+        double low = 0.0, high = -1.0e9;
+        for (int64_t t = 0; t < 480; t += 5)
+        {
+            low = std::min (low, g.notes[0].bendAt (t));
+            high = std::max (high, g.notes[0].bendAt (t));
+        }
+        check (low < -29.0 && high <= 1.0e-9, "note editor: āndolan swings under the pitch");
+        gamak (g, r, 4.0, 120.0);
+        check (near (g.notes[0].bendAt (120), 200.0, 1.0e-9) && near (g.notes[0].bendAt (240), 0.0, 1.0e-9), "note editor: gamak to the degree above");
+        clearCurves (g);
+        check (g.notes[0].curve.empty(), "note editor: curves cleared");
     }
 
 int main()

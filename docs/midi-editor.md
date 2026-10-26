@@ -59,6 +59,31 @@ fast edits do, and Ctrl+Z on the tracks puts the clip back.
   they sound together (Sethares' model of Plomp and Levelt's roughness, over each note's
   harmonics), in any tuning.
 
+## Pitch curves and ornaments
+
+Owner, 2026-10-26: "pitch curves for meend, gamaka and glides, plus PHI rāga's ornaments". A note
+can carry a pitch curve: points of time into the note and cents off its pitch, straight lines
+between. It is drawn over the note in the roll (orange) and bends each partial in the rising
+spectrum.
+
+- The **Curve** tool (6): drag across a note and its pitch follows the mouse, on the system's
+  degrees (Alt: to the cent); drag back to redraw from there. Right-click clears the curve.
+- **Functions > Ornaments**, on the picked notes (or all), in the system shown, each replacing the
+  curve a note had:
+  - **mīṇḍ** to the next note through the degrees between, each touched a moment as a pulled
+    string touches them, or a smooth **glide**; of a chord there, the nearest note is the goal;
+  - a **slide in** from the degree below or above, and **kaṇ**, the degree above or below touched
+    as the note starts;
+  - **āndolan**, a slow swing under the note, **gamak**, a shake to the degree above and back, and
+    **vibrato**, timed by the tempo;
+  - **murkī** (the note, above, the note, below, the note), **khaṭkā** and **zamzama**;
+  - **Clear the Curves**.
+- A split note's curve goes with each half; glued notes join theirs.
+- Saved, a curved note's bends are sent on its channel while it sounds (one each 48th of a beat, when it changes): with MPE
+  and pitch bend by channel it has a channel to itself, so no other note is bent with it; saved as
+  keys, on the note's own channel over the track's tuning. A bent clip read back gets its curves
+  back. Pitch bend by channel's ±2 semitones limits a curve to two semitones; MPE's ±48 does not.
+
 ## Restyle
 
 **Functions > Restyle into This System...** (after MIDIRestyle, by Aaron Brata Aditama, MIT): every
@@ -71,9 +96,9 @@ ghosts (dashed), and **Original** plays the clip as it was, switching while it p
 
 ## Editing, as in Cubase's Key Editor
 
-- Tools (1 to 5): **Pick** (click, Shift-click, drag a box; drag a note to move it, its right
+- Tools (1 to 6): **Pick** (click, Shift-click, drag a box; drag a note to move it, its right
   edge to stretch it; Alt moves by the cent), **Draw** (click and drag to the length; Ctrl-click
-  or a double-click with Pick does the same), **Erase**, **Split**, **Glue**. Right-click deletes.
+  or a double-click with Pick does the same), **Erase**, **Split**, **Glue**, **Curve** (above). Right-click deletes.
 - **Snap** and the grid (1/1 to 1/32, triplets), the **Length** of new notes, **Quantise** with a
   strength and swing (Q).
 - **Functions**: quantise starts, ends and lengths; legato; fixed lengths; delete overlaps (same
@@ -132,7 +157,6 @@ MIDIRestyle (MIT) for restyling by degree, the ghosts, A/B and pitch bend shared
 XenRoll (GPL-3.0) for cent-accurate notes, moving a note by the cent, and MPE; Blue's PianoRoll for
 rows that follow a Scala scale; Intonara for the pitch axis; Cubase for the tools, the info line,
 the lanes, quantise and step input. Ideas only: no code from any of them is used. Next, as agreed
-with the owner: pitch curves drawn on notes (meend, gamaka, glides), PHI rāga's ornaments, hum or
-sing to notes, tuning changes within a clip, and MTS-ESP.
+with the owner: hum or sing to notes, tuning changes within a clip, and MTS-ESP.
 
 The code: mixer/NoteEditor.h (the model, plain C++, with tests), core/Scala.h, ui/MidiEditor.h.

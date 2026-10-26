@@ -83,8 +83,13 @@ namespace noteedit
         int release = 64;                // note-off velocity
         int channel = 0;                 // the file's (drums stay on channel 10, index 9)
         bool selected = false;
+        // Its pitch curve (owner, 2026-10-26: "pitch curves for meend, gamaka and glides"): points of
+        // (ticks from its start, cents off its pitch), in time order, straight lines between; before
+        // the first and after the last the curve holds. Empty: the note holds its pitch.
+        std::vector<std::pair<int64_t, double>> curve;
         int64_t end() const { return start + length; }
         int key() const;                 // the nearest key, 0..127
+        double bendAt (int64_t ticksIn) const;   // the curve's cents that far into the note
     };
 
     struct Sequence
@@ -109,6 +114,8 @@ namespace noteedit
     // MPE set-up messages are taken into the notes; every other event is kept in `other`.
     Sequence decode (const midifile::Song&);
 
+    // Saving, a curved note's pitch is sent as bends on its own channel every so many ticks (keys:
+    // on the note's channel, as a file's pitch wheel would be).
     enum class Encoding
     {
         keys,           // each note on its nearest key, on its own channel, no bend: the track's tuning plays it
@@ -128,7 +135,7 @@ namespace noteedit
         int channels = 0;     // channels used for notes
     };
     Encoded encode (const Sequence&, const EncodeOptions&);
-    // Keys when every note sits on a key, else MPE.
+    // Keys when every note sits on a key and none is curved, else MPE.
     Encoding suggestedEncoding (const Sequence&);
 
     //==========================================================================
@@ -161,6 +168,27 @@ namespace noteedit
     // 0..11 and whether it is minor.
     struct Key { int root = 0; bool minor = false; };
     Key detectKey (const Sequence&);
+
+    //==========================================================================
+    // Ornaments: pitch curves written onto the targets, each replacing the curve a note had.
+    // Durations are in ticks; depths in cents.
+    // Mīṇḍ, a glide: from `from` (0..1 of the note) to its end the pitch moves to the next note's
+    // (the next start after it, the nearest of a chord); `throughDegrees` touches each degree between on the way, as a
+    // sitar's pulled string does, else it slides.
+    void glideToNext (Sequence&, const PitchSystem&, double from = 0.5, bool throughDegrees = true);
+    // In from a degree below (steps < 0) or above, over `ticks`.
+    void slideIn (Sequence&, const PitchSystem&, int steps, int64_t ticks);
+    // Āndolan, vibrato: a swing of `depth` cents at `rateHz` (a beat being a quarter at `bpm`);
+    // `below` swings under the pitch only (āndolan), else either side (vibrato).
+    void swing (Sequence&, double depth, double rateHz, double bpm, bool below);
+    // Gamak: a shake to the degree above and back, `rateHz` times a second.
+    void gamak (Sequence&, const PitchSystem&, double rateHz, double bpm);
+    // Kaṇ: the degree above (steps 1) or below (-1) touched for `ticks` as the note starts.
+    void kan (Sequence&, const PitchSystem&, int steps, int64_t ticks);
+    // A turn, each step `ticks` long, in degrees from the note: murkī {0, 1, 0, -1, 0}, khaṭkā
+    // {1, 0, -1, 0}, zamzama {1, 0, 1, 0, -1, 0}.
+    void turn (Sequence&, const PitchSystem&, const std::vector<int>& degrees, int64_t ticks);
+    void clearCurves (Sequence&);
 
     //==========================================================================
     // What the views show (owner, 2026-10-26: a scale wheel, an interval clock and a consonance display).

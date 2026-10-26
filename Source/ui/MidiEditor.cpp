@@ -40,7 +40,7 @@ using namespace noteedit;
 
 namespace
 {
-    enum Tool { toolPick, toolDraw, toolErase, toolSplit, toolGlue };
+    enum Tool { toolPick, toolDraw, toolErase, toolSplit, toolGlue, toolCurve };
 
     constexpr int keyWidth = 96, rulerHeight = 22, laneHeight = 110, laneGap = 6;
     constexpr int laneVelocity = -1;
@@ -229,6 +229,24 @@ protected:
             g.setPen (QPen (n.selected ? pal.color (QPalette::Text) : c.darker (160), 1.0));
             g.setBrush (c);
             g.drawRoundedRect (r, 2, 2);
+            if (! n.curve.empty())
+            {
+                // Its pitch curve, through the rows it bends to.
+                QPainterPath path;
+                const auto every = std::max<int64_t> (1, (int64_t) (2.0 / pixelsPerTick));
+                for (int64_t t = 0; t <= n.length; t = t == n.length ? t + 1 : std::min (n.length, t + every))
+                {
+                    const QPointF at (xOf (n.start + t), rulerHeight + centerY (n.pitch + n.bendAt (t)) - top);
+                    if (t == 0)
+                        path.moveTo (at);
+                    else
+                        path.lineTo (at);
+                }
+                g.setPen (QPen (n.selected ? pal.color (QPalette::Text) : QColor (0xe0, 0x8a, 0x2a), 2.0));
+                g.setBrush (Qt::NoBrush);
+                g.drawPath (path);
+                g.setBrush (c);
+            }
             if (r.width() > 28 && r.height() >= 9)
             {
                 const auto step = ed.system.nearestStep (n.pitch);
@@ -394,12 +412,25 @@ protected:
         const auto t = tickAt (x);
         if (e->button() == Qt::RightButton)
         {
-            if (hit >= 0)
+            if (hit >= 0 && tool == toolCurve)
+                ed.edit ([hit] (Sequence& s) { s.notes[(size_t) hit].curve.clear(); });
+            else if (hit >= 0)
                 ed.edit ([hit] (Sequence& s) { s.notes.erase (s.notes.begin() + hit); });
             return;
         }
         switch (tool)
         {
+            case toolCurve:
+                if (hit >= 0)
+                {
+                    ed.undoList.push_back (ed.seq);
+                    ed.redoList.clear();
+                    before = ed.seq;
+                    drawn = hit;
+                    drag = Drag::curve;
+                    curveMoved (e->position(), e->modifiers() & Qt::AltModifier);
+                }
+                return;
             case toolErase:
                 if (hit >= 0)
                 {
@@ -566,12 +597,18 @@ protected:
             case Drag::laneErase:
                 laneMoved (e->position());
                 break;
+            case Drag::curve:
+                curveMoved (e->position(), free);
+                break;
             case Drag::none: break;
         }
     }
 
     void mouseReleaseEvent (QMouseEvent*) override
     {
+        if (drag == Drag::curve && ! ed.undoList.empty() && drawn >= 0 && (size_t) drawn < ed.seq.notes.size()
+            && ed.seq.notes[(size_t) drawn].curve == before.notes[(size_t) drawn].curve)
+            ed.undoList.pop_back();
         if ((drag == Drag::move || drag == Drag::resize) && ! ed.undoList.empty())
         {
             // A click that moved nothing leaves no undo step.
@@ -620,7 +657,7 @@ protected:
     }
 
 private:
-    enum class Drag { none, move, resize, drawing, erasing, rubber, lane, laneErase };
+    enum class Drag { none, move, resize, drawing, erasing, rubber, lane, laneErase, curve };
 
     double rowHeight() const { return rowPixels; }
     double pixelsPerCent() const { return rowPixels / 100.0 * std::max (1.0, 1200.0 / std::max (1.0, ed.system.period) * ed.system.size() / 12.0); }
@@ -736,6 +773,25 @@ private:
                 drawn = (int) i;
         drag = Drag::drawing;
         ed.audition (pitch, ed.step.velocity);
+    }
+
+    // The Curve tool: the note's pitch drawn where the mouse goes, on the degrees unless Alt is
+    // held; a drag back in time redraws from there.
+    void curveMoved (QPointF p, bool free)
+    {
+        if (drawn < 0 || (size_t) drawn >= ed.seq.notes.size())
+            return;
+        auto& n = ed.seq.notes[(size_t) drawn];
+        const auto t = std::clamp<int64_t> (tickAt (p.x()) - n.start, 0, n.length);
+        const auto cents = pitchAt (p.y() - rulerHeight + verticalScrollBar()->value(), ! free) - n.pitch;
+        if (n.curve.empty())
+            n.curve.push_back ({ 0, 0.0 });
+        std::erase_if (n.curve, [&] (const auto& q) { return q.first >= t && q.first > 0; });
+        if (n.curve.empty() || n.curve.back().first < t)
+            n.curve.push_back ({ t, cents });
+        else
+            n.curve.back().second = cents;
+        ed.changed();
     }
 
     void laneMoved (QPointF p)
@@ -907,6 +963,25 @@ protected:
                 auto col = c;
                 col.setAlphaF (ghost ? 0.25 : std::clamp ((0.35 + 0.65 * n.velocity / 127.0) / std::pow ((double) k, 0.8) * (sounding ? 1.6 : 1.0), 0.05, 1.0));
                 const auto width = k == 1 ? 5.0 : std::max (1.0, 3.0 / std::sqrt ((double) k));
+                if (! n.curve.empty() && ! ghost)
+                {
+                    // A curved note: each partial follows the bend.
+                    QPainterPath path;
+                    constexpr int samples = 32;
+                    for (int i = 0; i <= samples; ++i)
+                    {
+                        const auto t = n.length * i / samples;
+                        const QPointF at (xOf (pc + n.bendAt (t)), yOf (n.start + t));
+                        if (i == 0)
+                            path.moveTo (at);
+                        else
+                            path.lineTo (at);
+                    }
+                    g.setPen (QPen (col, width, Qt::SolidLine, Qt::FlatCap));
+                    g.setBrush (Qt::NoBrush);
+                    g.drawPath (path);
+                    continue;
+                }
                 g.fillRect (QRectF (x - width / 2.0, std::max (0.0, y0), width, std::min ((double) h, y1) - std::max (0.0, y0)), col);
             }
         };
@@ -1171,8 +1246,9 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
                                                     { tr ("Draw"), tr ("Click to put a note, drag to its length; Alt puts it between the degrees (2)") },
                                                     { tr ("Erase"), tr ("Click or drag over notes to delete them (3)") },
                                                     { tr ("Split"), tr ("Cut a note in two where you click (4)") },
-                                                    { tr ("Glue"), tr ("Join a note to the next of its pitch (5)") } };
-    for (int i = 0; i < 5; ++i)
+                                                    { tr ("Glue"), tr ("Join a note to the next of its pitch (5)") },
+                                                    { tr ("Curve"), tr ("Drag across a note to draw its pitch curve, a mīṇḍ or gamak, on the degrees (Alt: freely); right-click clears it (6)") } };
+    for (int i = 0; i < 6; ++i)
     {
         auto* b = new QToolButton (this);
         b->setText (toolNames[i].first);
@@ -1438,6 +1514,27 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     menu->addAction (tr ("Down a Period (Shift+Down)"), this, [this] { edit ([this] (Sequence& s) { transposeSteps (s, system, -system.size()); }); });
     menu->addAction (tr ("Snap to the System's Degrees"), this, [this] { edit ([this] (Sequence& s) { snapToSystem (s, system); }); });
     menu->addAction (tr ("Restyle into This System..."), this, &MidiEditor::restyleDialog);
+    // Ornaments (owner, 2026-10-26: "pitch curves for meend, gamaka and glides, plus PHI rāga's
+    // ornaments"), as curves on the picked notes, in the system shown.
+    auto* ornaments = menu->addMenu (tr ("Ornaments"));
+    const auto beat = [this] { return (int64_t) seq.ticksPerQuarter; };
+    const auto bpm = [this] { return host.bpm > 0.0 ? host.bpm : seq.tempos.empty() ? 120.0 : 60.0e6 / seq.tempos.front().microsPerQuarter; };
+    ornaments->addAction (tr ("mīṇḍ to the next note, through the degrees"), this, [this] { edit ([this] (Sequence& s) { glideToNext (s, system, 0.4, true); }); });
+    ornaments->addAction (tr ("Glide to the next note"), this, [this] { edit ([this] (Sequence& s) { glideToNext (s, system, 0.5, false); }); });
+    ornaments->addAction (tr ("Slide in from the degree below"), this, [this, beat] { edit ([this, beat] (Sequence& s) { slideIn (s, system, -1, beat() / 4); }); });
+    ornaments->addAction (tr ("Slide in from the degree above"), this, [this, beat] { edit ([this, beat] (Sequence& s) { slideIn (s, system, 1, beat() / 4); }); });
+    ornaments->addAction (tr ("kaṇ from the degree above"), this, [this, beat] { edit ([this, beat] (Sequence& s) { kan (s, system, 1, beat() / 8); }); });
+    ornaments->addAction (tr ("kaṇ from the degree below"), this, [this, beat] { edit ([this, beat] (Sequence& s) { kan (s, system, -1, beat() / 8); }); });
+    ornaments->addSeparator();
+    ornaments->addAction (tr ("āndolan (a slow swing under the note)"), this, [this, bpm] { edit ([this, bpm] (Sequence& s) { swing (s, 30.0, 1.5, bpm(), true); }); });
+    ornaments->addAction (tr ("gamak (a shake to the degree above)"), this, [this, bpm] { edit ([this, bpm] (Sequence& s) { gamak (s, system, 5.0, bpm()); }); });
+    ornaments->addAction (tr ("Vibrato"), this, [this, bpm] { edit ([this, bpm] (Sequence& s) { swing (s, 25.0, 5.5, bpm(), false); }); });
+    ornaments->addSeparator();
+    ornaments->addAction (tr ("murkī (above, the note, below)"), this, [this, beat] { edit ([this, beat] (Sequence& s) { turn (s, system, { 0, 1, 0, -1, 0 }, beat() / 12); }); });
+    ornaments->addAction (tr ("khaṭkā (from above, round the note)"), this, [this, beat] { edit ([this, beat] (Sequence& s) { turn (s, system, { 1, 0, -1, 0 }, beat() / 12); }); });
+    ornaments->addAction (tr ("zamzama (the note and the one above, quickly)"), this, [this, beat] { edit ([this, beat] (Sequence& s) { turn (s, system, { 1, 0, 1, 0, -1, 0 }, beat() / 16); }); });
+    ornaments->addSeparator();
+    ornaments->addAction (tr ("Clear the Curves"), this, on ([] (Sequence& s) { clearCurves (s); }));
     menu->addSeparator();
     menu->addAction (tr ("Select All (Ctrl+A)"), this, [this] { selectAll (seq, true); changed(); });
     menu->addAction (tr ("Select None"), this, [this] { selectAll (seq, false); changed(); });
@@ -1695,7 +1792,10 @@ void MidiEditor::changed()
         && suggestedEncoding (seq) != Encoding::keys)
         encodingBox->setCurrentIndex (encodingBox->findData ((int) Encoding::mpe));
     const auto encoding = (Encoding) encodingBox->currentData().toInt();
-    if (encoding == Encoding::keys && suggestedEncoding (seq) != Encoding::keys)
+    const auto curved = std::any_of (seq.notes.begin(), seq.notes.end(), [] (const Note& n) { return ! n.curve.empty() && n.channel != 9; });
+    if (encoding == Encoding::keys && curved)
+        encodingNote->setText (tr ("The pitch curves are sent as pitch bend on each note's channel, over the track's tuning"));
+    else if (encoding == Encoding::keys && suggestedEncoding (seq) != Encoding::keys)
         encodingNote->setText (tr ("Some notes are between the keys: saved as keys they are rounded, unless the track's tuning has them"));
     else if (encoding != Encoding::keys)
     {
@@ -2020,7 +2120,7 @@ void MidiEditor::keyPressEvent (QKeyEvent* e)
         case Qt::Key_Space:
             togglePlay();
             return;
-        case Qt::Key_1: case Qt::Key_2: case Qt::Key_3: case Qt::Key_4: case Qt::Key_5:
+        case Qt::Key_1: case Qt::Key_2: case Qt::Key_3: case Qt::Key_4: case Qt::Key_5: case Qt::Key_6:
             if (! ctrl)
             {
                 const auto t = e->key() - Qt::Key_1;

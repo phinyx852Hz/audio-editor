@@ -335,6 +335,20 @@ namespace noteedit
     //==========================================================================
     int Note::key() const { return std::clamp ((int) std::lround (pitch / 100.0), 0, 127); }
 
+    double Note::bendAt (int64_t t) const
+    {
+        if (curve.empty())
+            return 0.0;
+        if (t <= curve.front().first)
+            return curve.front().second;
+        if (t >= curve.back().first)
+            return curve.back().second;
+        const auto it = std::upper_bound (curve.begin(), curve.end(), t, [] (int64_t x, const auto& p) { return x < p.first; });
+        const auto& b = *it;
+        const auto& a = *(it - 1);
+        return b.first == a.first ? b.second : a.second + (b.second - a.second) * (double) (t - a.first) / (double) (b.first - a.first);
+    }
+
     void Sequence::sort()
     {
         std::stable_sort (notes.begin(), notes.end(), [] (const Note& a, const Note& b)
@@ -379,6 +393,8 @@ namespace noteedit
         std::array<size_t, 16> rpnMsbAt;     // each channel's last CC 101
         rpnMsbAt.fill (SIZE_MAX);
         std::map<int, std::vector<size_t>> open;   // (channel << 7 | key): notes not let go yet, oldest first
+        std::array<std::vector<size_t>, 16> sounding;   // each channel's notes sounding now
+        std::array<double, 16> baseBend {};             // cents: the bend the channel's note began with
 
         for (size_t i = 0; i < song.events.size(); ++i)
         {
@@ -387,10 +403,27 @@ namespace noteedit
             switch (e.kind())
             {
                 case 0xE0:
+                {
                     c.bend = e.data2 << 7 | e.data1;
                     c.bendTick = e.tick;
                     c.bendIndex = i;
+                    // During the only note on its channel, the bend is that note's: its curve.
+                    auto& on = sounding[(size_t) e.channel()];
+                    if (on.size() == 1 && e.tick > s.notes[on.front()].start)
+                    {
+                        auto& n = s.notes[on.front()];
+                        const auto cents = (c.bend - 8192) / 8192.0 * c.bendRange * 100.0 - baseBend[(size_t) e.channel()];
+                        if (n.curve.empty())
+                            n.curve.push_back ({ 0, 0.0 });
+                        // A bend steps: after a long gap the curve holds until it, not a ramp.
+                        const auto at = e.tick - n.start;
+                        if (at - n.curve.back().first > std::max (2, song.ticksPerQuarter / 24))
+                            n.curve.push_back ({ at - 1, n.curve.back().second });
+                        n.curve.push_back ({ at, cents });
+                        drop[i] = true;
+                    }
                     break;
+                }
                 case 0xB0:
                     if (e.data1 == 101)
                     {
@@ -433,10 +466,15 @@ namespace noteedit
                         // The bend sent for this note, at its own tick: taken into its pitch.
                         if (c.bendTick == e.tick && c.bendIndex != SIZE_MAX)
                         {
-                            n.pitch += (c.bend - 8192) / 8192.0 * c.bendRange * 100.0;
+                            const auto b = (c.bend - 8192) / 8192.0 * c.bendRange * 100.0;
+                            n.pitch += b;
                             drop[c.bendIndex] = true;
+                            baseBend[(size_t) e.channel()] = b;
                         }
+                        else
+                            baseBend[(size_t) e.channel()] = 0.0;
                         open[e.channel() << 7 | e.data1].push_back (s.notes.size());
+                        sounding[(size_t) e.channel()].push_back (s.notes.size());
                         s.notes.push_back (n);
                         break;
                     }
@@ -446,6 +484,7 @@ namespace noteedit
                     auto& list = open[e.channel() << 7 | e.data1];
                     if (! list.empty())
                     {
+                        std::erase (sounding[(size_t) e.channel()], list.front());
                         auto& n = s.notes[list.front()];
                         n.length = std::max<int64_t> (1, e.tick - n.start);
                         n.release = e.kind() == 0x80 ? e.data2 : 64;
@@ -473,7 +512,7 @@ namespace noteedit
     Encoding suggestedEncoding (const Sequence& s)
     {
         for (const auto& n : s.notes)
-            if (std::abs (n.pitch - n.key() * 100.0) > 0.5)
+            if (std::abs (n.pitch - n.key() * 100.0) > 0.5 || (! n.curve.empty() && n.channel != 9))
                 return Encoding::mpe;
         return Encoding::keys;
     }
@@ -504,8 +543,24 @@ namespace noteedit
                     pool.push_back (c);
         }
 
-        struct Chan { int64_t busyUntil = 0; int bend = -1; std::vector<std::pair<int64_t, int>> sounding; bool used = false; };
+        struct Chan { int64_t busyUntil = 0, curvedUntil = 0; int bend = -1; std::vector<std::pair<int64_t, int>> sounding; bool used = false, bentKeys = false; };
         std::array<Chan, 16> chans {};
+        const auto toBend = [&] (double cents)
+        { return std::clamp ((int) std::lround (8192.0 + cents / (range * 100.0) * 8192.0), 0, 16383); };
+        const auto every = std::max<int64_t> (1, s.ticksPerQuarter / 48);
+        // A curved note's bends while it sounds, after the one at its start.
+        const auto curveBends = [&] (const Note& n, int channel, double offset, int first)
+        {
+            auto last = first;
+            for (auto t = every; t < n.length; t += every)
+            {
+                const auto b = toBend (offset + n.bendAt (t));
+                if (b != last)
+                    add (n.start + t, (uint8_t) (0xE0 | channel), b & 0x7F, b >> 7, 3);
+                last = b;
+            }
+            return last;
+        };
         auto notes = s.notes;
         std::stable_sort (notes.begin(), notes.end(), [] (const Note& a, const Note& b) { return a.start < b.start; });
         for (const auto& n : notes)
@@ -513,20 +568,34 @@ namespace noteedit
             if (n.length <= 0)
                 continue;
             const auto drum = o.keepDrums && n.channel == 9;
+            const auto curved = ! n.curve.empty() && ! drum;
             auto key = n.key();
             if (! bent || drum)
             {
+                auto& c = chans[(size_t) n.channel];
+                if (curved)
+                {
+                    // Keys: the curve on the note's own channel, as a file's pitch wheel bends it.
+                    const auto first = toBend (n.bendAt (0));
+                    add (n.start, (uint8_t) (0xE0 | n.channel), first & 0x7F, first >> 7, 3);
+                    if (curveBends (n, n.channel, 0.0, first) != 8192 || first != 8192)
+                        add (n.end(), (uint8_t) (0xE0 | n.channel), 0, 64, 3);
+                    c.bentKeys = true;
+                }
                 add (n.start, (uint8_t) (0x90 | n.channel), key, std::clamp (n.velocity, 1, 127), 4);
                 add (n.end(), (uint8_t) (0x80 | n.channel), key, n.release, 2);
-                chans[(size_t) n.channel].used = true;
+                c.used = true;
                 continue;
             }
             const auto offset = n.pitch - key * 100.0;
-            const auto bend = std::clamp ((int) std::lround (8192.0 + offset / (range * 100.0) * 8192.0), 0, 16383);
+            const auto bend = toBend (offset + n.bendAt (0));
             for (auto& c : chans)
                 std::erase_if (c.sounding, [&] (const auto& p) { return p.first <= n.start; });
             const auto free = [&] (int c) { return chans[(size_t) c].sounding.empty(); };
             const auto keyFree = [&] (int c) { for (auto& p : chans[(size_t) c].sounding) if (p.second == key) return false; return true; };
+            // A note joins a channel only when no curved note is moving its bend, and a curved
+            // note only a free one.
+            const auto straight = [&] (int c) { return ! curved && chans[(size_t) c].curvedUntil <= n.start; };
             int pick = -1;
             const auto earliest = [&] (auto&& ok)
             {
@@ -539,7 +608,7 @@ namespace noteedit
             if (o.encoding == Encoding::bendChannels)
             {
                 // Share a channel already bent this way, else one free (the one free longest).
-                pick = earliest ([&] (int c) { return ! free (c) && chans[(size_t) c].bend == bend && keyFree (c); });
+                pick = earliest ([&] (int c) { return ! free (c) && straight (c) && chans[(size_t) c].bend == bend && keyFree (c); });
                 if (pick < 0)
                     pick = earliest ([&] (int c) { return free (c) && chans[(size_t) c].bend == bend; });
                 if (pick < 0)
@@ -551,7 +620,7 @@ namespace noteedit
                 // rung out the most before the bend moves), else one bent the same.
                 pick = earliest (free);
                 if (pick < 0)
-                    pick = earliest ([&] (int c) { return chans[(size_t) c].bend == bend && keyFree (c); });
+                    pick = earliest ([&] (int c) { return straight (c) && chans[(size_t) c].bend == bend && keyFree (c); });
             }
             if (pick < 0)
             {
@@ -567,14 +636,19 @@ namespace noteedit
             add (n.start, (uint8_t) (0xE0 | pick), bend & 0x7F, bend >> 7, 3);
             add (n.start, (uint8_t) (0x90 | pick), key, std::clamp (n.velocity, 1, 127), 4);
             add (n.end(), (uint8_t) (0x80 | pick), key, n.release, 2);
-            c.bend = bend;
+            c.bend = curved ? curveBends (n, pick, offset, bend) : bend;
+            if (curved)
+                c.curvedUntil = std::max (c.curvedUntil, n.end());
             c.sounding.push_back ({ n.end(), key });
             c.busyUntil = std::max (c.busyUntil, n.end());
             c.used = true;
         }
 
         // The set-up at the start: the MPE zone, then the bend range of each channel bent.
-        if (bent)
+        auto anyBentKeys = false;
+        for (auto& c : chans)
+            anyBentKeys |= c.bentKeys;
+        if (bent || anyBentKeys)
         {
             const auto rpn = [&] (int channel, int lsb, double value)
             {
@@ -591,6 +665,9 @@ namespace noteedit
                 rpn (0, 6, 15.0);
             for (auto c : pool)
                 if (chans[(size_t) c].used)
+                    rpn (c, 0, range);
+            for (int c = 0; c < 16; ++c)
+                if (chans[(size_t) c].bentKeys && std::find (pool.begin(), pool.end(), c) == pool.end())
                     rpn (c, 0, range);
         }
 
@@ -777,7 +854,19 @@ namespace noteedit
                 auto right = n;
                 right.start = tick;
                 right.length = n.end() - tick;
-                n.length = tick - n.start;
+                const auto cut = tick - n.start;
+                if (! n.curve.empty())
+                {
+                    // The curve split with it, each half holding the bend it had at the cut.
+                    const auto at = n.bendAt (cut);
+                    right.curve = { { 0, at } };
+                    for (const auto& p : n.curve)
+                        if (p.first > cut)
+                            right.curve.push_back ({ p.first - cut, p.second });
+                    std::erase_if (n.curve, [&] (const auto& p) { return p.first >= cut; });
+                    n.curve.push_back ({ cut, at });
+                }
+                n.length = cut;
                 added.push_back (right);
             }
         }
@@ -800,6 +889,19 @@ namespace noteedit
                 auto& m = s.notes[t[j]];
                 if (! gone[t[j]] && std::abs (m.pitch - n.pitch) < 0.5 && m.channel == n.channel && m.start >= n.start)
                 {
+                    if (! n.curve.empty() || ! m.curve.empty())
+                    {
+                        // The curves joined: the first's to its end, then the second's from its start.
+                        const auto shift = m.start - n.start;
+                        if (n.curve.empty())
+                            n.curve = { { 0, 0.0 } };
+                        n.curve.push_back ({ std::min (n.length, shift), n.bendAt (n.length) });
+                        if (m.curve.empty())
+                            n.curve.push_back ({ shift, 0.0 });
+                        for (const auto& p : m.curve)
+                            n.curve.push_back ({ shift + p.first, p.second });
+                        std::stable_sort (n.curve.begin(), n.curve.end(), [] (const auto& a, const auto& b) { return a.first < b.first; });
+                    }
                     n.length = std::max (n.end(), m.end()) - n.start;
                     gone[t[j]] = true;
                     break;
@@ -887,6 +989,163 @@ namespace noteedit
                     best = { root, m };
                 }
         return best;
+    }
+
+    //==========================================================================
+    namespace
+    {
+        // The cents from a note's pitch to the degree `steps` from its nearest one.
+        double degreeAway (const PitchSystem& sys, const Note& n, int steps)
+        {
+            if (sys.degrees.empty())
+                return steps * 100.0;
+            return sys.pitchOf (sys.nearestStep (n.pitch) + steps) - n.pitch;
+        }
+
+        int64_t ticksPerSecond (const Sequence& s, double bpm)
+        {
+            return std::max<int64_t> (1, (int64_t) std::lround (s.ticksPerQuarter * (bpm > 0.0 ? bpm : 120.0) / 60.0));
+        }
+
+        // A curve from points, cut to the note and in time order.
+        void setCurve (Note& n, std::vector<std::pair<int64_t, double>> points)
+        {
+            for (auto& p : points)
+                p.first = std::clamp<int64_t> (p.first, 0, std::max<int64_t> (0, n.length));
+            std::stable_sort (points.begin(), points.end(), [] (const auto& a, const auto& b) { return a.first < b.first; });
+            n.curve = std::move (points);
+        }
+
+        // Each target that is not a drum.
+        template <typename F> void eachTonal (Sequence& s, F&& f)
+        {
+            for (auto i : s.targets())
+                if (s.notes[i].channel != 9 && s.notes[i].length > 0)
+                    f (s.notes[i]);
+        }
+    }
+
+    void glideToNext (Sequence& s, const PitchSystem& sys, double from, bool throughDegrees)
+    {
+        s.sort();
+        const auto t = s.targets();
+        for (auto i : t)
+        {
+            auto& n = s.notes[i];
+            if (n.channel == 9 || n.length <= 1)
+                continue;
+            // The next note; of a chord there, the one nearest in pitch.
+            const Note* next = nullptr;
+            for (size_t j = i + 1; j < s.notes.size(); ++j)
+            {
+                const auto& m = s.notes[j];
+                if (m.start <= n.start || m.channel == 9)
+                    continue;
+                if (next != nullptr && m.start > next->start)
+                    break;
+                if (next == nullptr || std::abs (m.pitch - n.pitch) < std::abs (next->pitch - n.pitch))
+                    next = &m;
+            }
+            if (next == nullptr)
+                continue;
+            const auto target = next->pitch - n.pitch;
+            const auto t0 = (int64_t) std::lround ((double) n.length * std::clamp (from, 0.0, 0.95));
+            std::vector<std::pair<int64_t, double>> c { { 0, 0.0 }, { t0, 0.0 } };
+            const auto a = sys.nearestStep (n.pitch), b = sys.nearestStep (next->pitch);
+            if (throughDegrees && ! sys.degrees.empty() && std::abs (b - a) > 1)
+            {
+                // Mīṇḍ: each degree between touched and held a moment, as a pulled string does.
+                const auto k = std::abs (b - a), dir = b > a ? 1 : -1;
+                const auto d = (double) (n.length - t0) / k;
+                for (int m = 1; m < k; ++m)
+                {
+                    const auto v = sys.pitchOf (a + dir * m) - n.pitch;
+                    const auto at = (double) t0 + d * m;
+                    c.push_back ({ (int64_t) std::lround (at - d * 0.3), v });
+                    c.push_back ({ (int64_t) std::lround (at + d * 0.3), v });
+                }
+            }
+            c.push_back ({ n.length, target });
+            setCurve (n, std::move (c));
+        }
+    }
+
+    void slideIn (Sequence& s, const PitchSystem& sys, int steps, int64_t ticks)
+    {
+        eachTonal (s, [&] (Note& n)
+        {
+            setCurve (n, { { 0, degreeAway (sys, n, steps) }, { std::min (ticks, n.length), 0.0 } });
+        });
+    }
+
+    void swing (Sequence& s, double depth, double rateHz, double bpm, bool below)
+    {
+        const auto cycle = std::max (4.0, (double) ticksPerSecond (s, bpm) / std::max (0.1, rateHz));
+        eachTonal (s, [&] (Note& n)
+        {
+            std::vector<std::pair<int64_t, double>> c;
+            for (double t = 0; t <= (double) n.length; t += cycle / 8.0)
+            {
+                const auto phase = t / cycle * 2.0 * 3.14159265358979323846;
+                c.push_back ({ (int64_t) std::lround (t), below ? -depth * (1.0 - std::cos (phase)) * 0.5 : depth * std::sin (phase) });
+            }
+            setCurve (n, std::move (c));
+        });
+    }
+
+    void gamak (Sequence& s, const PitchSystem& sys, double rateHz, double bpm)
+    {
+        const auto cycle = std::max (2.0, (double) ticksPerSecond (s, bpm) / std::max (0.1, rateHz));
+        eachTonal (s, [&] (Note& n)
+        {
+            const auto up = degreeAway (sys, n, 1);
+            std::vector<std::pair<int64_t, double>> c;
+            for (double t = 0; t < (double) n.length; t += cycle)
+            {
+                c.push_back ({ (int64_t) std::lround (t), 0.0 });
+                c.push_back ({ (int64_t) std::lround (t + cycle * 0.5), up });
+            }
+            c.push_back ({ n.length, 0.0 });
+            setCurve (n, std::move (c));
+        });
+    }
+
+    void kan (Sequence& s, const PitchSystem& sys, int steps, int64_t ticks)
+    {
+        eachTonal (s, [&] (Note& n)
+        {
+            const auto v = degreeAway (sys, n, steps == 0 ? 1 : steps);
+            const auto len = std::min (ticks, n.length / 2);
+            setCurve (n, { { 0, v }, { len * 2 / 3, v }, { len, 0.0 } });
+        });
+    }
+
+    void turn (Sequence& s, const PitchSystem& sys, const std::vector<int>& degrees, int64_t ticks)
+    {
+        if (degrees.empty() || ticks <= 0)
+            return;
+        eachTonal (s, [&] (Note& n)
+        {
+            // As short as the note needs: the turn fits in its first half.
+            const auto each = std::max<int64_t> (1, std::min (ticks, n.length / (2 * (int64_t) degrees.size())));
+            std::vector<std::pair<int64_t, double>> c;
+            for (size_t k = 0; k < degrees.size(); ++k)
+            {
+                const auto v = degrees[k] == 0 ? 0.0 : degreeAway (sys, n, degrees[k]);
+                const auto at = (int64_t) k * each;
+                c.push_back ({ at, v });
+                c.push_back ({ at + each * 3 / 4, v });
+            }
+            if (degrees.back() != 0)
+                c.push_back ({ (int64_t) degrees.size() * each, 0.0 });
+            setCurve (n, std::move (c));
+        });
+    }
+
+    void clearCurves (Sequence& s)
+    {
+        for (auto i : s.targets())
+            s.notes[i].curve.clear();
     }
 
     //==========================================================================
