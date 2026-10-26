@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MixerWindow.h"
+#include "../mixer/DrumsToMidi.h"
 #include "PhiMark.h"
 #include "Potentiometer.h"
 #include "SamplerWindow.h"
@@ -2129,6 +2130,10 @@ protected:
             menu.addAction (MixerWindow::tr ("&Split at the Playhead (Ctrl+E)"), this, [this] { split(); });
             menu.addAction (MixerWindow::tr ("D&uplicate (Ctrl+D)"), this, [this] { duplicate(); });
             menu.addAction (MixerWindow::tr ("&Delete (Delete)"), this, [this] { deleteSelected(); });
+            menu.addSeparator();
+            const auto list = window.engine.clips (row);
+            menu.addAction (MixerWindow::tr ("Drums to &MIDI"), this, [this, row, id = hit.id] { window.drumsToMidi (row, id, -1); })
+                ->setEnabled (std::any_of (list.begin(), list.end(), [id = hit.id] (const mixer::Clip& c) { return c.id == id && c.audio != nullptr; }));
         }
         else
         {
@@ -3545,6 +3550,8 @@ protected:
                 a->setCheckable (true);
                 a->setChecked (slot->quantise >= 0.0 && quantiseIndex (slot->quantise) == q);
             }
+            menu.addAction (MixerWindow::tr ("Drums to &MIDI"), this, [this, t, s] { window.drumsToMidi (t, 0, s); })
+                ->setEnabled (slot->clip.audio != nullptr && slot->clip.midi == nullptr);
             menu.addSeparator();
         }
         menu.addAction (MixerWindow::tr ("Choose &File..."), this, [this, t, s] { chooseFile (t, s); });
@@ -5275,6 +5282,15 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
         grid->addWidget (stretch, 1, 0);
         grid->addWidget (stretchRatioBox, 1, 1);
         connect (stretch, &QPushButton::clicked, this, [this] { stretchShownAudio(); });
+        auto* drums = new QPushButton (tr ("Drums to MIDI"), audioClipBox);
+        drums->setToolTip (tr ("Each hit as a note of the drum kit (kick, snare or hi-hat), as loud as it was played: "
+                               "a MIDI layer over the clip for the track's instrument to play"));
+        grid->addWidget (drums, 2, 0, 1, 2);
+        connect (drums, &QPushButton::clicked, this, [this]
+        {
+            if (showingClip)
+                drumsToMidi (clipView->shownTrack(), clipView->shownId(), clipView->shownScene());
+        });
     }
     audioClipBox->hide();
     inspectorLayout->addWidget (audioClipBox);
@@ -8360,6 +8376,78 @@ bool MixerWindow::sendAudioToLauncher (const AudioData& sound, const QString& na
     moveCursor (track, scene);
     status->setText (tr ("%1 is in the launcher on %2 (%3)").arg (name, trackName (track), file));
     return true;
+}
+
+void MixerWindow::drumsToMidi (int track, uint32_t id, int scene)
+{
+    if (track < 0 || track >= engine.numTracks())
+        return;
+    mixer::Clip clip;
+    mixer::SlotPtr slot;
+    if (id != 0)
+    {
+        for (const auto& c : engine.clips (track))
+            if (c.id == id)
+                clip = c;
+    }
+    else if (scene >= 0 && scene < mixer::maxScenes && (slot = slots[(size_t) track][(size_t) scene]) != nullptr)
+        clip = slot->clip;
+    if (clip.audio == nullptr || clip.length <= 0)
+        return;
+    if (slot != nullptr && clip.midi != nullptr)
+    {
+        say (tr ("%1 has its MIDI layer already.").arg (sceneName (scene)));
+        return;
+    }
+    const auto midi = mixer::drumsToMidi (clip, rate(), engine.tempo.load());
+    if (midi->events.empty())
+    {
+        say (tr ("No drum hits were found in the clip."));
+        return;
+    }
+    mixer::Recorded rec;
+    rec.track = track;
+    rec.scene = scene;
+    rec.midi = midi;
+    rec.length = clip.length;
+    rec.notes = true;
+    QString error;
+    const auto file = saveTake (rec, error);
+    if (file.isEmpty())
+    {
+        say (error);
+        return;
+    }
+    if (slot != nullptr)
+    {
+        // The notes are the clip as it plays, from its first frame: so is its audio from now on.
+        editSlot (track, scene, [&] (mixer::Slot& x)
+        {
+            if (x.clip.offset != 0 || x.clip.reversed)
+                x.clip.audio = layers::flatAudio (x.clip);
+            x.clip.offset = 0;
+            x.clip.reversed = false;
+            x.clip.midi = midi;
+        });
+    }
+    else
+    {
+        remember();
+        auto list = engine.clips (track);
+        auto notes = mixer::makeClip (mixer::MidiClipPtr (midi), clip.start);
+        notes.length = clip.length;
+        notes.id = nextClipId++;
+        list.push_back (notes);
+        editClips (track, std::move (list));
+    }
+    // The Synth plays the General MIDI kit on channel 10; another instrument is the track's choice.
+    const bool hadInstrument = engine.instrument (track) != nullptr;
+    giveSynth (track);
+    giveBothLayers (track);
+    changed();
+    refreshViews();
+    say (hadInstrument ? tr ("Drums to MIDI: %1 (on channel 10, for the track's instrument to play)").arg (QFileInfo (file).fileName())
+                       : tr ("Drums to MIDI: %1, played by the Synth's drum kit; choose another instrument for the track to change it").arg (QFileInfo (file).fileName()));
 }
 
 void MixerWindow::stretchShownAudio()

@@ -61,6 +61,23 @@ clips tall enough), and so is the clip along the bottom of the mixer.
 - Φ, counterpoint and anything else PHI does to MIDI act on the MIDI layer only; the audio layer
   keeps the loop's length.
 
+## Drums to MIDI (owner, 2026-10-26)
+
+"Audio drum loops can become MIDI loops for a drum machine." Right-click an audio clip in the
+launcher or the tracks across time (or the Inspector's button for the clip shown) and choose
+**Drums to MIDI**: each hit becomes a note of the General MIDI kit on channel 10, a kick (36), a
+snare (38) or a closed hi-hat (42), as loud as it was played, a 1/16 long. In the launcher the
+notes are the clip's MIDI layer, a mixed clip at once; on the timeline a MIDI clip beside the
+audio, on the same track. A track with no instrument gets the Synth, whose kit plays them;
+choose any other instrument (a drum machine, a sampler) to play them instead. Mute or turn down
+either layer with the Inspector's layer dials. The notes are a file of their own and are not
+edited afterwards.
+
+How (`Source/mixer/DrumsToMidi.cpp`): hits are found in the whole sound and in its top alone (a
+high pass at 5 kHz, so a hat under a ringing kick is found too), 50 ms of silence before so a hit
+on the first frame counts. Each is sorted by what it adds over the 43 ms before it: mostly below
+150 Hz a kick, mostly above 6 kHz a hat, else a snare. Melody and harmony to MIDI are next.
+
 ## Recording the instrument as audio
 
 **Its Instrument, as Audio** (Record Options, the track's Records) records what the track's

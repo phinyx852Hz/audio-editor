@@ -311,6 +311,9 @@ private:
     bool recordsAudioLayer (int track) const;   // what Record adds to a loop with one layer
     void giveBothLayers (int track);            // an Audio or Inst track plays both once a slot has them
     bool addLayerFile (int track, int scene, const QString& file);   // dropped on a clip of the other kind: false if not
+    // Drums to MIDI (owner, 2026-10-26): a timeline clip (id) or a slot's audio as kit notes, the
+    // slot's MIDI layer or a MIDI clip beside it.
+    void drumsToMidi (int track, uint32_t id, int scene);
     void captureMidi();                         // the last phrase played on the armed track, into its next empty slot
     void keepRecorded();                        // each tick: the takes that ended, saved as files and placed
     bool startTake (mixer::RecordRequest, QString& error);   // asks the engine, the input and the transport

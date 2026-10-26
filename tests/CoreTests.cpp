@@ -10,6 +10,7 @@
 #include "../Source/mixer/Tunings.h"
 #include "../Source/mixer/Counterpoint.h"
 #include "../Source/mixer/MixerEngine.h"
+#include "../Source/mixer/DrumsToMidi.h"
 #include "../Source/patchbay/PatchBay.h"
 #include "../Source/core/Ixml.h"
 #include "../Source/core/Metadata.h"
@@ -4458,6 +4459,70 @@ namespace
     // frame, quantised notes, the audio input with its delay, takes of no set length, the next
     // take following on, overdub, timeline takes, the count-in, Capture, and a launch on a frame
     // gone by.
+    void testDrumsToMidi()
+    {
+        // Two bars at 120 BPM: kicks on the beats 1 and 3, snares on 2 and 4, hats on the offbeats.
+        const double rate = 48000.0;
+        const Frame beat = 24000;
+        auto sound = std::make_shared<mixer::AudioClip>();
+        sound->left.assign ((size_t) (8 * beat), 0.0f);
+        uint32_t seed = 1;
+        auto noise = [&seed] { seed = seed * 1664525u + 1013904223u; return (float) ((seed >> 8) & 0xFFFF) / 32768.0f - 1.0f; };
+        auto add = [&] (Frame at, int kind, float level)
+        {
+            float last = 0.0f, smooth = 0.0f;
+            for (Frame k = 0; k < beat / 2 && at + k < 8 * beat; ++k)
+            {
+                const auto t = (float) k / (float) rate;
+                float v = 0.0f;
+                if (kind == 0)
+                    v = std::sin (2.0f * 3.14159265f * (50.0f + 60.0f * std::exp (-t / 0.03f)) * t) * std::exp (-t / 0.15f);
+                else if (kind == 1)
+                {
+                    const auto n = noise();
+                    smooth += (n - smooth) * 0.3f;   // the crack, below a few kHz
+                    v = (0.6f * std::sin (2.0f * 3.14159265f * 190.0f * t) + 0.8f * smooth) * std::exp (-t / 0.06f);
+                }
+                else
+                {
+                    const auto n = noise();
+                    v = (n - last) * 0.5f * std::exp (-t / 0.02f);   // a hiss, high up
+                    last = n;
+                }
+                sound->left[(size_t) (at + k)] += v * level;
+            }
+        };
+        for (int b = 0; b < 8; ++b)
+        {
+            add (b * beat, b % 2 == 0 ? 0 : 1, b % 2 == 0 ? 0.9f : 0.7f);
+            add (b * beat + beat / 2, 2, 0.4f);
+        }
+        sound->right = sound->left;
+        const auto clip = mixer::makeClip (mixer::AudioClipPtr (sound), 0);
+        const auto hits = mixer::findDrums (clip, rate);
+        int kicks = 0, snares = 0, hats = 0;
+        bool placed = true;
+        for (const auto& h : hits)
+        {
+            const auto step = (double) h.at / (beat / 2.0);
+            placed = placed && std::abs (step - std::round (step)) * (beat / 2.0) < 0.005 * rate;
+            const auto expected = (int) std::lround (step) % 2 == 1 ? mixer::gm::hat : ((int) std::lround (step) / 2) % 2 == 0 ? mixer::gm::kick : mixer::gm::snare;
+            kicks += h.note == mixer::gm::kick && expected == h.note;
+            snares += h.note == mixer::gm::snare && expected == h.note;
+            hats += h.note == mixer::gm::hat && expected == h.note;
+        }
+        check (hits.size() == 16 && placed, "drums to MIDI: every hit found, where it was played");
+        check (kicks == 4 && snares == 4 && hats == 8, "drums to MIDI: kicks, snares and hats told apart");
+        const auto midi = mixer::drumsToMidi (clip, rate, 120.0);
+        bool kit = true;
+        for (const auto& e : midi->events)
+            kit = kit && (e.status & 0x0F) == 9;
+        check (midi->events.size() == 32 && kit && midi->length == 8 * beat, "drums to MIDI: a note on the kit's channel for each hit");
+        check (std::find_if (hits.begin(), hits.end(), [] (const mixer::DrumHit& h) { return h.note == mixer::gm::kick; })->velocity
+                   > std::find_if (hits.begin(), hits.end(), [] (const mixer::DrumHit& h) { return h.note == mixer::gm::hat; })->velocity,
+               "drums to MIDI: louder hits play louder");
+    }
+
     void testRecording()
     {
         const double rate = 48000.0;
@@ -5781,6 +5846,7 @@ int main()
     testTunings();
     testCounterpoint();
     testRecording();
+    testDrumsToMidi();
     testPluginMeasure();
 
     if (failures == 0)
