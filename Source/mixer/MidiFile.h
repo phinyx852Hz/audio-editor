@@ -72,16 +72,25 @@ namespace midifile
     SongPtr doubleDensity (const Song&);     // each note played twice in its own time, half as long
     // Modal music (owner, 2026-10-25): the seven modes, then the major Hindustani ragas (the ten
     // thaats among them) as the notes they use, both ways up and down; some share their notes
-    // (Darbari and Jaunpuri with Asavari), and each is listed by its own name. Bit n: n semitones
-    // above the root (Sa).
+    // (darbārī kānaḍā and jaunpurī with āsāvarī), and each is listed by its own name; then the
+    // gamelan laras and pathet on their nearest keys, the Shona mbira tunings on the keys, and the
+    // Chinese, Japanese and Korean modes. Names are as the tunings have them: all lower case, the
+    // ragas in IAST. Bit n: n semitones above the root (Sa).
     struct Scale
     {
         const char* name;
-        const char* family;   // "Mode" or "Raga"
+        const char* family;   // "Mode", "Raga", "Gamelan", "Mbira", "Chinese", "Japanese" or "Korean"
         uint16_t notes;
     };
     const std::vector<Scale>& scales();
     // Every note moved to the nearest note of scales()[scale] on `root` (0 C .. 11 B), down when it
     // is between two; drums (channel 10) left alone.
     SongPtr toMode (const Song&, int root, int scale);
+    // The same for any set of keys (bit n: n semitones above the root), as the Mode menu
+    // gives a tuning system's (mixer::modeKeys).
+    SongPtr toKeys (const Song&, int root, uint16_t keys);
+    // Every note (drums left alone) folded by octaves into the octave that starts `below` keys
+    // under the final `root` (0 C .. 11 B), the one nearest the notes' middle: a hypo-mode's
+    // range (mixer::Hypo), the final kept.
+    SongPtr inRange (const Song&, int root, int below);
 }
