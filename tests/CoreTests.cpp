@@ -4205,7 +4205,7 @@ namespace
     {
         std::vector<std::string> errors;
         const auto all = phi::parseRagas (phi::builtInRagaSheets(), errors);
-        check (errors.empty() && all.size() == 74 && phi::builtInRagas().size() == 74, "raga sheets: the 74 built-in sheets read without a mistake");
+        check (errors.empty() && all.size() == 174 && phi::builtInRagas().size() == 174, "raga sheets: the 174 built-in sheets read without a mistake");
         for (const auto& e : errors)
             std::printf ("  %s\n", e.c_str());
         bool complete = true;
