@@ -45,6 +45,8 @@
 #include "../Source/core/PhiChorus.h"
 #include "../Source/core/PluginMeasure.h"
 #include "../Source/core/PhiForensics.h"
+#include "../Source/control/ControlSurface.h"
+#include "../Source/control/MidiLearn.h"
 
 #include <algorithm>
 #include <chrono>
@@ -6067,6 +6069,152 @@ namespace
         }
     }
 
+    // Control surfaces and MIDI Learn (docs/control-surfaces.md).
+    void testControlSurfaces()
+    {
+        using namespace control;
+        check (std::abs (unitFromDb (0.0f) - 0.8409f) < 0.001f, "control: 0 dB where the mixer's fader has it");
+        check (std::abs (dbFromUnit (unitFromDb (-12.0f)) + 12.0f) < 0.01f && unitFromDb (-120.0f) == 0.0f && dbFromUnit (1.0f) > 5.9f,
+               "control: fader units and dB both ways");
+        check (paletteIndex (0xFF0000) == 5 && paletteIndex (0x00FF00) == 21 && paletteIndex (0x0000FF) == 45 && paletteIndex (0xFFFFFF) == 3
+                   && paletteIndex (0) == 0,
+               "control: the Novation palette's red, green, blue, white and black");
+        bool round = true;
+        for (int i = 1; i < 60; ++i)   // 60..63 repeat hues
+            round &= paletteIndex (paletteRgb (i)) == i;
+        check (round, "control: each palette colour finds itself");
+
+        auto kindId = [] (const char* port) { const auto* k = kindOf (port); return k != nullptr ? k->id : std::string ("none"); };
+        check (kindId ("Launchpad X LPX MIDI In") == "launchpadX" && kindId ("Launchpad Pro MK3 LPProMK3 MIDI") == "launchpadProMk3"
+                   && kindId ("Launchpad Pro MIDI 2") == "launchpadPro" && kindId ("Launchkey Mini MK3 MIDI 2") == "launchkeyMiniMk3"
+                   && kindId ("Launchkey MK3 49 LKMK3 DAW In") == "launchkeyMk3" && kindId ("Ableton Push 2 MIDI 1") == "push2"
+                   && kindId ("Ableton Push 3 Live Port") == "push3" && kindId ("Midi Through Port-0") == "none",
+               "control: surfaces known by their ports' names");
+        const auto& kx = *kindOf ("Launchpad X MIDI 1");
+        check (pickPort (kx, { "Launchpad X LPX DAW In", "Launchpad X LPX MIDI In" }) == 1 && pickPort (kx, { "Launchpad X MIDI 2", "Launchpad X MIDI 1" }) == 0,
+               "control: a Launchpad is driven through its MIDI port, not its DAW port");
+        check (pickPort (*kindOf ("Launchkey MK3 49 MIDI 1"), { "Launchkey MK3 49 LKMK3 MIDI In", "Launchkey MK3 49 LKMK3 DAW In" }) == 1,
+               "control: a Launchkey through its DAW port, its keys left to play");
+        check (pickPort (*kindOf ("Ableton Push 2 MIDI 1"), { "Ableton Push 2 MIDI 2", "Ableton Push 2 MIDI 1" }) == 1, "control: Push through its first (Live) port");
+
+        State state;
+        state.tracks = 2;
+        state.scenes = 4;
+        state.track[0].rgb = 0xFF0000;
+        state.track[1].rgb = 0x0000FF;
+        state.slot[0][0].clip = true;
+        state.slot[1][0].clip = true;
+        state.slot[1][0].playing = true;
+        state.track[1].playing = true;
+        auto send = [] (Surface& s, std::initializer_list<int> bytes)
+        {
+            Message m;
+            for (int b : bytes)
+                m.push_back ((uint8_t) b);
+            Received r;
+            s.receive (m.data(), m.size(), r);
+            return r;
+        };
+        auto launched = [] (const Received& r, int track, int scene)
+        {
+            return r.commands.size() == 1 && r.commands[0].action == Action::launch && r.commands[0].track == track && r.commands[0].scene == scene;
+        };
+
+        // Launchpad X: programmer mode, the grid lit by RGB SysEx, pads launching.
+        {
+            auto lp = kindOf ("Launchpad X LPX MIDI In")->make();
+            check (lp->start() == Messages { { 0xF0, 0x00, 0x20, 0x29, 0x02, 0x0C, 0x0E, 0x01, 0xF7 } }, "launchpad: into programmer mode");
+            const auto first = lp->refresh (state);
+            bool topLeftRed = false;
+            for (const auto& m : first)
+                for (size_t i = 7; i + 4 < m.size(); ++i)
+                    topLeftRed |= m[i] == 0x03 && m[i + 1] == 81 && m[i + 2] == 0x7F && m[i + 3] == 0 && m[i + 4] == 0;
+            check (! first.empty() && first[0][6] == 0x03 && topLeftRed, "launchpad: the top-left pad in its track's red");
+            check (lp->refresh (state).empty(), "launchpad: nothing sent again when nothing changed");
+            check (launched (send (*lp, { 0x90, 81, 100 }), 0, 0) && launched (send (*lp, { 0x90, 12, 100 }), 1, 7), "launchpad: pads launch their slots");
+            check (send (*lp, { 0x90, 81, 0 }).commands.empty(), "launchpad: a pad let go does nothing");
+            send (*lp, { 0xB0, 92, 127 });   // down a scene
+            check (launched (send (*lp, { 0x90, 81, 100 }), 0, 1), "launchpad: the arrows move the grid down the scenes");
+            const auto scene = send (*lp, { 0xB0, 89, 127 });
+            check (scene.commands.size() == 1 && scene.commands[0].action == Action::launchScene && scene.commands[0].scene == 1, "launchpad: scene buttons launch scenes");
+            send (*lp, { 0xB0, 96, 127 });   // Note view
+            const auto on = send (*lp, { 0x90, 11, 90 });
+            const auto off = send (*lp, { 0x90, 11, 0 });
+            check (on.notes == Messages { { 0x90, 48, 90 } } && off.notes == Messages { { 0x80, 48, 0 } } && on.commands.empty(),
+                   "launchpad: in Note view the pads play, C3 at the bottom left");
+            check (send (*lp, { 0x90, 12, 90 }).notes == Messages { { 0x90, 50, 90 } }, "launchpad: in key, the next pad is the next note of the scale");
+        }
+
+        // Push 2: pads from the bottom left, relative encoders, held Mute.
+        {
+            auto push = kindOf ("Ableton Push 2 MIDI 1")->make();
+            check (push->start().size() >= 64, "push: its palette written at the start");
+            push->refresh (state);
+            check (launched (send (*push, { 0x90, 36, 100 }), 0, 7) && launched (send (*push, { 0x90, 99, 100 }), 7, 0) == false,
+                   "push: the bottom-left pad is track 1's eighth scene; tracks the mix lacks do nothing");
+            const auto up = send (*push, { 0xB0, 71, 1 }), down = send (*push, { 0xB0, 72, 127 });
+            check (up.commands.size() == 1 && up.commands[0].action == Action::volumeBy && up.commands[0].track == 0 && up.commands[0].value > 0.0f
+                       && down.commands.size() == 1 && down.commands[0].track == 1 && down.commands[0].value < 0.0f,
+                   "push: the encoders turn the faders up and down");
+            check (send (*push, { 0xB0, 85, 127 }).commands == std::vector<Command> { { Action::togglePlay } }, "push: Play plays");
+            send (*push, { 0xB0, 60, 127 });
+            const auto muted = send (*push, { 0xB0, 21, 127 });
+            check (muted.commands.size() == 1 && muted.commands[0].action == Action::mute && muted.commands[0].track == 1
+                       && send (*push, { 0xB0, 60, 0 }).commands.empty(),
+                   "push: Mute held with a track button mutes that track");
+            send (*push, { 0xB0, 60, 127 });
+            const auto tap = send (*push, { 0xB0, 60, 0 });
+            check (tap.commands.size() == 1 && tap.commands[0].action == Action::mute && tap.commands[0].track == -1, "push: Mute tapped mutes the selected track");
+        }
+
+        // Launchkey: DAW mode, two rows of pads, absolute knobs, drum pads playing.
+        {
+            auto lk = kindOf ("Launchkey MK3 49 LKMK3 DAW In")->make();
+            check (lk->start()[0] == Message { 0x9F, 0x0C, 0x7F }, "launchkey: DAW mode on");
+            lk->refresh (state);
+            check (launched (send (*lk, { 0x90, 96, 100 }), 0, 0) && launched (send (*lk, { 0x90, 113, 100 }), 1, 1), "launchkey: its two rows are two scenes");
+            const auto knob = send (*lk, { 0xBF, 0x15, 127 });
+            check (knob.commands.size() == 1 && knob.commands[0].action == Action::volume && knob.commands[0].value == 1.0f, "launchkey: knobs set volumes");
+            check (send (*lk, { 0x99, 36, 100 }).notes == Messages { { 0x99, 36, 100 } }, "launchkey: drum pads play the armed track");
+        }
+
+        // MIDI Learn.
+        {
+            Learn learn;
+            std::vector<Command> out;
+            std::optional<Mapping> learned;
+            Command volume { Action::volume, 2 };
+            learn.learn (volume, true);
+            check (learn.handle ("Grid", 0xB0, 1, 32, 64, out, &learned) && learned.has_value() && out.empty(), "learn: the next control moved is learned");
+            out.clear();
+            check (learn.handle ("Grid", 0xB0, 1, 32, 127, out) && out.size() == 1 && out[0].action == Action::volume && out[0].track == 2 && out[0].value == 1.0f,
+                   "learn: the learned knob sets the volume");
+            out.clear();
+            check (! learn.handle ("Keytar", 0xB0, 1, 32, 127, out) && ! learn.handle ("Grid", 0xB0, 2, 32, 127, out),
+                   "learn: another device or channel is left alone");
+            auto maps = learn.mappings();
+            maps[0].mode = Mapping::Mode::relativeTwos;
+            learn.setMappings (maps);
+            learn.handle ("Grid", 0xB0, 1, 32, 127, out);
+            check (out.size() == 1 && out[0].action == Action::volumeBy && out[0].value < 0.0f, "learn: an endless encoder turns it down");
+
+            out.clear();
+            learn.learn ({ Action::togglePlay }, false);
+            learn.handle ("Keytar", 0x90, 1, 60, 100, out);
+            learn.handle ("Keytar", 0x80, 1, 60, 0, out);
+            check (learn.handle ("Keytar", 0x90, 1, 60, 100, out) && out.size() == 1 && out[0].action == Action::togglePlay
+                       && learn.handle ("Keytar", 0x80, 1, 60, 0, out) && out.size() == 1,
+                   "learn: a learned key plays and stops, and no longer sounds");
+            out.clear();
+            learn.learn ({ Action::metronome }, false);
+            learn.handle ("Pad", 0xB0, 1, 20, 127, out);
+            learn.handle ("Pad", 0xB0, 1, 20, 0, out);
+            learn.handle ("Pad", 0xB0, 1, 20, 127, out);
+            learn.handle ("Pad", 0xB0, 1, 20, 127, out);
+            check (out.size() == 1, "learn: a CC button acts once a press");
+        }
+    }
+
 int main()
 {
     testStorage();
@@ -6117,6 +6265,7 @@ int main()
     testTunings();
     testCounterpoint();
     testRecording();
+    testControlSurfaces();
     testDrumsToMidi();
     testPluginMeasure();
 

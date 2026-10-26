@@ -10,6 +10,7 @@
 #include "SamplerWindow.h"
 #include "SlicerWindow.h"
 #include "Settings.h"
+#include "../engine/ControlSurfaces.h"
 #include "../engine/MidiInputs.h"
 #include "../mixer/MixerEngine.h"
 #include "../patchbay/PatchBay.h"
@@ -513,6 +514,10 @@ void MainWindow::openMidiInputs()
     else
         for (const auto& id : settings.value (QStringLiteral ("midi/inputs")).toStringList())
             ids.push_back (id.toStdString());
+    // The ports PHI drives as control surfaces are theirs alone.
+    if (surfaces != nullptr)
+        for (const auto& claimed : surfaces->claimedInputs())
+            ids.erase (std::remove (ids.begin(), ids.end(), claimed), ids.end());
     midiInputs->open (ids);
     updateMidiStatus();
 }
@@ -549,8 +554,9 @@ void MainWindow::midiInputsDialog()
     QDialog dialog (parent);
     dialog.setWindowTitle (tr ("MIDI Inputs"));
     auto* layout = new QVBoxLayout (&dialog);
-    auto* about = new QLabel (tr ("Ticked keyboards and controllers play Simplest or the Slicer, whichever you used last. Ableton Push: use its User mode, "
-                                  "or its own MIDI port when Live is not running; its 64 pads send notes 36 to 99."), &dialog);
+    auto* about = new QLabel (tr ("Ticked keyboards and controllers play the instrument you used last: Simplest, the Slicer, the mixer's armed "
+                                  "track or a patchbay synth. Launchpads, Launchkeys and Push are driven as control surfaces "
+                                  "(Performance > Control Surfaces); their other ports stay here."), &dialog);
     about->setWordWrap (true);
     layout->addWidget (about);
     auto* list = new QListWidget (&dialog);
@@ -559,10 +565,17 @@ void MainWindow::midiInputsDialog()
     {
         list->clear();
         const auto open = midiInputs->opened();
+        const auto claimed = surfaces != nullptr ? surfaces->claimedInputs() : std::vector<std::string>();
         for (const auto& d : MidiInputs::available())
         {
-            auto* item = new QListWidgetItem (QString::fromStdString (d.name), list);
+            const bool surface = std::find (claimed.begin(), claimed.end(), d.identifier) != claimed.end();
+            auto* item = new QListWidgetItem (surface ? tr ("%1 (a control surface)").arg (QString::fromStdString (d.name)) : QString::fromStdString (d.name), list);
             item->setData (Qt::UserRole, QString::fromStdString (d.identifier));
+            if (surface)
+            {
+                item->setFlags (item->flags() & ~Qt::ItemIsEnabled);
+                continue;
+            }
             item->setFlags (item->flags() | Qt::ItemIsUserCheckable);
             item->setCheckState (std::find (open.begin(), open.end(), d.identifier) != open.end() ? Qt::Checked : Qt::Unchecked);
         }
@@ -582,7 +595,7 @@ void MainWindow::midiInputsDialog()
     QStringList chosen;
     std::vector<std::string> ids;
     for (int i = 0; i < list->count(); ++i)
-        if (const auto* item = list->item (i); item->checkState() == Qt::Checked)
+        if (const auto* item = list->item (i); (item->flags() & Qt::ItemIsUserCheckable) && item->checkState() == Qt::Checked)
         {
             chosen << item->data (Qt::UserRole).toString();
             ids.push_back (chosen.back().toStdString());

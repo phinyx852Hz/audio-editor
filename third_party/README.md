@@ -51,3 +51,17 @@ Its `convertEffectsFromFT2` and `convertVolumeToEffect` are ported from there to
 `Source/tracker/TrackerEdit.cpp` follows MilkyTracker's `tracker/ModuleEditor.cpp`
 and `tracker/PatternEditor.cpp` (Copyright 2009 Peter Barth, GPL-3.0-or-later)
 for new songs, instrument and sample slots, note entry and block operations.
+
+## DrivenByMoss (control surfaces)
+
+`Source/control/Devices.cpp` and `Source/control/ControlSurface.h` port device
+facts from [DrivenByMoss](https://github.com/git-moss/DrivenByMoss) by Jürgen
+Moßgraber (© 2017-2026), licensed LGPL-3.0
+(http://www.gnu.org/licenses/lgpl-3.0.txt): the MIDI port names each device
+shows on Linux, the SysEx that puts Launchpads in programmer mode and Push into
+Live mode and writes its colour palette, the Launchkey's DAW-mode messages, the
+pad, button, knob and fader numbers, the Novation palette's layout and the LED
+channels for flashing and pulsing (from `de.mossgrabers.controller.novation.
+launchpad`, `.novation.launchkey` and `.ableton.push`). No Java source is
+included; the code is PHI's own. LGPL-3.0 lets it be conveyed under GPL-3.0 and
+so combined with PHI's AGPL-3.0.

@@ -6,6 +6,8 @@
 #include "SamplerWindow.h"
 #include "SlicerWindow.h"
 #include "../engine/MidiInputs.h"
+#include "../engine/ControlSurfaces.h"
+#include "../control/MidiLearn.h"
 #include "../sampler/SamplerEngine.h"
 #include "../sampler/SlicerEngine.h"
 #include "Brand.h"
@@ -316,6 +318,8 @@ MainWindow::~MainWindow()
     patchBay = nullptr;          // its synths and effects, and it lets go of the mixer
     delete mixerWin;             // before the mixer's engine and its instruments
     mixerWin = nullptr;
+    controlTimer.stop();
+    surfaces = nullptr;          // dark, and back to their own modes
     midiInputs = nullptr;
     delete batchWindow;   // stops its workers while the engine they render through still exists
 }
@@ -566,6 +570,7 @@ void MainWindow::registerCommands()
     registerSamplerCommands();
     registerInstrumentCommands();
     registerMixerCommands();
+    registerControlCommands();
     registerPatchBayCommands();
     registerReferenceCommands();
     registerMacroCommands();
@@ -898,13 +903,13 @@ void MainWindow::buildMenus()
         { tr ("Mi&xer"),     { "mixer.window", "mixer.dock", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
                                "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "-", "mixer.assistant" } },
         { tr ("S&ample"),    { "sample.send", "sample.window", "sample.refresh", "-", "slice.send", "slice.window", "slice.refresh", "-",
-                               "instrument.granular", "instrument.retroSampler", "-", "sample.midiInputs", "sample.panic" } },
+                               "instrument.granular", "instrument.retroSampler", "-", "sample.midiInputs", "control.surfaces", "control.learn", "sample.panic" } },
         { tr ("S&ynth"),     { "instrument.wavetable", "instrument.modular", "instrument.additive", "-",
                                "instrument.subtractive1", "instrument.subtractive2", "instrument.fm", "-",
                                "sample.midiInputs", "sample.panic" } },
         { tr ("Trac&ker"),   { "tracker.window", "tracker.furnace", "-", "tracker.new", "tracker.open", "tracker.save", "tracker.saveAs", "tracker.loadSample", "-", "tracker.playSong", "tracker.playPattern", "tracker.stop", "-",
                                "tracker.recordStereo", "tracker.recordMulti", "-", "tracker.resetTracks", "tracker.about" } },
-        { tr ("Performan&ce"), { "performance.launcher", "-", "performance.record", "performance.stream", "-", "performance.settings", "performance.folder" } },
+        { tr ("Performan&ce"), { "performance.launcher", "-", "control.surfaces", "control.learn", "-", "performance.record", "performance.stream", "-", "performance.settings", "performance.folder" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "-", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
     };
