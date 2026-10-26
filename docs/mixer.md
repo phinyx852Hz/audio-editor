@@ -428,7 +428,8 @@ case, in proper transliteration):
 - The mode chosen is what the Counterpoint and Fugue dialogs open on when the clip has no tuning
   of its own. **tune the track** sets the selected track's tuning to it (a hypo-mode on the bottom
   of its range, hypodorian on A for a final on D); **notes into the mode** moves the MIDI clip
-  shown in the Device Chain into its keys and range; **counterpoint...** opens Counterpoint.
+  shown in the Device Chain into its keys and range; **counterpoint...** opens Counterpoint, and
+  **stochasticize...** opens [stochasticize](stochastic.md), its pitch sieve ready to fill from the mode.
 - Kept in settings.ini as mode/system (the plain name), mode/final, mode/hypo and mode/equal.
   Code: ui/ModeSection.cpp, mixer::modeKeys, midifile::toKeys.
 - **rhythmic modes** (owner, 2026-10-26) holds 117 rhythms: North Indian tāls, South Indian tāḷams,
@@ -439,6 +440,12 @@ case, in proper transliteration):
 - With 23 menus the bar puts 2 px between titles instead of Fusion's 7, so at 1280 px wide every
   menu stays in view up to a 10 pt font (1204 px at 10 pt DejaVu Sans; 1345 px at 11 pt, when the
   last ones go behind the » button).
+
+Stochasticize (owner, 2026-10-26: Xenakis's methods, as our own C++): **stochasticize...** in
+the MIDI Clip section, and in the Mode menu, draws a new line from the clip shown: an ST cloud or
+Markov screens, with its pitches and rhythm through sieves. A sieve can be filled from the mode,
+a rhythmic mode or the clip itself. The line goes on a new track or in place of the clip. See
+[stochastic.md](stochastic.md).
 
 Counterpoint (owner, 2026-10-25: an automatic MIDI counterpoint generator, in modal systems
 beyond the church modes):
