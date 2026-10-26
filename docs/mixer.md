@@ -409,6 +409,53 @@ Fast MIDI edits (owner, 2026-10-25: "MIDI editing, but really fast"; "the idea i
   mixer/MidiFile.h (phiShuffle, duplicated, halfDensity, doubleDensity, toMode, scales), with
   tests.
 
+Counterpoint (owner, 2026-10-25: an automatic MIDI counterpoint generator, in modal systems
+beyond the church modes):
+- **Counterpoint...** in the MIDI Clip section writes new voices against the clip's melody. The
+  melody is the top note at each onset, each held until the next; a rest of an eighth or more
+  ends a phrase, and each phrase begins and cadences on its own.
+- The species (Fux, Gradus ad Parnassum): each note of the melody is a bar, and the new voice has
+  one note in it (first), two (second), four (third), a note tied over the bar line (fourth,
+  suspensions), or a mix of all of these (fifth, florid). 1 to 3 voices, above the melody, below
+  it, or around it (above, below, above again). As Fux writes in three and four parts, the nearest
+  voice takes the species and the others go note against note, unless "Every voice in the
+  species" is on.
+- The rules a voice must keep: consonances on the beat; dissonances only as passing notes and
+  neighbours on the off-beats or as suspensions prepared by a tie and falling a step; no parallel
+  fifths or octaves, nor octaves by contrary motion, between any two voices; unisons only at the
+  ends; perfect consonances to begin and end, the bass on the melody's note; no tritone, seventh,
+  major sixth or leap over an octave. Rules of taste cost a little: steps before leaps, a large
+  leap turned back by step, contrary motion, imperfect consonances in the middle, no hidden fifths
+  and octaves, one high point, the last note reached by step. A beam search finds the cheapest
+  line, voice by voice (the note-against-note voices and the bass first); if one leaves the next
+  nothing that keeps the strict rules, all are written again with another seed. Only when nothing
+  fits is a strict rule bent, and the status line says how many.
+- The mode: any of the tunings (church modes and hypo-modes, jazz modes, ragas, maqams and
+  dastgahs, 2 to 21 equal steps), on a root, or the melody's own (the diatonic mode on its last
+  note that holds all its notes). The voices use only the mode's keys, and consonance is judged
+  by the cents the tuning plays: a maqam's neutral third or sixth counts as a third or sixth; in
+  an equal temperament each key is one step. Church modes raise the note a whole step below a
+  cadence's arrival (musica ficta). A raga can carry its āroha and avaroha (the notes used going
+  up and coming down); the tunings list has none yet, so a raga uses its notes both ways.
+- Variation: another number writes other lines that keep the same rules; the same number writes
+  the same lines.
+- Each voice is a MIDI file (type 0, the melody's tempo map and channel) next to the mix, and a
+  clip on a new track with the Synth, named after the voice, where the melody's clip is (on the
+  timeline at its start, or in the same scene of the launcher), in the tuning the melody plays in.
+  The mixer's 8 tracks are the limit. The code is in mixer/Counterpoint.h, with tests.
+- Live loops (owner, 2026-10-25: "play a melody into a clip with a pre-determined length that can
+  be adjusted and the recording immediately stops, loops, and the new melody is generated"):
+  **Rec Loop** records the MIDI keyboard on the armed track for the bars set beside it (1 to 64,
+  4/4 at the tempo), from the next bar line, or at once when the transport is stopped (it then
+  starts). The take goes into the track's next empty slot from the cursor's scene (a new scene
+  when all are full), stops by itself and loops from the bar line it ended on. With
+  **+ Counterpoint** on, the voices are written at once with the Counterpoint dialog's last
+  choices (its mode, else the track's tuning, else the melody's own) and loop with it, on the
+  tracks the last loop's voices went on. A note up to 0.15 s early for the first beat goes on it;
+  notes still held end with the loop. Stopping the transport cancels the take. The engine keeps
+  the keyboard's messages on the launch clock (Engine::startRecording, stopRecording) and
+  launches the loop on a given clock frame (launchAt).
+
 The left column (owner, 2026-10-25: "a relatively static view of the mixer, clip launcher and
 horizontal track view"):
 - The Finder and the Inspector share one column, the same width in both views. The Finder shows

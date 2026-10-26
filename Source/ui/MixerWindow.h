@@ -20,6 +20,8 @@
 #include <tuple>
 
 class AudioEngine;
+class QSpinBox;
+namespace counterpoint { struct Settings; }
 class StatusLine;
 class QScrollArea;
 class QDialog;
@@ -280,6 +282,34 @@ private:
     void editShownMidi (const std::function<midifile::SongPtr (const midifile::Song&)>& edit, const QString& what);
     void refreshMidiClipBox();
     void phiShownMidi();   // Φ: the notes dealt out again, another order each time
+    // Counterpoint (owner, 2026-10-25): new voices against the clip's melody, in a species and a
+    // mode, raga or maqam (mixer/Counterpoint.h), each a MIDI file beside the mix and a clip on a
+    // new track, where the clip is on the timeline or in the same scene, in the clip's tuning.
+    void counterpointShownMidi();
+    // Writes the voices against `clip` (in `slot` of `scene`, or on the timeline when null). A
+    // live loop's (launchAt >= 0) go on the tracks the last loop's went on, and launch on that
+    // frame of the launch clock with it.
+    void writeCounterpoint (int track, const mixer::Clip& clip, mixer::SlotPtr slot, int scene, const counterpoint::Settings&,
+                            mixer::TuningChoice modeChoice, mixer::TuningChoice tuning, Frame launchAt);
+    // Loop recording (owner, 2026-10-25: "play a melody into a clip with a pre-determined length
+    // that can be adjusted and the recording immediately stops, loops, and the new melody is
+    // generated"): Rec Loop records the keyboard on the armed track for so many bars, from the
+    // next bar line (at once when stopped), into the track's next empty slot from the cursor's
+    // scene; it stops by itself, the clip loops from the bar line it ended on and, with
+    // + Counterpoint on, the voices (the Counterpoint dialog's last choices) loop with it.
+    void toggleLoopRecording();
+    void finishLoopRecording();
+    QPushButton* recordButton = nullptr;
+    QSpinBox* recordBarsBox = nullptr;
+    QPushButton* autoCounterpointButton = nullptr;
+    QTimer recordTimer;
+    struct LoopTake
+    {
+        int track = -1, scene = -1;
+        Frame start = 0, end = 0;   // on the launch clock
+        double bpm = 120.0;
+    };
+    LoopTake take;
     QString editsFolder() const;   // where edits of the mix's clips are saved
     // An audio clip shown: Paulstretch makes it the remembered number of times longer, with the
     // editor's Extreme Stretch settings, saved beside the mix (owner, 2026-10-25).

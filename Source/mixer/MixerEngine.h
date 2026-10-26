@@ -248,6 +248,10 @@ namespace mixer
         SlotPtr slot (int track, int scene) const;
         void launch (int track, int scene);   // -1 stops the track's clip
         void launchScene (int scene);         // every track's slot in it; tracks with none stop
+        // A launch on a given frame of the launch clock while it runs: a loop just recorded
+        // starts on the bar line it was recorded up to. One in the past plays from where it
+        // has got to since, in time with that frame.
+        void launchAt (int track, int scene, Frame clockFrame);
         void stopTrack (int track) { launch (track, -1); }
         void stopAll();                       // every track's clip, at the next quantise
         void backToTimeline (int track);      // -1: every track
@@ -261,6 +265,16 @@ namespace mixer
         int liveTrack() const { return armed.load(); }
         void liveMidi (uint8_t status, uint8_t data1, uint8_t data2);
         void panic();   // every instrument silent
+        // Recording what the keyboard plays (owner, 2026-10-25: loops for live counterpoint),
+        // each message on the launch clock (to a block) when it came. Any thread.
+        struct Recorded
+        {
+            Frame clock = 0;
+            uint8_t status = 0, data1 = 0, data2 = 0;
+        };
+        void startRecording();
+        std::vector<Recorded> stopRecording();   // what came since, in order
+        bool isRecording() const { return recording.load(); }
 
         Meter takeMeter (int index);   // a track (0..7), the master (8) or a return (9, 10), after the fader
 
@@ -345,6 +359,7 @@ namespace mixer
             int track = 0, scene = -1;
             bool now = false;          // the transport was stopped: no waiting for the quantise
             bool toTimeline = false;
+            Frame at = -1;             // launchAt: on this frame of the launch clock
         };
         struct LaunchShared
         {
@@ -395,6 +410,8 @@ namespace mixer
         std::atomic<int> armed { 0 };
         std::mutex liveLock;
         std::vector<NoteEvent> liveQueue, liveTaken;
+        std::atomic<bool> recording { false };
+        std::vector<Recorded> recorded;                      // under liveLock
         std::atomic<bool> panicPending { false };
 
         std::vector<LaunchRequest> launchQueue, launchTaken;   // launchQueue under liveLock
