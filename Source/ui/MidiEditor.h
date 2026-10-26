@@ -54,6 +54,8 @@ public:
     void midiIn (uint8_t status, uint8_t data1, uint8_t data2);
 
     class Roll;
+    class Spectrum;
+    class Wheel;
 
 protected:
     void keyPressEvent (QKeyEvent*) override;
@@ -61,6 +63,8 @@ protected:
 
 private:
     friend class Roll;
+    friend class Spectrum;
+    friend class Wheel;
 
     void buildSystems();
     void systemChosen();
@@ -72,6 +76,8 @@ private:
     void undo();
     void redo();
     void changed();          // the sequence changed: the roll, the info line, the encoding's note
+    void viewsUpdate();      // the spectrum and the wheel, after a change or as the playhead moves
+    int64_t nowTick() const; // what the wheel shows: the playhead, else the step cursor
     void updateInfo();
     void infoEdited();
     void restyleDialog();
@@ -100,6 +106,11 @@ private:
     int64_t chordAt = -1;
 
     Roll* roll = nullptr;
+    Spectrum* spectrum = nullptr;
+    Wheel* wheel = nullptr;
+    QComboBox* viewBox = nullptr;
+    QCheckBox* wheelBox = nullptr;
+    QSpinBox* harmonicsBox = nullptr;
     QComboBox* systemBox = nullptr;
     QComboBox* rootBox = nullptr;
     QComboBox* namingBox = nullptr;

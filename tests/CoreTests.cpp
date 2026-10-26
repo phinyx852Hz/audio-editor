@@ -7721,6 +7721,16 @@ namespace
         check (pts.size() == 5 && pts.front().value == 0 && pts.back().value == 127, "note editor: a modulation ramp drawn");
         eraseLane (st, 1, 0, 0, 240);
         check (lanePoints (st, 1, 0).size() == 2, "note editor: part of a lane erased");
+
+        // The views' measures.
+        check (roughness ({ 6000.0 }) == 0.0, "note editor: one note is not rough");
+        const auto fifth = roughness ({ 6000.0, 6700.0 }), semitone = roughness ({ 6000.0, 6100.0 }), tritone = roughness ({ 6000.0, 6600.0 });
+        const auto octave = roughness ({ 6000.0, 7200.0 }), neutral = roughness ({ 6000.0, 6350.0 });
+        check (octave < fifth && fifth < tritone && tritone < semitone, "note editor: octave, fifth, tritone, semitone, roughest last");
+        check (neutral > roughness ({ 6000.0, 6400.0 }) * 0.5 && neutral < semitone, "note editor: a neutral third between");
+        check (soundingAt (st, 0).size() == 1 && soundingAt (st, 100000).empty(), "note editor: what sounds at a tick");
+        const auto use = degreeUsage (st, twelveTet());
+        check (use.size() == 12 && use[0] == 120.0 && use[2] == 120.0, "note editor: how long each degree sounds");
     }
 
 int main()

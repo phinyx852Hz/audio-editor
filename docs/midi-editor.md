@@ -41,6 +41,24 @@ fast edits do, and Ctrl+Z on the tracks puts the clip back.
   mixer/NoteEditor.h); a new mode in mixer/Tunings.cpp takes its family's names, and a mode whose
   degrees have names of their own lists them in `TuningSystem::names`.
 
+## The rising spectrum and the scale wheel
+
+- **View: Rising spectrum** (owner, 2026-10-26: "the vertical MIDI view ... with a spectral frequency
+  view to show the frequencies rolling up"): frequency across on a log scale, time down the page.
+  Each note is drawn at its fundamental, its harmonics (**harmonics**, 1 to 32) fading above it, so
+  a chord shows as the comb of partials it puts in the air, in any tuning. The system's degrees are
+  the lines, named along the bottom with the frequencies, the twelve keys dotted where they differ.
+  While it plays, the notes roll up past the line where they sound. Click a note to pick it; Ctrl
+  and the wheel zoom across, Shift and the wheel move across, Alt and the wheel stretch time.
+- **Wheel** (after MIDIRestyle's scale wheel and XenRoll's clock diagram): the period as a circle,
+  the tonic at the top, each degree at its true angle against the twelve keys' ticks, so rāst's
+  neutral third sits between the major and minor ones and yaman's just-intonation ga a little
+  under the piano's E. The bars in from the rim show how long each degree sounds in the clip. The
+  notes sounding at the playhead (or the step cursor, or the picked notes) are marked at their own
+  angles and joined, each line with its interval in cents (the interval clock). Under it, how rough
+  they sound together (Sethares' model of Plomp and Levelt's roughness, over each note's
+  harmonics), in any tuning.
+
 ## Restyle
 
 **Functions > Restyle into This System...** (after MIDIRestyle, by Aaron Brata Aditama, MIT): every
@@ -114,7 +132,7 @@ MIDIRestyle (MIT) for restyling by degree, the ghosts, A/B and pitch bend shared
 XenRoll (GPL-3.0) for cent-accurate notes, moving a note by the cent, and MPE; Blue's PianoRoll for
 rows that follow a Scala scale; Intonara for the pitch axis; Cubase for the tools, the info line,
 the lanes, quantise and step input. Ideas only: no code from any of them is used. Next, as agreed
-with the owner: pitch curves drawn on notes (meend, gamaka, glides), PHI rāga's ornaments, a scale
-wheel; then a staff view and MusicXML, tuning changes within a clip, and a consonance display.
+with the owner: pitch curves drawn on notes (meend, gamaka, glides), PHI rāga's ornaments, hum or
+sing to notes, tuning changes within a clip, and MTS-ESP.
 
 The code: mixer/NoteEditor.h (the model, plain C++, with tests), core/Scala.h, ui/MidiEditor.h.

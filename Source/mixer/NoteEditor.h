@@ -163,6 +163,17 @@ namespace noteedit
     Key detectKey (const Sequence&);
 
     //==========================================================================
+    // What the views show (owner, 2026-10-26: a scale wheel, an interval clock and a consonance display).
+    // The notes sounding at a tick: started and not ended.
+    std::vector<size_t> soundingAt (const Sequence&, int64_t tick);
+    // How rough pitches sound together: Sethares' fit (1993) of Plomp and Levelt's curve, summed
+    // over the partials of each pair of notes (harmonic, the k-th at 0.88^k). 0 for one note; a
+    // unison or octave is low, a semitone or a tritone high, in any tuning.
+    double roughness (const std::vector<double>& pitches, int partials = 6);
+    // How long each degree of the system sounds over the whole sequence, in ticks (drums left out).
+    std::vector<double> degreeUsage (const Sequence&, const PitchSystem&);
+
+    //==========================================================================
     // Step input (Cubase): notes entered at a cursor that moves on by a step.
     struct StepInput
     {

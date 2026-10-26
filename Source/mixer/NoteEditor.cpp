@@ -890,6 +890,48 @@ namespace noteedit
     }
 
     //==========================================================================
+    std::vector<size_t> soundingAt (const Sequence& s, int64_t tick)
+    {
+        std::vector<size_t> out;
+        for (size_t i = 0; i < s.notes.size(); ++i)
+            if (s.notes[i].start <= tick && s.notes[i].end() > tick)
+                out.push_back (i);
+        return out;
+    }
+
+    double roughness (const std::vector<double>& pitches, int partials)
+    {
+        // Sethares, "Local consonance and the relationship between timbre and scale" (JASA 94, 1993).
+        constexpr double b1 = 3.51, b2 = 5.75, xStar = 0.24, s1 = 0.0207, s2 = 18.96;
+        double total = 0.0;
+        for (size_t i = 0; i < pitches.size(); ++i)
+            for (size_t j = i + 1; j < pitches.size(); ++j)
+            {
+                const auto fi = 440.0 * std::pow (2.0, (pitches[i] - 6900.0) / 1200.0);
+                const auto fj = 440.0 * std::pow (2.0, (pitches[j] - 6900.0) / 1200.0);
+                for (int a = 1; a <= partials; ++a)
+                    for (int b = 1; b <= partials; ++b)
+                    {
+                        const auto f1 = fi * a, f2 = fj * b;
+                        const auto amp = std::min (std::pow (0.88, a - 1), std::pow (0.88, b - 1));
+                        const auto sc = xStar / (s1 * std::min (f1, f2) + s2);
+                        const auto d = std::abs (f2 - f1);
+                        total += amp * (std::exp (-b1 * sc * d) - std::exp (-b2 * sc * d));
+                    }
+            }
+        return total;
+    }
+
+    std::vector<double> degreeUsage (const Sequence& s, const PitchSystem& system)
+    {
+        std::vector<double> out ((size_t) std::max (1, system.size()), 0.0);
+        for (const auto& n : s.notes)
+            if (n.channel != 9)
+                out[(size_t) system.degreeOf (system.nearestStep (n.pitch))] += (double) n.length;
+        return out;
+    }
+
+    //==========================================================================
     void stepNote (Sequence& s, StepInput& in, double pitch, int channel)
     {
         if (in.insert && ! in.chord)
