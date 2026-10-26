@@ -365,6 +365,7 @@ private:
     QLabel* midiClipTitle = nullptr;
     QComboBox* rootBox = nullptr;
     QComboBox* scaleBox = nullptr;
+    QComboBox* hypoBox = nullptr;   // the scale's range: authentic, or a hypo range
     int phiTurn = 0;
     // Q-Link (Cubase): with it on, a change to one of the picked strips goes to all of them;
     // Alt+Shift sends it to every track. `fn` gets each strip, and whether it is the one changed.

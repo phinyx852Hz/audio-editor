@@ -276,7 +276,17 @@ namespace counterpoint
             const auto r = std::abs (voice.rank);
             const auto centre = middle + (int) std::lround (scale * (voice.rank > 0 ? 7.0 * r : -(8.0 * r + 1.0)));
             const auto half = (int) std::lround (scale * 9.0);
-            const auto lo = std::clamp (centre - half, 21, 108), hi = std::clamp (centre + half, 21, 108);
+            auto lo = std::clamp (centre - half, 21, 108), hi = std::clamp (centre + half, 21, 108);
+            if (mode.below > 0 && mode.period == 12)
+            {
+                // A hypo range: the octave from `below` keys under a final, its middle nearest the centre.
+                const auto bottomKey = ((mode.root - mode.below) % 12 + 12) % 12;
+                auto bottom = centre - 6 - ((centre - 6 - bottomKey) % 12 + 12) % 12;
+                if (centre - (bottom + 6) > 6)
+                    bottom += 12;
+                lo = std::clamp (bottom - 2, 21, 108);
+                hi = std::clamp (bottom + 14, 21, 108);
+            }
 
             // What the other voices sound at each slot.
             std::vector<std::vector<int>> at (n, std::vector<int> (others.size(), -1));

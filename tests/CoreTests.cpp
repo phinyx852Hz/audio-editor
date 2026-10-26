@@ -1387,6 +1387,21 @@ namespace
         auto find = [&] (const std::string& name) { for (size_t i = 0; i < scales.size(); ++i) if (name == scales[i].name) return (int) i; return -1; };
         const auto malkauns = find ("Malkauns");
         check (malkauns >= 0 && pitchSet (*midifile::toMode (*song, 0, malkauns)) == (std::vector<int> { 60, 63, 63, 68 }), "midi edits: a raga's notes, pentatonic");
+        // Hypo: Bhupali (S R G P D) on C from the fifth folds every note into G3..G4 (55..67), Sa kept.
+        const auto bhupali = find ("Bhupali");
+        check (bhupali >= 0 && mixer::hypoFamily (scales[(size_t) bhupali].family) && mixer::hasHypo (scales[(size_t) bhupali].notes, mixer::Hypo::fifth)
+               && ! mixer::hasHypo (scales[(size_t) bhupali].notes, mixer::Hypo::fourth) && ! mixer::hypoFamily (scales[0].family),
+               "midi edits: hypo for a raga with the degree, not the church modes");
+        auto wide = std::make_shared<midifile::Song> (*song);
+        wide->events.clear();
+        const uint8_t spread[] { 48, 60, 62, 76 };
+        for (int i = 0; i < 4; ++i)
+        {
+            wide->events.push_back ({ i * 480, 0x90, spread[i], 90 });
+            wide->events.push_back ({ i * 480 + 240, 0x80, spread[i], 0 });
+        }
+        check (pitchSet (*midifile::inRange (*midifile::toMode (*wide, 0, bhupali), 0, 5)) == (std::vector<int> { 60, 60, 62, 64 }),
+               "midi edits: a hypo range, notes folded into the octave from the fifth below");
         check (find ("Darbari Kanada") >= 0 && find ("Jaunpuri") >= 0 && scales[(size_t) find ("Darbari Kanada")].notes == scales[(size_t) find ("Asavari")].notes
                && scales[(size_t) find ("Jaunpuri")].notes == scales[(size_t) find ("Asavari")].notes, "midi edits: ragas sharing their notes are each listed");
     }
@@ -4501,6 +4516,16 @@ namespace
         const auto bilaval = mixer::keyCents (get ("bilaval"));
         check (near (bilaval[7], 701.955, 1.0e-3) && near (bilaval[4], phi::Tuning::ratioToCents (1.25), 1.0e-9), "tunings: ragas in just intonation");
         check (near (mixer::keyCents (get ("darbari kanada"))[3], phi::Tuning::ratioToCents (32.0 / 27.0), 1.0e-9), "tunings: a raga's own komal svara");
+        // Hypo ranges: for ragas, maqams and dastgahs with that degree; not the church modes (they
+        // have their hypo-modes), jazz modes or equal steps.
+        using mixer::Hypo;
+        check (mixer::hasHypo (get ("bilaval"), Hypo::fifth) && mixer::hasHypo (get ("bilaval"), Hypo::fourth)
+               && mixer::hasHypo (get ("rast"), Hypo::fifth) && mixer::hasHypo (get ("shur"), Hypo::fourth)
+               && mixer::hasHypo (get ("bilaval (equal tempered)"), Hypo::fifth), "tunings: hypo for a tonic with its fifth and fourth");
+        check (! mixer::hasHypo (get ("dorian"), Hypo::fifth) && ! mixer::hasHypo (get ("hypodorian"), Hypo::fifth) && ! mixer::hasHypo (get ("altered"), Hypo::fourth)
+               && ! mixer::hasHypo (get ("12 equal steps"), Hypo::fifth) && ! mixer::hasHypo (get ("huzam"), Hypo::fifth),
+               "tunings: no hypo for the church modes, jazz modes, equal steps, or a mode without the degree");
+        check (mixer::hypoBelow (Hypo::fifth) == 5 && mixer::hypoBelow (Hypo::fourth) == 7 && mixer::hypoBelow (Hypo::none) == 0, "tunings: a hypo range's bottom");
         // Hypodorian on A has A's (Aeolian) Pythagorean steps: a 9/8 then a 256/243 limma.
         const auto hypo = mixer::keyCents (get ("hypodorian"));
         check (near (hypo[2], phi::Tuning::ratioToCents (9.0 / 8.0), 1.0e-9) && near (hypo[3] - hypo[2], phi::Tuning::ratioToCents (256.0 / 243.0), 1.0e-9),
@@ -4674,6 +4699,14 @@ namespace
         for (const auto& x : rm.voices[0])
             rastKeys = rastKeys && rast.scale[(size_t) (((x.pitch - 2) % 12 + 12) % 12)];
         check (rastKeys && near (rast.keyCents[4], 350.0, 1.0e-9), "counterpoint: a maqam's keys, its quarter steps included");
+        // Hypo: Rāst on D from the fifth keeps the voice above to the octave A..A (69..81), a step past each end.
+        auto plagal = maqam;
+        plagal.mode.below = mixer::hypoBelow (mixer::Hypo::fifth);
+        const auto rp = generate (cf, plagal);
+        bool inPlagal = ! rp.voices[0].empty() && rp.voices[0].back().pitch % 12 == 2;
+        for (const auto& x : rp.voices[0])
+            inPlagal = inPlagal && x.pitch >= 67 && x.pitch <= 83 && rast.scale[(size_t) (((x.pitch - 2) % 12 + 12) % 12)];
+        check (inPlagal, "counterpoint: a hypo range, the final kept");
 
         // A raga's āroha: going up never lands on a note it leaves out.
         auto bhairavi = Mode::fromTuning (mixer::tuningSystems()[(size_t) mixer::findTuning ("bhairavi")], 2);

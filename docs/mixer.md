@@ -403,6 +403,11 @@ Fast MIDI edits (owner, 2026-10-25: "MIDI editing, but really fast"; "the idea i
   Bhairav, Lalit, Puriya Dhanashri, Shree, Multani and Charukeshi. A note between two goes down,
   and drums (channel 10) stay. Ragas that share their notes (Darbari, Jaunpuri, Asavari) are each
   listed. A raga is taken as the notes it uses up and down; its own movement is not followed.
+- The box beside the raga offers a **hypo** range (owner, 2026-10-26): Sa stays the final, and
+  every note is folded by octaves into the octave from the fifth (Pa, a fourth below Sa, up to Pa)
+  or from the fourth (Ma, a fifth below Sa, up to Ma), the one nearest the clip's middle. It is
+  offered for the ragas that have that svara. The church modes (Ionian to Locrian) don't offer
+  it: their hypo-modes are among the tunings.
 - Each edit writes a new MIDI file (type 0) next to the mix, in "<mix> Edits", or in Music/PHI
   Edits until the mix is saved. The clip plays it from the start, as it was heard (a reversed
   clip is turned round first). Ctrl+Z undoes an edit on the tracks. The code is in
@@ -437,6 +442,14 @@ beyond the church modes):
   an equal temperament each key is one step. Church modes raise the note a whole step below a
   cadence's arrival (musica ficta). A raga can carry its āroha and avaroha (the notes used going
   up and coming down); the tunings list has none yet, so a raga uses its notes both ways.
+- **Range** (hypo, owner 2026-10-26): for a raga, maqam or dastgah, the new voices can keep to a
+  hypo range with the same tonic, as the Gregorian plagal modes do. *From the fifth* is the octave
+  from a fourth below the tonic (Pa, the dominant, up to Pa); *from the fourth* the octave from a
+  fifth below (Ma up to Ma). Each voice takes the octave of that range nearest where it would sit,
+  and may go a step past either end. It is offered only when the mode has a fifth or fourth within
+  30 cents of a pure one (Huzām has no fifth, Bhūpālī no fourth). The church modes don't offer it,
+  since they have their own hypo-modes in the list, and neither do jazz modes or equal steps, which
+  have no tonic-dominant hierarchy. The automatic counterpoint uses the dialog's last choice.
 - Variation: another number writes other lines that keep the same rules; the same number writes
   the same lines.
 - Each voice is a MIDI file (type 0, the melody's tempo map and channel) next to the mix, and a

@@ -39,6 +39,10 @@ namespace counterpoint
         std::vector<bool> scale;          // the keys of the period the mode uses
         std::vector<bool> up, down;       // a raga's āroha and avaroha (empty: the scale both ways)
         bool ficta = false;               // at a cadence, the note a whole step below where it lands may be raised
+        // A hypo range (mixer::Hypo): each new voice keeps to the octave that starts this many keys
+        // below a final (the root), the one nearest where it would sit, and a step past either
+        // end. 0: the voices' usual register around the melody.
+        int below = 0;
 
         static Mode chromatic (int root);   // every key, in 12-TET
         // A tuning system of mixer/Tunings.h on `root` (0 C .. 11 B), as its keys play it.

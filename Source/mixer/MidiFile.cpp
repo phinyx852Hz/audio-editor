@@ -638,4 +638,38 @@ namespace midifile
         }
         return join (song, notes, std::move (others), song.lastTick);
     }
+
+    SongPtr inRange (const Song& song, int root, int below)
+    {
+        std::vector<Note> notes;
+        std::vector<Event> others;
+        split (song, notes, others);
+        std::vector<int> pitches;
+        for (const auto& n : notes)
+            if (n.channel != 9)
+                pitches.push_back (n.pitch);
+        if (pitches.empty())
+            return std::make_shared<Song> (song);
+        std::nth_element (pitches.begin(), pitches.begin() + (long) pitches.size() / 2, pitches.end());
+        const auto middle = pitches[pitches.size() / 2];
+        // The bottom of the range: on the key `below` under the final, with the range's middle
+        // nearest the notes'.
+        const auto bottomKey = ((root - below) % 12 + 12) % 12;
+        auto bottom = middle - 6 - ((middle - 6 - bottomKey) % 12 + 12) % 12;
+        if (middle - (bottom + 6) > 6)
+            bottom += 12;
+        bottom = std::clamp (bottom, 0, 115);
+        for (auto& n : notes)
+        {
+            if (n.channel == 9)
+                continue;
+            int p = n.pitch;
+            while (p < bottom)
+                p += 12;
+            while (p > bottom + 12)
+                p -= 12;
+            n.pitch = (uint8_t) std::clamp (p, 0, 127);
+        }
+        return join (song, notes, std::move (others), song.lastTick);
+    }
 }
