@@ -205,6 +205,7 @@ public:
     bool modeShownMidi (int root, uint16_t keys, int below, const QString& what);
     bool showsMidiClip() const;
     void counterpointShown() { counterpointShownMidi(); }
+    void fugueShown() { fugueShownMidi(); }
     // The editor's track (owner, 2026-10-26): one track of the mix, Audio only, MIDI only or
     // Audio + MIDI, under the editor's waveform, with the mixer's launcher slots (left to right),
     // its clips across time, recording and the MIDI tools. It is the track last selected here or
