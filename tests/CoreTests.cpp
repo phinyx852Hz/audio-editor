@@ -4513,6 +4513,41 @@ namespace
         const auto five = mixer::makeTuning (get ("5 equal steps"), 0);
         check (near (five.hz (65), 2.0 * five.hz (60), 1.0e-9) && near (five.hz (60), 261.6255653005986, 1.0e-9), "tunings: equal steps from the root");
 
+        // Chinese and Japanese systems. The twelve lü by sanfen sunyi: linzhong a pure fifth,
+        // zhonglü (the last) a Pythagorean comma above 4/3, on F's key.
+        bool eastAsian = true;
+        for (const char* plain : { "shier lu (sanfen sunyi)", "jing fang 60 lu", "cai yuanding 18 lu", "he chengtian xinlu", "zhu zaiyu xinfa milu",
+                                   "chunlu wusheng (qin)", "gong", "yu", "yayue shang", "yanyue zhi", "gong (equal tempered)", "yifan (guangdong)",
+                                   "zhongsan zhongliu (chaozhou)", "ichikotsucho", "banshikicho", "miyako-bushi (in)", "ryukyu", "hirajoshi" })
+            eastAsian = eastAsian && mixer::findTuning (plain) >= 0;
+        check (eastAsian && get ("jue").name == "jué" && get ("hyojo").name == "hyōjō", "tunings: Chinese and Japanese systems, by their plain names");
+        const auto lu = mixer::keyCents (get ("shier lu (sanfen sunyi)"));
+        check (near (lu[7], 701.955, 1.0e-3) && near (lu[5], phi::Tuning::ratioToCents (177147.0 / 131072.0), 1.0e-6), "tunings: the twelve lü by sanfen sunyi");
+        // The five modes: gong's jue a Pythagorean third (81/64); yu (on la) has a minor third
+        // (32/27) and no second; in 12-TET, yu is 0 3 5 7 10.
+        check (near (mixer::keyCents (get ("gong"))[4], phi::Tuning::ratioToCents (81.0 / 64.0), 1.0e-9)
+               && get ("yu").cents.size() == 5 && near (get ("yu").cents[1], phi::Tuning::ratioToCents (32.0 / 27.0), 1.0e-9)
+               && get ("yu (equal tempered)").cents == std::vector<double> ({ 0, 300, 500, 700, 1000 }), "tunings: the five Chinese modes");
+        // Yanyue on gong has qingjue (4/3) and run (16/9); yayue has bianzhi (729/512).
+        const auto yanyue = get ("yanyue gong").cents, yayue = get ("yayue gong").cents;
+        check (yanyue.size() == 7 && near (yanyue[3], phi::Tuning::ratioToCents (4.0 / 3.0), 1.0e-9) && near (yanyue[6], phi::Tuning::ratioToCents (16.0 / 9.0), 1.0e-9)
+               && near (yayue[3], phi::Tuning::ratioToCents (729.0 / 512.0), 1.0e-9), "tunings: the seven-note Chinese scales");
+        // He Chengtian's lü close the circle: each within 8 cents of 12-TET (sanfen sunyi's zhonglü
+        // is 21.5 cents off).
+        bool closes = get ("he chengtian xinlu").cents.size() == 12;
+        for (size_t i = 0; closes && i < 12; ++i)
+            closes = std::abs (get ("he chengtian xinlu").cents[i] - 100.0 * (double) i) < 8.0;
+        check (closes, "tunings: He Chengtian's lü near equal");
+        // Jing Fang's 60 lü play a degree a key: seyu, the 54th fifth, is 3.6 cents above huangzhong.
+        const auto jing = mixer::makeTuning (get ("jing fang 60 lu"), 0);
+        check (near (jing.hz (120), 2.0 * jing.hz (60), 1.0e-9) && near (1200.0 * std::log2 (jing.hz (61) / jing.hz (60)), 3.615, 1.0e-3),
+               "tunings: Jing Fang's 60 lü, a degree a key");
+        check (counterpoint::Mode::fromTuning (get ("jing fang 60 lu"), 0).valid() && counterpoint::Mode::fromTuning (get ("jing fang 60 lu"), 0).period == 60,
+               "tunings: a long scale's degrees as counterpoint's keys");
+        // Gagaku: hyōjō is ritsu (Dorian), sōjō ryo (Lydian), both Pythagorean.
+        check (near (mixer::keyCents (get ("hyojo"))[3], phi::Tuning::ratioToCents (32.0 / 27.0), 1.0e-9)
+               && near (mixer::keyCents (get ("sojo"))[6], phi::Tuning::ratioToCents (729.0 / 512.0), 1.0e-9), "tunings: ritsu and ryo");
+
         const mixer::TuningChoice none, clip { 3, 0 }, scene { 5, 2 }, track { 7, 4 };
         check (mixer::tuningInForce (clip, scene, track) == clip && mixer::tuningInForce (none, scene, track) == scene
                && mixer::tuningInForce (none, none, track) == track && mixer::tuningInForce (none, none, none).system == -1,

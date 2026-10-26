@@ -602,6 +602,18 @@ namespace midifile
             { "Shree", "Raga", bits ({ 0, 1, 4, 6, 7, 8, 11 }) },
             { "Multani", "Raga", bits ({ 0, 1, 3, 6, 7, 8, 11 }) },
             { "Charukeshi", "Raga", bits ({ 0, 2, 4, 5, 7, 8, 10 }) },
+            // The five Chinese modes (wusheng) and Japanese scales, as in mixer/Tunings.cpp.
+            { "Gong", "Chinese", bits ({ 0, 2, 4, 7, 9 }) },
+            { "Shang", "Chinese", bits ({ 0, 2, 5, 7, 10 }) },
+            { "Jue", "Chinese", bits ({ 0, 3, 5, 8, 10 }) },
+            { "Zhi", "Chinese", bits ({ 0, 2, 5, 7, 9 }) },
+            { "Yu", "Chinese", bits ({ 0, 3, 5, 7, 10 }) },
+            { "Miyako-bushi (In)", "Japanese", bits ({ 0, 1, 5, 7, 8 }) },
+            { "Ritsu (Yo)", "Japanese", bits ({ 0, 2, 5, 7, 9 }) },
+            { "Min'yo", "Japanese", bits ({ 0, 3, 5, 7, 10 }) },
+            { "Ryukyu", "Japanese", bits ({ 0, 4, 5, 7, 11 }) },
+            { "Hirajoshi", "Japanese", bits ({ 0, 2, 3, 7, 8 }) },
+            { "Iwato", "Japanese", bits ({ 0, 1, 5, 6, 10 }) },
         };
         return all;
     }

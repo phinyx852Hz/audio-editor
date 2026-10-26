@@ -431,7 +431,7 @@ beyond the church modes):
   nothing that keeps the strict rules, all are written again with another seed. Only when nothing
   fits is a strict rule bent, and the status line says how many.
 - The mode: any of the tunings (church modes and hypo-modes, jazz modes, ragas, maqams and
-  dastgahs, 2 to 21 equal steps), on a root, or the melody's own (the diatonic mode on its last
+  dastgahs, Chinese and Japanese modes and lü, 2 to 21 equal steps), on a root, or the melody's own (the diatonic mode on its last
   note that holds all its notes). The voices use only the mode's keys, and consonance is judged
   by the cents the tuning plays: a maqam's neutral third or sixth counts as a third or sixth; in
   an equal temperament each key is one step. Church modes raise the note a whole step below a
@@ -489,12 +489,17 @@ could be applied on the clip level, track level or scene level"):
   ratios, with Pythagorean komal svaras where the raga sings them low: darbārī's ga and dha, the other kānaḍās' ga,
   toḍī's and bhairav's re and dha), and each of them again equal tempered; the six church modes and six hypo-modes in Pythagorean tuning
   (a hypo-mode's root is the bottom of its range, a fourth below the final); 13 jazz modes; nine
-  maqams and seven dastgahs with quarter steps of 50 cents; and 2 to 21 equal steps to the octave.
-  Names are in IAST (ragas), IJMES (maqams) and a common Persian romanisation (dastgahs), all in
-  lower case (owner); a mix saves the plain ASCII name beside each.
+  maqams and seven dastgahs with quarter steps of 50 cents; Chinese lü from the treatises (sānfēn
+  sǔnyì's twelve, Jīng Fáng's 60, Cài Yuándìng's 18, Hé Chéngtiān's and Zhū Zàiyù's temperaments,
+  the qin's just intonation), the five Chinese modes and the three seven-note scales on each in
+  sānfēn sǔnyì and in 12-TET, and Chaozhou and Cantonese modes; the six gagaku modes in
+  Pythagorean tuning and seven Japanese folk and koto scales (sources and details in
+  [east-asian-tunings.md](east-asian-tunings.md)); and 2 to 21 equal steps to the octave.
+  Names are in IAST (ragas), IJMES (maqams), a common Persian romanisation (dastgahs), pinyin with
+  its tones and Hepburn, all in lower case (owner); a mix saves the plain ASCII name beside each.
 - A scale's degrees play on the nearest keys from the root, a quarter step on the key above (rāst's
   E half-flat on E); the keys between keep their 12-TET pitch. Equal steps run up and down the
-  keys from the root.
+  keys from the root, as does a scale of more than twelve notes (Jīng Fáng's 60 lü), a note a key.
 - The mixer hands the tuning to the track's instrument (`mixer::Instrument::setTuning`) whenever
   it changes. Only the PHI synth retunes, and PHI rāga (docs/raga.md) plays a raga in force by its
   sheet; the Synth, Sampler, Slicer and plugins stay in 12-TET.

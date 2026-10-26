@@ -3,9 +3,11 @@
 
 // The modal tunings a clip, a scene or a track can play in (owner, 2026-10-25): the major
 // Hindustani ragas in just intonation (and each in 12-TET), the church modes and their hypo-modes in Pythagorean
-// tuning, jazz modes, Arabic maqams and Persian dastgahs with their quarter steps, and 2 to 21
-// equal steps to the octave. Names are transliterated (IAST for the ragas, IJMES for Arabic,
-// a common Persian romanisation), with a plain spelling beside each for searching and saving.
+// tuning, jazz modes, Arabic maqams and Persian dastgahs with their quarter steps, Chinese lü and
+// modes from the treatises (and in 12-TET) and Japanese gagaku and folk modes (2026-10-26), and 2
+// to 21 equal steps to the octave. Names are transliterated (IAST for the ragas, IJMES for Arabic,
+// a common Persian romanisation, pinyin with its tones, Hepburn), with a plain spelling beside
+// each for searching and saving.
 // The PHI synth plays them (mixer::Instrument::setTuning); other instruments stay in 12-TET.
 #include "../core/PhiTuning.h"
 
@@ -19,7 +21,9 @@ namespace mixer
     {
         std::string name;     // as shown, all lower case (owner): "darbārī kānaḍā", "ḥijāz", "rāst-panjgāh"
         std::string plain;    // ASCII, also the key a mix saves: "darbari kanada"
-        std::string family;   // "raga", "raga, equal tempered", "church mode", "hypo-mode", "jazz mode", "maqam", "dastgah", "equal"
+        std::string family;   // "raga", "raga, equal tempered", "church mode", "hypo-mode", "jazz mode", "maqam", "dastgah", "chinese tuning",
+                              // "chinese mode", "chinese mode, equal tempered", "chinese regional mode",
+                              // "gagaku mode", "japanese mode", "equal"
         std::vector<double> cents;   // the degrees above the tonic, from 0, within the period
         int divisions = 0;           // an equal temperament: this many steps to the octave (else 0)
     };
@@ -35,7 +39,8 @@ namespace mixer
 
     // The tuning for an instrument: `root` 0 (C) to 11 (B) is the tonic, Sa or the final, at its
     // 12-TET pitch with A4 at 440 Hz. An equal temperament walks its steps up and down the keys
-    // from the root (middle C's octave).
+    // from the root (middle C's octave), and so does a scale of more than twelve degrees (Jing
+    // Fang's 60 lü), a degree a key.
     phi::Tuning makeTuning (const TuningSystem&, int root);
 
     // A clip's, scene's or track's choice: system -1 is none (the next level decides).

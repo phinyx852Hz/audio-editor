@@ -34,7 +34,7 @@ namespace counterpoint
     struct Mode
     {
         int root = 0;                     // 0 (C) .. 11 (B): its keys count from 60 + root
-        int period = 12;                  // keys to the octave: 12, or an equal temperament's steps
+        int period = 12;                  // keys to the octave: 12, an equal temperament's steps, or a long scale's degrees
         std::vector<double> keyCents;     // what each key of the period plays, in cents above the root
         std::vector<bool> scale;          // the keys of the period the mode uses
         std::vector<bool> up, down;       // a raga's āroha and avaroha (empty: the scale both ways)
