@@ -620,6 +620,24 @@ namespace midifile
             { "dindinyongwe", "Mbira", bits ({ 0, 1, 3, 5, 6, 8, 10 }) },
             { "nyunga nyunga", "Mbira", bits ({ 0, 2, 4, 7, 9, 11 }) },
             { "matepe", "Mbira", bits ({ 0, 2, 4, 5, 7, 8, 10 }) },
+            // The five Chinese modes (wusheng), Japanese scales and Korean modes, as in mixer/Tunings.cpp.
+            { "gōng", "Chinese", bits ({ 0, 2, 4, 7, 9 }) },
+            { "shāng", "Chinese", bits ({ 0, 2, 5, 7, 10 }) },
+            { "jué", "Chinese", bits ({ 0, 3, 5, 8, 10 }) },
+            { "zhǐ", "Chinese", bits ({ 0, 2, 5, 7, 9 }) },
+            { "yǔ", "Chinese", bits ({ 0, 3, 5, 7, 10 }) },
+            { "miyako-bushi (in)", "Japanese", bits ({ 0, 1, 5, 7, 8 }) },
+            { "ritsu (yō)", "Japanese", bits ({ 0, 2, 5, 7, 9 }) },
+            { "min'yō", "Japanese", bits ({ 0, 3, 5, 7, 10 }) },
+            { "ryūkyū", "Japanese", bits ({ 0, 4, 5, 7, 11 }) },
+            { "hirajōshi", "Japanese", bits ({ 0, 2, 3, 7, 8 }) },
+            { "iwato", "Japanese", bits ({ 0, 1, 5, 6, 10 }) },
+            { "p'yŏngjo", "Korean", bits ({ 0, 2, 5, 7, 9 }) },
+            { "kyemyŏnjo", "Korean", bits ({ 0, 3, 5, 7, 10 }) },
+            { "kyŏngt'ori", "Korean", bits ({ 0, 2, 5, 7, 9 }) },
+            { "menarit'ori", "Korean", bits ({ 0, 3, 5, 8, 10 }) },
+            { "yukchabaegit'ori", "Korean", bits ({ 0, 5, 7, 8 }) },
+            { "susimgat'ori", "Korean", bits ({ 0, 2, 5, 7, 10 }) },
         };
         return all;
     }

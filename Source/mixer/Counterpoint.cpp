@@ -580,6 +580,13 @@ namespace counterpoint
             }
             return m;
         }
+        if (t.cents.size() > 12)   // a degree a key, as the tuning plays it
+        {
+            m.period = (int) t.cents.size();
+            m.keyCents = t.cents;
+            m.scale.assign (t.cents.size(), true);
+            return m;
+        }
         const auto keys = mixer::keyCents (t);
         m.keyCents.assign (keys.begin(), keys.end());
         m.scale.assign (12, false);
