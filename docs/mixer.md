@@ -429,7 +429,7 @@ case, in proper transliteration):
 - The mode chosen is what the Counterpoint and Fugue dialogs open on when the clip has no tuning
   of its own. **tune the track** sets the selected track's tuning to it (a hypo-mode on the bottom
   of its range, hypodorian on A for a final on D); **notes into the mode** moves the MIDI clip
-  shown in the Device Chain into its keys and range; **counterpoint...** opens Counterpoint, and
+  shown in the Device Chain into its keys and range; **counterpoint...** and **fugue...** open those dialogs,
   **stochasticize...** opens [stochasticize](stochastic.md), its pitch sieve ready to fill from the mode;
   **cubify...** arranges the MIDI clip shown, else the launcher's scene, by [Xenakis's cubes](cubify.md),
   on a messiaen mode when one is chosen here.
