@@ -5357,7 +5357,12 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
         auto* counterpoint = new QPushButton (tr ("Counterpoint..."), midiClipBox);
         counterpoint->setToolTip (tr ("New voices against this melody, by Fux's species of counterpoint, in a mode, raga or "
                                       "maqam, each a clip on a new track"));
-        grid->addWidget (counterpoint, 3, 0, 1, 4);
+        grid->addWidget (counterpoint, 3, 0, 1, 2);
+        auto* fugue = new QPushButton (tr ("Fugue..."), midiClipBox);
+        fugue->setToolTip (tr ("A fugue on this melody as its subject: two to four voices entering in turn, a countersubject, "
+                               "episodes and a stretto, in any mode, raga or maqam, each voice a clip on a new track"));
+        grid->addWidget (fugue, 3, 2, 1, 2);
+        connect (fugue, &QPushButton::clicked, this, [this] { fugueShownMidi(); });
         auto* hint = new QLabel (tr ("R reverses it"), midiClipBox);
         hint->setForegroundRole (QPalette::PlaceholderText);
         grid->addWidget (hint, 4, 0, 1, 4);
@@ -5818,6 +5823,31 @@ void MixerWindow::counterpointShownMidi()
 
     writeCounterpoint (track, clip, slot, scene, options, chosen >= 0 ? mixer::TuningChoice { chosen, rootChoice->currentIndex() } : mixer::TuningChoice {},
                        tuning, -1);
+}
+
+void MixerWindow::fugueShownMidi()
+{
+    if (! showingClip || ! clipView->showsMidi())
+        return;
+    const auto track = clipView->shownTrack();
+    const auto id = clipView->shownId();
+    const auto scene = clipView->shownScene();
+    mixer::Clip clip;
+    mixer::SlotPtr slot;
+    if (id != 0)
+    {
+        for (const auto& c : engine.clips (track))
+            if (c.id == id)
+                clip = c;
+    }
+    else if (scene >= 0 && (slot = slots[(size_t) track][(size_t) scene]) != nullptr)
+        clip = slot->clip;
+    if (clip.midi == nullptr || clip.midi->song == nullptr || ! writeFugue (track, clip, slot, scene))
+        return;
+    rebuildStrips();
+    grid->update();
+    rack->refresh();
+    changed();
 }
 
 void MixerWindow::writeCounterpoint (int track, const mixer::Clip& clip, mixer::SlotPtr slot, int scene, const counterpoint::Settings& options,
