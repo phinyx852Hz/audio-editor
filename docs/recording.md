@@ -14,6 +14,15 @@ clip launcher and horizontal track views)." "I'd prefer a robust offering of opt
 method super easy to learn with the options for the advanced performer who can handle the
 complexity."
 
+## The idea (owner, 2026-10-26)
+
+"No MIDI editing. Once a clip has been recorded, it's fixed." "The idea is to live with the mistake
+within reason. I was originally not going to have a metronome, but I'll allow that. The performer
+who uses this DAW needs to develop their musicianship and learn to get a good take from the start
+and not rely on heavy editing." So there is no piano roll: a take is played, kept or recorded
+again. Quantise Notes acts as it is played, not afterwards. A quantise for a recorded MIDI clip,
+like the one for audio, and making MIDI clips may come.
+
 ## The main method
 
 1. Arm a track (R, or its strip's arm button). It records the MIDI keyboard when it has an
