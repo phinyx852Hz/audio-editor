@@ -3613,6 +3613,9 @@ protected:
         {
             menu.addAction (MixerWindow::tr ("&Launch Scene (Shift+Enter)"), this, [this, s = hit.scene] { launchScene (s); });
             menu.addAction (MixerWindow::tr ("&Rename Scene..."), this, [this, s = hit.scene] { window.renameScene (s); });
+            menu.addSeparator();
+            menu.addAction (MixerWindow::tr ("&cubify..."), this, [this, s = hit.scene] { window.cubifyScene (s); })
+                ->setStatusTip (MixerWindow::tr ("The scene arranged by Xenakis's cubes: 24 sections onto its tracks"));
             menu.exec (e->globalPos());
             return;
         }
@@ -5363,9 +5366,14 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
                                     "sieves taken from the mode, a rhythmic mode or this clip"));
         grid->addWidget (stochastic, 3, 2, 1, 2);
         connect (stochastic, &QPushButton::clicked, this, [this] { stochasticizeShownMidi(); });
+        auto* cube = new QPushButton (tr ("cubify..."), midiClipBox);
+        cube->setToolTip (tr ("This clip arranged by Xenakis's cubes, as in nomos alpha: 24 sections onto its track (right-click a "
+                              "scene to cubify the whole scene)"));
+        grid->addWidget (cube, 4, 0, 1, 4);
+        connect (cube, &QPushButton::clicked, this, [this] { cubifyShownMidi(); });
         auto* hint = new QLabel (tr ("R reverses it"), midiClipBox);
         hint->setForegroundRole (QPalette::PlaceholderText);
-        grid->addWidget (hint, 4, 0, 1, 4);
+        grid->addWidget (hint, 5, 0, 1, 4);
         connect (counterpoint, &QPushButton::clicked, this, [this] { counterpointShownMidi(); });
 
         connect (phi, &QToolButton::clicked, this, [this] { phiShownMidi(); });
