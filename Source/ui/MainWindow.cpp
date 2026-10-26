@@ -84,12 +84,15 @@
 #include <QUrl>
 #include <QMessageBox>
 #include <QProgressDialog>
+#include <QProxyStyle>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QEventLoop>
 #include <QStatusBar>
+#include <QStyleFactory>
 #include <QTabBar>
 #include <QTimer>
+#include <QSplitter>
 #include <QVBoxLayout>
 #include <QtConcurrent/QtConcurrentRun>
 
@@ -169,7 +172,18 @@ MainWindow::MainWindow (AudioEngine& e)
     albumView = new AlbumView (editor);
     albumView->hide();
     editorLayout->addWidget (albumView);
-    editorLayout->addWidget (waveform, 1);
+    // The waveform above, the editor's track (one track of the project, MixerSection.cpp) below.
+    editorSplit = new QSplitter (Qt::Vertical, editor);
+    editorSplit->setChildrenCollapsible (false);
+    editorSplit->addWidget (waveform);
+    trackHolder = new QWidget (editorSplit);
+    auto* holderLayout = new QVBoxLayout (trackHolder);
+    holderLayout->setContentsMargins (0, 0, 0, 0);
+    trackHolder->hide();
+    editorSplit->addWidget (trackHolder);
+    editorSplit->setStretchFactor (0, 3);
+    editorSplit->setStretchFactor (1, 2);
+    editorLayout->addWidget (editorSplit, 1);
     editorLayout->addWidget (infoStrip);
     // The editor shares its place with the mixer (MixerSection.cpp).
     editorPage = editor;
@@ -572,6 +586,7 @@ void MainWindow::registerCommands()
     registerSamplerCommands();
     registerInstrumentCommands();
     registerMixerCommands();
+    registerModeCommands();
     registerControlCommands();
     registerPatchBayCommands();
     registerReferenceCommands();
@@ -903,18 +918,34 @@ void MainWindow::buildMenus()
                                "@visual.artistic", "@visual.science", "-", "@visual.milkdrop", "@visual.rain", "@visual.web", "@visual.sonify", "-",
                                "view.opacityUp", "view.opacityDown", "view.opacityFull" } },
         { tr ("Mi&xer"),     { "mixer.window", "mixer.dock", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
-                               "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "-", "mixer.assistant" } },
+                               "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "mixer.sendToTimeline", "-", "mixer.editorTrack", "mixer.trackToEditor", "-", "mixer.assistant" } },
         { tr ("S&ample"),    { "sample.send", "sample.window", "sample.refresh", "-", "slice.send", "slice.window", "slice.refresh", "-",
                                "instrument.granular", "instrument.retroSampler", "-", "sample.midiInputs", "control.surfaces", "control.learn", "sample.panic" } },
         { tr ("S&ynth"),     { "instrument.wavetable", "instrument.modular", "instrument.additive", "-",
                                "instrument.subtractive1", "instrument.subtractive2", "instrument.fm", "-",
                                "sample.midiInputs", "sample.panic" } },
+        { tr ("Mo&de"),      { "@mode" } },
         { tr ("Trac&ker"),   { "tracker.window", "tracker.furnace", "-", "tracker.new", "tracker.open", "tracker.save", "tracker.saveAs", "tracker.loadSample", "-", "tracker.playSong", "tracker.playPattern", "tracker.stop", "-",
                                "tracker.recordStereo", "tracker.recordMulti", "-", "tracker.resetTracks", "tracker.about" } },
         { tr ("Performan&ce"), { "performance.launcher", "-", "control.surfaces", "control.learn", "-", "performance.record", "performance.stream", "-", "performance.settings", "performance.folder" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "-", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
     };
+
+    // 23 menus (owner, 2026-10-26: "what happens when we load PHI on a small screen"): Fusion
+    // puts 7 px between titles, and at 1280 px wide with a 10 pt font the last ones went behind
+    // the » button. 2 px keeps them all in view there (1204 px at 10 pt DejaVu Sans).
+    struct TightMenuBar : QProxyStyle
+    {
+        using QProxyStyle::QProxyStyle;
+        int pixelMetric (PixelMetric metric, const QStyleOption* option, const QWidget* widget) const override
+        {
+            return metric == PM_MenuBarItemSpacing ? 2 : QProxyStyle::pixelMetric (metric, option, widget);
+        }
+    };
+    auto* tight = new TightMenuBar (QStyleFactory::create (QStringLiteral ("Fusion")));
+    tight->setParent (menuBar());
+    menuBar()->setStyle (tight);
 
     for (const auto& [title, ids] : layout)
     {
@@ -925,6 +956,12 @@ void MainWindow::buildMenus()
                 menu->addSeparator();
             else if (id.startsWith (QLatin1String ("@visual.")))
                 addVisualizerSubmenu (menu, id.mid (8));
+            else if (id == QLatin1String ("@mode"))
+            {
+                // Built as it opens, so its ticks follow the mode chosen and the mixer's state.
+                connect (menu, &QMenu::aboutToShow, this, [this, menu] { fillModeMenu (menu); });
+                fillModeMenu (menu);
+            }
             else if (id == QLatin1String ("@nyquist.generate"))
                 generateMenu = menu->addMenu (tr ("&Generate"));
             else if (id.startsWith (QLatin1Char ('@')))

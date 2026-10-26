@@ -10,9 +10,13 @@
 #include "../Source/mixer/Tunings.h"
 #include "../Source/mixer/RagaInstrument.h"
 #include "../Source/mixer/Counterpoint.h"
+#include "../Source/mixer/Fugue.h"
+#include "../Source/mixer/Cubify.h"
 #include "../Source/mixer/Minimalize.h"
 #include "../Source/mixer/MixerEngine.h"
 #include "../Source/mixer/DrumsToMidi.h"
+#include "../Source/mixer/Rhythms.h"
+#include "../Source/mixer/Stochastic.h"
 #include "../Source/patchbay/PatchBay.h"
 #include "../Source/core/Ixml.h"
 #include "../Source/core/Metadata.h"
@@ -1383,13 +1387,31 @@ namespace
         // C Phrygian (C Db Eb F G Ab Bb): D goes down to Db, E down to Eb.
         const auto phrygian = midifile::toMode (*song, 0, 2);
         check (pitchSet (*phrygian) == (std::vector<int> { 60, 61, 63, 67 }), "midi edits: notes move to the nearest of the mode, down when between");
+        check (pitchSet (*midifile::toKeys (*song, 0, 0b010110101011)) == pitchSet (*phrygian), "midi edits: any set of keys, as the Mode menu gives");
         // Ragas: Malkauns (S g m d n) on C, and Darbari and Jaunpuri listed with Asavari's notes.
         const auto& scales = midifile::scales();
         auto find = [&] (const std::string& name) { for (size_t i = 0; i < scales.size(); ++i) if (name == scales[i].name) return (int) i; return -1; };
-        const auto malkauns = find ("Malkauns");
+        const auto malkauns = find ("mālkauns");
         check (malkauns >= 0 && pitchSet (*midifile::toMode (*song, 0, malkauns)) == (std::vector<int> { 60, 63, 63, 68 }), "midi edits: a raga's notes, pentatonic");
-        check (find ("Darbari Kanada") >= 0 && find ("Jaunpuri") >= 0 && scales[(size_t) find ("Darbari Kanada")].notes == scales[(size_t) find ("Asavari")].notes
-               && scales[(size_t) find ("Jaunpuri")].notes == scales[(size_t) find ("Asavari")].notes, "midi edits: ragas sharing their notes are each listed");
+        // Hypo: bhūpālī (S R G P D) on C from the fifth folds every note into G3..G4 (55..67), Sa kept.
+        const auto bhupali = find ("bhūpālī");
+        check (bhupali >= 0 && mixer::hypoFamily (scales[(size_t) bhupali].family) && mixer::hasHypo (scales[(size_t) bhupali].notes, mixer::Hypo::fifth)
+               && ! mixer::hasHypo (scales[(size_t) bhupali].notes, mixer::Hypo::fourth) && ! mixer::hypoFamily (scales[0].family),
+               "midi edits: hypo for a raga with the degree, not the church modes");
+        auto wide = std::make_shared<midifile::Song> (*song);
+        wide->events.clear();
+        const uint8_t spread[] { 48, 60, 62, 76 };
+        for (int i = 0; i < 4; ++i)
+        {
+            wide->events.push_back ({ i * 480, 0x90, spread[i], 90 });
+            wide->events.push_back ({ i * 480 + 240, 0x80, spread[i], 0 });
+        }
+        check (pitchSet (*midifile::inRange (*midifile::toMode (*wide, 0, bhupali), 0, 5)) == (std::vector<int> { 60, 60, 62, 64 }),
+               "midi edits: a hypo range, notes folded into the octave from the fifth below");
+        check (find ("darbārī kānaḍā") >= 0 && find ("jaunpurī") >= 0 && scales[(size_t) find ("darbārī kānaḍā")].notes == scales[(size_t) find ("āsāvarī")].notes
+               && scales[(size_t) find ("jaunpurī")].notes == scales[(size_t) find ("āsāvarī")].notes, "midi edits: ragas sharing their notes are each listed");
+        check (find ("nyamaropa") >= 0 && scales[(size_t) find ("nyamaropa")].notes == scales[(size_t) find ("mixolydian")].notes
+               && find ("matepe") >= 0, "midi edits: the Shona mbira tunings on the keys");
     }
 
     // An instrument that writes down what it was sent and plays a constant level while a note is held.
@@ -4206,9 +4228,22 @@ namespace
     {
         std::vector<std::string> errors;
         const auto all = phi::parseRagas (phi::builtInRagaSheets(), errors);
-        check (errors.empty() && all.size() == 74 && phi::builtInRagas().size() == 74, "raga sheets: the 74 built-in sheets read without a mistake");
+        check (errors.empty() && all.size() == 175 && phi::builtInRagas().size() == 175, "raga sheets: the 175 built-in sheets read without a mistake");
         for (const auto& e : errors)
             std::printf ("  %s\n", e.c_str());
+        // Darpaṇ, made for PHI, is a mirror: each svara's reflection about Sa (and Ma) is one of its
+        // svaras, tuned so, and its avaroha is its āroha reflected.
+        for (const auto& r : all)
+            if (r.plain == "darpan")
+            {
+                bool mirrored = near (r.cents[6], 600.0, 1.0e-9) && r.aroha.size() == r.avaroha.size();
+                for (int k = 1; k < 12; ++k)
+                    mirrored = mirrored && r.uses[(size_t) k] == r.uses[(size_t) (12 - k)]
+                               && (! r.uses[(size_t) k] || near (r.cents[(size_t) k] + r.cents[(size_t) (12 - k)], 1200.0, 1.0e-6));
+                for (size_t i = 0; mirrored && i < r.aroha.size(); ++i)
+                    mirrored = (12 - r.aroha[i].key()) % 12 == ((r.avaroha[i].key() % 12) + 12) % 12;
+                check (mirrored, "raga sheets: darpan is its own mirror");
+            }
         bool complete = true;
         for (const auto& r : all)
             complete = complete && ! r.aroha.empty() && ! r.avaroha.empty() && r.vadi >= 0 && r.samvadi >= 0;
@@ -4473,7 +4508,7 @@ namespace
         const auto& all = mixer::tuningSystems();
         auto get = [&] (const std::string& plain) -> const mixer::TuningSystem& { return all[(size_t) mixer::findTuning (plain)]; };
         bool known = true;
-        for (const char* plain : { "bilaval", "darbari kanada", "dorian", "hypodorian", "altered", "rast", "hijaz", "shur", "chahargah", "2 equal steps", "21 equal steps" })
+        for (const char* plain : { "bilaval", "darbari kanada", "dorian", "hypodorian", "altered", "rast", "hijaz", "shur", "chahargah", "slendro", "pelog", "selisir", "salendro", "nyamaropa", "nyunga nyunga", "matepe (saini madera)", "2 equal steps", "21 equal steps" })
             known = known && mixer::findTuning (plain) >= 0;
         check (known && mixer::findTuning ("no such tuning") == -1, "tunings: each family is listed, found by its plain name");
         check (get ("darbari kanada").name == "darbārī kānaḍā" && get ("hijaz").name == "ḥijāz" && get ("chahargah").name == "čahārgāh", "tunings: transliterated names");
@@ -4502,6 +4537,19 @@ namespace
         const auto bilaval = mixer::keyCents (get ("bilaval"));
         check (near (bilaval[7], 701.955, 1.0e-3) && near (bilaval[4], phi::Tuning::ratioToCents (1.25), 1.0e-9), "tunings: ragas in just intonation");
         check (near (mixer::keyCents (get ("darbari kanada"))[3], phi::Tuning::ratioToCents (32.0 / 27.0), 1.0e-9), "tunings: a raga's own komal svara");
+        // Hypo ranges: for ragas, maqams and dastgahs with that degree; not the church modes (they
+        // have their hypo-modes), jazz modes or equal steps.
+        using mixer::Hypo;
+        check (mixer::hasHypo (get ("bilaval"), Hypo::fifth) && mixer::hasHypo (get ("bilaval"), Hypo::fourth)
+               && mixer::hasHypo (get ("rast"), Hypo::fifth) && mixer::hasHypo (get ("shur"), Hypo::fourth)
+               && mixer::hasHypo (get ("bilaval (equal tempered)"), Hypo::fifth), "tunings: hypo for a tonic with its fifth and fourth");
+        check (! mixer::hasHypo (get ("dorian"), Hypo::fifth) && ! mixer::hasHypo (get ("hypodorian"), Hypo::fifth) && ! mixer::hasHypo (get ("altered"), Hypo::fourth)
+               && ! mixer::hasHypo (get ("12 equal steps"), Hypo::fifth) && ! mixer::hasHypo (get ("huzam"), Hypo::fifth),
+               "tunings: no hypo for the church modes, jazz modes, equal steps, or a mode without the degree");
+        check (mixer::hypoBelow (Hypo::fifth) == 5 && mixer::hypoBelow (Hypo::fourth) == 7 && mixer::hypoBelow (Hypo::none) == 0, "tunings: a hypo range's bottom");
+        // The Mode menu's keys: dorian's seven, and rāst's half-flat third and seventh on E and B.
+        check (mixer::modeKeys (get ("dorian")) == 0b011010101101 && mixer::modeKeys (get ("rast")) == 0b101010110101,
+               "tunings: the keys a mode has a degree on");
         // Hypodorian on A has A's (Aeolian) Pythagorean steps: a 9/8 then a 256/243 limma.
         const auto hypo = mixer::keyCents (get ("hypodorian"));
         check (near (hypo[2], phi::Tuning::ratioToCents (9.0 / 8.0), 1.0e-9) && near (hypo[3] - hypo[2], phi::Tuning::ratioToCents (256.0 / 243.0), 1.0e-9),
@@ -4511,8 +4559,91 @@ namespace
         const auto onD = mixer::makeTuning (get ("rast"), 2);
         check (near (onD.hz (62), 440.0 * std::pow (2.0, -7.0 / 12.0), 1.0e-9) && near (1200.0 * std::log2 (onD.hz (66) / onD.hz (62)), 350.0, 1.0e-6)
                && near (onD.hz (74), 2.0 * onD.hz (62), 1.0e-9), "tunings: a maqam on its root, repeating each octave");
+        // Gamelan: sléndro's five near-equal steps on five keys, pélog's seven uneven ones, and a
+        // pathet read from its gong tone. The snap-to-scale list has them on the same keys.
+        const auto slendro = mixer::keyCents (get ("slendro"));
+        check (get ("slendro").name == "sléndro" && get ("pelog pathet barang").name == "pélog pathet barang" && get ("slendro").cents.size() == 5
+               && near (slendro[2], 231.0, 1.0e-9) && near (slendro[10], 955.0, 1.0e-9) && near (slendro[1], 100.0, 1.0e-9), "tunings: sléndro in its own cents");
+        check (get ("pelog").cents.size() == 7 && near (mixer::keyCents (get ("pelog"))[5], 539.0, 1.0e-9)
+               && near (get ("slendro pathet sanga").cents[1], 955.0 - 717.0, 1.0e-9) && near (get ("pelog pathet nem").cents[1], 1200.0 - 785.0, 1.0e-9),
+               "tunings: pélog, and pathet from their gong tone");
+        check (get ("selisir").family == "balinese gamelan" && get ("degung").family == "sundanese gamelan" && get ("patutan tembung").cents.size() == 5,
+               "tunings: Balinese and Sundanese gamelan");
+        {
+            const auto& snap = midifile::scales();
+            bool same = true;
+            for (auto [scale, plain] : { std::pair { "sléndro", "slendro pathet manyura" }, { "pélog", "pelog" }, { "pélog pathet lima", "pelog pathet lima" },
+                                         { "pélog pathet nem", "pelog pathet nem" }, { "pélog pathet barang", "pelog pathet barang" },
+                                         { "selisir", "selisir" }, { "degung", "degung" } })
+            {
+                uint16_t bits = 0;
+                for (auto c : get (plain).cents)
+                    bits = (uint16_t) (bits | (1u << (((int) std::floor (c / 100.0 + 0.5)) % 12)));
+                bool found = false;
+                for (const auto& sc : snap)
+                    found = found || (std::string (sc.name) == scale && sc.notes == bits);
+                same = same && found;
+            }
+            check (same, "tunings: gamelan in the snap-to-scale list on their keys");
+        }
+        // Shona mbira: nyamaropa's measured gamut, the other tunings its rotations, Madera's
+        // matepe from Tracey's frequencies; none of them 12-TET.
+        const auto nyamaropa = mixer::keyCents (get ("nyamaropa"));
+        check (near (nyamaropa[2], 177.0, 1.0e-9) && near (nyamaropa[10], 1015.0, 1.0e-9) && near (nyamaropa[11], 1100.0, 1.0e-9),
+               "tunings: nyamaropa's measured cents, Mixolydian's keys");
+        const auto& gamut = get ("nyamaropa").cents;
+        bool rotations = true;
+        for (auto [plain, start] : { std::pair { "dambatsoko", 3 }, { "katsanzaira", 4 }, { "mavembe (gandanga)", 5 }, { "dindinyongwe", 2 } })
+            for (size_t i = 0; i < 7; ++i)
+                rotations = rotations && near (get (plain).cents[i], std::fmod (gamut[(start + i) % 7] - gamut[(size_t) start] + 1200.0, 1200.0), 1.0e-9);
+        check (rotations && near (mixer::keyCents (get ("mavembe (gandanga)"))[1], 135.0, 1.0e-9), "tunings: the mbira tunings are one gamut from other keys");
+        check (get ("nyunga nyunga").cents.size() == 6 && near (mixer::keyCents (get ("saungweme"))[3], 1200.0 * 2 / 7, 1.0e-9)
+               && near (mixer::keyCents (get ("matepe (saini madera)"))[2], phi::Tuning::ratioToCents (240.0 / 216.0), 1.0e-9),
+               "tunings: nyunga nyunga's six tones, saungweme's equal sevenths, Madera's matepe");
         const auto five = mixer::makeTuning (get ("5 equal steps"), 0);
         check (near (five.hz (65), 2.0 * five.hz (60), 1.0e-9) && near (five.hz (60), 261.6255653005986, 1.0e-9), "tunings: equal steps from the root");
+
+        // Chinese and Japanese systems. The twelve lü by sanfen sunyi: linzhong a pure fifth,
+        // zhonglü (the last) a Pythagorean comma above 4/3, on F's key.
+        bool eastAsian = true;
+        for (const char* plain : { "shier lu (sanfen sunyi)", "jing fang 60 lu", "cai yuanding 18 lu", "he chengtian xinlu", "zhu zaiyu xinfa milu",
+                                   "chunlu wusheng (qin)", "gong", "yu", "yayue shang", "yanyue zhi", "gong (equal tempered)", "yifan (guangdong)",
+                                   "zhongsan zhongliu (chaozhou)", "ichikotsucho", "banshikicho", "miyako-bushi (in)", "ryukyu", "hirajoshi" })
+            eastAsian = eastAsian && mixer::findTuning (plain) >= 0;
+        check (eastAsian && get ("jue").name == "jué" && get ("hyojo").name == "hyōjō", "tunings: Chinese and Japanese systems, by their plain names");
+        const auto lu = mixer::keyCents (get ("shier lu (sanfen sunyi)"));
+        check (near (lu[7], 701.955, 1.0e-3) && near (lu[5], phi::Tuning::ratioToCents (177147.0 / 131072.0), 1.0e-6), "tunings: the twelve lü by sanfen sunyi");
+        // The five modes: gong's jue a Pythagorean third (81/64); yu (on la) has a minor third
+        // (32/27) and no second; in 12-TET, yu is 0 3 5 7 10.
+        check (near (mixer::keyCents (get ("gong"))[4], phi::Tuning::ratioToCents (81.0 / 64.0), 1.0e-9)
+               && get ("yu").cents.size() == 5 && near (get ("yu").cents[1], phi::Tuning::ratioToCents (32.0 / 27.0), 1.0e-9)
+               && get ("yu (equal tempered)").cents == std::vector<double> ({ 0, 300, 500, 700, 1000 }), "tunings: the five Chinese modes");
+        // Yanyue on gong has qingjue (4/3) and run (16/9); yayue has bianzhi (729/512).
+        const auto yanyue = get ("yanyue gong").cents, yayue = get ("yayue gong").cents;
+        check (yanyue.size() == 7 && near (yanyue[3], phi::Tuning::ratioToCents (4.0 / 3.0), 1.0e-9) && near (yanyue[6], phi::Tuning::ratioToCents (16.0 / 9.0), 1.0e-9)
+               && near (yayue[3], phi::Tuning::ratioToCents (729.0 / 512.0), 1.0e-9), "tunings: the seven-note Chinese scales");
+        // He Chengtian's lü close the circle: each within 8 cents of 12-TET (sanfen sunyi's zhonglü
+        // is 21.5 cents off).
+        bool closes = get ("he chengtian xinlu").cents.size() == 12;
+        for (size_t i = 0; closes && i < 12; ++i)
+            closes = std::abs (get ("he chengtian xinlu").cents[i] - 100.0 * (double) i) < 8.0;
+        check (closes, "tunings: He Chengtian's lü near equal");
+        // Jing Fang's 60 lü play a degree a key: seyu, the 54th fifth, is 3.6 cents above huangzhong.
+        const auto jing = mixer::makeTuning (get ("jing fang 60 lu"), 0);
+        check (near (jing.hz (120), 2.0 * jing.hz (60), 1.0e-9) && near (1200.0 * std::log2 (jing.hz (61) / jing.hz (60)), 3.615, 1.0e-3),
+               "tunings: Jing Fang's 60 lü, a degree a key");
+        check (counterpoint::Mode::fromTuning (get ("jing fang 60 lu"), 0).valid() && counterpoint::Mode::fromTuning (get ("jing fang 60 lu"), 0).period == 60,
+               "tunings: a long scale's degrees as counterpoint's keys");
+        // Gagaku: hyōjō is ritsu (Dorian), sōjō ryo (Lydian), both Pythagorean.
+        check (near (mixer::keyCents (get ("hyojo"))[3], phi::Tuning::ratioToCents (32.0 / 27.0), 1.0e-9)
+               && near (mixer::keyCents (get ("sojo"))[6], phi::Tuning::ratioToCents (729.0 / 512.0), 1.0e-9), "tunings: ritsu and ryo");
+
+        // Korean: p'yŏngjo on sol has a Pythagorean whole tone and fourth; kyemyŏnjo on la a
+        // minor third of 32/27; the tori in 12-TET.
+        check (get ("pyeongjo").name == "p'yŏngjo" && near (get ("pyeongjo").cents[2], phi::Tuning::ratioToCents (4.0 / 3.0), 1.0e-9)
+               && near (get ("gyemyeonjo").cents[1], phi::Tuning::ratioToCents (32.0 / 27.0), 1.0e-9)
+               && get ("menaritori").cents == std::vector<double> ({ 0, 300, 500, 800, 1000 }) && mixer::findTuning ("sibi-yul (sambun sonik)") >= 0,
+               "tunings: Korean modes and tori");
 
         const mixer::TuningChoice none, clip { 3, 0 }, scene { 5, 2 }, track { 7, 4 };
         check (mixer::tuningInForce (clip, scene, track) == clip && mixer::tuningInForce (none, scene, track) == scene
@@ -4754,6 +4885,14 @@ namespace
         for (const auto& x : rm.voices[0])
             rastKeys = rastKeys && rast.scale[(size_t) (((x.pitch - 2) % 12 + 12) % 12)];
         check (rastKeys && near (rast.keyCents[4], 350.0, 1.0e-9), "counterpoint: a maqam's keys, its quarter steps included");
+        // Hypo: Rāst on D from the fifth keeps the voice above to the octave A..A (69..81), a step past each end.
+        auto plagal = maqam;
+        plagal.mode.below = mixer::hypoBelow (mixer::Hypo::fifth);
+        const auto rp = generate (cf, plagal);
+        bool inPlagal = ! rp.voices[0].empty() && rp.voices[0].back().pitch % 12 == 2;
+        for (const auto& x : rp.voices[0])
+            inPlagal = inPlagal && x.pitch >= 67 && x.pitch <= 83 && rast.scale[(size_t) (((x.pitch - 2) % 12 + 12) % 12)];
+        check (inPlagal, "counterpoint: a hypo range, the final kept");
 
         // A raga's āroha: going up never lands on a note it leaves out.
         auto bhairavi = Mode::fromTuning (mixer::tuningSystems()[(size_t) mixer::findTuning ("bhairavi")], 2);
@@ -4805,6 +4944,168 @@ namespace
             onChannel = onChannel && e.channel() == 2;
         }
         check (ons == 11 && onChannel && written->ticksPerQuarter == 480 && written->channelsUsed == 4, "counterpoint: a voice as a MIDI file");
+    }
+
+    // Fugue: the plan (exposition, countersubject, episodes, middle entries, stretto, close),
+    // the tonal answer, the rules kept between the voices, and every family of modes.
+    void testFugue()
+    {
+        using namespace counterpoint;
+        auto modeOf = [] (const char* plain, int root) { return Mode::fromTuning (mixer::tuningSystems()[(size_t) mixer::findTuning (plain)], root); };
+        // A subject by degrees of a mode from its tonic, in quarters and halves (480 a quarter).
+        auto subjectIn = [] (const Mode& m)
+        {
+            std::vector<int> notes;
+            for (int p = 0; p < 128; ++p)
+                if (m.scale[(size_t) (((p - 60 - m.root) % m.period + m.period) % m.period)])
+                    notes.push_back (p);
+            const auto tonic = (int) (std::lower_bound (notes.begin(), notes.end(), 60 + m.root) - notes.begin());
+            const int degrees[] { 0, 4, 3, 2, 1, 0, 1, 2, 3, 2, 1, 0 }, beats[] { 2, 2, 1, 1, 1, 1, 1, 1, 2, 1, 1, 4 };
+            Line l;
+            int64_t t = 0;
+            for (int i = 0; i < 12; ++i)
+            {
+                l.push_back ({ t, t + beats[i] * 480, notes[(size_t) (tonic + degrees[i])], 90 });
+                t += beats[i] * 480;
+            }
+            return l;
+        };
+        const auto dorian = modeOf ("dorian", 2);
+        const auto subject = subjectIn (dorian);   // D A G F E D E F G F E D
+
+        fugue::Settings three;
+        three.mode = dorian;
+        const auto r = fugue::generate (subject, 480, three);
+        std::vector<std::string> plan;
+        for (const auto& x : r.plan)
+            plan.push_back (x.what);
+        auto count = [&] (const std::string& what) { return std::count (plan.begin(), plan.end(), what); };
+        check (r.voices.size() == 3 && r.names == std::vector<std::string> { "soprano", "alto", "bass" }
+               && plan.size() > 4 && plan[0] == "subject" && plan[1] == "answer" && plan[2] == "countersubject"
+               && count ("episode") == 3 && count ("middle entry") == 2 && count ("stretto") == 3 && plan.back() == "close",
+               "fugue: exposition, countersubject, episodes, two middle entries, a stretto and the close");
+        check (r.plan[0].voice == 1 && r.plan[1].voice == 0 && r.plan[1].start == 8640 && r.strettoDelay > 0 && r.strettoDelay <= 4320,
+               "fugue: the alto enters first, the soprano answers, the stretto's entries overlap");
+        // The tonal answer: the dominant A answered by the tonic D, then the rest at the fifth.
+        int64_t answerAt = r.plan[1].start;
+        std::vector<int> answer;
+        for (const auto& x : r.voices[0])
+            if (x.start >= answerAt && x.start < answerAt + 8640)
+                answer.push_back (x.pitch);
+        check (answer.size() == 12 && answer[0] == 69 && answer[1] == 74 && answer[2] == 74 && answer[11] == 69,
+               "fugue: a tonal answer at the fifth, tonic and dominant answering each other");
+        fugue::Settings real = three;
+        real.answer = fugue::Answer::real;
+        const auto rr = fugue::generate (subject, 480, real);
+        int64_t realAt = rr.plan[1].start;
+        int firstReal = -1, secondReal = -1;
+        for (const auto& x : rr.voices[0])
+            if (x.start == realAt)
+                firstReal = x.pitch;
+            else if (x.start == realAt + 960)
+                secondReal = x.pitch;
+        check (firstReal == 69 && secondReal == 76, "fugue: a real answer, every note a fifth up in the mode");
+
+        // The rules between every two voices: no parallel fifths or octaves, nothing dissonant
+        // struck together on the beat, in two and three voices.
+        auto at = [] (const Line& l, int64_t t, bool* starts = nullptr)
+        {
+            for (const auto& x : l)
+                if (x.start <= t && t < x.end)
+                {
+                    if (starts != nullptr)
+                        *starts = x.start == t;
+                    return x.pitch;
+                }
+            return -1;
+        };
+        bool kept = true;
+        for (int voices = 2; voices <= 3; ++voices)
+        {
+            fugue::Settings s = three;
+            s.voices = voices;
+            const auto f = fugue::generate (subject, 480, s);
+            std::set<int64_t> times;
+            for (const auto& v : f.voices)
+                for (const auto& x : v)
+                    times.insert (x.start);
+            const std::vector<int64_t> t (times.begin(), times.end());
+            int broken = 0;
+            for (size_t i = 1; i < t.size(); ++i)
+                for (size_t a = 0; a < f.voices.size(); ++a)
+                    for (size_t b = a + 1; b < f.voices.size(); ++b)
+                    {
+                        bool sa = false, sb = false;
+                        const auto pa = at (f.voices[a], t[i], &sa), pb = at (f.voices[b], t[i], &sb);
+                        const auto qa = at (f.voices[a], t[i - 1]), qb = at (f.voices[b], t[i - 1]);
+                        if (pa < 0 || pb < 0)
+                            continue;
+                        auto kind = [] (int x) { x = std::abs (x) % 12; return x == 0 ? 8 : x == 7 ? 5 : 0; };
+                        if (qa >= 0 && qb >= 0 && qa != pa && qb != pb && kind (pa - pb) != 0 && kind (pa - pb) == kind (qa - qb))
+                            ++broken;
+                        const auto iv = std::abs (pa - pb) % 12;
+                        if (t[i] % 960 == 0 && sa && sb && (iv == 1 || iv == 2 || iv == 6 || iv == 10 || iv == 11))
+                            ++broken;
+                    }
+            kept = kept && broken == 0 && f.bent == 0 && f.voices.size() == (size_t) voices;
+        }
+        check (kept, "fugue: no parallel fifths or octaves and no dissonance struck on the beat, in two and three voices");
+
+        // Four voices, with the middle entries inverted and no stretto.
+        fugue::Settings four = three;
+        four.voices = 4;
+        four.inversion = true;
+        four.stretto = false;
+        const auto r4 = fugue::generate (subject, 480, four);
+        int inverted = 0, final = 0;
+        for (const auto& x : r4.plan)
+        {
+            inverted += x.what == "middle entry, inverted" ? 1 : 0;
+            final += x.what == "final entry" && x.voice == 3 ? 1 : 0;
+        }
+        check (r4.voices.size() == 4 && r4.names[2] == "tenor" && inverted == 1 && final == 1 && r4.strettoDelay == 0,
+               "fugue: four voices, an inverted middle entry, the last entry in the bass");
+
+        // Every family of modes: each voice in the mode's notes (the church modes' raised
+        // leading note at a cadence aside), and a raga's āroha kept going up.
+        bool inMode = true;
+        for (const char* plain : { "yaman (kalyan)", "bhairavi (equal tempered)", "phrygian", "hypolydian", "altered", "blues", "rast", "segah", "19 equal steps" })
+        {
+            fugue::Settings s;
+            s.mode = modeOf (plain, 2);
+            const auto f = fugue::generate (subjectIn (s.mode), 480, s);
+            inMode = inMode && f.voices.size() == 3 && f.end > 0;
+            for (const auto& v : f.voices)
+            {
+                inMode = inMode && ! v.empty();
+                for (const auto& x : v)
+                    inMode = inMode && (s.mode.ficta || s.mode.scale[(size_t) (((x.pitch - 62) % s.mode.period + s.mode.period) % s.mode.period)]);
+            }
+        }
+        check (inMode, "fugue: in ragas, church and jazz modes, maqams, dastgahs and equal steps, each voice in the mode");
+        auto bhairavi = modeOf ("bhairavi", 2);
+        bhairavi.up = bhairavi.scale;
+        bhairavi.up[1] = bhairavi.up[8] = false;   // no komal re or komal dha going up
+        fugue::Settings raga;
+        raga.mode = bhairavi;
+        const auto rg = fugue::generate (subjectIn (bhairavi), 480, raga);
+        int wrongWay = 0;
+        for (const auto& v : rg.voices)
+            for (size_t k = 1; k < v.size(); ++k)
+            {
+                const auto key = ((v[k].pitch - 2) % 12 + 12) % 12;
+                wrongWay += v[k].pitch > v[k - 1].pitch && (key == 1 || key == 8) ? 1 : 0;
+            }
+        check (wrongWay <= rg.bent, "fugue: a raga's āroha kept going up");
+
+        // The subject in a melody: its first phrase, cut at a rest, at most four bars.
+        Line melody { { 0, 480, 62, 90 }, { 480, 960, 64, 90 }, { 960, 1920, 65, 90 }, { 2880, 3840, 67, 90 } };
+        check (fugue::subject (melody, 480).size() == 3, "fugue: the subject is the melody's first phrase");
+        Line long_;
+        for (int i = 0; i < 40; ++i)
+            long_.push_back ({ i * 480, (i + 1) * 480, 60 + i % 5, 90 });
+        check (fugue::subject (long_, 480).size() == 16 && fugue::subject ({ { 0, 480, 60, 90 } }, 480).empty(),
+               "fugue: a subject of four bars at most, two notes at least");
     }
 
     // Recording (docs/recording.md): slot takes that end by themselves and play on from that
@@ -5343,6 +5644,225 @@ namespace
         s.modulationSeconds = 6.0;
         s.tailSeconds = 0.5;
         return s;
+    }
+
+    // Stochastic music (Xenakis): sieves read and written back, and lines drawn by the laws,
+    // inside their range, sieve and grid, the same for the same seed.
+    void testCubify()
+    {
+        using namespace cubify;
+        // The group: closed, each rotation undone by its inverse, the A rotations keeping the
+        // tetrahedra and the Q rotations swapping them, A·A and Q·Q in A, A·Q and Q·A in Q.
+        const auto& all = group();
+        bool closed = true, inverses = true, halves = true;
+        for (int p = 0; p < 24; ++p)
+        {
+            inverses = inverses && product (p, inverse (p)) == 0 && product (inverse (p), p) == 0;
+            for (int q = 0; q < 24; ++q)
+            {
+                const auto r = product (p, q);
+                for (size_t i = 0; i < 8; ++i)
+                    closed = closed && all[(size_t) r].seq[i] == all[(size_t) q].seq[(size_t) all[(size_t) p].seq[i]];
+                halves = halves && all[(size_t) r].swaps == (all[(size_t) p].swaps != all[(size_t) q].swaps);
+            }
+            halves = halves && all[(size_t) p].swaps == (all[(size_t) p].seq[0] >= 4);
+        }
+        check (closed && inverses && halves, "cubify: the 24 rotations of the cube are a group, A and Q its halves");
+        check (std::string (all[0].label) == "I" && find ("Q12") >= 0 && find ("X") < 0, "cubify: the labels");
+        // Nomos Alpha's own path (Formalized Music, VIII), and the one in the first half alone.
+        auto labels = [&] (const std::vector<int>& path)
+        {
+            std::string out;
+            for (auto r : path)
+                out += std::string (out.empty() ? "" : " ") + all[(size_t) r].label;
+            return out;
+        };
+        check (labels (chain (find ("D"), find ("Q12"), 18)) == "D Q12 Q4 E Q8 Q2 E2 Q7 Q4 D2 Q3 Q11 L2 Q7 Q2 L Q8 Q11",
+               "cubify: D, Q12 gives Xenakis's path");
+        check (labels (chain (find ("E"), find ("G2"), 16)) == "E G2 L2 C G D E B D2 L G C L2 E2 D2 B", "cubify: E, G2 stays in A");
+
+        // A scene: a melody, a drum loop and an audio loop.
+        Part melody { "lead", {}, false, false };
+        for (int i = 0; i < 16; ++i)
+            melody.notes.push_back ({ i * 240, i * 240 + 200, 60 + (i * 5) % 14, 90 });
+        Part drums { "drums", {}, true, false };
+        for (int i = 0; i < 16; ++i)
+            drums.notes.push_back ({ i * 240, i * 240 + 60, i % 4 == 0 ? 36 : i % 2 == 0 ? 38 : 42, 100 });
+        Part loop { "pad", {}, false, true };
+        Settings settings;
+        auto result = arrange ({ melody, drums, loop }, settings);
+        check (result.error.empty() && result.sections.size() == 24 && result.lines.size() == 3, "cubify: 24 sections, a line for each track");
+        bool form = true, bars = true;
+        for (size_t i = 0; i < result.sections.size(); ++i)
+        {
+            form = form && result.sections[i].free == (i % 4 == 3);
+            bars = bars && result.sections[i].length > 0 && result.sections[i].length % (4 * 480) == 0
+                && (i == 0 || result.sections[i].start == result.sections[i - 1].start + result.sections[i - 1].length);
+        }
+        check (form && bars, "cubify: V1 V1 V1 V2 six times, each section whole bars, one after another");
+        check (result.corners[0] != result.corners[1] && result.corners[1] < 4, "cubify: the tracks on corners of their own, the drums low");
+        std::set<int> kit;
+        for (const auto& n : result.lines[1].notes)
+            kit.insert (n.pitch);
+        check (! result.lines[1].notes.empty() && kit.size() <= 3 && (kit.count (36) || kit.count (38) || kit.count (42)), "cubify: the drums keep their own drums");
+        check (! result.lines[2].plays.empty() && result.lines[2].plays.size() < 18 && result.lines[2].notes.empty(), "cubify: the audio loop plays in some V1 sections, not all");
+        bool quarter = false;
+        for (const auto& c : result.lines[0].controls)
+            quarter = quarter || (c.bend && c.value == 10240);
+        check (quarter, "cubify: quarter tones by pitch bend");
+        bool mono = true;
+        for (size_t i = 1; i < result.lines[0].notes.size(); ++i)
+            mono = mono && result.lines[0].notes[i].start >= result.lines[0].notes[i - 1].end;
+        check (mono, "cubify: one note at a time, so each can bend on its own");
+        check (result.commentary.find ("pitch D, durations E") != std::string::npos && result.modified.bars >= 0, "cubify: the commentary names the rotations");
+        const auto song = toSong (result.lines[0], 480, 120.0, 0);
+        std::string why;
+        const auto bytes = midifile::bytes (*song);
+        const auto back = midifile::parse (bytes.data(), bytes.size(), why);
+        check (back != nullptr && back->noteCount() == (int) result.lines[0].notes.size(), "cubify: the line as a MIDI file and back");
+        const auto again = arrange ({ melody, drums, loop }, settings);
+        settings.seed = 2;
+        const auto other = arrange ({ melody, drums, loop }, settings);
+        check (again.commentary == result.commentary && other.commentary != result.commentary, "cubify: the same seed, the same arrangement; another, another");
+
+        // Messiaen: mode 2 (octatonic) on the lowest note, palindromic durations, semitones.
+        settings = {};
+        settings.pitches = Pitches::messiaen;
+        settings.messiaenMode = 2;
+        settings.palindromes = true;
+        settings.quarterTones = false;
+        result = arrange ({ melody }, settings);
+        bool octatonic = true;
+        for (const auto& n : result.lines[0].notes)
+            if (n.start < result.sections[3].start)
+                octatonic = octatonic && ((0x6DB >> (((n.pitch - 60) % 12 + 12) % 12)) & 1) != 0;
+        check (! result.lines[0].notes.empty() && octatonic, "cubify: pitches in Messiaen's mode 2");
+        const auto& first = result.lines[0].notes;
+        bool palindrome = first.size() > 8;
+        for (size_t k = 0; palindrome && k < 4; ++k)
+            palindrome = first[k + 1].start - first[k].start == first[8 - k].start - first[7 - k].start;
+        check (palindrome, "cubify: non-retrogradable rhythms");
+        settings.path = Path::modeDeValeurs;
+        settings.glissandi = false;
+        const auto locked = arrange ({ melody }, settings);
+        bool still = true;
+        for (const auto& c : locked.lines[0].controls)
+            still = still && (! c.bend || c.value == 8192);
+        check (locked.error.empty() && still && locked.commentary.find ("locked") != std::string::npos, "cubify: mode de valeurs, in semitones");
+        check (! arrange ({}, settings).error.empty() && ! arrange (std::vector<Part> (9, melody), settings).error.empty(), "cubify: nothing, or more than eight tracks");
+        // Messiaen's seven modes in the Mode menu's tunings, mode 2 the octatonic.
+        bool seven = true;
+        for (int m = 1; m <= 7; ++m)
+            seven = seven && mixer::findTuning ("messiaen mode " + std::to_string (m)) >= 0;
+        check (seven && mixer::modeKeys (mixer::tuningSystems()[(size_t) mixer::findTuning ("messiaen mode 2")]) == 0x6DB,
+               "cubify: messiaen's modes of limited transposition are listed");
+    }
+
+    void testStochastic()
+    {
+        using namespace stochastic;
+        std::string error;
+        // Xenakis's major scale (Sieves, 1990), and its analysis back into residue classes.
+        const auto major = Sieve::parse ("(-3@2 & 4@0) | (-3@1 & 4@1) | (3@2 & 4@2) | (-3@0 & 4@3)", error);
+        check (error.empty() && major.period() == 12, "stochastic: a sieve reads, period 12");
+        check (major.points (0, 12) == std::vector<int64_t> { 0, 2, 4, 5, 7, 9, 11 }, "stochastic: the sieve is the major scale");
+        const auto back = Sieve::fromPoints ({ 0, 2, 4, 5, 7, 9, 11 }, 12);
+        check (back.points (-12, 24) == major.points (-12, 24), "stochastic: the analysis gives the same set (" + back.text() + ")");
+        check (Sieve::fromKeys (0xFFF).text() == "1@0" && Sieve::fromKeys (0x555).text() == "2@0", "stochastic: the simplest sieves");
+        for (const char* bad : { "3@", "(2@0", "2@0 |", "0@0", "x" })
+            check (Sieve::parse (bad, error).empty() && ! error.empty(), std::string ("stochastic: \"") + bad + "\" does not read");
+        check (Sieve::parse ("-2@0", error).contains (-3), "stochastic: the complement, and negative numbers");
+
+        // Every rhythmic mode turns into a sieve that gives back its onsets.
+        for (const auto& r : rhythm::rhythms())
+        {
+            const auto sieve = sieveFromRhythm (r);
+            const auto rows = rhythm::rowsPerBeat (r);
+            std::set<int64_t> onsets;
+            for (const auto& h : rhythm::hits (r))
+                onsets.insert (h.step * rows / r.lanes[(size_t) h.lane].perBeat);
+            const auto points = sieve.points (0, (int64_t) r.beats * rows);
+            check (std::vector<int64_t> (onsets.begin(), onsets.end()) == points, "stochastic: " + r.plain + " as a sieve (" + sieve.text() + ")");
+        }
+        const auto son = rhythm::findRhythm ("son clave 3-2");
+        if (son >= 0)
+            check (sieveFromRhythm (rhythm::rhythms()[(size_t) son]).text() == "16@0 | 16@3 | 16@6 | 16@10 | 16@12", "stochastic: the son clave's sieve");
+
+        // The laws: centred where they are asked, the linear law's mean distance a third of its width.
+        for (int l = 0; l < numLaws; ++l)
+        {
+            Random rng (7);
+            double sum = 0;
+            for (int i = 0; i < 20000; ++i)
+                sum += draw ((Law) l, 5.0, 1.0, rng);
+            check (std::abs (sum / 20000 - 5.0) < 0.1, std::string ("stochastic: the ") + lawName ((Law) l) + " law is centred");
+        }
+        {
+            Random rng (3);
+            double distance = 0;
+            for (int i = 0; i < 20000; ++i)
+                distance += std::abs (draw (Law::linear, 0.0, 12.0, rng));
+            check (std::abs (distance / 20000 - 4.0) < 0.2, "stochastic: the linear law of intervals, mean a/3");
+        }
+
+        for (auto method : { Method::cloud, Method::screens })
+        {
+            Settings s;
+            s.method = method;
+            s.length = 480 * 64;
+            s.density = 2.0;
+            s.low = 50;
+            s.high = 80;
+            s.root = 2;
+            s.pitches = major;   // D major
+            s.seed = 11;
+            const auto a = generate (s);
+            const auto again = generate (s);
+            check (a.error.empty() && a.notes.size() > 40 && a.notes.size() < 400, "stochastic: a line of about the density (" + std::to_string (a.notes.size()) + ")");
+            check (a.notes.size() == again.notes.size() && std::equal (a.notes.begin(), a.notes.end(), again.notes.begin(),
+                   [] (const Note& x, const Note& y) { return x.start == y.start && x.end == y.end && x.pitch == y.pitch && x.velocity == y.velocity; }),
+                   "stochastic: the same seed draws the same line");
+            bool inside = true;
+            for (size_t i = 0; i < a.notes.size(); ++i)
+            {
+                const auto& n = a.notes[i];
+                inside = inside && n.pitch >= 50 && n.pitch <= 80 && major.contains (n.pitch - 2) && n.start >= 0 && n.end <= s.length
+                      && n.end > n.start && n.velocity >= 1 && n.velocity <= 127 && (i == 0 || a.notes[i - 1].start <= n.start);
+                for (size_t j = 0; j < i; ++j)   // a key struck again is let go first
+                    inside = inside && ! (a.notes[j].pitch == n.pitch && a.notes[j].end > n.start);
+            }
+            check (inside, "stochastic: every note in range, in the sieve, in time and let go before it is struck again");
+            check ((method == Method::screens) == ! a.screens.empty(), "stochastic: the screens are named");
+
+            // On a grid: only its places.
+            s.grid = gridFromSieve (Sieve::parse ("16@0 | 16@3 | 16@6 | 16@10 | 16@12", error), 120, s.length);
+            check (s.grid.size() == 5 * 16, "stochastic: the clave's grid over 16 bars");
+            const auto g = generate (s);
+            bool onGrid = ! g.notes.empty();
+            for (const auto& n : g.notes)
+                onGrid = onGrid && std::binary_search (s.grid.begin(), s.grid.end(), n.start);
+            check (onGrid, "stochastic: notes start only on the grid");
+        }
+        Settings none;
+        none.low = 61;
+        none.high = 61;
+        none.pitches = major;
+        check (! generate (none).error.empty(), "stochastic: a sieve with no key in range says so");
+
+        // A MIDI file's own notes and onsets as sieves, and the line back as a MIDI file.
+        midifile::Song song;
+        for (int i = 0; i < 4; ++i)
+        {
+            song.events.push_back ({ i * 480, 0x90, (uint8_t) (60 + 4 * (i % 2)), 100 });
+            song.events.push_back ({ i * 480 + 240, 0x80, (uint8_t) (60 + 4 * (i % 2)), 0 });
+        }
+        check (pitchSieveOf (song, 0).points (0, 12) == std::vector<int64_t> { 0, 4 }, "stochastic: the clip's notes as a pitch sieve");
+        check (rhythmSieveOf (song, 120, 16).text() == "4@0", "stochastic: the clip's onsets as a rhythm sieve");
+        Settings small;
+        small.seed = 4;
+        const auto line = generate (small);
+        const auto written = toSong (song, line.notes, 2);
+        check (written->noteCount() == (int) line.notes.size() && written->channelsUsed == (1u << 2), "stochastic: the line as a MIDI file");
     }
 
     void testPluginMeasure()
@@ -6150,6 +6670,51 @@ namespace
         }
     }
 
+    // The Mode menu's rhythmic modes: every pattern the length of its cycle, and each a MIDI file
+    // that reads back with its notes; the tāls' and tāḷams' structures as the sources give them.
+    void testRhythms()
+    {
+        const auto& all = rhythm::rhythms();
+        check (all.size() > 100, "rhythms: the library is there (" + std::to_string (all.size()) + ")");
+        for (const auto& r : all)
+        {
+            check (rhythm::valid (r), "rhythm " + r.plain + ": every lane is one cycle long, the sections add up");
+            for (const auto c : r.name)
+                check (! (c >= 'A' && c <= 'Z'), "rhythm " + r.plain + ": the name is lower case");
+            check (std::count_if (all.begin(), all.end(), [&] (const rhythm::Rhythm& o) { return o.plain == r.plain; }) == 1,
+                   "rhythm " + r.plain + ": its plain name is its own");
+            const auto song = rhythm::toSong (r, 2, r.bpm);
+            std::string error;
+            const auto bytes = midifile::bytes (*song);
+            const auto back = midifile::parse (bytes.data(), bytes.size(), error);
+            check (back != nullptr && back->noteCount() == song->noteCount() && song->noteCount() > 0,
+                   "rhythm " + r.plain + ": a MIDI file with its notes");
+            check (song->lastTick == 2 * r.beats * 480, "rhythm " + r.plain + ": two cycles long");
+        }
+        auto find = [&] (const char* plain) -> const rhythm::Rhythm& { return all[(size_t) std::max (0, rhythm::findRhythm (plain))]; };
+        check (rhythm::findRhythm ("tintal") >= 0 && find ("tintal").beats == 16 && find ("tintal").sections == std::vector<int> { 4, 4, 4, 4 },
+               "tīntāl: 16 mātrās, 4+4+4+4");
+        check (find ("jhaptal").beats == 10 && find ("rupak").beats == 7 && find ("ektal").beats == 12 && find ("dhamar").beats == 14,
+               "jhaptāl 10, rūpak 7, ektāl 12, dhamār 14 mātrās");
+        check (find ("caturasra jati triputa talam (adi talam)").beats == 8, "ādi tāḷam: 8 akṣaras (4+2+2)");
+        check (find ("misra jati jhampa talam").beats == 10 && find ("khanda jati ata talam").beats == 14
+                   && find ("sankirna jati dhruva talam").beats == 29 && find ("tisra jati eka talam").beats == 3,
+               "sūḷādi tāḷas: laghu by jāti, drutam 2, anudrutam 1");
+        int talams = 0;
+        for (const auto& r : all)
+            talams += r.group == "south indian tāḷam" && r.subgroup != "cāpu";
+        check (talams == 35, "the 35 sūḷādi tāḷas: seven tāḷas in five jātis");
+        // The tracker writes a row for the finest step: tīntāl's ṭhekā is a bol a mātrā, ektāl's has tirakiṭa.
+        check (rhythm::rowsPerBeat (find ("tintal")) == 1 && rhythm::rowsPerBeat (find ("ektal")) == 4
+                   && rhythm::rowsPerBeat (find ("trap triplet hats")) == 12,
+               "rows a beat: the steps every sound falls on");
+        // A held note (the medieval modes' long) lasts its tempora.
+        const auto& primus = find ("modus primus");
+        const auto hits = rhythm::hits (primus);
+        check (std::any_of (hits.begin(), hits.end(), [] (const rhythm::Hit& h) { return h.length == 2; }), "modus primus: the long held two tempora");
+        check (rhythm::drumName (39) == "hand clap" && rhythm::drumName (81) == "open triangle" && rhythm::drumName (20).empty(), "general midi drum names");
+    }
+
     // Control surfaces and MIDI Learn (docs/control-surfaces.md).
     void testControlSurfaces()
     {
@@ -6348,10 +6913,14 @@ int main()
     testSitar();
     testTunings();
     testCounterpoint();
+    testFugue();
     testMinimalize();
     testRecording();
     testControlSurfaces();
     testDrumsToMidi();
+    testRhythms();
+    testStochastic();
+    testCubify();
     testPluginMeasure();
 
     if (failures == 0)
