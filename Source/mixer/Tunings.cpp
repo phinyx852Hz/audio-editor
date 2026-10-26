@@ -125,6 +125,14 @@ namespace mixer
         return -1;
     }
 
+    uint16_t modeKeys (const TuningSystem& t)
+    {
+        uint16_t keys = 0;
+        for (auto c : t.cents)
+            keys |= (uint16_t) (1u << (((int) std::floor (c / 100.0 + 0.5) % 12 + 12) % 12));
+        return keys;
+    }
+
     std::array<double, 12> keyCents (const TuningSystem& t)
     {
         std::array<double, 12> out;

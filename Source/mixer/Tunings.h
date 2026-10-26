@@ -33,6 +33,8 @@ namespace mixer
     // key above, as E half-flat is spelled on E) plays that degree; the others stay where 12-TET
     // has them.
     std::array<double, 12> keyCents (const TuningSystem&);
+    // The keys it has a degree on, as keyCents rounds them (bit n: n semitones above the root).
+    uint16_t modeKeys (const TuningSystem&);
 
     // The tuning for an instrument: `root` 0 (C) to 11 (B) is the tonic, Sa or the final, at its
     // 12-TET pitch with A4 at 440 Hz. An equal temperament walks its steps up and down the keys

@@ -414,6 +414,27 @@ Fast MIDI edits (owner, 2026-10-25: "MIDI editing, but really fast"; "the idea i
   mixer/MidiFile.h (phiShuffle, duplicated, halfDensity, doubleDensity, toMode, scales), with
   tests.
 
+The Mode menu (owner, 2026-10-26: "I love mode being its own thing"; every name in it lower
+case, in proper transliteration):
+- One mode for everything: it lists every mode and raga the tunings have, by tradition (church,
+  jazz, rāga, maqām, dastgāh, and east asian, gamelan and mbira as those tunings arrive; a
+  tradition it does not know yet gets a submenu of its own). A long list, the rāgas, comes in
+  alphabetical parts. The equal temperaments are tunings, not modes, so they stay in the
+  Tuning boxes.
+- **final** is the final, sa or tonic. **range** is authentic, or hypo from the fifth or from the
+  fourth where the mode has that degree; for a church mode, hypo from the fifth is its hypo-mode
+  (picking hypodorian in the church list does the same: dorian, hypo from the fifth, final kept).
+  **equal tempered** has the PHI synth play a rāga's 12-TET twin.
+- The mode chosen is what the Counterpoint and Fugue dialogs open on when the clip has no tuning
+  of its own. **tune the track** sets the selected track's tuning to it (a hypo-mode on the bottom
+  of its range, hypodorian on A for a final on D); **notes into the mode** moves the MIDI clip
+  shown in the Device Chain into its keys and range; **counterpoint...** opens Counterpoint.
+- Kept in settings.ini as mode/system (the plain name), mode/final, mode/hypo and mode/equal.
+  Code: ui/ModeSection.cpp, mixer::modeKeys, midifile::toKeys.
+- With 23 menus the bar puts 2 px between titles instead of Fusion's 7, so at 1280 px wide every
+  menu stays in view up to a 10 pt font (1204 px at 10 pt DejaVu Sans; 1345 px at 11 pt, when the
+  last ones go behind the » button).
+
 Counterpoint (owner, 2026-10-25: an automatic MIDI counterpoint generator, in modal systems
 beyond the church modes):
 - **Counterpoint...** in the MIDI Clip section writes new voices against the clip's melody. The

@@ -6062,6 +6062,36 @@ namespace layers
     std::shared_ptr<mixer::AudioClip> flatAudio (const mixer::Clip&);   // MixerRecording.cpp
 }
 
+bool MixerWindow::showsMidiClip() const
+{
+    return showingClip && clipView->showsMidi();
+}
+
+bool MixerWindow::modeShownMidi (int root, uint16_t keys, int below, const QString& what)
+{
+    if (! showsMidiClip())
+        return false;
+    editShownMidi ([root, keys, below] (const midifile::Song& s)
+                   { return below > 0 ? midifile::inRange (*midifile::toKeys (s, root, keys), root, below) : midifile::toKeys (s, root, keys); },
+                   what);
+    return true;
+}
+
+bool MixerWindow::tuneSelectedTrack (mixer::TuningChoice choice)
+{
+    if (selected >= mixer::masterIndex || selected >= engine.numTracks())
+        return false;
+    info[(size_t) selected].tuning = choice;
+    changed();
+    applyTunings();
+    if (inspectorStrip != nullptr)
+        inspectorStrip->refresh();
+    if (auto* strip = strips[(size_t) selected])
+        strip->refresh();
+    say (tr ("%1 tuned to %2").arg (trackName (selected), tuningText (choice)));
+    return true;
+}
+
 void MixerWindow::editShownMidi (const std::function<midifile::SongPtr (const midifile::Song&)>& edit, const QString& what)
 {
     if (! showingClip || ! clipView->showsMidi())
