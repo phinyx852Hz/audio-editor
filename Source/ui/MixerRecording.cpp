@@ -359,7 +359,7 @@ bool MixerWindow::startTake (mixer::RecordRequest q, QString& error)
     return true;
 }
 
-void MixerWindow::recordPressed()
+void MixerWindow::recordPressed (int intoLauncher)
 {
     const auto track = engine.liveTrack();
     if (track < 0 || track >= engine.numTracks())
@@ -386,7 +386,7 @@ void MixerWindow::recordPressed()
         engine.stopRecording (track);
         say (tr ("Overdub on %1 stopped; the loop plays on.").arg (trackName (track)));
     }
-    else if (launcherShown())
+    else if (intoLauncher < 0 ? launcherShown() : intoLauncher == 1)
     {
         if (const auto playing = engine.launchInfo (track).playing; playing >= 0)
         {
