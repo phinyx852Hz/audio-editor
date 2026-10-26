@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The raga sheets PHI comes with (format in PhiRaga.h). The list is the owner's (2026-10-25). The
+// The raga sheets PHI comes with (format in PhiRaga.h). The list is the owner's (2026-10-25), with
+// their teacher's additions (2026-10-26). The
 // tuning of each is as agreed; the āroha, avaroha, vādī, samvādī, pakaḍ and āndolan are a first
 // draft for the owner and their teacher to correct.
 #include "PhiRaga.h"
@@ -471,6 +472,330 @@ aroha: S r m P n S'
 avaroha: S' n P m r S
 vadi: m
 samvadi: S
+time: morning
+
+raga: vṛndāvanī sāraṅg
+plain: vrindavani sarang
+thaat: kāfī
+svaras: S R m P n N
+aroha: N, S R m P N S'
+avaroha: S' n P m R S
+vadi: R
+samvadi: P
+time: midday
+
+raga: madhmād sāraṅg
+plain: madhmad sarang
+thaat: kāfī
+svaras: S R m P n
+aroha: n, S R m P n S'
+avaroha: S' n P m R S
+vadi: R
+samvadi: P
+time: midday
+
+raga: miyāṅ kī sāraṅg
+plain: miyan ki sarang
+thaat: kāfī
+svaras: S R m P D n N
+aroha: N, S R m P N D N S'
+avaroha: S' n P m R S
+vadi: R
+samvadi: P
+time: midday
+
+raga: sāmant sāraṅg
+plain: samant sarang
+thaat: kāfī
+svaras: S R m P D n N
+aroha: N, S R m P D N S'
+avaroha: S' n D P m R S
+vadi: R
+samvadi: P
+time: midday
+
+raga: candrakauns
+plain: chandrakauns
+thaat: none
+svaras: S g m d N
+aroha: S g m d N S'
+avaroha: S' N d m g S
+vadi: m
+samvadi: S
+time: late night
+
+raga: harikauns
+plain: harikauns
+thaat: none
+svaras: S g M d n
+aroha: S g M d n S'
+avaroha: S' n d M g S
+vadi: M
+samvadi: S
+time: late night
+
+raga: madhukauns
+plain: madhukauns
+thaat: none
+svaras: S g M P n
+aroha: S g M P n S'
+avaroha: S' n P M g S
+vadi: P
+samvadi: S
+time: late night
+
+raga: sūhā kānaḍā
+plain: suha kanada
+thaat: kāfī
+svaras: S R g=32/27 m P n
+aroha: n, S m P n S'
+avaroha: S' n P m P g m R S
+vadi: m
+samvadi: S
+pakad: g m n P | m P S'
+andolan: g 20 0.5
+kan: m>g
+time: midday
+
+raga: sugharāī kānaḍā
+plain: sughrai kanada
+thaat: kāfī
+svaras: S R g=32/27 m P n N
+aroha: N, S R m P N S'
+avaroha: S' n P m P g m R S
+vadi: P
+samvadi: S
+pakad: n n P m R S R g
+andolan: g 20 0.5
+kan: m>g
+time: late morning
+
+raga: ābhogī kānaḍā
+plain: abhogi kanada
+thaat: kāfī
+svaras: S R g m D
+aroha: S R g m D S'
+avaroha: S' D m g R S
+vadi: S
+samvadi: m
+time: night
+
+raga: bahār
+plain: bahar
+thaat: kāfī
+svaras: S R g=32/27 m P D n N
+aroha: S m P g m D N S'
+avaroha: S' n P m P g m R S
+vadi: m
+samvadi: S
+time: spring, night
+
+raga: rāmdāsī malhār
+plain: ramdasi malhar
+thaat: kāfī
+svaras: S R g G m P D n N
+aroha: S R G m P D N S'
+avaroha: S' n P m P g m R S
+vadi: m
+samvadi: S
+time: monsoon
+
+raga: gauḍ malhār
+plain: gaud malhar
+thaat: khamāj
+svaras: S R G m P D n N
+aroha: S R G m P D N S'
+avaroha: S' D n P m G m R S
+vadi: m
+samvadi: S
+time: monsoon
+
+raga: jayant malhār
+plain: jayant malhar
+thaat: khamāj
+svaras: S R g G m P D n N
+aroha: S R G m P N S'
+avaroha: S' n D P m g R S
+vadi: R
+samvadi: P
+time: monsoon
+
+raga: ānand bhairav
+plain: anand bhairav
+thaat: bhairav
+svaras: S r G m P D N
+aroha: S r G m P D N S'
+avaroha: S' N D P m G r S
+vadi: m
+samvadi: S
+time: morning
+
+raga: guṇakalī
+plain: gunkali
+thaat: bhairav
+svaras: S r m P d
+aroha: S r m P d S'
+avaroha: S' d P m r S
+vadi: d
+samvadi: r
+time: morning
+
+raga: jogiyā
+plain: jogiya
+thaat: bhairav
+svaras: S r m P d N
+aroha: S r m P d S'
+avaroha: S' N d P d m r S
+vadi: m
+samvadi: S
+time: dawn
+
+raga: kāliṅgaḍā
+plain: kalingda
+thaat: bhairav
+svaras: S r G m P d N
+aroha: S r G m P d N S'
+avaroha: S' N d P m G r S
+vadi: P
+samvadi: S
+time: dawn
+
+raga: gaurī
+plain: gauri
+thaat: bhairav
+svaras: S r G m P d N
+aroha: S r m P N S'
+avaroha: S' N d P m G r S
+vadi: r
+samvadi: P
+time: sunset
+
+raga: basant mukhārī
+plain: basant mukhari
+thaat: bhairav
+svaras: S r G m P d n
+aroha: S r G m P d n S'
+avaroha: S' n d P m G r S
+vadi: m
+samvadi: S
+time: morning
+
+raga: devsākh kānaḍā
+plain: devsakh kanada
+thaat: kāfī
+svaras: S R g=32/27 m P n
+aroha: S R m P n S'
+avaroha: S' n P g m R S
+vadi: P
+samvadi: S
+pakad: g P | n P m R S
+andolan: g 20 0.5
+kan: m>g
+time: night
+
+raga: bhavsākh
+plain: bhavsakh
+thaat: kāfī
+svaras: S R g=32/27 m P d D n
+aroha: S m P D n S'
+avaroha: S' n d n P m P g m R S
+vadi: P
+samvadi: S
+pakad: S m m P g g P m | n P D n R' S' | d n P
+andolan: g 20 0.5
+kan: m>g
+time: night
+
+raga: rāmsākh
+plain: ramsakh
+thaat: bilāval
+svaras: S R g=32/27 G m P D n N
+aroha: S R G m P D N S'
+avaroha: S' n P m P g m R S
+vadi: P
+samvadi: S
+kan: m>g
+time: night
+
+raga: lacchāsākh
+plain: lachhasakh
+thaat: bilāval
+svaras: S R G m P D N
+aroha: S G P D N S'
+avaroha: S' N D P G m R S
+vadi: P
+samvadi: S
+pakad: G P | m R S
+time: morning
+
+raga: guñjī kānaḍā
+plain: gunji kanada
+thaat: kāfī
+svaras: S R g=32/27 G m P d n
+aroha: S R G m P d n S'
+avaroha: S' n d P m g m R S
+vadi: P
+samvadi: S
+andolan: g 20 0.5
+kan: m>g
+time: night
+
+raga: mudrikī kānaḍā
+plain: mudriki kanada
+thaat: kāfī
+svaras: S R g=32/27 m P D n
+aroha: S R m R P D n S'
+avaroha: S' n P m P g m R S
+vadi: P
+samvadi: S
+pakad: R m R P
+andolan: g 20 0.5
+kan: m>g
+time: night
+
+raga: husainī kānaḍā
+plain: hussaini kanada
+thaat: kāfī
+svaras: S R g=32/27 m P D n
+aroha: S n, R g m P D n P S'
+avaroha: S' D n P m P g m R S
+vadi: P
+samvadi: S
+pakad: S n, R S | g m R S | P m P | D n P
+andolan: g 20 0.5
+kan: m>g
+time: night
+
+raga: śivmat bhairav
+plain: shivmat bhairav
+thaat: bhairav
+svaras: S r=256/243 g G m P d=128/81 n N
+aroha: S r G m P G m P d N S'
+avaroha: S' N d P d n d P m G m G r S r g r S
+vadi: m
+samvadi: S
+pakad: N S N d P | P d n d P | G m G r S r g r S
+time: morning
+
+raga: prabhāt bhairav
+plain: prabhat bhairav
+thaat: bhairav
+svaras: S r G m M P d N
+aroha: S r G m G m d P d N S'
+avaroha: S' N d P m G r G m M G r S
+vadi: m
+samvadi: S
+time: dawn
+
+raga: maṅgal bhairav
+plain: mangal bhairav
+thaat: bhairav
+svaras: S r G m P D N
+aroha: S r G m D N S'
+avaroha: S' N D P m G r S
+vadi: m
+samvadi: S
+pakad: S D, P, D, S | P, D, r r S
 time: morning
 )sheets";
         return sheets;

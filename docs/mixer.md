@@ -444,7 +444,7 @@ could be applied on the clip level, track level or scene level"):
   scene under the launcher's cursor, and for the clip in the slot under it. A track plays in its
   launched clip's tuning, else that scene's, else its own; with none it is 12-TET. The section says
   which tuning the track plays in now.
-- The systems (`Source/mixer/Tunings.h`): 44 Hindustani ragas in just intonation (five-limit
+- The systems (`Source/mixer/Tunings.h`): 74 Hindustani ragas in just intonation (five-limit
   ratios, with Pythagorean komal svaras where the raga sings them low: darbārī's ga and dha, the other kānaḍās' ga,
   toḍī's and bhairav's re and dha), and each of them again equal tempered; the six church modes and six hypo-modes in Pythagorean tuning
   (a hypo-mode's root is the bottom of its range, a fourth below the final); 13 jazz modes; nine
