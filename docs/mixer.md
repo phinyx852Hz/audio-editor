@@ -403,6 +403,11 @@ Fast MIDI edits (owner, 2026-10-25: "MIDI editing, but really fast"; "the idea i
   bhairav, lalit, pūriyā dhanāśrī, śrī, multānī and cārukeśī. A note between two goes down,
   and drums (channel 10) stay. Ragas that share their notes (darbārī kānaḍā, jaunpurī, āsāvarī) are each
   listed. A raga is taken as the notes it uses up and down; its own movement is not followed.
+- The box beside the raga offers a **hypo** range (owner, 2026-10-26): Sa stays the final, and
+  every note is folded by octaves into the octave from the fifth (Pa, a fourth below Sa, up to Pa)
+  or from the fourth (Ma, a fifth below Sa, up to Ma), the one nearest the clip's middle. It is
+  offered for the ragas that have that svara. The church modes (Ionian to Locrian) don't offer
+  it: their hypo-modes are among the tunings.
 - Each edit writes a new MIDI file (type 0) next to the mix, in "<mix> Edits", or in Music/PHI
   Edits until the mix is saved. The clip plays it from the start, as it was heard (a reversed
   clip is turned round first). Ctrl+Z undoes an edit on the tracks. The code is in
@@ -431,12 +436,21 @@ beyond the church modes):
   nothing that keeps the strict rules, all are written again with another seed. Only when nothing
   fits is a strict rule bent, and the status line says how many.
 - The mode: any of the tunings (church modes and hypo-modes, jazz modes, ragas, maqams and
-  dastgahs, 2 to 21 equal steps), on a root, or the melody's own (the diatonic mode on its last
-  note that holds all its notes). The voices use only the mode's keys, and consonance is judged
+  dastgahs, gamelan laras and pathet, Shona mbira tunings, Chinese, Japanese and Korean modes and
+  lü, 2 to 21 equal steps), on a root, or the melody's own (the diatonic mode on its last note that
+  holds all its notes). The voices use only the mode's keys, and consonance is judged
   by the cents the tuning plays: a maqam's neutral third or sixth counts as a third or sixth; in
   an equal temperament each key is one step. Church modes raise the note a whole step below a
   cadence's arrival (musica ficta). A raga can carry its āroha and avaroha (the notes used going
   up and coming down); the tunings list has none yet, so a raga uses its notes both ways.
+- **Range** (hypo, owner 2026-10-26): for a raga, maqam or dastgah, the new voices can keep to a
+  hypo range with the same tonic, as the Gregorian plagal modes do. *From the fifth* is the octave
+  from a fourth below the tonic (Pa, the dominant, up to Pa); *from the fourth* the octave from a
+  fifth below (Ma up to Ma). Each voice takes the octave of that range nearest where it would sit,
+  and may go a step past either end. It is offered only when the mode has a fifth or fourth within
+  30 cents of a pure one (Huzām has no fifth, Bhūpālī no fourth). The church modes don't offer it,
+  since they have their own hypo-modes in the list, and neither do jazz modes or equal steps, which
+  have no tonic-dominant hierarchy. The automatic counterpoint uses the dialog's last choice.
 - Variation: another number writes other lines that keep the same rules; the same number writes
   the same lines.
 - Each voice is a MIDI file (type 0, the melody's tempo map and channel) next to the mix, and a
@@ -449,6 +463,45 @@ beyond the church modes):
   and Add Counterpoint**. The voices are written at once with the Counterpoint dialog's last
   choices (its mode, else the track's tuning, else the melody's own) and loop with it, on the
   tracks the last loop's voices went on. Recording itself is in [recording.md](recording.md).
+
+Fugue (owner, 2026-10-26: "a fugue generator based on open source software", "for the mixer view
+only", "using all mode types"):
+- **Fugue...** in the MIDI Clip section, beside Counterpoint, writes a fugue of 2 to 4 voices on
+  the clip's melody as its subject: its first phrase (up to a rest of an eighth or more), at most
+  four bars. Two voices are upper and lower; three soprano, alto and bass; four add the tenor.
+- The open-source generators surveyed (2026-10-26): sepiks-ai/fugue-structure, Baroque_fugue
+  (StrachNaWroble), the openDAW MCP's create_fugue and ethan-pronev/Fugue-Generator write fugues
+  but carry no licence, so none of their code can be used; the licensed ones (Melodizer, GPL-3.0;
+  foox and CounterPointer, MIT; Strasheela; FuX) write species counterpoint only, which PHI already
+  does. The fugue is our own code: the plan takes the textbook form those projects follow
+  (subject, tonal or real answer, countersubject, episodes from the subject's head in sequence,
+  stretto, inversion), and the free voices are written by the counterpoint search above.
+- The plan: the exposition, the alto first with the subject, the soprano with the answer at the
+  fifth, then the bass (and tenor), each a voice's length after the one before. The answer is
+  tonal (the tonic and dominant of the subject's head answer each other) or real (every note a
+  fifth up); both move by the mode's degrees, so they stay in the mode. The voice that had the
+  subject goes on in a countersubject, written against the answer, which comes back in another
+  voice against each later entry where it fits (moved by the mode's degrees and octaves, kept
+  only where it sounds well against the entry). Then 0 to 4 middle entries on the mediant,
+  submediant, subdominant and supertonic, each after an episode: the subject's head (its first
+  bar or third) in sequence, three steps down or up, in one voice. Every other middle entry can
+  be upside down. Then a last episode and the stretto: every voice enters again, each before the
+  one before has finished, as close as they sound well together (within half the subject if they
+  can); without it, a last entry in the bass. The close holds the tonic in the bass for a bar.
+- The free voices: wherever a voice that has come in has nothing given, it is written by the
+  counterpoint search against everything sounding, in the chosen species against the beat (a
+  half note under a subject of quarters and longer, else a quarter): note against note, two,
+  four, syncopated, or florid (the default). Each free stretch leads out of the voice's last note
+  and into its next, and the last ends as a cadence. A raga's āroha and avaroha are kept by
+  every line, the subject's own entries too.
+- The mode: as for Counterpoint, any of the tunings on a root, or the subject's own; the clip's
+  tuning is offered first. Variation: another number writes other free voices and countersubject
+  on the same plan.
+- Each voice is a MIDI file next to the mix ("<clip> fugue soprano.mid"), and a clip on a new
+  track with the Synth, where the clip is (on the timeline at its start, or in the same scene),
+  the whole fugue long, in the tuning the subject plays in. The status line gives the bars, the
+  middle entries, the stretto's distance and any strict rule bent. The code is in mixer/Fugue.h
+  (and FreePart in mixer/Counterpoint.h), with tests.
 
 The left column (owner, 2026-10-25: "a relatively static view of the mixer, clip launcher and
 horizontal track view"):
@@ -485,16 +538,50 @@ could be applied on the clip level, track level or scene level"):
   scene under the launcher's cursor, and for the clip in the slot under it. A track plays in its
   launched clip's tuning, else that scene's, else its own; with none it is 12-TET. The section says
   which tuning the track plays in now.
-- The systems (`Source/mixer/Tunings.h`): 74 Hindustani ragas in just intonation (five-limit
+- The systems (`Source/mixer/Tunings.h`): 175 Hindustani ragas in just intonation (five-limit
   ratios, with Pythagorean komal svaras where the raga sings them low: darbārī's ga and dha, the other kānaḍās' ga,
   toḍī's and bhairav's re and dha), and each of them again equal tempered; the six church modes and six hypo-modes in Pythagorean tuning
   (a hypo-mode's root is the bottom of its range, a fourth below the final); 13 jazz modes; nine
-  maqams and seven dastgahs with quarter steps of 50 cents; and 2 to 21 equal steps to the octave.
-  Names are in IAST (ragas), IJMES (maqams) and the Encyclopædia Iranica's romanisation (dastgahs), all in
-  lower case (owner); a mix saves the plain ASCII name beside each.
+  maqams and seven dastgahs with quarter steps of 50 cents; Indonesian gamelan in measured cents
+  (no two gamelan are tuned alike, so each is an average): Javanese sléndro and its pathet nem,
+  sanga and manyura, pélog and its pathet lima, nem and barang (from Surjodiningrat, Sudarjana and
+  Susanto's 1972 survey), Balinese selisir as gong kebyar tunes it, the saih pitu and its patutan
+  tembung and sunaren, and Sundanese salendro and degung; the Shona mbira tunings of Zimbabwe (below); Chinese lü from the treatises (sānfēn
+  sǔnyì's twelve, Jīng Fáng's 60, Cài Yuándìng's 18, Hé Chéngtiān's and Zhū Zàiyù's temperaments,
+  the qin's just intonation), the five Chinese modes and the three seven-note scales on each in
+  sānfēn sǔnyì and in 12-TET, and Chaozhou and Cantonese modes; the six gagaku modes in
+  Pythagorean tuning and seven Japanese folk and koto scales; the Korean twelve yul, p'yŏngjo and
+  kyemyŏnjo, and four folk-song tori (sources and details in
+  [east-asian-tunings.md](east-asian-tunings.md)); and 2 to 21 equal steps to the octave.
+  A pathet is the laras's tones in use, read from a gong tone it rests on (sléndro nem on 2, sanga
+  on 5, manyura on 6; pélog lima on 1, nem on 6, barang on 2).
+  Names are in IAST (ragas), IJMES (maqams), the Encyclopædia Iranica's romanisation (dastgahs),
+  Indonesian spelling (gamelan), pinyin with its tones, Hepburn and McCune-Reischauer, all in lower case (owner); a mix saves the plain ASCII name beside
+  each. The clip **Mode or raga...** snap list has the gamelan scales too, on their nearest keys.
+- The Shona tunings (owner, 2026-10-26: "mode and tuning systems from Zimbabwe, especially from
+  the Shona people"), in their own cents rather than 12-TET:
+  - Mbira dzavadzimu: one heptatonic gamut read from different keys, as Garikayi Tirikoti's mbira
+    orchestra plays one scale from seven starting notes. **nyamaropa** (near Mixolydian; the
+    gamut, a Shona mbira measured by McNeil and Mitran, J. Acoust. Soc. Am. 123, 2008: steps of
+    177, 193, 125, 190, 195, 135 and 185 cents), **dambatsoko** (the Mujuru family's, near
+    Ionian), **katsanzaira** (near Dorian), **mavembe (gandanga)** (near Phrygian) and
+    **dindinyongwe** (near Locrian) are its rotations. **nyamaropa (berliner)** is one player's
+    nyamaropa from Berliner's measurements (The Soul of Mbira, 1978, via Rechberger), and
+    **saungweme** (Simboti Mukuwurirwa's flattened whole tone) is seven equal steps of 171 cents
+    on the keys. Nemakonde (a low mavembe), mazingizi (katsanzaira an octave down) and dongonda
+    (the right hand an octave down) share those intervals, so they are not listed again.
+  - Nyunga nyunga, the 15-key karimba taught at Kwanongoma: six tones, the gamut without its
+    fourth; **nyunga nyunga (kwanongoma)** as Kwanongoma's instruments are tuned, in 12-TET, and
+    **nyunga nyunga** from dambatsoko's gamut.
+  - Matepe (hera) of the Korekore and Sena on the Mozambique border: **matepe (saini madera)**,
+    Saini Madera's instrument as Andrew Tracey measured it in 1969 (African Music 4(4), 1970),
+    near seven equal steps: 0, 182, 360, 498, 680, 845 and 1032 cents.
+  - Real mbira vary by maker and player (Berliner found Gondo's octaves wide and Mude's narrow),
+    and their octaves stretch; these play each octave at 1200 cents. The MIDI clip's "Mode or
+    raga" list has the same tunings as the keys they play on.
 - A scale's degrees play on the nearest keys from the root, a quarter step on the key above (rāst's
   E half-flat on E); the keys between keep their 12-TET pitch. Equal steps run up and down the
-  keys from the root.
+  keys from the root, as does a scale of more than twelve notes (Jīng Fáng's 60 lü), a note a key.
 - The mixer hands the tuning to the track's instrument (`mixer::Instrument::setTuning`) whenever
   it changes. Only the PHI synth retunes, and PHI rāga (docs/raga.md) plays a raga in force by its
   sheet; the Synth, Sampler, Slicer and plugins stay in 12-TET.
