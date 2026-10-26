@@ -431,8 +431,8 @@ beyond the church modes):
   nothing that keeps the strict rules, all are written again with another seed. Only when nothing
   fits is a strict rule bent, and the status line says how many.
 - The mode: any of the tunings (church modes and hypo-modes, jazz modes, ragas, maqams and
-  dastgahs, 2 to 21 equal steps), on a root, or the melody's own (the diatonic mode on its last
-  note that holds all its notes). The voices use only the mode's keys, and consonance is judged
+  dastgahs, Shona mbira tunings, 2 to 21 equal steps), on a root, or the melody's own (the
+  diatonic mode on its last note that holds all its notes). The voices use only the mode's keys, and consonance is judged
   by the cents the tuning plays: a maqam's neutral third or sixth counts as a third or sixth; in
   an equal temperament each key is one step. Church modes raise the note a whole step below a
   cadence's arrival (musica ficta). A raga can carry its āroha and avaroha (the notes used going
@@ -489,9 +489,31 @@ could be applied on the clip level, track level or scene level"):
   ratios, with Pythagorean komal svaras where the raga sings them low: darbārī's ga and dha, the other kānaḍās' ga,
   toḍī's and bhairav's re and dha), and each of them again equal tempered; the six church modes and six hypo-modes in Pythagorean tuning
   (a hypo-mode's root is the bottom of its range, a fourth below the final); 13 jazz modes; nine
-  maqams and seven dastgahs with quarter steps of 50 cents; and 2 to 21 equal steps to the octave.
+  maqams and seven dastgahs with quarter steps of 50 cents; the Shona mbira tunings of Zimbabwe
+  (below); and 2 to 21 equal steps to the octave.
   Names are in IAST (ragas), IJMES (maqams) and a common Persian romanisation (dastgahs), all in
   lower case (owner); a mix saves the plain ASCII name beside each.
+- The Shona tunings (owner, 2026-10-26: "mode and tuning systems from Zimbabwe, especially from
+  the Shona people"), in their own cents rather than 12-TET:
+  - Mbira dzavadzimu: one heptatonic gamut read from different keys, as Garikayi Tirikoti's mbira
+    orchestra plays one scale from seven starting notes. **nyamaropa** (near Mixolydian; the
+    gamut, a Shona mbira measured by McNeil and Mitran, J. Acoust. Soc. Am. 123, 2008: steps of
+    177, 193, 125, 190, 195, 135 and 185 cents), **dambatsoko** (the Mujuru family's, near
+    Ionian), **katsanzaira** (near Dorian), **mavembe (gandanga)** (near Phrygian) and
+    **dindinyongwe** (near Locrian) are its rotations. **nyamaropa (berliner)** is one player's
+    nyamaropa from Berliner's measurements (The Soul of Mbira, 1978, via Rechberger), and
+    **saungweme** (Simboti Mukuwurirwa's flattened whole tone) is seven equal steps of 171 cents
+    on the keys. Nemakonde (a low mavembe), mazingizi (katsanzaira an octave down) and dongonda
+    (the right hand an octave down) share those intervals, so they are not listed again.
+  - Nyunga nyunga, the 15-key karimba taught at Kwanongoma: six tones, the gamut without its
+    fourth; **nyunga nyunga (kwanongoma)** as Kwanongoma's instruments are tuned, in 12-TET, and
+    **nyunga nyunga** from dambatsoko's gamut.
+  - Matepe (hera) of the Korekore and Sena on the Mozambique border: **matepe (saini madera)**,
+    Saini Madera's instrument as Andrew Tracey measured it in 1969 (African Music 4(4), 1970),
+    near seven equal steps: 0, 182, 360, 498, 680, 845 and 1032 cents.
+  - Real mbira vary by maker and player (Berliner found Gondo's octaves wide and Mude's narrow),
+    and their octaves stretch; these play each octave at 1200 cents. The MIDI clip's "Mode or
+    raga" list has the same tunings as the keys they play on.
 - A scale's degrees play on the nearest keys from the root, a quarter step on the key above (rāst's
   E half-flat on E); the keys between keep their 12-TET pitch. Equal steps run up and down the
   keys from the root.

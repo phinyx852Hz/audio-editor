@@ -602,6 +602,14 @@ namespace midifile
             { "Shree", "Raga", bits ({ 0, 1, 4, 6, 7, 8, 11 }) },
             { "Multani", "Raga", bits ({ 0, 1, 3, 6, 7, 8, 11 }) },
             { "Charukeshi", "Raga", bits ({ 0, 2, 4, 5, 7, 8, 10 }) },
+            // Shona mbira tunings (mixer/Tunings.cpp has their cents), as the keys they play on.
+            { "Nyamaropa", "Mbira", bits ({ 0, 2, 4, 5, 7, 9, 10 }) },
+            { "Dambatsoko", "Mbira", bits ({ 0, 2, 4, 5, 7, 9, 11 }) },
+            { "Katsanzaira", "Mbira", bits ({ 0, 2, 3, 5, 7, 9, 10 }) },
+            { "Mavembe (Gandanga)", "Mbira", bits ({ 0, 1, 3, 5, 7, 8, 10 }) },
+            { "Dindinyongwe", "Mbira", bits ({ 0, 1, 3, 5, 6, 8, 10 }) },
+            { "Nyunga Nyunga", "Mbira", bits ({ 0, 2, 4, 7, 9, 11 }) },
+            { "Matepe", "Mbira", bits ({ 0, 2, 4, 5, 7, 8, 10 }) },
         };
         return all;
     }
