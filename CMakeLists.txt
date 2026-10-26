@@ -56,6 +56,7 @@ target_sources(${APP_ID} PRIVATE
     Source/mixer/Instruments.cpp
     Source/mixer/MixerEngine.cpp
     Source/mixer/Recording.cpp
+    Source/mixer/DrumsToMidi.cpp
     Source/patchbay/PatchBay.cpp
     Source/core/Ixml.cpp
     Source/core/Metadata.cpp
@@ -386,6 +387,7 @@ if(PHI_BUILD_TESTS)
         Source/control/ControlSurface.cpp
         Source/control/Devices.cpp
         Source/control/MidiLearn.cpp
+        Source/mixer/DrumsToMidi.cpp
         Source/patchbay/PatchBay.cpp
         Source/core/Ixml.cpp
         Source/core/Metadata.cpp

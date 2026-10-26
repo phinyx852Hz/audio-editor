@@ -36,6 +36,55 @@ like the one for audio, and making MIDI clips may come.
 4. Press Record again while the loop plays to **overdub** into it, and again to stop the overdub.
    One button steps through record, play, overdub and play, as a looper pedal does.
 
+## Layers: audio under MIDI (owner, 2026-10-26)
+
+A clip is audio only, MIDI only, or mixed: an audio layer and a MIDI layer that loop together,
+the MIDI playing the track's instrument over the audio, made as it is played rather than later
+in post production. A clip of one kind fills its slot with its waveform or its notes; a mixed one
+is drawn in two halves, the notes on top and the waveform below (the scenes scroll to keep the
+clips tall enough), and so is the clip along the bottom of the mixer.
+
+- A MIDI file dropped on an audio clip in the launcher (or an audio file on a MIDI clip) joins it
+  as its other layer, at the loop's length; a file of the same kind takes the slot, as before.
+- On the armed track a clip of one kind has a red dot where its other half would be: click it and that half records one pass of the
+  loop, starting on the next launch quantise (the slot is launched for it if it is not playing),
+  and plays on with the other. Its notes go round the loop from where it began.
+- Record (Ctrl+R) while a loop of one layer plays records the other layer, for the track's input
+  (the keyboard on a track with an instrument, else audio). On a loop that has the track's layer
+  it overdubs that layer, as before.
+- The audio half on a track with an instrument records the instrument itself as audio (below), on
+  a track set to the audio input that input.
+- A layer with no note in it, or cancelled before it began, is taken out again. Each layer is a
+  file of its own; the project keeps both (`midiLayer` beside `file` in its slot).
+- A track set to Audio or Inst becomes Hybrid when a slot of it gets both, so both are heard;
+  the Inspector's layer and Duck dials balance them.
+- Φ, counterpoint and anything else PHI does to MIDI act on the MIDI layer only; the audio layer
+  keeps the loop's length.
+
+## Drums to MIDI (owner, 2026-10-26)
+
+"Audio drum loops can become MIDI loops for a drum machine." Right-click an audio clip in the
+launcher or the tracks across time (or the Inspector's button for the clip shown) and choose
+**Drums to MIDI**: each hit becomes a note of the General MIDI kit on channel 10, a kick (36), a
+snare (38) or a closed hi-hat (42), as loud as it was played, a 1/16 long. In the launcher the
+notes are the clip's MIDI layer, a mixed clip at once; on the timeline a MIDI clip beside the
+audio, on the same track. A track with no instrument gets the Synth, whose kit plays them;
+choose any other instrument (a drum machine, a sampler) to play them instead. Mute or turn down
+either layer with the Inspector's layer dials. The notes are a file of their own and are not
+edited afterwards.
+
+How (`Source/mixer/DrumsToMidi.cpp`): hits are found in the whole sound and in its top alone (a
+high pass at 5 kHz, so a hat under a ringing kick is found too), 50 ms of silence before so a hit
+on the first frame counts. Each is sorted by what it adds over the 43 ms before it: mostly below
+150 Hz a kick, mostly above 6 kHz a hat, else a snare. Melody and harmony to MIDI are next.
+
+## Recording the instrument as audio
+
+**Its Instrument, as Audio** (Record Options, the track's Records) records what the track's
+instrument plays, from the keyboard and its MIDI clips, as a stereo audio take: before the strip,
+so its inserts are heard once when the take plays back through them, and with no input delay.
+The take loops and stops by itself like any other.
+
 In the tracks across time, Record records onto the armed track from the playhead until Record or
 Stop is pressed; the take becomes a clip (audio, MIDI or both) where it began.
 
@@ -68,8 +117,8 @@ launch quantise; the take length; **Capture**; and **Record Options**.
   recording or not. Capture makes a clip of the last phrase (back to a rest of two bars) in the
   track's next empty slot: with the transport playing, whole bars from the bar line it started in
   (1, 2, 4, 8, 16 or 32), launched in time with when it was played; stopped, from its first note.
-- **The armed track's input**: auto, the MIDI keyboard, the audio input, or both (a slot holds one
-  clip, so a slot takes the keyboard; the timeline takes both). Its **input channels**: the stereo
+- **The armed track's input**: auto, the MIDI keyboard, the audio input, both (a slot then takes
+  the keyboard and the timeline both), or its instrument as audio. Its **input channels**: the stereo
   pair, or the left or right alone (a mono clip). Its **monitoring**: auto (the input heard through
   the track while it is armed and records audio), always on, or off.
 - **Audio Input**: the first input (a microphone or line in), or any PipeWire source: an input, the
@@ -98,6 +147,9 @@ and for "record the next slot" the next take's too. Everything else happens on t
 the frame: the take waits for its quantise (the audio block is split there), records the keyboard
 and the input, ends on its frame, swaps itself into the slot and plays on from that frame, with no
 allocation. A take asked for while one records on the same track becomes the next take.
+A layer (`RecordRequest::layer`) is written into the new half the UI has already put in the slot,
+round the loop from its quantise for one pass; an instrument take (`fromInstrument`) reads the
+track's instrument as the block renders it instead of the input.
 `takeRecorded()` hands the UI each take that ended (and the slots it took the place of, to free);
 the UI writes the files and gives the clips their paths and songs, which the audio thread never
 reads.
@@ -116,6 +168,9 @@ The tests are in tests/CoreTests.cpp (`testRecording`).
 
 ## Next
 
-Takes kept per slot to choose from later (comping), punch in and out on the timeline, recording
-the launcher's performance onto the timeline, MIDI learn for Record and Capture (a footswitch), and
-recording several armed tracks at once.
+Mixed clips on the timeline (a MIDI clip dropped on an audio clip becoming one clip), aligning a
+MIDI layer to the audio's beats and transients (owner, 2026-10-26: generative
+reshaping, still no MIDI editing), a quantise for a recorded MIDI clip, takes kept per slot to
+choose from later (comping), punch in and out on the timeline, recording the launcher's
+performance onto the timeline, and recording several armed tracks at once. Controllers (MIDI
+learn, Launchpad, Launchkey, Push) have their own work.

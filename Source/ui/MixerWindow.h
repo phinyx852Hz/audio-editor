@@ -310,6 +310,15 @@ private:
     void recordSlot (int track, int scene);     // a take into the slot (an empty one, or replacing it)
     void recordTimeline (int track);
     void toggleOverdub (int track);
+    // A slot holds an audio layer under a MIDI layer (owner, 2026-10-26), each drawn in its half.
+    // An empty half records one pass of the loop and plays on with the other.
+    void recordLayer (int track, int scene, bool wantAudio);
+    bool recordsAudioLayer (int track) const;   // what Record adds to a loop with one layer
+    void giveBothLayers (int track);            // an Audio or Inst track plays both once a slot has them
+    bool addLayerFile (int track, int scene, const QString& file);   // dropped on a clip of the other kind: false if not
+    // Drums to MIDI (owner, 2026-10-26): a timeline clip (id) or a slot's audio as kit notes, the
+    // slot's MIDI layer or a MIDI clip beside it.
+    void drumsToMidi (int track, uint32_t id, int scene);
     void captureMidi();                         // the last phrase played on the armed track, into its next empty slot
     void keepRecorded();                        // each tick: the takes that ended, saved as files and placed
     bool startTake (mixer::RecordRequest, QString& error);   // asks the engine, the input and the transport
@@ -342,6 +351,8 @@ private:
     int takeNumber = 1;
     std::array<std::vector<uint32_t>, mixer::maxTracks> timelinePasses;   // a timeline take's clips so far, the newest kept
     std::vector<qint64> taps;      // Tap Tempo's last taps, in ms
+    struct LayerTake { int scene = -1; bool audio = false; };
+    std::array<LayerTake, mixer::maxTracks> layerTakes;   // the half a track is recording, for the grid
     QString editsFolder() const;   // where edits of the mix's clips are saved
     // An audio clip shown: Paulstretch makes it the remembered number of times longer, with the
     // editor's Extreme Stretch settings, saved beside the mix (owner, 2026-10-25).
@@ -376,7 +387,7 @@ private:
     // The launcher.
     // A file into a slot, played as `like` says (its loop and quantise; its clip's offset,
     // length and reversal, a length of 0 for the whole file).
-    void loadSlot (int track, int scene, const QString& path, mixer::Slot like = {});
+    void loadSlot (int track, int scene, const QString& path, mixer::Slot like = {}, const QString& midiLayer = {});
     mixer::MidiClipPtr launcherMidi (midifile::SongPtr, const std::string& path) const;   // whole bars long
     QString sceneName (int scene) const;
     void editSlot (int track, int scene, const std::function<void (mixer::Slot&)>& edit);
@@ -434,8 +445,6 @@ private:
     bool showingClip = false;
     void refreshInspector();   // soon, once for any number of changes
     QScrollArea* gridScroll = nullptr;
-    QByteArray timelineSplit;    // the splitter as the tracks across time had it
-    bool launcherSplit = false;
     QComboBox* quantiseBox = nullptr;
     QSpinBox* scenesBox = nullptr;
     int numScenes = 16;

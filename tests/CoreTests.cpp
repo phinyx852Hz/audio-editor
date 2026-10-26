@@ -10,6 +10,7 @@
 #include "../Source/mixer/Tunings.h"
 #include "../Source/mixer/Counterpoint.h"
 #include "../Source/mixer/MixerEngine.h"
+#include "../Source/mixer/DrumsToMidi.h"
 #include "../Source/patchbay/PatchBay.h"
 #include "../Source/core/Ixml.h"
 #include "../Source/core/Metadata.h"
@@ -4460,6 +4461,70 @@ namespace
     // frame, quantised notes, the audio input with its delay, takes of no set length, the next
     // take following on, overdub, timeline takes, the count-in, Capture, and a launch on a frame
     // gone by.
+    void testDrumsToMidi()
+    {
+        // Two bars at 120 BPM: kicks on the beats 1 and 3, snares on 2 and 4, hats on the offbeats.
+        const double rate = 48000.0;
+        const Frame beat = 24000;
+        auto sound = std::make_shared<mixer::AudioClip>();
+        sound->left.assign ((size_t) (8 * beat), 0.0f);
+        uint32_t seed = 1;
+        auto noise = [&seed] { seed = seed * 1664525u + 1013904223u; return (float) ((seed >> 8) & 0xFFFF) / 32768.0f - 1.0f; };
+        auto add = [&] (Frame at, int kind, float level)
+        {
+            float last = 0.0f, smooth = 0.0f;
+            for (Frame k = 0; k < beat / 2 && at + k < 8 * beat; ++k)
+            {
+                const auto t = (float) k / (float) rate;
+                float v = 0.0f;
+                if (kind == 0)
+                    v = std::sin (2.0f * 3.14159265f * (50.0f + 60.0f * std::exp (-t / 0.03f)) * t) * std::exp (-t / 0.15f);
+                else if (kind == 1)
+                {
+                    const auto n = noise();
+                    smooth += (n - smooth) * 0.3f;   // the crack, below a few kHz
+                    v = (0.6f * std::sin (2.0f * 3.14159265f * 190.0f * t) + 0.8f * smooth) * std::exp (-t / 0.06f);
+                }
+                else
+                {
+                    const auto n = noise();
+                    v = (n - last) * 0.5f * std::exp (-t / 0.02f);   // a hiss, high up
+                    last = n;
+                }
+                sound->left[(size_t) (at + k)] += v * level;
+            }
+        };
+        for (int b = 0; b < 8; ++b)
+        {
+            add (b * beat, b % 2 == 0 ? 0 : 1, b % 2 == 0 ? 0.9f : 0.7f);
+            add (b * beat + beat / 2, 2, 0.4f);
+        }
+        sound->right = sound->left;
+        const auto clip = mixer::makeClip (mixer::AudioClipPtr (sound), 0);
+        const auto hits = mixer::findDrums (clip, rate);
+        int kicks = 0, snares = 0, hats = 0;
+        bool placed = true;
+        for (const auto& h : hits)
+        {
+            const auto step = (double) h.at / (beat / 2.0);
+            placed = placed && std::abs (step - std::round (step)) * (beat / 2.0) < 0.005 * rate;
+            const auto expected = (int) std::lround (step) % 2 == 1 ? mixer::gm::hat : ((int) std::lround (step) / 2) % 2 == 0 ? mixer::gm::kick : mixer::gm::snare;
+            kicks += h.note == mixer::gm::kick && expected == h.note;
+            snares += h.note == mixer::gm::snare && expected == h.note;
+            hats += h.note == mixer::gm::hat && expected == h.note;
+        }
+        check (hits.size() == 16 && placed, "drums to MIDI: every hit found, where it was played");
+        check (kicks == 4 && snares == 4 && hats == 8, "drums to MIDI: kicks, snares and hats told apart");
+        const auto midi = mixer::drumsToMidi (clip, rate, 120.0);
+        bool kit = true;
+        for (const auto& e : midi->events)
+            kit = kit && (e.status & 0x0F) == 9;
+        check (midi->events.size() == 32 && kit && midi->length == 8 * beat, "drums to MIDI: a note on the kit's channel for each hit");
+        check (std::find_if (hits.begin(), hits.end(), [] (const mixer::DrumHit& h) { return h.note == mixer::gm::kick; })->velocity
+                   > std::find_if (hits.begin(), hits.end(), [] (const mixer::DrumHit& h) { return h.note == mixer::gm::hat; })->velocity,
+               "drums to MIDI: louder hits play louder");
+    }
+
     void testRecording()
     {
         const double rate = 48000.0;
@@ -4725,6 +4790,100 @@ namespace
             const auto info = m.launchInfo (0);
             check (info.playing == 0 && info.progress > 0.0f && std::abs (info.progress - (float) (m.launchClock() - 7000) / 48000.0f) < 1.0e-3f,
                    "recording: a launch on a frame gone by plays in time with it");
+        }
+
+        {
+            // A MIDI layer over a two-bar audio loop: one pass, round from where it began.
+            mixer::Engine m;
+            setUp (m);
+            auto sound = std::make_shared<mixer::AudioClip>();
+            sound->left.assign ((size_t) (8 * beat), 0.25f);
+            sound->right = sound->left;
+            auto slot = std::make_shared<mixer::Slot>();
+            slot->clip = mixer::makeClip (mixer::AudioClipPtr (sound), 0);
+            m.setSlot (0, 0, slot);
+            m.launch (0, 0);
+            run (m, 1024);
+            auto notes = std::make_shared<mixer::MidiClip>();
+            notes->events.reserve (64);
+            notes->length = 8 * beat;
+            auto layered = std::make_shared<mixer::Slot> (*slot);
+            layered->clip.midi = notes;
+            m.setSlot (0, 0, layered);
+            mixer::RecordRequest q;
+            q.scene = 0;
+            q.layer = true;
+            q.overdubMidi = notes;
+            std::string error;
+            check (m.record (q, error) && m.recordInfo (0).state == mixer::RecordState::waiting, "recording: a layer waits for the quantise");
+            run (m, 5 * beat - 1024);
+            check (m.recordInfo (0).state == mixer::RecordState::recording && m.launchInfo (0).playing == 0, "recording: the layer records, the loop playing on");
+            m.liveMidi (0x90, 62, 100);
+            run (m, beat / 2);
+            m.liveMidi (0x80, 62, 0);
+            run (m, 7 * beat);
+            const auto now = m.slot (0, 0);
+            check (now != nullptr && now->clip.audio == slot->clip.audio && now->clip.midi == notes && now->clip.length == 8 * beat
+                   && m.recordInfo (0).state == mixer::RecordState::none && m.launchInfo (0).playing == 0,
+                   "recording: the layer ends by itself after one pass; both play on");
+            check (notes->events.size() == 2 && notes->events[0].frame == 5 * beat && notes->events[1].frame == 5 * beat + beat / 2,
+                   "recording: the layer's notes round the loop from where it began");
+            const auto got = m.takeRecorded();
+            check (got.size() == 1 && got[0].layer && got[0].midi == notes && got[0].notes && got[0].length == 8 * beat, "recording: the layer handed to the UI");
+
+            // Cancelled before it begins: handed back with nothing in it.
+            auto more = std::make_shared<mixer::AudioClip>();
+            more->left.assign ((size_t) (8 * beat), 0.0f);
+            more->right = more->left;
+            auto withBoth = std::make_shared<mixer::Slot>();
+            withBoth->clip = mixer::makeClip (mixer::MidiClipPtr (notes), 0);
+            withBoth->clip.audio = more;
+            m.setSlot (0, 1, withBoth);
+            mixer::RecordRequest c;
+            c.scene = 1;
+            c.layer = true;
+            c.midi = false;
+            c.audio = true;
+            c.overdubAudio = more;
+            check (m.record (c, error), "recording: an audio layer for a slot not playing");
+            m.stopRecording (0);
+            run (m, 256);
+            const auto back = m.takeRecorded();
+            check (back.size() == 1 && back[0].layer && back[0].length == 0 && back[0].audio == more, "recording: a layer cancelled, handed back to take out");
+        }
+
+        {
+            // The track's instrument recorded as audio: as it sounds, with no input delay.
+            mixer::Engine m;
+            setUp (m);
+            m.inputLatencyMs = 10.0f;
+            mixer::RecordRequest q;
+            q.scene = 0;
+            q.beats = 4.0;
+            q.midi = false;
+            q.audio = true;
+            q.fromInstrument = true;
+            std::string error;
+            check (m.record (q, error), "recording: the instrument as audio");
+            m.play();
+            m.liveMidi (0x90, 69, 110);
+            run (m, beat);
+            m.liveMidi (0x80, 69, 0);
+            run (m, 3 * beat + 256);
+            const auto slot = m.slot (0, 0);
+            check (slot != nullptr && slot->clip.audio != nullptr && ! slot->clip.audio->mono && slot->clip.length == 4 * beat
+                   && slot->clip.midi == nullptr, "recording: the instrument's take is a stereo audio clip");
+            float early = 0.0f, late = 0.0f;
+            for (Frame f = 0; f < 480; ++f)
+                early = std::max (early, std::abs (slot->clip.audio->left[(size_t) f]));
+            for (Frame f = 3 * beat; f < 4 * beat; ++f)
+                late = std::max (late, std::abs (slot->clip.audio->left[(size_t) f]));
+            check (early > 0.001f && late < early, "recording: the note from its first frame, not moved by the input's delay");
+            mixer::RecordRequest none = q;
+            none.scene = 1;
+            m.setInstrument (1, nullptr);
+            none.track = 1;
+            check (! m.record (none, error), "recording: a track with no instrument cannot record it");
         }
     }
 
@@ -5836,6 +5995,7 @@ int main()
     testCounterpoint();
     testRecording();
     testControlSurfaces();
+    testDrumsToMidi();
     testPluginMeasure();
 
     if (failures == 0)

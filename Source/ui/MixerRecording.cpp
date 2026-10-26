@@ -134,6 +134,43 @@ namespace
     }
 }
 
+namespace layers
+{
+    // A slot's layers as it plays them, from its first frame forwards, so a layer added or
+    // overdubbed lines up with them frame for frame.
+    std::shared_ptr<mixer::MidiClip> flatMidi (const mixer::Clip& c, size_t room)
+    {
+        auto copy = std::make_shared<mixer::MidiClip> (*c.midi);
+        copy->events.clear();
+        copy->events.reserve (c.midi->events.size() + room);
+        for (const auto& e : c.midi->events)
+            if (e.frame >= c.offset && e.frame < c.offset + c.length)
+                copy->events.push_back ({ e.frame - c.offset, e.status, e.data1, e.data2 });
+        copy->length = c.length;
+        copy->song = nullptr;   // a new file once it is recorded into
+        if (c.offset != 0 || c.reversed || c.length != c.midi->length)
+            copy->path.clear();   // not the file's notes now: saved again
+        return copy;
+    }
+
+    std::shared_ptr<mixer::AudioClip> flatAudio (const mixer::Clip& c)
+    {
+        auto copy = std::make_shared<mixer::AudioClip>();
+        copy->mono = c.audio->mono;
+        copy->left.resize ((size_t) c.length);
+        copy->right.resize ((size_t) c.length);
+        const auto last = c.audio->length() - 1;
+        for (Frame f = 0; f < c.length; ++f)
+        {
+            const auto src = (size_t) std::clamp<Frame> (c.reversed ? last - (c.offset + f) : c.offset + f, 0, last);
+            copy->left[(size_t) f] = c.audio->left[src];
+            copy->right[(size_t) f] = c.audio->right[src];
+        }
+        copy->path = c.offset == 0 && ! c.reversed && c.length == c.audio->length() ? c.audio->path : std::string();
+        return copy;
+    }
+}
+
 //==============================================================================
 QWidget* MixerWindow::buildTransport()
 {
@@ -262,6 +299,7 @@ mixer::RecordRequest MixerWindow::recordRequest (int track, int scene) const
         case mixer::Strip::inputMidi: q.midi = true; q.audio = false; break;
         case mixer::Strip::inputAudio: q.midi = false; q.audio = true; break;
         case mixer::Strip::inputBoth: q.midi = true; q.audio = true; break;
+        case mixer::Strip::inputInstrument: q.midi = false; q.audio = true; q.fromInstrument = true; break;
         default:
             // The keyboard on a track with an instrument, else the audio input.
             q.midi = engine.instrument (track) != nullptr && (mixer::TrackMode) s.mode.load() != mixer::TrackMode::audio;
@@ -300,7 +338,7 @@ int MixerWindow::nextSlotFor (int track, int from) const
 
 bool MixerWindow::startTake (mixer::RecordRequest q, QString& error)
 {
-    if ((q.audio || q.overdubAudio != nullptr) && ! ensureInput (error))
+    if ((q.audio || q.overdubAudio != nullptr) && ! q.fromInstrument && ! ensureInput (error))
         return false;
     if (q.scene >= numScenes)
         setScenes (q.scene + 1);
@@ -350,8 +388,16 @@ void MixerWindow::recordPressed()
     }
     else if (launcherShown())
     {
-        if (engine.launchInfo (track).playing >= 0)
-            toggleOverdub (track);
+        if (const auto playing = engine.launchInfo (track).playing; playing >= 0)
+        {
+            // A loop of one layer gets the other one; else it is overdubbed.
+            const auto slot = engine.slot (track, playing);
+            const bool sound = recordsAudioLayer (track);
+            if (slot != nullptr && (sound ? slot->clip.audio == nullptr : slot->clip.midi == nullptr))
+                recordLayer (track, playing, sound);
+            else
+                toggleOverdub (track);
+        }
         else
             recordSlot (track, nextSlotFor (track, selected == track ? cursorScene : 0));
     }
@@ -404,46 +450,38 @@ void MixerWindow::toggleOverdub (int track)
     const auto slot = scene >= 0 ? engine.slot (track, scene) : nullptr;
     if (slot == nullptr || slot->clip.length <= 0)
         return;
-    // The slot gets its own copy of what it plays, as it plays it, to write into.
+    // The slot gets its own copy of what it plays, as it plays it, to write into: the layer the
+    // track records, when it has both.
     const auto& c = slot->clip;
     auto overdubbed = std::make_shared<mixer::Slot> (*slot);
     overdubbed->clip.offset = 0;
     overdubbed->clip.reversed = false;
     auto q = recordRequest (track, scene);
     q.overdub = true;
-    if (c.midi != nullptr)
+    const bool sound = c.audio != nullptr && (c.midi == nullptr || recordsAudioLayer (track));
+    if (! sound)
     {
-        auto copy = std::make_shared<mixer::MidiClip> (*c.midi);
-        copy->events.clear();
-        copy->events.reserve (c.midi->events.size() + 16384);
-        for (const auto& e : c.midi->events)
-            if (e.frame >= c.offset && e.frame < c.offset + c.length)
-                copy->events.push_back ({ e.frame - c.offset, e.status, e.data1, e.data2 });
-        copy->length = c.length;
-        copy->song = nullptr;   // a new file once the overdub ends
+        auto copy = layers::flatMidi (c, 16384);
         overdubbed->clip.midi = copy;
         q.overdubMidi = copy;
         q.midi = true;
         q.audio = false;
+        q.fromInstrument = false;
     }
-    else if (c.audio != nullptr)
+    else
     {
-        auto copy = std::make_shared<mixer::AudioClip>();
-        copy->mono = c.audio->mono;
-        copy->left.resize ((size_t) c.length);
-        copy->right.resize ((size_t) c.length);
-        const auto last = c.audio->length() - 1;
-        for (Frame f = 0; f < c.length; ++f)
-        {
-            const auto src = (size_t) std::clamp<Frame> (c.reversed ? last - (c.offset + f) : c.offset + f, 0, last);
-            copy->left[(size_t) f] = c.audio->left[src];
-            copy->right[(size_t) f] = c.audio->right[src];
-        }
+        auto copy = layers::flatAudio (c);
+        copy->path.clear();   // a new file once the overdub ends
         overdubbed->clip.audio = copy;
         q.overdubAudio = copy;
         q.midi = false;
         q.audio = true;
     }
+    // The other layer goes along as it plays.
+    if (sound && c.midi != nullptr && (c.offset != 0 || c.reversed))
+        overdubbed->clip.midi = layers::flatMidi (c, 0);
+    if (! sound && c.audio != nullptr && (c.offset != 0 || c.reversed))
+        overdubbed->clip.audio = layers::flatAudio (c);
     slots[(size_t) track][(size_t) scene] = overdubbed;
     engine.setSlot (track, scene, overdubbed);
     QString error;
@@ -453,6 +491,91 @@ void MixerWindow::toggleOverdub (int track)
         return;
     }
     say (tr ("Overdubbing %1 in %2: Record again to stop.").arg (trackName (track), sceneName (scene)));
+}
+
+bool MixerWindow::recordsAudioLayer (int track) const
+{
+    const auto q = recordRequest (track, 0);
+    return q.audio && ! q.midi;
+}
+
+void MixerWindow::recordLayer (int track, int scene, bool wantAudio)
+{
+    if (track < 0 || track >= engine.numTracks() || scene < 0 || scene >= mixer::maxScenes)
+        return;
+    const auto slot = engine.slot (track, scene);
+    if (slot == nullptr || slot->clip.length <= 0)
+        return;
+    const auto& c = slot->clip;
+    if (wantAudio ? c.audio != nullptr : c.midi != nullptr)
+    {
+        say (wantAudio ? tr ("%1 already has its audio layer.").arg (sceneName (scene)) : tr ("%1 already has its MIDI layer.").arg (sceneName (scene)));
+        return;
+    }
+    if (engine.recordInfo (track).state != mixer::RecordState::none)
+    {
+        say (tr ("%1 is recording already.").arg (trackName (track)));
+        return;
+    }
+    if (engine.liveTrack() != track)
+        arm (track);
+    auto q = recordRequest (track, scene);
+    q.layer = true;
+    q.overdub = false;
+    q.beats = 0.0;   // the loop's own length
+    // The slot, as it plays, with its new half empty.
+    auto layered = std::make_shared<mixer::Slot> (*slot);
+    layered->clip.offset = 0;
+    layered->clip.reversed = false;
+    if (c.midi != nullptr && (c.offset != 0 || c.reversed))
+        layered->clip.midi = layers::flatMidi (c, 0);
+    if (c.audio != nullptr && (c.offset != 0 || c.reversed))
+        layered->clip.audio = layers::flatAudio (c);
+    const auto& s = engine.strip (track);
+    if (wantAudio)
+    {
+        // The audio input when the track records it, else the track's own instrument.
+        const auto input = s.input.load();
+        q.fromInstrument = engine.instrument (track) != nullptr && input != mixer::Strip::inputAudio && input != mixer::Strip::inputBoth;
+        auto sound = std::make_shared<mixer::AudioClip>();
+        sound->left.assign ((size_t) c.length, 0.0f);
+        sound->right.assign ((size_t) c.length, 0.0f);
+        sound->mono = ! q.fromInstrument && s.inputChannels.load() != 0;
+        layered->clip.audio = sound;
+        q.overdubAudio = sound;
+        q.audio = true;
+        q.midi = false;
+    }
+    else
+    {
+        auto notes = std::make_shared<mixer::MidiClip>();
+        notes->events.reserve (16384);
+        notes->bpm = engine.tempo.load();
+        notes->length = c.length;
+        layered->clip.midi = notes;
+        q.overdubMidi = notes;
+        q.midi = true;
+        q.audio = false;
+        q.fromInstrument = false;
+        giveSynth (track);
+    }
+    slots[(size_t) track][(size_t) scene] = layered;
+    engine.setSlot (track, scene, layered);
+    QString error;
+    if (! startTake (q, error))
+    {
+        slots[(size_t) track][(size_t) scene] = slot;   // as it was
+        engine.setSlot (track, scene, slot);
+        say (error);
+        return;
+    }
+    layerTakes[(size_t) track] = { scene, wantAudio };
+    giveBothLayers (track);
+    moveCursor (track, scene);
+    say (wantAudio ? (q.fromInstrument ? tr ("Recording %1's instrument as audio under %2 for one pass.").arg (trackName (track), sceneName (scene))
+                                       : tr ("Recording audio under %1 for one pass.").arg (sceneName (scene)))
+                   : tr ("Recording MIDI over %1 for one pass.").arg (sceneName (scene)));
+    refreshViews();
 }
 
 void MixerWindow::recordTimeline (int track)
@@ -582,6 +705,51 @@ void MixerWindow::keepRecorded()
         if (track < 0 || track >= engine.numTracks())
             continue;
         QString error;
+        if (rec.layer)
+        {
+            // A layer: kept in the slot with the other, or taken out again when nothing came of it.
+            const auto scene = rec.scene;
+            layerTakes[(size_t) track] = {};
+            auto slot = engine.slot (track, scene);
+            if (rec.length <= 0 || (rec.audio == nullptr && ! rec.notes))
+            {
+                if (slot != nullptr && ((rec.audio != nullptr && slot->clip.audio == rec.audio) || (rec.midi != nullptr && slot->clip.midi == rec.midi)))
+                {
+                    auto back = std::make_shared<mixer::Slot> (*slot);
+                    if (rec.audio != nullptr)
+                        back->clip.audio = nullptr;
+                    else
+                        back->clip.midi = nullptr;
+                    slots[(size_t) track][(size_t) scene] = back;
+                    engine.setSlot (track, scene, back);
+                }
+                say (rec.length <= 0 ? tr ("The layer was cancelled before it began.") : tr ("Nothing was played in the layer, so nothing was kept."));
+                continue;
+            }
+            // The other layer, if it was flattened for this one, is a file of its own too.
+            if (slot != nullptr)
+            {
+                mixer::Recorded other;
+                other.track = track;
+                other.scene = scene;
+                other.length = slot->clip.length;
+                if (rec.audio != nullptr)
+                    other.midi = slot->clip.midi;
+                else
+                    other.audio = slot->clip.audio;
+                if ((other.audio != nullptr && other.audio->path.empty()) || (other.midi != nullptr && other.midi->path.empty()))
+                    saveTake (other, error);
+            }
+            const auto file = saveTake (rec, error);
+            slots[(size_t) track][(size_t) scene] = engine.slot (track, scene);
+            if (file.isEmpty())
+                say (error);
+            else
+                say (rec.audio != nullptr ? tr ("Audio layer recorded under %1, %2: %3.").arg (trackName (track), sceneName (scene), QFileInfo (file).fileName())
+                                          : tr ("MIDI layer recorded over %1, %2: %3.").arg (trackName (track), sceneName (scene), QFileInfo (file).fileName()));
+            changed();
+            continue;
+        }
         if (rec.scene >= 0)
         {
             const auto scene = rec.scene;
@@ -740,6 +908,7 @@ void MixerWindow::recordMenu (QPoint at)
             { mixer::Strip::inputMidi, tr ("The MIDI &Keyboard") },
             { mixer::Strip::inputAudio, tr ("The &Audio Input") },
             { mixer::Strip::inputBoth, tr ("&Both (the Timeline Takes Both)") },
+            { mixer::Strip::inputInstrument, tr ("Its &Instrument, as Audio") },
         };
         for (const auto& [value, name] : inputs)
         {
@@ -878,7 +1047,8 @@ void MixerWindow::updateInput()
     {
         const auto& s = engine.strip (t);
         const auto take = engine.recordInfo (t);
-        const bool audioTrack = recordRequest (t, 0).audio;
+        const auto q = recordRequest (t, 0);
+        const bool audioTrack = q.audio && ! q.fromInstrument;
         wanted = wanted || s.monitor.load() == mixer::Strip::monitorOn
               || (audioTrack && (take.state != mixer::RecordState::none || (t == engine.liveTrack() && s.monitor.load() == mixer::Strip::monitorAuto)));
     }

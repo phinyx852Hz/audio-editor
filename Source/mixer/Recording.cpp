@@ -73,13 +73,14 @@ namespace mixer
     }
 
     //==========================================================================
+    // Whether the track's takes record the audio input.
     bool Engine::recordsAudio (int index) const
     {
         const auto& s = strips[(size_t) index];
         const auto in = s.input.load();
         if (in == Strip::inputAudio || in == Strip::inputBoth)
             return true;
-        if (in == Strip::inputMidi)
+        if (in == Strip::inputMidi || in == Strip::inputInstrument)
             return false;
         return lanes[(size_t) index].instrument == nullptr || (TrackMode) s.mode.load() == TrackMode::audio;
     }
@@ -131,6 +132,11 @@ namespace mixer
             error = "Overdub needs the slot's clip playing.";
             return false;
         }
+        if (r.layer && (timeline || r.overdub || (r.overdubAudio == nullptr) == (r.overdubMidi == nullptr)))
+        {
+            error = "A layer needs the slot's clip and one new layer for it.";
+            return false;
+        }
         const auto sr = rate.load();
         const auto beatFrames = 60.0 / std::clamp (tempo.load(), 20.0, 999.0) * sr;
 
@@ -151,7 +157,7 @@ namespace mixer
                 audio = std::make_shared<AudioClip>();
                 audio->left.assign ((size_t) k.room, 0.0f);
                 audio->right.assign ((size_t) k.room, 0.0f);
-                audio->mono = strips[(size_t) r.track].inputChannels.load() != 0;
+                audio->mono = ! r.fromInstrument && strips[(size_t) r.track].inputChannels.load() != 0;
             }
             else
             {
@@ -162,7 +168,7 @@ namespace mixer
             }
             slot = std::make_shared<Slot>();
         };
-        if (r.overdub)
+        if (r.overdub || r.layer)
         {
             k.audio = r.overdubAudio;
             k.midi = r.overdubMidi;
@@ -178,9 +184,14 @@ namespace mixer
         const std::lock_guard<std::mutex> l (lock);
         auto& t = lanes[(size_t) r.track];
         auto& now = t.take;
+        if (r.fromInstrument && t.instrument == nullptr)
+        {
+            error = "The track has no instrument to record.";
+            return false;
+        }
         // While a slot take records, the next one asked for follows it on the frame it ends.
-        if (! timeline && ! r.overdub && now.state != RecordState::none && ! now.timeline && now.request.scene != r.scene
-            && now.state != RecordState::overdubbing)
+        if (! timeline && ! r.overdub && ! r.layer && now.state != RecordState::none && ! now.timeline && now.request.scene != r.scene
+            && now.state != RecordState::overdubbing && ! now.request.layer)
         {
             makeRoom (now.nextAudio, now.nextMidi, now.nextSlot);   // allocates under the lock, once, on the UI thread
             now.nextScene = r.scene;
@@ -209,6 +220,26 @@ namespace mixer
             k.state = RecordState::overdubbing;
             k.room = t.playing->clip.length;
         }
+        else if (r.layer)
+        {
+            const auto& slot = t.slots[(size_t) r.scene];
+            if (slot == nullptr || slot->clip.length <= 0
+                || (k.audio != nullptr ? slot->clip.audio != k.audio : slot->clip.midi != k.midi))
+            {
+                error = "The layer is not in the slot.";
+                return false;
+            }
+            k.state = RecordState::waiting;
+            k.length = k.room = slot->clip.length;
+            k.startAt = playing.load() ? quantiseFrom (launchQuantise.load()) : -1;
+            // Not playing: the slot is launched to start with it.
+            if (t.playing != slot)
+            {
+                t.queued = slot;
+                t.queuedScene = r.scene;
+                t.queuedAt = k.startAt >= 0 ? k.startAt : clock.load();
+            }
+        }
         else
         {
             k.state = RecordState::waiting;
@@ -222,6 +253,7 @@ namespace mixer
             gathered.track = r.track;
             gathered.audioOn = r.audio;
             gathered.midiOn = r.midi;
+            gathered.fromInstrument = r.fromInstrument;
             gathered.quantise = r.quantise;
         }
         // Whatever the track kept from before (a tail long done, a report given) goes after the lock.
@@ -245,7 +277,9 @@ namespace mixer
             auto& k = lanes[(size_t) i].take;
             if (k.state == RecordState::waiting)
             {
-                // Not begun: nothing to keep.
+                // Not begun: nothing to keep. A layer's empty half goes back to the UI to take out.
+                if (k.request.layer)
+                    endLayer (i, k, 0);
                 k.state = RecordState::none;
                 k.nextScene = -1;
                 recordShared[(size_t) i].state = 0;
@@ -357,12 +391,12 @@ namespace mixer
                     auto clip = std::make_shared<AudioClip>();
                     clip->left.assign ((size_t) frames, 0.0f);
                     clip->right.assign ((size_t) frames, 0.0f);
-                    const auto channels = strips[(size_t) gathered.track].inputChannels.load();
+                    const auto channels = gathered.fromInstrument ? 0 : strips[(size_t) gathered.track].inputChannels.load();
                     clip->mono = channels != 0;
                     const auto have = (int64_t) gathered.audio.size() / 2;
                     for (Frame f = 0; f < frames; ++f)
                     {
-                        const auto src = from.audioAt + latency + f;
+                        const auto src = from.audioAt + (gathered.fromInstrument ? 0 : latency) + f;
                         if (src < 0 || src >= have)
                             continue;
                         const auto l = gathered.audio[(size_t) (2 * src)], r = gathered.audio[(size_t) (2 * src + 1)];
@@ -535,7 +569,7 @@ namespace mixer
         if (k.midi == nullptr)
             return;
         auto& clip = *k.midi;
-        const bool overdub = k.state == RecordState::overdubbing;
+        const bool overdub = k.state == RecordState::overdubbing || k.request.layer;   // round the loop
         const auto grid = k.request.quantise * 60.0 / std::clamp (tempo.load(), 20.0, 999.0) * rate.load();
         const auto ch = (size_t) (e.status & 0x0F), key = (size_t) (e.data1 & 0x7F);
         auto wrap = [&] (Frame f) { return overdub && length > 0 ? ((f % length) + length) % length : f; };
@@ -623,7 +657,7 @@ namespace mixer
         k.done.notes = k.notes;
         // The audio still on its way (the input's delay) is written before the UI keeps it.
         const auto latency = (Frame) std::llround (std::max (0.0f, inputLatencyMs.load()) * 0.001 * rate.load());
-        if (k.audio != nullptr && latency > 0)
+        if (k.audio != nullptr && latency > 0 && ! k.request.fromInstrument)
         {
             k.tailAudio = k.audio;
             k.tailStart = k.startAt;
@@ -664,6 +698,25 @@ namespace mixer
         }
     }
 
+    void Engine::endLayer (int index, Track::Take& k, Frame length)
+    {
+        k.done = {};
+        k.done.track = index;
+        k.done.scene = k.request.scene;
+        k.done.layer = true;
+        k.done.audio = k.audio;
+        k.done.midi = k.midi;
+        k.done.start = k.startAt;
+        k.done.length = length;   // 0: it never began
+        k.done.notes = k.notes;
+        k.reporting = true;
+        k.state = RecordState::none;
+        k.audio = nullptr;
+        k.midi = nullptr;
+        k.endAt = -1;
+        recordShared[(size_t) index].state.store (0, std::memory_order_relaxed);
+    }
+
     void Engine::recordBlock (Frame clockAt, Frame posAt, int frames, bool play)
     {
         const auto armedTrack = armed.load();
@@ -685,8 +738,12 @@ namespace mixer
             auto& k = t.take;
             auto& shared = recordShared[(size_t) i];
             const auto channels = strips[(size_t) i].inputChannels.load();
+            const bool fromInstrument = k.request.fromInstrument;
+            const auto lat = fromInstrument ? 0 : latency;   // the instrument is heard as it is made
             auto inputAt = [&] (int f, bool right)
             {
+                if (fromInstrument)
+                    return right ? sourceR[(size_t) i][(size_t) f] : sourceL[(size_t) i][(size_t) f];
                 return channels == 1 ? inL[(size_t) f] : channels == 2 ? inR[(size_t) f] : right ? inR[(size_t) f] : inL[(size_t) f];
             };
 
@@ -764,8 +821,9 @@ namespace mixer
                         for (int f = 0; f < frames; ++f)
                         {
                             const auto at = (size_t) ((w + (uint64_t) f) % ringFrames) * 2;
-                            streamRing[at] = inL[(size_t) f];   // both sides as they came: the UI picks the channels
-                            streamRing[at + 1] = inR[(size_t) f];
+                            // Both sides as they came: the UI picks the channels.
+                            streamRing[at] = fromInstrument ? sourceL[(size_t) i][(size_t) f] : inL[(size_t) f];
+                            streamRing[at + 1] = fromInstrument ? sourceR[(size_t) i][(size_t) f] : inR[(size_t) f];
                         }
                         streamWritten.store (w + (uint64_t) frames, std::memory_order_release);
                     }
@@ -778,11 +836,79 @@ namespace mixer
                 continue;
             }
 
+            if (k.request.layer)
+            {
+                // The slot's other layer: one pass of its loop, round from where it began.
+                const auto scene = k.request.scene;
+                const auto& slot = t.slots[(size_t) scene];
+                const bool inSlot = slot != nullptr && (k.audio != nullptr ? slot->clip.audio == k.audio : slot->clip.midi == k.midi);
+                const bool sounding = inSlot && t.playing == slot && t.playingScene == scene;
+                const auto len = std::max<Frame> (1, k.length);
+                if (k.state == RecordState::waiting)
+                {
+                    const bool launching = inSlot && t.queued == slot && t.queuedScene == scene;
+                    if (! sounding && ! launching)
+                    {
+                        endLayer (i, k, 0);   // its slot was stopped, emptied or changed first: nothing kept
+                        report (i, t);
+                        continue;
+                    }
+                    if (! play || ! sounding)
+                        continue;
+                    if (k.startAt < 0)
+                        k.startAt = std::max (clockAt, t.launchedAt);
+                    if (clockAt < k.startAt)
+                        continue;
+                    k.state = RecordState::recording;
+                    k.phase = ((k.startAt - t.launchedAt) % len + len) % len;
+                    k.endAt = k.startAt + len;
+                    shared.start.store (k.startAt, std::memory_order_relaxed);
+                }
+                const auto at = clockAt - k.startAt;
+                const bool cut = ! sounding || ! play;   // stopped part way: what it has is kept
+                if (! cut)
+                {
+                    if (keys && at < len)
+                        for (const auto& e : liveTaken)
+                            recordNote (t, k.phase + at, e, len);
+                    if (k.audio != nullptr)
+                    {
+                        auto& a = *k.audio;
+                        for (int f = 0; f < frames; ++f)
+                        {
+                            const auto w = at + f - lat;
+                            const auto to = (size_t) ((k.phase + w) % len);
+                            if (w >= 0 && w < len && to < a.left.size())
+                            {
+                                a.left[to] = inputAt (f, false);
+                                a.right[to] = inputAt (f, true);
+                            }
+                        }
+                    }
+                }
+                const auto heard = std::clamp<Frame> (at + frames, 0, len);
+                shared.state.store ((int) k.state, std::memory_order_relaxed);
+                shared.recorded.store (heard, std::memory_order_relaxed);
+                shared.length.store (len, std::memory_order_relaxed);
+                shared.progress.store ((float) heard / (float) len, std::memory_order_relaxed);
+                if (cut || at + frames >= len + (k.audio != nullptr ? lat : 0))
+                {
+                    // Notes still held end with the pass.
+                    for (size_t ch = 0; ch < 16; ++ch)
+                        for (size_t key = 0; key < 128; ++key)
+                            if (k.on[ch][key] >= 0)
+                                recordNote (t, k.phase + std::min (len, at + frames) - 1, { 0, (uint8_t) (0x80 | ch), (uint8_t) key, 0 }, len);
+                    endLayer (i, k, len);
+                    report (i, t);
+                }
+                continue;
+            }
+
             if (k.state == RecordState::overdubbing)
             {
                 const auto len = t.playing != nullptr ? t.playing->clip.length : 0;
                 const bool same = t.playing != nullptr && t.playingScene == k.request.scene
-                               && (t.playing->clip.audio == k.audio || t.playing->clip.midi == k.midi);
+                               && ((k.audio != nullptr && t.playing->clip.audio == k.audio) || (k.midi != nullptr && t.playing->clip.midi == k.midi));
                 if (! same || len <= 0 || k.stopAsked || ! play)
                 {
                     // Kept as it is now.
@@ -809,7 +935,7 @@ namespace mixer
                     const auto offset = t.playing->clip.offset;
                     for (int f = 0; f < frames; ++f)
                     {
-                        const auto at = (size_t) ((((p + f - latency) % len) + len) % len + offset);
+                        const auto at = (size_t) ((((p + f - lat) % len) + len) % len + offset);
                         if (at < a.left.size())
                         {
                             a.left[at] += inputAt (f, false);
@@ -887,7 +1013,7 @@ namespace mixer
                 auto& a = *k.audio;
                 for (int f = 0; f < frames; ++f)
                 {
-                    const auto w = at + f - latency;
+                    const auto w = at + f - lat;
                     if (w >= 0 && w < lengthNow && w < a.length())
                     {
                         a.left[(size_t) w] = inputAt (f, false);
