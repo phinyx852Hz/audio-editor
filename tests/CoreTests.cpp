@@ -4523,9 +4523,9 @@ namespace
         {
             const auto& snap = midifile::scales();
             bool same = true;
-            for (auto [scale, plain] : { std::pair { "Slendro", "slendro pathet manyura" }, { "Pelog", "pelog" }, { "Pelog Pathet Lima", "pelog pathet lima" },
-                                         { "Pelog Pathet Nem", "pelog pathet nem" }, { "Pelog Pathet Barang", "pelog pathet barang" },
-                                         { "Selisir", "selisir" }, { "Degung", "degung" } })
+            for (auto [scale, plain] : { std::pair { "sléndro", "slendro pathet manyura" }, { "pélog", "pelog" }, { "pélog pathet lima", "pelog pathet lima" },
+                                         { "pélog pathet nem", "pelog pathet nem" }, { "pélog pathet barang", "pelog pathet barang" },
+                                         { "selisir", "selisir" }, { "degung", "degung" } })
             {
                 uint16_t bits = 0;
                 for (auto c : get (plain).cents)
