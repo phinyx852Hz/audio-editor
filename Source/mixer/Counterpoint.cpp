@@ -132,10 +132,12 @@ namespace counterpoint
             bool phraseStart = false, phraseEnd = false, penultimate = false;
             int bar = 0;
             int cadence = -1;           // the melody's last pitch of the phrase (for ficta)
+            int pinned = -1;            // a free part's note given as it is (freeVoice)
+            bool strictEnds = true;     // the phrase begins and ends by the rules (a free part: its cadence only)
         };
 
         // The voice's rhythm against each note of the melody.
-        std::vector<Slot> rhythm (const Line& cf, Species species, uint32_t seed)
+        std::vector<Slot> rhythm (const Line& cf, Species species, uint32_t seed, const FreePart* part = nullptr)
         {
             std::vector<Slot> slots;
             uint32_t random = seed * 2654435761u + 12345u;
@@ -185,8 +187,9 @@ namespace counterpoint
                                 break;
                             }
                         }
-                    if (d < 4)
-                        parts = { { 0.0, false } };   // too short to divide
+                    const auto pinned = part != nullptr && b < part->pinned.size() ? part->pinned[b] : -1;
+                    if (d < 4 || pinned >= 0)
+                        parts = { { 0.0, false } };   // too short to divide, or given
                     for (size_t k = 0; k < parts.size(); ++k)
                     {
                         Slot slot;
@@ -197,6 +200,8 @@ namespace counterpoint
                         slot.bar = (int) b;
                         slot.penultimate = penultimate;
                         slot.cadence = lastPitch;
+                        slot.pinned = pinned;
+                        slot.strictEnds = part == nullptr;
                         if (slot.end > slot.start)
                             slots.push_back (slot);
                     }
@@ -212,6 +217,8 @@ namespace counterpoint
                 slots.back().phraseEnd = true;
                 first = i + 1;
             }
+            if (part != nullptr && part->cadence && ! slots.empty())
+                slots.back().strictEnds = true;
             return slots;
         }
 
@@ -258,10 +265,10 @@ namespace counterpoint
         };
 
         Line write (const Line& cf, const std::vector<Line>& others, const std::vector<int>& ranks, const Voice& voice,
-                    const Mode& mode, int newVoices, bool lowest, uint32_t seed, int& bent)
+                    const Mode& mode, int newVoices, bool lowest, uint32_t seed, int& bent, const FreePart* part = nullptr)
         {
             const Keys m (mode);
-            const auto slots = rhythm (cf, voice.species, seed + (uint32_t) (voice.rank + 8) * 7919u);
+            const auto slots = rhythm (cf, voice.species, seed + (uint32_t) (voice.rank + 8) * 7919u, part);
             const auto n = slots.size();
             if (n == 0)
                 return {};
@@ -274,10 +281,10 @@ namespace counterpoint
             const auto middle = pitches[pitches.size() / 2];
             const auto scale = mode.period / 12.0;
             const auto r = std::abs (voice.rank);
-            const auto centre = middle + (int) std::lround (scale * (voice.rank > 0 ? 7.0 * r : -(8.0 * r + 1.0)));
-            const auto half = (int) std::lround (scale * 9.0);
+            const auto centre = part != nullptr ? part->centre : middle + (int) std::lround (scale * (voice.rank > 0 ? 7.0 * r : -(8.0 * r + 1.0)));
+            const auto half = part != nullptr ? std::max (2, part->range) : (int) std::lround (scale * 9.0);
             auto lo = std::clamp (centre - half, 21, 108), hi = std::clamp (centre + half, 21, 108);
-            if (mode.below > 0 && mode.period == 12)
+            if (part == nullptr && mode.below > 0 && mode.period == 12)
             {
                 // A hypo range: the octave from `below` keys under a final, its middle nearest the centre.
                 const auto bottomKey = ((mode.root - mode.below) % 12 + 12) % 12;
@@ -289,12 +296,16 @@ namespace counterpoint
             }
 
             // What the other voices sound at each slot.
-            std::vector<std::vector<int>> at (n, std::vector<int> (others.size(), -1));
+            // And just before, as a voice moving within the slot before is heard moving into this one.
+            std::vector<std::vector<int>> at (n, std::vector<int> (others.size(), -1)), justBefore = at;
             std::vector<int> prevStrong (n, -1);
             for (size_t i = 0, last = (size_t) -1; i < n; ++i)
             {
                 for (size_t o = 0; o < others.size(); ++o)
+                {
                     at[i][o] = sounding (others[o], slots[i].start);
+                    justBefore[i][o] = i > 0 ? sounding (others[o], slots[i].start - 1) : -1;
+                }
                 prevStrong[i] = last == (size_t) -1 || slots[i].phraseStart ? -1 : (int) last;
                 if (slots[i].strong)
                     last = i;
@@ -310,10 +321,12 @@ namespace counterpoint
                 const auto& slot = slots[i];
                 std::vector<int> candidates;
                 for (int p = lo; p <= hi; ++p)
-                    if (inScale (m, p))
+                    if (inScale (m, p) && slot.pinned < 0)
                         candidates.push_back (p);
+                if (slot.pinned >= 0)
+                    candidates.push_back (std::clamp (slot.pinned, 0, 127));
                 // Musica ficta: at a cadence the note a whole step below where it lands, raised.
-                if (mode.ficta && mode.period == 12 && (slot.penultimate || slot.phraseEnd))
+                if (mode.ficta && mode.period == 12 && slot.pinned < 0 && (slot.penultimate || slot.phraseEnd))
                     for (int p = lo; p <= hi; ++p)
                     {
                         const auto pc = ((p - slot.cadence) % 12 + 12) % 12;
@@ -420,7 +433,7 @@ namespace counterpoint
 
                             if (fresh || tie)
                                 continue;
-                            const auto qp = i > 0 ? at[i - 1][o] : -1;
+                            const auto qp = justBefore[i][o];
                             if (qp >= 0 && pp >= 0)
                             {
                                 const auto before = classify (cents (m, pp) - cents (m, qp));
@@ -474,7 +487,7 @@ namespace counterpoint
                             cost += 1.2;   // imperfect consonances in the middle
 
                         // Beginning and ending.
-                        if (slot.phraseStart && cantusSounds)
+                        if (slot.phraseStart && cantusSounds && slot.strictEnds)
                         {
                             // A fifth below would put the music in another mode; the bass starts on the melody's note.
                             const bool ok = withCantus == Interval::unison || withCantus == Interval::octave
@@ -487,7 +500,7 @@ namespace counterpoint
                                     rule (true);
                             }
                         }
-                        if (slot.phraseEnd && cantusSounds)
+                        if (slot.phraseEnd && cantusSounds && slot.strictEnds)
                         {
                             const bool octave = withCantus == Interval::unison || withCantus == Interval::octave;
                             if (! octave)
@@ -514,6 +527,14 @@ namespace counterpoint
                         }
                         cost += 0.15 * std::abs (p - centre) / std::max (scale, 0.25);
                         cost += (hash (seed, (uint32_t) i, (uint32_t) p) & 0xFFFF) / 65535.0;   // the seed's taste
+                        if (slot.pinned >= 0)
+                        {
+                            // Given: what it costs against the others is the same whichever way it is
+                            // reached, so only the way in counts; it is not this voice's to bend, and
+                            // owes nothing after it.
+                            broke = 0;
+                            node.pending = 0;
+                        }
                         node.cost = from.cost + cost;
                         node.bent = from.bent + broke;
                         next.push_back (node);
@@ -555,6 +576,8 @@ namespace counterpoint
             Line out;
             for (size_t i = 0; i < n; ++i)
             {
+                if (slots[i].pinned >= 0)
+                    continue;
                 if (slots[i].tied && ! slots[i].phraseStart && ! out.empty() && out.back().pitch == chosen[i] && out.back().end == slots[i].start)
                     out.back().end = slots[i].end;
                 else
@@ -588,6 +611,13 @@ namespace counterpoint
                 m.keyCents.push_back (1200.0 * k / t.divisions);
                 m.scale.push_back (true);
             }
+            return m;
+        }
+        if (t.cents.size() > 12)   // a degree a key, as the tuning plays it
+        {
+            m.period = (int) t.cents.size();
+            m.keyCents = t.cents;
+            m.scale.assign (t.cents.size(), true);
             return m;
         }
         const auto keys = mixer::keyCents (t);
@@ -751,6 +781,14 @@ namespace counterpoint
             result.names.push_back (v.rank > 0 ? above[v.rank - 1] : below[-v.rank - 1]);
         }
         return result;
+    }
+
+    Line freeVoice (const FreePart& part, const Mode& mode, uint32_t seed, int& bent)
+    {
+        if (part.grid.empty() || ! mode.valid() || part.against.empty() || part.ranks.size() != part.against.size())
+            return {};
+        return write (part.grid, part.against, part.ranks, { part.rank, part.species }, mode, std::max (1, part.parts - 1),
+                      part.lowest, seed, bent, &part);
     }
 
     midifile::SongPtr toSong (const midifile::Song& like, const Line& line, int channel)

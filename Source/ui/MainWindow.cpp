@@ -92,6 +92,7 @@
 #include <QStyleFactory>
 #include <QTabBar>
 #include <QTimer>
+#include <QSplitter>
 #include <QVBoxLayout>
 #include <QtConcurrent/QtConcurrentRun>
 
@@ -171,7 +172,18 @@ MainWindow::MainWindow (AudioEngine& e)
     albumView = new AlbumView (editor);
     albumView->hide();
     editorLayout->addWidget (albumView);
-    editorLayout->addWidget (waveform, 1);
+    // The waveform above, the editor's track (one track of the project, MixerSection.cpp) below.
+    editorSplit = new QSplitter (Qt::Vertical, editor);
+    editorSplit->setChildrenCollapsible (false);
+    editorSplit->addWidget (waveform);
+    trackHolder = new QWidget (editorSplit);
+    auto* holderLayout = new QVBoxLayout (trackHolder);
+    holderLayout->setContentsMargins (0, 0, 0, 0);
+    trackHolder->hide();
+    editorSplit->addWidget (trackHolder);
+    editorSplit->setStretchFactor (0, 3);
+    editorSplit->setStretchFactor (1, 2);
+    editorLayout->addWidget (editorSplit, 1);
     editorLayout->addWidget (infoStrip);
     // The editor shares its place with the mixer (MixerSection.cpp).
     editorPage = editor;
@@ -906,7 +918,7 @@ void MainWindow::buildMenus()
                                "@visual.artistic", "@visual.science", "-", "@visual.milkdrop", "@visual.rain", "@visual.web", "@visual.sonify", "-",
                                "view.opacityUp", "view.opacityDown", "view.opacityFull" } },
         { tr ("Mi&xer"),     { "mixer.window", "mixer.dock", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
-                               "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "-", "mixer.assistant" } },
+                               "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "mixer.sendToTimeline", "-", "mixer.editorTrack", "mixer.trackToEditor", "-", "mixer.assistant" } },
         { tr ("S&ample"),    { "sample.send", "sample.window", "sample.refresh", "-", "slice.send", "slice.window", "slice.refresh", "-",
                                "instrument.granular", "instrument.retroSampler", "-", "sample.midiInputs", "control.surfaces", "control.learn", "sample.panic" } },
         { tr ("S&ynth"),     { "instrument.wavetable", "instrument.modular", "instrument.additive", "-",
