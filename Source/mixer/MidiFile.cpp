@@ -645,7 +645,13 @@ namespace midifile
     SongPtr toMode (const Song& song, int root, int scale)
     {
         const auto& list = scales();
-        const auto notesOf = list[(size_t) std::clamp (scale, 0, (int) list.size() - 1)].notes;
+        return toKeys (song, root, list[(size_t) std::clamp (scale, 0, (int) list.size() - 1)].notes);
+    }
+
+    SongPtr toKeys (const Song& song, int root, uint16_t notesOf)
+    {
+        if ((notesOf & 0xfff) == 0)
+            notesOf = 0xfff;
         root = ((root % 12) + 12) % 12;
         bool in[12] {};
         for (int d = 0; d < 12; ++d)

@@ -169,6 +169,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/MixerControl.cpp
     Source/ui/ControlSection.cpp
     Source/ui/MixerSection.cpp
+    Source/ui/ModeSection.cpp
     Source/ui/PanelNavigation.cpp
     Source/ui/PatchBayWindow.cpp
     Source/ui/PatchBaySection.cpp

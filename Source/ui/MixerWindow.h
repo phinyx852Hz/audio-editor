@@ -196,6 +196,16 @@ public:
     control::State surfaceState() const;
     void surfaceCommand (const control::Command&);
 
+    // The Mode menu (ModeSection.cpp, owner 2026-10-26): the selected track tuned to a mode
+    // (its clips' and scenes' own tunings left as they are), and the MIDI clip shown in the
+    // Device Chain moved into the mode's keys, folded into a hypo range `below` keys under
+    // the root when that is not 0. False when there is no track, or no MIDI clip shown.
+    bool tuneSelectedTrack (mixer::TuningChoice);
+    bool modeShownMidi (int root, uint16_t keys, int below, const QString& what);
+    bool showsMidiClip() const;
+    void counterpointShown() { counterpointShownMidi(); }
+    void fugueShown() { fugueShownMidi(); }
+
 Q_SIGNALS:
     void mixdownRequested();
     void midiInputsRequested();

@@ -86,6 +86,9 @@ namespace midifile
     // Every note moved to the nearest note of scales()[scale] on `root` (0 C .. 11 B), down when it
     // is between two; drums (channel 10) left alone.
     SongPtr toMode (const Song&, int root, int scale);
+    // The same for any set of keys (bit n: n semitones above the root), as the Mode menu
+    // gives a tuning system's (mixer::modeKeys).
+    SongPtr toKeys (const Song&, int root, uint16_t keys);
     // Every note (drums left alone) folded by octaves into the octave that starts `below` keys
     // under the final `root` (0 C .. 11 B), the one nearest the notes' middle: a hypo-mode's
     // range (mixer::Hypo), the final kept.

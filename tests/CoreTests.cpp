@@ -1383,6 +1383,7 @@ namespace
         // C Phrygian (C Db Eb F G Ab Bb): D goes down to Db, E down to Eb.
         const auto phrygian = midifile::toMode (*song, 0, 2);
         check (pitchSet (*phrygian) == (std::vector<int> { 60, 61, 63, 67 }), "midi edits: notes move to the nearest of the mode, down when between");
+        check (pitchSet (*midifile::toKeys (*song, 0, 0b010110101011)) == pitchSet (*phrygian), "midi edits: any set of keys, as the Mode menu gives");
         // Ragas: Malkauns (S g m d n) on C, and Darbari and Jaunpuri listed with Asavari's notes.
         const auto& scales = midifile::scales();
         auto find = [&] (const std::string& name) { for (size_t i = 0; i < scales.size(); ++i) if (name == scales[i].name) return (int) i; return -1; };
@@ -4542,6 +4543,9 @@ namespace
                && ! mixer::hasHypo (get ("12 equal steps"), Hypo::fifth) && ! mixer::hasHypo (get ("huzam"), Hypo::fifth),
                "tunings: no hypo for the church modes, jazz modes, equal steps, or a mode without the degree");
         check (mixer::hypoBelow (Hypo::fifth) == 5 && mixer::hypoBelow (Hypo::fourth) == 7 && mixer::hypoBelow (Hypo::none) == 0, "tunings: a hypo range's bottom");
+        // The Mode menu's keys: dorian's seven, and rāst's half-flat third and seventh on E and B.
+        check (mixer::modeKeys (get ("dorian")) == 0b011010101101 && mixer::modeKeys (get ("rast")) == 0b101010110101,
+               "tunings: the keys a mode has a degree on");
         // Hypodorian on A has A's (Aeolian) Pythagorean steps: a 9/8 then a 256/243 limma.
         const auto hypo = mixer::keyCents (get ("hypodorian"));
         check (near (hypo[2], phi::Tuning::ratioToCents (9.0 / 8.0), 1.0e-9) && near (hypo[3] - hypo[2], phi::Tuning::ratioToCents (256.0 / 243.0), 1.0e-9),
