@@ -14,6 +14,7 @@
 #include "../core/PhiTuning.h"
 
 #include <array>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -56,4 +57,18 @@ namespace mixer
     };
     // The clip's, else the scene's, else the track's.
     TuningChoice tuningInForce (const TuningChoice& clip, const TuningChoice& scene, const TuningChoice& track);
+
+    // Hypo (owner, 2026-10-26): a mode's range moved off its final, the final kept, as the
+    // Gregorian plagal modes do: from the fifth (the octave from a fourth below the final) or
+    // from the fourth (the octave from a fifth below it). For the traditions built on a tonic
+    // and its fifth or fourth (ragas' Sa with Pa or Ma, a maqam's tonic and ghammāz, a dastgah's
+    // shāhed) that have no plagal forms of their own: the church modes have their hypo-modes,
+    // and jazz modes and equal steps no such hierarchy.
+    enum class Hypo { none, fifth, fourth };
+    bool hypoFamily (const std::string& family);   // a TuningSystem's, or a midifile::Scale's
+    // The mode has that degree: a fifth or fourth within 30 cents of a pure one.
+    bool hasHypo (const std::vector<double>& cents, Hypo);
+    bool hasHypo (uint16_t notes, Hypo);           // a midifile::Scale's notes
+    bool hasHypo (const TuningSystem&, Hypo);      // its family, and the degree
+    int hypoBelow (Hypo);   // keys from the bottom of the range up to the final: 5, 7 (none 0)
 }
