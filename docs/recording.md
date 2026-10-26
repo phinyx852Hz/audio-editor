@@ -38,12 +38,15 @@ like the one for audio, and making MIDI clips may come.
 
 ## Layers: audio under MIDI (owner, 2026-10-26)
 
-A slot holds two layers that loop together: an audio layer and a MIDI layer, the MIDI playing the
-track's instrument over the audio. When the clips are tall enough (the scenes scroll to keep them
-so) each slot is drawn in two halves, the notes on top and the waveform below, and so is the
-clip along the bottom of the mixer.
+A clip is audio only, MIDI only, or mixed: an audio layer and a MIDI layer that loop together,
+the MIDI playing the track's instrument over the audio, made as it is played rather than later
+in post production. A clip of one kind fills its slot with its waveform or its notes; a mixed one
+is drawn in two halves, the notes on top and the waveform below (the scenes scroll to keep the
+clips tall enough), and so is the clip along the bottom of the mixer.
 
-- On the armed track an empty half has a red dot: click it and that half records one pass of the
+- A MIDI file dropped on an audio clip in the launcher (or an audio file on a MIDI clip) joins it
+  as its other layer, at the loop's length; a file of the same kind takes the slot, as before.
+- On the armed track a clip of one kind has a red dot where its other half would be: click it and that half records one pass of the
   loop, starting on the next launch quantise (the slot is launched for it if it is not playing),
   and plays on with the other. Its notes go round the loop from where it began.
 - Record (Ctrl+R) while a loop of one layer plays records the other layer, for the track's input
@@ -148,7 +151,8 @@ The tests are in tests/CoreTests.cpp (`testRecording`).
 
 ## Next
 
-Aligning a MIDI layer to the audio's beats and transients (owner, 2026-10-26: generative
+Mixed clips on the timeline (a MIDI clip dropped on an audio clip becoming one clip), aligning a
+MIDI layer to the audio's beats and transients (owner, 2026-10-26: generative
 reshaping, still no MIDI editing), a quantise for a recorded MIDI clip, takes kept per slot to
 choose from later (comping), punch in and out on the timeline, recording the launcher's
 performance onto the timeline, and recording several armed tracks at once. Controllers (MIDI

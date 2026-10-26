@@ -3309,13 +3309,20 @@ protected:
                         // Two halves (owner, 2026-10-26): the MIDI layer's notes on top, the audio's
                         // waveform below, the name over them; an empty half on the armed track has
                         // its record dot.
+                        // A clip of one kind fills the slot (owner, 2026-10-26: audio only, MIDI
+                        // only, or both split in half).
                         auto faint = ink;
                         faint.setAlpha (110);
                         const auto top = halfRect (t, s, false), bottom = halfRect (t, s, true);
-                        drawNotes (p, top, slot->clip, faint);
-                        drawWave (p, bottom, slot->clip, faint);
-                        p.setPen (QPen (faint, 1, Qt::DotLine));
-                        p.drawLine (QPointF (top.left(), top.bottom()), QPointF (top.right(), top.bottom()));
+                        const bool mixed = slot->clip.audio != nullptr && slot->clip.midi != nullptr;
+                        const QRectF whole (top.left(), top.top(), top.width(), bottom.bottom() - top.top());
+                        drawNotes (p, mixed ? top : whole, slot->clip, faint);
+                        drawWave (p, mixed ? bottom : whole, slot->clip, faint);
+                        if (mixed)
+                        {
+                            p.setPen (QPen (faint, 1, Qt::DotLine));
+                            p.drawLine (QPointF (top.left(), top.bottom()), QPointF (top.right(), top.bottom()));
+                        }
                         for (const bool audio : { false, true })
                         {
                             const auto half = audio ? bottom : top;
@@ -3573,6 +3580,14 @@ protected:
                 continue;
             if (scene < 0)
                 break;
+            // A file of the other kind on a clip of one kind joins it as its other layer.
+            if (scene == hit.scene && window.addLayerFile (hit.track, scene, url.toLocalFile()))
+            {
+                scene = window.firstEmptyScene (hit.track);
+                if (scene < 0 && window.numScenes < mixer::maxScenes)
+                    scene = window.numScenes;
+                continue;
+            }
             window.loadSlot (hit.track, scene, url.toLocalFile());
             scene = window.firstEmptyScene (hit.track);
             if (scene < 0 && window.numScenes < mixer::maxScenes)
@@ -8663,6 +8678,88 @@ void MixerWindow::loadSlot (int track, int scene, const QString& file, mixer::Sl
         }
         place (mixer::makeClip (sound, 0));
     });
+}
+
+bool MixerWindow::addLayerFile (int track, int scene, const QString& file)
+{
+    const auto slot = track >= 0 && track < engine.numTracks() && scene >= 0 && scene < mixer::maxScenes ? slots[(size_t) track][(size_t) scene] : nullptr;
+    if (slot == nullptr || slot->clip.length <= 0 || (slot->clip.audio != nullptr) == (slot->clip.midi != nullptr))
+        return false;   // empty, or both layers already: the file takes the slot
+    const bool midiFile = isMidiFile (file);
+    if (midiFile == (slot->clip.midi != nullptr))
+        return false;   // the same kind: it takes the slot
+    // The slot as it plays, from its first frame, with the new layer from there.
+    auto layered = [slot] (mixer::Clip& c)
+    {
+        if (c.audio != nullptr && (c.offset != 0 || c.reversed))
+            c.audio = layers::flatAudio (slot->clip);
+        c.offset = 0;
+        c.reversed = false;
+    };
+    const auto name = QFileInfo (file).fileName();
+    if (midiFile)
+    {
+        std::string why;
+        auto song = midifile::read (file.toStdString(), why);
+        if (song == nullptr)
+        {
+            say (tr ("%1 could not be read: %2").arg (name, QString::fromStdString (why)));
+            return true;
+        }
+        auto x = std::make_shared<mixer::Slot> (*slot);
+        layered (x->clip);
+        x->clip.midi = launcherMidi (song, file.toStdString());
+        slots[(size_t) track][(size_t) scene] = x;
+        engine.setSlot (track, scene, x);
+        giveSynth (track);
+        giveBothLayers (track);
+        changed();
+        refreshViews();
+        say (tr ("%1 is the MIDI layer over %2, %3").arg (name, trackName (track), sceneName (scene)));
+        return true;
+    }
+    loadingSlots.insert ({ track, scene });
+    QPointer<MixerWindow> self (this);
+    decodeAudio (track, file, [self, track, scene, slot, layered, name] (mixer::AudioClipPtr sound)
+    {
+        if (self == nullptr)
+            return;
+        self->loadingSlots.erase ({ track, scene });
+        // Only if the slot is still the one it was dropped on.
+        if (sound == nullptr || self->slots[(size_t) track][(size_t) scene] != slot)
+        {
+            self->refreshViews();
+            return;
+        }
+        auto x = std::make_shared<mixer::Slot> (*slot);
+        layered (x->clip);
+        // As long as the loop: silence after a shorter sound.
+        if (sound->length() < x->clip.length)
+        {
+            auto padded = std::make_shared<mixer::AudioClip> (*sound);
+            padded->left.resize ((size_t) x->clip.length, 0.0f);
+            padded->right.resize ((size_t) x->clip.length, 0.0f);
+            padded->path.clear();
+            mixer::Recorded rec;
+            rec.track = track;
+            rec.scene = scene;
+            rec.audio = padded;
+            rec.length = x->clip.length;
+            QString error;
+            if (self->saveTake (rec, error).isEmpty())
+                self->say (error);
+            sound = padded;
+        }
+        x->clip.audio = sound;
+        self->slots[(size_t) track][(size_t) scene] = x;
+        self->engine.setSlot (track, scene, x);
+        self->giveBothLayers (track);
+        self->changed();
+        self->refreshViews();
+        self->say (tr ("%1 is the audio layer under %2, %3").arg (name, self->trackName (track), self->sceneName (scene)));
+    });
+    refreshViews();
+    return true;
 }
 
 void MixerWindow::editSlot (int track, int scene, const std::function<void (mixer::Slot&)>& edit)

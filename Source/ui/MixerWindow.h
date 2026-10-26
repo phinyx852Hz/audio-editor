@@ -310,6 +310,7 @@ private:
     void recordLayer (int track, int scene, bool wantAudio);
     bool recordsAudioLayer (int track) const;   // what Record adds to a loop with one layer
     void giveBothLayers (int track);            // an Audio or Inst track plays both once a slot has them
+    bool addLayerFile (int track, int scene, const QString& file);   // dropped on a clip of the other kind: false if not
     void captureMidi();                         // the last phrase played on the armed track, into its next empty slot
     void keepRecorded();                        // each tick: the takes that ended, saved as files and placed
     bool startTake (mixer::RecordRequest, QString& error);   // asks the engine, the input and the transport
