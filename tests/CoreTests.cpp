@@ -7,6 +7,8 @@
 #include "../Source/sampler/SamplerEngine.h"
 #include "../Source/sampler/SlicerEngine.h"
 #include "../Source/mixer/MidiFile.h"
+#include "../Source/mixer/Tunings.h"
+#include "../Source/mixer/RagaInstrument.h"
 #include "../Source/mixer/MixerEngine.h"
 #include "../Source/patchbay/PatchBay.h"
 #include "../Source/core/Ixml.h"
@@ -30,6 +32,8 @@
 #include "../Source/core/PhiVoice.h"
 #include "../Source/core/PhiPhaser.h"
 #include "../Source/core/PhiTuning.h"
+#include "../Source/core/PhiRaga.h"
+#include "../Source/core/PhiSitar.h"
 #include "../Source/core/PrismSplit.h"
 #include "../Source/core/MasterAssist.h"
 #include "../Source/mixer/MixAssist.h"
@@ -41,6 +45,7 @@
 #include "../Source/core/PhiForensics.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -4190,6 +4195,325 @@ namespace
         }
     }
 
+    // PHI rāga's sheets: every built-in sheet reads cleanly, and a sheet survives writing out.
+    void testRagaSheets()
+    {
+        std::vector<std::string> errors;
+        const auto all = phi::parseRagas (phi::builtInRagaSheets(), errors);
+        check (errors.empty() && all.size() == 74 && phi::builtInRagas().size() == 74, "raga sheets: the 74 built-in sheets read without a mistake");
+        for (const auto& e : errors)
+            std::printf ("  %s\n", e.c_str());
+        bool complete = true;
+        for (const auto& r : all)
+            complete = complete && ! r.aroha.empty() && ! r.avaroha.empty() && r.vadi >= 0 && r.samvadi >= 0;
+        check (complete, "raga sheets: each has its aroha, avaroha, vadi and samvadi");
+
+        const auto* darbari = &all[0];
+        for (const auto& r : all)
+            if (r.plain == "darbari kanada")
+                darbari = &r;
+        check (darbari->name == "darbārī kānaḍā" && darbari->thaat == "āsāvarī" && near (darbari->cents[3], phi::Tuning::ratioToCents (32.0 / 27.0), 1.0e-9)
+               && near (darbari->cents[7], phi::Tuning::ratioToCents (1.5), 1.0e-9) && ! darbari->uses[4], "raga sheets: svaras and their tuning");
+        check (darbari->aroha.front() == phi::Svara { 10, -1 } && darbari->aroha.back() == phi::Svara { 0, 1 } && darbari->vadi == 2 && darbari->samvadi == 7,
+               "raga sheets: aroha with octave marks, vadi and samvadi");
+        const auto* swing = darbari->andolanOn (3);
+        check (swing != nullptr && near (swing->depthCents, 20.0, 1.0e-9) && darbari->andolanOn (2) == nullptr, "raga sheets: andolan on ga");
+
+        std::vector<std::string> again;
+        const auto back = phi::parseRagas (phi::writeRagas (all), again);
+        bool same = again.empty() && back.size() == all.size();
+        for (size_t i = 0; same && i < all.size(); ++i)
+            same = back[i].name == all[i].name && back[i].aroha == all[i].aroha && back[i].avaroha == all[i].avaroha && back[i].pakad == all[i].pakad
+                   && back[i].uses == all[i].uses && std::abs (back[i].cents[3] - all[i].cents[3]) < 1.0e-6 && back[i].andolan.size() == all[i].andolan.size()
+                   && back[i].murki == all[i].murki && back[i].khatka == all[i].khatka && back[i].gamak.size() == all[i].gamak.size();
+        check (same, "raga sheets: written out and read back the same");
+
+        // A dot below or above in the notation is the octave, as with , and '.
+        phi::Phrase dots;
+        check (phi::parsePhrase ("n\xcc\xa3 S R S\xcc\x87", dots) && dots == phi::Phrase { { 10, -1 }, { 0, 0 }, { 2, 0 }, { 0, 1 } }, "raga sheets: dotted notation");
+        // The player: khamāj's one key plays N going up and n coming down.
+        auto byPlain = [&] (const char* plain) -> const phi::Raga& { for (const auto& r : all) if (r.plain == plain) return r; return all[0]; };
+        phi::RagaPlayer player;
+        player.setRaga (&byPlain ("khamaj"), 60);
+        player.noteOn (67);
+        const auto upN = player.noteOn (70);
+        player.noteOn (72);
+        const auto downN = player.noteOn (70);
+        check (upN.outKey == 71 && upN.svara.semitone == 11 && downN.outKey == 70 && downN.svara.semitone == 10, "raga player: the svara for the direction");
+        // Bhūpālī has no ma: going up, ma becomes ga (the nearer svara, there being no tīvra ma).
+        player.setRaga (&byPlain ("bhupali"), 60);
+        player.reset();
+        check (player.noteOn (65).outKey == 64 && player.noteOn (78).outKey == 79 && player.noteOn (77).svara == phi::Svara { 4, 1 }, "raga player: keys outside the raga go to its nearest svara");
+        // Darbārī: ga at 32/27 above Sa, swinging 20 cents below and back at 0.5 Hz.
+        player.setRaga (&byPlain ("darbari kanada"), 62, 293.6647679174076);
+        player.reset();
+        const auto ga = player.noteOn (65);
+        check (near (ga.hz, 293.6647679174076 * 32.0 / 27.0, 1.0e-9) && near (player.hzAt (ga, 0.0), ga.hz, 1.0e-9)
+               && near (1200.0 * std::log2 (ga.hz / player.hzAt (ga, 1.0)), 20.0, 1.0e-9) && near (player.hzAt (ga, 2.0), ga.hz, 1.0e-9),
+               "raga player: tuned svaras, and andolan swings below and back");
+        // Mīṇḍ in khamāj from G up to S': through m, P, D and N (the āroha's), 0.4 s, then there.
+        player.setOrnaments (1.0);
+        player.setRaga (&byPlain ("khamaj"), 60);
+        player.reset();
+        const auto from = player.noteOn (64);
+        const auto pulled = player.glide (from, 72, 0.4);
+        check (pulled.pathCount == 6 && near (pulled.path[0], from.cents, 1.0e-9) && near (pulled.path[4], 1200.0 * std::log2 (15.0 / 8.0), 1.0e-9)
+               && near (pulled.approachSeconds(), 0.4, 1.0e-12) && near (player.hzAt (pulled, 0.0), from.hz, 1.0e-9)
+               && near (player.hzAt (pulled, 0.5), pulled.hz, 1.0e-9), "raga player: mind touches the svaras between");
+        bool rises = true;
+        for (double t = 0.0, last = 0.0; t < 0.4; t += 0.01)
+        {
+            const auto hz = player.hzAt (pulled, t);
+            rises = rises && hz >= last - 1.0e-9;
+            last = hz;
+        }
+        check (rises, "raga player: an upward mind only rises");
+        // Kaṇ: darbārī's ga touched from ma, then ga, then its āndolan.
+        player.setRaga (&byPlain ("darbari kanada"), 62, 293.6647679174076);
+        player.reset();
+        auto kanGa = player.noteOn (65);
+        player.addKan (kanGa);
+        check (kanGa.pathCount == 2 && near (player.hzAt (kanGa, 0.0), 293.6647679174076 * 4.0 / 3.0, 1.0e-9)
+               && near (player.hzAt (kanGa, 0.05), kanGa.hz, 1.0e-9) && near (1200.0 * std::log2 (kanGa.hz / player.hzAt (kanGa, 1.05)), 20.0, 1.0e-9),
+               "raga player: kan from the sheet, then andolan");
+        // Khamāj's murkī on ga: ga, ma, ga, re, ga, quickly; then ga as it is.
+        player.setRaga (&byPlain ("khamaj"), 60);
+        player.reset();
+        auto murki = player.noteOn (64);
+        player.ornament (murki);
+        const auto cents = [&] (const phi::RagaPlayer::Voice& v, double t) { return 1200.0 * std::log2 (player.hzAt (v, t) / player.voiceSaHz()); };
+        check (byPlain ("khamaj").ornamentOn (4) == phi::Ornament::murki && murki.pathCount == 5 && near (cents (murki, 0.03 * 1.4), 1200.0 * std::log2 (4.0 / 3.0), 1.0e-6)
+               && near (cents (murki, 0.03 * 3.4), 1200.0 * std::log2 (9.0 / 8.0), 1.0e-6) && near (cents (murki, 0.2), murki.cents, 1.0e-9),
+               "raga player: murki turns about the svara, then holds it");
+        // Krintan, khaṭkā and zamzama from the neighbours, at half speed taking twice as long.
+        auto krintan = player.noteOn (64), khatka = krintan, zamzama = krintan;
+        player.ornament (krintan, phi::Ornament::krintan);
+        player.ornament (khatka, phi::Ornament::khatka, 2.0);
+        player.ornament (zamzama, phi::Ornament::zamzama);
+        check (near (krintan.path[0], 700.0 + 1.955, 0.01) && krintan.pathCount == 3 && near (khatka.path[0], 1200.0 * std::log2 (4.0 / 3.0), 1.0e-9)
+               && near (khatka.path[2], 1200.0 * std::log2 (9.0 / 8.0), 1.0e-9) && near (khatka.approachSeconds(), 0.27, 1.0e-12) && zamzama.pathCount == 6,
+               "raga player: krintan, khatka and zamzama");
+        // Mālkauns's gamak on komal dha: shaken up to komal ni (9/8 above) and back, five times a second.
+        player.setRaga (&byPlain ("malkauns"), 60);
+        player.reset();
+        const auto dha = player.noteOn (68);
+        check (near (dha.gamakHz, 5.0, 1.0e-12) && near (cents (dha, 0.1), dha.cents + dha.gamakCents, 1.0e-6) && near (cents (dha, 0.2), dha.cents, 1.0e-6)
+               && near (dha.gamakCents, 1200.0 * std::log2 ((9.0 / 5.0) / (8.0 / 5.0)), 1.0e-6), "raga player: gamak to the svara above");
+        player.setOrnaments (0.0);
+        check (near (player.hzAt (ga, 1.0), ga.hz, 1.0e-12) && player.noteOn (76).swingCents == 0.0, "raga player: ornaments off, and no andolan on Pa");
+
+        std::vector<std::string> mistakes;
+        const auto wrong = phi::parseRagas ("raga: test\nplain: test\nsvaras: S R G P D\naroha: S R m P\nraga: fine\nplain: fine\nsvaras: S P\nkey: x\n", mistakes);
+        check (wrong.empty() && mistakes.size() == 2 && mistakes[0].find ("line 4") == 0 && mistakes[1].find ("line 8") == 0,
+               "raga sheets: a svara the raga lacks, or an unknown field, is reported by its line");
+    }
+
+    // PHI rāga's sitar: in tune, sympathetic strings that answer only their own pitch, and cheap.
+    void testSitar()
+    {
+        constexpr double rate = 48000.0;
+        auto render = [] (phi::Sitar& sitar, int frames)
+        {
+            std::vector<float> l ((size_t) frames, 0.0f), r ((size_t) frames, 0.0f);
+            sitar.process (l.data(), r.data(), frames);
+            for (size_t i = 0; i < l.size(); ++i)
+                l[i] = 0.5f * (l[i] + r[i]);
+            return l;
+        };
+        auto pitch = [] (const std::vector<float>& x, size_t from, size_t count, double lowHz, double highHz)
+        {
+            double best = -1.0e30;
+            int bestLag = 0;
+            for (int lag = (int) (rate / highHz); lag <= (int) (rate / lowHz); ++lag)
+            {
+                double sum = 0.0;
+                for (size_t i = from; i < from + count; ++i)
+                    sum += (double) x[i] * x[i + (size_t) lag];
+                if (sum > best)
+                    best = sum, bestLag = lag;
+            }
+            return rate / bestLag;
+        };
+        auto energy = [] (const std::vector<float>& x, size_t from, size_t to)
+        {
+            double e = 0.0;
+            for (size_t i = from; i < to; ++i)
+                e += (double) x[i] * x[i];
+            return e;
+        };
+        {
+            phi::Sitar sitar;
+            sitar.prepare (rate);
+            sitar.setJawari (0.0);
+            sitar.pluck (220.0, 0.8);
+            const auto open = render (sitar, (int) rate);
+            const auto hz = pitch (open, 9600, 4800, 150.0, 300.0);
+            check (std::abs (1200.0 * std::log2 (hz / 220.0)) < 15.0, "sitar: an open bridge plays in tune");
+            bool finite = true;
+            for (auto v : open)
+                finite = finite && std::isfinite (v) && std::abs (v) < 4.0f;
+            check (finite && energy (open, 0, 4800) > 10.0 * energy (open, 43200, 48000), "sitar: bounded, and it dies away");
+        }
+        {
+            phi::Sitar sitar;
+            sitar.prepare (rate);
+            sitar.setJawari (0.7);
+            const auto string = sitar.pluck (220.0, 0.8);
+            auto buzz = render (sitar, (int) (0.5 * rate));
+            check (std::abs (1200.0 * std::log2 (pitch (buzz, 9600, 4800, 150.0, 300.0) / 220.0)) < 40.0, "sitar: in tune with the jawari");
+            // Pulled a whole tone (mīṇḍ), the string follows.
+            sitar.setHz (string, 246.94);
+            const auto pulled = render (sitar, (int) (0.5 * rate));
+            check (std::abs (1200.0 * std::log2 (pitch (pulled, 4800, 4800, 150.0, 300.0) / 246.94)) < 40.0, "sitar: the string bends to a new pitch");
+        }
+        {
+            // A tarab string at 220 Hz answers 220 Hz long after the played string is let go, and
+            // barely answers 233 Hz.
+            auto ring = [&] (double played)
+            {
+                phi::Sitar sitar;
+                sitar.prepare (rate);
+                sitar.setJawari (0.0);
+                sitar.setTarab ({ 220.0 });
+                const auto s = sitar.pluck (played, 0.9);
+                render (sitar, (int) (0.6 * rate));
+                sitar.release (s);
+                const auto after = render (sitar, (int) (2.0 * rate));
+                return energy (after, (size_t) (1.5 * rate), (size_t) (2.0 * rate));
+            };
+            const auto matched = ring (220.0), other = ring (233.08);
+            check (matched > 4.0 * other && matched > 0.0, "sitar: tarab rings in sympathy with its own pitch");
+        }
+        {
+            // PHI rāga on a track: its own raga, then the one the track's tuning puts in force.
+            mixer::RagaInstrument raga;
+            raga.setState ("raga=khamaj;sa=0;ornaments=1;jawari=0.6;tarab=0.6");
+            raga.prepare (rate, 512);
+            check (raga.playing() == "khamāj" && raga.state().find ("raga=khamaj;sa=0") == 0, "raga instrument: its own raga, saved in its state");
+            std::vector<float> l (24000, 0.0f), r (24000, 0.0f);
+            const mixer::NoteEvent on[] = { { 0, 0x90, 67, 100 }, { 12000, 0x90, 70, 100 } };
+            raga.process (on, 2, l.data(), r.data(), 24000);
+            bool finite = true;
+            for (auto v : l)
+                finite = finite && std::isfinite (v);
+            check (finite && energy (l, 12000, 24000) > 0.01, "raga instrument: plays the keys on the sitar");
+            const auto& sheets = phi::builtInRagas();
+            int darbari = -1;
+            for (size_t i = 0; i < sheets.size(); ++i)
+                if (sheets[i].plain == "darbari kanada")
+                    darbari = (int) i;
+            raga.setRaga (darbari, 2, true);
+            check (raga.playing() == "darbārī kānaḍā (equal tempered)", "raga instrument: the track's raga in force");
+            raga.setRaga (-1, 0, false);
+            check (raga.playing() == "khamāj", "raga instrument: back to its own raga");
+        }
+        {
+            // MPE: a bend on another note's channel leaves Pa alone; one on its own moves it.
+            mixer::RagaInstrument raga;
+            raga.setState ("raga=khamaj;sa=0;ornaments=0;jawari=0;tarab=0");
+            raga.prepare (rate, 512);
+            const auto upOne = 8192 + 8192 / 48;   // a semitone at MPE's ±48 on a member channel
+            std::vector<float> l (24000, 0.0f), r (24000, 0.0f);
+            const mixer::NoteEvent first[] = { { 0, 0x92, 67, 100 }, { 0, 0xe1, (uint8_t) (upOne & 0x7f), (uint8_t) (upOne >> 7) } };
+            raga.process (first, 2, l.data(), r.data(), 24000);
+            const auto plain = pitch (l, 9600, 4800, 300.0, 500.0);
+            std::fill (l.begin(), l.end(), 0.0f);
+            std::fill (r.begin(), r.end(), 0.0f);
+            const mixer::NoteEvent bent[] = { { 0, 0xe2, (uint8_t) (upOne & 0x7f), (uint8_t) (upOne >> 7) } };
+            raga.process (bent, 1, l.data(), r.data(), 24000);
+            const auto moved = pitch (l, 9600, 4800, 300.0, 500.0);
+            check (std::abs (1200.0 * std::log2 (plain / (261.6255653 * 1.5))) < 15.0 && std::abs (1200.0 * std::log2 (moved / plain) - 100.0) < 20.0,
+                   "raga instrument: MPE bends each note on its own channel");
+        }
+        {
+            // The tānpūrā: silent until on, then Pa below Sa first, the round's four plucks, and
+            // the state keeps it.
+            mixer::RagaInstrument raga;
+            raga.setState ("raga=yaman (kalyan);sa=0;tarab=0;tanpura=1;tanpuraLevel=0.8;tanpuraSeconds=2");
+            raga.prepare (rate, 512);
+            std::vector<float> l ((size_t) (2.0 * rate), 0.0f), r = l;
+            raga.process (nullptr, 0, l.data(), r.data(), (int) l.size());
+            check (raga.state().find ("tanpura=1;tanpuraLevel=0.8;tanpuraSeconds=2") != std::string::npos
+                   && std::abs (1200.0 * std::log2 (pitch (l, 2400, 9600, 100.0, 300.0) / (261.6255653 * 0.75))) < 40.0
+                   && energy (l, (size_t) (0.4 * rate), (size_t) (0.45 * rate)) > 0.0 && energy (l, (size_t) (1.9 * rate), (size_t) (2.0 * rate)) > 0.0,
+                   "raga instrument: the tanpura drone, Pa first");
+            phi::Tanpura off;
+            off.prepare (rate);
+            std::vector<float> quiet (4800, 0.0f), quietR = quiet;
+            off.process (quiet.data(), quietR.data(), 4800);
+            check (energy (quiet, 0, 4800) == 0.0, "tanpura: silent and free when off");
+        }
+        {
+            phi::Sitar sitar;
+            sitar.prepare (rate);
+            std::vector<double> tarab;
+            for (int i = 0; i < 13; ++i)
+                tarab.push_back (261.63 * std::pow (2.0, i / 12.0));
+            sitar.setTarab (tarab);
+            for (int i = 0; i < 4; ++i)
+                sitar.pluck (220.0 * (i + 1), 0.8);
+            const auto start = std::chrono::steady_clock::now();
+            render (sitar, (int) (5.0 * rate));
+            const auto seconds = std::chrono::duration<double> (std::chrono::steady_clock::now() - start).count();
+            check (seconds < 1.0, "sitar: 4 strings and 13 tarab render 5 s in under 1 s");
+            std::printf ("  sitar: 5 s of 4 strings and 13 tarab in %.3f s\n", seconds);
+        }
+    }
+
+    // Modal tunings for the PHI synth: the systems, the keys they put their degrees on, and which
+    // level's choice is in force.
+    void testTunings()
+    {
+        const auto& all = mixer::tuningSystems();
+        auto get = [&] (const std::string& plain) -> const mixer::TuningSystem& { return all[(size_t) mixer::findTuning (plain)]; };
+        bool known = true;
+        for (const char* plain : { "bilaval", "darbari kanada", "dorian", "hypodorian", "altered", "rast", "hijaz", "shur", "chahargah", "2 equal steps", "21 equal steps" })
+            known = known && mixer::findTuning (plain) >= 0;
+        check (known && mixer::findTuning ("no such tuning") == -1, "tunings: each family is listed, found by its plain name");
+        check (get ("darbari kanada").name == "darbārī kānaḍā" && get ("hijaz").name == "ḥijāz" && get ("chahargah").name == "čahārgāh", "tunings: transliterated names");
+        bool plainAscii = true, unique = true;
+        for (size_t i = 0; i < all.size(); ++i)
+        {
+            for (auto c : all[i].plain)
+                plainAscii = plainAscii && (unsigned char) c < 128;
+            unique = unique && mixer::findTuning (all[i].plain) == (int) i;
+        }
+        check (plainAscii && unique, "tunings: the saved names are ASCII and unique");
+        bool lower = true;
+        for (const auto& t : all)
+            for (auto c : t.name + t.plain)
+                lower = lower && ! (c >= 'A' && c <= 'Z');
+        check (lower && all[(size_t) mixer::findTuning ("yaman (kalyan)")].name == "yaman (kalyāṇ)", "tunings: names in lower case");
+        // Each raga has a 12-TET version: Pa at 700 cents, the svaras on the keys.
+        const auto et = mixer::keyCents (get ("darbari kanada (equal tempered)"));
+        check (near (et[7], 700.0, 1.0e-9) && near (et[3], 300.0, 1.0e-9) && get ("darbari kanada (equal tempered)").cents.size() == get ("darbari kanada").cents.size(),
+               "tunings: ragas in equal temperament too");
+
+        // Rāst's E half-flat (350 cents) plays on E; the other keys stay in 12-TET.
+        const auto rast = mixer::keyCents (get ("rast"));
+        check (near (rast[4], 350.0, 1.0e-9) && near (rast[3], 300.0, 1.0e-9) && near (rast[11], 1050.0, 1.0e-9) && near (rast[10], 1000.0, 1.0e-9), "tunings: a quarter step on its key");
+        // Bilāval in just intonation: Pa at 3/2, Ga at 5/4; Darbārī's ati-komal ga at 32/27.
+        const auto bilaval = mixer::keyCents (get ("bilaval"));
+        check (near (bilaval[7], 701.955, 1.0e-3) && near (bilaval[4], phi::Tuning::ratioToCents (1.25), 1.0e-9), "tunings: ragas in just intonation");
+        check (near (mixer::keyCents (get ("darbari kanada"))[3], phi::Tuning::ratioToCents (32.0 / 27.0), 1.0e-9), "tunings: a raga's own komal svara");
+        // Hypodorian on A has A's (Aeolian) Pythagorean steps: a 9/8 then a 256/243 limma.
+        const auto hypo = mixer::keyCents (get ("hypodorian"));
+        check (near (hypo[2], phi::Tuning::ratioToCents (9.0 / 8.0), 1.0e-9) && near (hypo[3] - hypo[2], phi::Tuning::ratioToCents (256.0 / 243.0), 1.0e-9),
+               "tunings: hypo-modes in Pythagorean tuning");
+
+        // On D, Rāst's E half-flat is key 66 (F#): 350 cents above D4.
+        const auto onD = mixer::makeTuning (get ("rast"), 2);
+        check (near (onD.hz (62), 440.0 * std::pow (2.0, -7.0 / 12.0), 1.0e-9) && near (1200.0 * std::log2 (onD.hz (66) / onD.hz (62)), 350.0, 1.0e-6)
+               && near (onD.hz (74), 2.0 * onD.hz (62), 1.0e-9), "tunings: a maqam on its root, repeating each octave");
+        const auto five = mixer::makeTuning (get ("5 equal steps"), 0);
+        check (near (five.hz (65), 2.0 * five.hz (60), 1.0e-9) && near (five.hz (60), 261.6255653005986, 1.0e-9), "tunings: equal steps from the root");
+
+        const mixer::TuningChoice none, clip { 3, 0 }, scene { 5, 2 }, track { 7, 4 };
+        check (mixer::tuningInForce (clip, scene, track) == clip && mixer::tuningInForce (none, scene, track) == scene
+               && mixer::tuningInForce (none, none, track) == track && mixer::tuningInForce (none, none, none).system == -1,
+               "tunings: the clip's, else the scene's, else the track's");
+    }
+
     // Φ Phaser: stages φ apart, a sweep that never repeats, and a response that matches what it does.
     void testPhiPhaser()
     {
@@ -5148,6 +5472,9 @@ int main()
     testPhiVoice();
     testPhiPhaser();
     testPhiTuning();
+    testRagaSheets();
+    testSitar();
+    testTunings();
     testPluginMeasure();
 
     if (failures == 0)

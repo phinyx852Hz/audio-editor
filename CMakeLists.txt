@@ -51,6 +51,8 @@ target_sources(${APP_ID} PRIVATE
     Source/sampler/SamplerEngine.cpp
     Source/sampler/SlicerEngine.cpp
     Source/mixer/MidiFile.cpp
+    Source/mixer/Tunings.cpp
+    Source/mixer/RagaInstrument.cpp
     Source/mixer/Instruments.cpp
     Source/mixer/MixerEngine.cpp
     Source/patchbay/PatchBay.cpp
@@ -81,6 +83,9 @@ target_sources(${APP_ID} PRIVATE
     Source/core/PhiVoice.cpp
     Source/core/PhiPhaser.cpp
     Source/core/PhiTuning.cpp
+    Source/core/PhiRaga.cpp
+    Source/core/PhiRagas.cpp
+    Source/core/PhiSitar.cpp
     Source/core/Nyquist.cpp
     Source/core/Album.cpp
     Source/core/MasterAssist.cpp
@@ -368,6 +373,8 @@ if(PHI_BUILD_TESTS)
         Source/sampler/SamplerEngine.cpp
         Source/sampler/SlicerEngine.cpp
         Source/mixer/MidiFile.cpp
+        Source/mixer/Tunings.cpp
+        Source/mixer/RagaInstrument.cpp
         Source/mixer/Instruments.cpp
         Source/mixer/MixerEngine.cpp
         Source/patchbay/PatchBay.cpp
@@ -397,6 +404,9 @@ if(PHI_BUILD_TESTS)
         Source/core/PhiVoice.cpp
         Source/core/PhiPhaser.cpp
         Source/core/PhiTuning.cpp
+        Source/core/PhiRaga.cpp
+        Source/core/PhiRagas.cpp
+        Source/core/PhiSitar.cpp
         Source/core/Nyquist.cpp
         Source/core/Album.cpp
         Source/core/MasterAssist.cpp

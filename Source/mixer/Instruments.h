@@ -15,6 +15,8 @@
 #include <string>
 #include <vector>
 
+namespace phi { class Tuning; }
+
 namespace mixer
 {
     // A channel message at a frame within the block being rendered.
@@ -27,7 +29,7 @@ namespace mixer
     class Instrument
     {
     public:
-        enum class Kind { synth, sampler, slicer, plugin };
+        enum class Kind { synth, sampler, slicer, plugin, raga };
 
         virtual ~Instrument() = default;
         virtual Kind kind() const = 0;
@@ -46,6 +48,14 @@ namespace mixer
         // A plugin's parameter by its name ("Sample MIDI Chan3"), set to a value from 0 to 1.
         // False when there is no such parameter. UI thread.
         virtual bool setParameter (const std::string&, float) { return false; }
+        // The tuning in force for this track (its playing clip's, else the scene's, else the
+        // track's own; see Tunings.h), or nullptr for 12-TET. UI thread, whenever it changes.
+        // Only the PHI synth retunes; the others play 12-TET.
+        virtual void setTuning (std::shared_ptr<const phi::Tuning>) {}
+        // When the tuning in force is a raga: its index in phi::builtInRagas(), its Sa (0 C to 11 B)
+        // and whether it is the equal-tempered version; -1 when it is not a raga. UI thread. PHI
+        // rāga plays it; the others don't use it.
+        virtual void setRaga (int /*raga*/, int /*root*/, bool /*equalTempered*/) {}
     };
     using InstrumentPtr = std::shared_ptr<Instrument>;
 
