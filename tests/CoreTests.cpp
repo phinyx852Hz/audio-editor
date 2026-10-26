@@ -1389,8 +1389,8 @@ namespace
         check (malkauns >= 0 && pitchSet (*midifile::toMode (*song, 0, malkauns)) == (std::vector<int> { 60, 63, 63, 68 }), "midi edits: a raga's notes, pentatonic");
         check (find ("Darbari Kanada") >= 0 && find ("Jaunpuri") >= 0 && scales[(size_t) find ("Darbari Kanada")].notes == scales[(size_t) find ("Asavari")].notes
                && scales[(size_t) find ("Jaunpuri")].notes == scales[(size_t) find ("Asavari")].notes, "midi edits: ragas sharing their notes are each listed");
-        check (find ("Nyamaropa") >= 0 && scales[(size_t) find ("Nyamaropa")].notes == scales[(size_t) find ("Mixolydian")].notes
-               && find ("Matepe") >= 0, "midi edits: the Shona mbira tunings on the keys");
+        check (find ("nyamaropa") >= 0 && scales[(size_t) find ("nyamaropa")].notes == scales[(size_t) find ("Mixolydian")].notes
+               && find ("matepe") >= 0, "midi edits: the Shona mbira tunings on the keys");
     }
 
     // An instrument that writes down what it was sent and plays a constant level while a note is held.
