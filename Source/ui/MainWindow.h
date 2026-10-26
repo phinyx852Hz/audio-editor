@@ -463,7 +463,7 @@ private:
     void showMixer();
     void editMixerClip (int track, quint32 clip);
     void returnMixerEdits();
-    void mixDownToEditor();
+    void mixDownToEditor (int track = -1);   // the whole mix, or one track as it sounds, into a new tab
     std::unique_ptr<mixer::Engine> mixerEngine;
     class MixerWindow* mixerWin = nullptr;
 
@@ -485,6 +485,12 @@ private:
     bool findHiddenForMixer = false;
     bool hidingFindForMixer = false;
     void sendToLauncher();   // the editor's sound (or its selection) into the mixer's launcher
+    void sendToTimeline();   // the same onto the editor's track at the playhead
+    // The editor's track (owner, 2026-10-26, MixerWindow::editorTrackView): under the waveform,
+    // in a split the user sizes (F4 shows or hides it). Made with the mixer, the first time shown.
+    void showEditorTrack (bool on);
+    class QSplitter* editorSplit = nullptr;
+    QWidget* trackHolder = nullptr;
     class QStackedWidget* centralStack = nullptr;
     QWidget* editorPage = nullptr;
     bool mixerFullFromDock = false;   // Super+F took the docked mixer full screen; again puts it back

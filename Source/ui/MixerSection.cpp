@@ -17,6 +17,7 @@
 #include <QEventLoop>
 #include <QFileInfo>
 #include <QFutureWatcher>
+#include <QLayout>
 #include <QMessageBox>
 #include <QProgressDialog>
 #include <QScreen>
@@ -79,6 +80,22 @@ void MainWindow::registerMixerCommands()
         ->setStatusTip (tr ("Render the whole mix, with the instruments' tails, into a new stereo tab"));
     add ("mixer.sendToLauncher", tr ("Send to Clip &Launcher"), { KS (Qt::ALT | Qt::Key_F3) }, [this] { sendToLauncher(); })
         ->setStatusTip (tr ("The sound in the editor (or its selection) into the mixer's clip launcher, under its cursor or in the selected track's first empty slot"));
+    add ("mixer.sendToTimeline", tr ("Send to &Timeline"), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_F3) }, [this] { sendToTimeline(); })
+        ->setStatusTip (tr ("The sound in the editor (or its selection) onto the editor's track at the playhead"));
+    add ("mixer.editorTrack", tr ("Editor &Track"), { KS (Qt::SHIFT | Qt::Key_F4) }, [this]
+    {
+        showEditorTrack (commands.action (QStringLiteral ("mixer.editorTrack"))->isChecked());
+    })->setStatusTip (tr ("One track of the project under the editor's waveform: Audio only, MIDI only or Audio + MIDI, "
+                          "its clip launcher slots, its clips across time, recording and the MIDI tools"));
+    commands.action (QStringLiteral ("mixer.editorTrack"))->setCheckable (true);
+    commands.action (QStringLiteral ("mixer.editorTrack"))->setChecked (appSettings().value (QStringLiteral ("view/editorTrack"), true).toBool());
+    if (commands.action (QStringLiteral ("mixer.editorTrack"))->isChecked())
+        QTimer::singleShot (0, this, [this] { showEditorTrack (true); });   // once the window is built
+    add ("mixer.trackToEditor", tr ("&Render the Editor's Track to a Tab"), {}, [this]
+    {
+        mixerWindow();
+        mixDownToEditor (mixerWin->editorTrack());
+    })->setStatusTip (tr ("The editor's track as it sounds, its MIDI through its instrument and its audio, as one sound in a new tab"));
     add ("mixer.assistant", tr ("Mix &Assistant..."), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_X) }, [this] { mixAssistant(); })
         ->setStatusTip (tr ("Sets the faders and pans of the mix by what each track is, with headroom for mastering"));
 }
@@ -312,6 +329,49 @@ void MainWindow::sendToLauncher()
         QMessageBox::warning (w, tr ("Send to Clip Launcher"), error);
 }
 
+void MainWindow::sendToTimeline()
+{
+    if (! doc.isOpen() || doc.isAlbum() || doc.current().data == nullptr)
+    {
+        statusBar()->showMessage (tr ("Open a sound first"), 5000);
+        return;
+    }
+    const auto& data = *doc.current().data;
+    const bool part = selEnd > selStart;
+    const auto sound = part ? data.slice (selStart, selEnd) : nullptr;
+    auto name = QFileInfo (QString::fromStdString (doc.path())).completeBaseName();
+    if (name.isEmpty())
+        name = tabName (doc);
+    if (part)
+        name += tr (" part");
+    auto* w = mixerWindow();
+    if (! commands.action (QStringLiteral ("mixer.editorTrack"))->isChecked())
+        commands.action (QStringLiteral ("mixer.editorTrack"))->trigger();   // where it went, in view
+    QString error;
+    if (! w->sendAudioToTimeline (part ? *sound : data, name, error))
+        QMessageBox::warning (this, tr ("Send to Timeline"), error);
+}
+
+void MainWindow::showEditorTrack (bool on)
+{
+    appSettings().setValue (QStringLiteral ("view/editorTrack"), on);
+    if (on && trackHolder->layout()->count() == 0)
+    {
+        auto* w = mixerWindow();
+        trackHolder->layout()->addWidget (w->editorTrackView (trackHolder));
+        connect (w, &MixerWindow::trackToEditorRequested, this, [this] (int track) { mixDownToEditor (track); });
+        // Played or recorded on from the editor: the keyboard and the sound go to the mixer.
+        connect (w, &MixerWindow::activated, this, [this] { playInstruments(); });
+        playInstruments();
+    }
+    trackHolder->setVisible (on);
+    if (auto* a = commands.action (QStringLiteral ("mixer.editorTrack")); a->isChecked() != on)
+    {
+        const QSignalBlocker quiet (a);
+        a->setChecked (on);
+    }
+}
+
 bool MainWindow::mixerDocked() const
 {
     return mixerWin != nullptr && centralStack != nullptr && mixerWin->parentWidget() == centralStack;
@@ -361,20 +421,24 @@ void MainWindow::placeMixer (bool docked)
     w->setFocus();
 }
 
-void MainWindow::mixDownToEditor()
+void MainWindow::mixDownToEditor (int track)
 {
     auto* w = mixerWindow();
-    if (mixerEngine->length() <= 0)
+    const auto title = track < 0 ? tr ("Mix Down to Editor") : tr ("Render to Editor");
+    // A track of two kinds is one sound only once rendered (owner, 2026-10-26: "it will be mixed
+    // down through the mastering chain or it can be sent to the main editor").
+    if (mixerEngine->length() <= 0 || (track >= 0 && mixerEngine->clips (track).empty()))
     {
-        QMessageBox::information (w, tr ("Mix Down to Editor"), tr ("Put an audio or MIDI file on a track first."));
+        QMessageBox::information (this, title, track < 0 ? tr ("Put an audio or MIDI file on a track first.")
+                                                         : tr ("%1 has nothing on its timeline to render. Send a launcher clip to the timeline first.").arg (w->trackName (track)));
         return;
     }
     mixerEngine->stop();
 
     auto progress = std::make_shared<std::atomic<float>> (0.0f);
     auto cancel = std::make_shared<std::atomic<bool>> (false);
-    QProgressDialog dialog (tr ("Mixing down..."), tr ("Cancel"), 0, 1000, w);
-    dialog.setWindowTitle (tr ("Mix Down to Editor"));
+    QProgressDialog dialog (track < 0 ? tr ("Mixing down...") : tr ("Rendering %1...").arg (w->trackName (track)), tr ("Cancel"), 0, 1000, this);
+    dialog.setWindowTitle (title);
     dialog.setWindowModality (Qt::WindowModal);
     dialog.setMinimumDuration (300);
     connect (&dialog, &QProgressDialog::canceled, this, [cancel] { cancel->store (true); });
@@ -386,10 +450,10 @@ void MainWindow::mixDownToEditor()
     QTimer poll;
     connect (&poll, &QTimer::timeout, this, [&] { dialog.setValue ((int) (progress->load() * 1000.0f)); });
     poll.start (50);
-    watcher.setFuture (QtConcurrent::run ([m = mixerEngine.get(), progress, cancel]
+    watcher.setFuture (QtConcurrent::run ([m = mixerEngine.get(), progress, cancel, track]
     {
         Result r;
-        r.data = m->mixdown (10.0, r.error, progress.get(), cancel.get());
+        r.data = m->mixdown (10.0, r.error, progress.get(), cancel.get(), track);
         return r;
     }));
     loop.exec();
@@ -400,12 +464,12 @@ void MainWindow::mixDownToEditor()
     if (result.data == nullptr || result.data->length() == 0)
     {
         if (result.error != "Cancelled.")
-            QMessageBox::warning (w, tr ("Mix Down to Editor"), result.error.empty() ? tr ("The mix made no sound.") : QString::fromStdString (result.error));
+            QMessageBox::warning (this, title, result.error.empty() ? tr ("The mix made no sound.") : QString::fromStdString (result.error));
         return;
     }
 
     Tags tags;
-    tags[tag::title] = w->mixName().toStdString();
+    tags[tag::title] = (track < 0 ? w->mixName() : w->mixName() + QStringLiteral (" - ") + w->trackName (track)).toStdString();
     const auto options = saveOptions;
     newTab();
     doc.reset (std::move (result.data), {}, {}, std::move (tags));
@@ -415,7 +479,8 @@ void MainWindow::mixDownToEditor()
     activateWindow();
     raise();
     waveform->setFocus();
-    statusBar()->showMessage (tr ("Mixed down %1 into a new tab").arg (w->mixName()), 8000);
+    statusBar()->showMessage (track < 0 ? tr ("Mixed down %1 into a new tab").arg (w->mixName())
+                                        : tr ("Rendered %1 into a new tab").arg (w->trackName (track)), 8000);
 }
 
 void MainWindow::mixAssistant()
