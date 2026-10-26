@@ -77,7 +77,7 @@ namespace midifile
     struct Scale
     {
         const char* name;
-        const char* family;   // "Mode", "Raga", "Chinese" or "Japanese"
+        const char* family;   // "Mode", "Raga", "Chinese", "Japanese" or "Korean"
         uint16_t notes;
     };
     const std::vector<Scale>& scales();

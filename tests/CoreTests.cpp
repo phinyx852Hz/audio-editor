@@ -4548,6 +4548,13 @@ namespace
         check (near (mixer::keyCents (get ("hyojo"))[3], phi::Tuning::ratioToCents (32.0 / 27.0), 1.0e-9)
                && near (mixer::keyCents (get ("sojo"))[6], phi::Tuning::ratioToCents (729.0 / 512.0), 1.0e-9), "tunings: ritsu and ryo");
 
+        // Korean: p'yŏngjo on sol has a Pythagorean whole tone and fourth; kyemyŏnjo on la a
+        // minor third of 32/27; the tori in 12-TET.
+        check (get ("pyeongjo").name == "p'yŏngjo" && near (get ("pyeongjo").cents[2], phi::Tuning::ratioToCents (4.0 / 3.0), 1.0e-9)
+               && near (get ("gyemyeonjo").cents[1], phi::Tuning::ratioToCents (32.0 / 27.0), 1.0e-9)
+               && get ("menaritori").cents == std::vector<double> ({ 0, 300, 500, 800, 1000 }) && mixer::findTuning ("sibi-yul (sambun sonik)") >= 0,
+               "tunings: Korean modes and tori");
+
         const mixer::TuningChoice none, clip { 3, 0 }, scene { 5, 2 }, track { 7, 4 };
         check (mixer::tuningInForce (clip, scene, track) == clip && mixer::tuningInForce (none, scene, track) == scene
                && mixer::tuningInForce (none, none, track) == track && mixer::tuningInForce (none, none, none).system == -1,

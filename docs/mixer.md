@@ -431,7 +431,7 @@ beyond the church modes):
   nothing that keeps the strict rules, all are written again with another seed. Only when nothing
   fits is a strict rule bent, and the status line says how many.
 - The mode: any of the tunings (church modes and hypo-modes, jazz modes, ragas, maqams and
-  dastgahs, Chinese and Japanese modes and lü, 2 to 21 equal steps), on a root, or the melody's own (the diatonic mode on its last
+  dastgahs, Chinese, Japanese and Korean modes and lü, 2 to 21 equal steps), on a root, or the melody's own (the diatonic mode on its last
   note that holds all its notes). The voices use only the mode's keys, and consonance is judged
   by the cents the tuning plays: a maqam's neutral third or sixth counts as a third or sixth; in
   an equal temperament each key is one step. Church modes raise the note a whole step below a
@@ -493,10 +493,11 @@ could be applied on the clip level, track level or scene level"):
   sǔnyì's twelve, Jīng Fáng's 60, Cài Yuándìng's 18, Hé Chéngtiān's and Zhū Zàiyù's temperaments,
   the qin's just intonation), the five Chinese modes and the three seven-note scales on each in
   sānfēn sǔnyì and in 12-TET, and Chaozhou and Cantonese modes; the six gagaku modes in
-  Pythagorean tuning and seven Japanese folk and koto scales (sources and details in
+  Pythagorean tuning and seven Japanese folk and koto scales; the Korean twelve yul, p'yŏngjo and
+  kyemyŏnjo, and four folk-song tori (sources and details in
   [east-asian-tunings.md](east-asian-tunings.md)); and 2 to 21 equal steps to the octave.
   Names are in IAST (ragas), IJMES (maqams), a common Persian romanisation (dastgahs), pinyin with
-  its tones and Hepburn, all in lower case (owner); a mix saves the plain ASCII name beside each.
+  its tones, Hepburn and McCune-Reischauer, all in lower case (owner); a mix saves the plain ASCII name beside each.
 - A scale's degrees play on the nearest keys from the root, a quarter step on the key above (rāst's
   E half-flat on E); the keys between keep their 12-TET pitch. Equal steps run up and down the
   keys from the root, as does a scale of more than twelve notes (Jīng Fáng's 60 lü), a note a key.

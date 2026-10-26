@@ -212,6 +212,20 @@ namespace mixer
             japanese ("hirajōshi", "hirajoshi", { 0, 2, 3, 7, 8 });
             japanese ("iwato", "iwato", { 0, 1, 5, 6, 10 });
 
+            // Korean (2026-10-26). The twelve yul of the Akhak kwebŏm (1493), by sambun sonik as
+            // the Chinese lü, hwangjong customarily on E flat; the court's two modes, p'yŏngjo (on
+            // sol) and kyemyŏnjo (on la), in the same tuning; and Lee Bo-hyung's folk-song tori
+            // (regional modes) in 12-TET. Names in McCune-Reischauer, Revised Romanization plain.
+            all.push_back ({ "sibi-yul (sambun sonik)", "sibi-yul (sambun sonik)", "korean tuning", chainOfFifths (12), 0 });
+            all.push_back ({ "p'yŏngjo", "pyeongjo", "korean mode", fifths ({ 0, 1, 2, 3, 4 }, 1), 0 });
+            all.push_back ({ "kyemyŏnjo", "gyemyeonjo", "korean mode", fifths ({ 0, 1, 2, 3, 4 }, 3), 0 });
+            const auto tori = [&] (std::string name, std::string plain, std::initializer_list<int> steps)
+            { all.push_back ({ std::move (name), std::move (plain), "korean folk mode", semitones (steps), 0 }); };
+            tori ("kyŏngt'ori", "gyeongtori", { 0, 2, 5, 7, 9 });          // Seoul and Gyeonggi: sol la do re mi
+            tori ("menarit'ori", "menaritori", { 0, 3, 5, 8, 10 });        // the east: mi sol la do re
+            tori ("yukchabaegit'ori", "yukjabaegitori", { 0, 5, 7, 8 });   // Jeolla: mi la (si) do
+            tori ("susimgat'ori", "susimgatori", { 0, 2, 5, 7, 10 });      // the northwest: re mi sol la do
+
             for (int n = 2; n <= 21; ++n)
             {
                 const auto name = std::to_string (n) + " equal steps";
