@@ -563,45 +563,81 @@ namespace midifile
     {
         auto bits = [] (std::initializer_list<int> degrees) { uint16_t m = 0; for (auto d : degrees) m = (uint16_t) (m | (1u << d)); return m; };
         static const std::vector<Scale> all {
-            { "Ionian (Major)", "Mode", bits ({ 0, 2, 4, 5, 7, 9, 11 }) },
-            { "Dorian", "Mode", bits ({ 0, 2, 3, 5, 7, 9, 10 }) },
-            { "Phrygian", "Mode", bits ({ 0, 1, 3, 5, 7, 8, 10 }) },
-            { "Lydian", "Mode", bits ({ 0, 2, 4, 6, 7, 9, 11 }) },
-            { "Mixolydian", "Mode", bits ({ 0, 2, 4, 5, 7, 9, 10 }) },
-            { "Aeolian (Minor)", "Mode", bits ({ 0, 2, 3, 5, 7, 8, 10 }) },
-            { "Locrian", "Mode", bits ({ 0, 1, 3, 5, 6, 8, 10 }) },
+            { "ionian (major)", "Mode", bits ({ 0, 2, 4, 5, 7, 9, 11 }) },
+            { "dorian", "Mode", bits ({ 0, 2, 3, 5, 7, 9, 10 }) },
+            { "phrygian", "Mode", bits ({ 0, 1, 3, 5, 7, 8, 10 }) },
+            { "lydian", "Mode", bits ({ 0, 2, 4, 6, 7, 9, 11 }) },
+            { "mixolydian", "Mode", bits ({ 0, 2, 4, 5, 7, 9, 10 }) },
+            { "aeolian (minor)", "Mode", bits ({ 0, 2, 3, 5, 7, 8, 10 }) },
+            { "locrian", "Mode", bits ({ 0, 1, 3, 5, 6, 8, 10 }) },
             // The ten thaats, by their best-known raga where it is named after one.
-            { "Bilawal", "Raga", bits ({ 0, 2, 4, 5, 7, 9, 11 }) },
-            { "Yaman (Kalyan)", "Raga", bits ({ 0, 2, 4, 6, 7, 9, 11 }) },
-            { "Khamaj", "Raga", bits ({ 0, 2, 4, 5, 7, 9, 10 }) },
-            { "Kafi", "Raga", bits ({ 0, 2, 3, 5, 7, 9, 10 }) },
-            { "Asavari", "Raga", bits ({ 0, 2, 3, 5, 7, 8, 10 }) },
-            { "Bhairavi", "Raga", bits ({ 0, 1, 3, 5, 7, 8, 10 }) },
-            { "Bhairav", "Raga", bits ({ 0, 1, 4, 5, 7, 8, 11 }) },
-            { "Marwa", "Raga", bits ({ 0, 1, 4, 6, 9, 11 }) },
-            { "Purvi", "Raga", bits ({ 0, 1, 4, 6, 7, 8, 11 }) },
-            { "Todi", "Raga", bits ({ 0, 1, 3, 6, 7, 8, 11 }) },
+            { "bilāval", "Raga", bits ({ 0, 2, 4, 5, 7, 9, 11 }) },
+            { "yaman (kalyāṇ)", "Raga", bits ({ 0, 2, 4, 6, 7, 9, 11 }) },
+            { "khamāj", "Raga", bits ({ 0, 2, 4, 5, 7, 9, 10 }) },
+            { "kāfī", "Raga", bits ({ 0, 2, 3, 5, 7, 9, 10 }) },
+            { "āsāvarī", "Raga", bits ({ 0, 2, 3, 5, 7, 8, 10 }) },
+            { "bhairavī", "Raga", bits ({ 0, 1, 3, 5, 7, 8, 10 }) },
+            { "bhairav", "Raga", bits ({ 0, 1, 4, 5, 7, 8, 11 }) },
+            { "mārvā", "Raga", bits ({ 0, 1, 4, 6, 9, 11 }) },
+            { "pūrvī", "Raga", bits ({ 0, 1, 4, 6, 7, 8, 11 }) },
+            { "toḍī", "Raga", bits ({ 0, 1, 3, 6, 7, 8, 11 }) },
             // The major ragas besides.
-            { "Darbari Kanada", "Raga", bits ({ 0, 2, 3, 5, 7, 8, 10 }) },
-            { "Jaunpuri", "Raga", bits ({ 0, 2, 3, 5, 7, 8, 10 }) },
-            { "Bageshri", "Raga", bits ({ 0, 2, 3, 5, 7, 9, 10 }) },
-            { "Bhimpalasi", "Raga", bits ({ 0, 2, 3, 5, 7, 9, 10 }) },
-            { "Desh", "Raga", bits ({ 0, 2, 4, 5, 7, 9, 10, 11 }) },
-            { "Bihag", "Raga", bits ({ 0, 2, 4, 5, 6, 7, 9, 11 }) },
-            { "Kedar", "Raga", bits ({ 0, 2, 4, 5, 6, 7, 9, 11 }) },
-            { "Miyan ki Malhar", "Raga", bits ({ 0, 2, 3, 5, 7, 9, 10, 11 }) },
-            { "Megh", "Raga", bits ({ 0, 2, 5, 7, 10 }) },
-            { "Bhupali", "Raga", bits ({ 0, 2, 4, 7, 9 }) },
-            { "Durga", "Raga", bits ({ 0, 2, 5, 7, 9 }) },
-            { "Hamsadhwani", "Raga", bits ({ 0, 2, 4, 7, 11 }) },
-            { "Malkauns", "Raga", bits ({ 0, 3, 5, 8, 10 }) },
-            { "Jog", "Raga", bits ({ 0, 3, 4, 5, 7, 10 }) },
-            { "Ahir Bhairav", "Raga", bits ({ 0, 1, 4, 5, 7, 9, 10 }) },
-            { "Lalit", "Raga", bits ({ 0, 1, 4, 5, 6, 8, 11 }) },
-            { "Puriya Dhanashri", "Raga", bits ({ 0, 1, 4, 6, 7, 8, 11 }) },
-            { "Shree", "Raga", bits ({ 0, 1, 4, 6, 7, 8, 11 }) },
-            { "Multani", "Raga", bits ({ 0, 1, 3, 6, 7, 8, 11 }) },
-            { "Charukeshi", "Raga", bits ({ 0, 2, 4, 5, 7, 8, 10 }) },
+            { "darbārī kānaḍā", "Raga", bits ({ 0, 2, 3, 5, 7, 8, 10 }) },
+            { "jaunpurī", "Raga", bits ({ 0, 2, 3, 5, 7, 8, 10 }) },
+            { "bāgeśrī", "Raga", bits ({ 0, 2, 3, 5, 7, 9, 10 }) },
+            { "bhīmpalāsī", "Raga", bits ({ 0, 2, 3, 5, 7, 9, 10 }) },
+            { "deś", "Raga", bits ({ 0, 2, 4, 5, 7, 9, 10, 11 }) },
+            { "bihāg", "Raga", bits ({ 0, 2, 4, 5, 6, 7, 9, 11 }) },
+            { "kedār", "Raga", bits ({ 0, 2, 4, 5, 6, 7, 9, 11 }) },
+            { "miyāṅ kī malhār", "Raga", bits ({ 0, 2, 3, 5, 7, 9, 10, 11 }) },
+            { "megh", "Raga", bits ({ 0, 2, 5, 7, 10 }) },
+            { "bhūpālī", "Raga", bits ({ 0, 2, 4, 7, 9 }) },
+            { "durgā", "Raga", bits ({ 0, 2, 5, 7, 9 }) },
+            { "haṃsadhvani", "Raga", bits ({ 0, 2, 4, 7, 11 }) },
+            { "mālkauns", "Raga", bits ({ 0, 3, 5, 8, 10 }) },
+            { "jog", "Raga", bits ({ 0, 3, 4, 5, 7, 10 }) },
+            { "ahīr bhairav", "Raga", bits ({ 0, 1, 4, 5, 7, 9, 10 }) },
+            { "lalit", "Raga", bits ({ 0, 1, 4, 5, 6, 8, 11 }) },
+            { "pūriyā dhanāśrī", "Raga", bits ({ 0, 1, 4, 6, 7, 8, 11 }) },
+            { "śrī", "Raga", bits ({ 0, 1, 4, 6, 7, 8, 11 }) },
+            { "multānī", "Raga", bits ({ 0, 1, 3, 6, 7, 8, 11 }) },
+            { "cārukeśī", "Raga", bits ({ 0, 2, 4, 5, 7, 8, 10 }) },
+            // Gamelan laras and pathet on the keys their tones round to (mixer/Tunings.cpp has them
+            // in their own cents); sléndro's three pathet all fall on the same keys.
+            { "sléndro", "Gamelan", bits ({ 0, 2, 5, 7, 10 }) },
+            { "pélog", "Gamelan", bits ({ 0, 1, 3, 5, 7, 8, 9 }) },
+            { "pélog pathet lima", "Gamelan", bits ({ 0, 1, 3, 7, 8 }) },
+            { "pélog pathet nem", "Gamelan", bits ({ 0, 4, 5, 7, 11 }) },
+            { "pélog pathet barang", "Gamelan", bits ({ 0, 1, 6, 7, 8 }) },
+            { "selisir", "Gamelan", bits ({ 0, 1, 3, 7, 8 }) },
+            { "degung", "Gamelan", bits ({ 0, 1, 3, 7, 8 }) },
+            // Shona mbira tunings (mixer/Tunings.cpp has their cents), as the keys they play on; Shona
+            // names in lower case, as the tunings have them (owner).
+            { "nyamaropa", "Mbira", bits ({ 0, 2, 4, 5, 7, 9, 10 }) },
+            { "dambatsoko", "Mbira", bits ({ 0, 2, 4, 5, 7, 9, 11 }) },
+            { "katsanzaira", "Mbira", bits ({ 0, 2, 3, 5, 7, 9, 10 }) },
+            { "mavembe (gandanga)", "Mbira", bits ({ 0, 1, 3, 5, 7, 8, 10 }) },
+            { "dindinyongwe", "Mbira", bits ({ 0, 1, 3, 5, 6, 8, 10 }) },
+            { "nyunga nyunga", "Mbira", bits ({ 0, 2, 4, 7, 9, 11 }) },
+            { "matepe", "Mbira", bits ({ 0, 2, 4, 5, 7, 8, 10 }) },
+            // The five Chinese modes (wusheng), Japanese scales and Korean modes, as in mixer/Tunings.cpp.
+            { "gōng", "Chinese", bits ({ 0, 2, 4, 7, 9 }) },
+            { "shāng", "Chinese", bits ({ 0, 2, 5, 7, 10 }) },
+            { "jué", "Chinese", bits ({ 0, 3, 5, 8, 10 }) },
+            { "zhǐ", "Chinese", bits ({ 0, 2, 5, 7, 9 }) },
+            { "yǔ", "Chinese", bits ({ 0, 3, 5, 7, 10 }) },
+            { "miyako-bushi (in)", "Japanese", bits ({ 0, 1, 5, 7, 8 }) },
+            { "ritsu (yō)", "Japanese", bits ({ 0, 2, 5, 7, 9 }) },
+            { "min'yō", "Japanese", bits ({ 0, 3, 5, 7, 10 }) },
+            { "ryūkyū", "Japanese", bits ({ 0, 4, 5, 7, 11 }) },
+            { "hirajōshi", "Japanese", bits ({ 0, 2, 3, 7, 8 }) },
+            { "iwato", "Japanese", bits ({ 0, 1, 5, 6, 10 }) },
+            { "p'yŏngjo", "Korean", bits ({ 0, 2, 5, 7, 9 }) },
+            { "kyemyŏnjo", "Korean", bits ({ 0, 3, 5, 7, 10 }) },
+            { "kyŏngt'ori", "Korean", bits ({ 0, 2, 5, 7, 9 }) },
+            { "menarit'ori", "Korean", bits ({ 0, 3, 5, 8, 10 }) },
+            { "yukchabaegit'ori", "Korean", bits ({ 0, 5, 7, 8 }) },
+            { "susimgat'ori", "Korean", bits ({ 0, 2, 5, 7, 10 }) },
         };
         return all;
     }
@@ -609,7 +645,13 @@ namespace midifile
     SongPtr toMode (const Song& song, int root, int scale)
     {
         const auto& list = scales();
-        const auto notesOf = list[(size_t) std::clamp (scale, 0, (int) list.size() - 1)].notes;
+        return toKeys (song, root, list[(size_t) std::clamp (scale, 0, (int) list.size() - 1)].notes);
+    }
+
+    SongPtr toKeys (const Song& song, int root, uint16_t notesOf)
+    {
+        if ((notesOf & 0xfff) == 0)
+            notesOf = 0xfff;
         root = ((root % 12) + 12) % 12;
         bool in[12] {};
         for (int d = 0; d < 12; ++d)
@@ -635,6 +677,40 @@ namespace midifile
                     break;
                 }
             }
+        }
+        return join (song, notes, std::move (others), song.lastTick);
+    }
+
+    SongPtr inRange (const Song& song, int root, int below)
+    {
+        std::vector<Note> notes;
+        std::vector<Event> others;
+        split (song, notes, others);
+        std::vector<int> pitches;
+        for (const auto& n : notes)
+            if (n.channel != 9)
+                pitches.push_back (n.pitch);
+        if (pitches.empty())
+            return std::make_shared<Song> (song);
+        std::nth_element (pitches.begin(), pitches.begin() + (long) pitches.size() / 2, pitches.end());
+        const auto middle = pitches[pitches.size() / 2];
+        // The bottom of the range: on the key `below` under the final, with the range's middle
+        // nearest the notes'.
+        const auto bottomKey = ((root - below) % 12 + 12) % 12;
+        auto bottom = middle - 6 - ((middle - 6 - bottomKey) % 12 + 12) % 12;
+        if (middle - (bottom + 6) > 6)
+            bottom += 12;
+        bottom = std::clamp (bottom, 0, 115);
+        for (auto& n : notes)
+        {
+            if (n.channel == 9)
+                continue;
+            int p = n.pitch;
+            while (p < bottom)
+                p += 12;
+            while (p > bottom + 12)
+                p -= 12;
+            n.pitch = (uint8_t) std::clamp (p, 0, 127);
         }
         return join (song, notes, std::move (others), song.lastTick);
     }

@@ -42,6 +42,7 @@ class LauncherRack;
 class ReturnStripWidget;
 class TrackDevices;
 class ClipView;
+class EditorTrack;
 class QStackedWidget;
 class QComboBox;
 class QSpinBox;
@@ -196,6 +197,28 @@ public:
     control::State surfaceState() const;
     void surfaceCommand (const control::Command&);
 
+    // The Mode menu (ModeSection.cpp, owner 2026-10-26): the selected track tuned to a mode
+    // (its clips' and scenes' own tunings left as they are), and the MIDI clip shown in the
+    // Device Chain moved into the mode's keys, folded into a hypo range `below` keys under
+    // the root when that is not 0. False when there is no track, or no MIDI clip shown.
+    bool tuneSelectedTrack (mixer::TuningChoice);
+    bool modeShownMidi (int root, uint16_t keys, int below, const QString& what);
+    bool showsMidiClip() const;
+    void counterpointShown() { counterpointShownMidi(); }
+    // The editor's track (owner, 2026-10-26): one track of the mix, Audio only, MIDI only or
+    // Audio + MIDI, under the editor's waveform, with the mixer's launcher slots (left to right),
+    // its clips across time, recording and the MIDI tools. It is the track last selected here or
+    // in the mixer. Made once, for `parent`.
+    QWidget* editorTrackView (QWidget* parent);
+    int editorTrack() const;
+    void refreshEditorTrack();
+    // A sound from the editor onto the editor's track at the playhead, saved as a WAV beside the mix.
+    bool sendAudioToTimeline (const AudioData& sound, const QString& name, QString& error);
+    // Between the launcher and the timeline (owner, 2026-10-26): a copy of a slot's clip at the
+    // playhead, or of a timeline clip into the track's next empty slot.
+    void slotToTimeline (int track, int scene);
+    void clipToLauncher (int track, uint32_t id);
+
 Q_SIGNALS:
     void mixdownRequested();
     void midiInputsRequested();
@@ -205,6 +228,8 @@ Q_SIGNALS:
     void editClipRequested (int track, quint32 clip);
     void devicePanelChanged();   // shown or hidden
     void finderWanted (bool show);   // in the editor's place: the editor's Find panel shown or hidden
+    void trackToEditorRequested (int track);   // the editor's track rendered into a tab of the editor
+    void message (const QString&);   // what the status line says, for the editor's track to show too
 
 protected:
     void keyPressEvent (class QKeyEvent*) override;
@@ -221,6 +246,7 @@ private:
     friend class ReturnStripWidget;
     friend class TrackDevices;
     friend class ClipView;
+    friend class EditorTrack;
 
     // What the window keeps about a track besides the engine's settings.
     struct TrackInfo
@@ -297,6 +323,11 @@ private:
     // frame of the launch clock with it.
     void writeCounterpoint (int track, const mixer::Clip& clip, mixer::SlotPtr slot, int scene, const counterpoint::Settings&,
                             mixer::TuningChoice modeChoice, mixer::TuningChoice tuning, Frame launchAt);
+    // Fugue (owner, 2026-10-26; MixerFugue.cpp): a fugue of two to four voices on the clip's
+    // melody as its subject, in any mode, raga, maqam or equal temperament (mixer/Fugue.h), each
+    // voice a MIDI file beside the mix and a clip on a new track, where the clip is.
+    void fugueShownMidi();
+    bool writeFugue (int track, const mixer::Clip& clip, mixer::SlotPtr slot, int scene);   // true if it made any
     // Recording (docs/recording.md; owner, 2026-10-25: "play a melody into a clip with a
     // pre-determined length that can be adjusted and the recording immediately stops, loops, and
     // the new melody is generated", and "the main method super easy to learn with the options for
@@ -306,7 +337,7 @@ private:
     // that slot. What the take does after (play, stop, record the next slot, add counterpoint),
     // its length, quantise, count-in and the audio input are the transport's Record options.
     QWidget* buildTransport();   // the transport row across the top, for both views
-    void recordPressed();
+    void recordPressed (int intoLauncher = -1);   // -1 as the mixer's view is; the editor's track says which
     void recordSlot (int track, int scene);     // a take into the slot (an empty one, or replacing it)
     void recordTimeline (int track);
     void toggleOverdub (int track);
@@ -319,6 +350,9 @@ private:
     // Drums to MIDI (owner, 2026-10-26): a timeline clip (id) or a slot's audio as kit notes, the
     // slot's MIDI layer or a MIDI clip beside it.
     void drumsToMidi (int track, uint32_t id, int scene);
+    // An audio file dropped on the editor's MIDI-only track: as MIDI (Drums to MIDI) or as audio
+    // (the track then Audio + MIDI), as asked. False when the drop goes on as usual.
+    bool audioIntoMidiTrack (int track, const QString& file, int scene, Frame at);
     void captureMidi();                         // the last phrase played on the armed track, into its next empty slot
     void keepRecorded();                        // each tick: the takes that ended, saved as files and placed
     bool startTake (mixer::RecordRequest, QString& error);   // asks the engine, the input and the transport
@@ -365,6 +399,7 @@ private:
     QLabel* midiClipTitle = nullptr;
     QComboBox* rootBox = nullptr;
     QComboBox* scaleBox = nullptr;
+    QComboBox* hypoBox = nullptr;   // the scale's range: authentic, or a hypo range
     int phiTurn = 0;
     // Q-Link (Cubase): with it on, a change to one of the picked strips goes to all of them;
     // Alt+Shift sends it to every track. `fn` gets each strip, and whether it is the one changed.
@@ -480,6 +515,8 @@ private:
     QTimer timer;
     qint64 lastTick = 0;
     int selected = 0;
+    int shownTrack = 0;              // the editor's track: the last track selected
+    EditorTrack* editorView = nullptr;
     int stripSections = 31;
     std::set<int> picked;            // strips Q-Link joins (the selected one is always among them)
     QPushButton* qLinkButton = nullptr;
