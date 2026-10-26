@@ -450,6 +450,45 @@ beyond the church modes):
   choices (its mode, else the track's tuning, else the melody's own) and loop with it, on the
   tracks the last loop's voices went on. Recording itself is in [recording.md](recording.md).
 
+Fugue (owner, 2026-10-26: "a fugue generator based on open source software", "for the mixer view
+only", "using all mode types"):
+- **Fugue...** in the MIDI Clip section, beside Counterpoint, writes a fugue of 2 to 4 voices on
+  the clip's melody as its subject: its first phrase (up to a rest of an eighth or more), at most
+  four bars. Two voices are upper and lower; three soprano, alto and bass; four add the tenor.
+- The open-source generators surveyed (2026-10-26): sepiks-ai/fugue-structure, Baroque_fugue
+  (StrachNaWroble), the openDAW MCP's create_fugue and ethan-pronev/Fugue-Generator write fugues
+  but carry no licence, so none of their code can be used; the licensed ones (Melodizer, GPL-3.0;
+  foox and CounterPointer, MIT; Strasheela; FuX) write species counterpoint only, which PHI already
+  does. The fugue is our own code: the plan takes the textbook form those projects follow
+  (subject, tonal or real answer, countersubject, episodes from the subject's head in sequence,
+  stretto, inversion), and the free voices are written by the counterpoint search above.
+- The plan: the exposition, the alto first with the subject, the soprano with the answer at the
+  fifth, then the bass (and tenor), each a voice's length after the one before. The answer is
+  tonal (the tonic and dominant of the subject's head answer each other) or real (every note a
+  fifth up); both move by the mode's degrees, so they stay in the mode. The voice that had the
+  subject goes on in a countersubject, written against the answer, which comes back in another
+  voice against each later entry where it fits (moved by the mode's degrees and octaves, kept
+  only where it sounds well against the entry). Then 0 to 4 middle entries on the mediant,
+  submediant, subdominant and supertonic, each after an episode: the subject's head (its first
+  bar or third) in sequence, three steps down or up, in one voice. Every other middle entry can
+  be upside down. Then a last episode and the stretto: every voice enters again, each before the
+  one before has finished, as close as they sound well together (within half the subject if they
+  can); without it, a last entry in the bass. The close holds the tonic in the bass for a bar.
+- The free voices: wherever a voice that has come in has nothing given, it is written by the
+  counterpoint search against everything sounding, in the chosen species against the beat (a
+  half note under a subject of quarters and longer, else a quarter): note against note, two,
+  four, syncopated, or florid (the default). Each free stretch leads out of the voice's last note
+  and into its next, and the last ends as a cadence. A raga's āroha and avaroha are kept by
+  every line, the subject's own entries too.
+- The mode: as for Counterpoint, any of the tunings on a root, or the subject's own; the clip's
+  tuning is offered first. Variation: another number writes other free voices and countersubject
+  on the same plan.
+- Each voice is a MIDI file next to the mix ("<clip> fugue soprano.mid"), and a clip on a new
+  track with the Synth, where the clip is (on the timeline at its start, or in the same scene),
+  the whole fugue long, in the tuning the subject plays in. The status line gives the bars, the
+  middle entries, the stretto's distance and any strict rule bent. The code is in mixer/Fugue.h
+  (and FreePart in mixer/Counterpoint.h), with tests.
+
 The left column (owner, 2026-10-25: "a relatively static view of the mixer, clip launcher and
 horizontal track view"):
 - The Finder and the Inspector share one column, the same width in both views. The Finder shows

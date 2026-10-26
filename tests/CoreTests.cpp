@@ -10,6 +10,7 @@
 #include "../Source/mixer/Tunings.h"
 #include "../Source/mixer/RagaInstrument.h"
 #include "../Source/mixer/Counterpoint.h"
+#include "../Source/mixer/Fugue.h"
 #include "../Source/mixer/MixerEngine.h"
 #include "../Source/mixer/DrumsToMidi.h"
 #include "../Source/patchbay/PatchBay.h"
@@ -4727,6 +4728,168 @@ namespace
         check (ons == 11 && onChannel && written->ticksPerQuarter == 480 && written->channelsUsed == 4, "counterpoint: a voice as a MIDI file");
     }
 
+    // Fugue: the plan (exposition, countersubject, episodes, middle entries, stretto, close),
+    // the tonal answer, the rules kept between the voices, and every family of modes.
+    void testFugue()
+    {
+        using namespace counterpoint;
+        auto modeOf = [] (const char* plain, int root) { return Mode::fromTuning (mixer::tuningSystems()[(size_t) mixer::findTuning (plain)], root); };
+        // A subject by degrees of a mode from its tonic, in quarters and halves (480 a quarter).
+        auto subjectIn = [] (const Mode& m)
+        {
+            std::vector<int> notes;
+            for (int p = 0; p < 128; ++p)
+                if (m.scale[(size_t) (((p - 60 - m.root) % m.period + m.period) % m.period)])
+                    notes.push_back (p);
+            const auto tonic = (int) (std::lower_bound (notes.begin(), notes.end(), 60 + m.root) - notes.begin());
+            const int degrees[] { 0, 4, 3, 2, 1, 0, 1, 2, 3, 2, 1, 0 }, beats[] { 2, 2, 1, 1, 1, 1, 1, 1, 2, 1, 1, 4 };
+            Line l;
+            int64_t t = 0;
+            for (int i = 0; i < 12; ++i)
+            {
+                l.push_back ({ t, t + beats[i] * 480, notes[(size_t) (tonic + degrees[i])], 90 });
+                t += beats[i] * 480;
+            }
+            return l;
+        };
+        const auto dorian = modeOf ("dorian", 2);
+        const auto subject = subjectIn (dorian);   // D A G F E D E F G F E D
+
+        fugue::Settings three;
+        three.mode = dorian;
+        const auto r = fugue::generate (subject, 480, three);
+        std::vector<std::string> plan;
+        for (const auto& x : r.plan)
+            plan.push_back (x.what);
+        auto count = [&] (const std::string& what) { return std::count (plan.begin(), plan.end(), what); };
+        check (r.voices.size() == 3 && r.names == std::vector<std::string> { "soprano", "alto", "bass" }
+               && plan.size() > 4 && plan[0] == "subject" && plan[1] == "answer" && plan[2] == "countersubject"
+               && count ("episode") == 3 && count ("middle entry") == 2 && count ("stretto") == 3 && plan.back() == "close",
+               "fugue: exposition, countersubject, episodes, two middle entries, a stretto and the close");
+        check (r.plan[0].voice == 1 && r.plan[1].voice == 0 && r.plan[1].start == 8640 && r.strettoDelay > 0 && r.strettoDelay <= 4320,
+               "fugue: the alto enters first, the soprano answers, the stretto's entries overlap");
+        // The tonal answer: the dominant A answered by the tonic D, then the rest at the fifth.
+        int64_t answerAt = r.plan[1].start;
+        std::vector<int> answer;
+        for (const auto& x : r.voices[0])
+            if (x.start >= answerAt && x.start < answerAt + 8640)
+                answer.push_back (x.pitch);
+        check (answer.size() == 12 && answer[0] == 69 && answer[1] == 74 && answer[2] == 74 && answer[11] == 69,
+               "fugue: a tonal answer at the fifth, tonic and dominant answering each other");
+        fugue::Settings real = three;
+        real.answer = fugue::Answer::real;
+        const auto rr = fugue::generate (subject, 480, real);
+        int64_t realAt = rr.plan[1].start;
+        int firstReal = -1, secondReal = -1;
+        for (const auto& x : rr.voices[0])
+            if (x.start == realAt)
+                firstReal = x.pitch;
+            else if (x.start == realAt + 960)
+                secondReal = x.pitch;
+        check (firstReal == 69 && secondReal == 76, "fugue: a real answer, every note a fifth up in the mode");
+
+        // The rules between every two voices: no parallel fifths or octaves, nothing dissonant
+        // struck together on the beat, in two and three voices.
+        auto at = [] (const Line& l, int64_t t, bool* starts = nullptr)
+        {
+            for (const auto& x : l)
+                if (x.start <= t && t < x.end)
+                {
+                    if (starts != nullptr)
+                        *starts = x.start == t;
+                    return x.pitch;
+                }
+            return -1;
+        };
+        bool kept = true;
+        for (int voices = 2; voices <= 3; ++voices)
+        {
+            fugue::Settings s = three;
+            s.voices = voices;
+            const auto f = fugue::generate (subject, 480, s);
+            std::set<int64_t> times;
+            for (const auto& v : f.voices)
+                for (const auto& x : v)
+                    times.insert (x.start);
+            const std::vector<int64_t> t (times.begin(), times.end());
+            int broken = 0;
+            for (size_t i = 1; i < t.size(); ++i)
+                for (size_t a = 0; a < f.voices.size(); ++a)
+                    for (size_t b = a + 1; b < f.voices.size(); ++b)
+                    {
+                        bool sa = false, sb = false;
+                        const auto pa = at (f.voices[a], t[i], &sa), pb = at (f.voices[b], t[i], &sb);
+                        const auto qa = at (f.voices[a], t[i - 1]), qb = at (f.voices[b], t[i - 1]);
+                        if (pa < 0 || pb < 0)
+                            continue;
+                        auto kind = [] (int x) { x = std::abs (x) % 12; return x == 0 ? 8 : x == 7 ? 5 : 0; };
+                        if (qa >= 0 && qb >= 0 && qa != pa && qb != pb && kind (pa - pb) != 0 && kind (pa - pb) == kind (qa - qb))
+                            ++broken;
+                        const auto iv = std::abs (pa - pb) % 12;
+                        if (t[i] % 960 == 0 && sa && sb && (iv == 1 || iv == 2 || iv == 6 || iv == 10 || iv == 11))
+                            ++broken;
+                    }
+            kept = kept && broken == 0 && f.bent == 0 && f.voices.size() == (size_t) voices;
+        }
+        check (kept, "fugue: no parallel fifths or octaves and no dissonance struck on the beat, in two and three voices");
+
+        // Four voices, with the middle entries inverted and no stretto.
+        fugue::Settings four = three;
+        four.voices = 4;
+        four.inversion = true;
+        four.stretto = false;
+        const auto r4 = fugue::generate (subject, 480, four);
+        int inverted = 0, final = 0;
+        for (const auto& x : r4.plan)
+        {
+            inverted += x.what == "middle entry, inverted" ? 1 : 0;
+            final += x.what == "final entry" && x.voice == 3 ? 1 : 0;
+        }
+        check (r4.voices.size() == 4 && r4.names[2] == "tenor" && inverted == 1 && final == 1 && r4.strettoDelay == 0,
+               "fugue: four voices, an inverted middle entry, the last entry in the bass");
+
+        // Every family of modes: each voice in the mode's notes (the church modes' raised
+        // leading note at a cadence aside), and a raga's āroha kept going up.
+        bool inMode = true;
+        for (const char* plain : { "yaman (kalyan)", "bhairavi (equal tempered)", "phrygian", "hypolydian", "altered", "blues", "rast", "segah", "19 equal steps" })
+        {
+            fugue::Settings s;
+            s.mode = modeOf (plain, 2);
+            const auto f = fugue::generate (subjectIn (s.mode), 480, s);
+            inMode = inMode && f.voices.size() == 3 && f.end > 0;
+            for (const auto& v : f.voices)
+            {
+                inMode = inMode && ! v.empty();
+                for (const auto& x : v)
+                    inMode = inMode && (s.mode.ficta || s.mode.scale[(size_t) (((x.pitch - 62) % s.mode.period + s.mode.period) % s.mode.period)]);
+            }
+        }
+        check (inMode, "fugue: in ragas, church and jazz modes, maqams, dastgahs and equal steps, each voice in the mode");
+        auto bhairavi = modeOf ("bhairavi", 2);
+        bhairavi.up = bhairavi.scale;
+        bhairavi.up[1] = bhairavi.up[8] = false;   // no komal re or komal dha going up
+        fugue::Settings raga;
+        raga.mode = bhairavi;
+        const auto rg = fugue::generate (subjectIn (bhairavi), 480, raga);
+        int wrongWay = 0;
+        for (const auto& v : rg.voices)
+            for (size_t k = 1; k < v.size(); ++k)
+            {
+                const auto key = ((v[k].pitch - 2) % 12 + 12) % 12;
+                wrongWay += v[k].pitch > v[k - 1].pitch && (key == 1 || key == 8) ? 1 : 0;
+            }
+        check (wrongWay <= rg.bent, "fugue: a raga's āroha kept going up");
+
+        // The subject in a melody: its first phrase, cut at a rest, at most four bars.
+        Line melody { { 0, 480, 62, 90 }, { 480, 960, 64, 90 }, { 960, 1920, 65, 90 }, { 2880, 3840, 67, 90 } };
+        check (fugue::subject (melody, 480).size() == 3, "fugue: the subject is the melody's first phrase");
+        Line long_;
+        for (int i = 0; i < 40; ++i)
+            long_.push_back ({ i * 480, (i + 1) * 480, 60 + i % 5, 90 });
+        check (fugue::subject (long_, 480).size() == 16 && fugue::subject ({ { 0, 480, 60, 90 } }, 480).empty(),
+               "fugue: a subject of four bars at most, two notes at least");
+    }
+
     // Recording (docs/recording.md): slot takes that end by themselves and play on from that
     // frame, quantised notes, the audio input with its delay, takes of no set length, the next
     // take following on, overdub, timeline takes, the count-in, Capture, and a launch on a frame
@@ -6268,6 +6431,7 @@ int main()
     testSitar();
     testTunings();
     testCounterpoint();
+    testFugue();
     testRecording();
     testControlSurfaces();
     testDrumsToMidi();

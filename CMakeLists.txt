@@ -54,6 +54,7 @@ target_sources(${APP_ID} PRIVATE
     Source/mixer/Tunings.cpp
     Source/mixer/RagaInstrument.cpp
     Source/mixer/Counterpoint.cpp
+    Source/mixer/Fugue.cpp
     Source/mixer/Instruments.cpp
     Source/mixer/MixerEngine.cpp
     Source/mixer/Recording.cpp
@@ -164,6 +165,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/SlicerWindow.cpp
     Source/ui/MixerWindow.cpp
     Source/ui/MixerRecording.cpp
+    Source/ui/MixerFugue.cpp
     Source/ui/MixerControl.cpp
     Source/ui/ControlSection.cpp
     Source/ui/MixerSection.cpp
@@ -402,6 +404,7 @@ if(PHI_BUILD_TESTS)
         Source/mixer/Tunings.cpp
         Source/mixer/RagaInstrument.cpp
         Source/mixer/Counterpoint.cpp
+        Source/mixer/Fugue.cpp
         Source/mixer/Instruments.cpp
         Source/mixer/MixerEngine.cpp
         Source/mixer/Recording.cpp
