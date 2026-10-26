@@ -602,6 +602,15 @@ namespace midifile
             { "Shree", "Raga", bits ({ 0, 1, 4, 6, 7, 8, 11 }) },
             { "Multani", "Raga", bits ({ 0, 1, 3, 6, 7, 8, 11 }) },
             { "Charukeshi", "Raga", bits ({ 0, 2, 4, 5, 7, 8, 10 }) },
+            // Gamelan laras and pathet on the keys their tones round to (mixer/Tunings.cpp has them
+            // in their own cents); sléndro's three pathet all fall on the same keys.
+            { "Slendro", "Gamelan", bits ({ 0, 2, 5, 7, 10 }) },
+            { "Pelog", "Gamelan", bits ({ 0, 1, 3, 5, 7, 8, 9 }) },
+            { "Pelog Pathet Lima", "Gamelan", bits ({ 0, 1, 3, 7, 8 }) },
+            { "Pelog Pathet Nem", "Gamelan", bits ({ 0, 4, 5, 7, 11 }) },
+            { "Pelog Pathet Barang", "Gamelan", bits ({ 0, 1, 6, 7, 8 }) },
+            { "Selisir", "Gamelan", bits ({ 0, 1, 3, 7, 8 }) },
+            { "Degung", "Gamelan", bits ({ 0, 1, 3, 7, 8 }) },
         };
         return all;
     }

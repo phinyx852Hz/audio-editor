@@ -4472,7 +4472,7 @@ namespace
         const auto& all = mixer::tuningSystems();
         auto get = [&] (const std::string& plain) -> const mixer::TuningSystem& { return all[(size_t) mixer::findTuning (plain)]; };
         bool known = true;
-        for (const char* plain : { "bilaval", "darbari kanada", "dorian", "hypodorian", "altered", "rast", "hijaz", "shur", "chahargah", "2 equal steps", "21 equal steps" })
+        for (const char* plain : { "bilaval", "darbari kanada", "dorian", "hypodorian", "altered", "rast", "hijaz", "shur", "chahargah", "slendro", "pelog", "selisir", "salendro", "2 equal steps", "21 equal steps" })
             known = known && mixer::findTuning (plain) >= 0;
         check (known && mixer::findTuning ("no such tuning") == -1, "tunings: each family is listed, found by its plain name");
         check (get ("darbari kanada").name == "darbārī kānaḍā" && get ("hijaz").name == "ḥijāz" && get ("chahargah").name == "čahārgāh", "tunings: transliterated names");
@@ -4510,6 +4510,33 @@ namespace
         const auto onD = mixer::makeTuning (get ("rast"), 2);
         check (near (onD.hz (62), 440.0 * std::pow (2.0, -7.0 / 12.0), 1.0e-9) && near (1200.0 * std::log2 (onD.hz (66) / onD.hz (62)), 350.0, 1.0e-6)
                && near (onD.hz (74), 2.0 * onD.hz (62), 1.0e-9), "tunings: a maqam on its root, repeating each octave");
+        // Gamelan: sléndro's five near-equal steps on five keys, pélog's seven uneven ones, and a
+        // pathet read from its gong tone. The snap-to-scale list has them on the same keys.
+        const auto slendro = mixer::keyCents (get ("slendro"));
+        check (get ("slendro").name == "sléndro" && get ("pelog pathet barang").name == "pélog pathet barang" && get ("slendro").cents.size() == 5
+               && near (slendro[2], 231.0, 1.0e-9) && near (slendro[10], 955.0, 1.0e-9) && near (slendro[1], 100.0, 1.0e-9), "tunings: sléndro in its own cents");
+        check (get ("pelog").cents.size() == 7 && near (mixer::keyCents (get ("pelog"))[5], 539.0, 1.0e-9)
+               && near (get ("slendro pathet sanga").cents[1], 955.0 - 717.0, 1.0e-9) && near (get ("pelog pathet nem").cents[1], 1200.0 - 785.0, 1.0e-9),
+               "tunings: pélog, and pathet from their gong tone");
+        check (get ("selisir").family == "balinese gamelan" && get ("degung").family == "sundanese gamelan" && get ("patutan tembung").cents.size() == 5,
+               "tunings: Balinese and Sundanese gamelan");
+        {
+            const auto& snap = midifile::scales();
+            bool same = true;
+            for (auto [scale, plain] : { std::pair { "Slendro", "slendro pathet manyura" }, { "Pelog", "pelog" }, { "Pelog Pathet Lima", "pelog pathet lima" },
+                                         { "Pelog Pathet Nem", "pelog pathet nem" }, { "Pelog Pathet Barang", "pelog pathet barang" },
+                                         { "Selisir", "selisir" }, { "Degung", "degung" } })
+            {
+                uint16_t bits = 0;
+                for (auto c : get (plain).cents)
+                    bits = (uint16_t) (bits | (1u << (((int) std::floor (c / 100.0 + 0.5)) % 12)));
+                bool found = false;
+                for (const auto& sc : snap)
+                    found = found || (std::string (sc.name) == scale && sc.notes == bits);
+                same = same && found;
+            }
+            check (same, "tunings: gamelan in the snap-to-scale list on their keys");
+        }
         const auto five = mixer::makeTuning (get ("5 equal steps"), 0);
         check (near (five.hz (65), 2.0 * five.hz (60), 1.0e-9) && near (five.hz (60), 261.6255653005986, 1.0e-9), "tunings: equal steps from the root");
 
