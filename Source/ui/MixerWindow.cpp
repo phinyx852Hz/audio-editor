@@ -6134,7 +6134,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
         auto* cube = new QPushButton (tr ("cubify..."), midiClipBox);
         cube->setToolTip (tr ("This clip arranged by Xenakis's cubes, as in nomos alpha: 24 sections onto its track (right-click a "
                               "scene to cubify the whole scene)"));
-        grid->addWidget (cube, 4, 0, 1, 4);
+        grid->addWidget (cube, 4, 2, 1, 2);
         connect (cube, &QPushButton::clicked, this, [this] { cubifyShownMidi(); });
         auto* hint = new QLabel (tr ("R reverses it"), midiClipBox);
         hint->setForegroundRole (QPalette::PlaceholderText);
