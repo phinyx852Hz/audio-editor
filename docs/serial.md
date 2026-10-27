@@ -1,11 +1,11 @@
-# Twelve-tone rows
+# Serialize (12 tone row)
 
 The owner asked on 2026-10-27 for Arnold Schoenberg's serial method, the twelve-tone row, among
 PHI's composing tools: looping serial pieces that can be made into a fugue or given counterpoint.
 It is our own C++ (mixer/Serial.h), with no code from another program. Every name in the dialog
 is lower case (owner).
 
-**twelve-tone row...** is in the **Mode** menu beside counterpoint, the fugue, stochasticize and
+**serialize (12 tone row)...** (the owner's name for it) is in the **Mode** menu beside counterpoint, the fugue, stochasticize and
 cubify. It needs no clip: the row is its own material.
 
 ## The row
@@ -73,7 +73,7 @@ Clicking a label adds that form to the **plan**.
 ## Into the other tools
 
 PHI's generative chain is the Selector's set, the MIDI generators, cubify, then minimalize. The
-twelve-tone row is one of the generators:
+serialize is one of the generators:
 
 - The voices in a launcher scene are what **cubify...** and **minimalize...** on that scene's
   right-click menu arrange.

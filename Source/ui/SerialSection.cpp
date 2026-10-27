@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Twelve-tone rows (owner, 2026-10-27: Schoenberg's serial method among PHI's composing tools;
+// serialize (12 tone row) (owner, 2026-10-27, and the name: Schoenberg's serial method among PHI's composing tools;
 // mixer/Serial.h, docs/serial.md): the Mode menu's dialog for a row, from the user, a famous
 // work, chance or the MIDI clip shown; its 12 x 12 matrix, whose p, i, r and ri labels build
 // the plan; and a piece of one to four voices on it, which loops, put in the mixer's launcher
@@ -218,7 +218,7 @@ void MainWindow::serialDialog()
 {
     auto settings = appSettings();
     QDialog dialog (this);
-    dialog.setWindowTitle (tr ("twelve-tone row"));
+    dialog.setWindowTitle (tr ("serialize (12 tone row)"));
     auto* layout = new QVBoxLayout (&dialog);
     auto* form = new QFormLayout;
     layout->addLayout (form);

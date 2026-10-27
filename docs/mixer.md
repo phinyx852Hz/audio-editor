@@ -432,7 +432,7 @@ case, in proper transliteration):
   shown in the Device Chain into its keys and range; **counterpoint...** and **fugue...** open those dialogs,
   **stochasticize...** opens [stochasticize](stochastic.md), its pitch sieve ready to fill from the mode;
   **cubify...** arranges the MIDI clip shown, else the launcher's scene, by [Xenakis's cubes](cubify.md),
-  on a messiaen mode when one is chosen here; **twelve-tone row...** writes a looping serial piece on
+  on a messiaen mode when one is chosen here; **serialize (12 tone row)...** writes a looping serial piece on
   a row and its matrix into a launcher scene or the timeline, for counterpoint and the fugue after
   (see [serial.md](serial.md)).
 - **messiaen** (owner, 2026-10-26: "all of Messiaen's modes in the mode section") holds his seven
@@ -455,7 +455,7 @@ Markov screens, with its pitches and rhythm through sieves. A sieve can be fille
 a rhythmic mode or the clip itself. The line goes on a new track or in place of the clip. See
 [stochastic.md](stochastic.md).
 
-Twelve-tone rows (owner, 2026-10-27: Schoenberg's serial method): **twelve-tone row...** in the
+Twelve-tone rows (owner, 2026-10-27: Schoenberg's serial method): **serialize (12 tone row)...** in the
 Mode menu takes a row (typed, by chance, from the clip shown or from a work of Schoenberg, Berg or
 Webern), shows its 12 x 12 matrix and its combinatorial partners, and writes one to four voices of
 its p, i, r and ri forms (independent, in canon, in mirror canon or in combinatorial pairs) as a
