@@ -883,7 +883,7 @@ void MainWindow::buildMenus()
     // Menu titles carry & mnemonics: Alt + the first letter where it is free, otherwise the next
     // clearest one. File, Edit and Process lead, then the rest A to Z (owner, 2026-10-27). A "#name"
     // entry is one of the submenus below; each one is the first item of its menu.
-    const QHash<QString, QPair<QString, QStringList>> submenus {
+    const QMap<QString, QPair<QString, QStringList>> submenus {
         { QStringLiteral ("#album"), { tr ("A&lbum"),   { "album.new", "album.addSongs", "-", "album.previousSong", "album.nextSong", "-",
                                "album.moveEarlier", "album.moveLater", "album.longerPause", "album.shorterPause", "-",
                                "album.songProperties", "album.openSong", "album.removeSong", "-",
