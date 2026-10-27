@@ -5320,6 +5320,14 @@ public:
         launcherButton->setChecked (appSettings().value (QStringLiteral ("editorTrack/launcher"), true).toBool());
         launcherButton->setToolTip (MixerWindow::tr ("The track's clip launcher slots, left to right"));
         bar->addWidget (launcherButton);
+        timelineButton = new QToolButton (this);
+        timelineButton->setText (MixerWindow::tr ("Timeline"));
+        timelineButton->setCheckable (true);
+        timelineButton->setAutoRaise (true);
+        timelineButton->setFocusPolicy (Qt::NoFocus);
+        timelineButton->setChecked (appSettings().value (QStringLiteral ("editorTrack/timeline"), false).toBool());
+        timelineButton->setToolTip (MixerWindow::tr ("The track's timeline, its clips across time (the clip editor below shows each take as it is recorded)"));
+        bar->addWidget (timelineButton);
         auto* render = new QPushButton (MixerWindow::tr ("Render to Editor"), this);
         render->setFocusPolicy (Qt::NoFocus);
         render->setToolTip (MixerWindow::tr ("The track as it sounds (its MIDI through its instrument, and its audio) into a new tab of the editor, "
@@ -5346,6 +5354,12 @@ public:
         });
         lanes = new TrackLanes (window, true, split);
         lanes->setMinimumHeight (70);
+        lanes->setVisible (timelineButton->isChecked());
+        QObject::connect (timelineButton, &QToolButton::toggled, this, [this] (bool on)
+        {
+            lanes->setVisible (on);
+            appSettings().setValue (QStringLiteral ("editorTrack/timeline"), on);
+        });
 
         auto* clipArea = new QWidget (split);
         auto* clipRow = new QHBoxLayout (clipArea);
@@ -5354,6 +5368,11 @@ public:
         clip = new ClipView (window, clipArea);
         clip->setMinimumHeight (90);
         clipRow->addWidget (clip, 1);
+        // While the track records, the clip editor says so; the take opens in it when it ends.
+        recordingNote = new QLabel (clip);
+        recordingNote->setAttribute (Qt::WA_TransparentForMouseEvents);
+        recordingNote->setMargin (6);
+        recordingNote->hide();
         tools = new QWidget (clipArea);
         auto* toolGrid = new QGridLayout (tools);
         toolGrid->setContentsMargins (0, 4, 4, 4);
@@ -5455,8 +5474,8 @@ protected:
 
 private:
     static constexpr const char* defaultHint = QT_TRANSLATE_NOOP ("MixerWindow",
-        "Drop audio or MIDI files on a slot or the timeline. Arm and Record to play into the track; a slot's dot records into it. "
-        "Right-click a clip to send it to the launcher or the timeline.");
+        "Drop audio or MIDI files on a slot or the timeline. Arm and Record to play into the track; a slot's dot records into it, "
+        "and the take opens in the clip editor. Right-click a clip to send it to the launcher or the timeline.");
 
     int track() const { return window.editorTrack(); }
 
@@ -5676,6 +5695,17 @@ private:
         armButton->setChecked (window.engine.liveTrack() == t);
         const auto take = window.engine.recordInfo (t);
         recordButton->setChecked (take.state != mixer::RecordState::none);
+        if (take.state != mixer::RecordState::none)
+        {
+            const auto seconds = window.rate() > 0.0 ? (int) (take.recorded / window.rate()) : 0;
+            recordingNote->setText (take.state == mixer::RecordState::recording
+                                        ? MixerWindow::tr ("● Recording %1:%2 (the take opens here when you stop)").arg (seconds / 60).arg (seconds % 60, 2, 10, QLatin1Char ('0'))
+                                        : MixerWindow::tr ("● Waiting to record (the take opens here when you stop)"));
+            recordingNote->adjustSize();
+            recordingNote->move (8, 6);
+            recordingNote->raise();
+        }
+        recordingNote->setVisible (take.state != mixer::RecordState::none);
         static_cast<TransportButton*> (playButton)->setSymbol (window.engine.isPlaying() || window.engine.countingIn() ? TransportButton::Symbol::pause
                                                                                                                        : TransportButton::Symbol::play);
         if (gridScroll->isVisible())
@@ -5698,10 +5728,12 @@ private:
     QComboBox* intoBox;
     TransportButton* playButton;
     QToolButton* launcherButton;
+    QToolButton* timelineButton;
     QScrollArea* gridScroll;
     ClipGrid* grid;
     TrackLanes* lanes;
     ClipView* clip;
+    QLabel* recordingNote;
     QWidget* tools;
     QLabel* title = nullptr;
     QWidget* midiTools = nullptr;
