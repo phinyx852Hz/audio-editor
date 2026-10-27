@@ -193,8 +193,12 @@ Tuning Standard, External Shared Platform): Surge XT, Vital, Pianoteq and the ot
 follow MTS-ESP, as plug-ins in PHI or in another program, play every key in the tuning in force
 on the live track (its playing clip's, the scene's or its own), as the PHI synth does, and show
 its name. A clip saved as keys then plays in its mode on those synths too. It needs ODDSound's
-free libMTS library (github.com/ODDSound/MTS-ESP, into /usr/local/lib), which PHI does not
-include; PHI includes only ODDSound's small master code (third_party/MTS-ESP), whose licence lets
+free libMTS library (github.com/ODDSound/MTS-ESP, in /usr/local/lib), which PHI does not
+include: when it is missing, turning this on offers **Install libMTS**, which downloads ODDSound's
+build for the computer's processor from their repository and puts it in place, asking for the
+password (then restart PHI). By hand: `curl -L -o libMTS.so
+https://raw.githubusercontent.com/ODDSound/MTS-ESP/main/libMTS/Linux/x86_64/libMTS.so` and
+`sudo install -m 755 libMTS.so /usr/local/lib/libMTS.so`; PHI includes only ODDSound's small master code (third_party/MTS-ESP), whose licence lets
 anyone use it. Only one program can be the master: PHI says so when another is.
 
 ## Scala files

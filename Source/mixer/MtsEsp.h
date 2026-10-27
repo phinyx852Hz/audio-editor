@@ -19,7 +19,11 @@ namespace mixer
         ~MtsEsp();
 
         static bool installed();   // libMTS is where libMTSMaster looks for it
-        enum class Start { started, noLibrary, otherMaster };
+        static constexpr const char* libraryPath = "/usr/local/lib/libMTS.so";
+        // ODDSound's own build of libMTS for this computer's processor, on GitHub; empty if none.
+        static std::string downloadUrl();
+        // restart: libMTS was put in after PHI started, and is loaded only at the start.
+        enum class Start { started, noLibrary, otherMaster, restart };
         Start start();
         void stop();
         bool running() const { return on; }

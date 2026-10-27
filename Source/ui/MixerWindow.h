@@ -210,6 +210,7 @@ public:
     // MTS-ESP (mixer/MtsEsp.h): synths that follow it play in the live track's tuning in force.
     bool mtsEspOn() const;
     void setMtsEsp (bool on);
+    void installLibMts();   // downloads ODDSound's libMTS and installs it, when the user agrees
     void counterpointShown() { counterpointShownMidi(); }
     void fugueShown() { fugueShownMidi(); }
     // The editor's track (owner, 2026-10-26): one track of the mix, Audio only, MIDI only or

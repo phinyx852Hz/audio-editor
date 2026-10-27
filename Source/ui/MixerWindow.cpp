@@ -37,8 +37,10 @@
 #include <QDropEvent>
 #include <QEventLoop>
 #include <QFutureWatcher>
+#include <QProcess>
 #include <QProgressDialog>
 #include <QRegularExpression>
+#include <QFile>
 #include <QFileDialog>
 #include <QFileSystemModel>
 #include <QFileInfo>
@@ -10097,6 +10099,56 @@ void MixerWindow::applyTunings()
     }
 }
 
+void MixerWindow::installLibMts()
+{
+    // libMTS is ODDSound's, free but not open source, so PHI does not include it: it is fetched
+    // from ODDSound's own repository when asked, and installed with the user's password.
+    const auto url = QString::fromStdString (mixer::MtsEsp::downloadUrl());
+    const auto manual = tr ("Or, in a terminal:\n\ncurl -L -o libMTS.so %1\nsudo install -m 755 libMTS.so %2")
+                            .arg (url.isEmpty() ? tr ("(ODDSound's libMTS for your processor, from github.com/ODDSound/MTS-ESP)") : url,
+                                  QString::fromLatin1 (mixer::MtsEsp::libraryPath));
+    QMessageBox ask (QMessageBox::Question, tr ("MTS-ESP"),
+                     tr ("MTS-ESP needs ODDSound's libMTS library, which is free but not part of PHI. Install it now? "
+                         "PHI downloads it from ODDSound's repository on GitHub and puts it in %1, which asks for your password.")
+                         .arg (QString::fromLatin1 (mixer::MtsEsp::libraryPath)),
+                     QMessageBox::Cancel, this);
+    ask.setDetailedText (manual);
+    auto* install = ask.addButton (tr ("Install libMTS"), QMessageBox::AcceptRole);
+    install->setEnabled (! url.isEmpty());
+    ask.exec();
+    if (ask.clickedButton() != install)
+        return;
+    const auto file = QDir::temp().filePath (QStringLiteral ("phi-libMTS.so"));
+    QFile::remove (file);
+    QApplication::setOverrideCursor (Qt::WaitCursor);
+    QProcess curl;
+    curl.start (QStringLiteral ("curl"), { QStringLiteral ("-fsSL"), QStringLiteral ("-o"), file, url });
+    const auto fetched = curl.waitForFinished (120000) && curl.exitStatus() == QProcess::NormalExit && curl.exitCode() == 0;
+    QApplication::restoreOverrideCursor();
+    // An ELF library, not an error page.
+    QFile got (file);
+    const auto elf = fetched && got.open (QIODevice::ReadOnly) && got.read (4) == QByteArray ("\x7f" "ELF", 4);
+    got.close();
+    if (! elf)
+    {
+        QFile::remove (file);
+        QMessageBox::warning (this, tr ("MTS-ESP"), tr ("libMTS could not be downloaded (is curl installed, and are you online?).") + QStringLiteral ("\n\n") + manual);
+        return;
+    }
+    // pkexec asks for the password in a window of its own.
+    QProcess put;
+    put.start (QStringLiteral ("pkexec"), { QStringLiteral ("install"), QStringLiteral ("-m"), QStringLiteral ("755"), file,
+                                            QString::fromLatin1 (mixer::MtsEsp::libraryPath) });
+    const auto installed = put.waitForFinished (300000) && put.exitStatus() == QProcess::NormalExit && put.exitCode() == 0;
+    QFile::remove (file);
+    if (! installed || ! mixer::MtsEsp::installed())
+    {
+        QMessageBox::warning (this, tr ("MTS-ESP"), tr ("libMTS was downloaded but could not be put in place.") + QStringLiteral ("\n\n") + manual);
+        return;
+    }
+    QMessageBox::information (this, tr ("MTS-ESP"), tr ("libMTS is installed. Restart PHI, then turn on Mode › send the tuning to mts-esp synths."));
+}
+
 bool MixerWindow::mtsEspOn() const { return mtsEsp != nullptr && mtsEsp->running(); }
 
 void MixerWindow::setMtsEsp (bool on)
@@ -10116,9 +10168,10 @@ void MixerWindow::setMtsEsp (bool on)
             say (tr ("MTS-ESP: synths that follow it now play in the tuning in force"));
             return;
         case mixer::MtsEsp::Start::noLibrary:
-            QMessageBox::information (this, tr ("MTS-ESP"),
-                                      tr ("MTS-ESP needs ODDSound's libMTS library, which PHI does not include: install it from "
-                                          "github.com/ODDSound/MTS-ESP (libMTS for Linux, into /usr/local/lib), then turn this on again."));
+            installLibMts();
+            break;
+        case mixer::MtsEsp::Start::restart:
+            QMessageBox::information (this, tr ("MTS-ESP"), tr ("libMTS is installed: restart PHI, then turn this on again."));
             break;
         case mixer::MtsEsp::Start::otherMaster:
             QMessageBox::information (this, tr ("MTS-ESP"),

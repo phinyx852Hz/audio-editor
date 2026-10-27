@@ -8,12 +8,33 @@
 
 namespace mixer
 {
+    namespace
+    {
+        bool present()
+        {
+            std::error_code ignored;
+            return std::filesystem::exists (MtsEsp::libraryPath, ignored);
+        }
+        // libMTSMaster loads libMTS as PHI starts, if it is there then.
+        const bool presentAtStart = present();
+    }
+
     MtsEsp::~MtsEsp() { stop(); }
 
-    bool MtsEsp::installed()
+    bool MtsEsp::installed() { return present(); }
+
+    std::string MtsEsp::downloadUrl()
     {
-        std::error_code ignored;
-        return std::filesystem::exists ("/usr/local/lib/libMTS.so", ignored);
+        const std::string base = "https://raw.githubusercontent.com/ODDSound/MTS-ESP/main/libMTS/Linux/";
+#if defined(__x86_64__)
+        return base + "x86_64/libMTS.so";
+#elif defined(__aarch64__)
+        return base + "arm64/libMTS.so";
+#elif defined(__arm__)
+        return base + "arm32hf/libMTS.so";
+#else
+        return {};
+#endif
     }
 
     MtsEsp::Start MtsEsp::start()
@@ -22,6 +43,8 @@ namespace mixer
             return Start::started;
         if (! installed())
             return Start::noLibrary;
+        if (! presentAtStart)
+            return Start::restart;
         if (! MTS_CanRegisterMaster())
             return Start::otherMaster;
         MTS_RegisterMaster();
