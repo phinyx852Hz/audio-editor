@@ -19,6 +19,7 @@
 #include "MidiEditor.h"
 #include "../engine/AudioCapture.h"
 #include "../engine/AudioEngine.h"
+#include "../mixer/MtsEsp.h"
 
 #include <QCheckBox>
 #include <QCloseEvent>
@@ -6354,11 +6355,19 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     select (0);
     showLauncher (false);
     restoring = false;
+    // MTS-ESP, when it was on last time and libMTS is there.
+    if (appSettings().value (QStringLiteral ("mixer/mtsEsp"), false).toBool() && mixer::MtsEsp::installed())
+    {
+        mtsEsp = std::make_unique<mixer::MtsEsp>();
+        if (mtsEsp->start() != mixer::MtsEsp::Start::started)
+            mtsEsp.reset();
+    }
     resize (1180, 860);
 }
 
 MixerWindow::~MixerWindow()
 {
+    mtsEsp.reset();   // the master let go of
     engine.setInput (nullptr);   // the audio thread lets go of the audio input before it goes
     if (capture != nullptr)
         capture->stop();
@@ -10077,6 +10086,47 @@ void MixerWindow::applyTunings()
         }
         inst->setRaga (raga, choice.root, equal);
     }
+    // MTS-ESP: the live track's tuning (else the selected track's), for the synths following it.
+    if (mtsEsp != nullptr && mtsEsp->running())
+    {
+        const auto track = engine.liveTrack() >= 0 && engine.liveTrack() < engine.numTracks() ? engine.liveTrack()
+                         : selected < engine.numTracks() ? selected : -1;
+        const auto choice = track >= 0 ? tuningInForce (track) : mixer::TuningChoice {};
+        const auto tuning = choice.system >= 0 ? mixer::makeTuning (mixer::tuningSystems()[(size_t) choice.system], choice.root) : phi::Tuning {};
+        mtsEsp->send (tuning, tuningText (choice).toStdString());
+    }
+}
+
+bool MixerWindow::mtsEspOn() const { return mtsEsp != nullptr && mtsEsp->running(); }
+
+void MixerWindow::setMtsEsp (bool on)
+{
+    appSettings().setValue (QStringLiteral ("mixer/mtsEsp"), on);
+    if (! on)
+    {
+        mtsEsp.reset();
+        return;
+    }
+    if (mtsEsp == nullptr)
+        mtsEsp = std::make_unique<mixer::MtsEsp>();
+    switch (mtsEsp->start())
+    {
+        case mixer::MtsEsp::Start::started:
+            applyTunings();
+            say (tr ("MTS-ESP: synths that follow it now play in the tuning in force"));
+            return;
+        case mixer::MtsEsp::Start::noLibrary:
+            QMessageBox::information (this, tr ("MTS-ESP"),
+                                      tr ("MTS-ESP needs ODDSound's libMTS library, which PHI does not include: install it from "
+                                          "github.com/ODDSound/MTS-ESP (libMTS for Linux, into /usr/local/lib), then turn this on again."));
+            break;
+        case mixer::MtsEsp::Start::otherMaster:
+            QMessageBox::information (this, tr ("MTS-ESP"),
+                                      tr ("Another program is the MTS-ESP master now (MTS-ESP Mini, a DAW or a tuning plug-in). Close it, then turn this on again."));
+            break;
+    }
+    mtsEsp.reset();
+    appSettings().setValue (QStringLiteral ("mixer/mtsEsp"), false);
 }
 
 void MixerWindow::clearSlot (int track, int scene)

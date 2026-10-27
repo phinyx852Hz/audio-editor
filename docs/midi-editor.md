@@ -186,6 +186,17 @@ A note's pitch is kept in cents, so it can be anywhere. What the clip's file hol
   its pitch. A track with a tuning of its own should be set to 12-TET for a bent clip, or the two
   add up; the editor says so.
 
+## MTS-ESP
+
+**Mode > send the tuning to mts-esp synths** makes PHI the MTS-ESP tuning master (ODDSound's MIDI
+Tuning Standard, External Shared Platform): Surge XT, Vital, Pianoteq and the other synths that
+follow MTS-ESP, as plug-ins in PHI or in another program, play every key in the tuning in force
+on the live track (its playing clip's, the scene's or its own), as the PHI synth does, and show
+its name. A clip saved as keys then plays in its mode on those synths too. It needs ODDSound's
+free libMTS library (github.com/ODDSound/MTS-ESP, into /usr/local/lib), which PHI does not
+include; PHI includes only ODDSound's small master code (third_party/MTS-ESP), whose licence lets
+anyone use it. Only one program can be the master: PHI says so when another is.
+
 ## Scala files
 
 PHI reads and writes Scala's .scl scales and .kbm keyboard maps with its own code
@@ -199,7 +210,7 @@ its key at its own pitch.
 MIDIRestyle (MIT) for restyling by degree, the ghosts, A/B and pitch bend shared by channel;
 XenRoll (GPL-3.0) for cent-accurate notes, moving a note by the cent, and MPE; Blue's PianoRoll for
 rows that follow a Scala scale; Intonara for the pitch axis; Cubase for the tools, the info line,
-the lanes, quantise and step input. Ideas only: no code from any of them is used. Next, as agreed
-with the owner: MTS-ESP.
+the lanes, quantise and step input. Ideas only: no code from any of them is used, apart from ODDSound's
+MTS-ESP master library, which XenRoll also uses.
 
 The code: mixer/NoteEditor.h (the model, plain C++, with tests), core/Scala.h, ui/MidiEditor.h.

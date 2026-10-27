@@ -26,6 +26,15 @@ Nyquist plug-ins that are licensed GPL v2 or later (each file names its
 author and licence); the GPL v2-only ones are left out. Plug-ins from an
 installed Audacity are also found at run time.
 
+## MTS-ESP (ODDSound)
+
+`MTS-ESP/libMTSMaster.h` and `libMTSMaster.cpp` are ODDSound's MTS-ESP master
+library (github.com/ODDSound/MTS-ESP, `Master/`), © 2021 ODDSound Ltd, under a
+permissive licence (permission to use, copy, modify and distribute for any
+purpose, with or without fee; see each file's header), unchanged. It loads
+ODDSound's libMTS library at run time when the user has installed it; libMTS is
+not part of PHI. `Source/mixer/MtsEsp.cpp` uses it.
+
 ## MilkyPlay (MilkyTracker)
 
 `milkyplay/` is MilkyTracker's player library, `src/milkyplay` from

@@ -54,6 +54,7 @@ target_sources(${APP_ID} PRIVATE
     Source/mixer/Tunings.cpp
     Source/mixer/Atlas.cpp
     Source/mixer/NoteEditor.cpp
+    Source/mixer/MtsEsp.cpp
     Source/mixer/RagaInstrument.cpp
     Source/mixer/Counterpoint.cpp
     Source/mixer/Fugue.cpp
@@ -373,6 +374,12 @@ target_compile_definitions(${APP_ID} PRIVATE PHI_WEB_BACKDROP=${PHI_HAVE_WEB})
 include(cmake/MilkyPlay.cmake)
 target_link_libraries(${APP_ID} PRIVATE phi_milkyplay)
 
+# MTS-ESP's master library (third_party/MTS-ESP, ODDSound, a permissive licence): it loads
+# ODDSound's libMTS at run time, when it is installed.
+add_library(phi_mtsesp STATIC third_party/MTS-ESP/libMTSMaster.cpp)
+target_link_libraries(phi_mtsesp PRIVATE ${CMAKE_DL_LIBS})
+target_link_libraries(${APP_ID} PRIVATE phi_mtsesp)
+
 # Nyquist effects (cmake/Nyquist.cmake): libnyquist, its runtime and the bundled plug-ins.
 include(cmake/Nyquist.cmake)
 target_link_libraries(${APP_ID} PRIVATE phi_nyquist)
@@ -424,7 +431,6 @@ if(PHI_BUILD_TESTS)
         Source/mixer/Tunings.cpp
         Source/mixer/Atlas.cpp
         Source/mixer/NoteEditor.cpp
-    Source/mixer/NoteEditor.cpp
         Source/mixer/RagaInstrument.cpp
         Source/mixer/Counterpoint.cpp
         Source/mixer/Fugue.cpp
@@ -470,7 +476,6 @@ if(PHI_BUILD_TESTS)
         Source/core/PhiPhaser.cpp
         Source/core/PhiTuning.cpp
         Source/core/Scala.cpp
-    Source/core/Scala.cpp
         Source/core/PhiRaga.cpp
         Source/core/PhiRagas.cpp
         Source/core/PhiSitar.cpp
