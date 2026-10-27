@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**73 pull requests:** 70 merged, 3 open.
+**73 pull requests:** 71 merged, 2 open.
 
 ## Contents
 
@@ -171,7 +171,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 |---|---|---|---|---|
 | [#64](https://github.com/phinyx852Hz/audio-editor/pull/64) | Add a self-updating pull request index | merged |  | `Source/core/PhiRagas.cpp`<br>`Source/ui/MixerWindow.cpp`<br>`Source/mixer/Fugue.cpp` |
 | [#66](https://github.com/phinyx852Hz/audio-editor/pull/66) | Minimalize: arrange a scene or the timeline by Reich's and Glass's processes | merged |  | `Source/core/PhiRagas.cpp`<br>`Source/ui/MixerWindow.cpp`<br>`Source/mixer/Rhythms.cpp` |
-| [#72](https://github.com/phinyx852Hz/audio-editor/pull/72) | MIDI inputs: remember them by name, and open them when plugged in | open |  | `Source/ui/SamplerSection.cpp`<br>`Source/ui/ControlSection.cpp`<br>`docs/control-surfaces.md` |
+| [#72](https://github.com/phinyx852Hz/audio-editor/pull/72) | MIDI inputs: remember them by name, and open them when plugged in | merged |  | `Source/ui/SamplerSection.cpp`<br>`Source/ui/ControlSection.cpp`<br>`docs/control-surfaces.md` |
 
 ## By number
 
@@ -248,5 +248,5 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#69](https://github.com/phinyx852Hz/audio-editor/pull/69) | Mode menu: twelve-tone rows, their matrix and looping serial pieces | Schoenberg's twelve-tone method added to PHI's composing tools. *(auto)* | merged | 2026-10-27 | Modes, tunings and composition |
 | [#70](https://github.com/phinyx852Hz/audio-editor/pull/70) | Rhythm generator, my breaks, laya and naḍai, and feels | my breaks (Mode > rhythmic modes > my breaks): your own break files, or a folder of them, transcribed with Drums to MIDI's hit finder into rhythmic modes (ki... *(auto)* | draft | 2026-10-27 | Modes, tunings and composition |
 | [#71](https://github.com/phinyx852Hz/audio-editor/pull/71) | Document what PHI is built on, add a licence check, and replace Vaporizer2's commercial fonts | docs/foundations.md lists everything PHI is built on, each with its licence and how it ships. *(auto)* | merged | 2026-10-27 | Documentation |
-| [#72](https://github.com/phinyx852Hz/audio-editor/pull/72) | MIDI inputs: remember them by name, and open them when plugged in | PHI detected the Novation keyboards, the Push 2 and the Launchpad Mini, but the keyboards played no synths. *(auto)* | open | 2026-10-27 | Not yet sorted |
+| [#72](https://github.com/phinyx852Hz/audio-editor/pull/72) | MIDI inputs: remember them by name, and open them when plugged in | PHI detected the Novation keyboards, the Push 2 and the Launchpad Mini, but the keyboards played no synths. *(auto)* | merged | 2026-10-27 | Not yet sorted |
 | [#73](https://github.com/phinyx852Hz/audio-editor/pull/73) | Mode menu: the world's modal and tuning systems, by region and people | This puts the owner's Mode Research (2026-10-26) into PHI's one shared list of systems, mixer::tuningSystems(). *(auto)* | open | 2026-10-27 | Modes, tunings and composition |
