@@ -37,7 +37,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#17](https://github.com/phinyx852Hz/audio-editor/pull/17) | Quantize panel: hitpoints, grooves and more warp algorithms | merged | Warp menu, Quantize Panel (Shift+Q) | `Source/ui/QuantizePanel.cpp`<br>`Source/ui/QuantizeSection.cpp`<br>`Source/core/Quantize.cpp` |
 | [#44](https://github.com/phinyx852Hz/audio-editor/pull/44) | Add Paulstretch extreme stretching (Ambient mode, Extreme Stretch) | merged | Warp menu, Extreme Stretch (Ctrl+Shift+X) | `Source/core/Paulstretch.cpp`<br>`Source/ui/WarpSection.cpp` |
 | [#68](https://github.com/phinyx852Hz/audio-editor/pull/68) | MIDI editor: a piano roll in 12-TET or any PHI tuning, with Scala files, restyle and MPE | merged |  | `Source/ui/MidiEditor.cpp`<br>`Source/mixer/NoteEditor.cpp`<br>`Source/core/Scala.cpp` |
-| [#76](https://github.com/phinyx852Hz/audio-editor/pull/76) | Editor track: hide the timeline row, open each take in the clip editor | open |  | `Source/ui/MixerWindow.cpp`<br>`Source/ui/MixerRecording.cpp` |
+| [#76](https://github.com/phinyx852Hz/audio-editor/pull/76) | Editor track without the timeline row; delete and add mixer tracks | open |  | `Source/ui/MixerWindow.cpp`<br>`Source/ui/MixerRecording.cpp`<br>`Source/ui/MixerWindow.h` |
 
 ### Analysis and meters
 
@@ -255,4 +255,4 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#73](https://github.com/phinyx852Hz/audio-editor/pull/73) | Mode menu: modes and tunings by region, tradition and person | This puts the owner's Mode Research (2026-10-26) into PHI's one shared list of systems, mixer::tuningSystems(). *(auto)* | merged | 2026-10-27 | Modes, tunings and composition |
 | [#74](https://github.com/phinyx852Hz/audio-editor/pull/74) | Reorganize the menu bar: four menus become submenus, rest A to Z | Album is now a submenu and the first item in Master. *(auto)* | merged | 2026-10-27 | Interface and branding |
 | [#75](https://github.com/phinyx852Hz/audio-editor/pull/75) | Spectrum: 20 FFT windows, Welch averaging, zero padding, multitaper, Selector hold colours | Changes to the Analysis Meters' Spectrum card, based on the FFT size and windowing reference document. *(auto)* | open | 2026-10-27 | Analysis and meters |
-| [#76](https://github.com/phinyx852Hz/audio-editor/pull/76) | Editor track: hide the timeline row, open each take in the clip editor | The user's request for the editor's track view (Shift+F4): drop the middle section, and have the MIDI editor below act as the recorder. *(auto)* | open | 2026-10-27 | Editing and warping |
+| [#76](https://github.com/phinyx852Hz/audio-editor/pull/76) | Editor track without the timeline row; delete and add mixer tracks | The user's request for the editor's track view (Shift+F4): drop the middle section, and have the MIDI editor below act as the recorder. *(auto)* | open | 2026-10-27 | Editing and warping |
