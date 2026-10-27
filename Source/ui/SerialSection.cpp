@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// serialize (12 tone row) (owner, 2026-10-27, the name theirs: Schoenberg's serial method among
+// 12 tone row (owner, 2026-10-27, the name theirs: Schoenberg's serial method among
 // PHI's composing tools; mixer/Serial.h, docs/serial.md): the Mode menu's dialog for a row, from the user, a famous
 // work, chance or the MIDI clip shown; its 12 x 12 matrix, whose p, i, r and ri labels build
 // the plan; and a piece of one to four voices on it, which loops, put in the mixer's launcher
@@ -218,7 +218,7 @@ void MainWindow::serialDialog()
 {
     auto settings = appSettings();
     QDialog dialog (this);
-    dialog.setWindowTitle (tr ("serialize (12 tone row)"));
+    dialog.setWindowTitle (tr ("12 tone row"));
     auto* layout = new QVBoxLayout (&dialog);
     auto* form = new QFormLayout;
     layout->addLayout (form);
@@ -555,14 +555,14 @@ void MainWindow::serialDialog()
         songs.push_back (serial::toSong (result.voices[v], result.length, options.ticksPerQuarter, bpm->value(), (int) v));
         voiceNames << text (result.voices[v].name);
     }
-    const auto stem = tr ("serialize %1").arg (text (serial::label (result.voices.front().statements.front())));
+    const auto stem = tr ("12 tone row %1").arg (text (serial::label (result.voices.front().statements.front())));
     const auto what = tr ("%1: %n voice(s), %2 bars; %3", "", (int) songs.size())
                           .arg (stem).arg (result.length / (4 * options.ticksPerQuarter))
                           .arg (text (result.commentary).replace (QLatin1Char ('\n'), QStringLiteral ("; ")));
     if (choice == 1)
     {
         const auto folder = settings.value (QStringLiteral ("serial/folder")).toString();
-        const auto file = QFileDialog::getSaveFileName (this, tr ("save the serialized piece as midi"), QDir (folder).filePath (stem + QStringLiteral (".mid")),
+        const auto file = QFileDialog::getSaveFileName (this, tr ("save the 12 tone row piece as midi"), QDir (folder).filePath (stem + QStringLiteral (".mid")),
                                                         tr ("MIDI files (*.mid *.midi)"));
         if (file.isEmpty())
             return;
