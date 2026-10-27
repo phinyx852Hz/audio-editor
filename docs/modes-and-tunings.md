@@ -22,11 +22,18 @@ Every system has three things besides its pitches:
 
 Each person or tradition is an `Origin`, with a region and a date. The regions are Europe, West
 Asia, Central Asia, South Asia, Southeast Asia, East Asia, Africa, the Americas and Oceania.
-Within a region, traditions come first and then people, each in order of date.
+Within a region, traditions come first and then people, each in order of date. The menu
+capitalizes the regions, people, nations and empires ("West Asia", "Ṣafī al-Dīn al-Urmawī",
+"Ottoman Empire (makam)"); the names of the modes and tunings stay lower case (owner,
+2026-10-27).
 
 ## Where it shows
 
-- **Mode ▸ melodic**: region ▸ tradition or person ▸ modes. The mode chosen, and the region and
+The Mode menu holds three things only (owner, 2026-10-27): *melody*, *tuning* and *rhythm*
+([rhythms.md](rhythms.md)). The final, the range and the actions on the mode are under melody;
+equal tempered and tune the track are under tuning.
+
+- **Mode ▸ melody**: region ▸ tradition or person ▸ modes. The mode chosen, and the region and
   origin it sits under, are in bold.
 - **Mode ▸ tuning**: the same tree for tunings, plus *equal divisions* (2 to 24, 31, 36, 41, 48,
   53, 72 and 96). *The mode's own tuning* is the default. A tuning chosen here is what **tune the
@@ -34,7 +41,7 @@ Within a region, traditions come first and then people, each in order of date.
   counterpoint and the fugue. A temperament (Werckmeister III, Kirnberger III, Zarlino's
   meantone) is laid on C whatever the final, as it is on a keyboard. Other tunings start on the
   final.
-- **Mode ▸ find a mode or tuning...**: a search over names, plain names, families, people,
+- **Mode ▸ melody (or tuning) ▸ find a mode or tuning...**: a search over names, plain names, families, people,
   cultures, regions and notes. "partch", "ottoman", "west asia" and "genus" all work.
 - **Inspector ▸ Tuning (PHI synth)**: each row's **…** button opens the same atlas, and a search.
 - **PHI Synth**, the stock synth being built as its own project, gets each tuning as a

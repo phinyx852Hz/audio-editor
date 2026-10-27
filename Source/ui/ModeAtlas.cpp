@@ -21,7 +21,9 @@ namespace
 
     QString originTitle (const mixer::Origin& o)
     {
-        return o.dates.empty() ? text (o.name) : QStringLiteral ("%1 (%2)").arg (text (o.name), text (o.dates));
+        // The names of people, nations and empires capitalized; the modes stay lower case (owner, 2026-10-27).
+        const auto& name = o.shown.empty() ? o.name : o.shown;
+        return o.dates.empty() ? text (name) : QStringLiteral ("%1 (%2)").arg (text (name), text (o.dates));
     }
 
     QString tipOf (const mixer::TuningSystem& t)
@@ -130,7 +132,7 @@ namespace modeatlas
                     here.push_back (&o);
             if (here.empty())
                 continue;
-            auto* sub = menu->addMenu (text (region));
+            auto* sub = menu->addMenu (text (mixer::regionTitle (region)));
             bool marked = false;
             for (const auto* o : here)
                 marked = marked || (chosen != nullptr && from (*chosen, o->name));

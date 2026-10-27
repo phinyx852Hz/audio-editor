@@ -60,7 +60,10 @@ namespace mixer
         int year = 0;
         std::string dates;    // "1517–1590", "6th c. bce", or empty
         bool person = false;
+        std::string shown;    // as the menu shows it, a proper noun capitalized (owner, 2026-10-27): "Ṣafī al-Dīn al-Urmawī", "Ottoman Empire (makam)"
     };
+    // A region as the menu shows it: "West Asia", "the Americas".
+    std::string regionTitle (const std::string& region);
     const std::vector<Origin>& origins();
     const Origin* findOrigin (const std::string& name);
     // The indices of tuningSystems() placed under `origin` that are of `kind`, in the list's order.

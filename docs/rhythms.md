@@ -6,7 +6,7 @@ modes, and of course, Caribbean, south american, and west and north african rhyt
 there's anything from East Asia, that would be great". Every name is lower case and in proper
 transliteration (owner).
 
-The menu is **Mode > rhythmic modes**. It has one submenu for each tradition. Hovering over a
+The menu is **Mode > rhythm**, beside *melody* and *tuning*. It has one submenu for each tradition. Hovering over a
 rhythm shows what it is and how it is counted: the ṭhekā's bols, the kriyās, or the strokes.
 Picking a rhythm opens a dialog with its sounds, the number of cycles, and a tempo, which starts
 at a usual tempo for that rhythm. The dialog has three buttons:

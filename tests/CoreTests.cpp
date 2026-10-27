@@ -4527,6 +4527,15 @@ namespace
         }
         check (known, "mode atlas: the research's systems, by their plain names");
 
+        // The menu capitalizes people, nations and empires (owner, 2026-10-27); the modes stay lower case.
+        bool shown = true;
+        for (const auto& o : mixer::origins())
+            shown = shown && ! o.shown.empty() && o.shown.size() == o.name.size();
+        const auto* safi = mixer::findOrigin ("ṣafī al-dīn al-urmawī");
+        check (shown && safi != nullptr && safi->shown == "Ṣafī al-Dīn al-Urmawī" && mixer::regionTitle ("west asia") == "West Asia"
+               && get ("partch 43").name == "partch 43-tone just intonation",
+               "mode atlas: every origin has its capitalized name, and the regions theirs");
+
         // Every system shown is placed: it names a known origin (the equal steps have their own
         // submenu), and every origin is in a region and has something in it.
         bool placed = true, originsKnown = true;

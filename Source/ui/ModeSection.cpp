@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The Mode menu (owner, 2026-10-26: "I love mode being its own thing"): every mode and raga
-// PHI has, in the atlas (owner, 2026-10-27: melodic and tuning, each by region, then by
+// PHI has, in the atlas (owner, 2026-10-27: melody and tuning, each by region, then by
 // people or culture; ModeAtlas.h), chosen once with its final and its range (authentic or
 // hypo), and then used everywhere a mode is asked for: the counterpoint and fugue dialogs
 // open on it, the selected mixer track can be tuned to it, and the MIDI clip shown in the
-// Device Chain moved into it. Every name in it is lower case (owner), the modes as
-// mixer/Tunings.cpp transliterates them.
+// Device Chain moved into it. Every mode's name in it is lower case (owner), as
+// mixer/Tunings.cpp transliterates them; the regions, people, nations and empires are capitalized
+// (owner, 2026-10-27).
 #include "MainWindow.h"
 #include "MixerWindow.h"
 #include "Settings.h"
@@ -216,10 +217,10 @@ void MainWindow::fillModeMenu (QMenu* menu)
     // Ticked: the mode, or its hypo-mode when the range is that.
     const auto shown = church (m.system) && m.hypo == mixer::Hypo::fifth ? hypoMode (m.system) : m.system;
 
-    auto* now = menu->addAction (describe (m));
-    now->setEnabled (false);
-    menu->addSeparator();
-
+    // Only three things under Mode (owner, 2026-10-27): melody, tuning and rhythm. "melody" holds
+    // the modes and scales by region, then by tradition (nation, culture, empire) and person, with
+    // the final, the range and what is done with the mode; "tuning" the tunings the same way, with
+    // the equal divisions and tune the track; "rhythm" the rhythms (RhythmSection.cpp).
     auto choose = [this] (Mode next) { saveMode (next); statusBar()->showMessage (tr ("Mode: %1").arg (describe (next)), 5000); };
     auto pickMode = [m, choose] (int i)
     {
@@ -236,36 +237,32 @@ void MainWindow::fillModeMenu (QMenu* menu)
     };
     auto pickTuning = [m, choose] (int i) { auto next = m; next.tuning = i; choose (next); };
 
-    // The atlas (owner, 2026-10-27): modes and scales under "melodic", tunings under
-    // "tuning", each by region, then by tradition (nation, culture, empire) and by person.
-    auto* melodicMenu = menu->addMenu (tr ("&melodic"));
-    melodicMenu->setToolTip (tr ("Modes, scales and rāgas, by region, then by tradition and composer"));
-    modeatlas::fill (melodicMenu, mixer::melodic, shown, pickMode);
-    auto* tuningMenu = menu->addMenu (tr ("tunin&g"));
-    tuningMenu->setToolTip (tr ("What the PHI synth plays the mode in: tunings by region, then by tradition and theorist, and the equal divisions"));
-    auto* own = tuningMenu->addAction (tr ("the mode's &own tuning"));
-    own->setCheckable (true);
-    own->setChecked (m.tuning < 0);
-    connect (own, &QAction::triggered, this, [m, choose] { auto next = m; next.tuning = -1; choose (next); });
-    tuningMenu->addSeparator();
-    modeatlas::fill (tuningMenu, mixer::tuning, m.tuning, pickTuning);
-    auto* find = menu->addAction (tr ("f&ind a mode or tuning..."));
-    find->setStatusTip (tr ("Search every mode, scale and tuning by name, people, composer, region or family"));
-    connect (find, &QAction::triggered, this, [this, pickMode, pickTuning]
+    auto findIn = [this, pickMode, pickTuning] (QMenu* in)
     {
-        const auto i = modeatlas::find (this, mixer::melodic | mixer::tuning, tr ("Find a mode or tuning"));
-        if (i < 0)
-            return;
-        // A mode is the mode; a tuning only (a temperament, equal steps) is what it plays in.
-        if (listed (systemAt (i)))
-            pickMode (i);
-        else
-            pickTuning (i);
-    });
-    fillRhythmMenu (menu->addMenu (tr ("r&hythmic modes")));
+        auto* find = in->addAction (tr ("f&ind a mode or tuning..."));
+        find->setStatusTip (tr ("Search every mode, scale and tuning by name, people, composer, region or family"));
+        connect (find, &QAction::triggered, this, [this, pickMode, pickTuning]
+        {
+            const auto i = modeatlas::find (this, mixer::melodic | mixer::tuning, tr ("Find a mode or tuning"));
+            if (i < 0)
+                return;
+            // A mode is the mode; a tuning only (a temperament, equal steps) is what it plays in.
+            if (listed (systemAt (i)))
+                pickMode (i);
+            else
+                pickTuning (i);
+        });
+    };
 
-    menu->addSeparator();
-    auto* finalMenu = menu->addMenu (tr ("&final"));
+    auto* melodyMenu = menu->addMenu (tr ("&melody"));
+    melodyMenu->setToolTipsVisible (true);
+    auto* now = melodyMenu->addAction (describe (m));
+    now->setEnabled (false);
+    findIn (melodyMenu);
+    melodyMenu->addSeparator();
+    modeatlas::fill (melodyMenu, mixer::melodic, shown, pickMode);
+    melodyMenu->addSeparator();
+    auto* finalMenu = melodyMenu->addMenu (tr ("&final"));
     finalMenu->setToolTip (tr ("The final, sa or tonic"));
     auto* finalGroup = new QActionGroup (finalMenu);
     for (int k = 0; k < 12; ++k)
@@ -276,7 +273,7 @@ void MainWindow::fillModeMenu (QMenu* menu)
         finalGroup->addAction (a);
         connect (a, &QAction::triggered, this, [m, k, choose] { auto next = m; next.final = k; choose (next); });
     }
-    auto* rangeMenu = menu->addMenu (tr ("r&ange"));
+    auto* rangeMenu = melodyMenu->addMenu (tr ("r&ange"));
     auto* rangeGroup = new QActionGroup (rangeMenu);
     for (auto [h, text] : { std::pair { mixer::Hypo::none, tr ("&authentic") },
                             { mixer::Hypo::fifth, church (m.system) ? tr ("hypo, from the &fifth (the hypo-mode)") : tr ("hypo, from the &fifth") },
@@ -289,16 +286,9 @@ void MainWindow::fillModeMenu (QMenu* menu)
         rangeGroup->addAction (a);
         connect (a, &QAction::triggered, this, [m, h, choose] { auto next = m; next.hypo = h; choose (next); });
     }
-    auto* equal = menu->addAction (tr ("e&qual tempered"));
-    equal->setCheckable (true);
-    equal->setChecked (m.equal);
-    equal->setStatusTip (tr ("The PHI synth plays the mode on the piano's keys (12-TET) instead of in its own tuning"));
-    equal->setEnabled (m.tuning < 0);
-    connect (equal, &QAction::toggled, this, [m, choose] (bool on) { auto next = m; next.equal = on; choose (next); });
-
-    menu->addSeparator();
+    melodyMenu->addSeparator();
     const auto clip = mixerWin != nullptr && mixerWin->showsMidiClip();
-    for (const auto* id : { "mode.tuneTrack", "mode.toClip", "mode.counterpoint", "mode.fugue", "mode.stochasticize" })
+    auto use = [this, &m, clip] (QMenu* in, const char* id)
     {
         const auto dialog = QLatin1String (id) == QLatin1String ("mode.counterpoint") || QLatin1String (id) == QLatin1String ("mode.fugue")
                             || QLatin1String (id) == QLatin1String ("mode.stochasticize");
@@ -306,10 +296,35 @@ void MainWindow::fillModeMenu (QMenu* menu)
         a->setEnabled (m.system >= 0 || dialog || (m.tuning >= 0 && QLatin1String (id) == QLatin1String ("mode.tuneTrack")));
         if (QLatin1String (id) != QLatin1String ("mode.tuneTrack"))
             a->setEnabled (a->isEnabled() && clip);
-        menu->addAction (a);
-    }
-    menu->addAction (commands.action (QStringLiteral ("mode.serial")));   // needs no clip: the row is its own
+        in->addAction (a);
+    };
+    for (const auto* id : { "mode.toClip", "mode.counterpoint", "mode.fugue", "mode.stochasticize" })
+        use (melodyMenu, id);
+    melodyMenu->addAction (commands.action (QStringLiteral ("mode.serial")));   // needs no clip: the row is its own
     auto* cube = commands.action (QStringLiteral ("mode.cubify"));
     cube->setEnabled (mixerWin != nullptr);
-    menu->addAction (cube);
+    melodyMenu->addAction (cube);
+
+    auto* tuningMenu = menu->addMenu (tr ("tunin&g"));
+    tuningMenu->setToolTipsVisible (true);
+    findIn (tuningMenu);
+    tuningMenu->addSeparator();
+    auto* own = tuningMenu->addAction (tr ("the mode's &own tuning"));
+    own->setCheckable (true);
+    own->setChecked (m.tuning < 0);
+    own->setStatusTip (tr ("What the PHI synth plays the mode in: its own tuning, else one chosen below"));
+    connect (own, &QAction::triggered, this, [m, choose] { auto next = m; next.tuning = -1; choose (next); });
+    tuningMenu->addSeparator();
+    modeatlas::fill (tuningMenu, mixer::tuning, m.tuning, pickTuning);
+    tuningMenu->addSeparator();
+    auto* equal = tuningMenu->addAction (tr ("e&qual tempered"));
+    equal->setCheckable (true);
+    equal->setChecked (m.equal);
+    equal->setStatusTip (tr ("The PHI synth plays the mode on the piano's keys (12-TET) instead of in its own tuning"));
+    equal->setEnabled (m.tuning < 0);
+    connect (equal, &QAction::toggled, this, [m, choose] (bool on) { auto next = m; next.equal = on; choose (next); });
+
+    use (tuningMenu, "mode.tuneTrack");
+
+    fillRhythmMenu (menu->addMenu (tr ("r&hythm")));
 }
