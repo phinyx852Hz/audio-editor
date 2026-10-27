@@ -5166,6 +5166,25 @@ namespace
         }
         check (hits.size() == 16 && placed, "drums to MIDI: every hit found, where it was played");
         check (kicks == 4 && snares == 4 && hats == 8, "drums to MIDI: kicks, snares and hats told apart");
+        // The same loop as a break of "my breaks": its tempo from its length, its hits on 16ths.
+        {
+            rhythm::Rhythm r;
+            std::string why;
+            const auto ok = mixer::breakRhythm (mixer::AudioClipPtr (sound), rate, "test break", r, why);
+            check (ok && rhythm::valid (r) && r.group == "my breaks", "my breaks: a loop becomes a rhythm (" + why + ")");
+            check (ok && std::abs (r.beats * 60.0 / r.bpm - 4.0) < 0.01, "my breaks: the loop's length in whole bars at its tempo");
+            int found[3] {};
+            for (const auto& h : rhythm::hits (r))
+                for (int k = 0; k < 3; ++k)
+                    found[k] += r.lanes[(size_t) h.lane].note == (k == 0 ? mixer::gm::kick : k == 1 ? mixer::gm::snare : mixer::gm::hat);
+            check (found[0] == 4 && found[1] == 4 && found[2] == 8, "my breaks: kicks, snares and hats on the grid");
+            check (ok && rhythm::toSong (r, 1, r.bpm)->noteCount() == 16, "my breaks: plays as MIDI");
+            rhythm::Rhythm none;
+            auto silence = std::make_shared<mixer::AudioClip>();
+            silence->left.assign (48000, 0.0f);
+            silence->right = silence->left;
+            check (! mixer::breakRhythm (mixer::AudioClipPtr (silence), rate, "silence", none, why) && ! why.empty(), "my breaks: silence is refused, with why");
+        }
         const auto midi = mixer::drumsToMidi (clip, rate, 120.0);
         bool kit = true;
         for (const auto& e : midi->events)

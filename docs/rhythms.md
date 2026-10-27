@@ -59,7 +59,7 @@ triplets while the kick stays in 16ths.
 
 Hindustani names follow their Hindi pronunciation, without the final schwa (tīntāl, not tīntāla).
 Karnatak names follow the Sanskrit-Tamil usage of the tradition (tāḷam, jāti, aṅga). English
-names are in plain lower case, with the IPA in the tooltip.
+names are in plain lower case, with the IPA in the tooltip (owner, 2026-10-27: both).
 
 ## North Indian tāl (16)
 
@@ -181,6 +181,35 @@ North African:
 Not yet included: the Mande djembe rhythms (kuku, soli, dundunba). Their parts differ between
 teachers.
 
+## Middle Eastern (1)
+
+samāʿī thaqīl is the 10/8 of the samāʿī, grouped 3+2+2+3. Dum falls on eighths 1, 6 and 7, and
+tak on 4 and 8.
+
+Not included yet: çiftetelli, wahda w-nuṣṣ and the other long Arab and Ottoman cycles. They can be
+added from Maqam World's iqāʿ pages once each one is checked.
+
+## My breaks
+
+**rhythmic modes > my breaks** holds your own breaks, added as needed (owner, 2026-10-27). Use
+**add break files...**, or **add a folder of breaks...** to take every audio file in a folder.
+Each file is transcribed with Drums to MIDI's hit finder (`mixer::breakRhythm`):
+
+- The tempo comes from the loop's length and hits (`beatgrid::fromLoop`). The file is read as 1
+  to 16 bars of 4/4, and the slowest tempo from 60 to 200 bpm whose 16ths the hits sit on is the
+  one used.
+- Each hit goes on its nearest 16th as a kick, snare or closed hi-hat.
+- Hits at velocity 110 and above are accents. Hits under 70 are ghost notes.
+
+Each break is named after its file, in lower case, and works like any other rhythmic mode: as a
+mixer clip, a Tracker pattern or a .mid file.
+
+A file that is not cut to whole bars is left out, and the dialog says why. So is a file with no
+drum hits.
+
+The transcriptions are kept in `breaks.json` beside `settings.ini`, so the audio files are only
+read once. **remove** takes one break off the list, or all of them.
+
 ## East Asian (7)
 
 These are Korean jangdan on the janggu:
@@ -250,6 +279,9 @@ Arabic and Maghrebi rhythms:
 
 - A. J. Racy, *Making Music in the Arab World* (Cambridge University Press, 2003).
 - Deborah Kapchan, *Traveling Spirit Masters* (Wesleyan University Press, 2007): Gnawa.
+- [Maqam World, iqāʿāt](https://ftp.maqamworld.com/en/iqaa.php), and
+  [samāʿī thaqīl counted in 10](https://www.oudforguitarists.com/count-to-10-samai-rhythm-samai-thaqil/)
+  (beats 1, 4, 6, 7 and 8 accented, 3+2+2+3).
 
 Korean jangdan:
 

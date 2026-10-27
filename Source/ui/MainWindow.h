@@ -27,6 +27,7 @@
 #include <atomic>
 #include <memory>
 
+namespace rhythm { struct Rhythm; }
 class ChainRow;
 class FindPanel;
 struct FindItem;
@@ -449,8 +450,9 @@ private:
     // Its rhythmic modes (RhythmSection.cpp, docs/rhythms.md): a rhythm put on the selected
     // mixer track, written into a new Tracker pattern, or saved as a MIDI file.
     void fillRhythmMenu (QMenu*);
-    void useRhythm (int index);
-    void rhythmToTracker (int index, int cycles, double bpm);
+    void useRhythm (const rhythm::Rhythm&);
+    void rhythmToTracker (const rhythm::Rhythm&, int cycles, double bpm);
+    void addBreaks (bool folder);   // "my breaks": files, or every audio file in a folder, transcribed
     // Control surfaces and MIDI Learn (ControlSection.cpp, docs/control-surfaces.md): Launchpads,
     // Launchkeys and Push play the mixer's launcher, strips and transport, lit in the tracks'
     // colours; any other controller's knobs and buttons are mapped by MIDI Learn.

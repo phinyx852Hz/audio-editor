@@ -465,17 +465,17 @@ namespace rhythm
                 "Afro-Cuban: the bell's seven strokes in twelve pulses, the West African standard pattern.",
                 { lane ("bell", gm::cowbell, 3, "x.x.xx.x.x.x"),
                   lane ("shekere", gm::cabasa, 3, "x..x..x..x..") }));
-            all.push_back (groove ("one drop", "one drop", g, {}, 4, { 4 }, 76,
+            all.push_back (groove ("one drop", "one drop", g, "wʌn drɒp", 4, { 4 }, 76,
                 "Jamaica, reggae: the bass drum and rimshot together on the third beat only.",
                 { lane ("kick", gm::kick, 4, "........x......."),
                   lane ("rimshot", gm::sideStick, 4, "........x......."),
                   lane ("closed hi-hat", gm::closedHat, 4, "x.x.x.x.x.x.x.x.") }));
-            all.push_back (groove ("rockers", "rockers", g, {}, 4, { 4 }, 80,
+            all.push_back (groove ("rockers", "rockers", g, "ˈrɒkərz", 4, { 4 }, 80,
                 "Jamaica, mid-1970s (Sly Dunbar): the bass drum on one and three.",
                 { lane ("kick", gm::kick, 4, "x.......x......."),
                   lane ("rimshot", gm::sideStick, 4, "........x......."),
                   lane ("closed hi-hat", gm::closedHat, 4, "x.xxx.xxx.xxx.xx") }));
-            all.push_back (groove ("steppers", "steppers", g, {}, 4, { 4 }, 80,
+            all.push_back (groove ("steppers", "steppers", g, "ˈstɛpərz", 4, { 4 }, 80,
                 "Jamaica and UK dub: the bass drum on every beat.",
                 { lane ("kick", gm::kick, 4, "x...x...x...x..."),
                   lane ("rimshot", gm::sideStick, 4, "........x......."),
@@ -589,6 +589,11 @@ namespace rhythm
                 all.push_back (groove (q.name, q.plain, n, {}, q.beats, { q.beats }, q.bpm, q.about,
                                        { lane ("dum", gm::lowConga, perBeat, q.dum), lane ("tak", gm::openHiConga, perBeat, q.tak) }, q.counting));
             }
+            // The Arab and Ottoman classical repertoire's long cycles.
+            all.push_back (groove ("samāʿī thaqīl", "samai thaqil", "middle eastern", {}, 10, { 3, 2, 2, 3 }, 120,
+                "The samāʿī's 10/8, 3+2+2+3: dum on 1, 6 and 7, tak on 4 and 8, the tenth eighth often leading into the next cycle.",
+                { lane ("dum", gm::lowConga, 1, "x....xx..."), lane ("tak", gm::openHiConga, 1, "...x...x..") },
+                "dum – – tak – dum dum tak – –"));
             all.push_back (groove ("gnāwa (qarāqib)", "gnawa", n, {}, 4, { 1, 1, 1, 1 }, 100,
                 "Morocco: the qarāqib (iron castanets) of the Gnawa līla, three strokes to the beat, long-short-short (simplified).",
                 { lane ("qarāqib", gm::maracas, 3, "X.xx.xx.xx.x"),
