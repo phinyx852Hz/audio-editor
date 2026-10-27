@@ -199,11 +199,22 @@ namespace analysis
         std::vector<float> ringLeft = std::vector<float> (ringSize), ringRight = std::vector<float> (ringSize);
         size_t ringPos = 0;
         int freshSamples = 0;
-        int fftOrder = 13, windowType = 1, response = 1;
+        // response: Fast, Medium, Slow or Infinite (every frame since the reset alike, as Welch's
+        // method averages). zeroPadding: how many times the frame's length is transformed, the
+        // rest zeros (padding is as much of it as the size allows). method: one window, or the
+        // average over several DPSS tapers (multitaper).
+        enum Method { windowed, multitaper };
+        static constexpr int infinite = 3, numTapers = 7;
+        static constexpr double taperBandwidth = 4.0;       // NW: the tapers see +-4 bins around each frequency
+        int fftOrder = 13, windowType = 1, response = 1, zeroPadding = 1, padding = 1, method = windowed;
         std::unique_ptr<Fft> fft;
-        std::vector<float> window;
-        double windowScale = 1.0;
+        std::vector<std::vector<float>> tapers;             // every shape transformed per frame: the window, or the tapers
+        double powerScale = 1.0;                            // so a full-scale sine reads 0 dB
+        double noiseBandwidth = 1.0;                        // in bins, for reading a band's power
+        int averaged = 0;                                   // frames in the Infinite average
         std::vector<std::complex<float>> buffer;
+        std::array<std::vector<double>, 4> framePower;      // this frame, summed over the tapers
+        std::vector<std::complex<double>> frameCross;
         std::array<std::vector<double>, 4> power;           // left, right, mid, side, per bin
         std::array<std::vector<double>, 4> prefix;          // running sums of power, for fractional-octave smoothing
         std::vector<std::complex<double>> cross;            // left times conjugate right
@@ -216,9 +227,10 @@ namespace analysis
         // Spectrum holds: dB at holdFrequency (i), and whether shown.
         std::array<std::vector<float>, numHolds> holds;
 
-        int fftSize() const     { return 1 << fftOrder; }
-        int numBins() const     { return fftSize() / 2 + 1; }
-        double binHz() const    { return rate / fftSize(); }
+        int fftSize() const       { return 1 << fftOrder; }            // samples in each frame
+        int transformSize() const { return fftSize() * padding; }      // with the zeros after them
+        int numBins() const       { return transformSize() / 2 + 1; }
+        double binHz() const      { return rate / transformSize(); }
         double nyquist() const  { return rate / 2.0; }
         double seconds() const  { return frames / rate; }
 
@@ -233,17 +245,46 @@ namespace analysis
             reset();
         }
 
+        // Zero padding stops at 2^17 points, and at 2^15 for the tapers (seven transforms a frame).
         void setFft (int order, int type)
         {
             fftOrder = std::clamp (order, 10, 15);
             windowType = std::clamp (type, 0, windows::numKinds - 1);
+            method = std::clamp (method, 0, 1);
             const int n = fftSize();
-            fft = std::make_unique<Fft> (fftOrder);
-            const auto shape = windows::make (windowType, n);
-            window.assign (shape.begin(), shape.end());
-            // A full-scale sine reads 0 dB.
-            windowScale = 2.0 / std::accumulate (window.begin(), window.end(), 0.0);
-            buffer.assign ((size_t) n, {});
+            const int limit = method == multitaper ? 1 << 15 : 1 << 17;
+            padding = std::clamp (zeroPadding, 1, std::max (1, limit / n));
+            int order2 = fftOrder;
+            while ((1 << order2) < transformSize())
+                ++order2;
+            fft = std::make_unique<Fft> (order2);
+
+            tapers.clear();
+            if (method == multitaper)
+                for (const auto& t : windows::dpss (n, taperBandwidth, numTapers))
+                    tapers.emplace_back (t.begin(), t.end());
+            else
+            {
+                const auto shape = windows::make (windowType, n);
+                tapers.emplace_back (shape.begin(), shape.end());
+            }
+
+            // A full-scale sine at a bin reads 0 dB: the shapes' gains add up in power, as their
+            // spectra do. The noise bandwidth is the same sum taken over their energy.
+            double gains = 0.0, energy = 0.0;
+            for (const auto& t : tapers)
+            {
+                const auto sum = std::accumulate (t.begin(), t.end(), 0.0);
+                gains += sum * sum;
+                energy += std::accumulate (t.begin(), t.end(), 0.0, [] (double a, float w) { return a + (double) w * w; });
+            }
+            powerScale = 4.0 / gains;
+            noiseBandwidth = transformSize() * energy / gains;
+
+            buffer.assign ((size_t) transformSize(), {});
+            for (auto& p : framePower)
+                p.assign ((size_t) numBins(), 0.0);
+            frameCross.assign ((size_t) numBins(), {});
             for (auto& p : power)
                 p.assign ((size_t) numBins(), 0.0);
             for (auto& p : prefix)
@@ -253,6 +294,7 @@ namespace analysis
                 p.assign ((size_t) numBins(), 0.0);
             totalCross.assign ((size_t) numBins(), {});
             spectra = 0;
+            averaged = 0;
         }
 
         void reset()
@@ -279,6 +321,7 @@ namespace analysis
             stats = {};
             frames = 0;
             windowFill = 0;
+            averaged = 0;
         }
 
         void add (const std::vector<float>& left, const std::vector<float>& right)
@@ -435,40 +478,49 @@ namespace analysis
 
         void updateSpectrum (double dt, bool fresh)
         {
-            const int n = fftSize(), bins = numBins();
+            const int n = fftSize(), size = transformSize(), bins = numBins();
             const double tau = response == 0 ? 0.04 : response == 1 ? 0.15 : 0.6;
-            const double a = 1.0 - std::exp (-dt / tau);
+            if (response == infinite && fresh)
+                ++averaged;
+            const double a = response == infinite ? (fresh ? 1.0 / averaged : 0.0) : 1.0 - std::exp (-dt / tau);
 
+            for (auto& p : framePower)
+                std::fill (p.begin(), p.end(), 0.0);
+            std::fill (frameCross.begin(), frameCross.end(), std::complex<double>());
             if (fresh)
-            {
-                // Left in the real part and right in the imaginary part: one transform for both.
-                auto pos = (ringPos + ringSize - (size_t) n) & (ringSize - 1);
-                for (int i = 0; i < n; ++i)
+                for (const auto& shape : tapers)
                 {
-                    buffer[(size_t) i] = { ringLeft[pos] * window[(size_t) i], ringRight[pos] * window[(size_t) i] };
-                    pos = (pos + 1) & (ringSize - 1);
+                    // Left in the real part and right in the imaginary part: one transform for both.
+                    auto pos = (ringPos + ringSize - (size_t) n) & (ringSize - 1);
+                    for (int i = 0; i < n; ++i)
+                    {
+                        buffer[(size_t) i] = { ringLeft[pos] * shape[(size_t) i], ringRight[pos] * shape[(size_t) i] };
+                        pos = (pos + 1) & (ringSize - 1);
+                    }
+                    std::fill (buffer.begin() + n, buffer.end(), std::complex<float>());
+                    fft->forward (buffer);
+                    for (int k = 0; k < bins; ++k)
+                    {
+                        const std::complex<double> z = buffer[(size_t) k], zc = std::conj ((std::complex<double>) buffer[(size_t) ((size - k) % size)]);
+                        const auto l = (z + zc) * 0.5, r = (z - zc) * std::complex<double> (0.0, -0.5);
+                        framePower[left][(size_t) k] += std::norm (l) * powerScale;
+                        framePower[right][(size_t) k] += std::norm (r) * powerScale;
+                        framePower[mid][(size_t) k] += std::norm ((l + r) * 0.5) * powerScale;
+                        framePower[side][(size_t) k] += std::norm ((l - r) * 0.5) * powerScale;
+                        frameCross[(size_t) k] += l * std::conj (r) * powerScale;
+                    }
                 }
-                fft->forward (buffer);
-            }
 
             for (int k = 0; k < bins; ++k)
             {
-                std::complex<double> l, r;
-                if (fresh)
-                {
-                    const std::complex<double> z = buffer[(size_t) k], zc = std::conj ((std::complex<double>) buffer[(size_t) ((n - k) % n)]);
-                    l = (z + zc) * 0.5 * windowScale;
-                    r = (z - zc) * std::complex<double> (0.0, -0.5) * windowScale;
-                }
-                const double now[4] { std::norm (l), std::norm (r), std::norm ((l + r) * 0.5), std::norm ((l - r) * 0.5) };
                 for (int c = 0; c < 4; ++c)
-                    power[(size_t) c][(size_t) k] += (now[c] - power[(size_t) c][(size_t) k]) * a;
-                cross[(size_t) k] += (l * std::conj (r) - cross[(size_t) k]) * a;
+                    power[(size_t) c][(size_t) k] += (framePower[(size_t) c][(size_t) k] - power[(size_t) c][(size_t) k]) * a;
+                cross[(size_t) k] += (frameCross[(size_t) k] - cross[(size_t) k]) * a;
                 if (accumulate && fresh)
                 {
                     for (int c = 0; c < 4; ++c)
-                        totalPower[(size_t) c][(size_t) k] += now[c];
-                    totalCross[(size_t) k] += l * std::conj (r);
+                        totalPower[(size_t) c][(size_t) k] += framePower[(size_t) c][(size_t) k];
+                    totalCross[(size_t) k] += frameCross[(size_t) k];
                 }
             }
             if (accumulate && fresh)
@@ -744,9 +796,7 @@ namespace analysis
 
         // The long-term spectrum, corrected for the window's noise bandwidth so a band reads its power.
         const auto spectra = std::max (1, s.spectra);
-        const auto squares = std::accumulate (s.window.begin(), s.window.end(), 0.0, [] (double a, float w) { return a + (double) w * w; });
-        const auto sum = std::accumulate (s.window.begin(), s.window.end(), 0.0);
-        const auto noiseBandwidth = s.fftSize() * squares / (sum * sum);
+        const auto noiseBandwidth = s.noiseBandwidth;
         const auto strongest = [&] (int ch)
         {
             const auto& p = s.totalPower[(size_t) ch];
@@ -2153,7 +2203,7 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
 
         auto* more = new QToolButton (spectrumCard);
         more->setText (tr ("Options"));
-        more->setToolTip (tr ("Display, slope, FFT size, window, response and range"));
+        more->setToolTip (tr ("Display, slope, FFT size, zero padding, window, estimate, response and range"));
         more->setPopupMode (QToolButton::InstantPopup);
         auto* menu = new QMenu (more);
         more->setMenu (menu);
@@ -2187,6 +2237,12 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
         radio (tr ("FFT Size"), { QStringLiteral ("1024"), QStringLiteral ("2048"), QStringLiteral ("4096"), QStringLiteral ("8192"),
                                   QStringLiteral ("16384"), QStringLiteral ("32768") }, key ("fftSize"), 3,
                [this, spectrumMeter] (int i) { state->setFft (10 + i, state->windowType); spectrumMeter->clear(); });
+        radio (tr ("Zero Padding"), { tr ("None"), tr ("2x"), tr ("4x"), tr ("8x") }, key ("zeroPadding"), 0,
+               [this, spectrumMeter] (int i) { state->zeroPadding = 1 << i; state->setFft (state->fftOrder, state->windowType); spectrumMeter->clear(); },
+               { tr ("Transform just the samples"),
+                 tr ("Zeros after the samples draw the curve between bins: smoother peaks, no finer resolution"),
+                 tr ("Zeros after the samples draw the curve between bins: smoother peaks, no finer resolution"),
+                 tr ("Zeros after the samples draw the curve between bins (up to 131072 points, 32768 with Multitaper)") });
         // In windows::Kind order, which is what the setting stores.
         radio (tr ("Window"),
                { tr ("Hann"), tr ("Blackman-Harris"), tr ("Flat Top (exact levels)"), tr ("Hamming"), tr ("Rectangular"),
@@ -2215,7 +2271,15 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
                  tr ("A smooth, strong taper for general spectral estimation"),
                  tr ("A sinc-shaped taper"),
                  tr ("Falls 26 dB to each edge; for transients and impulse responses") });
-        radio (tr ("Response"), { tr ("Fast"), tr ("Medium"), tr ("Slow") }, key ("response"), 1, [this] (int i) { state->response = i; });
+        radio (tr ("Estimate"), { tr ("Windowed FFT"), tr ("Multitaper (7 DPSS tapers)") }, key ("method"), 0,
+               [this, spectrumMeter] (int i) { state->method = i; state->setFft (state->fftOrder, state->windowType); spectrumMeter->clear(); },
+               { tr ("One transform per frame, shaped by the Window"),
+                 tr ("Seven Slepian tapers per frame, averaged: a steadier noise floor and low leakage, "
+                     "each tone about 8 bins wide (the Window is not used)") });
+        radio (tr ("Response"), { tr ("Fast"), tr ("Medium"), tr ("Slow"), tr ("Infinite (average since Reset)") }, key ("response"), 1,
+               [this] (int i) { state->response = i; state->averaged = 0; },
+               { tr ("Follows the music closely (40 ms)"), tr ("150 ms"), tr ("600 ms"),
+                 tr ("Every frame since Reset counts the same (Welch's method): a steady long-term spectrum and noise floor") });
         radio (tr ("Range"), { tr ("60 dB"), tr ("96 dB"), tr ("120 dB") }, key ("range"), 1,
                [spectrumMeter] (int i) { spectrumMeter->range = i == 0 ? 60.0 : i == 1 ? 96.0 : 120.0; spectrumMeter->update(); });
         auto* peakHold = menu->addAction (tr ("Peak Hold Curve"));

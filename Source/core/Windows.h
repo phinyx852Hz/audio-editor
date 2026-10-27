@@ -21,6 +21,11 @@ namespace windows
 
     std::vector<double> make (int kind, int n);
 
+    // The first `count` discrete prolate spheroidal sequences (Slepian tapers) of length
+    // n and time-bandwidth product nw: unit energy, the most concentrated first, each even
+    // one summing positive and each odd one rising first. For multitaper spectra.
+    std::vector<std::vector<double>> dpss (int n, double nw, int count);
+
     // Highest sidelobe in dB for Dolph-Chebyshev, the Gaussian's sigma (of half the
     // length), Tukey's tapered fraction and the Exponential's decay (e^-3, 26 dB, at the
     // edges: harris's Poisson window with alpha 3).

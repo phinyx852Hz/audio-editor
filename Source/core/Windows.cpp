@@ -95,6 +95,82 @@ namespace
     }
 
     // Beta for a highest sidelobe attenuationDb down (Kuo and Kaiser's fit for spectral analysis).
+    // Slepian's tridiagonal matrix, whose eigenvectors are the DPSS: diagonal
+    // ((n - 1 - 2i) / 2)^2 cos 2 pi W, off the diagonal i (n - i) / 2.
+    struct Tridiagonal
+    {
+        std::vector<double> diagonal, off;   // off[i] joins i - 1 and i (off[0] unused)
+
+        // How many eigenvalues are below x (Sturm sequence).
+        int countBelow (double x) const
+        {
+            int count = 0;
+            double q = 1.0;
+            for (size_t i = 0; i < diagonal.size(); ++i)
+            {
+                q = diagonal[i] - x - (i > 0 ? off[i] * off[i] / q : 0.0);
+                if (q == 0.0)
+                    q = -1.0e-300;
+                if (q < 0.0)
+                    ++count;
+            }
+            return count;
+        }
+
+        // Solves (A - shift) x = b in place, by Gaussian elimination with partial pivoting.
+        void solve (double shift, std::vector<double>& b) const
+        {
+            const auto n = diagonal.size();
+            std::vector<double> d (n), u (n, 0.0), u2 (n, 0.0), l (n, 0.0);
+            std::vector<bool> swapped (n, false);
+            for (size_t i = 0; i < n; ++i)
+            {
+                d[i] = diagonal[i] - shift;
+                if (i + 1 < n)
+                    u[i] = off[i + 1];
+            }
+            for (size_t i = 0; i + 1 < n; ++i)
+            {
+                const auto below = off[i + 1];
+                if (std::abs (d[i]) >= std::abs (below))
+                {
+                    l[i] = d[i] != 0.0 ? below / d[i] : 0.0;
+                    d[i + 1] -= l[i] * u[i];
+                }
+                else
+                {
+                    // Swap rows i and i + 1.
+                    swapped[i] = true;
+                    l[i] = d[i] / below;
+                    d[i] = below;
+                    const auto t = u[i];
+                    u[i] = d[i + 1];
+                    d[i + 1] = t - l[i] * u[i];
+                    if (i + 2 < n)
+                    {
+                        u2[i] = u[i + 1];
+                        u[i + 1] = -l[i] * u2[i];
+                    }
+                }
+            }
+            for (size_t i = 0; i + 1 < n; ++i)
+            {
+                if (swapped[i])
+                    std::swap (b[i], b[i + 1]);
+                b[i + 1] -= l[i] * b[i];
+            }
+            for (size_t j = n; j-- > 0;)
+            {
+                auto v = b[j];
+                if (j + 1 < n)
+                    v -= u[j] * b[j + 1];
+                if (j + 2 < n)
+                    v -= u2[j] * b[j + 2];
+                b[j] = v / (d[j] != 0.0 ? d[j] : 1.0e-300);
+            }
+        }
+    };
+
     double kaiser (double u, double attenuationDb)
     {
         const auto beta = 0.12438 * (attenuationDb + 6.3);
@@ -142,5 +218,71 @@ std::vector<double> make (int kind, int n)
         w[(size_t) i] = v;
     }
     return w;
+}
+
+std::vector<std::vector<double>> dpss (int n, double nw, int count)
+{
+    n = std::max (2, n);
+    count = std::clamp (count, 1, n);
+    const auto w = nw / n;
+    Tridiagonal a;
+    a.diagonal.resize ((size_t) n);
+    a.off.assign ((size_t) n, 0.0);
+    double radius = 0.0;
+    for (int i = 0; i < n; ++i)
+    {
+        const auto c = (n - 1 - 2.0 * i) / 2.0;
+        a.diagonal[(size_t) i] = c * c * std::cos (2.0 * pi * w);
+        if (i > 0)
+            a.off[(size_t) i] = i * (n - i) / 2.0;
+    }
+    for (int i = 0; i < n; ++i)
+        radius = std::max (radius, std::abs (a.diagonal[(size_t) i]) + a.off[(size_t) i] + (i + 1 < n ? a.off[(size_t) i + 1] : 0.0));
+
+    std::vector<std::vector<double>> tapers;
+    for (int k = 0; k < count; ++k)
+    {
+        // The (k + 1)th largest eigenvalue, by bisection.
+        double lo = -radius, hi = radius;
+        for (int step = 0; step < 200 && hi - lo > 1.0e-13 * radius; ++step)
+        {
+            const auto mid = 0.5 * (lo + hi);
+            (a.countBelow (mid) >= n - k ? hi : lo) = mid;
+        }
+        const auto lambda = 0.5 * (lo + hi);
+
+        // Its eigenvector, by inverse iteration from a start with the taper's symmetry.
+        std::vector<double> v ((size_t) n);
+        for (int i = 0; i < n; ++i)
+            v[(size_t) i] = std::cos (pi * (k + 1) * (i + 0.5) / n - pi / 2.0 * (k + 1)) + 1.0e-3;
+        for (int iteration = 0; iteration < 4; ++iteration)
+        {
+            a.solve (lambda + 1.0e-10 * radius, v);
+            for (const auto& t : tapers)   // keep it apart from the tapers before
+            {
+                double dot = 0.0;
+                for (int i = 0; i < n; ++i)
+                    dot += v[(size_t) i] * t[(size_t) i];
+                for (int i = 0; i < n; ++i)
+                    v[(size_t) i] -= dot * t[(size_t) i];
+            }
+            double energy = 0.0;
+            for (auto x : v)
+                energy += x * x;
+            const auto norm = 1.0 / std::sqrt (energy);
+            for (auto& x : v)
+                x *= norm;
+        }
+
+        // Even tapers sum positive; odd ones rise first.
+        double sign = 0.0;
+        for (int i = 0; i < n; ++i)
+            sign += v[(size_t) i] * (k % 2 == 0 ? 1.0 : (n - 1) / 2.0 - i);
+        if (sign < 0.0)
+            for (auto& x : v)
+                x = -x;
+        tapers.push_back (std::move (v));
+    }
+    return tapers;
 }
 }
