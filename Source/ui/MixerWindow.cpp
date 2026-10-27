@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MixerWindow.h"
+#include "ModeAtlas.h"
 #include "../mixer/RagaInstrument.h"
 #include "../core/PhiRaga.h"
 #include "../mixer/DrumsToMidi.h"
@@ -4088,8 +4089,9 @@ public:
 
         // The tuning the PHI synth plays in: the launched clip's, else its scene's, else the track's.
         tuningGroup = new QGroupBox (MixerWindow::tr ("Tuning (PHI synth)"), this);
-        tuningGroup->setToolTip (MixerWindow::tr ("Ragas in just intonation, church and hypo-modes, jazz modes, maqams and dastgahs with their quarter steps, "
-                                                  "or 2 to 21 equal steps. The PHI synth plays it; other instruments stay in 12-TET."));
+        tuningGroup->setToolTip (MixerWindow::tr ("Every mode and tuning of the atlas: ragas in just intonation, church modes, Greek genera, maqams, makams "
+                                                  "and dastgahs with their quarter steps, gamelan laras, temperaments, Partch's 43 and more, or 2 to 96 equal steps. "
+                                                  "The PHI synth plays it; other instruments stay in 12-TET."));
         auto* tuningLayout = new QGridLayout (tuningGroup);
         tuningLayout->setColumnStretch (1, 1);
         auto tuningRow = [&] (TuningRow& row, const QString& label, const QString& none, const QString& tip)
@@ -4121,13 +4123,19 @@ public:
             tuningLayout->addWidget (new QLabel (label, tuningGroup), at, 0);
             tuningLayout->addWidget (row.system, at, 1);
             tuningLayout->addWidget (row.root, at, 2);
+            // The atlas (ModeAtlas.h): every mode and tuning by region, people and culture.
+            row.browse = new QToolButton (tuningGroup);
+            row.browse->setText (QStringLiteral ("…"));
+            row.browse->setToolTip (MixerWindow::tr ("Choose from the atlas: by region, then by tradition, composer or theorist; or search"));
+            noFocus (row.browse);
+            tuningLayout->addWidget (row.browse, at, 3);
         };
         tuningRow (trackTuning, MixerWindow::tr ("Track"), MixerWindow::tr ("12-TET"), MixerWindow::tr ("The track's tuning, when neither its clip nor the scene has one"));
         tuningRow (sceneTuning, MixerWindow::tr ("Scene"), MixerWindow::tr ("The track's"), MixerWindow::tr ("The tuning for every clip in the scene under the cursor"));
         tuningRow (clipTuning, MixerWindow::tr ("Clip"), MixerWindow::tr ("The scene's"), MixerWindow::tr ("This clip's own tuning, over the scene's and the track's"));
         tuningLabel = new QLabel (tuningGroup);
         tuningLabel->setWordWrap (true);
-        tuningLayout->addWidget (tuningLabel, tuningLayout->rowCount(), 0, 1, 3);
+        tuningLayout->addWidget (tuningLabel, tuningLayout->rowCount(), 0, 1, 4);
         layout->addWidget (tuningGroup);
         layout->addStretch (1);
 
@@ -4252,6 +4260,24 @@ public:
         {
             QObject::connect (row->system, &QComboBox::activated, this, tuningEdited (*row, level));
             QObject::connect (row->root, &QComboBox::activated, this, tuningEdited (*row, level));
+            QObject::connect (row->browse, &QToolButton::clicked, this, [this, row, edited = tuningEdited (*row, level)]
+            {
+                auto pick = [row, edited] (int i)
+                {
+                    row->system->setCurrentIndex (std::max (0, row->system->findData (i)));
+                    row->root->setEnabled (true);
+                    edited();
+                };
+                QMenu menu (this);
+                modeatlas::fill (&menu, mixer::melodic | mixer::tuning, row->system->currentData().toInt(), pick);
+                menu.addSeparator();
+                menu.addAction (MixerWindow::tr ("find..."), this, [this, pick]
+                {
+                    if (const auto i = modeatlas::find (this, mixer::melodic | mixer::tuning, MixerWindow::tr ("Find a tuning")); i >= 0)
+                        pick (i);
+                });
+                menu.exec (row->browse->mapToGlobal (QPoint (0, row->browse->height())));
+            });
         }
     }
 
@@ -4326,6 +4352,7 @@ private:
     {
         QComboBox* system = nullptr;
         QComboBox* root = nullptr;
+        QToolButton* browse = nullptr;
         mixer::TuningChoice choice() const { return { system->currentData().toInt(), root->currentIndex() }; }
         void show (const mixer::TuningChoice& c)
         {

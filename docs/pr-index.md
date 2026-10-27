@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**73 pull requests:** 71 merged, 2 open.
+**73 pull requests:** 72 merged, 1 open.
 
 ## Contents
 
@@ -97,8 +97,8 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#65](https://github.com/phinyx852Hz/audio-editor/pull/65) | cubify: arrange a scene by Xenakis's cubes, plus Messiaen's modes | merged |  | `Source/ui/MixerWindow.cpp`<br>`Source/mixer/Rhythms.cpp`<br>`Source/mixer/Cubify.cpp` |
 | [#67](https://github.com/phinyx852Hz/audio-editor/pull/67) | PHI rāga: rāg darpaṇ, a raga made for PHI | merged |  | `docs/raga-darpan.md`<br>`Source/core/PhiRagas.cpp`<br>`tests/CoreTests.cpp` |
 | [#69](https://github.com/phinyx852Hz/audio-editor/pull/69) | Mode menu: twelve-tone rows, their matrix and looping serial pieces | merged | Mode > twelve-tone row... | `Source/mixer/Serial.cpp`<br>`Source/ui/SerialSection.cpp`<br>`tests/CoreTests.cpp` |
-| [#70](https://github.com/phinyx852Hz/audio-editor/pull/70) | Rhythm generator, my breaks, laya and naḍai, and feels | draft |  | `Source/ui/RhythmGeneratorDialog.cpp`<br>`Source/mixer/RhythmGenerator.cpp`<br>`Source/ui/RhythmSection.cpp` |
-| [#73](https://github.com/phinyx852Hz/audio-editor/pull/73) | Mode menu: the world's modal and tuning systems, by region and people | open |  | `Source/mixer/WorldModes.cpp`<br>`Source/ui/ModeAtlas.cpp`<br>`Source/ui/ModeSection.cpp` |
+| [#70](https://github.com/phinyx852Hz/audio-editor/pull/70) | Rhythm generator, my breaks, laya and naḍai, and feels | open |  | `Source/ui/RhythmGeneratorDialog.cpp`<br>`Source/mixer/RhythmGenerator.cpp`<br>`Source/ui/RhythmSection.cpp` |
+| [#73](https://github.com/phinyx852Hz/audio-editor/pull/73) | Mode menu: modes and tunings by region, tradition and person | merged |  | `Source/mixer/Atlas.cpp`<br>`Source/ui/ModeAtlas.cpp`<br>`Source/ui/ModeSection.cpp` |
 
 ### Φ effects and sounds
 
@@ -246,7 +246,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#67](https://github.com/phinyx852Hz/audio-editor/pull/67) | PHI rāga: rāg darpaṇ, a raga made for PHI | Adds rāg darpaṇ, a raga designed for PHI by the owner and Claude. *Darpaṇ* means mirror, and the raga is named after Faqīrullāh's *Rāg Darpaṇ* (1666), which... *(auto)* | merged | 2026-10-26 | Modes, tunings and composition |
 | [#68](https://github.com/phinyx852Hz/audio-editor/pull/68) | MIDI editor: a piano roll in 12-TET or any PHI tuning, with Scala files, restyle and MPE | The first stage of the MIDI editor (the "core editor" option the owner chose). *(auto)* | merged | 2026-10-27 | Editing and warping |
 | [#69](https://github.com/phinyx852Hz/audio-editor/pull/69) | Mode menu: twelve-tone rows, their matrix and looping serial pieces | Schoenberg's twelve-tone method added to PHI's composing tools. *(auto)* | merged | 2026-10-27 | Modes, tunings and composition |
-| [#70](https://github.com/phinyx852Hz/audio-editor/pull/70) | Rhythm generator, my breaks, laya and naḍai, and feels | my breaks (Mode > rhythmic modes > my breaks): your own break files, or a folder of them, transcribed with Drums to MIDI's hit finder into rhythmic modes (ki... *(auto)* | draft | 2026-10-27 | Modes, tunings and composition |
+| [#70](https://github.com/phinyx852Hz/audio-editor/pull/70) | Rhythm generator, my breaks, laya and naḍai, and feels | my breaks (Mode > rhythmic modes > my breaks): your own break files, or a folder of them, transcribed with Drums to MIDI's hit finder into rhythmic modes (ki... *(auto)* | open | 2026-10-27 | Modes, tunings and composition |
 | [#71](https://github.com/phinyx852Hz/audio-editor/pull/71) | Document what PHI is built on, add a licence check, and replace Vaporizer2's commercial fonts | docs/foundations.md lists everything PHI is built on, each with its licence and how it ships. *(auto)* | merged | 2026-10-27 | Documentation |
 | [#72](https://github.com/phinyx852Hz/audio-editor/pull/72) | MIDI inputs: remember them by name, and open them when plugged in | PHI detected the Novation keyboards, the Push 2 and the Launchpad Mini, but the keyboards played no synths. *(auto)* | merged | 2026-10-27 | Not yet sorted |
-| [#73](https://github.com/phinyx852Hz/audio-editor/pull/73) | Mode menu: the world's modal and tuning systems, by region and people | This puts the owner's Mode Research (2026-10-26) into PHI's one shared list of systems, mixer::tuningSystems(). *(auto)* | open | 2026-10-27 | Modes, tunings and composition |
+| [#73](https://github.com/phinyx852Hz/audio-editor/pull/73) | Mode menu: modes and tunings by region, tradition and person | This puts the owner's Mode Research (2026-10-26) into PHI's one shared list of systems, mixer::tuningSystems(). *(auto)* | merged | 2026-10-27 | Modes, tunings and composition |

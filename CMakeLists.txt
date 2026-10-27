@@ -52,6 +52,7 @@ target_sources(${APP_ID} PRIVATE
     Source/sampler/SlicerEngine.cpp
     Source/mixer/MidiFile.cpp
     Source/mixer/Tunings.cpp
+    Source/mixer/Atlas.cpp
     Source/mixer/NoteEditor.cpp
     Source/mixer/RagaInstrument.cpp
     Source/mixer/Counterpoint.cpp
@@ -180,6 +181,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/ControlSection.cpp
     Source/ui/MixerSection.cpp
     Source/ui/ModeSection.cpp
+    Source/ui/ModeAtlas.cpp
     Source/ui/RhythmSection.cpp
     Source/ui/RhythmGeneratorDialog.cpp
     Source/ui/StochasticSection.cpp
@@ -418,6 +420,7 @@ if(PHI_BUILD_TESTS)
         Source/sampler/SlicerEngine.cpp
         Source/mixer/MidiFile.cpp
         Source/mixer/Tunings.cpp
+        Source/mixer/Atlas.cpp
         Source/mixer/NoteEditor.cpp
     Source/mixer/NoteEditor.cpp
         Source/mixer/RagaInstrument.cpp

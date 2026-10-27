@@ -418,15 +418,16 @@ Fast MIDI edits (owner, 2026-10-25: "MIDI editing, but really fast"; "the idea i
 
 The Mode menu (owner, 2026-10-26: "I love mode being its own thing"; every name in it lower
 case, in proper transliteration):
-- One mode for everything: it lists every mode and raga the tunings have, by tradition (church,
-  jazz, messiaen, rāga, maqām, dastgāh, and east asian, gamelan and mbira as those tunings arrive; a
-  tradition it does not know yet gets a submenu of its own). A long list, the rāgas, comes in
-  alphabetical parts. The equal temperaments are tunings, not modes, so they stay in the
-  Tuning boxes.
+- It holds three things only (owner, 2026-10-27): **melody**, **tuning** and **rhythm**.
+- **melody** is one mode for everything: every mode, scale and rāga, by region, then by
+  tradition and person ([modes-and-tunings.md](modes-and-tunings.md)), with **find a mode or
+  tuning...**, the final and range below, and what is done with the mode (notes into the mode,
+  counterpoint, fugue, stochasticize, 12 tone row, cubify). **tuning** has the tunings the same
+  way, the equal divisions, **equal tempered** and **tune the track**.
 - **final** is the final, sa or tonic. **range** is authentic, or hypo from the fifth or from the
   fourth where the mode has that degree; for a church mode, hypo from the fifth is its hypo-mode
   (picking hypodorian in the church list does the same: dorian, hypo from the fifth, final kept).
-  **equal tempered** has the PHI synth play a rāga's 12-TET twin.
+  **equal tempered** (under tuning) has the PHI synth play a rāga's 12-TET twin.
 - The mode chosen is what the Counterpoint and Fugue dialogs open on when the clip has no tuning
   of its own. **tune the track** sets the selected track's tuning to it (a hypo-mode on the bottom
   of its range, hypodorian on A for a final on D); **notes into the mode** moves the MIDI clip
