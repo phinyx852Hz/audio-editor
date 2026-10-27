@@ -881,8 +881,9 @@ void MainWindow::registerCommands()
 void MainWindow::buildMenus()
 {
     // Menu titles carry & mnemonics: Alt + the first letter where it is free, otherwise the next
-    // clearest one. File, Edit and Process lead, then the rest A to Z, with Help last (owner,
-    // 2026-10-27). A "#name" entry is one of the submenus below; each is the first item of its menu.
+    // clearest one. File, Edit and Process lead, then the rest A to Z (but Spatial before Sample
+    // and Tracker before Tools), with Help last (owner, 2026-10-27). A "#name" entry is one of
+    // the submenus below; each is the first item of its menu.
     const QMap<QString, QPair<QString, QStringList>> submenus {
         { QStringLiteral ("#album"), { tr ("A&lbum"),   { "album.new", "album.addSongs", "-", "album.previousSong", "album.nextSong", "-",
                                "album.moveEarlier", "album.moveLater", "album.longerPause", "album.shorterPause", "-",
@@ -915,15 +916,15 @@ void MainWindow::buildMenus()
                                "repair.toolBox", "repair.toolLasso", "repair.toolBrush", "repair.toolSpotHeal",
                                "repair.brushSmaller", "repair.brushLarger", "repair.addHarmonics", "-",
                                "repair.frequencyRange", "repair.allFrequencies", "-", "view.spectral" } },
+        { tr ("Spat&ial"),   { "spatial.binaural", "process.midSide", "process.stereoize", "-", "spatial.layout", "-", "spatial.studio", "-", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.speakerArrays", "spatial.fumaToAmbix", "spatial.ambixToFuma", "-", "view.ambiScene", "analyze.imagingView" } },
         { tr ("&Sample"),    { "sample.send", "sample.window", "sample.refresh", "-", "slice.send", "slice.window", "slice.refresh", "-",
                                "instrument.granular", "instrument.retroSampler", "-", "sample.midiInputs", "control.surfaces", "control.learn", "sample.panic" } },
-        { tr ("Spat&ial"),   { "spatial.binaural", "process.midSide", "process.stereoize", "-", "spatial.layout", "-", "spatial.studio", "-", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.speakerArrays", "spatial.fumaToAmbix", "spatial.ambixToFuma", "-", "view.ambiScene", "analyze.imagingView" } },
         { tr ("S&ynth"),     { "instrument.wavetable", "instrument.modular", "instrument.additive", "-",
                                "instrument.subtractive1", "instrument.subtractive2", "instrument.fm", "-",
                                "sample.midiInputs", "sample.panic" } },
-        { tr ("&Tools"),     { "#markers", "-", "tools.macroRecord", "tools.macroApply", "tools.macros", "-", "tools.batch", "-", "tools.managePlugins", "-", "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan", "-", "tools.resetConfig" } },
         { tr ("Trac&ker"),   { "tracker.window", "tracker.furnace", "-", "tracker.new", "tracker.open", "tracker.save", "tracker.saveAs", "tracker.loadSample", "-", "tracker.playSong", "tracker.playPattern", "tracker.stop", "-",
                                "tracker.recordStereo", "tracker.recordMulti", "-", "tracker.resetTracks", "tracker.about" } },
+        { tr ("&Tools"),     { "#markers", "-", "tools.macroRecord", "tools.macroApply", "tools.macros", "-", "tools.batch", "-", "tools.managePlugins", "-", "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan", "-", "tools.resetConfig" } },
         { tr ("&View"),      { "#transport", "-", "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
                                "view.overview", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "view.cpuMeter", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "analyze.window", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "view.fullScreen", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
