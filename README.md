@@ -17,7 +17,7 @@ never clump (the first start is always the same sound, picked for PHI); it rings
 stand-in for the Φ synth, PHI's own phase distortion synth, until that is bundled.
 `--no-splash` starts without either.
 
-Status: Phase 2 complete: a usable editor with markers, meters, spectrogram, themes, a plugin Master Section and a spectral repair lab. Not yet tested on real audio hardware. See the full plan in [docs/plan.md](docs/plan.md).
+Status: Phase 2 complete: a usable editor with markers, meters, spectrogram, themes, a plugin Master Section and a spectral repair lab. Not yet tested on real audio hardware. See the full plan in [docs/plan.md](docs/plan.md). Every pull request, what it added and where to find it in the app and the code, is listed in [docs/pr-index.md](docs/pr-index.md), which updates itself.
 
 Built with a Qt 6 interface (native Wayland) on top of a JUCE 8 audio engine.
 
