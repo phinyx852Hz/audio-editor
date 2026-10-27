@@ -96,7 +96,7 @@ namespace rhythmgen
     // The feel's swing and humanizing into the settings, and its pushes onto the lanes by their sound.
     void applyFeel (Settings&, const Feel&);
 
-    // Euclidean rhythms of the world, from Toussaint (2005), each with a low drum on the beat.
+    // Euclidean timelines from many traditions, from Toussaint (2005), each with a low drum on the beat.
     struct Preset
     {
         std::string name;    // lower case: "tresillo: e(3,8)"
