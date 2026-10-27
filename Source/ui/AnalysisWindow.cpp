@@ -4,6 +4,7 @@
 #include "AnalysisWindow.h"
 #include "AnalysisReport.h"
 #include "AmbiVisualizer.h"
+#include "FindPanel.h"
 #include "Goniometer.h"
 #include "Settings.h"
 #include "Theme.h"
@@ -140,8 +141,9 @@ namespace analysis
         { QT_TRANSLATE_NOOP ("AnalysisWindow", "CD, club: -9 LUFS, -0.3 dBTP"), -9.0, -0.3 },
     }};
 
-    const std::array<QColor, numHolds> holdColors { QColor (0xef5350), QColor (0xff9800), QColor (0xffeb3b), QColor (0x66bb6a),
-                                                     QColor (0x26c6da), QColor (0x29b6f6), QColor (0x7e57c2), QColor (0xec407a) };
+    // The Selector's colours, 1 Silver to 8 Ruby.
+    const std::array<QColor, numHolds> holdColors { FindPanel::colour (0), FindPanel::colour (1), FindPanel::colour (2), FindPanel::colour (3),
+                                                     FindPanel::colour (4), FindPanel::colour (5), FindPanel::colour (6), FindPanel::colour (7) };
 
     double holdFrequency (int i) { return lowestHz * std::pow (highestHz / lowestHz, i / (double) (holdPoints - 1)); }
 
@@ -2139,10 +2141,11 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
             auto* b = new QPushButton (QString::number (h + 1), spectrumCard);
             b->setCheckable (true);
             b->setFixedSize (22, 20);
-            b->setToolTip (tr ("Hold the spectrum as it is now in this colour, or clear the hold (%1)").arg (h + 1));
+            b->setToolTip (tr ("Hold the spectrum as it is now in %1, or clear the hold (%2)").arg (FindPanel::colourName (h)).arg (h + 1));
+            const auto& c = holdColors[(size_t) h];
             b->setStyleSheet (QStringLiteral ("QPushButton { border: none; border-bottom: 3px solid %1; border-radius: 2px; padding: 0; }"
-                                              "QPushButton:checked { background: %2; color: black; }")
-                                  .arg (holdColors[(size_t) h].name(), holdColors[(size_t) h].name()));
+                                              "QPushButton:checked { background: %1; color: %2; }")
+                                  .arg (c.name(), 0.299 * c.red() + 0.587 * c.green() + 0.114 * c.blue() < 140.0 ? QStringLiteral ("white") : QStringLiteral ("black")));
             connect (b, &QPushButton::clicked, this, [this, h] { toggleHold (h); });
             holdButtons.push_back (b);
             spectrumCard->addControl (b);
