@@ -521,7 +521,7 @@ namespace rhythm
         //======================================================================
         void addSouthAmerican (std::vector<Rhythm>& all)
         {
-            const std::string g = "south american";
+            const std::string g = "south america";
             all.push_back (groove ("samba (batucada)", "samba", g, {}, 4, { 2, 2 }, 100,
                 "Brazil: two bars of 2/4, the surdos answering (the low one on the second beat), the caixa's 16ths, the tamborim's teleco-teco (simplified).",
                 { lane ("surdo de primeira", gm::floorTom, 4, "....X.......X..."),
@@ -568,7 +568,7 @@ namespace rhythm
         // Timelines counted in pulses, as Toussaint gives them, with a drum on the beat.
         void addAfrican (std::vector<Rhythm>& all)
         {
-            const std::string w = "west african";
+            const std::string w = "west africa";
             all.push_back (groove ("agbekɔ (standard bell)", "agbekor", w, {}, 4, { 1, 1, 1, 1 }, 110,
                 "Ewe, Ghana and Togo: the gankogui's seven strokes in twelve pulses, the standard pattern of West African 12/8, with the axatse rattle.",
                 { lane ("gankogui (bell)", gm::cowbell, 3, "X.x.xx.x.x.x"),
@@ -592,7 +592,7 @@ namespace rhythm
                   lane ("open hi-hat", gm::openHat, 4, "....x.......x...") }));
 
             // North African: Egyptian and Maghrebi iqāʿāt, dum (the darbuka's middle) and tak (its rim).
-            const std::string n = "north african";
+            const std::string n = "north africa";
             struct Iqa { const char* name; const char* plain; int beats; const char* dum; const char* tak; const char* counting; const char* about; double bpm; };
             const Iqa iqaat[] {
                 { "maqsūm", "maqsum", 4, "x...x...", ".x.x..x.", "dum tak – tak dum – tak –", "Egypt: the commonest iqāʿ of popular music, 4/4.", 110 },
@@ -608,7 +608,7 @@ namespace rhythm
                                        { lane ("dum", gm::lowConga, perBeat, q.dum), lane ("tak", gm::openHiConga, perBeat, q.tak) }, q.counting));
             }
             // The Arab and Ottoman classical repertoire's long cycles.
-            all.push_back (groove ("samāʿī thaqīl", "samai thaqil", "middle eastern", {}, 10, { 3, 2, 2, 3 }, 120,
+            all.push_back (groove ("samāʿī thaqīl", "samai thaqil", "iqāʿāt", {}, 10, { 3, 2, 2, 3 }, 120,
                 "The samāʿī's 10/8, 3+2+2+3: dum on 1, 6 and 7, tak on 4 and 8, the tenth eighth often leading into the next cycle.",
                 { lane ("dum", gm::lowConga, 1, "x....xx..."), lane ("tak", gm::openHiConga, 1, "...x...x..") },
                 "dum – – tak – dum dum tak – –"));
@@ -639,7 +639,7 @@ namespace rhythm
             if (roll.find_first_not_of ('.') != std::string::npos)
                 lanes.push_back (lane ("chaepyeon (gi, deoreoreo)", gm::highTimbale, perBeat * 4, roll));
             auto plain = name;
-            return groove (std::move (name), std::move (plain), "east asian", {}, beats, std::move (sections), bpm, std::move (about),
+            return groove (std::move (name), std::move (plain), "korean jangdan", {}, beats, std::move (sections), bpm, std::move (about),
                            std::move (lanes), std::move (counting));
         }
 
@@ -715,6 +715,27 @@ namespace rhythm
             if (std::find (out.begin(), out.end(), r.group) == out.end())
                 out.push_back (r.group);
         return out;
+    }
+
+    std::string region (const std::string& group)
+    {
+        static const std::vector<std::pair<std::string, std::string>> map {
+            { "north africa", "africa" }, { "west africa", "africa" },
+            { "breakbeats", "the americas" }, { "trap", "the americas" }, { "caribbean", "the americas" }, { "south america", "the americas" },
+            { "korean jangdan", "east asia" },
+            { "medieval rhythmic modes", "europe" },
+            { "north indian tāl", "south asia" }, { "south indian tāḷam", "south asia" },
+            { "iqāʿāt", "west asia" },
+        };
+        for (const auto& [g, r] : map)
+            if (g == group)
+                return r;
+        return {};
+    }
+
+    std::vector<std::string> regions()
+    {
+        return { "africa", "east asia", "europe", "south asia", "the americas", "west asia" };
     }
 
     int steps (const Lane& l) { return (int) compact (l.hits).size(); }

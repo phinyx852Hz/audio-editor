@@ -35,7 +35,7 @@ namespace rhythm
     {
         std::string name;       // as shown, lower case: "tīntāl", "caturaśra jāti tripuṭa tāḷam (ādi tāḷam)"
         std::string plain;      // ASCII, for searching and saving: "tintal"
-        std::string group;      // the Mode menu's submenu: "north indian tāl"
+        std::string group;      // the submenu inside its region: "north indian tāl"
         std::string subgroup;   // a submenu inside it, or empty
         std::string ipa;        // how an English name is said, or empty
         int beats = 4;          // in one cycle: mātrās, akṣaras, beats of the bar or bars
@@ -49,6 +49,11 @@ namespace rhythm
     const std::vector<Rhythm>& rhythms();
     int findRhythm (const std::string& plain);   // its index, or -1
     std::vector<std::string> groups();           // in menu order
+    // The Mode menu's rhythm is ordered by region (owner, 2026-10-27: regions as in melody and
+    // tuning, "west asia" and not "middle east", Europe one region among the others), then by
+    // group: "south asia" holds the north indian tāl and the south indian tāḷam.
+    std::vector<std::string> regions();          // alphabetical
+    std::string region (const std::string& group);
 
     struct Hit
     {

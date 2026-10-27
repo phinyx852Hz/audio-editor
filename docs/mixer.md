@@ -443,7 +443,7 @@ case, in proper transliteration):
   Code: ui/ModeSection.cpp, mixer::modeKeys, midifile::toKeys.
 - **rhythm** (owner, 2026-10-26; renamed from "rhythmic modes" 2026-10-27) holds 121 rhythms: North Indian tāls, South Indian tāḷams,
   breakbeats, trap, the medieval rhythmic modes, and Caribbean, South American, West and North
-  African, Middle Eastern and Korean rhythms, and **my breaks**, your own drum loops transcribed from
+  African, West Asian and Korean rhythms, by region, and **my breaks**, your own drum loops transcribed from
   their audio. Picking one opens a small dialog that adds it to the selected track
   as a MIDI clip, writes it into a new Tracker pattern, or saves it as a MIDI file, at any laya
   (and a tāḷam in any naḍai). **rhythm generator...** writes new grooves from Euclidean lanes,

@@ -6,7 +6,7 @@ modes, and of course, Caribbean, south american, and west and north african rhyt
 there's anything from East Asia, that would be great". Every name is lower case and in proper
 transliteration (owner).
 
-The menu is **Mode > rhythm** (owner, 2026-10-27: the Mode menu holds melody, tuning and rhythm). It has one submenu for each tradition. Hovering over a
+The menu is **Mode > rhythm** (owner, 2026-10-27: the Mode menu holds melody, tuning and rhythm). It has a submenu for each region, in alphabetical order: africa, east asia, europe, south asia, the americas and west asia. Europe is one region among the others, and West Asia is called that rather than the Middle East (owner, 2026-10-27). Each region has a submenu for each tradition. Hovering over a
 rhythm shows what it is and how it is counted: the ṭhekā's bols, the kriyās, or the strokes.
 Picking a rhythm opens a dialog with its sounds, the number of cycles, and a tempo, which starts
 at a usual tempo for that rhythm, and a laya (see below). The dialog has these buttons, and **edit in the generator...**:
@@ -61,7 +61,7 @@ Hindustani names follow their Hindi pronunciation, without the final schwa (tīn
 Karnatak names follow the Sanskrit-Tamil usage of the tradition (tāḷam, jāti, aṅga). English
 names are in plain lower case, with the IPA in the tooltip (owner, 2026-10-27: both).
 
-## North Indian tāl (16)
+## South Asia: north indian tāl (16)
 
 tīntāl, jhaptāl, ektāl, rūpak, dādrā, kaharvā, jhūmrā, dhamār, cautāl, āḍā cautāl, dīpcandī,
 tilvāḍā, sūltāl, tīvrā, jat tāl, pañjābī (sitārkhānī).
@@ -85,7 +85,7 @@ The theoretical literature counts more than a hundred tāls. Rarer ones such as 
 pañcam savārī, rudra, matta, śikhar and lakṣmī are not included yet, because their ṭhekās vary
 between gharānās and books. They can be added once the owner names the versions they want.
 
-## South Indian tāḷam (39)
+## South Asia: south indian tāḷam (39)
 
 The library has all 35 sūḷādi sapta tāḷas: dhruva, maṭhya, rūpaka, jhampa, tripuṭa, aṭa and ēka,
 each in the five jātis:
@@ -117,7 +117,7 @@ A low conga marks each aṅga and accents samam. A muted conga keeps the gati: t
 pulses to the akṣara in caturaśra naḍai. The other gatis (tiśra, khaṇḍa, miśra and saṅkīrṇa
 naḍai) would take each tāḷam's 35 versions to 175 and are left for later.
 
-## Breakbeats (10)
+## The Americas: breakbeats (10)
 
 amen break, funky drummer, think (about it), apache, impeach the president, when the levee breaks,
 funky president, cold sweat, it's a new day, the big beat.
@@ -127,7 +127,7 @@ the record. They are simplified: the drummers vary every bar, and ghost notes ar
 where they define the groove. Each one names its record and year, and its drummer where that is
 documented. These are our own transcriptions of rhythms, not samples.
 
-## Trap (3)
+## The Americas: trap (3)
 
 | rhythm | what it has |
 |---|---|
@@ -137,7 +137,7 @@ documented. These are our own transcriptions of rhythms, not samples.
 
 All three are at 140 to 142 bpm.
 
-## Medieval rhythmic modes (6)
+## Europe: medieval rhythmic modes (6)
 
 These are the six modi of the Notre-Dame school, as Johannes de Garlandia sets them out (c. 1240):
 
@@ -153,13 +153,13 @@ These are the six modi of the Notre-Dame school, as Johannes de Garlandia sets t
 They are in ternary time, with three tempora to a perfection. Each mode is played on a tabor and
 sung on d (channel 1, held for its value), so the longs sound long.
 
-## Caribbean (19)
+## The Americas: caribbean (19)
 
 son clave (3-2 and 2-3), rumba clave (3-2 and 2-3), cáscara (3-2 and 2-3, the timbal shell over its
 clave, after Mauleón), tresillo, cinquillo, habanera, son montuno
 (tumbao, 2-3), cha-cha-chá, bembé (6/8), one drop, rockers, steppers, ska, dembow, soca, merengue.
 
-## South American (8)
+## The Americas: south america (8)
 
 samba (batucada), bossa nova, baião, tango (3-3-2), milonga, candombe, cumbia, and huayno (the
 Andes: a stressed beat followed by two short ones, written as an 8th and two 16ths in 2/4 on the
@@ -168,7 +168,7 @@ bombo).
 Still to come: chacarera, marinera, maracatu, ijexá, partido alto, festejo and joropo. Haitian
 konpa and Mexican son jarocho too. Each waits for a transcription that can be cited.
 
-## West African (6) and North African (6)
+## Africa: west africa (6) and north africa (6)
 
 West African:
 
@@ -185,7 +185,7 @@ North African:
 Not yet included: the Mande djembe rhythms (kuku, soli, dundunba). Their parts differ between
 teachers.
 
-## Middle Eastern (1)
+## West Asia: iqāʿāt (1)
 
 samāʿī thaqīl is the 10/8 of the samāʿī, grouped 3+2+2+3. Dum falls on eighths 1, 6 and 7, and
 tak on 4 and 8.
@@ -274,7 +274,7 @@ drum hits.
 The transcriptions are kept in `breaks.json` beside `settings.ini`, so the audio files are only
 read once. **remove** takes one break off the list, or all of them.
 
-## East Asian (7)
+## East Asia: korean jangdan (7)
 
 These are Korean jangdan on the janggu:
 

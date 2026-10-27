@@ -163,9 +163,17 @@ void MainWindow::fillRhythmMenu (QMenu* menu)
     connect (generator, &QAction::triggered, this, [this] { rhythmGenerator(); });
     menu->addSeparator();
     const auto& all = rhythm::rhythms();
+    std::map<std::string, QMenu*> regions;
+    for (const auto& region : rhythm::regions())
+    {
+        auto* m = menu->addMenu (text (region));
+        m->setToolTipsVisible (true);
+        regions[region] = m;
+    }
     for (const auto& group : rhythm::groups())
     {
-        auto* sub = menu->addMenu (text (group));
+        const auto it = regions.find (rhythm::region (group));
+        auto* sub = (it != regions.end() ? it->second : menu)->addMenu (text (group));
         sub->setToolTipsVisible (true);
         std::map<std::string, QMenu*> inner;
         for (size_t i = 0; i < all.size(); ++i)

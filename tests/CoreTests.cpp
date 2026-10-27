@@ -6982,6 +6982,14 @@ namespace
         const auto& primus = find ("modus primus");
         const auto hits = rhythm::hits (primus);
         check (std::any_of (hits.begin(), hits.end(), [] (const rhythm::Hit& h) { return h.length == 2; }), "modus primus: the long held two tempora");
+        for (const auto& g : rhythm::groups())
+        {
+            const auto reg = rhythm::region (g);
+            const auto regs = rhythm::regions();
+            check (std::find (regs.begin(), regs.end(), reg) != regs.end(), "rhythm group " + g + ": in a region of the menu");
+        }
+        check (rhythm::region ("iqāʿāt") == "west asia" && rhythm::region ("medieval rhythmic modes") == "europe",
+               "regions: west asia, and europe as one region among the others");
         check (rhythm::drumName (39) == "hand clap" && rhythm::drumName (81) == "open triangle" && rhythm::drumName (20).empty(), "general midi drum names");
 
         // Layakārī: the ṭhekā twice, three and four times as fast, the claps and waves as they were.
