@@ -52,6 +52,7 @@ target_sources(${APP_ID} PRIVATE
     Source/sampler/SlicerEngine.cpp
     Source/mixer/MidiFile.cpp
     Source/mixer/Tunings.cpp
+    Source/mixer/NoteEditor.cpp
     Source/mixer/RagaInstrument.cpp
     Source/mixer/Counterpoint.cpp
     Source/mixer/Fugue.cpp
@@ -91,6 +92,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/PhiVoice.cpp
     Source/core/PhiPhaser.cpp
     Source/core/PhiTuning.cpp
+    Source/core/Scala.cpp
     Source/core/PhiRaga.cpp
     Source/core/PhiRagas.cpp
     Source/core/PhiSitar.cpp
@@ -168,6 +170,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/SamplerWindow.cpp
     Source/ui/SlicerWindow.cpp
     Source/ui/MixerWindow.cpp
+    Source/ui/MidiEditor.cpp
     Source/ui/MixerRecording.cpp
     Source/ui/MixerFugue.cpp
     Source/ui/MixerMinimalize.cpp
@@ -411,6 +414,8 @@ if(PHI_BUILD_TESTS)
         Source/sampler/SlicerEngine.cpp
         Source/mixer/MidiFile.cpp
         Source/mixer/Tunings.cpp
+        Source/mixer/NoteEditor.cpp
+    Source/mixer/NoteEditor.cpp
         Source/mixer/RagaInstrument.cpp
         Source/mixer/Counterpoint.cpp
         Source/mixer/Fugue.cpp
@@ -452,6 +457,8 @@ if(PHI_BUILD_TESTS)
         Source/core/PhiVoice.cpp
         Source/core/PhiPhaser.cpp
         Source/core/PhiTuning.cpp
+        Source/core/Scala.cpp
+    Source/core/Scala.cpp
         Source/core/PhiRaga.cpp
         Source/core/PhiRagas.cpp
         Source/core/PhiSitar.cpp

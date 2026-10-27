@@ -328,6 +328,7 @@ private:
     // mode, raga or maqam (mixer/Counterpoint.h), each a MIDI file beside the mix and a clip on a
     // new track, where the clip is on the timeline or in the same scene, in the clip's tuning.
     void counterpointShownMidi();
+    void noteEditorShownMidi();   // the MIDI editor on the clip shown
     // Writes the voices against `clip` (in `slot` of `scene`, or on the timeline when null). A
     // live loop's (launchAt >= 0) go on the tracks the last loop's went on, and launch on that
     // frame of the launch clock with it.

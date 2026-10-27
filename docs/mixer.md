@@ -388,8 +388,9 @@ Device Chain and drag and drop (owner, 2026-10-25, "very close to Ableton's work
   inserts. Enter or a double-click puts it on the selected track. Backspace goes back to the files.
 
 Fast MIDI edits (owner, 2026-10-25: "MIDI editing, but really fast"; "the idea is speed"):
-- No notes are picked or moved by hand. A MIDI clip picked (on the tracks or in the launcher) puts
-  a MIDI Clip section at the top of the Inspector, and R reverses the clip.
+- A MIDI clip picked (on the tracks or in the launcher) puts a MIDI Clip section at the top of the
+  Inspector, and R reverses the clip. Notes are picked and moved by hand in the MIDI editor, **Edit
+  Notes...** there ([midi-editor.md](midi-editor.md)).
 - **Φ** deals the notes out again along the golden ratio. The pitches, velocities and lengths stay
   the same, and so does the rhythm (the times notes start); which notes start at which of those
   times changes, and a chord stays together. Every press gives another order.
@@ -661,8 +662,8 @@ could be applied on the clip level, track level or scene level"):
 - The mixer hands the tuning to the track's instrument (`mixer::Instrument::setTuning`) whenever
   it changes. Only the PHI synth retunes, and PHI rāga (docs/raga.md) plays a raga in force by its
   sheet; the Synth, Sampler, Slicer and plugins stay in 12-TET.
-  MPE for the PHI synth, and tuning outside MPE synths (a channel and a ±48 bend per note), are
-  next.
+  A clip saved from the MIDI editor as MPE or pitch bend carries its tuning in its notes instead,
+  for any synth that follows the bends ([midi-editor.md](midi-editor.md)).
 
 The Sampler and Slicer windows of the Sample menu
 could dock into the mixer as track 1 (the other thread's docking work).
