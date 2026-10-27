@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**68 pull requests:** 64 merged, 4 open.
+**68 pull requests:** 67 merged, 1 open.
 
 ## Contents
 
@@ -93,8 +93,8 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#59](https://github.com/phinyx852Hz/audio-editor/pull/59) | Accurate, lower-case transliterations for the MIDI clip's modes and ragas | merged | Mixer, MIDI Clip section, Mode or raga list | `Source/mixer/MidiFile.cpp` |
 | [#60](https://github.com/phinyx852Hz/audio-editor/pull/60) | Add a top-level Mode menu | merged | Mode menu (Alt+D) | `Source/ui/ModeSection.cpp`<br>`Source/mixer/Tunings.cpp` |
 | [#62](https://github.com/phinyx852Hz/audio-editor/pull/62) | Rhythmic modes in the Mode menu: tāls, tāḷams, breakbeats, trap, medieval modes and world rhythms | merged | Mode menu, rhythmic modes | `Source/mixer/Rhythms.cpp`<br>`Source/ui/RhythmSection.cpp`<br>`docs/rhythms.md` |
-| [#63](https://github.com/phinyx852Hz/audio-editor/pull/63) | Stochasticize: Xenakis's ST clouds, sieves and Markov screens for MIDI clips | open | Mixer, MIDI Clip section and Mode menu, stochasticize | `Source/mixer/Stochastic.cpp`<br>`Source/ui/StochasticSection.cpp`<br>`docs/stochastic.md` |
-| [#65](https://github.com/phinyx852Hz/audio-editor/pull/65) | cubify: arrange a scene by Xenakis's cubes, plus Messiaen's modes | open |  | `Source/ui/MixerWindow.cpp`<br>`Source/mixer/Rhythms.cpp`<br>`Source/mixer/Cubify.cpp` |
+| [#63](https://github.com/phinyx852Hz/audio-editor/pull/63) | Stochasticize: Xenakis's ST clouds, sieves and Markov screens for MIDI clips | merged | Mixer, MIDI Clip section and Mode menu, stochasticize | `Source/mixer/Stochastic.cpp`<br>`Source/ui/StochasticSection.cpp`<br>`docs/stochastic.md` |
+| [#65](https://github.com/phinyx852Hz/audio-editor/pull/65) | cubify: arrange a scene by Xenakis's cubes, plus Messiaen's modes | merged |  | `Source/ui/MixerWindow.cpp`<br>`Source/mixer/Rhythms.cpp`<br>`Source/mixer/Cubify.cpp` |
 | [#67](https://github.com/phinyx852Hz/audio-editor/pull/67) | PHI rāga: rāg darpaṇ, a raga made for PHI | merged |  | `docs/raga-darpan.md`<br>`Source/core/PhiRagas.cpp`<br>`tests/CoreTests.cpp` |
 
 ### Φ effects and sounds
@@ -166,7 +166,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | PR | Title | State | In the app | In the code |
 |---|---|---|---|---|
 | [#64](https://github.com/phinyx852Hz/audio-editor/pull/64) | Add a self-updating pull request index | merged |  | `Source/core/PhiRagas.cpp`<br>`Source/ui/MixerWindow.cpp`<br>`Source/mixer/Fugue.cpp` |
-| [#66](https://github.com/phinyx852Hz/audio-editor/pull/66) | Minimalize: arrange a scene or the timeline by Reich's and Glass's processes | open |  | `Source/core/PhiRagas.cpp`<br>`Source/ui/MixerWindow.cpp`<br>`Source/mixer/Rhythms.cpp` |
+| [#66](https://github.com/phinyx852Hz/audio-editor/pull/66) | Minimalize: arrange a scene or the timeline by Reich's and Glass's processes | merged |  | `Source/core/PhiRagas.cpp`<br>`Source/ui/MixerWindow.cpp`<br>`Source/mixer/Rhythms.cpp` |
 
 ## By number
 
@@ -234,9 +234,9 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#60](https://github.com/phinyx852Hz/audio-editor/pull/60) | Add a top-level Mode menu | Top-level Mode menu: pick one mode, final and range, and the rest of PHI uses it. | merged | 2026-10-26 | Modes, tunings and composition |
 | [#61](https://github.com/phinyx852Hz/audio-editor/pull/61) | Editor Track: one track of the project under the editor's waveform | Editor Track: one project track shown under the editor's waveform, with recording and editing. | merged | 2026-10-27 | Mixer and clip launcher |
 | [#62](https://github.com/phinyx852Hz/audio-editor/pull/62) | Rhythmic modes in the Mode menu: tāls, tāḷams, breakbeats, trap, medieval modes and world rhythms | 117 rhythmic modes: tāls, tāḷams, breakbeats, trap, medieval modes and world rhythms. | merged | 2026-10-27 | Modes, tunings and composition |
-| [#63](https://github.com/phinyx852Hz/audio-editor/pull/63) | Stochasticize: Xenakis's ST clouds, sieves and Markov screens for MIDI clips | Stochasticize: Xenakis's ST clouds, sieves and Markov screens to write new lines from MIDI clips. | open | 2026-10-26 | Modes, tunings and composition |
+| [#63](https://github.com/phinyx852Hz/audio-editor/pull/63) | Stochasticize: Xenakis's ST clouds, sieves and Markov screens for MIDI clips | Stochasticize: Xenakis's ST clouds, sieves and Markov screens to write new lines from MIDI clips. | merged | 2026-10-27 | Modes, tunings and composition |
 | [#64](https://github.com/phinyx852Hz/audio-editor/pull/64) | Add a self-updating pull request index | A table of contents of every pull request, so it's easy to see what PHI has and where to find it. *(auto)* | merged | 2026-10-27 | Not yet sorted |
-| [#65](https://github.com/phinyx852Hz/audio-editor/pull/65) | cubify: arrange a scene by Xenakis's cubes, plus Messiaen's modes | cubify... arranges a clip-launcher scene (or one MIDI clip) using the cube method from Xenakis's *Nomos Alpha*. *(auto)* | open | 2026-10-26 | Modes, tunings and composition |
-| [#66](https://github.com/phinyx852Hz/audio-editor/pull/66) | Minimalize: arrange a scene or the timeline by Reich's and Glass's processes | Minimalize is step 4 of PHI's generative chain (phi set selector → MIDI generators → cubify → minimalize). *(auto)* | open | 2026-10-26 | Not yet sorted |
+| [#65](https://github.com/phinyx852Hz/audio-editor/pull/65) | cubify: arrange a scene by Xenakis's cubes, plus Messiaen's modes | cubify... arranges a clip-launcher scene (or one MIDI clip) using the cube method from Xenakis's *Nomos Alpha*. *(auto)* | merged | 2026-10-27 | Modes, tunings and composition |
+| [#66](https://github.com/phinyx852Hz/audio-editor/pull/66) | Minimalize: arrange a scene or the timeline by Reich's and Glass's processes | Minimalize is step 4 of PHI's generative chain (phi set selector → MIDI generators → cubify → minimalize). *(auto)* | merged | 2026-10-27 | Not yet sorted |
 | [#67](https://github.com/phinyx852Hz/audio-editor/pull/67) | PHI rāga: rāg darpaṇ, a raga made for PHI | Adds rāg darpaṇ, a raga designed for PHI by the owner and Claude. *Darpaṇ* means mirror, and the raga is named after Faqīrullāh's *Rāg Darpaṇ* (1666), which... *(auto)* | merged | 2026-10-26 | Modes, tunings and composition |
 | [#68](https://github.com/phinyx852Hz/audio-editor/pull/68) | MIDI editor: a piano roll in 12-TET or any PHI tuning, with Scala files, restyle and MPE | The first stage of the MIDI editor (the "core editor" option the owner chose). *(auto)* | open | 2026-10-26 | Editing and warping |
