@@ -1,6 +1,6 @@
 # Albums
 
-[]{.ix t="Album"}The Album menu (`Alt+B`) puts an album together, in the spirit of WaveLab's Audio Montage: songs in order with pauses or crossfades between them, each with its own title, ISRC and fades, played through the Master Section and written as a CD image or a set of gapless files.
+[]{.ix t="Album"}The Album submenu (Master > Album, `Alt+M` then `L`) puts an album together, in the spirit of WaveLab's Audio Montage: songs in order with pauses or crossfades between them, each with its own title, ISRC and fades, played through the Master Section and written as a CD image or a set of gapless files.
 
 ![An album of four songs: blocks above the waveform, and track regions.](images/album.png)
 
