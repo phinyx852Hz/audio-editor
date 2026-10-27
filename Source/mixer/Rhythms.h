@@ -53,7 +53,7 @@ namespace rhythm
     // tuning, "West Asia", Europe one region among the others), then by
     // group: "South Asia" holds the North Indian tāl and the South Indian tāḷam. Places and peoples
     // are capitalized there (owner, 2026-10-27), the rhythms themselves lower case.
-    std::vector<std::string> regions();          // alphabetical ("the Americas" under A)
+    std::vector<std::string> regions();          // west to east, as melody and tuning; some still empty
     std::string region (const std::string& group);
 
     struct Hit

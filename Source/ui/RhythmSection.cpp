@@ -163,14 +163,18 @@ void MainWindow::fillRhythmMenu (QMenu* menu)
     connect (generator, &QAction::triggered, this, [this] { rhythmGenerator(); });
     menu->addSeparator();
     const auto& all = rhythm::rhythms();
+    // Regions in melody and tuning's order, the ones with no rhythms yet left out.
     std::map<std::string, QMenu*> regions;
+    const auto groups = rhythm::groups();
     for (const auto& region : rhythm::regions())
     {
+        if (std::none_of (groups.begin(), groups.end(), [&] (const std::string& g) { return rhythm::region (g) == region; }))
+            continue;
         auto* m = menu->addMenu (text (region));
         m->setToolTipsVisible (true);
         regions[region] = m;
     }
-    for (const auto& group : rhythm::groups())
+    for (const auto& group : groups)
     {
         const auto it = regions.find (rhythm::region (group));
         auto* sub = (it != regions.end() ? it->second : menu)->addMenu (text (group));

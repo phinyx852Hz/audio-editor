@@ -735,7 +735,7 @@ namespace rhythm
 
     std::vector<std::string> regions()
     {
-        return { "Africa", "the Americas", "East Asia", "Europe", "South Asia", "West Asia" };
+        return { "Europe", "West Asia", "Central Asia", "South Asia", "Southeast Asia", "East Asia", "Africa", "the Americas", "Oceania" };
     }
 
     int steps (const Lane& l) { return (int) compact (l.hits).size(); }

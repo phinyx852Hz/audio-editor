@@ -6,7 +6,7 @@ modes, and of course, Caribbean, south american, and west and north african rhyt
 there's anything from East Asia, that would be great". Every name is lower case and in proper
 transliteration (owner).
 
-The menu is **Mode > rhythm** (owner, 2026-10-27: the Mode menu holds melody, tuning and rhythm). It has a submenu for each region, in alphabetical order: Africa, the Americas, East Asia, Europe, South Asia and West Asia. Names of places, peoples and people are capitalized in the menu (owner, 2026-10-27); the rhythms keep lower-case names. Europe is one region among the others (owner, 2026-10-27). Each region has a submenu for each tradition. Hovering over a
+The menu is **Mode > rhythm** (owner, 2026-10-27: the Mode menu holds melody, tuning and rhythm). It has a submenu for each region, west to east as in melody and tuning: Europe, West Asia, South Asia, East Asia, Africa and the Americas (Central Asia, Southeast Asia and Oceania have no rhythms yet, so they are hidden). Names of places, peoples and people are capitalized in the menu (owner, 2026-10-27); the rhythms keep lower-case names. Europe is one region among the others (owner, 2026-10-27). Each region has a submenu for each tradition. Hovering over a
 rhythm shows what it is and how it is counted: the ṭhekā's bols, the kriyās, or the strokes.
 Picking a rhythm opens a dialog with its sounds, the number of cycles, and a tempo, which starts
 at a usual tempo for that rhythm, and a laya (see below). The dialog has these buttons, and **edit in the generator...**:
