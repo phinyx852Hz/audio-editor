@@ -12,21 +12,20 @@ The palette is also the quickest way to learn shortcuts: the key for each comman
 
 ## Menus from the keyboard
 
-[]{.ix t="Menus!from the keyboard"}`F10` opens the first menu; the arrows move through the menus and their items, and `Enter` runs one. `Alt` with a menu's underlined letter opens that menu directly:
+[]{.ix t="Menus!from the keyboard"}`F10` opens the first menu; the arrows move through the menus and their items, and `Enter` runs one. `Alt` with a menu's underlined letter opens that menu directly. File, Edit and Process come first and the rest follow in alphabetical order (Spatial before Sample, Tracker before Tools), with Help last; Album, Effect, Markers and Transport are submenus at the top of Master, Process, Tools and View, opened with their underlined letter once that menu is open:
 
 | Keys | Menu | Keys | Menu |
 |---|---|---|---|
-| `Alt+F` | File | `Alt+S` | Master |
-| `Alt+E` | Edit | `Alt+T` | Transport |
-| `Alt+P` | Process | `Alt+V` | View |
-| `Alt+R` | Repair | `Alt+Z` | Visualizer |
-| `Alt+C` | Effect (pressed again: Performance) | `Alt+X` | Mixer |
-| `Alt+I` | Spatial | `Alt+A` | Sample |
-| `Alt+W` | Warp | `Alt+Y` | Synth |
-| `Alt+M` | Markers | `Alt+K` | Tracker |
-| `Alt+B` | Album | `Alt+O` | Options |
-| `Alt+N` | Analyze | `Alt+H` | Help |
-| `Alt+L` | Tools | | |
+| `Alt+F` | File | `Alt+I` | Spatial |
+| `Alt+E` | Edit | `Alt+S` | Sample |
+| `Alt+P` | Process (Effect submenu: `E`) | `Alt+Y` | Synth |
+| `Alt+A` | Analyze | `Alt+K` | Tracker |
+| `Alt+M` | Master (Album submenu: `L`) | `Alt+T` | Tools (Markers submenu: `K`) |
+| `Alt+X` | Mixer | `Alt+V` | View (Transport submenu: `A`) |
+| `Alt+D` | Mode | `Alt+Z` | Visualizer |
+| `Alt+O` | Options | `Alt+W` | Warp |
+| `Alt+C` | Performance | `Alt+H` | Help |
+| `Alt+R` | Repair | | |
 
 ![The menus open from the keyboard with F10.](images/menu-f10.png)
 

@@ -880,60 +880,66 @@ void MainWindow::registerCommands()
 
 void MainWindow::buildMenus()
 {
-    // Menu titles carry & mnemonics, so Alt+F, Alt+E, Alt+P, Alt+M, Alt+A... open them.
+    // Menu titles carry & mnemonics: Alt + the first letter where it is free, otherwise the next
+    // clearest one. File, Edit and Process lead, then the rest A to Z (but Spatial before Sample
+    // and Tracker before Tools), with Help last (owner, 2026-10-27). A "#name" entry is one of
+    // the submenus below; each is the first item of its menu.
+    const QMap<QString, QPair<QString, QStringList>> submenus {
+        { QStringLiteral ("#album"), { tr ("A&lbum"),   { "album.new", "album.addSongs", "-", "album.previousSong", "album.nextSong", "-",
+                               "album.moveEarlier", "album.moveLater", "album.longerPause", "album.shorterPause", "-",
+                               "album.songProperties", "album.openSong", "album.removeSong", "-",
+                               "album.properties", "album.twoTracks", "album.export" } } },
+        { QStringLiteral ("#effect"), { tr ("&Effect"),    { "effect.repeat", "-", "@nyquist.generate", "-", "@nyquist.effect" } } },
+        { QStringLiteral ("#markers"), { tr ("Mar&kers"),   { "marker.add", "marker.addRegion", "-", "marker.next", "marker.previous", "-", "marker.exportSlices", "warp.exportLoop", "marker.exportLabels", "-", "view.markers" } } },
+        { QStringLiteral ("#transport"), { tr ("Tr&ansport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
+                               "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } } },
+    };
+
     const QList<QPair<QString, QStringList>> layout {
         { tr ("&File"),      { "file.open", "album.new", "file.record", "-", "file.save", "file.saveAs", "file.export", "-", "file.metadata", "-", "file.close", "file.nextTab", "file.previousTab", "-", "file.quit" } },
         { tr ("&Edit"),      { "edit.undo", "edit.redo", "-", "view.find", "-", "edit.cut", "edit.copy", "edit.copyToNew", "edit.paste", "edit.delete", "-",
                                "edit.trim", "edit.insertSilence", "edit.split", "edit.duplicate", "-", "edit.snapZero", "edit.snapGrid", "edit.narrowGrid", "edit.widenGrid", "-", "select.all", "select.none", "-",
                                "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
                                "select.toStart", "select.toEnd" } },
-        { tr ("&Process"),   { "process.gain", "process.gainUp", "process.gainDown", "process.normalize", "-", "process.fadeIn", "process.fadeOut", "-",
+        { tr ("&Process"),   { "#effect", "-", "process.gain", "process.gainUp", "process.gainDown", "process.normalize", "-", "process.fadeIn", "process.fadeOut", "-",
                                "process.fadeShape.linear", "process.fadeShape.equalPower", "process.fadeShape.exponential",
                                "process.fadeShape.sCurve", "-", "process.reverse", "process.invert", "process.dcOffset", "-", "process.stereoize", "process.midSide", "process.convert" } },
+        { tr ("&Analyze"),   { "analyze.loudness", "-", "analyze.beats", "analyze.onsets", "analyze.tempoKey", "analyze.vamp", "-", "analyze.window", "view.meters", "analyze.imagingView", "analyze.resetMeters", "-", "analyze.plugin", "-", "view.spectral", "-", "@nyquist.analyze" } },
+        { tr ("&Master"),    { "#album", "-", "view.master", "view.chain", "master.addPlugin", "master.bypass", "analyze.plugin", "-", "master.assistant", "-", "master.render", "master.renderNew", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
+        { tr ("Mi&xer"),     { "mixer.window", "mixer.dock", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
+                               "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "mixer.sendToTimeline", "-", "mixer.editorTrack", "mixer.trackToEditor", "-", "mixer.assistant" } },
+        { tr ("Mo&de"),      { "@mode" } },
+        { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "-", "options.keymap", "options.theme", "options.waveformColors" } },
+        { tr ("Performan&ce"), { "performance.launcher", "-", "control.surfaces", "control.learn", "-", "performance.record", "performance.stream", "-", "performance.settings", "performance.folder" } },
         { tr ("&Repair"),    { "view.diagnostics", "-", "repair.autoHeal", "repair.spectralGain", "repair.findSimilar", "repair.correctPitch", "-", "repair.learnNoise", "repair.noiseReduction", "-",
                                "repair.declick", "repair.declip", "repair.dehum", "repair.deess", "-",
                                "repair.toolBox", "repair.toolLasso", "repair.toolBrush", "repair.toolSpotHeal",
                                "repair.brushSmaller", "repair.brushLarger", "repair.addHarmonics", "-",
                                "repair.frequencyRange", "repair.allFrequencies", "-", "view.spectral" } },
-        { tr ("Effe&ct"),    { "effect.repeat", "-", "@nyquist.generate", "-", "@nyquist.effect" } },
         { tr ("Spat&ial"),   { "spatial.binaural", "process.midSide", "process.stereoize", "-", "spatial.layout", "-", "spatial.studio", "-", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.speakerArrays", "spatial.fumaToAmbix", "spatial.ambixToFuma", "-", "view.ambiScene", "analyze.imagingView" } },
-        { tr ("&Warp"),      { "warp.showGrid", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "-", "warp.detectGrid", "warp.autoDetect", "warp.setTempo", "warp.downbeat", "warp.halve", "warp.double", "-",
-                               "warp.edit", "warp.previousHit", "warp.nextHit", "warp.toggleMarker", "warp.nudgeEarlier", "warp.nudgeLater", "-",
-                               "warp.quantizePanel", "warp.quantize", "warp.markersFromHits", "warp.sliceAtHits", "warp.resetWarp", "-", "warp.stretch", "warp.halfSpeed", "warp.doubleSpeed", "warp.extremeStretch", "warp.extremeAgain", "-", "warp.exportLoop" } },
-        { tr ("&Markers"),   { "marker.add", "marker.addRegion", "-", "marker.next", "marker.previous", "-", "marker.exportSlices", "warp.exportLoop", "marker.exportLabels", "-", "view.markers" } },
-        { tr ("Al&bum"),   { "album.new", "album.addSongs", "-", "album.previousSong", "album.nextSong", "-",
-                               "album.moveEarlier", "album.moveLater", "album.longerPause", "album.shorterPause", "-",
-                               "album.songProperties", "album.openSong", "album.removeSong", "-",
-                               "album.properties", "album.twoTracks", "album.export" } },
-        { tr ("A&nalyze"),   { "analyze.loudness", "-", "analyze.beats", "analyze.onsets", "analyze.tempoKey", "analyze.vamp", "-", "analyze.window", "view.meters", "analyze.imagingView", "analyze.resetMeters", "-", "analyze.plugin", "-", "view.spectral", "-", "@nyquist.analyze" } },
-        { tr ("Too&ls"),     { "tools.macroRecord", "tools.macroApply", "tools.macros", "-", "tools.batch", "-", "tools.managePlugins", "-", "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan", "-", "tools.resetConfig" } },
-        { tr ("Ma&ster"),    { "view.master", "view.chain", "master.addPlugin", "master.bypass", "analyze.plugin", "-", "master.assistant", "-", "master.render", "master.renderNew", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
-        { tr ("&Transport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
-                               "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } },
-        { tr ("&View"),      { "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
+        { tr ("&Sample"),    { "sample.send", "sample.window", "sample.refresh", "-", "slice.send", "slice.window", "slice.refresh", "-",
+                               "instrument.granular", "instrument.retroSampler", "-", "sample.midiInputs", "control.surfaces", "control.learn", "sample.panic" } },
+        { tr ("S&ynth"),     { "instrument.wavetable", "instrument.modular", "instrument.additive", "-",
+                               "instrument.subtractive1", "instrument.subtractive2", "instrument.fm", "-",
+                               "sample.midiInputs", "sample.panic" } },
+        { tr ("Trac&ker"),   { "tracker.window", "tracker.furnace", "-", "tracker.new", "tracker.open", "tracker.save", "tracker.saveAs", "tracker.loadSample", "-", "tracker.playSong", "tracker.playPattern", "tracker.stop", "-",
+                               "tracker.recordStereo", "tracker.recordMulti", "-", "tracker.resetTracks", "tracker.about" } },
+        { tr ("&Tools"),     { "#markers", "-", "tools.macroRecord", "tools.macroApply", "tools.macros", "-", "tools.batch", "-", "tools.managePlugins", "-", "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan", "-", "tools.resetConfig" } },
+        { tr ("&View"),      { "#transport", "-", "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
                                "view.overview", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "view.cpuMeter", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "analyze.window", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "view.fullScreen", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
         { tr ("Visuali&zer"), { "view.visualizer", "view.visualizerFullScreen", "view.visualizerBehind", "-",
                                "view.visualizerNext", "view.visualizerPrevious", "view.visualizerChoose", "-",
                                "@visual.artistic", "@visual.science", "-", "@visual.milkdrop", "@visual.rain", "@visual.web", "@visual.sonify", "-",
                                "view.opacityUp", "view.opacityDown", "view.opacityFull" } },
-        { tr ("Mi&xer"),     { "mixer.window", "mixer.dock", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
-                               "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "mixer.sendToTimeline", "-", "mixer.editorTrack", "mixer.trackToEditor", "-", "mixer.assistant" } },
-        { tr ("S&ample"),    { "sample.send", "sample.window", "sample.refresh", "-", "slice.send", "slice.window", "slice.refresh", "-",
-                               "instrument.granular", "instrument.retroSampler", "-", "sample.midiInputs", "control.surfaces", "control.learn", "sample.panic" } },
-        { tr ("S&ynth"),     { "instrument.wavetable", "instrument.modular", "instrument.additive", "-",
-                               "instrument.subtractive1", "instrument.subtractive2", "instrument.fm", "-",
-                               "sample.midiInputs", "sample.panic" } },
-        { tr ("Mo&de"),      { "@mode" } },
-        { tr ("Trac&ker"),   { "tracker.window", "tracker.furnace", "-", "tracker.new", "tracker.open", "tracker.save", "tracker.saveAs", "tracker.loadSample", "-", "tracker.playSong", "tracker.playPattern", "tracker.stop", "-",
-                               "tracker.recordStereo", "tracker.recordMulti", "-", "tracker.resetTracks", "tracker.about" } },
-        { tr ("Performan&ce"), { "performance.launcher", "-", "control.surfaces", "control.learn", "-", "performance.record", "performance.stream", "-", "performance.settings", "performance.folder" } },
-        { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "-", "options.keymap", "options.theme", "options.waveformColors" } },
+        { tr ("&Warp"),      { "warp.showGrid", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "-", "warp.detectGrid", "warp.autoDetect", "warp.setTempo", "warp.downbeat", "warp.halve", "warp.double", "-",
+                               "warp.edit", "warp.previousHit", "warp.nextHit", "warp.toggleMarker", "warp.nudgeEarlier", "warp.nudgeLater", "-",
+                               "warp.quantizePanel", "warp.quantize", "warp.markersFromHits", "warp.sliceAtHits", "warp.resetWarp", "-", "warp.stretch", "warp.halfSpeed", "warp.doubleSpeed", "warp.extremeStretch", "warp.extremeAgain", "-", "warp.exportLoop" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
     };
 
-    // 23 menus (owner, 2026-10-26: "what happens when we load PHI on a small screen"): Fusion
-    // puts 7 px between titles, and at 1280 px wide with a 10 pt font the last ones went behind
+    // 19 menus (23 before Album, Effect, Markers and Transport became submenus; owner,
+    // 2026-10-26: "what happens when we load PHI on a small screen"): Fusion puts 7 px between titles, and at 1280 px wide with a 10 pt font the last ones went behind
     // the » button. 2 px keeps them all in view there (1204 px at 10 pt DejaVu Sans).
     struct TightMenuBar : QProxyStyle
     {
@@ -947,13 +953,17 @@ void MainWindow::buildMenus()
     tight->setParent (menuBar());
     menuBar()->setStyle (tight);
 
-    for (const auto& [title, ids] : layout)
+    std::function<void (QMenu*, const QStringList&)> fill = [&] (QMenu* menu, const QStringList& ids)
     {
-        auto* menu = menuBar()->addMenu (title);
         for (const auto& id : ids)
         {
             if (id == QLatin1String ("-"))
                 menu->addSeparator();
+            else if (id.startsWith (QLatin1Char ('#')))
+            {
+                const auto [subTitle, subIds] = submenus.value (id);
+                fill (menu->addMenu (subTitle), subIds);
+            }
             else if (id.startsWith (QLatin1String ("@visual.")))
                 addVisualizerSubmenu (menu, id.mid (8));
             else if (id == QLatin1String ("@mode"))
@@ -989,7 +999,10 @@ void MainWindow::buildMenus()
             else
                 menu->addAction (commands.action (id));
         }
-    }
+    };
+
+    for (const auto& [title, ids] : layout)
+        fill (menuBar()->addMenu (title), ids);
 }
 
 QSlider* MainWindow::makeOpacitySlider (QWidget* parent)

@@ -1,6 +1,6 @@
 # Simplest and the Slicer
 
-The Sample menu (`Alt+A`) holds PHI's samplers. Two are built into PHI and work hand in hand with the editor: **Simplest**, which plays a sound across the keyboard, and the **Slicer**, which cuts a sound into pads. (The Sample menu's other samplers, Granular and Retro Sampler, are in [Instruments](#instruments).)
+The Sample menu (`Alt+S`) holds PHI's samplers. Two are built into PHI and work hand in hand with the editor: **Simplest**, which plays a sound across the keyboard, and the **Slicer**, which cuts a sound into pads. (The Sample menu's other samplers, Granular and Retro Sampler, are in [Instruments](#instruments).)
 
 Both open in windows of their own, so they get the room they need whatever panels are open; on Hyprland they tile, and `Super+F` takes one full screen. They sound on top of whatever else plays, file or tracker.
 
