@@ -11,6 +11,7 @@
 #include "../Source/mixer/RagaInstrument.h"
 #include "../Source/mixer/Counterpoint.h"
 #include "../Source/mixer/Fugue.h"
+#include "../Source/mixer/Cubify.h"
 #include "../Source/mixer/MixerEngine.h"
 #include "../Source/mixer/DrumsToMidi.h"
 #include "../Source/mixer/Rhythms.h"
@@ -5567,6 +5568,116 @@ namespace
 
     // Stochastic music (Xenakis): sieves read and written back, and lines drawn by the laws,
     // inside their range, sieve and grid, the same for the same seed.
+    void testCubify()
+    {
+        using namespace cubify;
+        // The group: closed, each rotation undone by its inverse, the A rotations keeping the
+        // tetrahedra and the Q rotations swapping them, A·A and Q·Q in A, A·Q and Q·A in Q.
+        const auto& all = group();
+        bool closed = true, inverses = true, halves = true;
+        for (int p = 0; p < 24; ++p)
+        {
+            inverses = inverses && product (p, inverse (p)) == 0 && product (inverse (p), p) == 0;
+            for (int q = 0; q < 24; ++q)
+            {
+                const auto r = product (p, q);
+                for (size_t i = 0; i < 8; ++i)
+                    closed = closed && all[(size_t) r].seq[i] == all[(size_t) q].seq[(size_t) all[(size_t) p].seq[i]];
+                halves = halves && all[(size_t) r].swaps == (all[(size_t) p].swaps != all[(size_t) q].swaps);
+            }
+            halves = halves && all[(size_t) p].swaps == (all[(size_t) p].seq[0] >= 4);
+        }
+        check (closed && inverses && halves, "cubify: the 24 rotations of the cube are a group, A and Q its halves");
+        check (std::string (all[0].label) == "I" && find ("Q12") >= 0 && find ("X") < 0, "cubify: the labels");
+        // Nomos Alpha's own path (Formalized Music, VIII), and the one in the first half alone.
+        auto labels = [&] (const std::vector<int>& path)
+        {
+            std::string out;
+            for (auto r : path)
+                out += std::string (out.empty() ? "" : " ") + all[(size_t) r].label;
+            return out;
+        };
+        check (labels (chain (find ("D"), find ("Q12"), 18)) == "D Q12 Q4 E Q8 Q2 E2 Q7 Q4 D2 Q3 Q11 L2 Q7 Q2 L Q8 Q11",
+               "cubify: D, Q12 gives Xenakis's path");
+        check (labels (chain (find ("E"), find ("G2"), 16)) == "E G2 L2 C G D E B D2 L G C L2 E2 D2 B", "cubify: E, G2 stays in A");
+
+        // A scene: a melody, a drum loop and an audio loop.
+        Part melody { "lead", {}, false, false };
+        for (int i = 0; i < 16; ++i)
+            melody.notes.push_back ({ i * 240, i * 240 + 200, 60 + (i * 5) % 14, 90 });
+        Part drums { "drums", {}, true, false };
+        for (int i = 0; i < 16; ++i)
+            drums.notes.push_back ({ i * 240, i * 240 + 60, i % 4 == 0 ? 36 : i % 2 == 0 ? 38 : 42, 100 });
+        Part loop { "pad", {}, false, true };
+        Settings settings;
+        auto result = arrange ({ melody, drums, loop }, settings);
+        check (result.error.empty() && result.sections.size() == 24 && result.lines.size() == 3, "cubify: 24 sections, a line for each track");
+        bool form = true, bars = true;
+        for (size_t i = 0; i < result.sections.size(); ++i)
+        {
+            form = form && result.sections[i].free == (i % 4 == 3);
+            bars = bars && result.sections[i].length > 0 && result.sections[i].length % (4 * 480) == 0
+                && (i == 0 || result.sections[i].start == result.sections[i - 1].start + result.sections[i - 1].length);
+        }
+        check (form && bars, "cubify: V1 V1 V1 V2 six times, each section whole bars, one after another");
+        check (result.corners[0] != result.corners[1] && result.corners[1] < 4, "cubify: the tracks on corners of their own, the drums low");
+        std::set<int> kit;
+        for (const auto& n : result.lines[1].notes)
+            kit.insert (n.pitch);
+        check (! result.lines[1].notes.empty() && kit.size() <= 3 && (kit.count (36) || kit.count (38) || kit.count (42)), "cubify: the drums keep their own drums");
+        check (! result.lines[2].plays.empty() && result.lines[2].plays.size() < 18 && result.lines[2].notes.empty(), "cubify: the audio loop plays in some V1 sections, not all");
+        bool quarter = false;
+        for (const auto& c : result.lines[0].controls)
+            quarter = quarter || (c.bend && c.value == 10240);
+        check (quarter, "cubify: quarter tones by pitch bend");
+        bool mono = true;
+        for (size_t i = 1; i < result.lines[0].notes.size(); ++i)
+            mono = mono && result.lines[0].notes[i].start >= result.lines[0].notes[i - 1].end;
+        check (mono, "cubify: one note at a time, so each can bend on its own");
+        check (result.commentary.find ("pitch D, durations E") != std::string::npos && result.modified.bars >= 0, "cubify: the commentary names the rotations");
+        const auto song = toSong (result.lines[0], 480, 120.0, 0);
+        std::string why;
+        const auto bytes = midifile::bytes (*song);
+        const auto back = midifile::parse (bytes.data(), bytes.size(), why);
+        check (back != nullptr && back->noteCount() == (int) result.lines[0].notes.size(), "cubify: the line as a MIDI file and back");
+        const auto again = arrange ({ melody, drums, loop }, settings);
+        settings.seed = 2;
+        const auto other = arrange ({ melody, drums, loop }, settings);
+        check (again.commentary == result.commentary && other.commentary != result.commentary, "cubify: the same seed, the same arrangement; another, another");
+
+        // Messiaen: mode 2 (octatonic) on the lowest note, palindromic durations, semitones.
+        settings = {};
+        settings.pitches = Pitches::messiaen;
+        settings.messiaenMode = 2;
+        settings.palindromes = true;
+        settings.quarterTones = false;
+        result = arrange ({ melody }, settings);
+        bool octatonic = true;
+        for (const auto& n : result.lines[0].notes)
+            if (n.start < result.sections[3].start)
+                octatonic = octatonic && ((0x6DB >> (((n.pitch - 60) % 12 + 12) % 12)) & 1) != 0;
+        check (! result.lines[0].notes.empty() && octatonic, "cubify: pitches in Messiaen's mode 2");
+        const auto& first = result.lines[0].notes;
+        bool palindrome = first.size() > 8;
+        for (size_t k = 0; palindrome && k < 4; ++k)
+            palindrome = first[k + 1].start - first[k].start == first[8 - k].start - first[7 - k].start;
+        check (palindrome, "cubify: non-retrogradable rhythms");
+        settings.path = Path::modeDeValeurs;
+        settings.glissandi = false;
+        const auto locked = arrange ({ melody }, settings);
+        bool still = true;
+        for (const auto& c : locked.lines[0].controls)
+            still = still && (! c.bend || c.value == 8192);
+        check (locked.error.empty() && still && locked.commentary.find ("locked") != std::string::npos, "cubify: mode de valeurs, in semitones");
+        check (! arrange ({}, settings).error.empty() && ! arrange (std::vector<Part> (9, melody), settings).error.empty(), "cubify: nothing, or more than eight tracks");
+        // Messiaen's seven modes in the Mode menu's tunings, mode 2 the octatonic.
+        bool seven = true;
+        for (int m = 1; m <= 7; ++m)
+            seven = seven && mixer::findTuning ("messiaen mode " + std::to_string (m)) >= 0;
+        check (seven && mixer::modeKeys (mixer::tuningSystems()[(size_t) mixer::findTuning ("messiaen mode 2")]) == 0x6DB,
+               "cubify: messiaen's modes of limited transposition are listed");
+    }
+
     void testStochastic()
     {
         using namespace stochastic;
@@ -6728,6 +6839,7 @@ int main()
     testDrumsToMidi();
     testRhythms();
     testStochastic();
+    testCubify();
     testPluginMeasure();
 
     if (failures == 0)

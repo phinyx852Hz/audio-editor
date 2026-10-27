@@ -220,6 +220,9 @@ public:
     void slotToTimeline (int track, int scene);
     void clipToLauncher (int track, uint32_t id);
     void stochasticizeShown() { stochasticizeShownMidi(); }
+    // cubify (CubifySection.cpp, owner 2026-10-26): the MIDI clip shown, else the cursor's scene,
+    // arranged by Xenakis's cubes (mixer/Cubify.h) onto the tracks' timelines.
+    void cubify();
     // A rhythm from the Mode menu's rhythmic modes (RhythmSection.cpp): saved as a MIDI file
     // with the mix's edits, `stem` naming it, and placed on the selected track at the playhead,
     // the Synth's drum kit playing it when the track has no instrument. False with no track.
@@ -349,6 +352,12 @@ private:
     // that can come from the mode, a rhythmic mode or the clip itself; on a new track, or in
     // place of the clip.
     void stochasticizeShownMidi();
+    // cubify: a scene's clips (or the clip shown) as 24 sections by Xenakis's cubes, onto their
+    // tracks after everything already on them; MIDI tracks get a MIDI file each, audio loops
+    // play in the sections their corner of the grand cube turns into the upper tetrahedron.
+    void cubifyShownMidi();
+    void cubifyScene (int scene);
+    void cubifyTracks (const std::vector<std::pair<int, mixer::Clip>>& clips, const QString& name);
     // Recording (docs/recording.md; owner, 2026-10-25: "play a melody into a clip with a
     // pre-determined length that can be adjusted and the recording immediately stops, loops, and
     // the new melody is generated", and "the main method super easy to learn with the options for

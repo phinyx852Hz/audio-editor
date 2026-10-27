@@ -418,7 +418,7 @@ Fast MIDI edits (owner, 2026-10-25: "MIDI editing, but really fast"; "the idea i
 The Mode menu (owner, 2026-10-26: "I love mode being its own thing"; every name in it lower
 case, in proper transliteration):
 - One mode for everything: it lists every mode and raga the tunings have, by tradition (church,
-  jazz, rāga, maqām, dastgāh, and east asian, gamelan and mbira as those tunings arrive; a
+  jazz, messiaen, rāga, maqām, dastgāh, and east asian, gamelan and mbira as those tunings arrive; a
   tradition it does not know yet gets a submenu of its own). A long list, the rāgas, comes in
   alphabetical parts. The equal temperaments are tunings, not modes, so they stay in the
   Tuning boxes.
@@ -429,8 +429,13 @@ case, in proper transliteration):
 - The mode chosen is what the Counterpoint and Fugue dialogs open on when the clip has no tuning
   of its own. **tune the track** sets the selected track's tuning to it (a hypo-mode on the bottom
   of its range, hypodorian on A for a final on D); **notes into the mode** moves the MIDI clip
-  shown in the Device Chain into its keys and range; **counterpoint...** and **fugue...** open those dialogs, and
-  **stochasticize...** opens [stochasticize](stochastic.md), its pitch sieve ready to fill from the mode.
+  shown in the Device Chain into its keys and range; **counterpoint...** and **fugue...** open those dialogs,
+  **stochasticize...** opens [stochasticize](stochastic.md), its pitch sieve ready to fill from the mode;
+  **cubify...** arranges the MIDI clip shown, else the launcher's scene, by [Xenakis's cubes](cubify.md),
+  on a messiaen mode when one is chosen here.
+- **messiaen** (owner, 2026-10-26: "all of Messiaen's modes in the mode section") holds his seven
+  modes of limited transposition, in 12-TET as he wrote them: 1 (whole tone), 2 (octatonic), and
+  3 to 7. They are also in the MIDI Clip section's mode list.
 - Kept in settings.ini as mode/system (the plain name), mode/final, mode/hypo and mode/equal.
   Code: ui/ModeSection.cpp, mixer::modeKeys, midifile::toKeys.
 - **rhythmic modes** (owner, 2026-10-26) holds 117 rhythms: North Indian tāls, South Indian tāḷams,
@@ -447,6 +452,11 @@ the MIDI Clip section, and in the Mode menu, draws a new line from the clip show
 Markov screens, with its pitches and rhythm through sieves. A sieve can be filled from the mode,
 a rhythmic mode or the clip itself. The line goes on a new track or in place of the clip. See
 [stochastic.md](stochastic.md).
+
+cubify (owner, 2026-10-26): **cubify...** in a scene's right-click menu, in the MIDI Clip section
+and in the Mode menu arranges a scene (or one MIDI clip) by the cube method of Xenakis's Nomos
+Alpha: 24 sections, V1 V1 V1 V2 six times, onto the tracks after everything already on them. See
+[cubify.md](cubify.md).
 
 Counterpoint (owner, 2026-10-25: an automatic MIDI counterpoint generator, in modal systems
 beyond the church modes):
@@ -575,7 +585,8 @@ could be applied on the clip level, track level or scene level"):
 - The systems (`Source/mixer/Tunings.h`): 175 Hindustani ragas in just intonation (five-limit
   ratios, with Pythagorean komal svaras where the raga sings them low: darbārī's ga and dha, the other kānaḍās' ga,
   toḍī's and bhairav's re and dha), and each of them again equal tempered; the six church modes and six hypo-modes in Pythagorean tuning
-  (a hypo-mode's root is the bottom of its range, a fourth below the final); 13 jazz modes; nine
+  (a hypo-mode's root is the bottom of its range, a fourth below the final); 13 jazz modes; Messiaen's
+  seven modes of limited transposition; nine
   maqams and seven dastgahs with quarter steps of 50 cents; Indonesian gamelan in measured cents
   (no two gamelan are tuned alike, so each is an average): Javanese sléndro and its pathet nem,
   sanga and manyura, pélog and its pathet lima, nem and barang (from Surjodiningrat, Sudarjana and

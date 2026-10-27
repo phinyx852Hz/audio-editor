@@ -34,6 +34,7 @@ namespace
         static const std::vector<Tradition> all {
             { "&church", { "church mode", "hypo-mode" } },
             { "&jazz", { "jazz mode" } },
+            { "me&ssiaen", { "messiaen mode" } },
             { "&rāga", { "raga" } },
             { "&maqām", { "maqam" } },
             { "&dastgāh", { "dastgah" } },
@@ -194,6 +195,12 @@ void MainWindow::registerModeCommands()
             return statusBar()->showMessage (tr ("Pick a MIDI clip in the mixer first"), 5000);
         mixerWin->stochasticizeShown();
     })->setStatusTip (tr ("A new line beside the MIDI clip shown in the mixer, by Xenakis's methods, its pitches sieved from the mode"));
+    add ("mode.cubify", tr ("cubif&y..."), [this]
+    {
+        if (mixerWin == nullptr)
+            return statusBar()->showMessage (tr ("Open the mixer first"), 5000);
+        mixerWin->cubify();
+    })->setStatusTip (tr ("The MIDI clip shown in the mixer, else the launcher's scene, arranged by Xenakis's cubes; a messiaen mode chosen here is its pitches"));
 }
 
 void MainWindow::fillModeMenu (QMenu* menu)
@@ -330,4 +337,7 @@ void MainWindow::fillModeMenu (QMenu* menu)
             a->setEnabled (a->isEnabled() && clip);
         menu->addAction (a);
     }
+    auto* cube = commands.action (QStringLiteral ("mode.cubify"));
+    cube->setEnabled (mixerWin != nullptr);
+    menu->addAction (cube);
 }

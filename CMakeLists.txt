@@ -56,6 +56,7 @@ target_sources(${APP_ID} PRIVATE
     Source/mixer/Counterpoint.cpp
     Source/mixer/Fugue.cpp
     Source/mixer/Stochastic.cpp
+    Source/mixer/Cubify.cpp
     Source/mixer/Rhythms.cpp
     Source/mixer/Instruments.cpp
     Source/mixer/MixerEngine.cpp
@@ -174,6 +175,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/ModeSection.cpp
     Source/ui/RhythmSection.cpp
     Source/ui/StochasticSection.cpp
+    Source/ui/CubifySection.cpp
     Source/ui/PanelNavigation.cpp
     Source/ui/PatchBayWindow.cpp
     Source/ui/PatchBaySection.cpp
@@ -411,6 +413,7 @@ if(PHI_BUILD_TESTS)
         Source/mixer/Counterpoint.cpp
         Source/mixer/Fugue.cpp
         Source/mixer/Stochastic.cpp
+        Source/mixer/Cubify.cpp
         Source/mixer/Rhythms.cpp
         Source/mixer/Instruments.cpp
         Source/mixer/MixerEngine.cpp
