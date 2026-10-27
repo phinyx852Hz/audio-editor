@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**74 pull requests:** 73 merged, 1 open.
+**74 pull requests:** 74 merged, 0 open.
 
 ## Contents
 
@@ -157,7 +157,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#27](https://github.com/phinyx852Hz/audio-editor/pull/27) | Rename the app from PHINYX to PHI, with a Φ logo | merged | Whole app, Help menu, About | `CMakeLists.txt`<br>`Source/ui/Brand.h`<br>`packaging/phi.svg` |
 | [#39](https://github.com/phinyx852Hz/audio-editor/pull/39) | Add the PHI Gold theme and make it the default | merged | Themes (Ctrl+Shift+T) | `Source/ui/Theme.cpp`<br>`docs/themes.md` |
 | [#41](https://github.com/phinyx852Hz/audio-editor/pull/41) | Stop idle redraws and uptime-growing loudness work | merged | Meters (no visible change) | `Source/core/Dsp.cpp`<br>`Source/ui/Panels.cpp` |
-| [#74](https://github.com/phinyx852Hz/audio-editor/pull/74) | Reorganize the menu bar: four menus become submenus, rest A to Z | open |  | `Source/ui/MainWindow.cpp`<br>`docs/manual/chapters/keyboard.md`<br>`README.md` |
+| [#74](https://github.com/phinyx852Hz/audio-editor/pull/74) | Reorganize the menu bar: four menus become submenus, rest A to Z | merged |  | `Source/ui/MainWindow.cpp`<br>`docs/manual/chapters/keyboard.md`<br>`README.md` |
 
 ### Documentation
 
@@ -251,4 +251,4 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#71](https://github.com/phinyx852Hz/audio-editor/pull/71) | Document what PHI is built on, add a licence check, and replace Vaporizer2's commercial fonts | docs/foundations.md lists everything PHI is built on, each with its licence and how it ships. *(auto)* | merged | 2026-10-27 | Documentation |
 | [#72](https://github.com/phinyx852Hz/audio-editor/pull/72) | MIDI inputs: remember them by name, and open them when plugged in | PHI detected the Novation keyboards, the Push 2 and the Launchpad Mini, but the keyboards played no synths. *(auto)* | merged | 2026-10-27 | Not yet sorted |
 | [#73](https://github.com/phinyx852Hz/audio-editor/pull/73) | Mode menu: modes and tunings by region, tradition and person | This puts the owner's Mode Research (2026-10-26) into PHI's one shared list of systems, mixer::tuningSystems(). *(auto)* | merged | 2026-10-27 | Modes, tunings and composition |
-| [#74](https://github.com/phinyx852Hz/audio-editor/pull/74) | Reorganize the menu bar: four menus become submenus, rest A to Z | Album is now a submenu and the first item in Master. *(auto)* | open | 2026-10-27 | Interface and branding |
+| [#74](https://github.com/phinyx852Hz/audio-editor/pull/74) | Reorganize the menu bar: four menus become submenus, rest A to Z | Album is now a submenu and the first item in Master. *(auto)* | merged | 2026-10-27 | Interface and branding |
