@@ -52,7 +52,7 @@ namespace phi
 
     Tuning Tuning::equal (int divisions, int rootKey, double rootHz)
     {
-        divisions = std::clamp (divisions, 1, 72);
+        divisions = std::clamp (divisions, 1, 128);   // Carrillo's 96, and on to a step a key
         Tuning t;
         for (int k = 0; k < numKeys; ++k)
             t.keyHz[(size_t) k] = rootHz * std::pow (2.0, (double) (k - rootKey) / divisions);

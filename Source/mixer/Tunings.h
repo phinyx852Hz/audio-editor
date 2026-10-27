@@ -31,10 +31,41 @@ namespace mixer
                               // "korean folk mode", "equal"
         std::vector<double> cents;   // the degrees above the tonic, from 0, within the period
         int divisions = 0;           // an equal temperament: this many steps to the octave (else 0)
+
+        // Where it is from, for the Mode menu's world atlas (owner, 2026-10-27; WorldModes.cpp):
+        // the people, cultures, nations or empires it belongs to (origins()' names), whether it
+        // is a mode or scale (melodic), a tuning, or both, and what it repeats at. Set after the
+        // entry is made, never in its braces, so the list can take new fields.
+        std::vector<std::string> from;
+        unsigned kinds = 0;          // melodic | tuning; 0 until the atlas places it
+        double period = 1200.0;      // cents: an octave, else a fourth (Hajibeyov's chains), a tritave (Bohlen-Pierce), a step (Carlos)
+        std::string note;            // a line for the menu's tooltip: the source, or what is approximate
     };
+    enum TuningKind : unsigned { melodic = 1, tuning = 2 };
 
     const std::vector<TuningSystem>& tuningSystems();
     int findTuning (const std::string& plain);   // its index, or -1
+
+    // The atlas: the regions, in the menu's order, and the people and cultures in them. A
+    // person's `year` is their birth (or floruit) and a culture's the start of its tradition,
+    // for the order within a region; `dates` is what the menu shows beside the name.
+    const std::vector<std::string>& regions();   // "europe", "west asia", ... "the americas", "oceania"
+    struct Origin
+    {
+        std::string name;     // lower case, transliterated: "ṣafī al-dīn al-urmawī", "ottoman empire"
+        std::string region;
+        int year = 0;
+        std::string dates;    // "1517–1590", "6th c. bce", or empty
+        bool person = false;
+    };
+    const std::vector<Origin>& origins();
+    const Origin* findOrigin (const std::string& name);
+    // The indices of tuningSystems() placed under `origin` that are of `kind`, in the list's order.
+    std::vector<int> systemsFrom (const std::string& origin, unsigned kind);
+
+    // The degrees within one octave, from 0: the cents themselves, or for a scale that repeats at
+    // another period, its degrees walked up from the tonic until the octave.
+    std::vector<double> octaveCents (const TuningSystem&);
 
     // What each of the twelve keys above the root plays, in cents above the root. A key the
     // scale has a degree on (the degree rounded to the nearest key, a quarter step up to the

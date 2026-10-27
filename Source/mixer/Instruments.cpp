@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "Instruments.h"
 
+#include "../core/PhiTuning.h"
+
 #include <algorithm>
 #include <cmath>
 #include <sstream>
@@ -83,6 +85,15 @@ namespace mixer
         return current;
     }
 
+    void Synth::setTuning (std::shared_ptr<const phi::Tuning> t)
+    {
+        const std::lock_guard<std::mutex> l (lock);
+        retired.erase (std::remove_if (retired.begin(), retired.end(), [] (const auto& r) { return r.use_count() == 1; }), retired.end());
+        if (tuning != nullptr)
+            retired.push_back (tuning);
+        tuning = std::move (t);
+    }
+
     std::string Synth::state() const
     {
         const auto s = settings();
@@ -158,7 +169,7 @@ namespace mixer
         v.age = ++clock;
         if (! drums)
         {
-            v.frequency = noteHz (note);
+            v.frequency = liveTuning != nullptr ? liveTuning->hz (note) : noteHz (note);
             return;
         }
 
@@ -254,7 +265,10 @@ namespace mixer
         {
             std::unique_lock<std::mutex> l (lock, std::try_to_lock);
             if (l.owns_lock())
+            {
                 live = current;
+                liveTuning = tuning;   // copied, not freed: `retired` keeps the one it replaces
+            }
         }
         const auto gain = (float) std::pow (10.0, live.gainDb / 20.0);
         const auto dt = 1.0 / rate;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "Tunings.h"
 
+#include "WorldModes.h"
 #include "../core/PhiRaga.h"
 
 #include <algorithm>
@@ -338,7 +339,17 @@ namespace mixer
             tori ("yukchabaegit'ori", "yukjabaegitori", { 0, 5, 7, 8 });   // Jeolla: mi la (si) do
             tori ("susimgat'ori", "susimgatori", { 0, 2, 5, 7, 10 });      // the northwest: re mi sol la do
 
-            for (int n = 2; n <= 21; ++n)
+            world::add (all);
+
+            // Equal steps: 2 to 24 (Blackwood's 13 to 24), and the composers' larger ones (19
+            // Yasser's, 31 Huygens's and Fokker's, 36 Busoni's sixth tones, 48 and 96 Carrillo's,
+            // 53 the Turkish commas, 72 the twelfth tones and the Byzantine moria).
+            std::vector<int> counts;
+            for (int n = 2; n <= 24; ++n)
+                counts.push_back (n);
+            for (int n : { 31, 36, 41, 48, 53, 72, 96 })
+                counts.push_back (n);
+            for (int n : counts)
             {
                 const auto name = std::to_string (n) + " equal steps";
                 std::vector<double> c;
@@ -346,6 +357,7 @@ namespace mixer
                     c.push_back (1200.0 * i / n);
                 all.push_back ({ name, name, "equal", std::move (c), n });
             }
+            world::place (all);
             return all;
         }
     }
@@ -368,7 +380,7 @@ namespace mixer
     uint16_t modeKeys (const TuningSystem& t)
     {
         uint16_t keys = 0;
-        for (auto c : t.cents)
+        for (auto c : octaveCents (t))
             keys |= (uint16_t) (1u << (((int) std::floor (c / 100.0 + 0.5) % 12 + 12) % 12));
         return keys;
     }
@@ -379,7 +391,13 @@ namespace mixer
         bool taken[12] {};
         for (int k = 0; k < 12; ++k)
             out[(size_t) k] = k * 100.0;
-        for (auto c : t.cents)
+        const auto degrees = octaveCents (t);
+        if (degrees.size() == 12 && t.divisions == 0)   // a temperament or a 12-note just tuning: a degree a key, in its order
+        {
+            std::copy (degrees.begin(), degrees.end(), out.begin());
+            return out;
+        }
+        for (auto c : degrees)
         {
             const auto key = ((int) std::floor (c / 100.0 + 0.5) % 12 + 12) % 12;
             if (taken[key])
@@ -397,8 +415,11 @@ namespace mixer
         const double rootHz = 440.0 * std::pow (2.0, (rootKey - 69) / 12.0);
         if (t.divisions > 0)
             return phi::Tuning::equal (t.divisions, rootKey, rootHz);
-        if (t.cents.size() > 12)
-            return phi::Tuning::scale (t.cents, 1200.0, rootKey, rootHz);
+        // A tuning that repeats at another period (the tritave, Carlos's steps), or one of more
+        // than twelve degrees: a degree a key. A mode that repeats at a fourth (Hajibeyov's
+        // chains, the obikhod) is on the keys, like the others.
+        if (t.cents.size() > 12 || (std::abs (t.period - 1200.0) > 1.0e-6 && (t.kinds & melodic) == 0))
+            return phi::Tuning::scale (t.cents, t.period, rootKey, rootHz);
         const auto keys = keyCents (t);
         return phi::Tuning::scale (std::vector<double> (keys.begin(), keys.end()), 1200.0, rootKey, rootHz);
     }
@@ -414,7 +435,7 @@ namespace mixer
 
     bool hypoFamily (const std::string& family)
     {
-        for (const char* f : { "raga", "raga, equal tempered", "maqam", "dastgah", "Raga" })
+        for (const char* f : { "raga", "raga, equal tempered", "maqam", "dastgah", "Raga", "melakarta", "makam", "avaz" })
             if (family == f)
                 return true;
         return false;

@@ -75,7 +75,9 @@ namespace mixer
     // polyphonic synth (sine, triangle, saw or square through a low-pass filter, with
     // an envelope), and General MIDI drums on channel 10 made from noise and sweeps.
     // Channel volume (CC7), expression (CC11), pan (CC10), sustain (CC64) and pitch
-    // bend (±2 semitones) follow the file.
+    // bend (±2 semitones) follow the file. It plays the tuning in force too (2026-10-27): every
+    // mode and tuning of Tunings.h, from the Mode menu or the Inspector, key by key, as PHI Synth
+    // (the stock synth being built on its own) will through setTuning.
     struct SynthSettings
     {
         enum Wave { sine, triangle, saw, square };
@@ -102,6 +104,8 @@ namespace mixer
 
         void setSettings (const SynthSettings&);
         SynthSettings settings() const;
+        // The tuning its keys play (nullptr: 12-TET); a note already sounding keeps its pitch.
+        void setTuning (std::shared_ptr<const phi::Tuning>) override;
 
     protected:
         void handle (const NoteEvent&) override;
@@ -130,8 +134,12 @@ namespace mixer
         Voice& freeVoice();
         float noise();
 
-        mutable std::mutex lock;   // the settings
+        mutable std::mutex lock;   // the settings and the tuning
         SynthSettings current, live;
+        std::shared_ptr<const phi::Tuning> tuning, liveTuning;
+        // Tunings the audio thread may still hold, let go of here once it has moved on, so it
+        // never frees one itself.
+        std::vector<std::shared_ptr<const phi::Tuning>> retired;
         double rate = 48000.0;
         std::array<Voice, maxVoices> voice {};
         std::array<Channel, 16> channel {};

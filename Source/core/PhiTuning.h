@@ -24,7 +24,7 @@ namespace phi
         double hz (int key) const;      // keys outside 0..127 are clamped
         void setHz (int key, double hz);
 
-        // `divisions` equal steps to the octave (2 to 21, or any count up to 72), `rootKey` at `rootHz`.
+        // `divisions` equal steps to the octave (2 to 21, or any count up to 128: Carrillo's 96), `rootKey` at `rootHz`.
         static Tuning equal (int divisions, int rootKey = 69, double rootHz = 440.0);
         // A scale on consecutive keys: `cents` are its degrees above the tonic (the first is
         // usually 0), repeating every `periodCents` (1200 for an octave). `rootKey` plays the
