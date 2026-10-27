@@ -50,7 +50,7 @@ namespace rhythm
     int findRhythm (const std::string& plain);   // its index, or -1
     std::vector<std::string> groups();           // in menu order
     // The Mode menu's rhythm is ordered by region (owner, 2026-10-27: regions as in melody and
-    // tuning, "west asia" and not "middle east", Europe one region among the others), then by
+    // tuning, "west asia", Europe one region among the others), then by
     // group: "south asia" holds the north indian tāl and the south indian tāḷam.
     std::vector<std::string> regions();          // alphabetical
     std::string region (const std::string& group);
