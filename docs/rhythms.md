@@ -6,7 +6,7 @@ modes, and of course, Caribbean, south american, and west and north african rhyt
 there's anything from East Asia, that would be great". Every name is lower case and in proper
 transliteration (owner).
 
-The menu is **Mode > rhythmic modes**. It has one submenu for each tradition. Hovering over a
+The menu is **Mode > rhythm** (owner, 2026-10-27: the Mode menu holds melody, tuning and rhythm). It has one submenu for each tradition. Hovering over a
 rhythm shows what it is and how it is counted: the ṭhekā's bols, the kriyās, or the strokes.
 Picking a rhythm opens a dialog with its sounds, the number of cycles, and a tempo, which starts
 at a usual tempo for that rhythm, and a laya (see below). The dialog has these buttons, and **edit in the generator...**:
@@ -209,7 +209,7 @@ akṣara. Code: `rhythm::laya` and `rhythm::gati`.
 
 ## Rhythm generator
 
-**Mode > rhythmic modes > rhythm generator...** writes new grooves (owner, 2026-10-27: "a combo of
+**Mode > rhythm > rhythm generator...** writes new grooves (owner, 2026-10-27: "a combo of
 all of these as you see fit", after Music Pattern Generator, Stochas and Subsequence). Any rhythm's
 dialog also has **edit in the generator...**, which opens the generator with that rhythm's sounds as
 written lanes, at the laya and naḍai chosen.
@@ -255,7 +255,7 @@ tests are in `testRhythmGenerator`.
 
 ## My breaks
 
-**rhythmic modes > my breaks** holds your own breaks, added as needed (owner, 2026-10-27). Use
+**Mode > rhythm > my breaks** holds your own breaks, added as needed (owner, 2026-10-27). Use
 **add break files...**, or **add a folder of breaks...** to take every audio file in a folder.
 Each file is transcribed with Drums to MIDI's hit finder (`mixer::breakRhythm`):
 

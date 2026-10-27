@@ -2,7 +2,7 @@
 // The rhythm generator's dialog (owner, 2026-10-27; mixer/RhythmGenerator.h, docs/rhythms.md):
 // a row for each drum lane (its sound, a Euclidean rhythm or written hits, a sieve, a chance),
 // the rules and the feel under it, and the groove put on the selected mixer track, written into
-// a new Tracker pattern, or saved as a MIDI file. It opens from Mode > rhythmic modes, or with a
+// a new Tracker pattern, or saved as a MIDI file. It opens from Mode > rhythm, or with a
 // rhythmic mode's lanes from that rhythm's dialog. The last settings are kept in settings.ini.
 #include "MainWindow.h"
 #include "MixerWindow.h"

@@ -276,7 +276,7 @@ void MainWindow::addBreaks (bool folder)
     std::stable_sort (all.begin(), all.end(), [] (const rhythm::Rhythm& a, const rhythm::Rhythm& b) { return a.name < b.name; });
     saveBreaks (all);
     if (failed.isEmpty())
-        statusBar()->showMessage (tr ("%n break(s) added to Mode > rhythmic modes > my breaks", nullptr, added), 8000);
+        statusBar()->showMessage (tr ("%n break(s) added to Mode > rhythm > my breaks", nullptr, added), 8000);
     else
         QMessageBox::information (this, tr ("my breaks"),
                                   tr ("%1 added; these were left out:\n\n%2").arg (added).arg (failed.join (QStringLiteral ("\n"))));

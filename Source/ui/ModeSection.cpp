@@ -295,7 +295,7 @@ void MainWindow::fillModeMenu (QMenu* menu)
     for (const auto& family : order)   // a tradition the table above does not know yet
         if (auto it = byFamily.find (family); it != byFamily.end())
             addFamily (menu->addMenu (QString::fromStdString (family)), it->second);
-    fillRhythmMenu (menu->addMenu (tr ("r&hythmic modes")));
+    fillRhythmMenu (menu->addMenu (tr ("r&hythm")));
 
     menu->addSeparator();
     auto* finalMenu = menu->addMenu (tr ("&final"));
