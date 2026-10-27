@@ -1,0 +1,47 @@
+name: pr-index
+
+# Regenerates docs/pr-index.md on main whenever a pull request changes state.
+# pull_request_target runs this file from main, never from the PR's branch,
+# and only main is checked out, so no PR code runs here.
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, closed, ready_for_review, converted_to_draft]
+  push:
+    branches: [main]
+    paths: [docs/pr-index-notes.json, scripts/pr-index.py]
+  workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * *"
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: pr-index
+  cancel-in-progress: false
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Regenerate the index
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/pr-index.py
+      - name: Commit if it changed
+        # Pushes made with GITHUB_TOKEN don't start other workflows, so this doesn't trigger a build
+        run: |
+          git diff --quiet docs/pr-index.md && exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add docs/pr-index.md
+          git commit -m "docs: update the pull request index"
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            sleep $((i * 5))
+          done
+          exit 1

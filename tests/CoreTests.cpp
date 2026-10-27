@@ -13,8 +13,12 @@
 #include "../Source/mixer/RagaInstrument.h"
 #include "../Source/mixer/Counterpoint.h"
 #include "../Source/mixer/Fugue.h"
+#include "../Source/mixer/Cubify.h"
+#include "../Source/mixer/Minimalize.h"
 #include "../Source/mixer/MixerEngine.h"
 #include "../Source/mixer/DrumsToMidi.h"
+#include "../Source/mixer/Rhythms.h"
+#include "../Source/mixer/Stochastic.h"
 #include "../Source/patchbay/PatchBay.h"
 #include "../Source/core/Ixml.h"
 #include "../Source/core/Metadata.h"
@@ -4650,6 +4654,85 @@ namespace
                "tunings: the clip's, else the scene's, else the track's");
     }
 
+    // Minimalize: Reich's and Glass's processes on a scene of a melody, a chord pad and drums,
+    // within eight tracks, each section as long as its longest gradual process.
+    void testMinimalize()
+    {
+        using namespace minimalize;
+        constexpr int64_t q = ticksPerQuarter, s16 = q / 4, bar = q * 4;
+        // Piano Phase's twelve-note figure, in sixteenths (one bar of 3/4 within a 4/4 loop of 12 sixteenths).
+        const int phase[] { 64, 66, 71, 73, 74, 66, 64, 73, 71, 66, 74, 73 };
+        Part melody { { Cell { {}, 12 * s16 } }, "melody", false };
+        for (int i = 0; i < 12; ++i)
+            melody.cells[0].notes.push_back ({ i * s16, (i + 1) * s16, phase[i], 90, 0 });
+        Part pad { { Cell { {}, bar } }, "pad", false };
+        for (const int p : { 52, 59, 64 })
+            pad.cells[0].notes.push_back ({ 0, bar, p, 70, 1 });
+        Part drums { { Cell { {}, bar } }, "drums", true };
+        for (int i = 0; i < 8; ++i)
+            drums.cells[0].notes.push_back ({ i * q / 2, i * q / 2 + 60, i % 2 ? 42 : 36, 100, 9 });
+
+        Settings reich;
+        reich.style = Style::reich;
+        auto r = arrange ({ melody, pad, drums }, reich);
+        check (r.tracks.size() <= (size_t) maxTracks && r.tracks.size() >= 5, "minimalize: the parts and new voices within eight tracks");
+        check (r.tracks[0].process == Process::hold && r.tracks[3].process == Process::phase && r.tracks[3].added,
+               "minimalize: Reich's phasing, the pattern held and a copy that moves");
+        // The phase copy goes round all twelve steps back to unison: thirteen stages of four.
+        check (r.length == (13 * 4 * 12 * s16 + bar - 1) / bar * bar, "minimalize: the section as long as the phase going round");
+        bool inUnisonAtEnd = false, shiftedOnce = false;
+        {
+            const auto& held = r.tracks[0].notes;
+            const auto& moving = r.tracks[3].notes;
+            const auto lastStage = 12 * 4 * 12 * s16;
+            std::set<int64_t> a, b, firstShift;
+            for (const auto& n : held)
+                if (n.start >= lastStage && n.start < lastStage + 12 * s16)
+                    a.insert (n.start * 128 + n.pitch);
+            for (const auto& n : moving)
+            {
+                if (n.start >= lastStage && n.start < lastStage + 12 * s16)
+                    b.insert (n.start * 128 + n.pitch);
+                if (n.start == 4 * 12 * s16 && n.pitch == phase[1])
+                    shiftedOnce = true;   // the second stage starts on the figure's second note
+            }
+            inUnisonAtEnd = ! a.empty() && a == b;
+        }
+        check (shiftedOnce && inUnisonAtEnd, "minimalize: a sixteenth ahead each stage, and in unison again at the end");
+        check (std::all_of (r.tracks.begin(), r.tracks.end(), [&] (const Track& t)
+               { return std::all_of (t.notes.begin(), t.notes.end(), [&] (const Note& n) { return n.start >= 0 && n.end <= r.length && n.end > n.start; }); }),
+               "minimalize: every note within the arrangement");
+
+        Settings glass;
+        glass.style = Style::glass;
+        glass.repeats = 2;
+        auto g = arrange ({ melody, pad }, glass);
+        check (g.tracks[0].process == Process::additive && g.tracks[1].process == Process::arpeggio, "minimalize: Glass's additive process and arpeggios");
+        // Additive: one note twice, then two notes twice...
+        const auto& add = g.tracks[0].notes;
+        check (add.size() >= 6 && add[0].pitch == phase[0] && add[1].pitch == phase[0] && add[1].start == s16
+               && add[2].pitch == phase[0] && add[3].pitch == phase[1] && add[2].start == 2 * s16,
+               "minimalize: the additive figure grows a note at a time");
+        bool inChord = ! g.tracks[1].notes.empty();
+        for (const auto& n : g.tracks[1].notes)
+            inChord = inChord && (n.pitch % 12 == 4 || n.pitch % 12 == 11 || n.pitch % 12 == 6 || n.pitch % 12 == 1 || n.pitch % 12 == 2);
+        check (inChord, "minimalize: the arpeggios keep to the scene's harmony");
+
+        // A timeline cut into sections: two cells, two sections, one after the other.
+        Notes line;
+        for (int i = 0; i < 8; ++i)
+            line.push_back ({ i * q, i * q + q / 2, 60 + i, 80, 0 });
+        Part two { { cut (line, 0, bar), cut (line, bar, 2 * bar) }, "line", false };
+        Settings build;
+        build.processes = { Process::buildUp };
+        build.newVoices = false;
+        auto b = arrange ({ two }, build);
+        check (b.sections.size() == 2 && b.sections[1] == 4 * 4 * bar && b.length == 2 * 4 * 4 * bar,
+               "minimalize: a section a cell, each as long as its build-up");
+        check (b.tracks.size() == 1 && b.tracks[0].notes.front().pitch == 60 && b.tracks[0].notes.back().pitch >= 64,
+               "minimalize: the build-up starts on the downbeat, and the second section is the second cell");
+    }
+
     // Species counterpoint: Fux's rules kept against his own cantus firmus, in every species,
     // in two to four parts, and in the modal systems beyond the church modes.
     void testCounterpoint()
@@ -5566,6 +5649,225 @@ namespace
         return s;
     }
 
+    // Stochastic music (Xenakis): sieves read and written back, and lines drawn by the laws,
+    // inside their range, sieve and grid, the same for the same seed.
+    void testCubify()
+    {
+        using namespace cubify;
+        // The group: closed, each rotation undone by its inverse, the A rotations keeping the
+        // tetrahedra and the Q rotations swapping them, A·A and Q·Q in A, A·Q and Q·A in Q.
+        const auto& all = group();
+        bool closed = true, inverses = true, halves = true;
+        for (int p = 0; p < 24; ++p)
+        {
+            inverses = inverses && product (p, inverse (p)) == 0 && product (inverse (p), p) == 0;
+            for (int q = 0; q < 24; ++q)
+            {
+                const auto r = product (p, q);
+                for (size_t i = 0; i < 8; ++i)
+                    closed = closed && all[(size_t) r].seq[i] == all[(size_t) q].seq[(size_t) all[(size_t) p].seq[i]];
+                halves = halves && all[(size_t) r].swaps == (all[(size_t) p].swaps != all[(size_t) q].swaps);
+            }
+            halves = halves && all[(size_t) p].swaps == (all[(size_t) p].seq[0] >= 4);
+        }
+        check (closed && inverses && halves, "cubify: the 24 rotations of the cube are a group, A and Q its halves");
+        check (std::string (all[0].label) == "I" && find ("Q12") >= 0 && find ("X") < 0, "cubify: the labels");
+        // Nomos Alpha's own path (Formalized Music, VIII), and the one in the first half alone.
+        auto labels = [&] (const std::vector<int>& path)
+        {
+            std::string out;
+            for (auto r : path)
+                out += std::string (out.empty() ? "" : " ") + all[(size_t) r].label;
+            return out;
+        };
+        check (labels (chain (find ("D"), find ("Q12"), 18)) == "D Q12 Q4 E Q8 Q2 E2 Q7 Q4 D2 Q3 Q11 L2 Q7 Q2 L Q8 Q11",
+               "cubify: D, Q12 gives Xenakis's path");
+        check (labels (chain (find ("E"), find ("G2"), 16)) == "E G2 L2 C G D E B D2 L G C L2 E2 D2 B", "cubify: E, G2 stays in A");
+
+        // A scene: a melody, a drum loop and an audio loop.
+        Part melody { "lead", {}, false, false };
+        for (int i = 0; i < 16; ++i)
+            melody.notes.push_back ({ i * 240, i * 240 + 200, 60 + (i * 5) % 14, 90 });
+        Part drums { "drums", {}, true, false };
+        for (int i = 0; i < 16; ++i)
+            drums.notes.push_back ({ i * 240, i * 240 + 60, i % 4 == 0 ? 36 : i % 2 == 0 ? 38 : 42, 100 });
+        Part loop { "pad", {}, false, true };
+        Settings settings;
+        auto result = arrange ({ melody, drums, loop }, settings);
+        check (result.error.empty() && result.sections.size() == 24 && result.lines.size() == 3, "cubify: 24 sections, a line for each track");
+        bool form = true, bars = true;
+        for (size_t i = 0; i < result.sections.size(); ++i)
+        {
+            form = form && result.sections[i].free == (i % 4 == 3);
+            bars = bars && result.sections[i].length > 0 && result.sections[i].length % (4 * 480) == 0
+                && (i == 0 || result.sections[i].start == result.sections[i - 1].start + result.sections[i - 1].length);
+        }
+        check (form && bars, "cubify: V1 V1 V1 V2 six times, each section whole bars, one after another");
+        check (result.corners[0] != result.corners[1] && result.corners[1] < 4, "cubify: the tracks on corners of their own, the drums low");
+        std::set<int> kit;
+        for (const auto& n : result.lines[1].notes)
+            kit.insert (n.pitch);
+        check (! result.lines[1].notes.empty() && kit.size() <= 3 && (kit.count (36) || kit.count (38) || kit.count (42)), "cubify: the drums keep their own drums");
+        check (! result.lines[2].plays.empty() && result.lines[2].plays.size() < 18 && result.lines[2].notes.empty(), "cubify: the audio loop plays in some V1 sections, not all");
+        bool quarter = false;
+        for (const auto& c : result.lines[0].controls)
+            quarter = quarter || (c.bend && c.value == 10240);
+        check (quarter, "cubify: quarter tones by pitch bend");
+        bool mono = true;
+        for (size_t i = 1; i < result.lines[0].notes.size(); ++i)
+            mono = mono && result.lines[0].notes[i].start >= result.lines[0].notes[i - 1].end;
+        check (mono, "cubify: one note at a time, so each can bend on its own");
+        check (result.commentary.find ("pitch D, durations E") != std::string::npos && result.modified.bars >= 0, "cubify: the commentary names the rotations");
+        const auto song = toSong (result.lines[0], 480, 120.0, 0);
+        std::string why;
+        const auto bytes = midifile::bytes (*song);
+        const auto back = midifile::parse (bytes.data(), bytes.size(), why);
+        check (back != nullptr && back->noteCount() == (int) result.lines[0].notes.size(), "cubify: the line as a MIDI file and back");
+        const auto again = arrange ({ melody, drums, loop }, settings);
+        settings.seed = 2;
+        const auto other = arrange ({ melody, drums, loop }, settings);
+        check (again.commentary == result.commentary && other.commentary != result.commentary, "cubify: the same seed, the same arrangement; another, another");
+
+        // Messiaen: mode 2 (octatonic) on the lowest note, palindromic durations, semitones.
+        settings = {};
+        settings.pitches = Pitches::messiaen;
+        settings.messiaenMode = 2;
+        settings.palindromes = true;
+        settings.quarterTones = false;
+        result = arrange ({ melody }, settings);
+        bool octatonic = true;
+        for (const auto& n : result.lines[0].notes)
+            if (n.start < result.sections[3].start)
+                octatonic = octatonic && ((0x6DB >> (((n.pitch - 60) % 12 + 12) % 12)) & 1) != 0;
+        check (! result.lines[0].notes.empty() && octatonic, "cubify: pitches in Messiaen's mode 2");
+        const auto& first = result.lines[0].notes;
+        bool palindrome = first.size() > 8;
+        for (size_t k = 0; palindrome && k < 4; ++k)
+            palindrome = first[k + 1].start - first[k].start == first[8 - k].start - first[7 - k].start;
+        check (palindrome, "cubify: non-retrogradable rhythms");
+        settings.path = Path::modeDeValeurs;
+        settings.glissandi = false;
+        const auto locked = arrange ({ melody }, settings);
+        bool still = true;
+        for (const auto& c : locked.lines[0].controls)
+            still = still && (! c.bend || c.value == 8192);
+        check (locked.error.empty() && still && locked.commentary.find ("locked") != std::string::npos, "cubify: mode de valeurs, in semitones");
+        check (! arrange ({}, settings).error.empty() && ! arrange (std::vector<Part> (9, melody), settings).error.empty(), "cubify: nothing, or more than eight tracks");
+        // Messiaen's seven modes in the Mode menu's tunings, mode 2 the octatonic.
+        bool seven = true;
+        for (int m = 1; m <= 7; ++m)
+            seven = seven && mixer::findTuning ("messiaen mode " + std::to_string (m)) >= 0;
+        check (seven && mixer::modeKeys (mixer::tuningSystems()[(size_t) mixer::findTuning ("messiaen mode 2")]) == 0x6DB,
+               "cubify: messiaen's modes of limited transposition are listed");
+    }
+
+    void testStochastic()
+    {
+        using namespace stochastic;
+        std::string error;
+        // Xenakis's major scale (Sieves, 1990), and its analysis back into residue classes.
+        const auto major = Sieve::parse ("(-3@2 & 4@0) | (-3@1 & 4@1) | (3@2 & 4@2) | (-3@0 & 4@3)", error);
+        check (error.empty() && major.period() == 12, "stochastic: a sieve reads, period 12");
+        check (major.points (0, 12) == std::vector<int64_t> { 0, 2, 4, 5, 7, 9, 11 }, "stochastic: the sieve is the major scale");
+        const auto back = Sieve::fromPoints ({ 0, 2, 4, 5, 7, 9, 11 }, 12);
+        check (back.points (-12, 24) == major.points (-12, 24), "stochastic: the analysis gives the same set (" + back.text() + ")");
+        check (Sieve::fromKeys (0xFFF).text() == "1@0" && Sieve::fromKeys (0x555).text() == "2@0", "stochastic: the simplest sieves");
+        for (const char* bad : { "3@", "(2@0", "2@0 |", "0@0", "x" })
+            check (Sieve::parse (bad, error).empty() && ! error.empty(), std::string ("stochastic: \"") + bad + "\" does not read");
+        check (Sieve::parse ("-2@0", error).contains (-3), "stochastic: the complement, and negative numbers");
+
+        // Every rhythmic mode turns into a sieve that gives back its onsets.
+        for (const auto& r : rhythm::rhythms())
+        {
+            const auto sieve = sieveFromRhythm (r);
+            const auto rows = rhythm::rowsPerBeat (r);
+            std::set<int64_t> onsets;
+            for (const auto& h : rhythm::hits (r))
+                onsets.insert (h.step * rows / r.lanes[(size_t) h.lane].perBeat);
+            const auto points = sieve.points (0, (int64_t) r.beats * rows);
+            check (std::vector<int64_t> (onsets.begin(), onsets.end()) == points, "stochastic: " + r.plain + " as a sieve (" + sieve.text() + ")");
+        }
+        const auto son = rhythm::findRhythm ("son clave 3-2");
+        if (son >= 0)
+            check (sieveFromRhythm (rhythm::rhythms()[(size_t) son]).text() == "16@0 | 16@3 | 16@6 | 16@10 | 16@12", "stochastic: the son clave's sieve");
+
+        // The laws: centred where they are asked, the linear law's mean distance a third of its width.
+        for (int l = 0; l < numLaws; ++l)
+        {
+            Random rng (7);
+            double sum = 0;
+            for (int i = 0; i < 20000; ++i)
+                sum += draw ((Law) l, 5.0, 1.0, rng);
+            check (std::abs (sum / 20000 - 5.0) < 0.1, std::string ("stochastic: the ") + lawName ((Law) l) + " law is centred");
+        }
+        {
+            Random rng (3);
+            double distance = 0;
+            for (int i = 0; i < 20000; ++i)
+                distance += std::abs (draw (Law::linear, 0.0, 12.0, rng));
+            check (std::abs (distance / 20000 - 4.0) < 0.2, "stochastic: the linear law of intervals, mean a/3");
+        }
+
+        for (auto method : { Method::cloud, Method::screens })
+        {
+            Settings s;
+            s.method = method;
+            s.length = 480 * 64;
+            s.density = 2.0;
+            s.low = 50;
+            s.high = 80;
+            s.root = 2;
+            s.pitches = major;   // D major
+            s.seed = 11;
+            const auto a = generate (s);
+            const auto again = generate (s);
+            check (a.error.empty() && a.notes.size() > 40 && a.notes.size() < 400, "stochastic: a line of about the density (" + std::to_string (a.notes.size()) + ")");
+            check (a.notes.size() == again.notes.size() && std::equal (a.notes.begin(), a.notes.end(), again.notes.begin(),
+                   [] (const Note& x, const Note& y) { return x.start == y.start && x.end == y.end && x.pitch == y.pitch && x.velocity == y.velocity; }),
+                   "stochastic: the same seed draws the same line");
+            bool inside = true;
+            for (size_t i = 0; i < a.notes.size(); ++i)
+            {
+                const auto& n = a.notes[i];
+                inside = inside && n.pitch >= 50 && n.pitch <= 80 && major.contains (n.pitch - 2) && n.start >= 0 && n.end <= s.length
+                      && n.end > n.start && n.velocity >= 1 && n.velocity <= 127 && (i == 0 || a.notes[i - 1].start <= n.start);
+                for (size_t j = 0; j < i; ++j)   // a key struck again is let go first
+                    inside = inside && ! (a.notes[j].pitch == n.pitch && a.notes[j].end > n.start);
+            }
+            check (inside, "stochastic: every note in range, in the sieve, in time and let go before it is struck again");
+            check ((method == Method::screens) == ! a.screens.empty(), "stochastic: the screens are named");
+
+            // On a grid: only its places.
+            s.grid = gridFromSieve (Sieve::parse ("16@0 | 16@3 | 16@6 | 16@10 | 16@12", error), 120, s.length);
+            check (s.grid.size() == 5 * 16, "stochastic: the clave's grid over 16 bars");
+            const auto g = generate (s);
+            bool onGrid = ! g.notes.empty();
+            for (const auto& n : g.notes)
+                onGrid = onGrid && std::binary_search (s.grid.begin(), s.grid.end(), n.start);
+            check (onGrid, "stochastic: notes start only on the grid");
+        }
+        Settings none;
+        none.low = 61;
+        none.high = 61;
+        none.pitches = major;
+        check (! generate (none).error.empty(), "stochastic: a sieve with no key in range says so");
+
+        // A MIDI file's own notes and onsets as sieves, and the line back as a MIDI file.
+        midifile::Song song;
+        for (int i = 0; i < 4; ++i)
+        {
+            song.events.push_back ({ i * 480, 0x90, (uint8_t) (60 + 4 * (i % 2)), 100 });
+            song.events.push_back ({ i * 480 + 240, 0x80, (uint8_t) (60 + 4 * (i % 2)), 0 });
+        }
+        check (pitchSieveOf (song, 0).points (0, 12) == std::vector<int64_t> { 0, 4 }, "stochastic: the clip's notes as a pitch sieve");
+        check (rhythmSieveOf (song, 120, 16).text() == "4@0", "stochastic: the clip's onsets as a rhythm sieve");
+        Settings small;
+        small.seed = 4;
+        const auto line = generate (small);
+        const auto written = toSong (song, line.notes, 2);
+        check (written->noteCount() == (int) line.notes.size() && written->channelsUsed == (1u << 2), "stochastic: the line as a MIDI file");
+    }
+
     void testPluginMeasure()
     {
         // A wire: flat, no delay, no distortion, no aliasing, no compression.
@@ -6371,6 +6673,51 @@ namespace
         }
     }
 
+    // The Mode menu's rhythmic modes: every pattern the length of its cycle, and each a MIDI file
+    // that reads back with its notes; the tāls' and tāḷams' structures as the sources give them.
+    void testRhythms()
+    {
+        const auto& all = rhythm::rhythms();
+        check (all.size() > 100, "rhythms: the library is there (" + std::to_string (all.size()) + ")");
+        for (const auto& r : all)
+        {
+            check (rhythm::valid (r), "rhythm " + r.plain + ": every lane is one cycle long, the sections add up");
+            for (const auto c : r.name)
+                check (! (c >= 'A' && c <= 'Z'), "rhythm " + r.plain + ": the name is lower case");
+            check (std::count_if (all.begin(), all.end(), [&] (const rhythm::Rhythm& o) { return o.plain == r.plain; }) == 1,
+                   "rhythm " + r.plain + ": its plain name is its own");
+            const auto song = rhythm::toSong (r, 2, r.bpm);
+            std::string error;
+            const auto bytes = midifile::bytes (*song);
+            const auto back = midifile::parse (bytes.data(), bytes.size(), error);
+            check (back != nullptr && back->noteCount() == song->noteCount() && song->noteCount() > 0,
+                   "rhythm " + r.plain + ": a MIDI file with its notes");
+            check (song->lastTick == 2 * r.beats * 480, "rhythm " + r.plain + ": two cycles long");
+        }
+        auto find = [&] (const char* plain) -> const rhythm::Rhythm& { return all[(size_t) std::max (0, rhythm::findRhythm (plain))]; };
+        check (rhythm::findRhythm ("tintal") >= 0 && find ("tintal").beats == 16 && find ("tintal").sections == std::vector<int> { 4, 4, 4, 4 },
+               "tīntāl: 16 mātrās, 4+4+4+4");
+        check (find ("jhaptal").beats == 10 && find ("rupak").beats == 7 && find ("ektal").beats == 12 && find ("dhamar").beats == 14,
+               "jhaptāl 10, rūpak 7, ektāl 12, dhamār 14 mātrās");
+        check (find ("caturasra jati triputa talam (adi talam)").beats == 8, "ādi tāḷam: 8 akṣaras (4+2+2)");
+        check (find ("misra jati jhampa talam").beats == 10 && find ("khanda jati ata talam").beats == 14
+                   && find ("sankirna jati dhruva talam").beats == 29 && find ("tisra jati eka talam").beats == 3,
+               "sūḷādi tāḷas: laghu by jāti, drutam 2, anudrutam 1");
+        int talams = 0;
+        for (const auto& r : all)
+            talams += r.group == "south indian tāḷam" && r.subgroup != "cāpu";
+        check (talams == 35, "the 35 sūḷādi tāḷas: seven tāḷas in five jātis");
+        // The tracker writes a row for the finest step: tīntāl's ṭhekā is a bol a mātrā, ektāl's has tirakiṭa.
+        check (rhythm::rowsPerBeat (find ("tintal")) == 1 && rhythm::rowsPerBeat (find ("ektal")) == 4
+                   && rhythm::rowsPerBeat (find ("trap triplet hats")) == 12,
+               "rows a beat: the steps every sound falls on");
+        // A held note (the medieval modes' long) lasts its tempora.
+        const auto& primus = find ("modus primus");
+        const auto hits = rhythm::hits (primus);
+        check (std::any_of (hits.begin(), hits.end(), [] (const rhythm::Hit& h) { return h.length == 2; }), "modus primus: the long held two tempora");
+        check (rhythm::drumName (39) == "hand clap" && rhythm::drumName (81) == "open triangle" && rhythm::drumName (20).empty(), "general midi drum names");
+    }
+
     // Control surfaces and MIDI Learn (docs/control-surfaces.md).
     void testControlSurfaces()
     {
@@ -6751,9 +7098,13 @@ int main()
     testNoteEditor();
     testCounterpoint();
     testFugue();
+    testMinimalize();
     testRecording();
     testControlSurfaces();
     testDrumsToMidi();
+    testRhythms();
+    testStochastic();
+    testCubify();
     testPluginMeasure();
 
     if (failures == 0)

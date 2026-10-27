@@ -34,6 +34,7 @@ namespace
         static const std::vector<Tradition> all {
             { "&church", { "church mode", "hypo-mode" } },
             { "&jazz", { "jazz mode" } },
+            { "me&ssiaen", { "messiaen mode" } },
             { "&rāga", { "raga" } },
             { "&maqām", { "maqam" } },
             { "&dastgāh", { "dastgah" } },
@@ -188,6 +189,18 @@ void MainWindow::registerModeCommands()
             return statusBar()->showMessage (tr ("Pick a MIDI clip in the mixer first"), 5000);
         mixerWin->fugueShown();
     })->setStatusTip (tr ("A fugue on the MIDI clip shown in the mixer as its subject, in the mode"));
+    add ("mode.stochasticize", tr ("&stochasticize..."), [this]
+    {
+        if (mixerWin == nullptr || ! mixerWin->showsMidiClip())
+            return statusBar()->showMessage (tr ("Pick a MIDI clip in the mixer first"), 5000);
+        mixerWin->stochasticizeShown();
+    })->setStatusTip (tr ("A new line beside the MIDI clip shown in the mixer, by Xenakis's methods, its pitches sieved from the mode"));
+    add ("mode.cubify", tr ("cubif&y..."), [this]
+    {
+        if (mixerWin == nullptr)
+            return statusBar()->showMessage (tr ("Open the mixer first"), 5000);
+        mixerWin->cubify();
+    })->setStatusTip (tr ("The MIDI clip shown in the mixer, else the launcher's scene, arranged by Xenakis's cubes; a messiaen mode chosen here is its pitches"));
 }
 
 void MainWindow::fillModeMenu (QMenu* menu)
@@ -279,6 +292,7 @@ void MainWindow::fillModeMenu (QMenu* menu)
     for (const auto& family : order)   // a tradition the table above does not know yet
         if (auto it = byFamily.find (family); it != byFamily.end())
             addFamily (menu->addMenu (QString::fromStdString (family)), it->second);
+    fillRhythmMenu (menu->addMenu (tr ("r&hythmic modes")));
 
     menu->addSeparator();
     auto* finalMenu = menu->addMenu (tr ("&final"));
@@ -313,13 +327,17 @@ void MainWindow::fillModeMenu (QMenu* menu)
 
     menu->addSeparator();
     const auto clip = mixerWin != nullptr && mixerWin->showsMidiClip();
-    for (const auto* id : { "mode.tuneTrack", "mode.toClip", "mode.counterpoint", "mode.fugue" })
+    for (const auto* id : { "mode.tuneTrack", "mode.toClip", "mode.counterpoint", "mode.fugue", "mode.stochasticize" })
     {
-        const auto dialog = QLatin1String (id) == QLatin1String ("mode.counterpoint") || QLatin1String (id) == QLatin1String ("mode.fugue");
+        const auto dialog = QLatin1String (id) == QLatin1String ("mode.counterpoint") || QLatin1String (id) == QLatin1String ("mode.fugue")
+                            || QLatin1String (id) == QLatin1String ("mode.stochasticize");
         auto* a = commands.action (QString::fromLatin1 (id));
         a->setEnabled (m.system >= 0 || dialog);
         if (QLatin1String (id) != QLatin1String ("mode.tuneTrack"))
             a->setEnabled (a->isEnabled() && clip);
         menu->addAction (a);
     }
+    auto* cube = commands.action (QStringLiteral ("mode.cubify"));
+    cube->setEnabled (mixerWin != nullptr);
+    menu->addAction (cube);
 }

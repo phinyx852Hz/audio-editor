@@ -23,6 +23,7 @@ class AudioEngine;
 class QSpinBox;
 class QAbstractButton;
 namespace counterpoint { struct Settings; }
+namespace minimalize { struct Part; }
 namespace control { struct State; struct Command; }
 class StatusLine;
 class QScrollArea;
@@ -42,6 +43,7 @@ class LauncherRack;
 class ReturnStripWidget;
 class TrackDevices;
 class ClipView;
+class EditorTrack;
 class QStackedWidget;
 class QComboBox;
 class QSpinBox;
@@ -205,6 +207,27 @@ public:
     bool showsMidiClip() const;
     void counterpointShown() { counterpointShownMidi(); }
     void fugueShown() { fugueShownMidi(); }
+    // The editor's track (owner, 2026-10-26): one track of the mix, Audio only, MIDI only or
+    // Audio + MIDI, under the editor's waveform, with the mixer's launcher slots (left to right),
+    // its clips across time, recording and the MIDI tools. It is the track last selected here or
+    // in the mixer. Made once, for `parent`.
+    QWidget* editorTrackView (QWidget* parent);
+    int editorTrack() const;
+    void refreshEditorTrack();
+    // A sound from the editor onto the editor's track at the playhead, saved as a WAV beside the mix.
+    bool sendAudioToTimeline (const AudioData& sound, const QString& name, QString& error);
+    // Between the launcher and the timeline (owner, 2026-10-26): a copy of a slot's clip at the
+    // playhead, or of a timeline clip into the track's next empty slot.
+    void slotToTimeline (int track, int scene);
+    void clipToLauncher (int track, uint32_t id);
+    void stochasticizeShown() { stochasticizeShownMidi(); }
+    // cubify (CubifySection.cpp, owner 2026-10-26): the MIDI clip shown, else the cursor's scene,
+    // arranged by Xenakis's cubes (mixer/Cubify.h) onto the tracks' timelines.
+    void cubify();
+    // A rhythm from the Mode menu's rhythmic modes (RhythmSection.cpp): saved as a MIDI file
+    // with the mix's edits, `stem` naming it, and placed on the selected track at the playhead,
+    // the Synth's drum kit playing it when the track has no instrument. False with no track.
+    bool addRhythm (const midifile::Song&, const QString& stem);
 
 Q_SIGNALS:
     void mixdownRequested();
@@ -215,6 +238,8 @@ Q_SIGNALS:
     void editClipRequested (int track, quint32 clip);
     void devicePanelChanged();   // shown or hidden
     void finderWanted (bool show);   // in the editor's place: the editor's Find panel shown or hidden
+    void trackToEditorRequested (int track);   // the editor's track rendered into a tab of the editor
+    void message (const QString&);   // what the status line says, for the editor's track to show too
 
 protected:
     void keyPressEvent (class QKeyEvent*) override;
@@ -231,6 +256,7 @@ private:
     friend class ReturnStripWidget;
     friend class TrackDevices;
     friend class ClipView;
+    friend class EditorTrack;
 
     // What the window keeps about a track besides the engine's settings.
     struct TrackInfo
@@ -313,6 +339,36 @@ private:
     // voice a MIDI file beside the mix and a clip on a new track, where the clip is.
     void fugueShownMidi();
     bool writeFugue (int track, const mixer::Clip& clip, mixer::SlotPtr slot, int scene);   // true if it made any
+    // A generated MIDI file (saved as `file`) as a clip where `clip` is: on the timeline at its
+    // start, or in the same scene of the launcher. On track `target`, or on a new track named
+    // `trackName` with `track`'s fader and colour, in `tuning`, when that is -1 (the caller makes
+    // sure there is room). With launchAt >= 0 it launches on that frame.
+    void placeGenerated (int track, const mixer::Clip&, mixer::SlotPtr, int scene, midifile::SongPtr written, const QString& file,
+                         const QString& trackName, mixer::TuningChoice tuning, int target, Frame launchAt);
+    void generatedPlaced();   // the strips, the launcher and the rack shown again, and the mix marked changed
+    // The MIDI clip shown in the Device Chain: its track, its scene (or -1), the clip, its slot
+    // (null on the timeline), and the tuning it plays in. False when none is shown.
+    bool shownMidiClip (int& track, int& scene, mixer::Clip&, mixer::SlotPtr&, mixer::TuningChoice& tuning) const;
+    // Stochasticize (StochasticSection.cpp, owner 2026-10-26): a new line by Xenakis's methods
+    // (mixer/Stochastic.h), ST clouds or Markov screens, its pitches and rhythm through sieves
+    // that can come from the mode, a rhythmic mode or the clip itself; on a new track, or in
+    // place of the clip.
+    void stochasticizeShownMidi();
+    // cubify: a scene's clips (or the clip shown) as 24 sections by Xenakis's cubes, onto their
+    // tracks after everything already on them; MIDI tracks get a MIDI file each, audio loops
+    // play in the sections their corner of the grand cube turns into the upper tetrahedron.
+    void cubifyShownMidi();
+    void cubifyScene (int scene);
+    void cubifyTracks (const std::vector<std::pair<int, mixer::Clip>>& clips, const QString& name);
+    // Minimalize (owner, 2026-10-26; mixer/Minimalize.h): an arrangement by Reich's and Glass's
+    // processes, from a scene's MIDI slots or from the timeline at `from` on (cubify's
+    // arrangement, a Φ deal), placed after everything on the tracks, all starting together;
+    // new voices (phase copies, canons, a pulse) on the free tracks.
+    void minimalizeScene (int scene);
+    void minimalizeTimeline (Frame from);
+    // `parts` (one cell each: a slot's loop, or the whole stretch of the timeline, which the
+    // dialog cuts into sections) come from `tracks`, at `bpm`.
+    void arrangeMinimal (const std::vector<int>& tracks, std::vector<minimalize::Part> parts, double bpm, bool timeline, const QString& what);
     // Recording (docs/recording.md; owner, 2026-10-25: "play a melody into a clip with a
     // pre-determined length that can be adjusted and the recording immediately stops, loops, and
     // the new melody is generated", and "the main method super easy to learn with the options for
@@ -322,7 +378,7 @@ private:
     // that slot. What the take does after (play, stop, record the next slot, add counterpoint),
     // its length, quantise, count-in and the audio input are the transport's Record options.
     QWidget* buildTransport();   // the transport row across the top, for both views
-    void recordPressed();
+    void recordPressed (int intoLauncher = -1);   // -1 as the mixer's view is; the editor's track says which
     void recordSlot (int track, int scene);     // a take into the slot (an empty one, or replacing it)
     void recordTimeline (int track);
     void toggleOverdub (int track);
@@ -335,6 +391,9 @@ private:
     // Drums to MIDI (owner, 2026-10-26): a timeline clip (id) or a slot's audio as kit notes, the
     // slot's MIDI layer or a MIDI clip beside it.
     void drumsToMidi (int track, uint32_t id, int scene);
+    // An audio file dropped on the editor's MIDI-only track: as MIDI (Drums to MIDI) or as audio
+    // (the track then Audio + MIDI), as asked. False when the drop goes on as usual.
+    bool audioIntoMidiTrack (int track, const QString& file, int scene, Frame at);
     void captureMidi();                         // the last phrase played on the armed track, into its next empty slot
     void keepRecorded();                        // each tick: the takes that ended, saved as files and placed
     bool startTake (mixer::RecordRequest, QString& error);   // asks the engine, the input and the transport
@@ -497,6 +556,8 @@ private:
     QTimer timer;
     qint64 lastTick = 0;
     int selected = 0;
+    int shownTrack = 0;              // the editor's track: the last track selected
+    EditorTrack* editorView = nullptr;
     int stripSections = 31;
     std::set<int> picked;            // strips Q-Link joins (the selected one is always among them)
     QPushButton* qLinkButton = nullptr;

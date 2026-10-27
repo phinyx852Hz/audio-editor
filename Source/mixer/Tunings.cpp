@@ -116,6 +116,20 @@ namespace mixer
             jazz ("diminished (whole-half)", "diminished whole-half", { 0, 2, 3, 5, 6, 8, 9, 11 });
             jazz ("blues", "blues", { 0, 3, 5, 6, 7, 10 });
 
+            // Olivier Messiaen's seven modes of limited transposition (Technique de mon langage
+            // musical, 1944): each is made of a group of steps repeated, so after a few
+            // transpositions it comes back onto its own notes (mode 1 has 2, mode 2 has 3, modes 3
+            // to 7 have 4 or 6). In 12-TET, as he wrote them, each from its first note.
+            const auto messiaen = [&] (std::string name, int mode, std::initializer_list<int> steps)
+            { all.push_back ({ std::move (name), "messiaen mode " + std::to_string (mode), "messiaen mode", semitones (steps), 0 }); };
+            messiaen ("messiaen mode 1 (whole tone)", 1, { 0, 2, 4, 6, 8, 10 });
+            messiaen ("messiaen mode 2 (octatonic)", 2, { 0, 1, 3, 4, 6, 7, 9, 10 });
+            messiaen ("messiaen mode 3", 3, { 0, 2, 3, 4, 6, 7, 8, 10, 11 });
+            messiaen ("messiaen mode 4", 4, { 0, 1, 2, 5, 6, 7, 8, 11 });
+            messiaen ("messiaen mode 5", 5, { 0, 1, 5, 6, 7, 11 });
+            messiaen ("messiaen mode 6", 6, { 0, 2, 4, 5, 6, 8, 10, 11 });
+            messiaen ("messiaen mode 7", 7, { 0, 1, 2, 3, 5, 6, 7, 8, 9, 11 });
+
             // Maqams (IJMES) and dastgahs, a quarter step being 50 cents.
             const auto cents50 = [&] (std::string name, std::string plain, const char* family, std::vector<double> c)
             { all.push_back ({ std::move (name), std::move (plain), family, std::move (c), 0 }); };

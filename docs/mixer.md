@@ -2,6 +2,7 @@
 
 Status: step 1 built (2026-10-21); the rest is the proposal the owner reviewed (2026-10-19).
 See "Built so far" at the end.
+One track of the mix also shows under the editor's waveform: [editor-track.md](editor-track.md).
 
 ## One kind of track (owner, 2026-10-21)
 
@@ -418,7 +419,7 @@ Fast MIDI edits (owner, 2026-10-25: "MIDI editing, but really fast"; "the idea i
 The Mode menu (owner, 2026-10-26: "I love mode being its own thing"; every name in it lower
 case, in proper transliteration):
 - One mode for everything: it lists every mode and raga the tunings have, by tradition (church,
-  jazz, rāga, maqām, dastgāh, and east asian, gamelan and mbira as those tunings arrive; a
+  jazz, messiaen, rāga, maqām, dastgāh, and east asian, gamelan and mbira as those tunings arrive; a
   tradition it does not know yet gets a submenu of its own). A long list, the rāgas, comes in
   alphabetical parts. The equal temperaments are tunings, not modes, so they stay in the
   Tuning boxes.
@@ -429,12 +430,34 @@ case, in proper transliteration):
 - The mode chosen is what the Counterpoint and Fugue dialogs open on when the clip has no tuning
   of its own. **tune the track** sets the selected track's tuning to it (a hypo-mode on the bottom
   of its range, hypodorian on A for a final on D); **notes into the mode** moves the MIDI clip
-  shown in the Device Chain into its keys and range; **counterpoint...** and **fugue...** open those dialogs.
+  shown in the Device Chain into its keys and range; **counterpoint...** and **fugue...** open those dialogs,
+  **stochasticize...** opens [stochasticize](stochastic.md), its pitch sieve ready to fill from the mode;
+  **cubify...** arranges the MIDI clip shown, else the launcher's scene, by [Xenakis's cubes](cubify.md),
+  on a messiaen mode when one is chosen here.
+- **messiaen** (owner, 2026-10-26: "all of Messiaen's modes in the mode section") holds his seven
+  modes of limited transposition, in 12-TET as he wrote them: 1 (whole tone), 2 (octatonic), and
+  3 to 7. They are also in the MIDI Clip section's mode list.
 - Kept in settings.ini as mode/system (the plain name), mode/final, mode/hypo and mode/equal.
   Code: ui/ModeSection.cpp, mixer::modeKeys, midifile::toKeys.
+- **rhythmic modes** (owner, 2026-10-26) holds 117 rhythms: North Indian tāls, South Indian tāḷams,
+  breakbeats, trap, the medieval rhythmic modes, and Caribbean, South American, West and North
+  African and Korean rhythms. Picking one opens a small dialog that adds it to the selected track
+  as a MIDI clip, writes it into a new Tracker pattern, or saves it as a MIDI file. See
+  [rhythms.md](rhythms.md).
 - With 23 menus the bar puts 2 px between titles instead of Fusion's 7, so at 1280 px wide every
   menu stays in view up to a 10 pt font (1204 px at 10 pt DejaVu Sans; 1345 px at 11 pt, when the
   last ones go behind the » button).
+
+Stochasticize (owner, 2026-10-26: Xenakis's methods, as our own C++): **stochasticize...** in
+the MIDI Clip section, and in the Mode menu, draws a new line from the clip shown: an ST cloud or
+Markov screens, with its pitches and rhythm through sieves. A sieve can be filled from the mode,
+a rhythmic mode or the clip itself. The line goes on a new track or in place of the clip. See
+[stochastic.md](stochastic.md).
+
+cubify (owner, 2026-10-26): **cubify...** in a scene's right-click menu, in the MIDI Clip section
+and in the Mode menu arranges a scene (or one MIDI clip) by the cube method of Xenakis's Nomos
+Alpha: 24 sections, V1 V1 V1 V2 six times, onto the tracks after everything already on them. See
+[cubify.md](cubify.md).
 
 Counterpoint (owner, 2026-10-25: an automatic MIDI counterpoint generator, in modal systems
 beyond the church modes):
@@ -525,6 +548,37 @@ only", "using all mode types"):
   middle entries, the stretto's distance and any strict rule bent. The code is in mixer/Fugue.h
   (and FreePart in mixer/Counterpoint.h), with tests.
 
+Minimalize (owner, 2026-10-26: composing in the minimalist style of Philip Glass and Steve Reich,
+step 4 of PHI's generative chain: the Selector's set, the MIDI generators, cubify, minimalize):
+- **minimalize...** on a scene's right-click menu arranges the scene's MIDI slots; **minimalize
+  from here...** on the timeline's right-click menu (on a clip, from its start; in empty space,
+  from there) arranges every MIDI note on the tracks from that point on, such as cubify's
+  arrangement or a Φ deal. The timeline's stretch is cut into patterns of one, two, four or eight
+  bars (or kept whole), each pattern a section, one after another.
+- Each track takes a process. Reich's: **phase**, a copy of the pattern a step (a sixteenth or an
+  eighth) ahead at each stage against the pattern held still, until it is round to unison again
+  (Piano Phase, Clapping Music; "Phase steps" stops it sooner and holds); **canon**, copies at the
+  unison entering a stage apart, a beat further behind each; **build-up**, the pattern's notes put
+  in place of rests one a stage, the downbeat first (Drumming); **pulse**, the harmony in steady
+  eighths that swell and fall like a breath (Music for 18 Musicians). Glass's: **additive**, the
+  figure's first note, then its first two, then three, each stage a little longer (Music in
+  Fifths, Einstein on the Beach); **subtractive**, a note off the front each stage; **cycles**,
+  the figure a note shorter, looped against the others so they part and meet again;
+  **arpeggio**, the scene's chords (every part's notes but the drums, bar by bar) broken in
+  eighths, up, up and down, Alberti, or three-three-two. **hold** plays the pattern as it is.
+- **automatic** picks by the style (reich, glass, or both) and the track's place; drums never
+  take an arpeggio or pulse. Each stage plays "Each stage" times (4 by default), as Reich and
+  Glass mark a bar to repeat. The gradual processes (phase, canon, build-up, additive,
+  subtractive) set how long a section lasts, rounded up to the bar; the others loop through it,
+  and one that ends early holds where it ended.
+- New voices: the phasing and canon copies, and a pulse (an arpeggio in the glass style), go on
+  the free tracks; the mixer's 8 tracks are the limit. Without room, a phasing track moves against
+  the others itself, and a canon track enters a stage late, a beat behind.
+- The arrangement goes on the tracks after everything already on them, all tracks starting
+  together, each track's part a MIDI file next to the mix ("<scene> minimalize <track>.mid").
+  Ctrl+Z takes the clips off again (new tracks stay, empty). Variation changes the build-up order and the arpeggio figure. The code is in
+  mixer/Minimalize.h, with tests.
+
 The left column (owner, 2026-10-25: "a relatively static view of the mixer, clip launcher and
 horizontal track view"):
 - The Finder and the Inspector share one column, the same width in both views. The Finder shows
@@ -563,7 +617,8 @@ could be applied on the clip level, track level or scene level"):
 - The systems (`Source/mixer/Tunings.h`): 175 Hindustani ragas in just intonation (five-limit
   ratios, with Pythagorean komal svaras where the raga sings them low: darbārī's ga and dha, the other kānaḍās' ga,
   toḍī's and bhairav's re and dha), and each of them again equal tempered; the six church modes and six hypo-modes in Pythagorean tuning
-  (a hypo-mode's root is the bottom of its range, a fourth below the final); 13 jazz modes; nine
+  (a hypo-mode's root is the bottom of its range, a fourth below the final); 13 jazz modes; Messiaen's
+  seven modes of limited transposition; nine
   maqams and seven dastgahs with quarter steps of 50 cents; Indonesian gamelan in measured cents
   (no two gamelan are tuned alike, so each is an average): Javanese sléndro and its pathet nem,
   sanga and manyura, pélog and its pathet lima, nem and barang (from Surjodiningrat, Sudarjana and

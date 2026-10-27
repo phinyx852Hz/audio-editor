@@ -570,6 +570,14 @@ namespace midifile
             { "mixolydian", "Mode", bits ({ 0, 2, 4, 5, 7, 9, 10 }) },
             { "aeolian (minor)", "Mode", bits ({ 0, 2, 3, 5, 7, 8, 10 }) },
             { "locrian", "Mode", bits ({ 0, 1, 3, 5, 6, 8, 10 }) },
+            // Messiaen's modes of limited transposition.
+            { "messiaen 1 (whole tone)", "Messiaen", bits ({ 0, 2, 4, 6, 8, 10 }) },
+            { "messiaen 2 (octatonic)", "Messiaen", bits ({ 0, 1, 3, 4, 6, 7, 9, 10 }) },
+            { "messiaen 3", "Messiaen", bits ({ 0, 2, 3, 4, 6, 7, 8, 10, 11 }) },
+            { "messiaen 4", "Messiaen", bits ({ 0, 1, 2, 5, 6, 7, 8, 11 }) },
+            { "messiaen 5", "Messiaen", bits ({ 0, 1, 5, 6, 7, 11 }) },
+            { "messiaen 6", "Messiaen", bits ({ 0, 2, 4, 5, 6, 8, 10, 11 }) },
+            { "messiaen 7", "Messiaen", bits ({ 0, 1, 2, 3, 5, 6, 7, 8, 9, 11 }) },
             // The ten thaats, by their best-known raga where it is named after one.
             { "bilāval", "Raga", bits ({ 0, 2, 4, 5, 7, 9, 11 }) },
             { "yaman (kalyāṇ)", "Raga", bits ({ 0, 2, 4, 6, 7, 9, 11 }) },
