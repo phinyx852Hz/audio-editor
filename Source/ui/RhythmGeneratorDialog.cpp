@@ -153,7 +153,7 @@ void MainWindow::rhythmGenerator (const rhythmgen::Settings* start, const QStrin
         presets->addItem (text (p.name));
         presets->setItemData (presets->count() - 1, text (p.about), Qt::ToolTipRole);
     }
-    presets->setToolTip (tr ("euclidean timelines from many traditions (toussaint 2005); any rhythmic mode opens here from its own dialog"));
+    presets->setToolTip (tr ("euclidean timelines from many traditions (toussaint 2005); any rhythm opens here from its own dialog"));
     top->addWidget (presets);
     auto* feel = new QComboBox (&dialog);
     feel->addItem (tr ("feel..."));

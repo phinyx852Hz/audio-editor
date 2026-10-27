@@ -137,7 +137,9 @@ documented. These are our own transcriptions of rhythms, not samples.
 
 All three are at 140 to 142 bpm.
 
-## Europe: medieval rhythmic modes (6)
+## Europe: medieval (ars antiqua) (6)
+
+The submenu is **europe > medieval (ars antiqua)**, so "mode" is not repeated inside the Mode menu (owner, 2026-10-27). The six rhythms keep their Latin names, modus primus to modus sextus.
 
 These are the six modi of the Notre-Dame school, as Johannes de Garlandia sets them out (c. 1240):
 

@@ -6988,7 +6988,7 @@ namespace
             const auto regs = rhythm::regions();
             check (std::find (regs.begin(), regs.end(), reg) != regs.end(), "rhythm group " + g + ": in a region of the menu");
         }
-        check (rhythm::region ("iqāʿāt") == "west asia" && rhythm::region ("medieval rhythmic modes") == "europe",
+        check (rhythm::region ("iqāʿāt") == "west asia" && rhythm::region ("medieval (ars antiqua)") == "europe",
                "regions: west asia, and europe as one region among the others");
         check (rhythm::drumName (39) == "hand clap" && rhythm::drumName (81) == "open triangle" && rhythm::drumName (20).empty(), "general midi drum names");
 

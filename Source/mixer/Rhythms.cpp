@@ -428,7 +428,7 @@ namespace rhythm
             };
             for (const auto& m : modes)
             {
-                Rhythm r = groove (m.name, m.plain, "medieval rhythmic modes", {}, 2, { 1, 1 }, 60, m.about,
+                Rhythm r = groove (m.name, m.plain, "medieval (ars antiqua)", {}, 2, { 1, 1 }, 60, m.about,
                                    { lane ("tabor", gm::lowTom, 3, m.hits) }, m.counting);
                 Lane voice { "voice (d)", 62, 3, m.hits, 0 };
                 r.lanes.push_back (voice);
@@ -723,7 +723,7 @@ namespace rhythm
             { "north africa", "africa" }, { "west africa", "africa" },
             { "breakbeats", "the americas" }, { "trap", "the americas" }, { "caribbean", "the americas" }, { "south america", "the americas" },
             { "korean jangdan", "east asia" },
-            { "medieval rhythmic modes", "europe" },
+            { "medieval (ars antiqua)", "europe" },
             { "north indian tāl", "south asia" }, { "south indian tāḷam", "south asia" },
             { "iqāʿāt", "west asia" },
         };
