@@ -140,8 +140,12 @@ namespace rhythm
                 if (strokes[s].find_first_not_of ('.') != std::string::npos)
                     r.lanes.push_back (lane (names[s], notes[s], perBeat, strokes[s]));
             r.lanes.push_back (lane ("tālī (clap)", gm::clap, perBeat, claps));
+            r.lanes.back().marksCycle = true;
             if (waves.find_first_not_of ('.') != std::string::npos)
+            {
                 r.lanes.push_back (lane ("khālī (wave)", gm::sideStick, perBeat, waves));
+                r.lanes.back().marksCycle = true;
+            }
             return r;
         }
 
@@ -252,7 +256,10 @@ namespace rhythm
             if (waves.find_first_not_of ('.') != std::string::npos)
                 r.lanes.push_back (lane ("wave (vīccu)", gm::hiWoodBlock, 1, waves));
             r.lanes.push_back (lane ("aṅga (samam accented)", gm::lowConga, 1, anga));
+            for (auto& l : r.lanes)
+                l.marksCycle = true;
             r.lanes.push_back (lane ("gati: ta ka dhi mi", gm::muteHiConga, 4, "X" + std::string (n * 4 - 1, '.')));
+            r.lanes.back().pulse = true;
             auto& gati = r.lanes.back().hits;
             for (size_t b = 1; b < n * 4; ++b)
                 gati[b] = b % 4 == 0 ? 'x' : 'o';
@@ -441,6 +448,14 @@ namespace rhythm
                 "Cuba: the rumba's clave, its third stroke a 16th later than the son's.", { lane ("claves", gm::claves, 4, "x..x...x..x.x...") }));
             all.push_back (groove ("rumba clave (2-3)", "rumba clave 2-3", g, {}, 4, { 2, 2 }, 100,
                 "Cuba: the rumba clave from its other side.", { lane ("claves", gm::claves, 4, "..x.x...x..x...x") }));
+            all.push_back (groove ("cáscara (3-2)", "cascara 3-2", g, {}, 4, { 2, 2 }, 100,
+                "Cuba: the timbalero's pattern on the shell of the timbales, under the verses of son and salsa, over a 3-2 son clave.",
+                { lane ("cáscara (timbal shell)", gm::highTimbale, 4, "x.x.xx.xx.xx.x.x"),
+                  lane ("claves", gm::claves, 4, "x..x..x...x.x...") }));
+            all.push_back (groove ("cáscara (2-3)", "cascara 2-3", g, {}, 4, { 2, 2 }, 100,
+                "Cuba: the cáscara from its other side, over a 2-3 son clave.",
+                { lane ("cáscara (timbal shell)", gm::highTimbale, 4, "x.xx.x.xx.x.xx.x"),
+                  lane ("claves", gm::claves, 4, "..x.x...x..x..x.") }));
             all.push_back (groove ("tresillo", "tresillo", g, {}, 4, { 2, 2 }, 100,
                 "Cuba and across the Americas: 3+3+2, twice to the bar.", { lane ("bass drum", gm::kick, 4, "x..x..x.x..x..x.") }));
             all.push_back (groove ("cinquillo", "cinquillo", g, {}, 4, { 2, 2 }, 100,
@@ -525,6 +540,9 @@ namespace rhythm
                   lane ("bacalhau", gm::sideStick, 4, "....x.x.....x.x."),
                   lane ("triangle, closed", gm::muteTriangle, 4, "x.x.x.x.x.x.x.x."),
                   lane ("triangle, open", gm::openTriangle, 4, ".x.x.x.x.x.x.x.x") }));
+            all.push_back (groove ("huayno", "huayno", g, {}, 2, { 1, 1 }, 120,
+                "The Andes of Peru and Bolivia: 2/4, each beat an 8th and two 16ths, the bombo's galloping long-short-short.",
+                { lane ("bombo", gm::floorTom, 4, "X.xxx.xx") }));
             all.push_back (groove ("tango (3-3-2)", "tango 3-3-2", g, {}, 4, { 4 }, 120,
                 "Argentina and Uruguay: the 3-3-2 of the orchestra's bass and chords; on the beat it is the marcato.",
                 { lane ("bass", gm::kick, 4, "x..x..x.x..x..x."),
@@ -743,6 +761,51 @@ namespace rhythm
                 return false;
         }
         return true;
+    }
+
+    Rhythm laya (const Rhythm& r, int times)
+    {
+        times = std::clamp (times, 1, 8);
+        if (times == 1)
+            return r;
+        auto out = r;
+        for (auto& l : out.lanes)
+            if (! l.marksCycle)
+            {
+                l.hits = rep (compact (l.hits), times);
+                l.perBeat *= times;
+            }
+        static const char* const names[] { "", "", "duguṇ", "tiguṇ", "cauguṇ" };
+        out.name += times <= 4 ? std::string (", ") + names[times] : ", " + std::to_string (times) + "×";
+        return out;
+    }
+
+    bool hasGati (const Rhythm& r)
+    {
+        return std::any_of (r.lanes.begin(), r.lanes.end(), [] (const Lane& l) { return l.pulse; });
+    }
+
+    Rhythm gati (const Rhythm& r, int pulses)
+    {
+        pulses = std::clamp (pulses, 1, 12);
+        auto out = r;
+        for (auto& l : out.lanes)
+            if (l.pulse)
+            {
+                l.perBeat = pulses;
+                l.hits.assign ((size_t) (r.beats * pulses), 'o');
+                for (int b = 0; b < r.beats; ++b)
+                    l.hits[(size_t) (b * pulses)] = b == 0 ? 'X' : 'x';
+                static const std::pair<int, const char*> named[] { { 3, "tiśra" }, { 4, "caturaśra" }, { 5, "khaṇḍa" }, { 7, "miśra" }, { 9, "saṅkīrṇa" } };
+                for (auto [n, name] : named)
+                    if (n == pulses)
+                    {
+                        l.name = std::string ("gati: ") + name + " naḍai";
+                        if (pulses != 4)
+                            out.name += std::string (", ") + name + " naḍai";
+                    }
+            }
+        return out;
     }
 
     midifile::SongPtr toSong (const Rhythm& r, int cycles, double bpm)

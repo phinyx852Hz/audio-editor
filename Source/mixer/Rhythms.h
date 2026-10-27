@@ -27,6 +27,8 @@ namespace rhythm
         int perBeat = 4;
         std::string hits;
         int channel = 9;    // 0-based: 9 is General MIDI's drum channel
+        bool marksCycle = false;   // keeps the cycle (claps, waves, kriyās): stays put at another laya
+        bool pulse = false;        // a tāḷam's gati, the pulses under each akṣara
     };
 
     struct Rhythm
@@ -59,6 +61,15 @@ namespace rhythm
     std::vector<Hit> hits (const Rhythm&);           // every lane's, lane by lane
     int rowsPerBeat (const Rhythm&);                 // the steps every lane falls on: their perBeats' least common multiple
     bool valid (const Rhythm&);                      // every lane `beats` long, the sections adding up
+
+    // Layakārī (owner, 2026-10-27): the rhythm `times` as fast in the same cycle (2 duguṇ, 3
+    // tiguṇ, 4 cauguṇ), each lane repeated that many times, the lanes that mark the cycle as
+    // they were.
+    Rhythm laya (const Rhythm&, int times);
+    // A tāḷam in another naḍai (gati): its pulse lane with `pulses` to the akṣara (3 tiśra,
+    // 4 caturaśra, 5 khaṇḍa, 7 miśra, 9 saṅkīrṇa). Unchanged without a pulse lane.
+    Rhythm gati (const Rhythm&, int pulses);
+    bool hasGati (const Rhythm&);
 
     // `cycles` of the rhythm as a type 0 MIDI file at `bpm`, 480 ticks a beat.
     midifile::SongPtr toSong (const Rhythm&, int cycles, double bpm);

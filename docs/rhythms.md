@@ -9,7 +9,7 @@ transliteration (owner).
 The menu is **Mode > rhythmic modes**. It has one submenu for each tradition. Hovering over a
 rhythm shows what it is and how it is counted: the ṭhekā's bols, the kriyās, or the strokes.
 Picking a rhythm opens a dialog with its sounds, the number of cycles, and a tempo, which starts
-at a usual tempo for that rhythm. The dialog has three buttons:
+at a usual tempo for that rhythm, and a laya (see below). The dialog has these buttons, and **edit in the generator...**:
 
 - **add to the mixer** saves the rhythm as a MIDI file in the mix's Edits folder and puts it on the
   selected track at the playhead. If the track has no instrument, it gets the Synth, which plays
@@ -153,16 +153,20 @@ These are the six modi of the Notre-Dame school, as Johannes de Garlandia sets t
 They are in ternary time, with three tempora to a perfection. Each mode is played on a tabor and
 sung on d (channel 1, held for its value), so the longs sound long.
 
-## Caribbean (17)
+## Caribbean (19)
 
-son clave (3-2 and 2-3), rumba clave (3-2 and 2-3), tresillo, cinquillo, habanera, son montuno
+son clave (3-2 and 2-3), rumba clave (3-2 and 2-3), cáscara (3-2 and 2-3, the timbal shell over its
+clave, after Mauleón), tresillo, cinquillo, habanera, son montuno
 (tumbao, 2-3), cha-cha-chá, bembé (6/8), one drop, rockers, steppers, ska, dembow, soca, merengue.
 
-## South American (7)
+## South American (8)
 
-samba (batucada), bossa nova, baião, tango (3-3-2), milonga, candombe, cumbia.
+samba (batucada), bossa nova, baião, tango (3-3-2), milonga, candombe, cumbia, and huayno (the
+Andes: a stressed beat followed by two short ones, written as an 8th and two 16ths in 2/4 on the
+bombo).
 
-Still to come: chacarera, maracatu, ijexá, partido alto, festejo and joropo.
+Still to come: chacarera, marinera, maracatu, ijexá, partido alto, festejo and joropo. Haitian
+konpa and Mexican son jarocho too. Each waits for a transcription that can be cited.
 
 ## West African (6) and North African (6)
 
@@ -188,6 +192,66 @@ tak on 4 and 8.
 
 Not included yet: çiftetelli, wahda w-nuṣṣ and the other long Arab and Ottoman cycles. They can be
 added from Maqam World's iqāʿ pages once each one is checked.
+
+## Laya and naḍai
+
+The rhythm's dialog has a **laya (speed)** choice: as written, duguṇ (twice as fast), tiguṇ (three
+times) or cauguṇ (four times). This is layakārī. Each sound plays its cycle that many times in the
+same cycle, so tīntāl stays 16 mātrās with two, three or four bols to the mātrā. The lanes that keep
+the cycle stay as they are: the tāl's claps and waves, and the tāḷam's kriyās. It works on every
+rhythm, so a breakbeat at duguṇ is the break in double time.
+
+A South Indian tāḷam also gets a **naḍai (gati)** choice: caturaśra (4 pulses to the akṣara),
+tiśra (3), khaṇḍa (5), miśra (7) or saṅkīrṇa (9). Its pulse lane is rewritten with that many
+pulses to the akṣara, the first of the cycle accented. The name says which, as in "ādi tāḷam,
+khaṇḍa naḍai". Laya and naḍai go together, so ādi tāḷam in tiśra naḍai at duguṇ is six pulses to the
+akṣara. Code: `rhythm::laya` and `rhythm::gati`.
+
+## Rhythm generator
+
+**Mode > rhythmic modes > rhythm generator...** writes new grooves (owner, 2026-10-27: "a combo of
+all of these as you see fit", after Music Pattern Generator, Stochas and Subsequence). Any rhythm's
+dialog also has **edit in the generator...**, which opens the generator with that rhythm's sounds as
+written lanes, at the laya and naḍai chosen.
+
+Each row of the table is a lane: a General MIDI drum and its own cycle.
+
+- **steps**, **a beat**, **pulses** and **rotation** make a Euclidean rhythm. The pulses are spread
+  as evenly as they go over the steps by Bjorklund's algorithm, then the cycle is turned. Toussaint
+  (2005) showed that many traditional timelines come out this way: E(3,8) is the tresillo, E(5,8)
+  the cinquillo, E(7,12) the bembé bell, E(5,16) the bossa nova.
+- **written hits** (X accent, x hit, o soft, . rest) take the Euclidean rhythm's place.
+- **sieve** is a Xenakis sieve over the lane's steps, as in the stochastic tools, such as 4@0|4@3.
+  Only the steps it holds may play.
+- **chance** is how likely each hit is to play, as in Stochas.
+- **push ms** plays the lane late (laid back) or early (pushing).
+
+Lanes of different lengths run against each other (polymeter). The clip lasts until they line up
+again, at most 64 bars, unless you set the bars yourself. A 16-step lane against a 12-step lane
+comes round in three bars of 4/4.
+
+The rules come from Subsequence:
+
+- a fill in the last bar of every n bars, where rests play softly by chance
+- a density that rises or falls across the clip
+- every nth hit left out
+- each lane turning a step later every n bars
+
+The feel settings are swing (in the MPC's percentages: 50% is straight, 66% a triplet shuffle) on
+each lane's own steps, on 8ths or on 16ths, and humanized timing and loudness. Swing bends the time
+inside each swung pair, so 16ths between swung 8ths follow along. The **feel...** menu fills these
+in. It has straight, 16th swing at 54, 58 and 62%, triplet shuffle, laid back (the snare behind the
+beat), pushing (the cymbals ahead), loose (dilla-style), second line and human. These are our own
+starting points, after Hydrogen's swing and humanizing. They are not measurements of any drummer.
+
+Every chance is drawn from the **seed** with the stochastic tools' random numbers, so the same
+settings and seed always write the same groove. **new** picks another seed. **start from...** loads
+one of ten Euclidean rhythms from Toussaint (2005), each with a low drum on the beat.
+
+The groove goes to the mixer as a MIDI clip, to a new Tracker pattern (on the grid, without swing
+or humanizing, up to 256 rows), or to a .mid file. The settings are kept in `settings.ini` for next
+time. Code: `Source/mixer/RhythmGenerator.{h,cpp}` and `Source/ui/RhythmGeneratorDialog.cpp`. The
+tests are in `testRhythmGenerator`.
 
 ## My breaks
 
@@ -268,11 +332,23 @@ Timelines and claves:
 - David Locke, *Drum Gahu* (White Cliffs Media, 1987).
 - Kofi Agawu, *The African Imagination in Music* (Oxford University Press, 2016).
 
+The rhythm generator:
+
+- Godfried T. Toussaint, "The Euclidean Algorithm Generates Traditional Musical Rhythms"
+  (Bridges, 2005): Euclidean rhythms and their traditional timelines.
+- E. Bjorklund, "The Theory of Rep-Rate Pattern Generation in the SNS Timing System" (SNS-NOTE-CNTRL-99,
+  Los Alamos, 2003): the algorithm.
+- Iannis Xenakis, *Formalized Music* (Pendragon, rev. ed. 1992): sieves.
+- Roger Linn's swing percentages, from the LinnDrum and the Akai MPC60.
+- Hydrogen (hydrogen-music.org), Stochas (Surge Synth Team) and Subsequence: the ideas of swing and
+  humanizing, chance per step, and rules. No code is taken from them.
+
 Caribbean and South America:
 
 - Ed Uribe, *The Essence of Afro-Cuban Percussion and Drum Set* (Warner Bros., 1996).
 - Ed Uribe, *The Essence of Brazilian Percussion and Drum Set* (Warner Bros., 1993).
-- Rebeca Mauleón, *Salsa Guidebook* (Sher Music, 1993).
+- Rebeca Mauleón, *Salsa Guidebook* (Sher Music, 1993): claves and the cáscara.
+- "Huayno", Wikipedia: the stressed beat and two short ones.
 - Michael E. Veal, *Dub* (Wesleyan University Press, 2007): one drop, rockers, steppers.
 
 Arabic and Maghrebi rhythms:

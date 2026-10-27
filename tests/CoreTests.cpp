@@ -16,6 +16,7 @@
 #include "../Source/mixer/MixerEngine.h"
 #include "../Source/mixer/DrumsToMidi.h"
 #include "../Source/mixer/Rhythms.h"
+#include "../Source/mixer/RhythmGenerator.h"
 #include "../Source/mixer/Stochastic.h"
 #include "../Source/patchbay/PatchBay.h"
 #include "../Source/core/Ixml.h"
@@ -6732,6 +6733,127 @@ namespace
         const auto hits = rhythm::hits (primus);
         check (std::any_of (hits.begin(), hits.end(), [] (const rhythm::Hit& h) { return h.length == 2; }), "modus primus: the long held two tempora");
         check (rhythm::drumName (39) == "hand clap" && rhythm::drumName (81) == "open triangle" && rhythm::drumName (20).empty(), "general midi drum names");
+
+        // Layakārī: the ṭhekā twice, three and four times as fast, the claps and waves as they were.
+        const auto& tintal = find ("tintal");
+        for (int times = 2; times <= 4; ++times)
+        {
+            const auto fast = rhythm::laya (tintal, times);
+            check (rhythm::valid (fast) && fast.beats == tintal.beats && rhythm::rowsPerBeat (fast) == times,
+                   "tīntāl at laya " + std::to_string (times) + ": still 16 mātrās, " + std::to_string (times) + " bols to the mātrā");
+            bool kept = true;
+            for (size_t i = 0; i < fast.lanes.size(); ++i)
+                if (tintal.lanes[i].marksCycle)
+                    kept = kept && fast.lanes[i].hits == tintal.lanes[i].hits && fast.lanes[i].perBeat == tintal.lanes[i].perBeat;
+            check (kept, "tīntāl at laya " + std::to_string (times) + ": the claps and waves stay put");
+        }
+        check (rhythm::laya (tintal, 2).name == "tīntāl, duguṇ", "duguṇ in the name");
+        // Naḍai: ādi tāḷam's pulses in tiśra, khaṇḍa, miśra and saṅkīrṇa.
+        const auto& adi = find ("caturasra jati triputa talam (adi talam)");
+        check (rhythm::hasGati (adi) && ! rhythm::hasGati (tintal), "a tāḷam has a gati, a tāl does not");
+        for (int pulses : { 3, 5, 7, 9 })
+        {
+            const auto g = rhythm::gati (adi, pulses);
+            check (rhythm::valid (g) && g.beats == 8, "ādi tāḷam in " + std::to_string (pulses) + " naḍai: still 8 akṣaras");
+            const auto lane = std::find_if (g.lanes.begin(), g.lanes.end(), [] (const rhythm::Lane& l) { return l.pulse; });
+            check (lane != g.lanes.end() && lane->perBeat == pulses && rhythm::steps (*lane) == 8 * pulses,
+                   "ādi tāḷam in " + std::to_string (pulses) + " naḍai: " + std::to_string (pulses) + " pulses to the akṣara");
+        }
+        check (rhythm::gati (adi, 5).name.find ("khaṇḍa naḍai") != std::string::npos && rhythm::gati (adi, 4).name == adi.name,
+               "the naḍai in the name, unless caturaśra");
+    }
+
+    void testRhythmGenerator()
+    {
+        // Toussaint (2005): the tresillo E(3,8), the cinquillo E(5,8), the bembé bell E(7,12) turned.
+        auto pattern = [] (const std::vector<bool>& v) { std::string s; for (bool b : v) s += b ? 'x' : '.'; return s; };
+        check (pattern (rhythmgen::euclid (3, 8)) == "x..x..x.", "euclid: E(3,8) is the tresillo");
+        check (pattern (rhythmgen::euclid (5, 8)) == "x.xx.xx.", "euclid: E(5,8) is the cinquillo");
+        check (pattern (rhythmgen::euclid (4, 16)) == "x...x...x...x...", "euclid: E(4,16) four on the floor");
+        check (pattern (rhythmgen::euclid (0, 5)) == "....." && pattern (rhythmgen::euclid (9, 4)) == "xxxx", "euclid: none, and all");
+        for (const auto& p : rhythmgen::presets())
+            if (p.name.rfind ("bembé", 0) == 0)
+                check (rhythmgen::cycle (p.settings.lanes[0]) == "X.x.xx.x.x.x", "the bembé bell, x.x.xx.x.x.x");
+
+        // Polymeter: a 16-step lane against a 12-step one meets again after 3 bars of 4/4 at 16ths.
+        rhythmgen::Settings s;
+        rhythmgen::Lane kick;
+        kick.steps = 16;
+        kick.pulses = 4;
+        rhythmgen::Lane bell;
+        bell.note = 56;
+        bell.steps = 12;
+        bell.pulses = 5;
+        s.lanes = { kick, bell };
+        check (rhythmgen::lengthBars (s) == 3, "polymeter: 16 against 12 steps comes round in 3 bars");
+        std::string error;
+        const auto song = rhythmgen::generate (s, 120, error);
+        check (error.empty() && song->noteCount() == 3 * 4 + 4 * 5 && song->lastTick == 3 * 4 * 480,
+               "generate: every pulse of every lane, three bars");
+
+        // Chance, swing, humanizing and the rules, all from the seed: the same seed, the same groove.
+        s.lanes[1].chance = 0.5;
+        s.swing = 0.2;
+        s.humanizeMs = 6;
+        s.humanizeVelocity = 8;
+        s.fillEvery = 2;
+        s.rotateEvery = 1;
+        auto same = [] (const midifile::Song& a, const midifile::Song& b) {
+            if (a.events.size() != b.events.size())
+                return false;
+            for (size_t i = 0; i < a.events.size(); ++i)
+                if (a.events[i].tick != b.events[i].tick || a.events[i].data1 != b.events[i].data1 || a.events[i].data2 != b.events[i].data2)
+                    return false;
+            return true;
+        };
+        const auto one = rhythmgen::generate (s, 120, error), two = rhythmgen::generate (s, 120, error);
+        check (same (*one, *two), "generate: the same seed writes the same groove");
+        s.seed = 2;
+        check (! same (*one, *rhythmgen::generate (s, 120, error)), "generate: another seed, another groove");
+
+        s.lanes[0].sieve = "3@0|";
+        rhythmgen::generate (s, 120, error);
+        check (! error.empty(), "generate: a sieve that does not read is an error");
+        s.lanes[0].sieve = "4@0";
+        error.clear();
+
+        // Feels: the triplet shuffle puts the second 8th two thirds into the beat.
+        rhythmgen::Settings hats;
+        rhythmgen::Lane hat;
+        hat.note = 42;
+        hat.steps = 2;
+        hat.stepsPerBeat = 2;
+        hat.pulses = 2;
+        hats.lanes = { hat };
+        hats.bars = 1;
+        for (const auto& f : rhythmgen::feels())
+            if (f.name == "triplet shuffle")
+                rhythmgen::applyFeel (hats, f);
+        const auto shuffled = rhythmgen::generate (hats, 120, error);
+        std::vector<int64_t> ons;
+        for (const auto& e : shuffled->events)
+            if (e.kind() == 0x90 && e.data2 > 0)
+                ons.push_back (e.tick);
+        check (ons.size() == 8 && ons[1] == 320, "the triplet shuffle: the off-beat 8th at 2/3 of the beat");
+        rhythmgen::Settings laid = rhythmgen::fromRhythm (rhythm::rhythms()[(size_t) rhythm::findRhythm ("funky drummer")]);
+        for (const auto& f : rhythmgen::feels())
+            if (f.name == "laid back")
+                rhythmgen::applyFeel (laid, f);
+        bool snareLate = false, kickOn = true;
+        for (const auto& l : laid.lanes)
+        {
+            snareLate = snareLate || (l.note == 38 && l.pushMs > 0);
+            kickOn = kickOn && (l.note != 36 || l.pushMs == 0);
+        }
+        check (snareLate && kickOn, "laid back: the snare behind the beat, the kick on it");
+
+        // Back to a rhythmic mode for the Tracker, and a rhythmic mode into the generator.
+        rhythm::Rhythm r;
+        s.lanes[1].chance = 1.0;
+        check (rhythmgen::toRhythm (s, "test", r, error) && rhythm::valid (r) && r.beats == 3 * 4 && r.lanes.size() == 2,
+               "toRhythm: the clip as a rhythm the Tracker can write");
+        const auto amen = rhythmgen::fromRhythm (rhythm::rhythms()[(size_t) rhythm::findRhythm ("amen break")]);
+        check (amen.lanes.size() == 4 && rhythmgen::lengthBars (amen) == 1 && amen.beatsPerBar == 16, "fromRhythm: the amen break's four lanes, one cycle");
     }
 
     // Control surfaces and MIDI Learn (docs/control-surfaces.md).
@@ -6938,6 +7060,7 @@ int main()
     testControlSurfaces();
     testDrumsToMidi();
     testRhythms();
+    testRhythmGenerator();
     testStochastic();
     testCubify();
     testPluginMeasure();

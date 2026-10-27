@@ -12,10 +12,12 @@
 #include "TrackerWindow.h"
 #include "../engine/AudioEngine.h"
 #include "../mixer/DrumsToMidi.h"
+#include "../mixer/RhythmGenerator.h"
 #include "../mixer/Rhythms.h"
 #include "../tracker/PatternText.h"
 #include "../tracker/TrackerEngine.h"
 
+#include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
@@ -156,6 +158,10 @@ void MainWindow::fillRhythmMenu (QMenu* menu)
     menu->clear();
     qDeleteAll (menu->findChildren<QMenu*> (QString(), Qt::FindDirectChildrenOnly));
     menu->setToolTipsVisible (true);
+    auto* generator = menu->addAction (tr ("rhythm &generator..."));
+    generator->setToolTip (tr ("euclidean lanes against each other, with chance, rules (fills, density, rotation) and a feel"));
+    connect (generator, &QAction::triggered, this, [this] { rhythmGenerator(); });
+    menu->addSeparator();
     const auto& all = rhythm::rhythms();
     for (const auto& group : rhythm::groups())
     {
@@ -278,8 +284,6 @@ void MainWindow::addBreaks (bool folder)
 
 void MainWindow::useRhythm (const rhythm::Rhythm& r)
 {
-    auto settings = appSettings();
-
     QDialog dialog (this);
     dialog.setWindowTitle (text (r.name));
     auto* layout = new QVBoxLayout (&dialog);
@@ -310,6 +314,25 @@ void MainWindow::useRhythm (const rhythm::Rhythm& r)
     bpm->setSuffix (tr (" bpm"));
     bpm->setToolTip (tr ("beats (mātrās, akṣaras, pulses of the beat) a minute"));
     form->addRow (tr ("&tempo"), bpm);
+    // Layakārī: the rhythm two, three or four times as fast in the same cycle.
+    auto* laya = new QComboBox (&dialog);
+    laya->addItem (tr ("as written"), 1);
+    laya->addItem (tr ("duguṇ (twice as fast)"), 2);
+    laya->addItem (tr ("tiguṇ (three times)"), 3);
+    laya->addItem (tr ("cauguṇ (four times)"), 4);
+    laya->setToolTip (tr ("each sound repeated in the same cycle; the claps, waves and kriyās that keep the cycle stay as they are"));
+    form->addRow (tr ("&laya (speed)"), laya);
+    // A tāḷam's naḍai: the pulses under each akṣara.
+    QComboBox* nadai = nullptr;
+    if (rhythm::hasGati (r))
+    {
+        nadai = new QComboBox (&dialog);
+        for (auto [label, pulses] : { std::pair { tr ("caturaśra (4)"), 4 }, { tr ("tiśra (3)"), 3 }, { tr ("khaṇḍa (5)"), 5 },
+                                      { tr ("miśra (7)"), 7 }, { tr ("saṅkīrṇa (9)"), 9 } })
+            nadai->addItem (label, pulses);
+        nadai->setToolTip (tr ("the gati: how many pulses each akṣara is divided into"));
+        form->addRow (tr ("&naḍai (gati)"), nadai);
+    }
     layout->addLayout (form);
 
     auto* buttons = new QDialogButtonBox (&dialog);
@@ -318,16 +341,37 @@ void MainWindow::useRhythm (const rhythm::Rhythm& r)
     auto* toTracker = buttons->addButton (tr ("write a t&racker pattern"), QDialogButtonBox::AcceptRole);
     toTracker->setToolTip (tr ("a new pattern at the end of the song, a channel and an instrument for each sound"));
     auto* toFile = buttons->addButton (tr ("&save as midi..."), QDialogButtonBox::AcceptRole);
+    auto* toGenerator = buttons->addButton (tr ("edit in the &generator..."), QDialogButtonBox::AcceptRole);
+    toGenerator->setToolTip (tr ("its sounds as lanes of the rhythm generator, to add chance, rules and a feel"));
     buttons->addButton (QDialogButtonBox::Cancel);
     layout->addWidget (buttons);
     int choice = -1;
-    for (auto [b, n] : { std::pair { toMixer, 0 }, { toTracker, 1 }, { toFile, 2 } })
+    for (auto [b, n] : { std::pair { toMixer, 0 }, { toTracker, 1 }, { toFile, 2 }, { toGenerator, 3 } })
         connect (b, &QPushButton::clicked, &dialog, [&choice, &dialog, n] { choice = n; dialog.accept(); });
     connect (buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     if (dialog.exec() != QDialog::Accepted || choice < 0)
         return;
 
-    const auto song = rhythm::toSong (r, cycles->value(), bpm->value());
+    auto played = r;
+    if (nadai != nullptr)
+        played = rhythm::gati (played, nadai->currentData().toInt());
+    if (laya->currentData().toInt() > 1)
+        played = rhythm::laya (played, laya->currentData().toInt());
+    useRhythmAs (played, choice, cycles->value(), bpm->value());
+}
+
+void MainWindow::useRhythmAs (const rhythm::Rhythm& r, int choice, int cycles, double bpm)
+{
+    auto settings = appSettings();
+    if (choice == 3)
+    {
+        auto s = rhythmgen::fromRhythm (r);
+        s.bars = std::clamp (cycles * r.beats / std::max (1, s.beatsPerBar), 0, 64);
+        settings.setValue (QStringLiteral ("rhythm/generatorBpm"), bpm);
+        rhythmGenerator (&s, text (r.name));
+        return;
+    }
+    const auto song = rhythm::toSong (r, cycles, bpm);
     if (choice == 0)
     {
         showMixer();
@@ -335,7 +379,7 @@ void MainWindow::useRhythm (const rhythm::Rhythm& r)
             statusBar()->showMessage (tr ("Pick a track in the mixer first"), 5000);
     }
     else if (choice == 1)
-        rhythmToTracker (r, cycles->value(), bpm->value());
+        rhythmToTracker (r, cycles, bpm);
     else
     {
         const auto folder = settings.value (QStringLiteral ("rhythm/folder")).toString();
