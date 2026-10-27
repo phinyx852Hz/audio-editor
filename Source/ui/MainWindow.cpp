@@ -881,8 +881,8 @@ void MainWindow::registerCommands()
 void MainWindow::buildMenus()
 {
     // Menu titles carry & mnemonics: Alt + the first letter where it is free, otherwise the next
-    // clearest one. File, Edit and Process lead, then the rest A to Z (owner, 2026-10-27). A "#name"
-    // entry is one of the submenus below; each one is the first item of its menu.
+    // clearest one. File, Edit and Process lead, then the rest A to Z, with Help last (owner,
+    // 2026-10-27). A "#name" entry is one of the submenus below; each is the first item of its menu.
     const QMap<QString, QPair<QString, QStringList>> submenus {
         { QStringLiteral ("#album"), { tr ("A&lbum"),   { "album.new", "album.addSongs", "-", "album.previousSong", "album.nextSong", "-",
                                "album.moveEarlier", "album.moveLater", "album.longerPause", "album.shorterPause", "-",
@@ -904,7 +904,6 @@ void MainWindow::buildMenus()
                                "process.fadeShape.linear", "process.fadeShape.equalPower", "process.fadeShape.exponential",
                                "process.fadeShape.sCurve", "-", "process.reverse", "process.invert", "process.dcOffset", "-", "process.stereoize", "process.midSide", "process.convert" } },
         { tr ("&Analyze"),   { "analyze.loudness", "-", "analyze.beats", "analyze.onsets", "analyze.tempoKey", "analyze.vamp", "-", "analyze.window", "view.meters", "analyze.imagingView", "analyze.resetMeters", "-", "analyze.plugin", "-", "view.spectral", "-", "@nyquist.analyze" } },
-        { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
         { tr ("&Master"),    { "#album", "-", "view.master", "view.chain", "master.addPlugin", "master.bypass", "analyze.plugin", "-", "master.assistant", "-", "master.render", "master.renderNew", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
         { tr ("Mi&xer"),     { "mixer.window", "mixer.dock", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
                                "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "mixer.sendToTimeline", "-", "mixer.editorTrack", "mixer.trackToEditor", "-", "mixer.assistant" } },
@@ -935,6 +934,7 @@ void MainWindow::buildMenus()
         { tr ("&Warp"),      { "warp.showGrid", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "-", "warp.detectGrid", "warp.autoDetect", "warp.setTempo", "warp.downbeat", "warp.halve", "warp.double", "-",
                                "warp.edit", "warp.previousHit", "warp.nextHit", "warp.toggleMarker", "warp.nudgeEarlier", "warp.nudgeLater", "-",
                                "warp.quantizePanel", "warp.quantize", "warp.markersFromHits", "warp.sliceAtHits", "warp.resetWarp", "-", "warp.stretch", "warp.halfSpeed", "warp.doubleSpeed", "warp.extremeStretch", "warp.extremeAgain", "-", "warp.exportLoop" } },
+        { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
     };
 
     // 19 menus (23 before Album, Effect, Markers and Transport became submenus; owner,
