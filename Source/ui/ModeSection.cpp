@@ -195,6 +195,9 @@ void MainWindow::registerModeCommands()
             return statusBar()->showMessage (tr ("Pick a MIDI clip in the mixer first"), 5000);
         mixerWin->stochasticizeShown();
     })->setStatusTip (tr ("A new line beside the MIDI clip shown in the mixer, by Xenakis's methods, its pitches sieved from the mode"));
+    add ("mode.serial", tr ("t&welve-tone row..."), [this] { serialDialog(); })
+        ->setStatusTip (tr ("Schoenberg's method: a row, its matrix and a looping piece on it in one to four voices, for the launcher, "
+                            "counterpoint and the fugue"));
     add ("mode.cubify", tr ("cubif&y..."), [this]
     {
         if (mixerWin == nullptr)
@@ -337,6 +340,7 @@ void MainWindow::fillModeMenu (QMenu* menu)
             a->setEnabled (a->isEnabled() && clip);
         menu->addAction (a);
     }
+    menu->addAction (commands.action (QStringLiteral ("mode.serial")));   // needs no clip: the row is its own
     auto* cube = commands.action (QStringLiteral ("mode.cubify"));
     cube->setEnabled (mixerWin != nullptr);
     menu->addAction (cube);

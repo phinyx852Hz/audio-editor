@@ -297,7 +297,13 @@ namespace fugue
         const auto unit = lengths[lengths.size() / 2] >= tpq ? 2 * tpq : tpq;
         const auto Ls = roundUp (subject.back().end, unit);
         const auto fifth = s.degreesFor (702.0);
-        auto answer = answered (s, subject, fifth, settings.answer == Answer::tonal);
+        // A twelve-tone subject (every pitch class in it, mixer/Serial.h) is answered real: a
+        // tonal answer would change a note of the row.
+        unsigned classes = 0;
+        for (const auto& x : subject)
+            classes |= 1u << (((x.pitch % 12) + 12) % 12);
+        const bool twelveTone = classes == 0xFFFu;
+        auto answer = answered (s, subject, fifth, settings.answer == Answer::tonal && ! twelveTone);
         keepDirections (s, answer);
 
         const auto& home = homes[V - 2];
