@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**63 pull requests:** 52 merged, 11 open.
+**68 pull requests:** 64 merged, 4 open.
 
 ## Contents
 
@@ -25,6 +25,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
   - [Performance and visuals](#performance-and-visuals)
   - [Interface and branding](#interface-and-branding)
   - [Documentation](#documentation)
+  - [Not yet sorted](#not-yet-sorted)
 - [By number](#by-number)
 
 ## By feature area
@@ -35,6 +36,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 |---|---|---|---|---|
 | [#17](https://github.com/phinyx852Hz/audio-editor/pull/17) | Quantize panel: hitpoints, grooves and more warp algorithms | merged | Warp menu, Quantize Panel (Shift+Q) | `Source/ui/QuantizePanel.cpp`<br>`Source/ui/QuantizeSection.cpp`<br>`Source/core/Quantize.cpp` |
 | [#44](https://github.com/phinyx852Hz/audio-editor/pull/44) | Add Paulstretch extreme stretching (Ambient mode, Extreme Stretch) | merged | Warp menu, Extreme Stretch (Ctrl+Shift+X) | `Source/core/Paulstretch.cpp`<br>`Source/ui/WarpSection.cpp` |
+| [#68](https://github.com/phinyx852Hz/audio-editor/pull/68) | MIDI editor: a piano roll in 12-TET or any PHI tuning, with Scala files, restyle and MPE | open |  | `Source/ui/MidiEditor.cpp`<br>`Source/mixer/NoteEditor.cpp`<br>`Source/core/Scala.cpp` |
 
 ### Analysis and meters
 
@@ -66,7 +68,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#40](https://github.com/phinyx852Hz/audio-editor/pull/40) | Mixer and launcher layout: Inspector, per-track Device Chain, clip view, fast MIDI edits, Selector-set tracks | merged | Mixer (F3), Clip Launcher (F5), Tab switches | `Source/ui/MixerWindow.cpp`<br>`Source/mixer/MidiFile.cpp`<br>`Source/ui/FindPanel.cpp` |
 | [#45](https://github.com/phinyx852Hz/audio-editor/pull/45) | Mixer: Paulstretch on clips, Finder/Inspector column, fixed Device Chain, editor round trip | merged | Mixer, clip Inspector, Audio Clip section | `Source/ui/MixerWindow.cpp`<br>`Source/ui/ExtremeSettings.h`<br>`Source/ui/MixerSection.cpp` |
 | [#51](https://github.com/phinyx852Hz/audio-editor/pull/51) | Mixer: recording into slots and onto the timeline, live looping, audio and MIDI layers, and a full transport | merged | Mixer and Clip Launcher, Record (Ctrl+R) | `Source/mixer/Recording.cpp`<br>`Source/ui/MixerRecording.cpp`<br>`docs/recording.md` |
-| [#61](https://github.com/phinyx852Hz/audio-editor/pull/61) | Editor Track: one track of the project under the editor's waveform | open | Mixer menu, Editor Track (Shift+F4) | `Source/ui/MixerWindow.cpp`<br>`Source/ui/MixerSection.cpp`<br>`docs/editor-track.md` |
+| [#61](https://github.com/phinyx852Hz/audio-editor/pull/61) | Editor Track: one track of the project under the editor's waveform | merged | Mixer menu, Editor Track (Shift+F4) | `Source/ui/MixerWindow.cpp`<br>`Source/ui/MixerSection.cpp`<br>`docs/editor-track.md` |
 
 ### Routing and racks
 
@@ -82,16 +84,18 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#47](https://github.com/phinyx852Hz/audio-editor/pull/47) | Tuning and MPE for the PHI synth in phi_dsp | merged | PHI synth tuning (engine side) | `Source/core/PhiTuning.cpp`<br>`Source/core/PhiTuning.h` |
 | [#49](https://github.com/phinyx852Hz/audio-editor/pull/49) | Modal tunings per clip, scene and track, and PHI rāga (raga sheets, player, sitar) | merged | Mixer, MIDI Clip section and track tuning | `Source/mixer/Tunings.cpp`<br>`Source/core/PhiRagas.cpp`<br>`Source/core/PhiRaga.cpp`<br>`Source/core/PhiSitar.cpp` |
 | [#50](https://github.com/phinyx852Hz/audio-editor/pull/50) | Mixer: species counterpoint against a MIDI clip, in any modal tuning | merged | Mixer, MIDI Clip section, Counterpoint | `Source/mixer/Counterpoint.cpp`<br>`Source/ui/MixerWindow.cpp` |
-| [#53](https://github.com/phinyx852Hz/audio-editor/pull/53) | PHI rāga: the 100 rāgs of Ghulām Ḥaidar's Sau Achhūp Rāg (174 ragas) | open | PHI rāga sheets, Mode menu | `Source/core/PhiRagas.cpp`<br>`docs/raga.md` |
-| [#54](https://github.com/phinyx852Hz/audio-editor/pull/54) | Tunings: Indonesian gamelan laras and pathet | open | Tuning and mode lists | `Source/mixer/Tunings.cpp` |
-| [#55](https://github.com/phinyx852Hz/audio-editor/pull/55) | Add Shona mbira tunings from Zimbabwe | open | Tuning and mode lists | `Source/mixer/Tunings.cpp` |
-| [#56](https://github.com/phinyx852Hz/audio-editor/pull/56) | Modal tunings: Chinese, Japanese and Korean modes and tunings | open | Tuning and mode lists | `Source/mixer/Tunings.cpp`<br>`docs/east-asian-tunings.md` |
-| [#57](https://github.com/phinyx852Hz/audio-editor/pull/57) | Add a fugue generator to the mixer | open | Mixer, MIDI Clip section, Fugue | `Source/mixer/Fugue.cpp`<br>`Source/ui/MixerFugue.cpp` |
-| [#58](https://github.com/phinyx852Hz/audio-editor/pull/58) | Mixer: hypo ranges for ragas, maqams and dastgahs | open | Mixer, MIDI Clip section, mode range | `Source/mixer/Tunings.cpp`<br>`Source/mixer/MidiFile.cpp` |
-| [#59](https://github.com/phinyx852Hz/audio-editor/pull/59) | Accurate, lower-case transliterations for the MIDI clip's modes and ragas | open | Mixer, MIDI Clip section, Mode or raga list | `Source/mixer/MidiFile.cpp` |
-| [#60](https://github.com/phinyx852Hz/audio-editor/pull/60) | Add a top-level Mode menu | open | Mode menu (Alt+D) | `Source/ui/ModeSection.cpp`<br>`Source/mixer/Tunings.cpp` |
-| [#62](https://github.com/phinyx852Hz/audio-editor/pull/62) | Rhythmic modes in the Mode menu: tāls, tāḷams, breakbeats, trap, medieval modes and world rhythms | open | Mode menu, rhythmic modes | `Source/mixer/Rhythms.cpp`<br>`Source/ui/RhythmSection.cpp`<br>`docs/rhythms.md` |
+| [#53](https://github.com/phinyx852Hz/audio-editor/pull/53) | PHI rāga: the 100 rāgs of Ghulām Ḥaidar's Sau Achhūp Rāg (174 ragas) | merged | PHI rāga sheets, Mode menu | `Source/core/PhiRagas.cpp`<br>`docs/raga.md` |
+| [#54](https://github.com/phinyx852Hz/audio-editor/pull/54) | Tunings: Indonesian gamelan laras and pathet | merged | Tuning and mode lists | `Source/mixer/Tunings.cpp` |
+| [#55](https://github.com/phinyx852Hz/audio-editor/pull/55) | Add Shona mbira tunings from Zimbabwe | merged | Tuning and mode lists | `Source/mixer/Tunings.cpp` |
+| [#56](https://github.com/phinyx852Hz/audio-editor/pull/56) | Modal tunings: Chinese, Japanese and Korean modes and tunings | merged | Tuning and mode lists | `Source/mixer/Tunings.cpp`<br>`docs/east-asian-tunings.md` |
+| [#57](https://github.com/phinyx852Hz/audio-editor/pull/57) | Add a fugue generator to the mixer | merged | Mixer, MIDI Clip section, Fugue | `Source/mixer/Fugue.cpp`<br>`Source/ui/MixerFugue.cpp` |
+| [#58](https://github.com/phinyx852Hz/audio-editor/pull/58) | Mixer: hypo ranges for ragas, maqams and dastgahs | merged | Mixer, MIDI Clip section, mode range | `Source/mixer/Tunings.cpp`<br>`Source/mixer/MidiFile.cpp` |
+| [#59](https://github.com/phinyx852Hz/audio-editor/pull/59) | Accurate, lower-case transliterations for the MIDI clip's modes and ragas | merged | Mixer, MIDI Clip section, Mode or raga list | `Source/mixer/MidiFile.cpp` |
+| [#60](https://github.com/phinyx852Hz/audio-editor/pull/60) | Add a top-level Mode menu | merged | Mode menu (Alt+D) | `Source/ui/ModeSection.cpp`<br>`Source/mixer/Tunings.cpp` |
+| [#62](https://github.com/phinyx852Hz/audio-editor/pull/62) | Rhythmic modes in the Mode menu: tāls, tāḷams, breakbeats, trap, medieval modes and world rhythms | merged | Mode menu, rhythmic modes | `Source/mixer/Rhythms.cpp`<br>`Source/ui/RhythmSection.cpp`<br>`docs/rhythms.md` |
 | [#63](https://github.com/phinyx852Hz/audio-editor/pull/63) | Stochasticize: Xenakis's ST clouds, sieves and Markov screens for MIDI clips | open | Mixer, MIDI Clip section and Mode menu, stochasticize | `Source/mixer/Stochastic.cpp`<br>`Source/ui/StochasticSection.cpp`<br>`docs/stochastic.md` |
+| [#65](https://github.com/phinyx852Hz/audio-editor/pull/65) | cubify: arrange a scene by Xenakis's cubes, plus Messiaen's modes | open |  | `Source/ui/MixerWindow.cpp`<br>`Source/mixer/Rhythms.cpp`<br>`Source/mixer/Cubify.cpp` |
+| [#67](https://github.com/phinyx852Hz/audio-editor/pull/67) | PHI rāga: rāg darpaṇ, a raga made for PHI | merged |  | `docs/raga-darpan.md`<br>`Source/core/PhiRagas.cpp`<br>`tests/CoreTests.cpp` |
 
 ### Φ effects and sounds
 
@@ -157,6 +161,13 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 |---|---|---|---|---|
 | [#46](https://github.com/phinyx852Hz/audio-editor/pull/46) | Add comprehensive PHI manual: web site and PDF documentation | merged | docs/manual | `docs/manual/build.py`<br>`docs/manual/chapters/` |
 
+### Not yet sorted
+
+| PR | Title | State | In the app | In the code |
+|---|---|---|---|---|
+| [#64](https://github.com/phinyx852Hz/audio-editor/pull/64) | Add a self-updating pull request index | merged |  | `Source/core/PhiRagas.cpp`<br>`Source/ui/MixerWindow.cpp`<br>`Source/mixer/Fugue.cpp` |
+| [#66](https://github.com/phinyx852Hz/audio-editor/pull/66) | Minimalize: arrange a scene or the timeline by Reich's and Glass's processes | open |  | `Source/core/PhiRagas.cpp`<br>`Source/ui/MixerWindow.cpp`<br>`Source/mixer/Rhythms.cpp` |
+
 ## By number
 
 | PR | Title | What it added | State | Date | Area |
@@ -213,14 +224,19 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#50](https://github.com/phinyx852Hz/audio-editor/pull/50) | Mixer: species counterpoint against a MIDI clip, in any modal tuning | Species counterpoint generator (Fux's rules) against a MIDI clip, in any modal tuning. | merged | 2026-10-26 | Modes, tunings and composition |
 | [#51](https://github.com/phinyx852Hz/audio-editor/pull/51) | Mixer: recording into slots and onto the timeline, live looping, audio and MIDI layers, and a full transport | Recording into slots and onto the timeline, live looping, audio and MIDI layers, and a full transport. | merged | 2026-10-26 | Mixer and clip launcher |
 | [#52](https://github.com/phinyx852Hz/audio-editor/pull/52) | Control surfaces: Launchpad, Launchkey and Push 2/3, and MIDI Learn | Control surfaces (Launchpad, Launchkey, Push 2/3) with no drivers, and MIDI Learn. | merged | 2026-10-26 | Performance and visuals |
-| [#53](https://github.com/phinyx852Hz/audio-editor/pull/53) | PHI rāga: the 100 rāgs of Ghulām Ḥaidar's Sau Achhūp Rāg (174 ragas) | The 100 rare rāgs of Ghulām Ḥaidar's Sau Achhūp Rāg, taking the raga sheets to 174. | open | 2026-10-26 | Modes, tunings and composition |
-| [#54](https://github.com/phinyx852Hz/audio-editor/pull/54) | Tunings: Indonesian gamelan laras and pathet | Indonesian gamelan laras and pathet (Javanese, Balinese, Sundanese) in measured cents. | open | 2026-10-26 | Modes, tunings and composition |
-| [#55](https://github.com/phinyx852Hz/audio-editor/pull/55) | Add Shona mbira tunings from Zimbabwe | Shona mbira tunings from Zimbabwe in their own measured cents. | open | 2026-10-26 | Modes, tunings and composition |
-| [#56](https://github.com/phinyx852Hz/audio-editor/pull/56) | Modal tunings: Chinese, Japanese and Korean modes and tunings | Chinese, Japanese and Korean modes and historical tunings. | open | 2026-10-26 | Modes, tunings and composition |
-| [#57](https://github.com/phinyx852Hz/audio-editor/pull/57) | Add a fugue generator to the mixer | Fugue generator: 2 to 4 voices on a clip's melody, each on a new track. | open | 2026-10-26 | Modes, tunings and composition |
-| [#58](https://github.com/phinyx852Hz/audio-editor/pull/58) | Mixer: hypo ranges for ragas, maqams and dastgahs | Hypo (plagal) ranges for ragas, maqams and dastgahs. | open | 2026-10-26 | Modes, tunings and composition |
-| [#59](https://github.com/phinyx852Hz/audio-editor/pull/59) | Accurate, lower-case transliterations for the MIDI clip's modes and ragas | Accurate, lower-case transliterations for every non-European mode and raga name. | open | 2026-10-26 | Modes, tunings and composition |
-| [#60](https://github.com/phinyx852Hz/audio-editor/pull/60) | Add a top-level Mode menu | Top-level Mode menu: pick one mode, final and range, and the rest of PHI uses it. | open | 2026-10-26 | Modes, tunings and composition |
-| [#61](https://github.com/phinyx852Hz/audio-editor/pull/61) | Editor Track: one track of the project under the editor's waveform | Editor Track: one project track shown under the editor's waveform, with recording and editing. | open | 2026-10-26 | Mixer and clip launcher |
-| [#62](https://github.com/phinyx852Hz/audio-editor/pull/62) | Rhythmic modes in the Mode menu: tāls, tāḷams, breakbeats, trap, medieval modes and world rhythms | 117 rhythmic modes: tāls, tāḷams, breakbeats, trap, medieval modes and world rhythms. | open | 2026-10-26 | Modes, tunings and composition |
+| [#53](https://github.com/phinyx852Hz/audio-editor/pull/53) | PHI rāga: the 100 rāgs of Ghulām Ḥaidar's Sau Achhūp Rāg (174 ragas) | The 100 rare rāgs of Ghulām Ḥaidar's Sau Achhūp Rāg, taking the raga sheets to 174. | merged | 2026-10-26 | Modes, tunings and composition |
+| [#54](https://github.com/phinyx852Hz/audio-editor/pull/54) | Tunings: Indonesian gamelan laras and pathet | Indonesian gamelan laras and pathet (Javanese, Balinese, Sundanese) in measured cents. | merged | 2026-10-26 | Modes, tunings and composition |
+| [#55](https://github.com/phinyx852Hz/audio-editor/pull/55) | Add Shona mbira tunings from Zimbabwe | Shona mbira tunings from Zimbabwe in their own measured cents. | merged | 2026-10-26 | Modes, tunings and composition |
+| [#56](https://github.com/phinyx852Hz/audio-editor/pull/56) | Modal tunings: Chinese, Japanese and Korean modes and tunings | Chinese, Japanese and Korean modes and historical tunings. | merged | 2026-10-26 | Modes, tunings and composition |
+| [#57](https://github.com/phinyx852Hz/audio-editor/pull/57) | Add a fugue generator to the mixer | Fugue generator: 2 to 4 voices on a clip's melody, each on a new track. | merged | 2026-10-26 | Modes, tunings and composition |
+| [#58](https://github.com/phinyx852Hz/audio-editor/pull/58) | Mixer: hypo ranges for ragas, maqams and dastgahs | Hypo (plagal) ranges for ragas, maqams and dastgahs. | merged | 2026-10-26 | Modes, tunings and composition |
+| [#59](https://github.com/phinyx852Hz/audio-editor/pull/59) | Accurate, lower-case transliterations for the MIDI clip's modes and ragas | Accurate, lower-case transliterations for every non-European mode and raga name. | merged | 2026-10-26 | Modes, tunings and composition |
+| [#60](https://github.com/phinyx852Hz/audio-editor/pull/60) | Add a top-level Mode menu | Top-level Mode menu: pick one mode, final and range, and the rest of PHI uses it. | merged | 2026-10-26 | Modes, tunings and composition |
+| [#61](https://github.com/phinyx852Hz/audio-editor/pull/61) | Editor Track: one track of the project under the editor's waveform | Editor Track: one project track shown under the editor's waveform, with recording and editing. | merged | 2026-10-27 | Mixer and clip launcher |
+| [#62](https://github.com/phinyx852Hz/audio-editor/pull/62) | Rhythmic modes in the Mode menu: tāls, tāḷams, breakbeats, trap, medieval modes and world rhythms | 117 rhythmic modes: tāls, tāḷams, breakbeats, trap, medieval modes and world rhythms. | merged | 2026-10-27 | Modes, tunings and composition |
 | [#63](https://github.com/phinyx852Hz/audio-editor/pull/63) | Stochasticize: Xenakis's ST clouds, sieves and Markov screens for MIDI clips | Stochasticize: Xenakis's ST clouds, sieves and Markov screens to write new lines from MIDI clips. | open | 2026-10-26 | Modes, tunings and composition |
+| [#64](https://github.com/phinyx852Hz/audio-editor/pull/64) | Add a self-updating pull request index | A table of contents of every pull request, so it's easy to see what PHI has and where to find it. *(auto)* | merged | 2026-10-27 | Not yet sorted |
+| [#65](https://github.com/phinyx852Hz/audio-editor/pull/65) | cubify: arrange a scene by Xenakis's cubes, plus Messiaen's modes | cubify... arranges a clip-launcher scene (or one MIDI clip) using the cube method from Xenakis's *Nomos Alpha*. *(auto)* | open | 2026-10-26 | Modes, tunings and composition |
+| [#66](https://github.com/phinyx852Hz/audio-editor/pull/66) | Minimalize: arrange a scene or the timeline by Reich's and Glass's processes | Minimalize is step 4 of PHI's generative chain (phi set selector → MIDI generators → cubify → minimalize). *(auto)* | open | 2026-10-26 | Not yet sorted |
+| [#67](https://github.com/phinyx852Hz/audio-editor/pull/67) | PHI rāga: rāg darpaṇ, a raga made for PHI | Adds rāg darpaṇ, a raga designed for PHI by the owner and Claude. *Darpaṇ* means mirror, and the raga is named after Faqīrullāh's *Rāg Darpaṇ* (1666), which... *(auto)* | merged | 2026-10-26 | Modes, tunings and composition |
+| [#68](https://github.com/phinyx852Hz/audio-editor/pull/68) | MIDI editor: a piano roll in 12-TET or any PHI tuning, with Scala files, restyle and MPE | The first stage of the MIDI editor (the "core editor" option the owner chose). *(auto)* | open | 2026-10-26 | Editing and warping |
