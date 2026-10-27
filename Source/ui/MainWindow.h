@@ -451,6 +451,9 @@ private:
     void fillRhythmMenu (QMenu*);
     void useRhythm (int index);
     void rhythmToTracker (int index, int cycles, double bpm);
+    // Twelve-tone rows (SerialSection.cpp, docs/serial.md): a row, its matrix and a looping
+    // serial piece in one to four voices, put in the mixer's launcher or saved as a MIDI file.
+    void serialDialog();
     // Control surfaces and MIDI Learn (ControlSection.cpp, docs/control-surfaces.md): Launchpads,
     // Launchkeys and Push play the mixer's launcher, strips and transport, lit in the tracks'
     // colours; any other controller's knobs and buttons are mapped by MIDI Learn.

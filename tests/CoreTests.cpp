@@ -19,6 +19,7 @@
 #include "../Source/mixer/DrumsToMidi.h"
 #include "../Source/mixer/Rhythms.h"
 #include "../Source/mixer/Stochastic.h"
+#include "../Source/mixer/Serial.h"
 #include "../Source/patchbay/PatchBay.h"
 #include "../Source/core/Ixml.h"
 #include "../Source/core/Metadata.h"
@@ -5761,6 +5762,252 @@ namespace
                "cubify: messiaen's modes of limited transposition are listed");
     }
 
+    void testSerial()
+    {
+        using namespace serial;
+        auto rowNamed = [] (const std::string& start)
+        {
+            for (const auto& h : historical())
+                if (std::string (h.name).rfind (start, 0) == 0)
+                    return h.row;
+            return Row {};
+        };
+        const auto op25 = rowNamed ("schoenberg: suite for piano, op. 25");
+        Row read {}, numbers {};
+        std::string error;
+        check (parse ("E F G C# F# Eb Ab D B C A Bb", read, error) && read == op25
+               && parse ("4,5,7,1,6,3,8,2,e,0,9,t", numbers, error) && numbers == op25 && text (op25, true) == "e f g c♯ f♯ e♭ a♭ d b c a b♭",
+               "serial: a row as note names or numbers");
+        check (! parse ("e f g c# f# eb ab d b c a", read, error) && ! parse ("e e g c# f# eb ab d b c a bb", read, error)
+               && ! parse ("0 1 2 3 4 5 6 7 8 9 10 12", read, error), "serial: not a row");
+        check (transform (op25, { Form::i, 0 }) == Row { 4, 3, 1, 7, 2, 5, 0, 6, 9, 8, 11, 10 }
+               && transform (op25, { Form::r, 0 }) == Row { 10, 9, 0, 11, 2, 8, 3, 6, 1, 7, 5, 4 }
+               && transform (op25, { Form::ri, 2 }) == Row { 0, 1, 10, 11, 8, 2, 7, 4, 9, 3, 5, 6 }
+               && transform (op25, { Form::p, 3 })[0] == 7, "serial: p, i, r and ri");
+        std::vector<Statement> plan;
+        check (parseStatements ("p0 RI5, i11 r3", plan, error) && plan.size() == 4 && plan[1] == Statement { Form::ri, 5 }
+               && text (plan) == "p0 ri5 i11 r3" && ! parseStatements ("p12", plan, error) && ! parseStatements ("x3", plan, error),
+               "serial: the forms' labels");
+        const auto m = matrix (op25);
+        bool square = m[0] == op25;
+        for (int k = 0; k < 12; ++k)
+        {
+            Row column;
+            for (int i = 0; i < 12; ++i)
+                column[(size_t) i] = m[(size_t) i][(size_t) k];
+            square = square && isRow (std::vector<int> (m[(size_t) k].begin(), m[(size_t) k].end()))
+                     && m[(size_t) k] == transform (op25, { Form::p, primeLevelOfRow (op25, k) })
+                     && column == transform (op25, { Form::i, inversionLevelOfColumn (op25, k) });
+        }
+        check (square, "serial: the matrix, its rows the p forms and its columns the i forms");
+        check (allInterval (rowNamed ("berg: lyric suite")) && ! allInterval (op25), "serial: the lyric suite's is an all-interval row");
+        const auto op33a = rowNamed ("schoenberg: piano piece, op. 33a");
+        const auto with = combinatorial (op33a);
+        check (std::find (with.begin(), with.end(), Statement { Form::i, 5 }) != with.end() && describe (op33a).find ("inversional with i5") != std::string::npos,
+               "serial: op. 33a is combinatorial with i5");
+        bool partners = true;
+        for (int f = 0; f < 4; ++f)
+            for (int n = 0; n < 12; ++n)
+            {
+                const Statement st { (Form) f, n };
+                const auto a = transform (op25, st), b = transform (op25, partner (op25, st));
+                unsigned bits = 0;
+                for (int k = 0; k < 6; ++k)
+                    bits |= (1u << a[(size_t) k]) | (1u << b[(size_t) k]);
+                partners = partners && bits == 0xFFFu && ! (partner (op25, st) == st);
+            }
+        check (partners, "serial: every form's partner completes its first hexachord");
+        const auto path = walk (op25, 20, 3);
+        bool steps = path.size() == 20 && path[0] == Statement { Form::p, 0 };
+        for (size_t k = 1; k < path.size(); ++k)
+            steps = steps && ! (path[k] == path[k - 1]);
+        check (steps && walk (op25, 20, 3) == path && walk (op25, 20, 4) != path, "serial: a walk through the matrix, the same for a seed");
+        bool chance = true;
+        for (uint32_t seed = 1; seed < 20; ++seed)
+        {
+            const auto r = randomRow (seed), a = randomAllInterval (seed);
+            chance = chance && isRow (std::vector<int> (r.begin(), r.end())) && isRow (std::vector<int> (a.begin(), a.end())) && allInterval (a);
+        }
+        check (chance, "serial: rows and all-interval rows by chance");
+        int missing = 0;
+        const auto taken = rowOf ({ 62, 60, 74, 64, 61 }, missing);
+        check (missing == 8 && taken[0] == 2 && taken[1] == 0 && taken[2] == 4 && taken[3] == 1 && taken[4] == 3, "serial: a row from a melody");
+
+        // A piece: every twelve notes of a line all twelve, in the range, the bars asked for.
+        Settings s;
+        s.row = op25;
+        s.bars = 4;
+        auto aggregates = [] (const std::vector<Note>& notes, size_t from, size_t count)
+        {
+            unsigned bits = 0;
+            for (size_t k = from; k < from + count && k < notes.size(); ++k)
+                bits |= 1u << (notes[k].pitch % 12);
+            return bits == 0xFFFu;
+        };
+        auto one = compose (s);
+        bool whole = one.error.empty() && one.voices.size() == 1 && one.voices[0].notes.size() == 24 && one.length == 4 * 1920;
+        for (size_t k = 0; whole && k < one.voices[0].notes.size(); k += 12)
+            whole = aggregates (one.voices[0].notes, k, 12);
+        for (const auto& n : one.voices[0].notes)
+            whole = whole && n.pitch >= s.low && n.pitch <= s.high && n.end > n.start;
+        check (whole, "serial: whole rows, in the range, the bars asked for");
+        const auto song = toSong (one.voices[0], one.length, 480, 100.0, 2);
+        check (song->noteCount() == 24 && song->lastTick == one.length && song->channelsUsed == (1u << 2), "serial: a voice as a MIDI file that loops");
+        s.plan = { { Form::ri, 3 }, { Form::i, 0 } };
+        const auto planned = compose (s);
+        check (planned.voices[0].statements == std::vector<Statement> { { Form::ri, 3 }, { Form::i, 0 } }
+               && planned.voices[0].notes[0].pitch % 12 == transform (op25, { Form::ri, 3 })[0], "serial: the plan");
+
+        // Canon and mirror canon: the comes is the dux later (inverted).
+        s.plan.clear();
+        s.voices = 2;
+        s.relation = Voices::canon;
+        s.delay = 4;
+        const auto canon = compose (s);
+        bool follows = canon.voices.size() == 2 && canon.voices[1].notes.size() == canon.voices[0].notes.size() && canon.voices[1].name == "comes";
+        for (size_t k = 0; follows && k < canon.voices[0].notes.size(); ++k)
+            follows = canon.voices[1].notes[k].start == canon.voices[0].notes[k].start + 480
+                      && canon.voices[1].notes[k].pitch % 12 == canon.voices[0].notes[k].pitch % 12;
+        check (follows && canon.voices[0].notes.back().pitch > 0, "serial: a canon");
+        s.relation = Voices::mirror;
+        const auto mirror = compose (s);
+        bool mirrored = mirror.voices.size() == 2;
+        for (size_t k = 0; mirrored && k < mirror.voices[0].statements.size(); ++k)
+        {
+            const auto a = mirror.voices[0].statements[k], b = mirror.voices[1].statements[k];
+            mirrored = a.level == b.level && (a.form == Form::p ? b.form == Form::i : a.form == Form::i ? b.form == Form::p : a.form == Form::r ? b.form == Form::ri : b.form == Form::r);
+        }
+        check (mirrored, "serial: a mirror canon");
+        // Combinatorial pairs: each hexachord with its complement at once.
+        s.row = op33a;
+        s.relation = Voices::combinatorial;
+        const auto pair = compose (s);
+        bool complete = pair.voices.size() == 2 && pair.voices[0].notes.size() == pair.voices[1].notes.size();
+        for (size_t k = 0; complete && k < pair.voices[0].notes.size(); k += 6)
+        {
+            unsigned bits = 0;
+            for (size_t j = k; j < k + 6; ++j)
+                bits |= (1u << (pair.voices[0].notes[j].pitch % 12)) | (1u << (pair.voices[1].notes[j].pitch % 12));
+            complete = bits == 0xFFFu && pair.voices[0].notes[k].start == pair.voices[1].notes[k].start;
+        }
+        check (complete, "serial: combinatorial pairs make aggregates");
+        // Chords, serial durations and a frozen register.
+        s.voices = 1;
+        s.chord = 3;
+        s.rhythm = Rhythm::serial;
+        s.unit = 1;
+        s.reg = Register::fixed;
+        s.bars = 8;
+        const auto chords = compose (s);
+        const auto& notes = chords.voices[0].notes;
+        bool stacked = ! notes.empty() && notes.size() % 12 == 0;
+        int frozen[12];
+        std::fill (std::begin (frozen), std::end (frozen), -1);
+        for (size_t k = 0; stacked && k < notes.size(); ++k)
+        {
+            if (k % 3 != 0)
+                stacked = notes[k].start == notes[k - k % 3].start;
+            auto& f = frozen[notes[k].pitch % 12];
+            stacked = stacked && (f < 0 || f == notes[k].pitch);
+            f = notes[k].pitch;
+        }
+        // The first chord's length: its first note's place in p0, in sixteenths.
+        const auto first = transform (op33a, chords.voices[0].statements[0])[0];
+        const auto place = std::find (op33a.begin(), op33a.end(), first) - op33a.begin();
+        check (stacked && notes[3].start - notes[0].start == 120 * (place + 1), "serial: trichords, serial durations and a frozen register");
+        check (! compose ([&] { auto bad = s; bad.chord = 5; return bad; }()).error.empty()
+               && ! compose ([&] { auto bad = s; bad.low = 60; bad.high = 66; return bad; }()).error.empty(), "serial: what cannot be written");
+        check (compose (s).commentary == chords.commentary && ! chords.commentary.empty(), "serial: the same seed, the same piece");
+
+        // Babbitt. Time points: each note on its pitch class's twelfth of the modulus (12 sixteenths here), the next time it comes round.
+        Settings tp;
+        tp.row = op25;
+        tp.rhythm = Rhythm::timePoint;
+        tp.unit = 1;
+        tp.bars = 3;
+        const auto points = compose (tp);
+        bool onPoints = ! points.voices[0].notes.empty() && points.error.empty();
+        int64_t lastStart = -1;
+        for (const auto& n : points.voices[0].notes)
+        {
+            onPoints = onPoints && (n.start / 120) % 12 == (n.pitch - op25[0] + 120) % 12 && n.start > lastStart;
+            lastStart = n.start;
+        }
+        check (onPoints && points.voices[0].notes[0].start == 0 && points.length >= 3 * 1920 && points.length % 1920 == 0,
+               "serial: babbitt's time points");
+        // Derived rows: the cell's forms fill out the aggregate.
+        Row derivedRow {};
+        bool cells = derive ({ 0, 1, 3 }, 5, derivedRow, error) && isRow (std::vector<int> (derivedRow.begin(), derivedRow.end()))
+                     && derivedRow[0] == 0 && derivedRow[1] == 1 && derivedRow[2] == 3;
+        for (int k = 0; cells && k < 12; k += 3)
+        {
+            // Every trichord of it is the cell's shape: {0, 1, 3} or its inversion {0, 2, 3}, transposed.
+            std::array<int, 3> t { derivedRow[(size_t) k], derivedRow[(size_t) k + 1], derivedRow[(size_t) k + 2] };
+            std::sort (t.begin(), t.end());
+            bool shaped = false;
+            for (int r = 0; r < 3 && ! shaped; ++r)
+            {
+                const auto a = (t[(size_t) (r + 1) % 3] - t[(size_t) r] + 12) % 12, b = (t[(size_t) (r + 2) % 3] - t[(size_t) r] + 12) % 12;
+                shaped = (a == 1 && b == 3) || (a == 2 && b == 3);
+            }
+            cells = shaped;
+        }
+        Row tetra {};
+        check (cells && derive ({ 0, 1, 2, 3 }, 1, tetra, error) && ! derive ({ 0, 1 }, 1, tetra, error) && ! derive ({ 0, 4, 4 }, 1, tetra, error),
+               "serial: babbitt's derived rows");
+        // Source sets: a row on one is combinatorial in all four forms.
+        bool sets = true;
+        for (int set = 0; set < 6; ++set)
+        {
+            const auto r = fromSourceSet (set, 9);
+            sets = sets && sourceSetOf (r) == set && describe (r).find ("all-combinatorial") != std::string::npos;
+        }
+        check (sets && sourceSetOf (op25) == -1 && sourceSets()[5].pcs[5] == 10, "serial: babbitt's all-combinatorial source sets");
+        // Arrays: every block all twelve notes across the voices, each voice a segment of it.
+        Settings ar;
+        ar.row = op25;
+        ar.voices = 4;
+        ar.relation = Voices::array;
+        ar.bars = 4;
+        const auto arr = compose (ar);
+        bool blocks = arr.voices.size() == 4 && arr.error.empty() && arr.voices[0].name == "lyne 1";
+        for (size_t b = 0; blocks && b < arr.voices[0].statements.size(); ++b)
+        {
+            unsigned bits = 0;
+            for (const auto& v : arr.voices)
+                for (size_t k = b * 3; k < b * 3 + 3; ++k)
+                    bits |= 1u << (v.notes[k].pitch % 12);
+            blocks = bits == 0xFFFu && arr.voices[0].notes[b * 3].start == arr.voices[3].notes[b * 3].start;
+        }
+        // Block 0 gives voice 1 the first trichord, block 1 the second.
+        const auto second = transform (op25, arr.voices[0].statements[1]);
+        check (blocks && arr.voices[0].statements.size() >= 2 && arr.voices[0].notes[0].pitch % 12 == transform (op25, arr.voices[0].statements[0])[0]
+               && arr.voices[0].notes[3].pitch % 12 == second[3], "serial: babbitt's arrays");
+
+        // A fugue on a twelve-tone subject answers it at the fifth exactly, even when a tonal answer is asked for.
+        counterpoint::Line subject;
+        for (int k = 0; k < 12; ++k)
+            subject.push_back ({ k * 480, k * 480 + 480, 60 + op25[(size_t) k], 90 });
+        fugue::Settings f;
+        f.voices = 2;
+        f.answer = fugue::Answer::tonal;
+        f.mode = counterpoint::Mode::chromatic ((op25[0] + 5) % 12);   // the subject begins on the dominant, which a tonal answer answers a fourth up
+        const auto fg = fugue::generate (subject, 480, f);
+        bool real = fg.plan.size() > 1 && fg.plan[1].what == "answer";
+        if (real)
+        {
+            const auto& voice = fg.voices[(size_t) fg.plan[1].voice];
+            std::vector<int> heard;
+            for (const auto& x : voice)
+                if (x.start >= fg.plan[1].start && x.start < fg.plan[1].end)
+                    heard.push_back (x.pitch % 12);
+            real = heard.size() == 12;
+            for (size_t k = 0; real && k < 12; ++k)
+                real = heard[k] == (op25[k] + 7) % 12;
+        }
+        check (real, "serial: the fugue answers a twelve-tone subject real");
+    }
+
     void testStochastic()
     {
         using namespace stochastic;
@@ -7105,6 +7352,7 @@ int main()
     testRhythms();
     testStochastic();
     testCubify();
+    testSerial();
     testPluginMeasure();
 
     if (failures == 0)
