@@ -163,8 +163,13 @@ void MainWindow::controlTick()
     for (const auto& c : surfaces->takeCommands())
         controlCommand (c);
     // Plugged in and taken out: looked for every two seconds.
-    if (++controlTicks % 60 == 0 && surfaces->scan())
-        openMidiInputs();
+    if (++controlTicks % 60 == 0)
+    {
+        if (surfaces->scan())
+            openMidiInputs();
+        else
+            lookForMidiInputs();
+    }
     const auto state = mixerWin != nullptr ? mixerWin->surfaceState() : control::State {};
     surfaces->refresh (state);
 

@@ -405,8 +405,10 @@ private:
     QString findFile() const;                     // the file highlighted in Find, when Find has the keyboard
     void keepFindFocus (QWidget* had);            // after F7 or F8 from Find
     void midiInputsDialog();
-    void openMidiInputs();
+    void openMidiInputs();      // every input but those turned off (by name) and the surfaces' own
+    void lookForMidiInputs();   // again, if inputs were plugged in or taken out
     void updateMidiStatus();
+    std::vector<std::string> midiDevicesSeen;   // the inputs there at the last openMidiInputs
     std::unique_ptr<sampler::Engine> samplerEngine;
     class SamplerWindow* samplerWin = nullptr;
     DockablePanel* samplerPanel = nullptr;
