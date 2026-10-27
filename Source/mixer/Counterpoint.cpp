@@ -623,7 +623,7 @@ namespace counterpoint
         const auto keys = mixer::keyCents (t);
         m.keyCents.assign (keys.begin(), keys.end());
         m.scale.assign (12, false);
-        for (auto c : t.cents)
+        for (auto c : mixer::octaveCents (t))   // a scale repeating at a fourth: its degrees in the octave
             m.scale[(size_t) (((int) std::floor (c / 100.0 + 0.5) % 12 + 12) % 12)] = true;
         m.ficta = t.family == "church mode" || t.family == "hypo-mode";
         return m;
