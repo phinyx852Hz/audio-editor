@@ -6,6 +6,7 @@
 // (36), a snare (38) or a closed hi-hat (42) by where the hit's energy lies, at the loudness it
 // was played. Our own code. Plain C++, no JUCE or Qt.
 #include "MixerEngine.h"
+#include "Rhythms.h"
 
 #include <vector>
 
@@ -34,4 +35,11 @@ namespace mixer
     // The hits as a MIDI layer for the clip: as long as it, at `bpm`, each note a 1/16 long or
     // up to the next hit of its kind.
     std::shared_ptr<MidiClip> drumsToMidi (const Clip&, double sampleRate, double bpm, const DrumsSettings& = {});
+
+    // A break (owner, 2026-10-27: "I can add the breaks as needed"): a drum loop cut to whole
+    // bars, as a rhythm of the Mode menu's "my breaks". Its tempo from its length and hits
+    // (beatgrid::fromLoop: 1 to 16 bars of 4/4), each hit of findDrums on its nearest 16th as a
+    // kick, snare or hat, accented (X) from velocity 110, soft (o) under 70. False, with why,
+    // when no such tempo fits the hits.
+    bool breakRhythm (const AudioClipPtr&, double sampleRate, const std::string& name, rhythm::Rhythm&, std::string& error);
 }

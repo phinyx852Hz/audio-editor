@@ -75,7 +75,7 @@ namespace rhythm
             Rhythm r;
             r.name = std::move (name);
             r.plain = std::move (plain);
-            r.group = "north indian tāl";
+            r.group = "North Indian tāl";
             r.bpm = bpm;
             r.about = std::move (about);
 
@@ -140,8 +140,12 @@ namespace rhythm
                 if (strokes[s].find_first_not_of ('.') != std::string::npos)
                     r.lanes.push_back (lane (names[s], notes[s], perBeat, strokes[s]));
             r.lanes.push_back (lane ("tālī (clap)", gm::clap, perBeat, claps));
+            r.lanes.back().marksCycle = true;
             if (waves.find_first_not_of ('.') != std::string::npos)
+            {
                 r.lanes.push_back (lane ("khālī (wave)", gm::sideStick, perBeat, waves));
+                r.lanes.back().marksCycle = true;
+            }
             return r;
         }
 
@@ -212,7 +216,7 @@ namespace rhythm
             Rhythm r;
             r.name = std::move (name);
             r.plain = std::move (plain);
-            r.group = "south indian tāḷam";
+            r.group = "South Indian tāḷam";
             r.subgroup = std::move (subgroup);
             r.sections = sections;
             r.beats = std::accumulate (sections.begin(), sections.end(), 0);
@@ -252,7 +256,10 @@ namespace rhythm
             if (waves.find_first_not_of ('.') != std::string::npos)
                 r.lanes.push_back (lane ("wave (vīccu)", gm::hiWoodBlock, 1, waves));
             r.lanes.push_back (lane ("aṅga (samam accented)", gm::lowConga, 1, anga));
+            for (auto& l : r.lanes)
+                l.marksCycle = true;
             r.lanes.push_back (lane ("gati: ta ka dhi mi", gm::muteHiConga, 4, "X" + std::string (n * 4 - 1, '.')));
+            r.lanes.back().pulse = true;
             auto& gati = r.lanes.back().hits;
             for (size_t b = 1; b < n * 4; ++b)
                 gati[b] = b % 4 == 0 ? 'x' : 'o';
@@ -421,7 +428,7 @@ namespace rhythm
             };
             for (const auto& m : modes)
             {
-                Rhythm r = groove (m.name, m.plain, "medieval rhythmic modes", {}, 2, { 1, 1 }, 60, m.about,
+                Rhythm r = groove (m.name, m.plain, "medieval (ars antiqua)", {}, 2, { 1, 1 }, 60, m.about,
                                    { lane ("tabor", gm::lowTom, 3, m.hits) }, m.counting);
                 Lane voice { "voice (d)", 62, 3, m.hits, 0 };
                 r.lanes.push_back (voice);
@@ -432,7 +439,7 @@ namespace rhythm
         //======================================================================
         void addCaribbean (std::vector<Rhythm>& all)
         {
-            const std::string g = "caribbean";
+            const std::string g = "Caribbean";
             all.push_back (groove ("son clave (3-2)", "son clave 3-2", g, {}, 4, { 2, 2 }, 100,
                 "Cuba: the son's timeline, three strokes then two.", { lane ("claves", gm::claves, 4, "x..x..x...x.x...") }));
             all.push_back (groove ("son clave (2-3)", "son clave 2-3", g, {}, 4, { 2, 2 }, 100,
@@ -441,6 +448,14 @@ namespace rhythm
                 "Cuba: the rumba's clave, its third stroke a 16th later than the son's.", { lane ("claves", gm::claves, 4, "x..x...x..x.x...") }));
             all.push_back (groove ("rumba clave (2-3)", "rumba clave 2-3", g, {}, 4, { 2, 2 }, 100,
                 "Cuba: the rumba clave from its other side.", { lane ("claves", gm::claves, 4, "..x.x...x..x...x") }));
+            all.push_back (groove ("cáscara (3-2)", "cascara 3-2", g, {}, 4, { 2, 2 }, 100,
+                "Cuba: the timbalero's pattern on the shell of the timbales, under the verses of son and salsa, over a 3-2 son clave.",
+                { lane ("cáscara (timbal shell)", gm::highTimbale, 4, "x.x.xx.xx.xx.x.x"),
+                  lane ("claves", gm::claves, 4, "x..x..x...x.x...") }));
+            all.push_back (groove ("cáscara (2-3)", "cascara 2-3", g, {}, 4, { 2, 2 }, 100,
+                "Cuba: the cáscara from its other side, over a 2-3 son clave.",
+                { lane ("cáscara (timbal shell)", gm::highTimbale, 4, "x.xx.x.xx.x.xx.x"),
+                  lane ("claves", gm::claves, 4, "..x.x...x..x..x.") }));
             all.push_back (groove ("tresillo", "tresillo", g, {}, 4, { 2, 2 }, 100,
                 "Cuba and across the Americas: 3+3+2, twice to the bar.", { lane ("bass drum", gm::kick, 4, "x..x..x.x..x..x.") }));
             all.push_back (groove ("cinquillo", "cinquillo", g, {}, 4, { 2, 2 }, 100,
@@ -465,17 +480,17 @@ namespace rhythm
                 "Afro-Cuban: the bell's seven strokes in twelve pulses, the West African standard pattern.",
                 { lane ("bell", gm::cowbell, 3, "x.x.xx.x.x.x"),
                   lane ("shekere", gm::cabasa, 3, "x..x..x..x..") }));
-            all.push_back (groove ("one drop", "one drop", g, {}, 4, { 4 }, 76,
+            all.push_back (groove ("one drop", "one drop", g, "wʌn drɒp", 4, { 4 }, 76,
                 "Jamaica, reggae: the bass drum and rimshot together on the third beat only.",
                 { lane ("kick", gm::kick, 4, "........x......."),
                   lane ("rimshot", gm::sideStick, 4, "........x......."),
                   lane ("closed hi-hat", gm::closedHat, 4, "x.x.x.x.x.x.x.x.") }));
-            all.push_back (groove ("rockers", "rockers", g, {}, 4, { 4 }, 80,
+            all.push_back (groove ("rockers", "rockers", g, "ˈrɒkərz", 4, { 4 }, 80,
                 "Jamaica, mid-1970s (Sly Dunbar): the bass drum on one and three.",
                 { lane ("kick", gm::kick, 4, "x.......x......."),
                   lane ("rimshot", gm::sideStick, 4, "........x......."),
                   lane ("closed hi-hat", gm::closedHat, 4, "x.xxx.xxx.xxx.xx") }));
-            all.push_back (groove ("steppers", "steppers", g, {}, 4, { 4 }, 80,
+            all.push_back (groove ("steppers", "steppers", g, "ˈstɛpərz", 4, { 4 }, 80,
                 "Jamaica and UK dub: the bass drum on every beat.",
                 { lane ("kick", gm::kick, 4, "x...x...x...x..."),
                   lane ("rimshot", gm::sideStick, 4, "........x......."),
@@ -506,7 +521,7 @@ namespace rhythm
         //======================================================================
         void addSouthAmerican (std::vector<Rhythm>& all)
         {
-            const std::string g = "south american";
+            const std::string g = "South America";
             all.push_back (groove ("samba (batucada)", "samba", g, {}, 4, { 2, 2 }, 100,
                 "Brazil: two bars of 2/4, the surdos answering (the low one on the second beat), the caixa's 16ths, the tamborim's teleco-teco (simplified).",
                 { lane ("surdo de primeira", gm::floorTom, 4, "....X.......X..."),
@@ -525,6 +540,9 @@ namespace rhythm
                   lane ("bacalhau", gm::sideStick, 4, "....x.x.....x.x."),
                   lane ("triangle, closed", gm::muteTriangle, 4, "x.x.x.x.x.x.x.x."),
                   lane ("triangle, open", gm::openTriangle, 4, ".x.x.x.x.x.x.x.x") }));
+            all.push_back (groove ("huayno", "huayno", g, {}, 2, { 1, 1 }, 120,
+                "The Andes of Peru and Bolivia: 2/4, each beat an 8th and two 16ths, the bombo's galloping long-short-short.",
+                { lane ("bombo", gm::floorTom, 4, "X.xxx.xx") }));
             all.push_back (groove ("tango (3-3-2)", "tango 3-3-2", g, {}, 4, { 4 }, 120,
                 "Argentina and Uruguay: the 3-3-2 of the orchestra's bass and chords; on the beat it is the marcato.",
                 { lane ("bass", gm::kick, 4, "x..x..x.x..x..x."),
@@ -550,7 +568,7 @@ namespace rhythm
         // Timelines counted in pulses, as Toussaint gives them, with a drum on the beat.
         void addAfrican (std::vector<Rhythm>& all)
         {
-            const std::string w = "west african";
+            const std::string w = "West Africa";
             all.push_back (groove ("agbekɔ (standard bell)", "agbekor", w, {}, 4, { 1, 1, 1, 1 }, 110,
                 "Ewe, Ghana and Togo: the gankogui's seven strokes in twelve pulses, the standard pattern of West African 12/8, with the axatse rattle.",
                 { lane ("gankogui (bell)", gm::cowbell, 3, "X.x.xx.x.x.x"),
@@ -574,7 +592,7 @@ namespace rhythm
                   lane ("open hi-hat", gm::openHat, 4, "....x.......x...") }));
 
             // North African: Egyptian and Maghrebi iqāʿāt, dum (the darbuka's middle) and tak (its rim).
-            const std::string n = "north african";
+            const std::string n = "North Africa";
             struct Iqa { const char* name; const char* plain; int beats; const char* dum; const char* tak; const char* counting; const char* about; double bpm; };
             const Iqa iqaat[] {
                 { "maqsūm", "maqsum", 4, "x...x...", ".x.x..x.", "dum tak – tak dum – tak –", "Egypt: the commonest iqāʿ of popular music, 4/4.", 110 },
@@ -589,6 +607,11 @@ namespace rhythm
                 all.push_back (groove (q.name, q.plain, n, {}, q.beats, { q.beats }, q.bpm, q.about,
                                        { lane ("dum", gm::lowConga, perBeat, q.dum), lane ("tak", gm::openHiConga, perBeat, q.tak) }, q.counting));
             }
+            // The Arab and Ottoman classical repertoire's long cycles.
+            all.push_back (groove ("samāʿī thaqīl", "samai thaqil", "iqāʿāt", {}, 10, { 3, 2, 2, 3 }, 120,
+                "The samāʿī's 10/8, 3+2+2+3: dum on 1, 6 and 7, tak on 4 and 8, the tenth eighth often leading into the next cycle.",
+                { lane ("dum", gm::lowConga, 1, "x....xx..."), lane ("tak", gm::openHiConga, 1, "...x...x..") },
+                "dum – – tak – dum dum tak – –"));
             all.push_back (groove ("gnāwa (qarāqib)", "gnawa", n, {}, 4, { 1, 1, 1, 1 }, 100,
                 "Morocco: the qarāqib (iron castanets) of the Gnawa līla, three strokes to the beat, long-short-short (simplified).",
                 { lane ("qarāqib", gm::maracas, 3, "X.xx.xx.xx.x"),
@@ -616,7 +639,7 @@ namespace rhythm
             if (roll.find_first_not_of ('.') != std::string::npos)
                 lanes.push_back (lane ("chaepyeon (gi, deoreoreo)", gm::highTimbale, perBeat * 4, roll));
             auto plain = name;
-            return groove (std::move (name), std::move (plain), "east asian", {}, beats, std::move (sections), bpm, std::move (about),
+            return groove (std::move (name), std::move (plain), "Korean jangdan", {}, beats, std::move (sections), bpm, std::move (about),
                            std::move (lanes), std::move (counting));
         }
 
@@ -694,6 +717,27 @@ namespace rhythm
         return out;
     }
 
+    std::string region (const std::string& group)
+    {
+        static const std::vector<std::pair<std::string, std::string>> map {
+            { "North Africa", "Africa" }, { "West Africa", "Africa" },
+            { "breakbeats", "the Americas" }, { "trap", "the Americas" }, { "Caribbean", "the Americas" }, { "South America", "the Americas" },
+            { "Korean jangdan", "East Asia" },
+            { "medieval (ars antiqua)", "Europe" },
+            { "North Indian tāl", "South Asia" }, { "South Indian tāḷam", "South Asia" },
+            { "iqāʿāt", "West Asia" },
+        };
+        for (const auto& [g, r] : map)
+            if (g == group)
+                return r;
+        return {};
+    }
+
+    std::vector<std::string> regions()
+    {
+        return { "Europe", "West Asia", "Central Asia", "South Asia", "Southeast Asia", "East Asia", "Africa", "the Americas", "Oceania" };
+    }
+
     int steps (const Lane& l) { return (int) compact (l.hits).size(); }
 
     std::vector<Hit> hits (const Rhythm& r)
@@ -738,6 +782,51 @@ namespace rhythm
                 return false;
         }
         return true;
+    }
+
+    Rhythm laya (const Rhythm& r, int times)
+    {
+        times = std::clamp (times, 1, 8);
+        if (times == 1)
+            return r;
+        auto out = r;
+        for (auto& l : out.lanes)
+            if (! l.marksCycle)
+            {
+                l.hits = rep (compact (l.hits), times);
+                l.perBeat *= times;
+            }
+        static const char* const names[] { "", "", "duguṇ", "tiguṇ", "cauguṇ" };
+        out.name += times <= 4 ? std::string (", ") + names[times] : ", " + std::to_string (times) + "×";
+        return out;
+    }
+
+    bool hasGati (const Rhythm& r)
+    {
+        return std::any_of (r.lanes.begin(), r.lanes.end(), [] (const Lane& l) { return l.pulse; });
+    }
+
+    Rhythm gati (const Rhythm& r, int pulses)
+    {
+        pulses = std::clamp (pulses, 1, 12);
+        auto out = r;
+        for (auto& l : out.lanes)
+            if (l.pulse)
+            {
+                l.perBeat = pulses;
+                l.hits.assign ((size_t) (r.beats * pulses), 'o');
+                for (int b = 0; b < r.beats; ++b)
+                    l.hits[(size_t) (b * pulses)] = b == 0 ? 'X' : 'x';
+                static const std::pair<int, const char*> named[] { { 3, "tiśra" }, { 4, "caturaśra" }, { 5, "khaṇḍa" }, { 7, "miśra" }, { 9, "saṅkīrṇa" } };
+                for (auto [n, name] : named)
+                    if (n == pulses)
+                    {
+                        l.name = std::string ("gati: ") + name + " naḍai";
+                        if (pulses != 4)
+                            out.name += std::string (", ") + name + " naḍai";
+                    }
+            }
+        return out;
     }
 
     midifile::SongPtr toSong (const Rhythm& r, int cycles, double bpm)

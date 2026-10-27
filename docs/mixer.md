@@ -442,11 +442,13 @@ case, in proper transliteration):
   3 to 7. They are also in the MIDI Clip section's mode list.
 - Kept in settings.ini as mode/system (the plain name), mode/final, mode/hypo and mode/equal.
   Code: ui/ModeSection.cpp, mixer::modeKeys, midifile::toKeys.
-- **rhythm** (owner, 2026-10-26; named "rhythm" 2026-10-27, beside melody and tuning) holds 117 rhythms: North Indian tāls, South Indian tāḷams,
+- **rhythm** (owner, 2026-10-26; renamed from "rhythmic modes" 2026-10-27) holds 121 rhythms: North Indian tāls, South Indian tāḷams,
   breakbeats, trap, the medieval rhythmic modes, and Caribbean, South American, West and North
-  African and Korean rhythms. Picking one opens a small dialog that adds it to the selected track
-  as a MIDI clip, writes it into a new Tracker pattern, or saves it as a MIDI file. See
-  [rhythms.md](rhythms.md).
+  African, West Asian and Korean rhythms, by region, and **my breaks**, your own drum loops transcribed from
+  their audio. Picking one opens a small dialog that adds it to the selected track
+  as a MIDI clip, writes it into a new Tracker pattern, or saves it as a MIDI file, at any laya
+  (and a tāḷam in any naḍai). **rhythm generator...** writes new grooves from Euclidean lanes,
+  chance, rules and a feel. See [rhythms.md](rhythms.md).
 - With 23 menus the bar puts 2 px between titles instead of Fusion's 7, so at 1280 px wide every
   menu stays in view up to a 10 pt font (1204 px at 10 pt DejaVu Sans; 1345 px at 11 pt, when the
   last ones go behind the » button).

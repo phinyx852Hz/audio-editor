@@ -27,6 +27,8 @@
 #include <atomic>
 #include <memory>
 
+namespace rhythm { struct Rhythm; }
+namespace rhythmgen { struct Settings; }
 class ChainRow;
 class FindPanel;
 struct FindItem;
@@ -451,8 +453,13 @@ private:
     // Its rhythmic modes (RhythmSection.cpp, docs/rhythms.md): a rhythm put on the selected
     // mixer track, written into a new Tracker pattern, or saved as a MIDI file.
     void fillRhythmMenu (QMenu*);
-    void useRhythm (int index);
-    void rhythmToTracker (int index, int cycles, double bpm);
+    void useRhythm (const rhythm::Rhythm&);
+    void useRhythmAs (const rhythm::Rhythm&, int choice, int cycles, double bpm);   // 0 mixer, 1 tracker, 2 file, 3 generator
+    void rhythmToTracker (const rhythm::Rhythm&, int cycles, double bpm);
+    void addBreaks (bool folder);   // "my breaks": files, or every audio file in a folder, transcribed
+    // The rhythm generator (RhythmGeneratorDialog.cpp): Euclidean lanes, chance, rules and feels,
+    // from `start`, or from the settings last used.
+    void rhythmGenerator (const rhythmgen::Settings* start = nullptr, const QString& name = {});
     // Twelve-tone rows (SerialSection.cpp, docs/serial.md): a row, its matrix and a looping
     // serial piece in one to four voices, put in the mixer's launcher or saved as a MIDI file.
     void serialDialog();

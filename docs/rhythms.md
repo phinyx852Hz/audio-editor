@@ -6,10 +6,10 @@ modes, and of course, Caribbean, south american, and west and north african rhyt
 there's anything from East Asia, that would be great". Every name is lower case and in proper
 transliteration (owner).
 
-The menu is **Mode > rhythm**, beside *melody* and *tuning*. It has one submenu for each tradition. Hovering over a
+The menu is **Mode > rhythm** (owner, 2026-10-27: the Mode menu holds melody, tuning and rhythm). It has a submenu for each region, west to east as in melody and tuning: Europe, West Asia, South Asia, East Asia, Africa and the Americas (Central Asia, Southeast Asia and Oceania have no rhythms yet, so they are hidden). Names of places, peoples and people are capitalized in the menu (owner, 2026-10-27); the rhythms keep lower-case names. Europe is one region among the others (owner, 2026-10-27). Each region has a submenu for each tradition. Hovering over a
 rhythm shows what it is and how it is counted: the ṭhekā's bols, the kriyās, or the strokes.
 Picking a rhythm opens a dialog with its sounds, the number of cycles, and a tempo, which starts
-at a usual tempo for that rhythm. The dialog has three buttons:
+at a usual tempo for that rhythm, and a laya (see below). The dialog has these buttons, and **edit in the generator...**:
 
 - **add to the mixer** saves the rhythm as a MIDI file in the mix's Edits folder and puts it on the
   selected track at the playhead. If the track has no instrument, it gets the Synth, which plays
@@ -59,9 +59,9 @@ triplets while the kick stays in 16ths.
 
 Hindustani names follow their Hindi pronunciation, without the final schwa (tīntāl, not tīntāla).
 Karnatak names follow the Sanskrit-Tamil usage of the tradition (tāḷam, jāti, aṅga). English
-names are in plain lower case, with the IPA in the tooltip.
+names are in plain lower case, with the IPA in the tooltip (owner, 2026-10-27: both).
 
-## North Indian tāl (16)
+## South Asia: North Indian tāl (16)
 
 tīntāl, jhaptāl, ektāl, rūpak, dādrā, kaharvā, jhūmrā, dhamār, cautāl, āḍā cautāl, dīpcandī,
 tilvāḍā, sūltāl, tīvrā, jat tāl, pañjābī (sitārkhānī).
@@ -85,7 +85,7 @@ The theoretical literature counts more than a hundred tāls. Rarer ones such as 
 pañcam savārī, rudra, matta, śikhar and lakṣmī are not included yet, because their ṭhekās vary
 between gharānās and books. They can be added once the owner names the versions they want.
 
-## South Indian tāḷam (39)
+## South Asia: South Indian tāḷam (39)
 
 The library has all 35 sūḷādi sapta tāḷas: dhruva, maṭhya, rūpaka, jhampa, tripuṭa, aṭa and ēka,
 each in the five jātis:
@@ -117,7 +117,7 @@ A low conga marks each aṅga and accents samam. A muted conga keeps the gati: t
 pulses to the akṣara in caturaśra naḍai. The other gatis (tiśra, khaṇḍa, miśra and saṅkīrṇa
 naḍai) would take each tāḷam's 35 versions to 175 and are left for later.
 
-## Breakbeats (10)
+## The Americas: breakbeats (10)
 
 amen break, funky drummer, think (about it), apache, impeach the president, when the levee breaks,
 funky president, cold sweat, it's a new day, the big beat.
@@ -127,7 +127,7 @@ the record. They are simplified: the drummers vary every bar, and ghost notes ar
 where they define the groove. Each one names its record and year, and its drummer where that is
 documented. These are our own transcriptions of rhythms, not samples.
 
-## Trap (3)
+## The Americas: trap (3)
 
 | rhythm | what it has |
 |---|---|
@@ -137,7 +137,9 @@ documented. These are our own transcriptions of rhythms, not samples.
 
 All three are at 140 to 142 bpm.
 
-## Medieval rhythmic modes (6)
+## Europe: medieval (ars antiqua) (6)
+
+The submenu is **Europe > medieval (ars antiqua)**, so "mode" is not repeated inside the Mode menu (owner, 2026-10-27). The six rhythms keep their Latin names, modus primus to modus sextus.
 
 These are the six modi of the Notre-Dame school, as Johannes de Garlandia sets them out (c. 1240):
 
@@ -153,18 +155,22 @@ These are the six modi of the Notre-Dame school, as Johannes de Garlandia sets t
 They are in ternary time, with three tempora to a perfection. Each mode is played on a tabor and
 sung on d (channel 1, held for its value), so the longs sound long.
 
-## Caribbean (17)
+## The Americas: Caribbean (19)
 
-son clave (3-2 and 2-3), rumba clave (3-2 and 2-3), tresillo, cinquillo, habanera, son montuno
+son clave (3-2 and 2-3), rumba clave (3-2 and 2-3), cáscara (3-2 and 2-3, the timbal shell over its
+clave, after Mauleón), tresillo, cinquillo, habanera, son montuno
 (tumbao, 2-3), cha-cha-chá, bembé (6/8), one drop, rockers, steppers, ska, dembow, soca, merengue.
 
-## South American (7)
+## The Americas: South America (8)
 
-samba (batucada), bossa nova, baião, tango (3-3-2), milonga, candombe, cumbia.
+samba (batucada), bossa nova, baião, tango (3-3-2), milonga, candombe, cumbia, and huayno (the
+Andes: a stressed beat followed by two short ones, written as an 8th and two 16ths in 2/4 on the
+bombo).
 
-Still to come: chacarera, maracatu, ijexá, partido alto, festejo and joropo.
+Still to come: chacarera, marinera, maracatu, ijexá, partido alto, festejo and joropo. Haitian
+konpa and Mexican son jarocho too. Each waits for a transcription that can be cited.
 
-## West African (6) and North African (6)
+## Africa: West Africa (6) and North Africa (6)
 
 West African:
 
@@ -181,7 +187,96 @@ North African:
 Not yet included: the Mande djembe rhythms (kuku, soli, dundunba). Their parts differ between
 teachers.
 
-## East Asian (7)
+## West Asia: iqāʿāt (1)
+
+samāʿī thaqīl is the 10/8 of the samāʿī, grouped 3+2+2+3. Dum falls on eighths 1, 6 and 7, and
+tak on 4 and 8.
+
+Not included yet: çiftetelli, wahda w-nuṣṣ and the other long Arab and Ottoman cycles. They can be
+added from Maqam World's iqāʿ pages once each one is checked.
+
+## Laya and naḍai
+
+The rhythm's dialog has a **laya (speed)** choice: as written, duguṇ (twice as fast), tiguṇ (three
+times) or cauguṇ (four times). This is layakārī. Each sound plays its cycle that many times in the
+same cycle, so tīntāl stays 16 mātrās with two, three or four bols to the mātrā. The lanes that keep
+the cycle stay as they are: the tāl's claps and waves, and the tāḷam's kriyās. It works on every
+rhythm, so a breakbeat at duguṇ is the break in double time.
+
+A South Indian tāḷam also gets a **naḍai (gati)** choice: caturaśra (4 pulses to the akṣara),
+tiśra (3), khaṇḍa (5), miśra (7) or saṅkīrṇa (9). Its pulse lane is rewritten with that many
+pulses to the akṣara, the first of the cycle accented. The name says which, as in "ādi tāḷam,
+khaṇḍa naḍai". Laya and naḍai go together, so ādi tāḷam in tiśra naḍai at duguṇ is six pulses to the
+akṣara. Code: `rhythm::laya` and `rhythm::gati`.
+
+## Rhythm generator
+
+**Mode > rhythm > rhythm generator...** writes new grooves (owner, 2026-10-27: "a combo of
+all of these as you see fit", after Music Pattern Generator, Stochas and Subsequence). Any rhythm's
+dialog also has **edit in the generator...**, which opens the generator with that rhythm's sounds as
+written lanes, at the laya and naḍai chosen.
+
+Each row of the table is a lane: a General MIDI drum and its own cycle.
+
+- **steps**, **a beat**, **pulses** and **rotation** make a Euclidean rhythm. The pulses are spread
+  as evenly as they go over the steps by Bjorklund's algorithm, then the cycle is turned. Toussaint
+  (2005) showed that many traditional timelines come out this way: E(3,8) is the tresillo, E(5,8)
+  the cinquillo, E(7,12) the bembé bell, E(5,16) the bossa nova.
+- **written hits** (X accent, x hit, o soft, . rest) take the Euclidean rhythm's place.
+- **sieve** is a Xenakis sieve over the lane's steps, as in the stochastic tools, such as 4@0|4@3.
+  Only the steps it holds may play.
+- **chance** is how likely each hit is to play, as in Stochas.
+- **push ms** plays the lane late (laid back) or early (pushing).
+
+Lanes of different lengths run against each other (polymeter). The clip lasts until they line up
+again, at most 64 bars, unless you set the bars yourself. A 16-step lane against a 12-step lane
+comes round in three bars of 4/4.
+
+The rules come from Subsequence:
+
+- a fill in the last bar of every n bars, where rests play softly by chance
+- a density that rises or falls across the clip
+- every nth hit left out
+- each lane turning a step later every n bars
+
+The feel settings are swing (in the MPC's percentages: 50% is straight, 66% a triplet shuffle) on
+each lane's own steps, on 8ths or on 16ths, and humanized timing and loudness. Swing bends the time
+inside each swung pair, so 16ths between swung 8ths follow along. The **feel...** menu fills these
+in. It has straight, 16th swing at 54, 58 and 62%, triplet shuffle, laid back (the snare behind the
+beat), pushing (the cymbals ahead), loose (Dilla-style), second line and human. These are our own
+starting points, after Hydrogen's swing and humanizing. They are not measurements of any drummer.
+
+Every chance is drawn from the **seed** with the stochastic tools' random numbers, so the same
+settings and seed always write the same groove. **new** picks another seed. **start from...** loads
+one of ten Euclidean rhythms from Toussaint (2005), each with a low drum on the beat.
+
+The groove goes to the mixer as a MIDI clip, to a new Tracker pattern (on the grid, without swing
+or humanizing, up to 256 rows), or to a .mid file. The settings are kept in `settings.ini` for next
+time. Code: `Source/mixer/RhythmGenerator.{h,cpp}` and `Source/ui/RhythmGeneratorDialog.cpp`. The
+tests are in `testRhythmGenerator`.
+
+## My breaks
+
+**Mode > rhythm > my breaks** holds your own breaks, added as needed (owner, 2026-10-27). Use
+**add break files...**, or **add a folder of breaks...** to take every audio file in a folder.
+Each file is transcribed with Drums to MIDI's hit finder (`mixer::breakRhythm`):
+
+- The tempo comes from the loop's length and hits (`beatgrid::fromLoop`). The file is read as 1
+  to 16 bars of 4/4, and the slowest tempo from 60 to 200 bpm whose 16ths the hits sit on is the
+  one used.
+- Each hit goes on its nearest 16th as a kick, snare or closed hi-hat.
+- Hits at velocity 110 and above are accents. Hits under 70 are ghost notes.
+
+Each break is named after its file, in lower case, and works like any other rhythmic mode: as a
+mixer clip, a Tracker pattern or a .mid file.
+
+A file that is not cut to whole bars is left out, and the dialog says why. So is a file with no
+drum hits.
+
+The transcriptions are kept in `breaks.json` beside `settings.ini`, so the audio files are only
+read once. **remove** takes one break off the list, or all of them.
+
+## East Asia: Korean jangdan (7)
 
 These are Korean jangdan on the janggu:
 
@@ -239,17 +334,32 @@ Timelines and claves:
 - David Locke, *Drum Gahu* (White Cliffs Media, 1987).
 - Kofi Agawu, *The African Imagination in Music* (Oxford University Press, 2016).
 
+The rhythm generator:
+
+- Godfried T. Toussaint, "The Euclidean Algorithm Generates Traditional Musical Rhythms"
+  (Bridges, 2005): Euclidean rhythms and their traditional timelines.
+- E. Bjorklund, "The Theory of Rep-Rate Pattern Generation in the SNS Timing System" (SNS-NOTE-CNTRL-99,
+  Los Alamos, 2003): the algorithm.
+- Iannis Xenakis, *Formalized Music* (Pendragon, rev. ed. 1992): sieves.
+- Roger Linn's swing percentages, from the LinnDrum and the Akai MPC60.
+- Hydrogen (hydrogen-music.org), Stochas (Surge Synth Team) and Subsequence: the ideas of swing and
+  humanizing, chance per step, and rules. No code is taken from them.
+
 Caribbean and South America:
 
 - Ed Uribe, *The Essence of Afro-Cuban Percussion and Drum Set* (Warner Bros., 1996).
 - Ed Uribe, *The Essence of Brazilian Percussion and Drum Set* (Warner Bros., 1993).
-- Rebeca Mauleón, *Salsa Guidebook* (Sher Music, 1993).
+- Rebeca Mauleón, *Salsa Guidebook* (Sher Music, 1993): claves and the cáscara.
+- "Huayno", Wikipedia: the stressed beat and two short ones.
 - Michael E. Veal, *Dub* (Wesleyan University Press, 2007): one drop, rockers, steppers.
 
 Arabic and Maghrebi rhythms:
 
 - A. J. Racy, *Making Music in the Arab World* (Cambridge University Press, 2003).
 - Deborah Kapchan, *Traveling Spirit Masters* (Wesleyan University Press, 2007): Gnawa.
+- [Maqam World, iqāʿāt](https://ftp.maqamworld.com/en/iqaa.php), and
+  [samāʿī thaqīl counted in 10](https://www.oudforguitarists.com/count-to-10-samai-rhythm-samai-thaqil/)
+  (beats 1, 4, 6, 7 and 8 accented, 3+2+2+3).
 
 Korean jangdan:
 

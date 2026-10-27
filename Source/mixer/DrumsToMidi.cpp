@@ -2,6 +2,7 @@
 #include "DrumsToMidi.h"
 
 #include "../core/AudioData.h"
+#include "../core/BeatGrid.h"
 #include "../core/Fft.h"
 #include "../core/TimeStretch.h"
 
@@ -9,6 +10,7 @@
 #include <array>
 #include <cmath>
 #include <complex>
+#include <cstdio>
 
 namespace mixer
 {
@@ -139,5 +141,66 @@ namespace mixer
             return x.frame < y.frame || (x.frame == y.frame && (x.status & 0xF0) == 0x80 && (y.status & 0xF0) != 0x80);   // a note off first
         });
         return midi;
+    }
+
+    bool breakRhythm (const AudioClipPtr& audio, double sampleRate, const std::string& name, rhythm::Rhythm& out, std::string& error)
+    {
+        if (audio == nullptr || audio->length() <= 0 || sampleRate <= 0.0)
+        {
+            error = "no audio";
+            return false;
+        }
+        const auto clip = makeClip (audio, 0);
+        const auto hits = findDrums (clip, sampleRate);
+        if (hits.empty())
+        {
+            error = "no drum hits found";
+            return false;
+        }
+        std::vector<double> seconds;
+        for (const auto& h : hits)
+            seconds.push_back ((double) h.at / sampleRate);
+        const auto length = (double) clip.length / sampleRate;
+        const auto grid = beatgrid::fromLoop (length, seconds);
+        if (! grid.isSet())
+        {
+            error = "no tempo of 1 to 16 bars of 4/4 fits its hits (is it cut to whole bars?)";
+            return false;
+        }
+        const auto bars = std::clamp ((int) std::lround (length / grid.barSeconds()), 1, 16);
+        const auto beats = bars * 4;
+        const auto steps = beats * 4;
+        const auto stepSeconds = grid.beatSeconds() / 4.0;
+
+        const std::pair<int, const char*> sounds[] { { gm::kick, "kick" }, { gm::snare, "snare" }, { gm::hat, "closed hi-hat" } };
+        std::string lanes[3];
+        for (auto& l : lanes)
+            l.assign ((size_t) steps, '.');
+        for (const auto& h : hits)
+        {
+            const auto step = (int) std::lround ((double) h.at / sampleRate / stepSeconds);
+            if (step < 0 || step >= steps)
+                continue;   // a hit right at the end is the next loop's first
+            const auto lane = h.note == gm::kick ? 0 : h.note == gm::snare ? 1 : 2;
+            const auto c = h.velocity >= 110 ? 'X' : h.velocity >= 70 ? 'x' : 'o';
+            auto& at = lanes[lane][(size_t) step];
+            if (at == '.' || (at == 'o' && c != 'o') || (at == 'x' && c == 'X'))
+                at = c;
+        }
+
+        out = {};
+        out.name = name;
+        out.plain = name;
+        out.group = "my breaks";
+        out.beats = beats;
+        out.sections.assign ((size_t) bars, 4);
+        out.bpm = std::round (grid.bpm * 100.0) / 100.0;
+        char about[96];
+        std::snprintf (about, sizeof about, "transcribed from the file: %.2f bpm, %d bar%s.", out.bpm, bars, bars == 1 ? "" : "s");
+        out.about = about;
+        for (size_t i = 0; i < 3; ++i)
+            if (lanes[i].find_first_not_of ('.') != std::string::npos)
+                out.lanes.push_back ({ sounds[i].second, sounds[i].first, 4, lanes[i], 9 });
+        return true;
     }
 }
