@@ -27,6 +27,7 @@
 #include "../Source/core/RiffChunks.h"
 #include "../Source/core/Xmp.h"
 #include "../Source/core/Fft.h"
+#include "../Source/core/Windows.h"
 #include "../Source/core/Album.h"
 #include "../Source/core/Nyquist.h"
 #include "../Source/core/Repair.h"
@@ -60,6 +61,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <complex>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -2057,6 +2059,54 @@ namespace
         Album empty;
         check (empty.mixdown() != nullptr && empty.mixdown()->length() == 0, "album: empty mixdown");
     }
+    // Every window is symmetric about the middle and peaks at 1; the ones with a design
+    // sidelobe level reach it (measured on a 16x zero-padded spectrum).
+    void testWindows()
+    {
+        const int n = 256, pad = 16, points = n * pad / 2;
+        const auto highestSidelobeDb = [&] (const std::vector<double>& w)
+        {
+            std::vector<double> magnitude ((size_t) points);
+            for (int f = 0; f < points; ++f)
+            {
+                std::complex<double> sum;
+                for (int i = 0; i < n; ++i)
+                    sum += w[(size_t) i] * std::polar (1.0, -2.0 * M_PI * f * i / (n * pad));
+                magnitude[(size_t) f] = std::abs (sum);
+            }
+            int f = 1;
+            while (f < points - 1 && magnitude[(size_t) f + 1] < magnitude[(size_t) f])
+                ++f;   // the main lobe's first null
+            return 20.0 * std::log10 (*std::max_element (magnitude.begin() + f, magnitude.end()) / magnitude[0]);
+        };
+
+        for (int kind = 0; kind < windows::numKinds; ++kind)
+        {
+            const auto w = windows::make (kind, n);
+            const auto label = "window " + std::to_string (kind);
+            check ((int) w.size() == n, label + " size");
+            double asymmetry = 0.0;
+            for (int i = 1; i < n; ++i)
+                asymmetry = std::max (asymmetry, std::abs (w[(size_t) i] - w[(size_t) (n - i)]));
+            check (asymmetry < 1.0e-12, label + " is symmetric");
+            check (near (w[(size_t) n / 2], 1.0, 1.0e-8) && near (*std::max_element (w.begin(), w.end()), 1.0, 1.0e-8), label + " peaks at 1 in the middle");
+        }
+
+        const std::vector<std::pair<int, double>> designed {
+            { windows::hann, -31.0 }, { windows::hamming, -42.0 }, { windows::blackman, -58.0 }, { windows::blackmanHarris, -92.0 },
+            { windows::nuttall, -93.0 }, { windows::blackmanNuttall, -97.5 }, { windows::kaiser140, -140.0 }, { windows::kaiser180, -180.0 } };
+        for (const auto& [kind, limit] : designed)
+            check (highestSidelobeDb (windows::make (kind, n)) <= limit, "window " + std::to_string (kind) + " sidelobes");
+        check (near (highestSidelobeDb (windows::make (windows::chebyshev, n)), -windows::chebyshevSidelobeDb, 0.5), "Dolph-Chebyshev sidelobes all at its level");
+
+        // The largest FFT size stays finite (the Chebyshev's polynomial and Kaiser's Bessel function).
+        for (int kind : { (int) windows::chebyshev, (int) windows::kaiser180 })
+        {
+            const auto w = windows::make (kind, 32768);
+            check (std::all_of (w.begin(), w.end(), [] (double v) { return std::isfinite (v) && v > -1.0e-9; }), "window " + std::to_string (kind) + " at 32768");
+        }
+    }
+
     void testSpectrumView()
     {
         using namespace spectrum;
@@ -7573,6 +7623,7 @@ int main()
     testLayouts();
     testStereoize();
     testSpectrum();
+    testWindows();
     testSpectrumView();
     testGenerate();
     testPitch();

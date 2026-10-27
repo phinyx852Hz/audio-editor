@@ -9,6 +9,7 @@
 #include "Theme.h"
 #include "../core/Dsp.h"
 #include "../core/Fft.h"
+#include "../core/Windows.h"
 #include "../engine/AudioEngine.h"
 
 #include <QActionGroup>
@@ -233,25 +234,11 @@ namespace analysis
         void setFft (int order, int type)
         {
             fftOrder = std::clamp (order, 10, 15);
-            windowType = std::clamp (type, 0, 4);
+            windowType = std::clamp (type, 0, windows::numKinds - 1);
             const int n = fftSize();
             fft = std::make_unique<Fft> (fftOrder);
-            window.assign ((size_t) n, 1.0f);
-            for (int i = 0; i < n; ++i)
-            {
-                const double x = 2.0 * M_PI * i / n;
-                double w = 1.0;
-                switch (windowType)
-                {
-                    case 0: w = 0.5 - 0.5 * std::cos (x); break;   // Hann
-                    case 1: w = 0.35875 - 0.48829 * std::cos (x) + 0.14128 * std::cos (2 * x) - 0.01168 * std::cos (3 * x); break;   // Blackman-Harris
-                    case 2: w = 0.21557895 - 0.41663158 * std::cos (x) + 0.277263158 * std::cos (2 * x)
-                                - 0.083578947 * std::cos (3 * x) + 0.006947368 * std::cos (4 * x); break;   // flat top
-                    case 3: w = 0.54 - 0.46 * std::cos (x); break;   // Hamming
-                    default: break;                                  // rectangular
-                }
-                window[(size_t) i] = (float) w;
-            }
+            const auto shape = windows::make (windowType, n);
+            window.assign (shape.begin(), shape.end());
             // A full-scale sine reads 0 dB.
             windowScale = 2.0 / std::accumulate (window.begin(), window.end(), 0.0);
             buffer.assign ((size_t) n, {});
@@ -2168,9 +2155,10 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
         auto* menu = new QMenu (more);
         more->setMenu (menu);
         const auto radio = [this, menu, &settings] (const QString& title, const QStringList& names, const QString& settingKey, int fallback,
-                                                     std::function<void (int)> apply)
+                                                     std::function<void (int)> apply, const QStringList& tips = {})
         {
             auto* sub = menu->addMenu (title);
+            sub->setToolTipsVisible (! tips.isEmpty());
             auto* group = new QActionGroup (sub);
             const auto chosen = std::clamp (settings.value (settingKey, fallback).toInt(), 0, (int) names.size() - 1);
             for (int i = 0; i < names.size(); ++i)
@@ -2178,6 +2166,8 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
                 auto* a = sub->addAction (names[i]);
                 a->setCheckable (true);
                 a->setChecked (i == chosen);
+                if (i < tips.size())
+                    a->setToolTip (tips[i]);
                 group->addAction (a);
                 connect (a, &QAction::triggered, this, [apply, settingKey, i]
                 {
@@ -2194,8 +2184,34 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
         radio (tr ("FFT Size"), { QStringLiteral ("1024"), QStringLiteral ("2048"), QStringLiteral ("4096"), QStringLiteral ("8192"),
                                   QStringLiteral ("16384"), QStringLiteral ("32768") }, key ("fftSize"), 3,
                [this, spectrumMeter] (int i) { state->setFft (10 + i, state->windowType); spectrumMeter->clear(); });
-        radio (tr ("Window"), { tr ("Hann"), tr ("Blackman-Harris"), tr ("Flat Top (exact levels)"), tr ("Hamming"), tr ("Rectangular") }, key ("window"), 1,
-               [this, spectrumMeter] (int i) { state->setFft (state->fftOrder, i); spectrumMeter->clear(); });
+        // In windows::Kind order, which is what the setting stores.
+        radio (tr ("Window"),
+               { tr ("Hann"), tr ("Blackman-Harris"), tr ("Flat Top (exact levels)"), tr ("Hamming"), tr ("Rectangular"),
+                 tr ("Triangular"), tr ("Blackman"), tr ("Welch"), tr ("Kaiser (140 dB)"), tr ("Kaiser (180 dB)"),
+                 tr ("Nuttall"), tr ("Blackman-Nuttall"), tr ("Gaussian"), tr ("Tukey (tapered cosine)"), tr ("Dolph-Chebyshev (120 dB)"),
+                 tr ("Bartlett-Hann"), tr ("Bohman"), tr ("Parzen"), tr ("Lanczos"), tr ("Exponential") },
+               key ("window"), 1,
+               [this, spectrumMeter] (int i) { state->setFft (state->fftOrder, i); spectrumMeter->clear(); },
+               { tr ("General purpose: a good balance of sharp peaks and low leakage"),
+                 tr ("Low-level detail: weak harmonics and distortion beside loud tones (sidelobes 92 dB down)"),
+                 tr ("Exact levels of tones and harmonics, at the cost of wide peaks"),
+                 tr ("Like Hann with a lower nearest sidelobe; a balance for tones"),
+                 tr ("No window: the sharpest peaks, but much leakage unless the tone fits the frame"),
+                 tr ("A simple straight taper with modest leakage"),
+                 tr ("Less leakage than Hann or Hamming, with wider peaks"),
+                 tr ("A parabolic taper for general analysis"),
+                 tr ("Weak sounds 140 dB below loud ones stay visible"),
+                 tr ("Weak sounds 180 dB below loud ones stay visible, with the widest peaks"),
+                 tr ("Strong sidelobe suppression for weak harmonics and spurious tones"),
+                 tr ("High dynamic range for detail near strong peaks"),
+                 tr ("Smooth in time and frequency; for complex and transient-rich audio"),
+                 tr ("Flat in the middle half, Hann-like edges: between Rectangular and Hann"),
+                 tr ("Every sidelobe at the same height, 120 dB down"),
+                 tr ("Triangular and cosine combined: a compromise of resolution and leakage"),
+                 tr ("A smooth taper whose distant leakage falls off fast"),
+                 tr ("A smooth, strong taper for general spectral estimation"),
+                 tr ("A sinc-shaped taper"),
+                 tr ("Falls 26 dB to each edge; for transients and impulse responses") });
         radio (tr ("Response"), { tr ("Fast"), tr ("Medium"), tr ("Slow") }, key ("response"), 1, [this] (int i) { state->response = i; });
         radio (tr ("Range"), { tr ("60 dB"), tr ("96 dB"), tr ("120 dB") }, key ("range"), 1,
                [spectrumMeter] (int i) { spectrumMeter->range = i == 0 ? 60.0 : i == 1 ? 96.0 : 120.0; spectrumMeter->update(); });

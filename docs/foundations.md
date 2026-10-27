@@ -187,6 +187,7 @@ Built by `cmake/Instruments.cmake`, installed beside the stock plugins with thei
 | DeHum | Goertzel's algorithm (1958) |
 | Oscillators (`Source/mixer/Instruments.cpp`, `Source/core/Generate.cpp`) | PolyBLEP (Välimäki and Huovilainen, 2007) |
 | Pink noise (`Source/core/Generate.cpp`) | Paul Kellet's filter |
+| Spectrum windows (`Source/core/Windows.cpp`) | fredric harris, "On the Use of Windows for Harmonic Analysis with the Discrete Fourier Transform", *Proc. IEEE* 66 (1978); Albert Nuttall (1981); Dolph-Chebyshev (C. L. Dolph, 1946); Kaiser's window with Kuo and Kaiser's sidelobe fit (1974) |
 | Plugin Analyzer (`Source/core/PluginMeasure.cpp`) | exponential sine sweep and deconvolution (Angelo Farina, 2000); 4-term Blackman-Harris window (fredric harris, 1978) |
 | Forensic Φ (`Source/core/PhiForensics.cpp`) | Poisson tail tests with a control scan; PHI's own method |
 | Master Assistant search | Levenberg-Marquardt with Broyden updates |
