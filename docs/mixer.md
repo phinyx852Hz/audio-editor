@@ -547,6 +547,37 @@ only", "using all mode types"):
   middle entries, the stretto's distance and any strict rule bent. The code is in mixer/Fugue.h
   (and FreePart in mixer/Counterpoint.h), with tests.
 
+Minimalize (owner, 2026-10-26: composing in the minimalist style of Philip Glass and Steve Reich,
+step 4 of PHI's generative chain: the Selector's set, the MIDI generators, cubify, minimalize):
+- **minimalize...** on a scene's right-click menu arranges the scene's MIDI slots; **minimalize
+  from here...** on the timeline's right-click menu (on a clip, from its start; in empty space,
+  from there) arranges every MIDI note on the tracks from that point on, such as cubify's
+  arrangement or a Φ deal. The timeline's stretch is cut into patterns of one, two, four or eight
+  bars (or kept whole), each pattern a section, one after another.
+- Each track takes a process. Reich's: **phase**, a copy of the pattern a step (a sixteenth or an
+  eighth) ahead at each stage against the pattern held still, until it is round to unison again
+  (Piano Phase, Clapping Music; "Phase steps" stops it sooner and holds); **canon**, copies at the
+  unison entering a stage apart, a beat further behind each; **build-up**, the pattern's notes put
+  in place of rests one a stage, the downbeat first (Drumming); **pulse**, the harmony in steady
+  eighths that swell and fall like a breath (Music for 18 Musicians). Glass's: **additive**, the
+  figure's first note, then its first two, then three, each stage a little longer (Music in
+  Fifths, Einstein on the Beach); **subtractive**, a note off the front each stage; **cycles**,
+  the figure a note shorter, looped against the others so they part and meet again;
+  **arpeggio**, the scene's chords (every part's notes but the drums, bar by bar) broken in
+  eighths, up, up and down, Alberti, or three-three-two. **hold** plays the pattern as it is.
+- **automatic** picks by the style (reich, glass, or both) and the track's place; drums never
+  take an arpeggio or pulse. Each stage plays "Each stage" times (4 by default), as Reich and
+  Glass mark a bar to repeat. The gradual processes (phase, canon, build-up, additive,
+  subtractive) set how long a section lasts, rounded up to the bar; the others loop through it,
+  and one that ends early holds where it ended.
+- New voices: the phasing and canon copies, and a pulse (an arpeggio in the glass style), go on
+  the free tracks; the mixer's 8 tracks are the limit. Without room, a phasing track moves against
+  the others itself, and a canon track enters a stage late, a beat behind.
+- The arrangement goes on the tracks after everything already on them, all tracks starting
+  together, each track's part a MIDI file next to the mix ("<scene> minimalize <track>.mid").
+  Ctrl+Z takes the clips off again (new tracks stay, empty). Variation changes the build-up order and the arpeggio figure. The code is in
+  mixer/Minimalize.h, with tests.
+
 The left column (owner, 2026-10-25: "a relatively static view of the mixer, clip launcher and
 horizontal track view"):
 - The Finder and the Inspector share one column, the same width in both views. The Finder shows

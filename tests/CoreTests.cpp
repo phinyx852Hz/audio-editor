@@ -12,6 +12,7 @@
 #include "../Source/mixer/Counterpoint.h"
 #include "../Source/mixer/Fugue.h"
 #include "../Source/mixer/Cubify.h"
+#include "../Source/mixer/Minimalize.h"
 #include "../Source/mixer/MixerEngine.h"
 #include "../Source/mixer/DrumsToMidi.h"
 #include "../Source/mixer/Rhythms.h"
@@ -4650,6 +4651,85 @@ namespace
                "tunings: the clip's, else the scene's, else the track's");
     }
 
+    // Minimalize: Reich's and Glass's processes on a scene of a melody, a chord pad and drums,
+    // within eight tracks, each section as long as its longest gradual process.
+    void testMinimalize()
+    {
+        using namespace minimalize;
+        constexpr int64_t q = ticksPerQuarter, s16 = q / 4, bar = q * 4;
+        // Piano Phase's twelve-note figure, in sixteenths (one bar of 3/4 within a 4/4 loop of 12 sixteenths).
+        const int phase[] { 64, 66, 71, 73, 74, 66, 64, 73, 71, 66, 74, 73 };
+        Part melody { { Cell { {}, 12 * s16 } }, "melody", false };
+        for (int i = 0; i < 12; ++i)
+            melody.cells[0].notes.push_back ({ i * s16, (i + 1) * s16, phase[i], 90, 0 });
+        Part pad { { Cell { {}, bar } }, "pad", false };
+        for (const int p : { 52, 59, 64 })
+            pad.cells[0].notes.push_back ({ 0, bar, p, 70, 1 });
+        Part drums { { Cell { {}, bar } }, "drums", true };
+        for (int i = 0; i < 8; ++i)
+            drums.cells[0].notes.push_back ({ i * q / 2, i * q / 2 + 60, i % 2 ? 42 : 36, 100, 9 });
+
+        Settings reich;
+        reich.style = Style::reich;
+        auto r = arrange ({ melody, pad, drums }, reich);
+        check (r.tracks.size() <= (size_t) maxTracks && r.tracks.size() >= 5, "minimalize: the parts and new voices within eight tracks");
+        check (r.tracks[0].process == Process::hold && r.tracks[3].process == Process::phase && r.tracks[3].added,
+               "minimalize: Reich's phasing, the pattern held and a copy that moves");
+        // The phase copy goes round all twelve steps back to unison: thirteen stages of four.
+        check (r.length == (13 * 4 * 12 * s16 + bar - 1) / bar * bar, "minimalize: the section as long as the phase going round");
+        bool inUnisonAtEnd = false, shiftedOnce = false;
+        {
+            const auto& held = r.tracks[0].notes;
+            const auto& moving = r.tracks[3].notes;
+            const auto lastStage = 12 * 4 * 12 * s16;
+            std::set<int64_t> a, b, firstShift;
+            for (const auto& n : held)
+                if (n.start >= lastStage && n.start < lastStage + 12 * s16)
+                    a.insert (n.start * 128 + n.pitch);
+            for (const auto& n : moving)
+            {
+                if (n.start >= lastStage && n.start < lastStage + 12 * s16)
+                    b.insert (n.start * 128 + n.pitch);
+                if (n.start == 4 * 12 * s16 && n.pitch == phase[1])
+                    shiftedOnce = true;   // the second stage starts on the figure's second note
+            }
+            inUnisonAtEnd = ! a.empty() && a == b;
+        }
+        check (shiftedOnce && inUnisonAtEnd, "minimalize: a sixteenth ahead each stage, and in unison again at the end");
+        check (std::all_of (r.tracks.begin(), r.tracks.end(), [&] (const Track& t)
+               { return std::all_of (t.notes.begin(), t.notes.end(), [&] (const Note& n) { return n.start >= 0 && n.end <= r.length && n.end > n.start; }); }),
+               "minimalize: every note within the arrangement");
+
+        Settings glass;
+        glass.style = Style::glass;
+        glass.repeats = 2;
+        auto g = arrange ({ melody, pad }, glass);
+        check (g.tracks[0].process == Process::additive && g.tracks[1].process == Process::arpeggio, "minimalize: Glass's additive process and arpeggios");
+        // Additive: one note twice, then two notes twice...
+        const auto& add = g.tracks[0].notes;
+        check (add.size() >= 6 && add[0].pitch == phase[0] && add[1].pitch == phase[0] && add[1].start == s16
+               && add[2].pitch == phase[0] && add[3].pitch == phase[1] && add[2].start == 2 * s16,
+               "minimalize: the additive figure grows a note at a time");
+        bool inChord = ! g.tracks[1].notes.empty();
+        for (const auto& n : g.tracks[1].notes)
+            inChord = inChord && (n.pitch % 12 == 4 || n.pitch % 12 == 11 || n.pitch % 12 == 6 || n.pitch % 12 == 1 || n.pitch % 12 == 2);
+        check (inChord, "minimalize: the arpeggios keep to the scene's harmony");
+
+        // A timeline cut into sections: two cells, two sections, one after the other.
+        Notes line;
+        for (int i = 0; i < 8; ++i)
+            line.push_back ({ i * q, i * q + q / 2, 60 + i, 80, 0 });
+        Part two { { cut (line, 0, bar), cut (line, bar, 2 * bar) }, "line", false };
+        Settings build;
+        build.processes = { Process::buildUp };
+        build.newVoices = false;
+        auto b = arrange ({ two }, build);
+        check (b.sections.size() == 2 && b.sections[1] == 4 * 4 * bar && b.length == 2 * 4 * 4 * bar,
+               "minimalize: a section a cell, each as long as its build-up");
+        check (b.tracks.size() == 1 && b.tracks[0].notes.front().pitch == 60 && b.tracks[0].notes.back().pitch >= 64,
+               "minimalize: the build-up starts on the downbeat, and the second section is the second cell");
+    }
+
     // Species counterpoint: Fux's rules kept against his own cantus firmus, in every species,
     // in two to four parts, and in the modal systems beyond the church modes.
     void testCounterpoint()
@@ -6834,6 +6914,7 @@ int main()
     testTunings();
     testCounterpoint();
     testFugue();
+    testMinimalize();
     testRecording();
     testControlSurfaces();
     testDrumsToMidi();

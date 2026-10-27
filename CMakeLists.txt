@@ -58,6 +58,7 @@ target_sources(${APP_ID} PRIVATE
     Source/mixer/Stochastic.cpp
     Source/mixer/Cubify.cpp
     Source/mixer/Rhythms.cpp
+    Source/mixer/Minimalize.cpp
     Source/mixer/Instruments.cpp
     Source/mixer/MixerEngine.cpp
     Source/mixer/Recording.cpp
@@ -169,6 +170,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/MixerWindow.cpp
     Source/ui/MixerRecording.cpp
     Source/ui/MixerFugue.cpp
+    Source/ui/MixerMinimalize.cpp
     Source/ui/MixerControl.cpp
     Source/ui/ControlSection.cpp
     Source/ui/MixerSection.cpp
@@ -415,6 +417,7 @@ if(PHI_BUILD_TESTS)
         Source/mixer/Stochastic.cpp
         Source/mixer/Cubify.cpp
         Source/mixer/Rhythms.cpp
+        Source/mixer/Minimalize.cpp
         Source/mixer/Instruments.cpp
         Source/mixer/MixerEngine.cpp
         Source/mixer/Recording.cpp
