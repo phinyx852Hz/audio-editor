@@ -501,25 +501,33 @@ void MainWindow::slicerFollow()
 
 void MainWindow::openMidiInputs()
 {
-    // First time: every input. Afterwards: the ones chosen.
-    auto settings = appSettings();
+    // Every keyboard and controller plays, but those turned off in MIDI Inputs. They are known by
+    // their names: ALSA numbers a device afresh each time it is plugged in.
+    const auto off = appSettings().value (QStringLiteral ("midi/off")).toStringList();
     const auto devices = MidiInputs::available();
+    const auto claimed = surfaces != nullptr ? surfaces->claimedInputs() : std::vector<std::string>();
     std::vector<std::string> ids;
-    if (! settings.contains (QStringLiteral ("midi/inputs")))
+    midiDevicesSeen.clear();
+    for (const auto& d : devices)
     {
-        for (const auto& d : devices)
-            if (QString::fromStdString (d.name).contains (QLatin1String ("Midi Through"), Qt::CaseInsensitive) == false)
-                ids.push_back (d.identifier);
+        midiDevicesSeen.push_back (d.identifier);
+        const auto name = QString::fromStdString (d.name);
+        if (name.contains (QLatin1String ("Midi Through"), Qt::CaseInsensitive) || off.contains (name)
+            || std::find (claimed.begin(), claimed.end(), d.identifier) != claimed.end())   // a surface's alone
+            continue;
+        ids.push_back (d.identifier);
     }
-    else
-        for (const auto& id : settings.value (QStringLiteral ("midi/inputs")).toStringList())
-            ids.push_back (id.toStdString());
-    // The ports PHI drives as control surfaces are theirs alone.
-    if (surfaces != nullptr)
-        for (const auto& claimed : surfaces->claimedInputs())
-            ids.erase (std::remove (ids.begin(), ids.end(), claimed), ids.end());
     midiInputs->open (ids);
     updateMidiStatus();
+}
+
+void MainWindow::lookForMidiInputs()
+{
+    std::vector<std::string> now;
+    for (const auto& d : MidiInputs::available())
+        now.push_back (d.identifier);
+    if (now != midiDevicesSeen)
+        openMidiInputs();
 }
 
 void MainWindow::updateMidiStatus()
@@ -556,7 +564,8 @@ void MainWindow::midiInputsDialog()
     auto* layout = new QVBoxLayout (&dialog);
     auto* about = new QLabel (tr ("Ticked keyboards and controllers play the instrument you used last: Simplest, the Slicer, the mixer's armed "
                                   "track or a patchbay synth. Launchpads, Launchkeys and Push are driven as control surfaces "
-                                  "(Performance > Control Surfaces); their other ports stay here."), &dialog);
+                                  "(Performance > Control Surfaces); their other ports stay here. A keyboard plays as soon as it is plugged "
+                                  "in; untick it to keep it out."), &dialog);
     about->setWordWrap (true);
     layout->addWidget (about);
     auto* list = new QListWidget (&dialog);
@@ -571,6 +580,7 @@ void MainWindow::midiInputsDialog()
             const bool surface = std::find (claimed.begin(), claimed.end(), d.identifier) != claimed.end();
             auto* item = new QListWidgetItem (surface ? tr ("%1 (a control surface)").arg (QString::fromStdString (d.name)) : QString::fromStdString (d.name), list);
             item->setData (Qt::UserRole, QString::fromStdString (d.identifier));
+            item->setData (Qt::UserRole + 1, QString::fromStdString (d.name));
             if (surface)
             {
                 item->setFlags (item->flags() & ~Qt::ItemIsEnabled);
@@ -585,22 +595,29 @@ void MainWindow::midiInputsDialog()
     fill();
     auto* buttons = new QDialogButtonBox (QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
     auto* again = buttons->addButton (tr ("&Look Again"), QDialogButtonBox::ActionRole);
-    connect (again, &QPushButton::clicked, &dialog, fill);
+    connect (again, &QPushButton::clicked, &dialog, [this, fill]
+    {
+        lookForMidiInputs();
+        fill();
+    });
     connect (buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     connect (buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     layout->addWidget (buttons);
     dialog.resize (420, 300);
     if (dialog.exec() != QDialog::Accepted)
         return;
-    QStringList chosen;
-    std::vector<std::string> ids;
+    // Those unticked are kept off by name, as are those turned off before and not plugged in now.
+    auto settings = appSettings();
+    auto off = settings.value (QStringLiteral ("midi/off")).toStringList();
     for (int i = 0; i < list->count(); ++i)
-        if (const auto* item = list->item (i); (item->flags() & Qt::ItemIsUserCheckable) && item->checkState() == Qt::Checked)
+        if (const auto* item = list->item (i); item->flags() & Qt::ItemIsUserCheckable)
         {
-            chosen << item->data (Qt::UserRole).toString();
-            ids.push_back (chosen.back().toStdString());
+            const auto name = item->data (Qt::UserRole + 1).toString();
+            off.removeAll (name);
+            if (item->checkState() == Qt::Unchecked)
+                off << name;
         }
-    appSettings().setValue (QStringLiteral ("midi/inputs"), chosen);
-    midiInputs->open (ids);
-    updateMidiStatus();
+    settings.setValue (QStringLiteral ("midi/off"), off);
+    settings.remove (QStringLiteral ("midi/inputs"));   // the choice by ALSA's numbers, before
+    openMidiInputs();
 }

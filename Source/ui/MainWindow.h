@@ -407,8 +407,10 @@ private:
     QString findFile() const;                     // the file highlighted in Find, when Find has the keyboard
     void keepFindFocus (QWidget* had);            // after F7 or F8 from Find
     void midiInputsDialog();
-    void openMidiInputs();
+    void openMidiInputs();      // every input but those turned off (by name) and the surfaces' own
+    void lookForMidiInputs();   // again, if inputs were plugged in or taken out
     void updateMidiStatus();
+    std::vector<std::string> midiDevicesSeen;   // the inputs there at the last openMidiInputs
     std::unique_ptr<sampler::Engine> samplerEngine;
     class SamplerWindow* samplerWin = nullptr;
     DockablePanel* samplerPanel = nullptr;
@@ -458,6 +460,9 @@ private:
     // The rhythm generator (RhythmGeneratorDialog.cpp): Euclidean lanes, chance, rules and feels,
     // from `start`, or from the settings last used.
     void rhythmGenerator (const rhythmgen::Settings* start = nullptr, const QString& name = {});
+    // Twelve-tone rows (SerialSection.cpp, docs/serial.md): a row, its matrix and a looping
+    // serial piece in one to four voices, put in the mixer's launcher or saved as a MIDI file.
+    void serialDialog();
     // Control surfaces and MIDI Learn (ControlSection.cpp, docs/control-surfaces.md): Launchpads,
     // Launchkeys and Push play the mixer's launcher, strips and transport, lit in the tracks'
     // colours; any other controller's knobs and buttons are mapped by MIDI Learn.

@@ -776,11 +776,25 @@ namespace mixer
         return lengthLocked();
     }
 
-    void Engine::liveMidi (uint8_t status, uint8_t data1, uint8_t data2)
+    void Engine::liveMidi (uint8_t status, uint8_t data1, uint8_t data2, bool heard)
     {
-        const std::lock_guard<std::mutex> l (liveLock);
-        if (liveQueue.size() < 1024)
-            liveQueue.push_back ({ 0, status, data1, data2 });
+        {
+            const std::lock_guard<std::mutex> l (liveLock);
+            if (liveQueue.size() < 1024)
+                liveQueue.push_back ({ 0, status, data1, data2 });
+        }
+        if (heard)
+        {
+            const std::lock_guard<std::mutex> l (listenerLock);
+            if (liveListener)
+                liveListener (status, data1, data2);
+        }
+    }
+
+    void Engine::setLiveListener (std::function<void (uint8_t, uint8_t, uint8_t)> f)
+    {
+        const std::lock_guard<std::mutex> l (listenerLock);
+        liveListener = std::move (f);
     }
 
     void Engine::panic() { panicPending = true; }

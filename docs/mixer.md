@@ -388,8 +388,9 @@ Device Chain and drag and drop (owner, 2026-10-25, "very close to Ableton's work
   inserts. Enter or a double-click puts it on the selected track. Backspace goes back to the files.
 
 Fast MIDI edits (owner, 2026-10-25: "MIDI editing, but really fast"; "the idea is speed"):
-- No notes are picked or moved by hand. A MIDI clip picked (on the tracks or in the launcher) puts
-  a MIDI Clip section at the top of the Inspector, and R reverses the clip.
+- A MIDI clip picked (on the tracks or in the launcher) puts a MIDI Clip section at the top of the
+  Inspector, and R reverses the clip. Notes are picked and moved by hand in the MIDI editor, **Edit
+  Notes...** there ([midi-editor.md](midi-editor.md)).
 - **Φ** deals the notes out again along the golden ratio. The pitches, velocities and lengths stay
   the same, and so does the rhythm (the times notes start); which notes start at which of those
   times changes, and a chord stays together. Every press gives another order.
@@ -432,7 +433,9 @@ case, in proper transliteration):
   shown in the Device Chain into its keys and range; **counterpoint...** and **fugue...** open those dialogs,
   **stochasticize...** opens [stochasticize](stochastic.md), its pitch sieve ready to fill from the mode;
   **cubify...** arranges the MIDI clip shown, else the launcher's scene, by [Xenakis's cubes](cubify.md),
-  on a messiaen mode when one is chosen here.
+  on a messiaen mode when one is chosen here; **12 tone row...** writes a looping serial piece on
+  a row and its matrix into a launcher scene or the timeline, for counterpoint and the fugue after
+  (see [serial.md](serial.md)).
 - **messiaen** (owner, 2026-10-26: "all of Messiaen's modes in the mode section") holds his seven
   modes of limited transposition, in 12-TET as he wrote them: 1 (whole tone), 2 (octatonic), and
   3 to 7. They are also in the MIDI Clip section's mode list.
@@ -454,6 +457,12 @@ the MIDI Clip section, and in the Mode menu, draws a new line from the clip show
 Markov screens, with its pitches and rhythm through sieves. A sieve can be filled from the mode,
 a rhythmic mode or the clip itself. The line goes on a new track or in place of the clip. See
 [stochastic.md](stochastic.md).
+
+Twelve-tone rows (owner, 2026-10-27: Schoenberg's serial method): **12 tone row...** in the
+Mode menu takes a row (typed, by chance, from the clip shown or from a work of Schoenberg, Berg or
+Webern), shows its 12 x 12 matrix and its combinatorial partners, and writes one to four voices of
+its p, i, r and ri forms (independent, in canon, in mirror canon or in combinatorial pairs) as a
+launcher scene that loops, or onto the timeline. See [serial.md](serial.md).
 
 cubify (owner, 2026-10-26): **cubify...** in a scene's right-click menu, in the MIDI Clip section
 and in the Mode menu arranges a scene (or one MIDI clip) by the cube method of Xenakis's Nomos
@@ -663,8 +672,8 @@ could be applied on the clip level, track level or scene level"):
 - The mixer hands the tuning to the track's instrument (`mixer::Instrument::setTuning`) whenever
   it changes. Only the PHI synth retunes, and PHI rāga (docs/raga.md) plays a raga in force by its
   sheet; the Synth, Sampler, Slicer and plugins stay in 12-TET.
-  MPE for the PHI synth, and tuning outside MPE synths (a channel and a ±48 bend per note), are
-  next.
+  A clip saved from the MIDI editor as MPE or pitch bend carries its tuning in its notes instead,
+  for any synth that follows the bends ([midi-editor.md](midi-editor.md)).
 
 The Sampler and Slicer windows of the Sample menu
 could dock into the mixer as track 1 (the other thread's docking work).

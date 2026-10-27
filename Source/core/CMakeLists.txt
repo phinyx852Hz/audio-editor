@@ -13,6 +13,7 @@ add_library(phi_dsp STATIC
     PhiDynamics.cpp
     PhiPhaser.cpp
     PhiTuning.cpp
+    Scala.cpp
     PhiRaga.cpp
     PhiRagas.cpp
     PhiSitar.cpp

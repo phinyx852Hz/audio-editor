@@ -121,6 +121,19 @@ namespace mixer
     {
         voice = {};
         channel = {};
+        resetMpe();
+    }
+
+    void Synth::resetMpe()
+    {
+        // No MPE zone until a file or keyboard sets one up (its MPE Configuration Message), so an
+        // ordinary file's bends are ±2 semitones on every channel.
+        mpe.reset();
+        mpe.handle (0xB0, 101, 0);
+        mpe.handle (0xB0, 100, 6);
+        mpe.handle (0xB0, 6, 0);
+        mpe.handle (0xB0, 101, 127);
+        mpe.handle (0xB0, 100, 127);
     }
 
     float Synth::noise()
@@ -202,6 +215,8 @@ namespace mixer
     {
         const auto ch = e.status & 0x0F;
         auto& c = channel[(size_t) ch];
+        // Bends, their ranges (RPN 0) and the MPE zone, per channel (the MIDI editor's MPE).
+        mpe.handle (e.status, e.data1, e.data2);
         switch (e.status & 0xF0)
         {
             case 0x90:
@@ -211,7 +226,6 @@ namespace mixer
                     noteOff (ch, e.data1);
                 break;
             case 0x80: noteOff (ch, e.data1); break;
-            case 0xE0: c.bend = ((e.data2 << 7 | e.data1) - 8192) / 8192.0; break;
             case 0xB0:
                 switch (e.data1)
                 {
@@ -233,7 +247,10 @@ namespace mixer
                             if (v.channel == ch)
                                 v.active = false;
                         break;
-                    case 121: c = {}; break;
+                    case 121:
+                        c = {};
+                        mpe.handle ((uint8_t) (0xE0 | ch), 0, 64);
+                        break;
                     case 123:
                         for (auto& v : voice)
                             if (v.active && v.channel == ch && v.drum == 0)
@@ -330,7 +347,7 @@ namespace mixer
                 continue;
             }
 
-            const auto frequency = v.frequency * std::pow (2.0, c.bend * 2.0 / 12.0);
+            const auto frequency = v.frequency * std::pow (2.0, mpe.expression (v.channel).bendSemitones / 12.0);
             const auto inc = std::min (0.45, frequency * dt);
             // A two-pole state-variable low-pass, opened a little more by velocity.
             const auto fc = std::clamp (live.cutoff * (0.5 + v.velocity), 30.0, rate * 0.45);

@@ -224,6 +224,19 @@ public:
     // cubify (CubifySection.cpp, owner 2026-10-26): the MIDI clip shown, else the cursor's scene,
     // arranged by Xenakis's cubes (mixer/Cubify.h) onto the tracks' timelines.
     void cubify();
+    // Twelve-tone serial music (SerialSection.cpp, owner 2026-10-27; mixer/Serial.h): a piece's
+    // voices saved as MIDI files beside the mix, on the selected track and the ones after it,
+    // then on new tracks. In the launcher they fill one scene and loop together, so cubify and
+    // minimalize can take the scene; else they go on the timeline at the playhead. Each clip
+    // plays in 12 equal steps, so counterpoint and the fugue open on every key. `then` 1 or 2:
+    // the first voice shown in the Device Chain and counterpoint or a fugue asked for on it.
+    // False, with `error` set, when there is no track or no room.
+    bool addSerial (const std::vector<midifile::SongPtr>& voices, const QStringList& names, const QString& stem,
+                    bool launcher, int then, QString& error);
+    // The notes of the MIDI clip shown in the Device Chain as they are heard, drums left out
+    // (a row can be taken from them). Empty when no MIDI clip is shown.
+    std::vector<int> shownMidiPitches() const;
+    double mixTempo() const;
     // A rhythm from the Mode menu's rhythmic modes (RhythmSection.cpp): saved as a MIDI file
     // with the mix's edits, `stem` naming it, and placed on the selected track at the playhead,
     // the Synth's drum kit playing it when the track has no instrument. False with no track.
@@ -328,6 +341,7 @@ private:
     // mode, raga or maqam (mixer/Counterpoint.h), each a MIDI file beside the mix and a clip on a
     // new track, where the clip is on the timeline or in the same scene, in the clip's tuning.
     void counterpointShownMidi();
+    void noteEditorShownMidi();   // the MIDI editor on the clip shown
     // Writes the voices against `clip` (in `slot` of `scene`, or on the timeline when null). A
     // live loop's (launchAt >= 0) go on the tracks the last loop's went on, and launch on that
     // frame of the launch clock with it.

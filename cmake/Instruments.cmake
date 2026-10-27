@@ -81,11 +81,13 @@ phi_juce_instrument(AmiSampler https://github.com/astriiddev/Ami-Sampler-VST.git
 
 # Wavetable: Vaporizer2, with its own JUCE. A starter set of its wavetables and presets
 # (vaporizer2-starter.txt, about 28 MB of the library's 1 GB) and its noises go into the
-# bundle's Resources folder, where the patch makes it look on Linux.
+# bundle's Resources folder, where the patch makes it look on Linux. Four of its fonts may
+# not be redistributed, so free ones take their place (vaporizer2-fonts/ReplaceFonts.cmake).
 phi_juce_instrument(Vaporizer2 https://github.com/VASTDynamics/Vaporizer2.git 1c56c4be304255f1c397dad725ea784f15a55ef5
     VASTvaporizer2_artefacts/Release/VST3/VASTvaporizer2.vst3
-    LICENCES LICENSE
-    PATCH ${CMAKE_COMMAND} -DPATCH=${instruments_dir}/vaporizer2-bundle-data.patch -P ${CMAKE_CURRENT_LIST_DIR}/ApplyPatch.cmake)
+    LICENCES LICENSE PHI-FONTS.md OFL-Inter.txt OFL-ArchivoNarrow.txt OFL-SchibstedGrotesk.txt LICENSE-OpenSans.txt
+    PATCH ${CMAKE_COMMAND} -DPATCH=${instruments_dir}/vaporizer2-bundle-data.patch -P ${CMAKE_CURRENT_LIST_DIR}/ApplyPatch.cmake
+        COMMAND ${CMAKE_COMMAND} -DSRC=<SOURCE_DIR> -P ${instruments_dir}/vaporizer2-fonts/ReplaceFonts.cmake)
 ExternalProject_Add_Step(stock_Vaporizer2 data
     COMMAND ${CMAKE_COMMAND} -E make_directory "${PHI_STOCK_DIR}/VASTvaporizer2.vst3/Contents/Resources"
     COMMAND ${CMAKE_COMMAND} -DSRC=<SOURCE_DIR>/VASTvaporizer "-DDEST=${PHI_STOCK_DIR}/VASTvaporizer2.vst3/Contents/Resources"
