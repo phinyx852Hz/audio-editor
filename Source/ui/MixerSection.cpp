@@ -70,7 +70,7 @@ void MainWindow::registerMixerCommands()
         ->setStatusTip (tr ("Save the mix, the patchbay and the view in a PHI project (.phi)"));
     add ("mixer.saveAs", tr ("Save Project &As..."), {}, [this] { mixerWindow()->saveMix (true); });
     add ("mixer.addTrack", tr ("Add &Track"), {}, [this] { showMixer(); mixerWin->addTrack(); });
-    add ("mixer.removeTrack", tr ("&Remove Last Track"), {}, [this] { showMixer(); mixerWin->removeTrack(); });
+    add ("mixer.removeTrack", tr ("&Delete Selected Track"), {}, [this] { showMixer(); mixerWin->removeTrack(); });
     add ("mixer.playStop", tr ("&Play or Stop the Mix"), { KS (Qt::SHIFT | Qt::Key_F3) }, [this]
     {
         mixerWindow();

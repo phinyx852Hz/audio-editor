@@ -1517,6 +1517,11 @@ protected:
         menu.addAction (MixerWindow::tr ("Bounce to &New Track (Shift+B)"), this, [this] { window.bounce (index, false); })
             ->setEnabled (hasSound && window.engine.numTracks() < mixer::maxTracks);
         menu.addSeparator();
+        menu.addAction (MixerWindow::tr ("Add &Track After This (Ctrl+T)"), this, [this] { window.insertTrack (index + 1); })
+            ->setEnabled (window.engine.numTracks() < mixer::maxTracks);
+        menu.addAction (MixerWindow::tr ("&Delete Track (Delete)"), this, [this] { window.deleteTrack (index); })
+            ->setEnabled (window.engine.numTracks() > 1);
+        menu.addSeparator();
         menu.addAction (MixerWindow::tr ("&Colour..."), this, [this]
         {
             const auto c = QColorDialog::getColor (window.info[(size_t) index].colour, this, MixerWindow::tr ("Track Colour"));
@@ -2177,12 +2182,12 @@ protected:
                     break;
                 case Qt::Key_Delete:
                 case Qt::Key_Backspace:
-                    if (! ctrl)
+                    if (! ctrl && ! selection.empty())
                     {
                         deleteSelected();
                         return;
                     }
-                    break;
+                    break;   // no clip picked: the window's, which deletes the track
                 case Qt::Key_E:
                     if (ctrl)
                     {
@@ -5975,8 +5980,8 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     bypassInsertsButton->setCheckable (true);
     bypassSendsButton = button (tr ("Bypass Sends"), tr ("Leave out every send, to hear the mix without the returns"));
     bypassSendsButton->setCheckable (true);
-    auto* addButton = button (tr ("+ Track"), tr ("Add a track, up to 8 (Ctrl+T)"));
-    auto* removeButton = button (tr ("− Track"), tr ("Remove the last track (Ctrl+Shift+T)"));
+    auto* addButton = button (tr ("+ Track"), tr ("Add a track after the selected one, up to 8 (Ctrl+T)"));
+    auto* removeButton = button (tr ("− Track"), tr ("Delete the selected track (Delete, Ctrl+Shift+T)"));
     auto* openButton = button (tr ("Open..."), tr ("Open a project (Ctrl+O): the mix, the patchbay and the view"));
     auto* saveButton = button (tr ("Save"), tr ("Save the project (Ctrl+S); Ctrl+Shift+S saves it under a new name"));
     auto* mixdownButton = button (tr ("Mix Down to Editor"), tr ("Render the whole mix, with the instruments' tails, into a new tab (Ctrl+Return)"));
@@ -7346,37 +7351,222 @@ void MixerWindow::toStart()
 
 void MixerWindow::addTrack()
 {
-    if (engine.numTracks() >= mixer::maxTracks)
-    {
-        status->setText (tr ("The mixer has 8 tracks at most."));
-        return;
-    }
-    engine.setNumTracks (engine.numTracks() + 1);
-    rebuildStrips();
-    select (engine.numTracks() - 1);
-    changed();
+    insertTrack (selected < engine.numTracks() ? selected + 1 : engine.numTracks());
 }
 
 void MixerWindow::removeTrack()
 {
-    const auto last = engine.numTracks() - 1;
-    if (last < 1)
+    deleteTrack (selected < engine.numTracks() ? selected : engine.numTracks() - 1);
+}
+
+// Everything the mixer keeps about track `from`, given to track `to` (the engine's settings,
+// clips, instrument, inserts and slots, and the window's name, colour, tuning and undo steps).
+void MixerWindow::copyTrack (int from, int to)
+{
+    const auto& a = engine.strip (from);
+    auto& b = engine.strip (to);
+    b.mode = a.mode.load();
+    b.audioLayerDb = a.audioLayerDb.load();
+    b.instrumentLayerDb = a.instrumentLayerDb.load();
+    b.duckDb = a.duckDb.load();
+    b.audioDucksInstrument = a.audioDucksInstrument.load();
+    b.duckKey = a.duckKey.load();
+    b.duckBelowHz = a.duckBelowHz.load();
+    b.duckAttackMs = a.duckAttackMs.load();
+    b.duckReleaseMs = a.duckReleaseMs.load();
+    b.trimDb = a.trimDb.load();
+    b.faderDb = a.faderDb.load();
+    b.pan = a.pan.load();
+    b.invertLeft = a.invertLeft.load();
+    b.invertRight = a.invertRight.load();
+    b.mute = a.mute.load();
+    b.solo = a.solo.load();
+    b.transpose = a.transpose.load();
+    b.channels = a.channels.load();
+    b.lowCut = a.lowCut.load();
+    b.highCut = a.highCut.load();
+    b.lowCutHz = a.lowCutHz.load();
+    b.highCutHz = a.highCutHz.load();
+    b.lowCutSlope = a.lowCutSlope.load();
+    b.highCutSlope = a.highCutSlope.load();
+    b.delayMs = a.delayMs.load();
+    b.width = a.width.load();
+    for (int r = 0; r < mixer::numReturns; ++r)
+    {
+        b.sendDb[(size_t) r] = a.sendDb[(size_t) r].load();
+        b.sendPre[(size_t) r] = a.sendPre[(size_t) r].load();
+    }
+    b.input = a.input.load();
+    b.monitor = a.monitor.load();
+    b.inputChannels = a.inputChannels.load();
+    engine.setClips (to, engine.clips (from));
+    engine.setInstrument (to, engine.instrument (from));
+    engine.setInserts (to, engine.inserts (from));
+    for (int sc = 0; sc < mixer::maxScenes; ++sc)
+    {
+        slots[(size_t) to][(size_t) sc] = slots[(size_t) from][(size_t) sc];
+        engine.setSlot (to, sc, slots[(size_t) to][(size_t) sc]);
+    }
+    auto& t = info[(size_t) to];
+    const auto& f = info[(size_t) from];
+    t.name = f.name;
+    t.colour = f.colour;
+    t.sound = f.sound;
+    t.tuning = f.tuning;
+    givenDefaults[(size_t) to] = givenDefaults[(size_t) from];
+    heardTunings[(size_t) to] = heardTunings[(size_t) from];
+    timelinePasses[(size_t) to] = timelinePasses[(size_t) from];
+    layerTakes[(size_t) to] = layerTakes[(size_t) from];
+    for (auto* stack : { &undoStack, &redoStack })
+        for (auto& snap : *stack)
+            snap[(size_t) to] = snap[(size_t) from];
+}
+
+// Track `k` as a new one: nothing on it, its strip as it starts.
+void MixerWindow::clearTrack (int k)
+{
+    engine.setClips (k, {});
+    engine.setInstrument (k, nullptr);
+    engine.setInserts (k, {});
+    for (int sc = 0; sc < mixer::maxScenes; ++sc)
+    {
+        slots[(size_t) k][(size_t) sc] = nullptr;
+        engine.setSlot (k, sc, nullptr);
+    }
+    auto& s = engine.strip (k);
+    const mixer::Strip fresh;
+    s.mode = fresh.mode.load();
+    s.audioLayerDb = s.instrumentLayerDb = 0.0f;
+    s.duckDb = 0.0f;
+    s.audioDucksInstrument = false;
+    s.duckKey = -1;
+    s.duckBelowHz = 0.0f;
+    s.duckAttackMs = fresh.duckAttackMs.load();
+    s.duckReleaseMs = fresh.duckReleaseMs.load();
+    s.trimDb = s.faderDb = s.pan = 0.0f;
+    s.invertLeft = s.invertRight = s.mute = s.solo = false;
+    s.transpose = 0;
+    s.channels = 0xFFFF;
+    s.lowCut = s.highCut = false;
+    s.lowCutHz = fresh.lowCutHz.load();
+    s.highCutHz = fresh.highCutHz.load();
+    s.lowCutSlope = s.highCutSlope = 12;
+    s.delayMs = 0.0f;
+    s.width = 1.0f;
+    for (int r = 0; r < mixer::numReturns; ++r)
+    {
+        s.sendDb[(size_t) r] = -100.0f;
+        s.sendPre[(size_t) r] = false;
+    }
+    s.input = mixer::Strip::inputAuto;
+    s.monitor = mixer::Strip::monitorAuto;
+    s.inputChannels = 0;
+    auto& t = info[(size_t) k];
+    const auto d = defaultTrack (k);
+    t.name = d.first;
+    t.colour = d.second;
+    t.sound = nullptr;
+    t.tuning = {};
+    givenDefaults[(size_t) k] = d;
+    heardTunings[(size_t) k] = {};
+    timelinePasses[(size_t) k].clear();
+    layerTakes[(size_t) k] = {};
+    for (auto* stack : { &undoStack, &redoStack })
+        for (auto& snap : *stack)
+            snap[(size_t) k].clear();
+}
+
+// Before tracks move: loads still running and windows open for them would land on the
+// wrong track, so they are let go; nothing is recording or playing from a launched slot.
+bool MixerWindow::readyToMoveTracks (int from)
+{
+    if (engine.isRecording())
+    {
+        status->setText (tr ("Stop recording first."));
+        return false;
+    }
+    engine.backToTimeline (-1);
+    for (int k = from; k < mixer::maxTracks; ++k)
+    {
+        auto& t = info[(size_t) k];
+        ++t.generation;
+        t.busy = 0;
+        if (t.editor != nullptr)
+            t.editor->close();
+    }
+    for (auto it = loadingSlots.begin(); it != loadingSlots.end();)
+        it = it->first >= from ? loadingSlots.erase (it) : std::next (it);
+    picked.clear();
+    return true;
+}
+
+// The keys of the ducks, which name other tracks, follow the tracks that moved.
+void MixerWindow::moveDuckKeys (const std::function<int (int)>& moved)
+{
+    for (int k = 0; k < engine.numTracks(); ++k)
+        if (auto& key = engine.strip (k).duckKey; key.load() >= 0)
+            key = moved (key.load());
+}
+
+void MixerWindow::insertTrack (int at)
+{
+    const auto count = engine.numTracks();
+    if (count >= mixer::maxTracks)
+    {
+        status->setText (tr ("The mixer has 8 tracks at most."));
         return;
-    if ((! engine.clips (last).empty() || engine.instrument (last) != nullptr)
-        && QMessageBox::question (this, tr ("Remove Track"), tr ("Remove track %1, “%2”, and what is on it?").arg (last + 1).arg (info[(size_t) last].name))
+    }
+    at = std::clamp (at, 0, count);
+    if (at < count && ! readyToMoveTracks (at))
+        return;
+    const auto live = engine.liveTrack();
+    engine.setNumTracks (count + 1);
+    for (int k = count; k > at; --k)
+        copyTrack (k - 1, k);
+    clearTrack (at);
+    // Named and coloured as the track appended would be, so it differs from its neighbours.
+    givenDefaults[(size_t) at] = defaultTrack (count);
+    std::tie (info[(size_t) at].name, info[(size_t) at].colour) = givenDefaults[(size_t) at];
+    moveDuckKeys ([at] (int key) { return key >= at ? key + 1 : key; });
+    if (live >= at)
+        engine.setLiveTrack (live + 1);
+    rebuildStrips();
+    select (at);
+    changed();
+}
+
+void MixerWindow::deleteTrack (int index)
+{
+    const auto count = engine.numTracks();
+    if (index < 0 || index >= count)
+        return;
+    if (count < 2)
+    {
+        status->setText (tr ("A mix keeps at least one track."));
+        return;
+    }
+    bool hasSlots = false;
+    for (const auto& slot : slots[(size_t) index])
+        hasSlots = hasSlots || slot != nullptr;
+    if ((! engine.clips (index).empty() || engine.instrument (index) != nullptr || hasSlots)
+        && QMessageBox::question (this, tr ("Delete Track"), tr ("Delete track %1, “%2”, and what is on it?").arg (index + 1).arg (info[(size_t) index].name))
                != QMessageBox::Yes)
         return;
-    remember();
-    engine.setNumTracks (last);
-    engine.setClips (last, {});
-    engine.setInstrument (last, nullptr);
-    auto& s = engine.strip (last);
-    s.mute = s.solo = false;
-    ++info[(size_t) last].generation;
-    info[(size_t) last].busy = 0;
-    if (info[(size_t) last].editor != nullptr)
-        info[(size_t) last].editor->close();
+    if (! readyToMoveTracks (index))
+        return;
+    const auto live = engine.liveTrack();
+    for (int k = index; k < count - 1; ++k)
+        copyTrack (k + 1, k);
+    clearTrack (count - 1);
+    engine.setNumTracks (count - 1);
+    moveDuckKeys ([index] (int key) { return key == index ? -1 : key > index ? key - 1 : key; });
+    if (live == index)
+        engine.setLiveTrack (-1);
+    else if (live > index)
+        engine.setLiveTrack (live - 1);
     rebuildStrips();
+    select (std::min (index, count - 2));
+    status->setText (tr ("Track %1 deleted.").arg (index + 1));
     changed();
 }
 
@@ -8555,6 +8745,11 @@ void MixerWindow::keyPressEvent (QKeyEvent* e)
             case Qt::Key_Down: nudgeFader (shift ? -0.1 : -1.0); return;
             case Qt::Key_BracketLeft: nudgePan (shift ? -0.01f : -0.05f); return;
             case Qt::Key_BracketRight: nudgePan (shift ? 0.01f : 0.05f); return;
+            case Qt::Key_Delete:
+            case Qt::Key_Backspace:
+                if (! master && ! shift)
+                    deleteTrack (selected);
+                return;
             case Qt::Key_Insert:
                 if (! master)
                 {
@@ -10334,7 +10529,8 @@ bool MixerWindow::launcherKey (QKeyEvent* e)
             return true;
         case Qt::Key_Delete:
         case Qt::Key_Backspace:
-            if (plain) { clearSlot (track, cursorScene); return true; }
+            // An empty slot: the window's, which deletes the track.
+            if (plain && slots[(size_t) track][(size_t) cursorScene] != nullptr) { clearSlot (track, cursorScene); return true; }
             break;
         case Qt::Key_T:
             if (plain) { engine.backToTimeline (track); return true; }

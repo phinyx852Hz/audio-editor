@@ -147,8 +147,12 @@ public:
     // else a new one. An error, or empty.
     QString applyEqCuts (int track, const std::vector<std::pair<double, double>>& cuts);
 
-    void addTrack();
-    void removeTrack();
+    void addTrack();      // after the selected track
+    void removeTrack();   // the selected track
+    // A new track at `at` (0-based), the ones from there on moving along; and track `index`
+    // deleted (asked first when something is on it), the ones after it moving up.
+    void insertTrack (int at);
+    void deleteTrack (int index);
 
     // The clip launcher in the upper area, or the tracks across time.
     void showLauncher (bool on);
@@ -283,6 +287,10 @@ private:
         mixer::TuningChoice tuning;  // the PHI synth's, when neither the clip nor the scene has one
     };
 
+    void copyTrack (int from, int to);
+    void clearTrack (int track);
+    bool readyToMoveTracks (int from);
+    void moveDuckKeys (const std::function<int (int)>& moved);
     void rebuildStrips();
     void select (int index);         // 0..7 a track, 8 the master
     void tick();
