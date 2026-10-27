@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**74 pull requests:** 74 merged, 0 open.
+**75 pull requests:** 74 merged, 1 open.
 
 ## Contents
 
@@ -48,6 +48,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#13](https://github.com/phinyx852Hz/audio-editor/pull/13) | Ambisonics visualizer: speaker layouts up to 9.1.6 and 7.1.8, and a Channels view | merged | Analysis Meters, Ambisonics card, Options | `Source/ui/AmbiVisualizer.cpp` |
 | [#24](https://github.com/phinyx852Hz/audio-editor/pull/24) | Add a CPU meter to the status bar | merged | Status bar; View menu, CPU Meter | `Source/ui/MainWindow.cpp`<br>`Source/engine/AudioEngine.cpp` |
 | [#48](https://github.com/phinyx852Hz/audio-editor/pull/48) | Add the Plugin Analyzer, Forensic Φ and the Aliasing scope | merged | Analyze menu, Plugin Analyzer | `Source/core/PluginMeasure.cpp`<br>`Source/core/PhiForensics.cpp`<br>`Source/ui/PluginAnalyzer.cpp` |
+| [#75](https://github.com/phinyx852Hz/audio-editor/pull/75) | Offer 20 FFT windows in the Analysis Meters' Spectrum | open | Options > Window | `Source/core/Windows.cpp`<br>`Source/ui/AnalysisWindow.cpp`<br>`tests/CoreTests.cpp` |
 
 ### Mastering
 
@@ -252,3 +253,4 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#72](https://github.com/phinyx852Hz/audio-editor/pull/72) | MIDI inputs: remember them by name, and open them when plugged in | PHI detected the Novation keyboards, the Push 2 and the Launchpad Mini, but the keyboards played no synths. *(auto)* | merged | 2026-10-27 | Not yet sorted |
 | [#73](https://github.com/phinyx852Hz/audio-editor/pull/73) | Mode menu: modes and tunings by region, tradition and person | This puts the owner's Mode Research (2026-10-26) into PHI's one shared list of systems, mixer::tuningSystems(). *(auto)* | merged | 2026-10-27 | Modes, tunings and composition |
 | [#74](https://github.com/phinyx852Hz/audio-editor/pull/74) | Reorganize the menu bar: four menus become submenus, rest A to Z | Album is now a submenu and the first item in Master. *(auto)* | merged | 2026-10-27 | Interface and branding |
+| [#75](https://github.com/phinyx852Hz/audio-editor/pull/75) | Offer 20 FFT windows in the Analysis Meters' Spectrum | The Spectrum card's Options > Window menu goes from 5 windows to 20. *(auto)* | open | 2026-10-27 | Analysis and meters |
