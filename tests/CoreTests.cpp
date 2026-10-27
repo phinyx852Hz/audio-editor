@@ -7802,6 +7802,51 @@ namespace
                    && ! m.notes[0].selected && ! m.notes[1].selected,
                "note editor: an edit in each stretch's own system");
         check (removeSystemChange (m, 2000) && m.systems.size() == 1 && systemAt (m, twelveTet(), 2000).name == r.name, "note editor: a change taken out");
+        // Hum to notes: C4 for half a second (a blip to D in it), G4, a breath, then E4 slid into from D.
+        std::vector<Heard> heard;
+        for (int i = 0; i < 160; ++i)
+        {
+            const auto t = i * 0.01;
+            double p = -1.0;
+            if (t < 0.5)
+                p = (t >= 0.30 && t < 0.32) ? 6200.0 : 6000.0 + 4.0 * std::sin (t * 30.0);
+            else if (t < 1.0)
+                p = 6700.0;
+            else if (t >= 1.2)
+                p = t < 1.3 ? 6200.0 + (t - 1.2) / 0.1 * 200.0 : 6400.0;
+            heard.push_back ({ t, p, p < 0.0 ? 0.0 : 0.5 });
+        }
+        const auto sung = notesFromPitch (heard, twelveTet(), {}, 480, 120.0, 960);
+        check (sung.size() == 3 && near (sung[0].pitch, 6000.0, 1.0e-9) && near (sung[1].pitch, 6700.0, 1.0e-9) && near (sung[2].pitch, 6400.0, 1.0e-9),
+               "note editor: hummed notes, a blip and a slide not notes of their own");
+        check (sung.size() == 3 && sung[0].start == 960 && std::abs (sung[0].length - 480) <= 10 && sung[1].start == 960 + 480 && std::abs (sung[2].start - (960 + 1152)) <= 2,
+               "note editor: hummed notes in time, at the tempo");
+        check (sung.size() == 3 && sung[0].bendAt (290) > 150.0 && sung[1].curve.empty() && ! sung[2].curve.empty() && sung[2].bendAt (0) < -150.0 && near (sung[2].bendAt (300), 0.0, 1.0e-9),
+               "note editor: the blip and the slide kept as curves, steady singing left steady");
+        check (sung.size() == 3 && sung[0].velocity > 100 && sung[0].velocity < 127, "note editor: hummed loudness as velocity");
+        HumOptions asSung;
+        asSung.snap = false;
+        asSung.grid = 120;
+        const auto free = notesFromPitch (heard, twelveTet(), asSung, 480, 120.0, 0);
+        check (free.size() == 3 && std::abs (free[0].pitch - 6000.0) < 5.0 && free[2].start % 120 == 0, "note editor: hummed as sung, on the grid");
+
+        // And from sound: a sung line of sines, C4 E4 G4 at 0.4 s each, heard back as those notes.
+        {
+            const double rate = 44100.0;
+            AudioData::Builder b (1, rate);
+            std::vector<float> wave;
+            for (const double hz : { 261.63, 329.63, 392.0 })
+                for (int i = 0; i < (int) (0.4 * rate); ++i)
+                    wave.push_back ((float) (0.4 * std::sin (2.0 * 3.14159265358979323846 * hz * i / rate)));
+            const float* ch[] { wave.data() };
+            b.append (ch, (int) wave.size());
+            const auto heardSines = listen (*b.finish());
+            const auto line = notesFromPitch (heardSines, twelveTet(), {}, 480, 60.0, 0);
+            check (line.size() == 3 && near (line[0].pitch, 6000.0, 1.0e-9) && near (line[1].pitch, 6400.0, 1.0e-9) && near (line[2].pitch, 6700.0, 1.0e-9)
+                       && std::abs (line[1].start - 192) < 20,
+                   "note editor: notes heard in a recording");
+        }
+
         PitchSystem junk;
         check (! parseSystemMarker ("verse", junk) && ! parseSystemMarker ("PHI system: x | y | tonic a | period 1200 | 0 |", junk), "note editor: other markers are not systems");
     }

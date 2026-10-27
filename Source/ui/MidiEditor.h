@@ -10,6 +10,7 @@
 // input from the MIDI keyboard or the computer's. Restyle, after MIDIRestyle, moves a melody into
 // another system degree by degree, the notes it had kept as ghosts behind. Saved as plain keys,
 // MPE or pitch bend by channel (NoteEditor.h).
+#include "../core/AudioData.h"
 #include "../mixer/NoteEditor.h"
 
 #include <QDialog>
@@ -18,6 +19,7 @@
 #include <memory>
 #include <vector>
 
+class AudioCapture;
 class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
@@ -42,6 +44,9 @@ public:
         double bpm = 0.0;    // the mixer's tempo when the clip follows it, else 0 (the file's)
         QString folder;      // where to look for .scl and .kbm files
         QString title;       // the clip's name
+        QString inputSource; // the audio input to hum into (a PipeWire target); empty the first input
+        // Reads a sound file (to hear its melody), null with the reason when it cannot.
+        std::function<AudioDataPtr (const QString& path, QString& error)> loadAudio;
     };
 
     MidiEditor (const midifile::Song&, Host, QWidget* parent);
@@ -90,6 +95,9 @@ private:
     void infoEdited();
     void restyleDialog();
     void velocityDialog();
+    void humDialog();        // hum or sing to notes, or a recording's melody
+    void putInHeard (const std::vector<noteedit::Heard>&, const noteedit::HumOptions&);
+    double tempo() const;    // beats a minute: the mixer's, else the file's
     void togglePlay();
     void startPlay (bool original);
     void stopPlay();
@@ -152,6 +160,7 @@ private:
     size_t infoMark = (size_t) -1;   // the undo list's size after the last typed change
 
     // Playback in the editor: the encoded notes sent at their times.
+    std::unique_ptr<AudioCapture> capture;   // the audio input, while humming
     QTimer* playTimer = nullptr;
     struct Timed { double seconds; uint8_t status, data1, data2; };
     std::vector<Timed> playing;

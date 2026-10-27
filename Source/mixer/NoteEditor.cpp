@@ -2,6 +2,7 @@
 #include "NoteEditor.h"
 
 #include "Tunings.h"
+#include "../core/Pitch.h"
 #include "../core/Scala.h"
 
 #include <algorithm>
@@ -1299,6 +1300,170 @@ namespace noteedit
     {
         for (auto i : s.targets())
             s.notes[i].curve.clear();
+    }
+
+    //==========================================================================
+    std::vector<Note> notesFromPitch (const std::vector<Heard>& heard, const PitchSystem& sys, const HumOptions& o,
+                                      int ticksPerQuarter, double bpm, int64_t at)
+    {
+        std::vector<Note> notes;
+        if (heard.empty() || sys.degrees.empty())
+            return notes;
+        const auto perSecond = ticksPerQuarter * (bpm > 0.0 ? bpm : 120.0) / 60.0;
+        const auto tickOf = [&] (double seconds) { return at + (int64_t) std::llround (seconds * perSecond); };
+        const auto hop = heard.size() > 1 ? std::max (1.0e-4, (heard.back().seconds - heard.front().seconds) / (double) (heard.size() - 1)) : 0.01;
+        const auto voiced = [&] (size_t i) { return heard[i].pitch >= 0.0; };
+
+        struct Segment { size_t first, last; int step; size_t onStep; };   // onStep: points on its own degree
+        std::vector<Segment> segments;
+        bool open = false;
+        Segment now {};
+        int candidate = 0;
+        size_t candidateFirst = 0;
+        bool hasCandidate = false;
+        const auto close = [&]
+        {
+            if (open && heard[now.last].seconds + hop - heard[now.first].seconds >= o.shortestSeconds - 1.0e-9)
+                segments.push_back (now);
+            open = false;
+            hasCandidate = false;
+        };
+        for (size_t i = 0; i < heard.size(); ++i)
+        {
+            if (! voiced (i))
+            {
+                if (open && heard[i].seconds - heard[now.last].seconds > o.holdSeconds)
+                    close();
+                continue;
+            }
+            const auto step = sys.nearestStep (heard[i].pitch);
+            if (! open)
+            {
+                now = { i, i, step, 1 };
+                open = true;
+                hasCandidate = false;
+                continue;
+            }
+            now.last = i;
+            if (step == now.step)
+            {
+                ++now.onStep;
+                hasCandidate = false;
+                continue;
+            }
+            if (! hasCandidate || step != candidate)
+            {
+                candidate = step;
+                candidateFirst = i;
+                hasCandidate = true;
+            }
+            if (heard[i].seconds - heard[candidateFirst].seconds + hop < o.holdSeconds - 1.0e-9)
+                continue;   // a moment away (an ornament): still this note
+            // A new degree, held: this note ends where it began. A note that was hardly on its own
+            // degree is the slide into the new one, and starts it.
+            Segment next { candidateFirst, i, candidate, i - candidateFirst + 1 };
+            if ((double) now.onStep * hop < o.shortestSeconds - 1.0e-9)
+                next.first = now.first;
+            else
+            {
+                now.last = candidateFirst - 1;
+                segments.push_back (now);
+            }
+            now = next;
+            hasCandidate = false;
+        }
+        close();
+
+        for (const auto& g : segments)
+        {
+            std::vector<double> sung;
+            double loudest = 0.0;
+            for (auto i = g.first; i <= g.last; ++i)
+                if (voiced (i))
+                {
+                    sung.push_back (heard[i].pitch);
+                    loudest = std::max (loudest, heard[i].level);
+                }
+            if (sung.empty())
+                continue;
+            Note n;
+            if (o.snap)
+                n.pitch = sys.pitchOf (g.step);
+            else
+            {
+                auto middle = sung;
+                std::nth_element (middle.begin(), middle.begin() + (std::ptrdiff_t) (middle.size() / 2), middle.end());
+                n.pitch = std::round (middle[middle.size() / 2]);
+            }
+            const auto start = tickOf (heard[g.first].seconds);
+            const auto end = tickOf (heard[g.last].seconds + hop);
+            n.start = start;
+            n.length = std::max<int64_t> (1, end - start);
+            const auto db = 20.0 * std::log10 (std::max (loudest, 1.0e-6));
+            n.velocity = std::clamp ((int) std::lround (127.0 + db * 107.0 / 50.0), 20, 127);
+            if (o.curves)
+            {
+                std::vector<std::pair<int64_t, double>> c;
+                double far = 0.0;
+                for (auto i = g.first; i <= g.last; ++i)
+                {
+                    if (! voiced (i))
+                        continue;
+                    const auto off = heard[i].pitch - n.pitch;
+                    far = std::max (far, std::abs (off));
+                    if (c.empty() || std::abs (off - c.back().second) >= 3.0)
+                        c.push_back ({ tickOf (heard[i].seconds) - start, off });
+                }
+                if (far > 20.0)
+                    n.curve = std::move (c);
+            }
+            if (o.grid > 0)
+            {
+                const auto shift = (int64_t) std::llround ((double) n.start / (double) o.grid) * o.grid - n.start;
+                n.start += shift;
+                n.length = std::max (o.grid, (int64_t) std::llround ((double) n.length / (double) o.grid) * o.grid);
+            }
+            notes.push_back (std::move (n));
+        }
+        return notes;
+    }
+
+    std::vector<Heard> listen (const AudioData& audio)
+    {
+        std::vector<Heard> heard;
+        pitch::Settings settings;
+        settings.lowestHz = 55.0;
+        settings.highestHz = 1600.0;
+        settings.hop = std::max (64, (int) std::lround (audio.sampleRate() / 200.0));   // 5 ms
+        const auto track = pitch::track (audio, settings);
+        if (track == nullptr)
+            return heard;
+        // The loudness around each point: RMS over a hop each side, the channels mixed.
+        const auto channels = audio.numChannels();
+        const auto span = settings.hop * 2;
+        std::vector<std::vector<float>> block ((size_t) channels, std::vector<float> ((size_t) span));
+        std::vector<float*> to ((size_t) channels);
+        for (int c = 0; c < channels; ++c)
+            to[(size_t) c] = block[(size_t) c].data();
+        for (const auto& p : track->points)
+        {
+            audio.read (p.at - settings.hop, span, to.data());
+            double sum = 0.0;
+            for (int i = 0; i < span; ++i)
+            {
+                double x = 0.0;
+                for (int c = 0; c < channels; ++c)
+                    x += block[(size_t) c][(size_t) i];
+                x /= std::max (1, channels);
+                sum += x * x;
+            }
+            Heard h;
+            h.seconds = (double) p.at / audio.sampleRate();
+            h.pitch = p.hz > 0.0f ? 6900.0 + 1200.0 * std::log2 ((double) p.hz / 440.0) : -1.0;
+            h.level = std::sqrt (sum / span);
+            heard.push_back (h);
+        }
+        return heard;
     }
 
     //==========================================================================

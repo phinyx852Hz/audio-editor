@@ -2,6 +2,7 @@
 #include "MidiEditor.h"
 
 #include "../core/Scala.h"
+#include "../engine/AudioCapture.h"
 #include "../mixer/Tunings.h"
 
 #include <QAbstractScrollArea>
@@ -1485,6 +1486,13 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     octaveBox->setToolTip (tr ("Where the computer's keys play: A S D F... are the degrees up from the tonic in this period, Q W E R... "
                                "the period above, Z X C V... the one below"));
     lanes->addWidget (octaveBox);
+    auto* hum = new QToolButton (this);
+    hum->setText (tr ("Hum or Sing..."));
+    hum->setToolTip (tr ("Sing, hum or play a melody into the audio input, or open a recording: its notes are put in at the step cursor, "
+                         "on the system's degrees, its slides and shakes kept as curves"));
+    connect (hum, &QToolButton::clicked, this, &MidiEditor::humDialog);
+    lanes->addSpacing (10);
+    lanes->addWidget (hum);
     lanes->addStretch (1);
     layout->addLayout (lanes);
 
@@ -1571,7 +1579,7 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     // ornaments"), as curves on the picked notes, each in the system it is in.
     auto* ornaments = menu->addMenu (tr ("Ornaments"));
     const auto beat = [this] { return (int64_t) seq.ticksPerQuarter; };
-    const auto bpm = [this] { return host.bpm > 0.0 ? host.bpm : seq.tempos.empty() ? 120.0 : 60.0e6 / seq.tempos.front().microsPerQuarter; };
+    const auto bpm = [this] { return tempo(); };
     ornaments->addAction (tr ("mīṇḍ to the next note, through the degrees"), this, [this] { editBySystem ([] (Sequence& s, const PitchSystem& sys) { glideToNext (s, sys, 0.4, true); }); });
     ornaments->addAction (tr ("Glide to the next note"), this, [this] { editBySystem ([] (Sequence& s, const PitchSystem& sys) { glideToNext (s, sys, 0.5, false); }); });
     ornaments->addAction (tr ("Slide in from the degree below"), this, [this, beat] { editBySystem ([beat] (Sequence& s, const PitchSystem& sys) { slideIn (s, sys, -1, beat() / 4); }); });
@@ -2042,6 +2050,246 @@ void MidiEditor::infoEdited()
     if (merge)
         undoList.pop_back();
     infoMark = undoList.size();
+}
+
+double MidiEditor::tempo() const
+{
+    return host.bpm > 0.0 ? host.bpm : seq.tempos.empty() ? 120.0 : 60.0e6 / seq.tempos.front().microsPerQuarter;
+}
+
+void MidiEditor::putInHeard (const std::vector<Heard>& heard, const HumOptions& options)
+{
+    const auto at = step.position;
+    auto notes = notesFromPitch (heard, systemAt (at), options, seq.ticksPerQuarter, tempo(), at);
+    if (notes.empty())
+        return;
+    int64_t end = at;
+    for (const auto& n : notes)
+        end = std::max (end, n.end());
+    edit ([&] (Sequence& s)
+    {
+        selectAll (s, false);
+        for (auto& n : notes)
+        {
+            n.selected = true;
+            s.notes.push_back (n);
+        }
+        s.sort();
+        s.lastTick = std::max (s.lastTick, s.end());
+    });
+    // The next take goes on after this one.
+    step.position = grid() > 0 ? (end + grid() - 1) / grid() * grid() : end;
+    changed();
+}
+
+void MidiEditor::humDialog()
+{
+    QDialog d (this);
+    d.setWindowTitle (tr ("Hum or Sing to Notes"));
+    auto* form = new QVBoxLayout (&d);
+    auto* intro = new QLabel (tr ("Sing, hum, whistle or play a melody: its notes are put in from the step cursor (%1), in %2.")
+                                  .arg (barText (step.position, seq.ticksPerQuarter), QString::fromStdString (systemAt (step.position).name)), &d);
+    intro->setWordWrap (true);
+    form->addWidget (intro);
+
+    auto* sourceBox = new QComboBox (&d);
+    auto* record = new QPushButton (tr ("Record"), &d);
+    record->setCheckable (true);
+    auto* fromFile = new QPushButton (tr ("From a Recording..."), &d);
+    auto* heardLabel = new QLabel (tr ("Heard: nothing yet"), &d);
+    auto* snap = new QCheckBox (tr ("On the system's degrees (else as sung, to the cent)"), &d);
+    snap->setChecked (true);
+    auto* curves = new QCheckBox (tr ("Keep the slides and shakes as pitch curves (mīṇḍ, gamak)"), &d);
+    curves->setChecked (true);
+    auto* quantise = new QCheckBox (tr ("Starts and lengths on the grid"), &d);
+    auto* holdMs = new QSpinBox (&d);
+    holdMs->setRange (20, 400);
+    holdMs->setValue (60);
+    holdMs->setSuffix (tr (" ms"));
+    holdMs->setToolTip (tr ("How long the voice must stay on a new degree for a new note; shorter moves are ornaments of the note"));
+    auto* playAlong = new QCheckBox (tr ("Play the clip from the cursor while recording"), &d);
+    auto* status = new QLabel (&d);
+    status->setWordWrap (true);
+
+    if (! AudioCapture::isAvailable())
+    {
+        sourceBox->addItem (tr ("This build of PHI has no PipeWire, so no audio input"));
+        sourceBox->setEnabled (false);
+        record->setEnabled (false);
+    }
+    else
+    {
+        if (capture == nullptr)
+            capture = std::make_unique<AudioCapture>();
+        if (! capture->isConnected())
+            if (const auto why = capture->connect(); ! why.empty())
+                status->setText (tr ("The audio input could not be opened: %1").arg (QString::fromStdString (why)));
+        for (const auto& source : capture->sources())
+        {
+            const auto kind = source.kind == CaptureSource::Kind::input ? tr ("Input") : source.kind == CaptureSource::Kind::desktop ? tr ("Desktop")
+                                                                                                                                    : tr ("Application");
+            sourceBox->addItem (tr ("%1: %2").arg (kind, QString::fromStdString (source.name)), QString::fromStdString (source.target));
+            // The mixer's audio input, else the first input.
+            if ((! host.inputSource.isEmpty() && QString::fromStdString (source.target) == host.inputSource)
+                || (host.inputSource.isEmpty() && source.kind == CaptureSource::Kind::input && sourceBox->property ("picked").isNull()))
+            {
+                sourceBox->setCurrentIndex (sourceBox->count() - 1);
+                sourceBox->setProperty ("picked", true);
+            }
+        }
+        if (sourceBox->count() == 0)
+        {
+            sourceBox->addItem (tr ("No audio input"));
+            record->setEnabled (false);
+        }
+    }
+    fromFile->setEnabled ((bool) host.loadAudio);
+
+    auto* row = new QHBoxLayout;
+    row->addWidget (sourceBox, 1);
+    row->addWidget (record);
+    form->addLayout (row);
+    form->addWidget (heardLabel);
+    form->addWidget (fromFile, 0, Qt::AlignLeft);
+    form->addSpacing (6);
+    form->addWidget (snap);
+    form->addWidget (curves);
+    form->addWidget (quantise);
+    auto* holdRow = new QHBoxLayout;
+    holdRow->addWidget (new QLabel (tr ("A new note after"), &d));
+    holdRow->addWidget (holdMs);
+    holdRow->addWidget (new QLabel (tr ("on a degree"), &d));
+    holdRow->addStretch (1);
+    form->addLayout (holdRow);
+    form->addWidget (playAlong);
+    form->addWidget (status);
+    auto* buttons = new QDialogButtonBox (QDialogButtonBox::Close, &d);
+    form->addWidget (buttons);
+    connect (buttons, &QDialogButtonBox::rejected, &d, &QDialog::reject);
+
+    const auto options = [&]
+    {
+        HumOptions o;
+        o.snap = snap->isChecked();
+        o.curves = curves->isChecked();
+        o.holdSeconds = holdMs->value() / 1000.0;
+        o.grid = quantise->isChecked() ? grid() : 0;
+        return o;
+    };
+    const auto putIn = [&] (const std::vector<Heard>& heard)
+    {
+        const auto before = seq.notes.size();
+        putInHeard (heard, options());
+        const auto added = (int) (seq.notes.size() - before);
+        status->setText (added > 0 ? tr ("%n note(s) put in; Ctrl+Z takes them out. The cursor is now at %1, for the next take.", nullptr, added)
+                                         .arg (barText (step.position, seq.ticksPerQuarter))
+                                   : tr ("No notes were heard: a single voice or instrument, clearly, works best."));
+        intro->setText (tr ("Sing, hum, whistle or play a melody: its notes are put in from the step cursor (%1), in %2.")
+                            .arg (barText (step.position, seq.ticksPerQuarter), QString::fromStdString (systemAt (step.position).name)));
+    };
+
+    // Recording: what comes in is kept, and its pitch shown as it is sung.
+    std::vector<float> take;
+    int rate = 48000;
+    QTimer timer;
+    timer.setInterval (50);
+    connect (&timer, &QTimer::timeout, &d, [&]
+    {
+        std::vector<float> block (4096);
+        for (int n; (n = capture->read (block.data(), (int) block.size())) > 0;)
+            take.insert (take.end(), block.begin(), block.begin() + n);
+        if (take.size() < 2048)
+            return;
+        AudioData::Builder b (1, rate);
+        const auto from = take.size() - std::min<size_t> (take.size(), (size_t) rate / 5);
+        const float* ch[] { take.data() + from };
+        b.append (ch, (int) (take.size() - from));
+        const auto now = listen (*b.finish());
+        for (auto it = now.rbegin(); it != now.rend(); ++it)
+            if (it->pitch >= 0.0)
+            {
+                const auto& sys = systemAt (step.position);
+                const auto st = sys.nearestStep (it->pitch);
+                const auto off = it->pitch - sys.pitchOf (st);
+                heardLabel->setText (tr ("Heard: %1 %2 · %3 Hz").arg (QString::fromStdString (label (sys, st, (Naming) namingBox->currentData().toInt())),
+                                                                      QString::fromStdString (centsText (off)))
+                                         .arg (hzOf (it->pitch), 0, 'f', 1));
+                return;
+            }
+        heardLabel->setText (tr ("Heard: no clear pitch"));
+    });
+    const auto stopRecording = [&]
+    {
+        timer.stop();
+        if (capture != nullptr && capture->isRunning())
+        {
+            std::vector<float> block (4096);
+            for (int n; (n = capture->read (block.data(), (int) block.size())) > 0;)
+                take.insert (take.end(), block.begin(), block.begin() + n);
+            capture->stop();
+        }
+        if (playTimer->isActive())
+            stopPlay();
+        record->setText (tr ("Record"));
+        if (take.empty())
+            return;
+        AudioData::Builder b (1, rate);
+        const float* ch[] { take.data() };
+        b.append (ch, (int) take.size());
+        take.clear();
+        putIn (listen (*b.finish()));
+    };
+    connect (record, &QPushButton::toggled, &d, [&] (bool on)
+    {
+        if (! on)
+        {
+            stopRecording();
+            return;
+        }
+        const auto target = sourceBox->currentData().toString().toStdString();
+        CaptureSource source;
+        for (const auto& s2 : capture->sources())
+            if (s2.target == target)
+                source = s2;
+        take.clear();
+        rate = 48000;
+        if (const auto why = capture->start (source, rate, 1); ! why.empty())
+        {
+            status->setText (tr ("The audio input could not start: %1").arg (QString::fromStdString (why)));
+            const QSignalBlocker block (record);
+            record->setChecked (false);
+            return;
+        }
+        rate = capture->sampleRate();
+        if (playAlong->isChecked())
+        {
+            playheadTick = step.position;
+            startPlay (false);
+        }
+        record->setText (tr ("Stop"));
+        status->setText (tr ("Recording: sing, then Stop."));
+        timer.start();
+    });
+    connect (fromFile, &QPushButton::clicked, &d, [&]
+    {
+        const auto file = QFileDialog::getOpenFileName (&d, tr ("A Recording of a Melody"), host.folder,
+                                                        tr ("Sound files (*.wav *.flac *.ogg *.mp3 *.aif *.aiff *.m4a *.opus);;All files (*)"));
+        if (file.isEmpty())
+            return;
+        QString why;
+        QApplication::setOverrideCursor (Qt::WaitCursor);
+        const auto audio = host.loadAudio (file, why);
+        const auto heard = audio != nullptr ? listen (*audio) : std::vector<Heard> {};
+        QApplication::restoreOverrideCursor();
+        if (audio == nullptr)
+        {
+            status->setText (tr ("%1 could not be read: %2").arg (QFileInfo (file).fileName(), why));
+            return;
+        }
+        putIn (heard);
+    });
+    d.exec();
+    stopRecording();
 }
 
 void MidiEditor::velocityDialog()

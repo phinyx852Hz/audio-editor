@@ -6474,6 +6474,16 @@ void MixerWindow::noteEditorShownMidi()
     host.bpm = followTempoBox->isChecked() ? tempoBox->value() : 0.0;
     host.folder = folder();
     host.title = QFileInfo (QString::fromStdString (clip.midi->path)).completeBaseName();
+    host.inputSource = inputSource;
+    host.loadAudio = [] (const QString& file, QString& why) -> AudioDataPtr
+    {
+        std::vector<Marker> markers;
+        Tags tags;
+        std::string error;
+        auto loaded = AudioEngine::loadFile (file.toStdString(), markers, tags, error);
+        why = QString::fromStdString (error);
+        return loaded;
+    };
     const auto armed = engine.liveTrack();
     engine.setLiveTrack (track);
     MidiEditor editor (*song, host, this);

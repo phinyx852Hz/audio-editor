@@ -19,6 +19,8 @@
 #include <string>
 #include <vector>
 
+class AudioData;
+
 namespace phi::scala { struct Scale; struct KeyboardMap; }
 
 namespace mixer { struct TuningSystem; }
@@ -214,6 +216,28 @@ namespace noteedit
     // {1, 0, -1, 0}, zamzama {1, 0, 1, 0, -1, 0}.
     void turn (Sequence&, const PitchSystem&, const std::vector<int>& degrees, int64_t ticks);
     void clearCurves (Sequence&);
+
+    //==========================================================================
+    // Hum or sing to notes (owner, 2026-10-26). The pitch heard over time, a point every few
+    // milliseconds (from pitch::track): its time, its pitch in cents (below 0 where there is none)
+    // and its loudness (RMS, 0..1).
+    struct Heard { double seconds = 0.0; double pitch = -1.0; double level = 0.0; };
+    struct HumOptions
+    {
+        bool snap = true;             // each note on the degree of the system nearest it, else as sung
+        bool curves = true;           // the slides and shakes kept as the notes' pitch curves
+        double holdSeconds = 0.06;    // how long a new degree must hold to start a new note
+        double shortestSeconds = 0.08;   // shorter notes are taken into the next one (a slide in)
+        int64_t grid = 0;             // starts and lengths onto it, in ticks; 0 not
+    };
+    // The notes sung, from `at` on, at a tempo. A degree held starts a note; a note ends where the
+    // voice stops or moves to another degree and stays there. A curve is kept only where the voice
+    // moved more than 20 cents off the note (a mīṇḍ, a gamak): steady singing is left steady.
+    std::vector<Note> notesFromPitch (const std::vector<Heard>&, const PitchSystem&, const HumOptions&,
+                                      int ticksPerQuarter, double bpm, int64_t at);
+    // The pitch heard in a recording (a voice, a flute, a sitar's melody), by pitch::track (YIN,
+    // core/Pitch.h), each point with its loudness.
+    std::vector<Heard> listen (const AudioData&);
 
     //==========================================================================
     // What the views show (owner, 2026-10-26: a scale wheel, an interval clock and a consonance display).

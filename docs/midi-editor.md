@@ -41,6 +41,26 @@ fast edits do, and Ctrl+Z on the tracks puts the clip back.
   mixer/NoteEditor.h); a new mode in mixer/Tunings.cpp takes its family's names, and a mode whose
   degrees have names of their own lists them in `TuningSystem::names`.
 
+## Hum or sing to notes
+
+**Hum or Sing...** (beside Step input): sing, hum, whistle or play a melody into the audio input
+(the mixer's, through PipeWire), or open a recording of one, and its notes are put in from the
+step cursor, in the system in force there. The note heard is shown as you sing, by the system's
+own names.
+
+- A note starts where the voice settles on a degree and ends where it stops or settles on another.
+  A move shorter than **A new note after** (60 ms) is an ornament of the note it is in; a
+  note hardly on its own degree is the slide into the next and starts it.
+- **On the system's degrees** puts each note on its degree (else at the pitch sung, to the cent).
+- **Keep the slides and shakes as pitch curves**: where the voice moved more than 20 cents off
+  the note (a mīṇḍ, a gamak, a kaṇ), the note keeps what was sung as its curve; steady singing is
+  left steady.
+- **Starts and lengths on the grid** quantises them; loudness is the velocity.
+- **Play the clip from the cursor while recording** sings along with what is there. The cursor
+  moves to the end of each take, so the next carries on; Ctrl+Z takes a take out.
+- The pitch is found by YIN (core/Pitch.h, the same tracker as the sound editor's pitch tools),
+  from 55 Hz to 1600 Hz: one voice or instrument at a time.
+
 ## Tuning changes within a clip
 
 Owner, 2026-10-26: "tuning changes within a piece". A clip can change system part way: a
@@ -180,6 +200,6 @@ MIDIRestyle (MIT) for restyling by degree, the ghosts, A/B and pitch bend shared
 XenRoll (GPL-3.0) for cent-accurate notes, moving a note by the cent, and MPE; Blue's PianoRoll for
 rows that follow a Scala scale; Intonara for the pitch axis; Cubase for the tools, the info line,
 the lanes, quantise and step input. Ideas only: no code from any of them is used. Next, as agreed
-with the owner: hum or sing to notes, and MTS-ESP.
+with the owner: MTS-ESP.
 
 The code: mixer/NoteEditor.h (the model, plain C++, with tests), core/Scala.h, ui/MidiEditor.h.
