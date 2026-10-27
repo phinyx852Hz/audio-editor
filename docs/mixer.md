@@ -2,6 +2,7 @@
 
 Status: step 1 built (2026-10-21); the rest is the proposal the owner reviewed (2026-10-19).
 See "Built so far" at the end.
+One track of the mix also shows under the editor's waveform: [editor-track.md](editor-track.md).
 
 ## One kind of track (owner, 2026-10-21)
 
