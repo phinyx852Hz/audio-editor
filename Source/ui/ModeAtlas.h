@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #pragma once
 
-// The world atlas of modes and tunings (owner, 2026-10-27), as a menu and as a search: by region,
+// The atlas of modes and tunings (owner, 2026-10-27), as a menu and as a search: by region,
 // then the traditions (nations, cultures, empires) and the people of that region in order of
 // date, then their systems. The Mode menu's "melodic" and "tuning" submenus are it, and so is the
 // Inspector's tuning browser, so a mode is found the same way everywhere (mixer/Tunings.h).

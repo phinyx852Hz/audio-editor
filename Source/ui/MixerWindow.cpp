@@ -4089,7 +4089,7 @@ public:
 
         // The tuning the PHI synth plays in: the launched clip's, else its scene's, else the track's.
         tuningGroup = new QGroupBox (MixerWindow::tr ("Tuning (PHI synth)"), this);
-        tuningGroup->setToolTip (MixerWindow::tr ("Every mode and tuning of the world atlas: ragas in just intonation, church modes, Greek genera, maqams, makams "
+        tuningGroup->setToolTip (MixerWindow::tr ("Every mode and tuning of the atlas: ragas in just intonation, church modes, Greek genera, maqams, makams "
                                                   "and dastgahs with their quarter steps, gamelan laras, temperaments, Partch's 43 and more, or 2 to 96 equal steps. "
                                                   "The PHI synth plays it; other instruments stay in 12-TET."));
         auto* tuningLayout = new QGridLayout (tuningGroup);
@@ -4123,10 +4123,10 @@ public:
             tuningLayout->addWidget (new QLabel (label, tuningGroup), at, 0);
             tuningLayout->addWidget (row.system, at, 1);
             tuningLayout->addWidget (row.root, at, 2);
-            // The world atlas (ModeAtlas.h): every mode and tuning by region, people and culture.
+            // The atlas (ModeAtlas.h): every mode and tuning by region, people and culture.
             row.browse = new QToolButton (tuningGroup);
             row.browse->setText (QStringLiteral ("…"));
-            row.browse->setToolTip (MixerWindow::tr ("Choose from the world atlas: by region, then by tradition, composer or theorist; or search"));
+            row.browse->setToolTip (MixerWindow::tr ("Choose from the atlas: by region, then by tradition, composer or theorist; or search"));
             noFocus (row.browse);
             tuningLayout->addWidget (row.browse, at, 3);
         };

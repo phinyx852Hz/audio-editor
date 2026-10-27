@@ -6,7 +6,7 @@
 // Sanskrit and ISO 15919 for the Karnatak melakartas, Indonesian spelling for gamelan,
 // Vietnamese with its tones, and the Ethiopian names as the Ethiopian Studies transliteration
 // gives them. A plain ASCII spelling goes beside each, for searching and for saving.
-#include "WorldModes.h"
+#include "Atlas.h"
 
 #include <algorithm>
 #include <cmath>
@@ -133,7 +133,7 @@ namespace mixer
         }
     }
 
-    namespace world
+    namespace atlas
     {
         void add (std::vector<TuningSystem>& all)
         {
@@ -334,14 +334,14 @@ namespace mixer
             // Arabic maqāmāt besides those in Tunings.cpp, and the ajnās they are built from.
             const auto maqam = [&] (std::string name, std::string plain, std::vector<double> c, std::vector<std::string> from, std::string note = {})
             { put (name, plain, "maqam", std::move (c), std::move (from), melodic, std::move (note)); };
-            maqam ("nikrīz", "nikriz", { 0, 200, 300, 600, 700, 900, 1000 }, { "arab world (maqām)" });
-            maqam ("būsalīk", "busalik", { 0, 200, 300, 500, 700, 800, 1100 }, { "arab world (maqām)" }, "nahāwand's steps on D or G");
-            maqam ("ʿirāq", "iraq", { 0, 150, 350, 500, 650, 850, 1050 }, { "arab world (maqām)", "iraq (maqām ʿirāqī)" }, "on B half-flat, rāst's notes");
+            maqam ("nikrīz", "nikriz", { 0, 200, 300, 600, 700, 900, 1000 }, { "arabic maqām" });
+            maqam ("būsalīk", "busalik", { 0, 200, 300, 500, 700, 800, 1100 }, { "arabic maqām" }, "nahāwand's steps on D or G");
+            maqam ("ʿirāq", "iraq", { 0, 150, 350, 500, 650, 850, 1050 }, { "arabic maqām", "iraq (maqām ʿirāqī)" }, "on B half-flat, rāst's notes");
             for (auto [name, c] : { std::pair { "jins rāst", std::vector<double> { 0, 200, 350, 500 } }, { "jins bayātī", { 0, 150, 300, 500 } },
                                     { "jins sīkāh", { 0, 150, 350 } }, { "jins ḥijāz", { 0, 100, 400, 500 } }, { "jins ṣabā", { 0, 150, 300, 400 } },
                                     { "jins nahāwand", { 0, 200, 300, 500, 700 } }, { "jins ʿajam", { 0, 200, 400 } },
                                     { "jins kurd", { 0, 100, 300, 500 } }, { "jins nikrīz", { 0, 200, 300, 600, 700 } } })
-                put (name, ascii (name), "jins", c, { "arab world (maqām)", "rodolphe d'erlanger" }, melodic, "a jins: the tetrachord (or tri- or pentachord) a maqām is built from");
+                put (name, ascii (name), "jins", c, { "arabic maqām", "rodolphe d'erlanger" }, melodic, "a jins: the tetrachord (or tri- or pentachord) a maqām is built from");
 
             // Turkish makams in the 53 commas of Arel-Ezgi-Uzdilek: a whole tone 9, the bakiye 4,
             // küçük mücennep 5, büyük mücennep 8, artık ikili 12.
@@ -502,7 +502,7 @@ namespace mixer
                 { "hypo-mode", { { "western church (gregorian chant)" }, melodic } },
                 { "jazz mode", { { "jazz (united states)" }, melodic } },
                 { "messiaen mode", { { "olivier messiaen" }, melodic } },
-                { "maqam", { { "arab world (maqām)" }, melodic } },
+                { "maqam", { { "arabic maqām" }, melodic } },
                 { "dastgah", { { "iran (dastgāh)" }, melodic } },
                 { "javanese gamelan", { { "central java" }, melodic | tuning } },
                 { "balinese gamelan", { { "bali" }, melodic | tuning } },
@@ -681,7 +681,7 @@ namespace mixer
                 { "gérard grisey and tristan murail", "europe", 1946, "1946–1998; b. 1947", true },
                 { "georg friedrich haas", "europe", 1953, "b. 1953", true },
                 // West Asia
-                { "arab world (maqām)", "west asia", 700, "", false },
+                { "arabic maqām", "west asia", 700, "", false },
                 { "iran (dastgāh)", "west asia", 800, "the radif, codified in the 19th c.", false },
                 { "ottoman empire (makam)", "west asia", 1300, "and modern turkey", false },
                 { "iraq (maqām ʿirāqī)", "west asia", 1500, "", false },

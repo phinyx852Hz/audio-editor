@@ -35,7 +35,7 @@ namespace mixer
         // be worked out from the cents: the kepatihan number of each gamelan tone. Else empty.
         std::vector<std::string> names;
 
-        // Where it is from, for the Mode menu's world atlas (owner, 2026-10-27; WorldModes.cpp):
+        // Where it is from, for the Mode menu's atlas (owner, 2026-10-27; Atlas.cpp):
         // the people, cultures, nations or empires it belongs to (origins()' names), whether it
         // is a mode or scale (melodic), a tuning, or both, and what it repeats at. Set after the
         // entry is made, never in its braces, so the list can take new fields.

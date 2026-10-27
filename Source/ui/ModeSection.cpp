@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The Mode menu (owner, 2026-10-26: "I love mode being its own thing"): every mode and raga
-// PHI has, in the world atlas (owner, 2026-10-27: melodic and tuning, each by region, then by
+// PHI has, in the atlas (owner, 2026-10-27: melodic and tuning, each by region, then by
 // people or culture; ModeAtlas.h), chosen once with its final and its range (authentic or
 // hypo), and then used everywhere a mode is asked for: the counterpoint and fugue dialogs
 // open on it, the selected mixer track can be tuned to it, and the MIDI clip shown in the
@@ -236,7 +236,7 @@ void MainWindow::fillModeMenu (QMenu* menu)
     };
     auto pickTuning = [m, choose] (int i) { auto next = m; next.tuning = i; choose (next); };
 
-    // The world atlas (owner, 2026-10-27): modes and scales under "melodic", tunings under
+    // The atlas (owner, 2026-10-27): modes and scales under "melodic", tunings under
     // "tuning", each by region, then by tradition (nation, culture, empire) and by person.
     auto* melodicMenu = menu->addMenu (tr ("&melodic"));
     melodicMenu->setToolTip (tr ("Modes, scales and rāgas, by region, then by tradition and composer"));

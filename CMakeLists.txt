@@ -52,7 +52,7 @@ target_sources(${APP_ID} PRIVATE
     Source/sampler/SlicerEngine.cpp
     Source/mixer/MidiFile.cpp
     Source/mixer/Tunings.cpp
-    Source/mixer/WorldModes.cpp
+    Source/mixer/Atlas.cpp
     Source/mixer/NoteEditor.cpp
     Source/mixer/RagaInstrument.cpp
     Source/mixer/Counterpoint.cpp
@@ -418,7 +418,7 @@ if(PHI_BUILD_TESTS)
         Source/sampler/SlicerEngine.cpp
         Source/mixer/MidiFile.cpp
         Source/mixer/Tunings.cpp
-        Source/mixer/WorldModes.cpp
+        Source/mixer/Atlas.cpp
         Source/mixer/NoteEditor.cpp
     Source/mixer/NoteEditor.cpp
         Source/mixer/RagaInstrument.cpp

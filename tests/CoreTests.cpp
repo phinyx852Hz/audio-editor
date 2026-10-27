@@ -4505,9 +4505,9 @@ namespace
         }
     }
 
-    // The world atlas (owner, 2026-10-27): the research's systems, each placed under its region
+    // The atlas (owner, 2026-10-27): the research's systems, each placed under its region
     // and its people or culture, non-octave scales, and the built-in Synth playing a tuning.
-    void testWorldModes()
+    void testModeAtlas()
     {
         const auto& all = mixer::tuningSystems();
         auto get = [&] (const std::string& plain) -> const mixer::TuningSystem& { return all[(size_t) std::max (0, mixer::findTuning (plain))]; };
@@ -4525,7 +4525,7 @@ namespace
                 std::printf ("  missing: %s\n", plain);
             known = known && found;
         }
-        check (known, "world modes: the research's systems, by their plain names");
+        check (known, "mode atlas: the research's systems, by their plain names");
 
         // Every system shown is placed: it names a known origin (the equal steps have their own
         // submenu), and every origin is in a region and has something in it.
@@ -4557,45 +4557,45 @@ namespace
             for (auto c : o.name)
                 regionsKnown = regionsKnown && ! (c >= 'A' && c <= 'Z');
         }
-        check (placed && originsKnown && regionsKnown && nonEmpty, "world modes: every system placed under a known people or culture, in a region");
+        check (placed && originsKnown && regionsKnown && nonEmpty, "mode atlas: every system placed under a known people or culture, in a region");
         check (! mixer::systemsFrom ("gioseffo zarlino", mixer::melodic).empty() && ! mixer::systemsFrom ("gioseffo zarlino", mixer::tuning).empty()
                && mixer::systemsFrom ("harry partch", mixer::melodic).empty() && mixer::systemsFrom ("venkaṭamakhin", mixer::melodic).size() == 72
-               && ! mixer::systemsFrom ("percy grainger", mixer::melodic).empty(), "world modes: melodic and tuning kinds, by person");
+               && ! mixer::systemsFrom ("percy grainger", mixer::melodic).empty(), "mode atlas: melodic and tuning kinds, by person");
         const auto* first = &mixer::origins().front();
-        check (first->region == "europe" && ! first->person, "world modes: origins by region, traditions before people");
+        check (first->region == "europe" && ! first->person, "mode atlas: origins by region, traditions before people");
 
         // The melakartas: 29 is the major scale, 65 the Lydian, 15 māyāmāḷavagauḷa (bhairav's notes).
         check (mixer::modeKeys (get ("melakarta 29 (dhirasankarabharanam)")) == 0b101010110101 && mixer::modeKeys (get ("melakarta 65 (mecakalyani)")) == 0b101011010101
                && mixer::modeKeys (get ("melakarta 15 (mayamalavagaula)")) == 0b100110110011 && get ("melakarta 1 (kanakangi)").name == "kanakāṅgi (1)",
-               "world modes: the 72 melakartas");
+               "mode atlas: the 72 melakartas");
         // Greek: the Dorian species is E to E (a limma first); Archytas's enharmonic starts 28/27;
         // Aristoxenus's enharmonic diesis is a quarter tone (50 cents).
         check (near (get ("greek dorian").cents[1], phi::Tuning::ratioToCents (256.0 / 243), 1.0e-9) && near (get ("enharmonic (archytas)").cents[1], phi::Tuning::ratioToCents (28.0 / 27), 1.0e-9)
                && near (get ("enharmonic (archytas)").cents[4], 701.955, 1.0e-3) && near (get ("enharmonic (aristoxenus)").cents[1], 50.0, 1.0e-9)
-               && near (get ("enharmonic (aristoxenus)").cents[4], 700.0, 1.0e-9), "world modes: Greek species and genera");
+               && near (get ("enharmonic (aristoxenus)").cents[4], 700.0, 1.0e-9), "mode atlas: Greek species and genera");
         check (get ("partch 43").cents.size() == 43 && get ("22 shruti").cents.size() == 22 && get ("safi al-din 17").cents.size() == 17
                && get ("arel-ezgi-uzdilek 24").cents.size() == 24 && near (get ("safi al-din 17").cents[1], phi::Tuning::ratioToCents (256.0 / 243), 1.0e-6),
-               "world modes: Partch's 43, the 22 śrutis, Ṣafī al-Dīn's 17, the 24 of Arel-Ezgi-Uzdilek");
+               "mode atlas: Partch's 43, the 22 śrutis, Ṣafī al-Dīn's 17, the 24 of Arel-Ezgi-Uzdilek");
         // Twelve-note tunings play a ratio a key, in their order: the Well-Tuned Piano's G (key 4
         // above E flat) is 21/16, though its G sharp (1323/1024) is lower.
         const auto wtp = mixer::keyCents (get ("well-tuned piano"));
         check (near (wtp[4], phi::Tuning::ratioToCents (21.0 / 16), 1.0e-9) && near (wtp[5], phi::Tuning::ratioToCents (1323.0 / 1024), 1.0e-9)
-               && near (mixer::keyCents (get ("werckmeister iii"))[7], 696.090, 1.0e-9), "world modes: a twelve-note tuning a ratio a key");
+               && near (mixer::keyCents (get ("werckmeister iii"))[7], 696.090, 1.0e-9), "mode atlas: a twelve-note tuning a ratio a key");
         // Hajibeyov's rast repeats at the fourth: in the octave, C D E F G A B♭, on the keys.
         const auto& rast = get ("rast (mugam)");
         const auto oct = mixer::octaveCents (rast);
         check (near (rast.period, 500.0, 1.0e-9) && oct == std::vector<double> ({ 0, 200, 400, 500, 700, 900, 1000 })
-               && near (mixer::makeTuning (rast, 0).hz (70), 440.0 * std::pow (2.0, 1.0 / 12.0), 1.0e-6), "world modes: a mode repeating at the fourth, on the keys");
+               && near (mixer::makeTuning (rast, 0).hz (70), 440.0 * std::pow (2.0, 1.0 / 12.0), 1.0e-6), "mode atlas: a mode repeating at the fourth, on the keys");
         // Bohlen-Pierce: a degree a key, thirteen keys to the tritave; Carlos alpha a step a key.
         const auto bp = mixer::makeTuning (get ("bohlen-pierce equal"), 0);
         const auto alpha = mixer::makeTuning (get ("carlos alpha"), 0);
         check (near (bp.hz (73) / bp.hz (60), 3.0, 1.0e-9) && near (1200.0 * std::log2 (alpha.hz (61) / alpha.hz (60)), 77.965, 1.0e-6),
-               "world modes: non-octave tunings, a degree a key");
+               "mode atlas: non-octave tunings, a degree a key");
         check (near (1200.0 * std::log2 (mixer::makeTuning (get ("96 equal steps"), 0).hz (61) / mixer::makeTuning (get ("96 equal steps"), 0).hz (60)), 12.5, 1.0e-6),
-               "world modes: Carrillo's 96 equal steps");
+               "mode atlas: Carrillo's 96 equal steps");
         // Turkish makams in commas: uşşak's second is 8 commas.
         check (near (get ("ussak").cents[1], 8 * 1200.0 / 53, 1.0e-9) && get ("ussak").name == "uşşak" && get ("echos protos").name == "ēchos prōtos (first)",
-               "world modes: makams in 53 commas, names transliterated");
+               "mode atlas: makams in 53 commas, names transliterated");
 
         // The built-in Synth plays the tuning, as PHI Synth will: key 61 in 24 equal steps from
         // middle C is a quarter tone above it.
@@ -4615,7 +4615,7 @@ namespace
         for (size_t i = 4800; i + 1 < l.size(); ++i)
             crossings += (l[i] <= 0.0f && l[i + 1] > 0.0f) ? 1 : 0;
         const auto hz = crossings / (43200.0 / 48000.0);
-        check (std::abs (hz - 261.6255653 * std::pow (2.0, 1.0 / 24.0)) < 2.0, "world modes: the built-in Synth plays the tuning");
+        check (std::abs (hz - 261.6255653 * std::pow (2.0, 1.0 / 24.0)) < 2.0, "mode atlas: the built-in Synth plays the tuning");
         synth.setTuning (nullptr);
     }
 
@@ -7455,7 +7455,7 @@ int main()
     testRagaSheets();
     testSitar();
     testTunings();
-    testWorldModes();
+    testModeAtlas();
     testScala();
     testNoteEditor();
     testCounterpoint();

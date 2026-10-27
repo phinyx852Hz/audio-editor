@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "Tunings.h"
 
-#include "WorldModes.h"
+#include "Atlas.h"
 #include "../core/PhiRaga.h"
 
 #include <algorithm>
@@ -346,7 +346,7 @@ namespace mixer
             tori ("yukchabaegit'ori", "yukjabaegitori", { 0, 5, 7, 8 });   // Jeolla: mi la (si) do
             tori ("susimgat'ori", "susimgatori", { 0, 2, 5, 7, 10 });      // the northwest: re mi sol la do
 
-            world::add (all);
+            atlas::add (all);
 
             // Equal steps: 2 to 24 (Blackwood's 13 to 24), and the composers' larger ones (19
             // Yasser's, 31 Huygens's and Fokker's, 36 Busoni's sixth tones, 48 and 96 Carrillo's,
@@ -364,7 +364,7 @@ namespace mixer
                     c.push_back (1200.0 * i / n);
                 all.push_back ({ name, name, "equal", std::move (c), n });
             }
-            world::place (all);
+            atlas::place (all);
             return all;
         }
     }

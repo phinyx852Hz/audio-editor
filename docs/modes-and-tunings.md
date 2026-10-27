@@ -1,8 +1,8 @@
-# World modes and tunings
+# Modes and tunings by region
 
-The owner's research (Mode Research, 2026-10-26) lists the modal and tuning systems of the world.
+The owner's research (Mode Research, 2026-10-26) lists modal and tuning systems from every region, Europe among them.
 Each one is now in PHI's single list of systems, `mixer::tuningSystems()` (`Source/mixer/Tunings.cpp`
-and `Source/mixer/WorldModes.cpp`). The Mode menu, the Inspector's tuning, counterpoint, the fugue,
+and `Source/mixer/Atlas.cpp`). The Mode menu, the Inspector's tuning, counterpoint, the fugue,
 stochasticize, cubify, the MIDI editor and the PHI synth all read that one list. A system added
 there is everywhere at once.
 
@@ -40,7 +40,7 @@ Within a region, traditions come first and then people, each in order of date.
 - **PHI Synth**, the stock synth being built as its own project, gets each tuning as a
   `phi::Tuning` through `Instrument::setTuning`, or as MIDI Tuning Standard messages. So it plays
   every system here with nothing more to add. To browse the atlas itself, it can compile
-  `Tunings.cpp` and `WorldModes.cpp`. They are plain C++ and need only `PhiTuning` and `PhiRaga`
+  `Tunings.cpp` and `Atlas.cpp`. They are plain C++ and need only `PhiTuning` and `PhiRaga`
   from phi_dsp.
 - **The built-in Synth** now plays the tuning in force too, key by key, until PHI Synth takes its
   place. Before this, only PHI rāga followed the tuning.
