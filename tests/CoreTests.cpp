@@ -5916,6 +5916,71 @@ namespace
                && ! compose ([&] { auto bad = s; bad.low = 60; bad.high = 66; return bad; }()).error.empty(), "serial: what cannot be written");
         check (compose (s).commentary == chords.commentary && ! chords.commentary.empty(), "serial: the same seed, the same piece");
 
+        // Babbitt. Time points: each note on its pitch class's twelfth of the modulus (12 sixteenths here), the next time it comes round.
+        Settings tp;
+        tp.row = op25;
+        tp.rhythm = Rhythm::timePoint;
+        tp.unit = 1;
+        tp.bars = 3;
+        const auto points = compose (tp);
+        bool onPoints = ! points.voices[0].notes.empty() && points.error.empty();
+        int64_t lastStart = -1;
+        for (const auto& n : points.voices[0].notes)
+        {
+            onPoints = onPoints && (n.start / 120) % 12 == (n.pitch - op25[0] + 120) % 12 && n.start > lastStart;
+            lastStart = n.start;
+        }
+        check (onPoints && points.voices[0].notes[0].start == 0 && points.length >= 3 * 1920 && points.length % 1920 == 0,
+               "serial: babbitt's time points");
+        // Derived rows: the cell's forms fill out the aggregate.
+        Row derivedRow {};
+        bool cells = derive ({ 0, 1, 3 }, 5, derivedRow, error) && isRow (std::vector<int> (derivedRow.begin(), derivedRow.end()))
+                     && derivedRow[0] == 0 && derivedRow[1] == 1 && derivedRow[2] == 3;
+        for (int k = 0; cells && k < 12; k += 3)
+        {
+            // Every trichord of it is the cell's shape: {0, 1, 3} or its inversion {0, 2, 3}, transposed.
+            std::array<int, 3> t { derivedRow[(size_t) k], derivedRow[(size_t) k + 1], derivedRow[(size_t) k + 2] };
+            std::sort (t.begin(), t.end());
+            bool shaped = false;
+            for (int r = 0; r < 3 && ! shaped; ++r)
+            {
+                const auto a = (t[(size_t) (r + 1) % 3] - t[(size_t) r] + 12) % 12, b = (t[(size_t) (r + 2) % 3] - t[(size_t) r] + 12) % 12;
+                shaped = (a == 1 && b == 3) || (a == 2 && b == 3);
+            }
+            cells = shaped;
+        }
+        Row tetra {};
+        check (cells && derive ({ 0, 1, 2, 3 }, 1, tetra, error) && ! derive ({ 0, 1 }, 1, tetra, error) && ! derive ({ 0, 4, 4 }, 1, tetra, error),
+               "serial: babbitt's derived rows");
+        // Source sets: a row on one is combinatorial in all four forms.
+        bool sets = true;
+        for (int set = 0; set < 6; ++set)
+        {
+            const auto r = fromSourceSet (set, 9);
+            sets = sets && sourceSetOf (r) == set && describe (r).find ("all-combinatorial") != std::string::npos;
+        }
+        check (sets && sourceSetOf (op25) == -1 && sourceSets()[5].pcs[5] == 10, "serial: babbitt's all-combinatorial source sets");
+        // Arrays: every block all twelve notes across the voices, each voice a segment of it.
+        Settings ar;
+        ar.row = op25;
+        ar.voices = 4;
+        ar.relation = Voices::array;
+        ar.bars = 4;
+        const auto arr = compose (ar);
+        bool blocks = arr.voices.size() == 4 && arr.error.empty() && arr.voices[0].name == "lyne 1";
+        for (size_t b = 0; blocks && b < arr.voices[0].statements.size(); ++b)
+        {
+            unsigned bits = 0;
+            for (const auto& v : arr.voices)
+                for (size_t k = b * 3; k < b * 3 + 3; ++k)
+                    bits |= 1u << (v.notes[k].pitch % 12);
+            blocks = bits == 0xFFFu && arr.voices[0].notes[b * 3].start == arr.voices[3].notes[b * 3].start;
+        }
+        // Block 0 gives voice 1 the first trichord, block 1 the second.
+        const auto second = transform (op25, arr.voices[0].statements[1]);
+        check (blocks && arr.voices[0].statements.size() >= 2 && arr.voices[0].notes[0].pitch % 12 == transform (op25, arr.voices[0].statements[0])[0]
+               && arr.voices[0].notes[3].pitch % 12 == second[3], "serial: babbitt's arrays");
+
         // A fugue on a twelve-tone subject answers it at the fifth exactly, even when a tonal answer is asked for.
         counterpoint::Line subject;
         for (int k = 0; k < 12; ++k)

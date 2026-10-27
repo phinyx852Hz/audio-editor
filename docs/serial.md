@@ -15,12 +15,23 @@ cubify. It needs no clip: the row is its own material.
   may stand for 10 and 11).
 - **fill from...**: the MIDI clip shown in the Device Chain (its first twelve different pitch
   classes, the ones it never plays added after them), a row by chance, an all-interval row by
-  chance (each of the eleven intervals once, as in Berg's Lyric Suite), or the row of a work by
-  Schoenberg, Berg or Webern.
+  chance (each of the eleven intervals once, as in Berg's Lyric Suite), a row on one of Milton
+  Babbitt's six all-combinatorial **source sets** (below), or the row of a work by Schoenberg,
+  Berg or Webern.
+- **derive**: Babbitt's derived rows. Type a cell of three or four notes (`c d♭ e♭`) and **derive
+  a row**: the cell, then transpositions, inversions and retrogrades of it that fill out the twelve
+  notes, so every three (or four) notes of the row are the same shape. A cell none of whose forms
+  fill the aggregate says so.
 - Under it: the row's intervals, whether it is an all-interval row, and the forms it is
   **hexachordally combinatorial** with: the forms whose first six notes are the six the row's
   first six leave out. Schoenberg built his works on these pairs from op. 25 on (op. 33a's row with
-  i5, for one): played together they give all twelve notes in each half.
+  i5, for one): played together they give all twelve notes in each half. When the row's first
+  hexachord is one of Babbitt's source sets it is named too.
+- Babbitt's **source sets** ("Set Structure as a Compositional Determinant", 1961) are the six
+  hexachords whose rows are combinatorial in all four forms: a (c c♯ d e♭ e f, chromatic), b
+  (c d e♭ e f g), c (c d e f g a, diatonic), d (c c♯ d f♯ g a♭), e (c c♯ e f a♭ a, hexatonic) and
+  f (the whole-tone scale). *Fill from* draws a row on one: the hexachord transposed and in some
+  order, then the other six notes.
 
 ## The matrix
 
@@ -49,12 +60,19 @@ Clicking a label adds that form to the **plan**.
     the first, so the two make all twelve notes in each hexachord at once; a third and fourth voice
     are a second pair on a walk of their own. A row with no partner but its own retrograde is
     paired with that.
+  - **array** (Babbitt): block by block, each form of the plan is shared out among the voices
+    (lynes), a segment of 12 / voices notes each, the segments passed round so each lyne takes the
+    next one in the following block. The lynes start each block together, so every block is an
+    aggregate, all twelve notes across the voices. Texture is a line in an array.
 - **texture**: a line, or the row cut into dyads, trichords, tetrachords or hexachords, each
   sounding as a chord.
 - **rhythm**: **even** (every note one unit), **serial** (each pitch class as many units as its
   place in p0: the row's first note one unit, its last twelve, in every form; total serialism after
-  Messiaen and Boulez) or **free** (lengths of one to six units, with the chance of a rest after a
-  note).
+  Messiaen and Boulez), **free** (lengths of one to six units, with the chance of a rest after a
+  note) or **time points** (Babbitt, "Twelve-Tone Rhythmic Structure and the Electronic Medium",
+  1962): twelve units make the modulus (twelve sixteenths, a bar of 3/4, by default), and each note
+  starts on the point its pitch class names, counted from the row's first note, the next time that
+  point comes round. Each form begins and ends on the modulus.
 - **register**: **close** (each note near the last), **wide** (any octave in the range:
   pointillist) or **fixed** (each pitch class in one octave for the whole piece: a frozen register,
   as in Webern). The range is shared out among the voices, the first highest, an octave each at
@@ -87,7 +105,11 @@ PHI's generative chain is the Selector's set, the MIDI generators, cubify, then 
 ## Sources
 
 - Arnold Schoenberg, "Composition with Twelve Tones" (1941), in *Style and Idea* (1950).
-- Milton Babbitt, "Some Aspects of Twelve-Tone Composition" (1955), on combinatoriality.
+- Milton Babbitt, "Some Aspects of Twelve-Tone Composition" (1955), on combinatoriality; "Set
+  Structure as a Compositional Determinant" (1961), on derivation and the source sets;
+  "Twelve-Tone Rhythmic Structure and the Electronic Medium" (1962), on time points.
+- Andrew Mead, *An Introduction to the Music of Milton Babbitt* (1994), on arrays.
+- Babbitt's methods are our own code from these sources: no open-source program for them was found.
 - The historical rows are the ones music21's serial module lists (`music21/serial.py`,
   `historicalDict`), used under its BSD 3-Clause licence, whose notice follows:
 

@@ -4,6 +4,7 @@
 #include "Stochastic.h"
 
 #include <algorithm>
+#include <bit>
 #include <cctype>
 #include <numeric>
 
@@ -127,7 +128,7 @@ namespace serial
         return true;
     }
 
-    bool parse (const std::string& text, Row& row, std::string& error)
+    bool parseNotes (const std::string& text, std::vector<int>& pcs, std::string& error)
     {
         const auto words = tokens (text);
         // Numbers if any word is one: then t and e are 10 and 11, not the note e.
@@ -135,7 +136,7 @@ namespace serial
         {
             return ! w.empty() && std::all_of (w.begin(), w.end(), [] (char c) { return std::isdigit ((unsigned char) c); });
         });
-        std::vector<int> pcs;
+        pcs.clear();
         for (const auto& w : words)
         {
             int pc = -1;
@@ -160,11 +161,19 @@ namespace serial
             }
             if (std::find (pcs.begin(), pcs.end(), pc) != pcs.end())
             {
-                error = std::string (pitchName (pc)) + " is in the row twice";
+                error = std::string (pitchName (pc)) + " is there twice";
                 return false;
             }
             pcs.push_back (pc);
         }
+        return true;
+    }
+
+    bool parse (const std::string& text, Row& row, std::string& error)
+    {
+        std::vector<int> pcs;
+        if (! parseNotes (text, pcs, error))
+            return false;
         if (pcs.size() != 12)
         {
             error = pcs.size() < 12 ? std::to_string (12 - pcs.size()) + " note(s) missing: a row has all twelve"
@@ -290,6 +299,8 @@ namespace serial
             out += " " + std::to_string (i);
         if (allInterval (row))
             out += "; an all-interval row";
+        if (const auto set = sourceSetOf (row); set >= 0)
+            out += std::string ("; on babbitt's ") + sourceSets()[(size_t) set].name;
         std::string kinds[4];
         for (const auto& s : combinatorial (row))
             if (! (s == Statement { Form::r, 0 }))   // r0 is the trivial one: every row has it
@@ -365,6 +376,107 @@ namespace serial
         Row row;
         std::copy (pcs.begin(), pcs.end(), row.begin());
         return row;
+    }
+
+    bool derive (const std::vector<int>& cell, uint32_t seed, Row& row, std::string& error)
+    {
+        const auto n = (int) cell.size();
+        unsigned used = 0;
+        for (auto pc : cell)
+            if (pc >= 0 && pc < 12)
+                used |= 1u << pc;
+        if ((n != 3 && n != 4) || std::popcount (used) != n)
+            return error = "a cell is three or four different notes", false;
+        // The cell's forms: transposed or inverted, forwards or backwards.
+        std::vector<std::vector<int>> forms;
+        for (int inverted = 0; inverted < 2; ++inverted)
+            for (int backwards = 0; backwards < 2; ++backwards)
+                for (int t = 0; t < 12; ++t)
+                {
+                    std::vector<int> f;
+                    for (auto pc : cell)
+                        f.push_back (mod12 ((inverted ? 2 * cell[0] - pc : pc) + t));
+                    if (backwards)
+                        std::reverse (f.begin(), f.end());
+                    forms.push_back (std::move (f));
+                }
+        stochastic::Random rng (seed * 40503u + 11u);
+        for (size_t k = forms.size() - 1; k > 0; --k)
+            std::swap (forms[k], forms[(size_t) below (rng, (int) k + 1)]);
+        std::vector<int> out (cell.begin(), cell.end());
+        auto search = [&] (auto&& self, unsigned have) -> bool
+        {
+            if (have == 0xFFFu)
+                return true;
+            for (const auto& f : forms)
+            {
+                unsigned bits = 0;
+                for (auto pc : f)
+                    bits |= 1u << pc;
+                if (bits & have)
+                    continue;
+                out.insert (out.end(), f.begin(), f.end());
+                if (self (self, have | bits))
+                    return true;
+                out.resize (out.size() - f.size());
+            }
+            return false;
+        };
+        if (! search (search, used))
+            return error = "no transpositions or inversions of this cell fill out the twelve notes", false;
+        std::copy (out.begin(), out.end(), row.begin());
+        return true;
+    }
+
+    const std::array<SourceSet, 6>& sourceSets()
+    {
+        // Babbitt's labels (Set Structure as a Compositional Determinant, 1961): the first-order
+        // a, b and c, the second-order d, the third-order e and the fourth-order f.
+        static const std::array<SourceSet, 6> all { {
+            { "source set a (chromatic)", { 0, 1, 2, 3, 4, 5 } },
+            { "source set b", { 0, 2, 3, 4, 5, 7 } },
+            { "source set c (diatonic)", { 0, 2, 4, 5, 7, 9 } },
+            { "source set d", { 0, 1, 2, 6, 7, 8 } },
+            { "source set e (hexatonic)", { 0, 1, 4, 5, 8, 9 } },
+            { "source set f (whole tone)", { 0, 2, 4, 6, 8, 10 } },
+        } };
+        return all;
+    }
+
+    Row fromSourceSet (int set, uint32_t seed)
+    {
+        stochastic::Random rng (seed * 69069u + 7u);
+        const auto& h = sourceSets()[(size_t) std::clamp (set, 0, 5)].pcs;
+        const auto t = below (rng, 12);
+        std::vector<int> first, second;
+        for (auto pc : h)
+            first.push_back (mod12 (pc + t));
+        for (int pc = 0; pc < 12; ++pc)
+            if (std::find (first.begin(), first.end(), pc) == first.end())
+                second.push_back (pc);
+        for (auto* half : { &first, &second })
+            for (size_t k = half->size() - 1; k > 0; --k)
+                std::swap ((*half)[k], (*half)[(size_t) below (rng, (int) k + 1)]);
+        Row row;
+        std::copy (first.begin(), first.end(), row.begin());
+        std::copy (second.begin(), second.end(), row.begin() + 6);
+        return row;
+    }
+
+    int sourceSetOf (const Row& row)
+    {
+        const auto first = hexachord (row, 0);
+        // Each source set is its own inversion, so its transpositions are all its forms.
+        for (int set = 0; set < 6; ++set)
+            for (int t = 0; t < 12; ++t)
+            {
+                unsigned bits = 0;
+                for (auto pc : sourceSets()[(size_t) set].pcs)
+                    bits |= 1u << mod12 (pc + t);
+                if (bits == first)
+                    return set;
+            }
+        return -1;
     }
 
     const std::vector<Historical>& historical()
@@ -449,24 +561,30 @@ namespace serial
         // the rest after it and its velocity. Canons and combinatorial pairs share their leader's.
         struct Timing
         {
+            int64_t lead = 0;   // time points: the wait from the modulus's start to the first note
             std::vector<int64_t> lengths, rests;
             std::vector<int> velocities;
             int64_t total() const
             {
-                return std::accumulate (lengths.begin(), lengths.end(), (int64_t) 0) + std::accumulate (rests.begin(), rests.end(), (int64_t) 0);
+                return lead + std::accumulate (lengths.begin(), lengths.end(), (int64_t) 0) + std::accumulate (rests.begin(), rests.end(), (int64_t) 0);
             }
         };
 
-        Timing timing (const Settings& s, const Row& notes, stochastic::Random& rng)
+        // The timing of notes (or chords) one after another, `heads` the pitch class of each (a
+        // chord's first). With time points it starts and ends on the modulus.
+        Timing timing (const Settings& s, const std::vector<int>& heads, stochastic::Random& rng)
         {
             const auto unit = std::max<int64_t> (1, (int64_t) s.unit * s.ticksPerQuarter / 4);
             const auto i0 = transform (s.row, { Form::i, 0 });
             static const int terraces[8] { 28, 40, 52, 64, 76, 88, 102, 118 };   // ppp .. fff
             const auto terrace = terraces[below (rng, 8)];
+            auto point = [&s] (int pc) { return mod12 (pc - s.row[0]); };   // the row's first note on the downbeat
             Timing t;
-            for (int k = 0; k < 12; k += s.chord)
+            if (s.rhythm == Rhythm::timePoint && ! heads.empty())
+                t.lead = unit * point (heads.front());
+            for (size_t k = 0; k < heads.size(); ++k)
             {
-                const auto pc = notes[(size_t) k];
+                const auto pc = heads[k];
                 int64_t length = unit;
                 int64_t rest = 0;
                 if (s.rhythm == Rhythm::serial)
@@ -478,6 +596,14 @@ namespace serial
                     if (rng.uniform() < s.rests)
                         rest = unit * (1 + below (rng, 2));
                 }
+                else if (s.rhythm == Rhythm::timePoint)
+                {
+                    // Until the next note's time point comes round (a whole modulus if it is this one's),
+                    // the last until the modulus ends.
+                    const auto next = k + 1 < heads.size() ? point (heads[k + 1]) : 0;
+                    const auto d = mod12 (next - point (pc));
+                    length = unit * (d == 0 ? 12 : d);
+                }
                 int velocity = s.velocity;
                 if (s.dynamics == Dynamics::terraced)
                     velocity = terrace;
@@ -488,6 +614,14 @@ namespace serial
                 t.velocities.push_back (std::clamp (velocity, 1, 127));
             }
             return t;
+        }
+
+        std::vector<int> headsOf (const Row& notes, int chord)
+        {
+            std::vector<int> heads;
+            for (int k = 0; k < 12; k += chord)
+                heads.push_back (notes[(size_t) k]);
+            return heads;
         }
 
         // Where a voice's pitch classes go: its range, what it last played, its frozen register.
@@ -551,6 +685,71 @@ namespace serial
         }
     }
 
+    namespace
+    {
+        // The voices' ranges: the whole range cut in overlapping parts, an octave each at least, the first highest.
+        std::pair<int, int> rangeOf (const Settings& s, int v, int V)
+        {
+            const auto span = s.high - s.low;
+            const auto width = V == 1 ? span : std::max (11, span / V + 5);
+            const auto lo = V == 1 ? s.low : s.low + (int) ((int64_t) (V - 1 - v) * (span - width) / (V - 1));
+            return { lo, lo + width };
+        }
+
+        // Babbitt's arrays: block by block, a form of the plan cut into a segment for each voice,
+        // the segments passed round so each voice takes the next one in the following block. The
+        // voices start each block together; it lasts as long as the longest segment.
+        Result array (const Settings& s, const std::vector<Statement>& plan, int64_t target, stochastic::Random& rng)
+        {
+            Result result;
+            const auto V = std::clamp (s.voices, 2, 4);
+            const auto seg = 12 / V;
+            const auto bar = (int64_t) s.ticksPerQuarter * 4;
+            std::vector<Placer> placers;
+            for (int v = 0; v < V; ++v)
+            {
+                const auto [lo, hi] = rangeOf (s, v, V);
+                placers.emplace_back (s.reg, lo, hi, rng);
+                result.voices.push_back ({ "lyne " + std::to_string (v + 1), {}, {} });
+            }
+            int64_t at = 0;
+            for (size_t b = 0; b < plan.size(); ++b)
+            {
+                const auto notes = transform (s.row, plan[b]);
+                std::vector<Timing> timings;
+                int64_t block = 0;
+                for (int v = 0; v < V; ++v)
+                {
+                    const auto g = (v + (int) b) % V;
+                    timings.push_back (timing (s, std::vector<int> (notes.begin() + g * seg, notes.begin() + (g + 1) * seg), rng));
+                    block = std::max (block, timings.back().total());
+                }
+                if (b > 0 && at + block > target)
+                    break;
+                for (int v = 0; v < V; ++v)
+                {
+                    const auto g = (v + (int) b) % V;
+                    const auto& t = timings[(size_t) v];
+                    auto& voice = result.voices[(size_t) v];
+                    voice.statements.push_back (plan[b]);
+                    auto when = at + t.lead;
+                    for (int n = 0; n < seg; ++n)
+                    {
+                        const auto length = t.lengths[(size_t) n];
+                        const auto key = placers[(size_t) v].place (notes[(size_t) (g * seg + n)], rng, {});
+                        voice.notes.push_back ({ when, when + std::max<int64_t> (1, length - length / 8), key, t.velocities[(size_t) n] });
+                        when += length + t.rests[(size_t) n];
+                    }
+                }
+                at += block;
+            }
+            result.length = std::max (target, (at + bar - 1) / bar * bar);
+            result.commentary = "an array in " + std::to_string (V) + " lynes, a block for each of " + text (result.voices.front().statements)
+                                + ", every block all twelve notes";
+            return result;
+        }
+    }
+
     Result compose (const Settings& s)
     {
         Result result;
@@ -588,7 +787,7 @@ namespace serial
             int64_t at = 0;
             for (const auto& st : plan)
             {
-                auto t = timing (s, transform (s.row, st), rng);
+                auto t = timing (s, headsOf (transform (s.row, st), s.chord), rng);
                 if (! used.empty() && at + t.total() > target)
                     break;
                 at += t.total();
@@ -596,6 +795,9 @@ namespace serial
                 timings.push_back (std::move (t));
             }
         };
+
+        if (s.relation == Voices::array && V > 1)
+            return array (s, planFor (s.seed), target, rng);
 
         std::vector<std::vector<Statement>> statements ((size_t) V);
         std::vector<std::vector<Timing>> timings ((size_t) V);
@@ -618,6 +820,8 @@ namespace serial
                     timings[(size_t) v] = timings[0];
                     delays[(size_t) v] = (int64_t) v * std::max (0, s.delay) * tpq / 4;
                     break;
+                case Voices::array:   // one voice: a line
+                    break;
                 case Voices::combinatorial:
                     if (v == 2)   // a second pair, on a walk of its own
                         lead (walk (s.row, most, s.seed + 104729u), mine, timings[2]);
@@ -631,13 +835,10 @@ namespace serial
             }
         }
 
-        // The voices' ranges: the whole range cut in overlapping parts, an octave each at least, the first highest.
-        const auto span = s.high - s.low;
-        const auto width = V == 1 ? span : std::max (11, span / V + 5);
         for (int v = 0; v < V; ++v)
         {
-            const auto lo = V == 1 ? s.low : s.low + (int) ((int64_t) (V - 1 - v) * (span - width) / (V - 1));
-            Placer placer (s.reg, lo, lo + width, rng);
+            const auto [lo, hi] = rangeOf (s, v, V);
+            Placer placer (s.reg, lo, hi, rng);
             Voice voice;
             static const char* const canonNames[4] { "dux", "comes", "comes 2", "comes 3" };
             voice.name = V == 1 ? "voice" : s.relation == Voices::canon || s.relation == Voices::mirror ? canonNames[v] : "voice " + std::to_string (v + 1);
@@ -647,6 +848,7 @@ namespace serial
             {
                 const auto notes = transform (s.row, voice.statements[k]);
                 const auto& t = timings[(size_t) v][k];
+                at += t.lead;
                 for (size_t c = 0; c < t.lengths.size(); ++c)
                 {
                     const auto length = t.lengths[c];

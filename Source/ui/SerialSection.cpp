@@ -237,8 +237,17 @@ void MainWindow::serialDialog()
     fill->addItem (tr ("a row by chance"), QStringLiteral ("random"));
     fill->addItem (tr ("an all-interval row by chance"), QStringLiteral ("all-interval"));
     fill->insertSeparator (fill->count());
+    for (int set = 0; set < 6; ++set)
+        fill->addItem (tr ("babbitt: a row on %1").arg (QString::fromUtf8 (serial::sourceSets()[(size_t) set].name)), QStringLiteral ("set %1").arg (set));
+    fill->insertSeparator (fill->count());
     for (size_t i = 0; i < serial::historical().size(); ++i)
         fill->addItem (QString::fromUtf8 (serial::historical()[i].name), (int) i);
+    // Babbitt's derived rows: a cell of three or four notes and its forms.
+    auto* cell = new QLineEdit (&dialog);
+    cell->setPlaceholderText (tr ("three or four notes: c d♭ e♭"));
+    cell->setToolTip (tr ("babbitt's derivation: a row made of this cell and its transpositions, inversions and retrogrades, "
+                          "so every three (or four) notes of it are the same shape"));
+    auto* deriveButton = new QPushButton (tr ("derive a row"), &dialog);
     auto* names = new QCheckBox (tr ("note names"), &dialog);
     names->setToolTip (tr ("The matrix in note names, else in numbers (0 is c)"));
     auto* about = new QLabel (&dialog);
@@ -298,6 +307,7 @@ void MainWindow::serialDialog()
     relation->addItem (tr ("canon: the same forms, entering one after another"));
     relation->addItem (tr ("mirror canon: every other voice inverted (webern)"));
     relation->addItem (tr ("combinatorial pairs: hexachords against their complements (schoenberg)"));
+    relation->addItem (tr ("array: each form shared out among the voices, every block all twelve notes (babbitt)"));
     relation->setToolTip (tr ("How the voices go together. combinatorial: the second voice takes the form whose first hexachord holds "
                               "the six notes the first voice's leaves out, so the two make all twelve notes at once"));
     auto* delay = new QSpinBox (&dialog);
@@ -315,8 +325,10 @@ void MainWindow::serialDialog()
     rhythm->addItem (tr ("even"));
     rhythm->addItem (tr ("serial: each note as long as its place in p0"));
     rhythm->addItem (tr ("free, with rests"));
+    rhythm->addItem (tr ("time points: each note on its pitch class's twelfth of the modulus (babbitt)"));
     rhythm->setToolTip (tr ("serial: the first note of the row one unit long, the second two... the last twelve, in every form "
-                            "(total serialism, after messiaen and boulez)"));
+                            "(total serialism, after messiaen and boulez).\ntime points: twelve units make the modulus, and each "
+                            "note starts on the point its pitch class names, counted from the row's first note, the next time it comes round"));
     auto* unit = new QComboBox (&dialog);
     unit->addItem (tr ("sixteenths"), 1);
     unit->addItem (tr ("eighths"), 2);
@@ -369,10 +381,10 @@ void MainWindow::serialDialog()
     names->setChecked (settings.value (QStringLiteral ("serial/names"), true).toBool());
     plan->setText (settings.value (QStringLiteral ("serial/plan")).toString());
     voices->setValue (settings.value (QStringLiteral ("serial/voices"), 1).toInt());
-    relation->setCurrentIndex (std::clamp (settings.value (QStringLiteral ("serial/relation"), 0).toInt(), 0, 3));
+    relation->setCurrentIndex (std::clamp (settings.value (QStringLiteral ("serial/relation"), 0).toInt(), 0, 4));
     delay->setValue (settings.value (QStringLiteral ("serial/delay"), 8).toInt());
     chord->setCurrentIndex (std::max (0, chord->findData (settings.value (QStringLiteral ("serial/chord"), 1).toInt())));
-    rhythm->setCurrentIndex (std::clamp (settings.value (QStringLiteral ("serial/rhythm"), 0).toInt(), 0, 2));
+    rhythm->setCurrentIndex (std::clamp (settings.value (QStringLiteral ("serial/rhythm"), 0).toInt(), 0, 3));
     unit->setCurrentIndex (std::max (0, unit->findData (settings.value (QStringLiteral ("serial/unit"), 2).toInt())));
     rests->setValue (settings.value (QStringLiteral ("serial/rests"), 20).toInt());
     registerBox->setCurrentIndex (std::clamp (settings.value (QStringLiteral ("serial/register"), 0).toInt(), 0, 2));
@@ -431,6 +443,7 @@ void MainWindow::serialDialog()
         walkButton->setEnabled (good);
         delay->setEnabled (relation->currentIndex() == 1 || relation->currentIndex() == 2);
         rests->setEnabled (rhythm->currentIndex() == 2);
+        chord->setEnabled (relation->currentIndex() != 4);   // an array's voices share each form out as lines
     };
     connect (rowEdit, &QLineEdit::textChanged, &dialog, check);
     connect (plan, &QLineEdit::textChanged, &dialog, check);
@@ -458,9 +471,25 @@ void MainWindow::serialDialog()
             next = serial::randomRow (seed);
         else if (chosen.toString() == QLatin1String ("all-interval"))
             next = serial::randomAllInterval (seed);
+        else if (chosen.toString().startsWith (QLatin1String ("set ")))
+            next = serial::fromSourceSet (chosen.toString().mid (4).toInt(), seed);
         else
             return;
         rowEdit->setText (text (serial::text (next, names->isChecked())));
+    });
+    connect (deriveButton, &QPushButton::clicked, &dialog, [&]
+    {
+        std::vector<int> pcs;
+        std::string why;
+        serial::Row derived {};
+        const auto seed = (uint32_t) variation->value() * 7u + (uint32_t) QDateTime::currentMSecsSinceEpoch();
+        if (! serial::parseNotes (cell->text().toStdString(), pcs, why) || ! serial::derive (pcs, seed, derived, why))
+        {
+            problem->setText (tr ("the cell: %1").arg (text (why)));
+            problem->setVisible (true);
+            return;
+        }
+        rowEdit->setText (text (serial::text (derived, names->isChecked())));
     });
     connect (walkButton, &QPushButton::clicked, &dialog, [&]
     {
@@ -483,6 +512,7 @@ void MainWindow::serialDialog()
     };
     form->addRow (tr ("row"), line ({ rowEdit, fill, names }));
     form->addRow (QString(), about);
+    form->addRow (tr ("derive"), line ({ cell, deriveButton }));
     auto* matrixRow = new QHBoxLayout;
     matrixRow->addStretch();
     matrixRow->addLayout (matrixGrid);

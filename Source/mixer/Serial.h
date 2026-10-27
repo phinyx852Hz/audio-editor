@@ -23,6 +23,8 @@
 //   free; registers close, wide (pointillist) or fixed (a frozen register, each pitch class in
 //   one octave). The voices are whole statements of the row only, as many as fit in the bars
 //   asked for (one at least), and the piece is whole bars of 4/4, so it loops.
+// - Milton Babbitt's methods: rows derived from a cell, his six all-combinatorial source sets,
+//   time-point rhythm and arrays (each below).
 // Everything comes from one seed: the same settings and seed write the same piece.
 #include <array>
 #include <cstdint>
@@ -44,6 +46,8 @@ namespace serial
     // or note names ("e f g c♯ f♯ e♭ a♭ d b c a b♭"; # and b for sharp and flat), separated by
     // spaces or commas. False, with `error` set, when it is not twelve different notes.
     bool parse (const std::string&, Row&, std::string& error);
+    // The same for any number of different notes (a cell).
+    bool parseNotes (const std::string&, std::vector<int>& pcs, std::string& error);
     std::string text (const Row&, bool names);   // numbers: "4 5 7 1 6 3 8 2 11 0 9 10"
 
     enum class Form { p, i, r, ri };
@@ -78,6 +82,23 @@ namespace serial
     // plays after them from the lowest. `missing`: how many had to be added.
     Row rowOf (const std::vector<int>& pitches, int& missing);
 
+    // Milton Babbitt ("Set Structure as a Compositional Determinant", 1961). A row derived from
+    // a cell of three or four notes: the cell, in its order, and transpositions and inversions of
+    // it that fill out the twelve notes (the cell's forms, a seed's choice among those that do).
+    // False, with `error` set, when no forms of it fill the aggregate.
+    bool derive (const std::vector<int>& cell, uint32_t seed, Row&, std::string& error);
+    // His six all-combinatorial source sets, the hexachords whose rows are combinatorial in all
+    // four forms: a (chromatic), b, c (diatonic), d, e (hexatonic) and f (whole tone).
+    struct SourceSet
+    {
+        const char* name;   // "source set a (chromatic)"
+        std::array<int, 6> pcs;
+    };
+    const std::array<SourceSet, 6>& sourceSets();
+    // A row on a source set by chance: its hexachord (transposed) in some order, then the other six.
+    Row fromSourceSet (int set, uint32_t seed);
+    int sourceSetOf (const Row&);   // the source set the row's first hexachord is, 0..5, else -1
+
     struct Historical
     {
         const char* name;   // lower case: "schoenberg: suite for piano, op. 25"
@@ -91,8 +112,14 @@ namespace serial
     std::vector<Statement> walk (const Row&, int count, uint32_t seed);
 
     //==========================================================================
-    enum class Voices { independent, canon, mirror, combinatorial };
-    enum class Rhythm { even, serial, free };
+    // array: Babbitt's arrays, each form of the plan shared out among the voices a segment each
+    // (12 / voices notes), the segments turning from voice to voice block by block, so every
+    // block of the piece is an aggregate, all twelve notes across the voices.
+    enum class Voices { independent, canon, mirror, combinatorial, array };
+    // timePoint: Babbitt's time-point system ("Twelve-Tone Rhythmic Structure and the Electronic
+    // Medium", 1962): a bar of twelve units is the modulus, and each note starts on the time point
+    // its pitch class names (counted from the row's first note), the next one after the last.
+    enum class Rhythm { even, serial, free, timePoint };
     enum class Register { close, wide, fixed };
     enum class Dynamics { even, terraced, serial };
 
@@ -106,7 +133,7 @@ namespace serial
         int delay = 8;                       // a canon's entries, sixteenths apart
         int chord = 1;                       // notes at once: 1 (a line), 2, 3, 4 or 6
         Rhythm rhythm = Rhythm::even;
-        int unit = 2;                        // sixteenths: each note (even), the shortest (serial, free)
+        int unit = 2;                        // sixteenths: each note (even), the shortest (serial, free), a time point
         double rests = 0.2;                  // free: the chance of a rest after a note
         Register reg = Register::close;
         int low = 48, high = 84;             // the range of all the voices, MIDI keys (at least 12 apart)
