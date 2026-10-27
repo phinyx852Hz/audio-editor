@@ -156,6 +156,8 @@ PHI runs natively on Wayland. Its window class is `phi`, so you can target it in
 ## License
 GNU Affero General Public License v3.0 only. See `LICENSE`. JUCE is used under its AGPLv3 license; Qt under the LGPLv3.
 
+Everything PHI is built on (libraries, code, plugins, data, standards, papers and books), with each licence, is listed in [`docs/foundations.md`](docs/foundations.md); the licence check for publishing and installers is [`docs/licence-compliance.md`](docs/licence-compliance.md).
+
 Stock plugins and instruments, with thanks to their authors (licence texts are installed next to them in `lib/phi/stock/licenses`):
 - [ToneShiftEQ](https://github.com/brummer10/ToneShiftEQ) by brummer10, BSD-3-Clause, with [libxputty](https://github.com/brummer10/libxputty) (0BSD)
 - [Wolf Shaper](https://github.com/wolf-plugins/wolf-shaper) by Patrick Desaulniers, GPL-3.0, on [DPF](https://github.com/DISTRHO/DPF) (ISC)
@@ -172,9 +174,9 @@ projectM: [projectM](https://github.com/projectM-visualizer/projectm) by the pro
 
 FFmpeg: [FFmpeg](https://ffmpeg.org) (LGPL-2.1-or-later; GPL-2.0-or-later as most distributions build it, with [x265](https://www.videolan.org/developers/x265.html) and [x264](https://www.videolan.org/developers/x264.html), both GPL-2.0-or-later) encodes and decodes audio and, for the Performance menu, encodes video, writes MP4, streams over RTMP and SRT and reads cameras (libavdevice). The system's copy is used; nothing is bundled. OBS Studio itself is not built in: its libobs is GPL-2.0-or-later and would fit the licence, but it is a whole streaming application's engine, with a scene system and its own screen capture, while PHI only needs to encode its own window, so it goes straight to the same FFmpeg that OBS uses.
 
-Rubber Band: [Rubber Band Library](https://breakfastquay.com/rubberband/) by Particular Programs Ltd (Chris Cannam), GPL-2.0-or-later; used for Correct Pitch.
+Rubber Band: [Rubber Band Library](https://breakfastquay.com/rubberband/) by Particular Programs Ltd (Chris Cannam), GPL-2.0-or-later; used for Correct Pitch. The system's copy is used when installed, otherwise version 4.0.0 is downloaded and built in.
 
-Paulstretch: Extreme Stretch and the Ambient warp algorithm follow the extreme time-stretching algorithm of [Paulstretch](https://hypermammut.sourceforge.net/paulstretch/) by Nasca Octavian Paul, and their controls follow [PaulXStretch](https://github.com/essej/paulxstretch) by Xenakios and Jesse Chappell (sonosaurus). PHI's implementation is its own: no code from either is used, since Paulstretch's engine is GPL-2.0-only. The system's copy is used when installed, otherwise version 4.0.0 is downloaded and built in.
+Paulstretch: Extreme Stretch and the Ambient warp algorithm follow the extreme time-stretching algorithm of [Paulstretch](https://hypermammut.sourceforge.net/paulstretch/) by Nasca Octavian Paul, and their controls follow [PaulXStretch](https://github.com/essej/paulxstretch) by Xenakios and Jesse Chappell (sonosaurus). PHI's implementation is its own: no code from either is used, since Paulstretch's engine is GPL-2.0-only.
 
 MilkyTracker: Tracker1 is built on [MilkyTracker](https://milkytracker.org) ([source](https://github.com/milkytracker/MilkyTracker)) by Peter "pailes" Barth and its contributors. Its player library MilkyPlay (New BSD) is built in, and the pattern display adapts its PatternTools (GPL-3.0-or-later). See `third_party/README.md`.
 
