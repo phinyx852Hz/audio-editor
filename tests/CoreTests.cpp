@@ -6972,7 +6972,7 @@ namespace
                "sūḷādi tāḷas: laghu by jāti, drutam 2, anudrutam 1");
         int talams = 0;
         for (const auto& r : all)
-            talams += r.group == "south indian tāḷam" && r.subgroup != "cāpu";
+            talams += r.group == "South Indian tāḷam" && r.subgroup != "cāpu";
         check (talams == 35, "the 35 sūḷādi tāḷas: seven tāḷas in five jātis");
         // The tracker writes a row for the finest step: tīntāl's ṭhekā is a bol a mātrā, ektāl's has tirakiṭa.
         check (rhythm::rowsPerBeat (find ("tintal")) == 1 && rhythm::rowsPerBeat (find ("ektal")) == 4
@@ -6988,7 +6988,7 @@ namespace
             const auto regs = rhythm::regions();
             check (std::find (regs.begin(), regs.end(), reg) != regs.end(), "rhythm group " + g + ": in a region of the menu");
         }
-        check (rhythm::region ("iqāʿāt") == "west asia" && rhythm::region ("medieval (ars antiqua)") == "europe",
+        check (rhythm::region ("iqāʿāt") == "West Asia" && rhythm::region ("medieval (ars antiqua)") == "Europe",
                "regions: west asia, and europe as one region among the others");
         check (rhythm::drumName (39) == "hand clap" && rhythm::drumName (81) == "open triangle" && rhythm::drumName (20).empty(), "general midi drum names");
 

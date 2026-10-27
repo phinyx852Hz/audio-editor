@@ -335,7 +335,7 @@ namespace rhythmgen
             add ("triplet shuffle", "8ths at 66%: the shuffle of blues, jazz and the swung 12/8 feel.", 66.7, 2, 0, 0, 0, 0, 0);
             add ("laid back", "The snare behind the beat, the rest on it: the backbeat of soul, funk and hip-hop.", 50, 4, 0, 18, 0, 3, 4);
             add ("pushing", "The cymbals ahead of the beat: urgent.", 50, 4, 0, 0, -10, 3, 4);
-            add ("loose (dilla-style)", "Swung 16ths, the kick a little early, the snare late, everything humanized: the unquantized, "
+            add ("loose (Dilla-style)", "Swung 16ths, the kick a little early, the snare late, everything humanized: the unquantized, "
                 "drunk feel J Dilla's beats are known for, approximated.", 57, 4, -8, 16, 0, 7, 8);
             add ("second line", "New Orleans: 16ths swung about halfway to the triplet, the snare a little behind.", 60, 4, 0, 8, 0, 4, 6);
             add ("human", "No swing, only the timing and loudness of hands.", 50, 4, 0, 0, 0, 6, 8);

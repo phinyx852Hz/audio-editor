@@ -75,7 +75,7 @@ namespace rhythm
             Rhythm r;
             r.name = std::move (name);
             r.plain = std::move (plain);
-            r.group = "north indian tāl";
+            r.group = "North Indian tāl";
             r.bpm = bpm;
             r.about = std::move (about);
 
@@ -216,7 +216,7 @@ namespace rhythm
             Rhythm r;
             r.name = std::move (name);
             r.plain = std::move (plain);
-            r.group = "south indian tāḷam";
+            r.group = "South Indian tāḷam";
             r.subgroup = std::move (subgroup);
             r.sections = sections;
             r.beats = std::accumulate (sections.begin(), sections.end(), 0);
@@ -439,7 +439,7 @@ namespace rhythm
         //======================================================================
         void addCaribbean (std::vector<Rhythm>& all)
         {
-            const std::string g = "caribbean";
+            const std::string g = "Caribbean";
             all.push_back (groove ("son clave (3-2)", "son clave 3-2", g, {}, 4, { 2, 2 }, 100,
                 "Cuba: the son's timeline, three strokes then two.", { lane ("claves", gm::claves, 4, "x..x..x...x.x...") }));
             all.push_back (groove ("son clave (2-3)", "son clave 2-3", g, {}, 4, { 2, 2 }, 100,
@@ -521,7 +521,7 @@ namespace rhythm
         //======================================================================
         void addSouthAmerican (std::vector<Rhythm>& all)
         {
-            const std::string g = "south america";
+            const std::string g = "South America";
             all.push_back (groove ("samba (batucada)", "samba", g, {}, 4, { 2, 2 }, 100,
                 "Brazil: two bars of 2/4, the surdos answering (the low one on the second beat), the caixa's 16ths, the tamborim's teleco-teco (simplified).",
                 { lane ("surdo de primeira", gm::floorTom, 4, "....X.......X..."),
@@ -568,7 +568,7 @@ namespace rhythm
         // Timelines counted in pulses, as Toussaint gives them, with a drum on the beat.
         void addAfrican (std::vector<Rhythm>& all)
         {
-            const std::string w = "west africa";
+            const std::string w = "West Africa";
             all.push_back (groove ("agbekɔ (standard bell)", "agbekor", w, {}, 4, { 1, 1, 1, 1 }, 110,
                 "Ewe, Ghana and Togo: the gankogui's seven strokes in twelve pulses, the standard pattern of West African 12/8, with the axatse rattle.",
                 { lane ("gankogui (bell)", gm::cowbell, 3, "X.x.xx.x.x.x"),
@@ -592,7 +592,7 @@ namespace rhythm
                   lane ("open hi-hat", gm::openHat, 4, "....x.......x...") }));
 
             // North African: Egyptian and Maghrebi iqāʿāt, dum (the darbuka's middle) and tak (its rim).
-            const std::string n = "north africa";
+            const std::string n = "North Africa";
             struct Iqa { const char* name; const char* plain; int beats; const char* dum; const char* tak; const char* counting; const char* about; double bpm; };
             const Iqa iqaat[] {
                 { "maqsūm", "maqsum", 4, "x...x...", ".x.x..x.", "dum tak – tak dum – tak –", "Egypt: the commonest iqāʿ of popular music, 4/4.", 110 },
@@ -639,7 +639,7 @@ namespace rhythm
             if (roll.find_first_not_of ('.') != std::string::npos)
                 lanes.push_back (lane ("chaepyeon (gi, deoreoreo)", gm::highTimbale, perBeat * 4, roll));
             auto plain = name;
-            return groove (std::move (name), std::move (plain), "korean jangdan", {}, beats, std::move (sections), bpm, std::move (about),
+            return groove (std::move (name), std::move (plain), "Korean jangdan", {}, beats, std::move (sections), bpm, std::move (about),
                            std::move (lanes), std::move (counting));
         }
 
@@ -720,12 +720,12 @@ namespace rhythm
     std::string region (const std::string& group)
     {
         static const std::vector<std::pair<std::string, std::string>> map {
-            { "north africa", "africa" }, { "west africa", "africa" },
-            { "breakbeats", "the americas" }, { "trap", "the americas" }, { "caribbean", "the americas" }, { "south america", "the americas" },
-            { "korean jangdan", "east asia" },
-            { "medieval (ars antiqua)", "europe" },
-            { "north indian tāl", "south asia" }, { "south indian tāḷam", "south asia" },
-            { "iqāʿāt", "west asia" },
+            { "North Africa", "Africa" }, { "West Africa", "Africa" },
+            { "breakbeats", "the Americas" }, { "trap", "the Americas" }, { "Caribbean", "the Americas" }, { "South America", "the Americas" },
+            { "Korean jangdan", "East Asia" },
+            { "medieval (ars antiqua)", "Europe" },
+            { "North Indian tāl", "South Asia" }, { "South Indian tāḷam", "South Asia" },
+            { "iqāʿāt", "West Asia" },
         };
         for (const auto& [g, r] : map)
             if (g == group)
@@ -735,7 +735,7 @@ namespace rhythm
 
     std::vector<std::string> regions()
     {
-        return { "africa", "east asia", "europe", "south asia", "the americas", "west asia" };
+        return { "Africa", "the Americas", "East Asia", "Europe", "South Asia", "West Asia" };
     }
 
     int steps (const Lane& l) { return (int) compact (l.hits).size(); }

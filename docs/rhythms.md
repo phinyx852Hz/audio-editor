@@ -6,7 +6,7 @@ modes, and of course, Caribbean, south american, and west and north african rhyt
 there's anything from East Asia, that would be great". Every name is lower case and in proper
 transliteration (owner).
 
-The menu is **Mode > rhythm** (owner, 2026-10-27: the Mode menu holds melody, tuning and rhythm). It has a submenu for each region, in alphabetical order: africa, east asia, europe, south asia, the americas and west asia. Europe is one region among the others (owner, 2026-10-27). Each region has a submenu for each tradition. Hovering over a
+The menu is **Mode > rhythm** (owner, 2026-10-27: the Mode menu holds melody, tuning and rhythm). It has a submenu for each region, in alphabetical order: Africa, the Americas, East Asia, Europe, South Asia and West Asia. Names of places, peoples and people are capitalized in the menu (owner, 2026-10-27); the rhythms keep lower-case names. Europe is one region among the others (owner, 2026-10-27). Each region has a submenu for each tradition. Hovering over a
 rhythm shows what it is and how it is counted: the ṭhekā's bols, the kriyās, or the strokes.
 Picking a rhythm opens a dialog with its sounds, the number of cycles, and a tempo, which starts
 at a usual tempo for that rhythm, and a laya (see below). The dialog has these buttons, and **edit in the generator...**:
@@ -61,7 +61,7 @@ Hindustani names follow their Hindi pronunciation, without the final schwa (tīn
 Karnatak names follow the Sanskrit-Tamil usage of the tradition (tāḷam, jāti, aṅga). English
 names are in plain lower case, with the IPA in the tooltip (owner, 2026-10-27: both).
 
-## South Asia: north indian tāl (16)
+## South Asia: North Indian tāl (16)
 
 tīntāl, jhaptāl, ektāl, rūpak, dādrā, kaharvā, jhūmrā, dhamār, cautāl, āḍā cautāl, dīpcandī,
 tilvāḍā, sūltāl, tīvrā, jat tāl, pañjābī (sitārkhānī).
@@ -85,7 +85,7 @@ The theoretical literature counts more than a hundred tāls. Rarer ones such as 
 pañcam savārī, rudra, matta, śikhar and lakṣmī are not included yet, because their ṭhekās vary
 between gharānās and books. They can be added once the owner names the versions they want.
 
-## South Asia: south indian tāḷam (39)
+## South Asia: South Indian tāḷam (39)
 
 The library has all 35 sūḷādi sapta tāḷas: dhruva, maṭhya, rūpaka, jhampa, tripuṭa, aṭa and ēka,
 each in the five jātis:
@@ -139,7 +139,7 @@ All three are at 140 to 142 bpm.
 
 ## Europe: medieval (ars antiqua) (6)
 
-The submenu is **europe > medieval (ars antiqua)**, so "mode" is not repeated inside the Mode menu (owner, 2026-10-27). The six rhythms keep their Latin names, modus primus to modus sextus.
+The submenu is **Europe > medieval (ars antiqua)**, so "mode" is not repeated inside the Mode menu (owner, 2026-10-27). The six rhythms keep their Latin names, modus primus to modus sextus.
 
 These are the six modi of the Notre-Dame school, as Johannes de Garlandia sets them out (c. 1240):
 
@@ -155,13 +155,13 @@ These are the six modi of the Notre-Dame school, as Johannes de Garlandia sets t
 They are in ternary time, with three tempora to a perfection. Each mode is played on a tabor and
 sung on d (channel 1, held for its value), so the longs sound long.
 
-## The Americas: caribbean (19)
+## The Americas: Caribbean (19)
 
 son clave (3-2 and 2-3), rumba clave (3-2 and 2-3), cáscara (3-2 and 2-3, the timbal shell over its
 clave, after Mauleón), tresillo, cinquillo, habanera, son montuno
 (tumbao, 2-3), cha-cha-chá, bembé (6/8), one drop, rockers, steppers, ska, dembow, soca, merengue.
 
-## The Americas: south america (8)
+## The Americas: South America (8)
 
 samba (batucada), bossa nova, baião, tango (3-3-2), milonga, candombe, cumbia, and huayno (the
 Andes: a stressed beat followed by two short ones, written as an 8th and two 16ths in 2/4 on the
@@ -170,7 +170,7 @@ bombo).
 Still to come: chacarera, marinera, maracatu, ijexá, partido alto, festejo and joropo. Haitian
 konpa and Mexican son jarocho too. Each waits for a transcription that can be cited.
 
-## Africa: west africa (6) and north africa (6)
+## Africa: West Africa (6) and North Africa (6)
 
 West African:
 
@@ -243,7 +243,7 @@ The feel settings are swing (in the MPC's percentages: 50% is straight, 66% a tr
 each lane's own steps, on 8ths or on 16ths, and humanized timing and loudness. Swing bends the time
 inside each swung pair, so 16ths between swung 8ths follow along. The **feel...** menu fills these
 in. It has straight, 16th swing at 54, 58 and 62%, triplet shuffle, laid back (the snare behind the
-beat), pushing (the cymbals ahead), loose (dilla-style), second line and human. These are our own
+beat), pushing (the cymbals ahead), loose (Dilla-style), second line and human. These are our own
 starting points, after Hydrogen's swing and humanizing. They are not measurements of any drummer.
 
 Every chance is drawn from the **seed** with the stochastic tools' random numbers, so the same
@@ -276,7 +276,7 @@ drum hits.
 The transcriptions are kept in `breaks.json` beside `settings.ini`, so the audio files are only
 read once. **remove** takes one break off the list, or all of them.
 
-## East Asia: korean jangdan (7)
+## East Asia: Korean jangdan (7)
 
 These are Korean jangdan on the janggu:
 
