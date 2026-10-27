@@ -15,10 +15,10 @@ This is an engineering review, not legal advice.
   AGPL v3 allow combination with each other (section 13 of each), and the "or later" GPL v2 parts
   are used under v3. Nothing GPL-2.0-only is combined: Paulstretch's code was kept out on purpose,
   and so were Audacity's GPL-2.0-only plug-ins.
-- **Making the repository public: one thing to fix first** (B1 below), because the build CI
-  uploads the built stock plugins as a downloadable artifact, and one of them carries commercial
-  fonts. Everything that is in the repository itself is fine to publish.
-- **Installers: five things to fix first** (B1 to B5): two plugins carry fonts we may not
+- **Making the repository public: nothing blocks it.** B1 (commercial fonts in Vaporizer2, which
+  CI uploads as a downloadable artifact) is fixed in this pull request. Everything in the
+  repository itself is fine to publish.
+- **Installers: four things to fix first** (B2 to B5): Ami Sampler carries a font we may not
   redistribute, the corresponding source of the bundled plugins must be published with each
   release, the licence notices must be complete, and the About box needs the AGPL's legal notices.
 
@@ -34,7 +34,7 @@ This is an engineering review, not legal advice.
 | GPL-2.0-only | Paulstretch, some Audacity plug-ins | **No**: none is used (ideas only) |
 | CC-BY-4.0 | Helm's factory presets | Yes for data: credit and the licence notice must go with them |
 | OFL-1.1 | fonts inside Wolf Shaper (Chivo), Airwindows, ZL Audio (Inter) and OctaSine (Open Sans) | Yes: ship the OFL text |
-| Non-commercial or proprietary | VCV's component artwork (replaced), Ami's sample packs (left out), Furnace's demo songs (left out), **fonts inside Vaporizer2 and Ami Sampler (still in)** | **No**: must not ship |
+| Non-commercial or proprietary | VCV's component artwork (replaced), Ami's sample packs (left out), Furnace's demo songs (left out), Vaporizer2's SF UI Display, Trade Gothic LT and Alte Haas Grotesk (replaced), **the AmiDOS font inside Ami Sampler (still in)** | **No**: must not ship |
 
 Furnace runs as a separate program, so its licence does not combine with PHI's; it is shipped
 beside it ("aggregate"), which any licence allows. The stock plugins are separate binaries but are
@@ -42,7 +42,7 @@ loaded into PHI's process, so they are treated as combined above; all of them ar
 
 ## Must fix
 
-### B1. Vaporizer2 builds commercial fonts into its plugin (blocks the public CI artifact and installers)
+### B1. Vaporizer2 builds commercial fonts into its plugin (fixed)
 
 Vaporizer2's `CMakeLists.txt` puts eight fonts from `VASTvaporizer/Resources/Fonts/` into its binary
 with `juce_add_binary_data`. Its README says only "to the best of our knowledge the true type fonts
@@ -55,11 +55,14 @@ with `juce_add_binary_data`. Its README says only "to the best of our knowledge 
   clear terms for redistribution.
 - `OpenSans-*.ttf`: Open Sans, OFL-1.1 or Apache-2.0, fine.
 
-Fix: extend `cmake/instruments/vaporizer2-bundle-data.patch` to drop the six fonts from
-`juce_add_binary_data` and point Vaporizer2's look-and-feel at OFL fonts (for example Inter, which
-the ZL plugins already ship, and Open Sans), then ship their OFL text. Until that is done, leave
-Vaporizer2 out of installers (`PHI_STOCK_INSTRUMENTS` covers all instruments, so this needs its own
-option) and keep `build/stock` out of the CI artifact once the repository is public.
+Each pair is one skin's font: Classic uses Open Sans, Tech SF UI Display, Dark Trade Gothic LT and
+IceCubes Alte Haas Grotesk.
+
+Fixed: `cmake/instruments/vaporizer2-fonts/ReplaceFonts.cmake` copies free fonts over the six files
+before Vaporizer2 builds, under the same names, so its code loads them unchanged: Inter for Tech,
+Archivo Narrow for Dark and Schibsted Grotesk for IceCubes (all OFL-1.1). Classic, the default
+skin, keeps Open Sans. The fonts' licences and `PHI-FONTS.md` are installed in Vaporizer2's licence
+folder. If an update of Vaporizer2 renames a font, the step stops the build instead of shipping it.
 
 ### B2. Ami Sampler's AmiDOS font is under a non-commercial licence
 
@@ -101,7 +104,7 @@ Missing:
   Wolf Shaper's `resources/fonts/Chivo/SIL Open Font License.txt`; OctaSine's
   `contrib/open-sans/LICENSE.txt` and a list of its Rust crates' licences (for example from
   `cargo about`); ToneShiftEQ's `EQ12/AudioFFT/COPYING.txt` and `EQ12/vst3/travesty/LICENSE`;
-  Vaporizer2's `fftw-3.3.10/COPYING`; qm-dsp's `COPYING` and its `ext/` notices; Furnace's
+  qm-dsp's `COPYING` and its `ext/` notices; Furnace's
   `extern/*/LICENSE*` files (only its main `LICENSE` and fonts are installed now).
 
 Fix: add the files to the `phi_stock_licence` calls (mind the space in Helm's path) and an
@@ -152,6 +155,7 @@ third-party notices, and Qt's own About Qt (`QMessageBox::aboutQt`), which LGPL 
 
 ## Fixed in this pull request
 
+- B1: Vaporizer2's commercial fonts replaced with OFL fonts.
 - README: the sentence "The system's copy is used when installed, otherwise version 4.0.0 is
   downloaded and built in" belonged to Rubber Band but sat in the Paulstretch paragraph.
 - Manual credits: the MIT KEMAR row had no licence.
@@ -161,12 +165,11 @@ third-party notices, and Qt's own About Qt (`QMessageBox::aboutQt`), which LGPL 
 
 Before making the repository public:
 
-- [ ] B1 done, or `build/stock` dropped from the CI artifact.
 - [ ] `python3 scripts/check-foundations.py` passes.
 
 Before each installer:
 
-- [ ] B1 to B5 done.
+- [ ] B2 to B5 done.
 - [ ] Every stock plugin and instrument still at the commit [foundations.md](foundations.md) names;
       any new one checked for fonts, presets and samples (`git ls-tree -r <commit> | grep -iE
       '\.(ttf|otf|wav|png)$'`) and for vendored code.
