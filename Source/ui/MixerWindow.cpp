@@ -6123,9 +6123,14 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
                                "episodes and a stretto, in any mode, raga or maqam, each voice a clip on a new track"));
         grid->addWidget (fugue, 3, 2, 1, 2);
         connect (fugue, &QPushButton::clicked, this, [this] { fugueShownMidi(); });
+        auto* stochastic = new QPushButton (tr ("stochasticize..."), midiClipBox);
+        stochastic->setToolTip (tr ("A new line by Xenakis's methods: an st cloud or markov screens, its pitches and rhythm through "
+                                    "sieves taken from the mode, a rhythmic mode or this clip"));
+        grid->addWidget (stochastic, 4, 0, 1, 2);
+        connect (stochastic, &QPushButton::clicked, this, [this] { stochasticizeShownMidi(); });
         auto* hint = new QLabel (tr ("R reverses it"), midiClipBox);
         hint->setForegroundRole (QPalette::PlaceholderText);
-        grid->addWidget (hint, 4, 0, 1, 4);
+        grid->addWidget (hint, 5, 0, 1, 4);
         connect (counterpoint, &QPushButton::clicked, this, [this] { counterpointShownMidi(); });
 
         connect (phi, &QToolButton::clicked, this, [this] { phiShownMidi(); });
@@ -6657,7 +6662,6 @@ void MixerWindow::writeCounterpoint (int track, const mixer::Clip& clip, mixer::
             channel = c;
             break;
         }
-    const auto bpm = followTempoBox->isChecked() ? tempoBox->value() : 0.0;
     if (! live)
         remember();
     int made = 0;
@@ -6685,55 +6689,10 @@ void MixerWindow::writeCounterpoint (int track, const mixer::Clip& clip, mixer::
             status->setText (tr ("The new voice could not be saved to %1: %2").arg (file, QString::fromStdString (why)));
             break;
         }
-        if (target < 0)
-        {
-            target = engine.numTracks();
-            engine.setNumTracks (target + 1);
-            auto& to = engine.strip (target);
-            to.trimDb = 0.0f;
-            to.invertLeft = to.invertRight = false;
-            to.lowCut = to.highCut = false;
-            to.width = 1.0f;
-            to.delayMs = 0.0f;
-            to.faderDb = engine.strip (track).faderDb.load();
-            to.pan = 0.0f;
-            to.mute = to.solo = false;
-            to.transpose = 0;
-            to.channels = 0xFFFF;
-            engine.setInserts (target, {});
-            engine.setInstrument (target, nullptr);
-            engine.setClips (target, {});
-            info[(size_t) target].name = trackName;
-            info[(size_t) target].colour = info[(size_t) track].colour;
-            info[(size_t) target].tuning = tuning;   // the PHI synth plays the new voices in the melody's tuning
-        }
-        if (slot != nullptr)
-        {
-            auto placed = std::make_shared<mixer::Slot> (*slot);
-            placed->clip.midi = launcherMidi (written, file.toStdString());
-            placed->clip.reversed = false;
-            placed->clip.offset = std::min (clip.offset, placed->clip.midi->length);
-            placed->clip.length = std::min (clip.length, placed->clip.midi->length - placed->clip.offset);
-            slots[(size_t) target][(size_t) scene] = placed;
-            engine.setSlot (target, scene, placed);
-            if (live)
-                engine.launchAt (target, scene, launchAt);
-        }
-        else
-        {
-            auto placed = mixer::makeClip (mixer::placeMidi (written, file.toStdString(), rate(), bpm), clip.start);
-            placed.offset = std::min (clip.offset, placed.midi->length);
-            placed.length = std::min (clip.length, placed.midi->length - placed.offset);
-            editClips (target, { placed });
-        }
-        if (engine.instrument (target) == nullptr)
-            setInstrumentKind (target, synthChoice, {});
+        placeGenerated (track, clip, slot, scene, written, file, trackName, tuning, target, launchAt);
         ++made;
     }
-    rebuildStrips();
-    grid->update();
-    rack->refresh();
-    changed();
+    generatedPlaced();
     const auto mode = modeChoice.system >= 0 ? tuningText (modeChoice) : tr ("the melody's mode");
     auto text = tr ("%n voice(s) of counterpoint in %1", "", made).arg (mode);
     if (made < (int) result.voices.size())
@@ -6741,6 +6700,88 @@ void MixerWindow::writeCounterpoint (int track, const mixer::Clip& clip, mixer::
     if (result.bent > 0)
         text += tr ("; %n strict rule(s) bent where nothing else fitted", "", result.bent);
     status->setText (text);
+}
+
+void MixerWindow::placeGenerated (int track, const mixer::Clip& clip, mixer::SlotPtr slot, int scene, midifile::SongPtr written,
+                                  const QString& file, const QString& trackName, mixer::TuningChoice tuning, int target, Frame launchAt)
+{
+    const bool live = launchAt >= 0;
+    const auto bpm = followTempoBox->isChecked() ? tempoBox->value() : 0.0;
+    if (target < 0)
+    {
+        target = engine.numTracks();
+        engine.setNumTracks (target + 1);
+        auto& to = engine.strip (target);
+        to.trimDb = 0.0f;
+        to.invertLeft = to.invertRight = false;
+        to.lowCut = to.highCut = false;
+        to.width = 1.0f;
+        to.delayMs = 0.0f;
+        to.faderDb = engine.strip (track).faderDb.load();
+        to.pan = 0.0f;
+        to.mute = to.solo = false;
+        to.transpose = 0;
+        to.channels = 0xFFFF;
+        engine.setInserts (target, {});
+        engine.setInstrument (target, nullptr);
+        engine.setClips (target, {});
+        info[(size_t) target].name = trackName;
+        info[(size_t) target].colour = info[(size_t) track].colour;
+        info[(size_t) target].tuning = tuning;   // the PHI synth plays the new voices in the melody's tuning
+    }
+    if (slot != nullptr)
+    {
+        auto placed = std::make_shared<mixer::Slot> (*slot);
+        placed->clip.midi = launcherMidi (written, file.toStdString());
+        placed->clip.reversed = false;
+        placed->clip.offset = std::min (clip.offset, placed->clip.midi->length);
+        placed->clip.length = std::min (clip.length, placed->clip.midi->length - placed->clip.offset);
+        slots[(size_t) target][(size_t) scene] = placed;
+        engine.setSlot (target, scene, placed);
+        if (live)
+            engine.launchAt (target, scene, launchAt);
+    }
+    else
+    {
+        auto placed = mixer::makeClip (mixer::placeMidi (written, file.toStdString(), rate(), bpm), clip.start);
+        placed.offset = std::min (clip.offset, placed.midi->length);
+        placed.length = std::min (clip.length, placed.midi->length - placed.offset);
+        editClips (target, { placed });
+    }
+    if (engine.instrument (target) == nullptr)
+        setInstrumentKind (target, synthChoice, {});
+}
+
+void MixerWindow::generatedPlaced()
+{
+    rebuildStrips();
+    grid->update();
+    rack->refresh();
+    changed();
+}
+
+bool MixerWindow::shownMidiClip (int& track, int& scene, mixer::Clip& clip, mixer::SlotPtr& slot, mixer::TuningChoice& tuning) const
+{
+    if (! showingClip || ! clipView->showsMidi())
+        return false;
+    track = clipView->shownTrack();
+    scene = clipView->shownScene();
+    const auto id = clipView->shownId();
+    slot = nullptr;
+    clip = {};
+    if (id != 0)
+    {
+        for (const auto& c : engine.clips (track))
+            if (c.id == id)
+                clip = c;
+    }
+    else if (scene >= 0 && (slot = slots[(size_t) track][(size_t) scene]) != nullptr)
+        clip = slot->clip;
+    if (clip.midi == nullptr || clip.midi->song == nullptr)
+        return false;
+    tuning = slot != nullptr ? mixer::tuningInForce (slot->tuning, sceneTunings[(size_t) scene], info[(size_t) track].tuning)
+                             : info[(size_t) track].tuning;
+    return true;
 }
 
 void MixerWindow::refreshViews()

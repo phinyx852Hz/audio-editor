@@ -219,6 +219,7 @@ public:
     // playhead, or of a timeline clip into the track's next empty slot.
     void slotToTimeline (int track, int scene);
     void clipToLauncher (int track, uint32_t id);
+    void stochasticizeShown() { stochasticizeShownMidi(); }
     // A rhythm from the Mode menu's rhythmic modes (RhythmSection.cpp): saved as a MIDI file
     // with the mix's edits, `stem` naming it, and placed on the selected track at the playhead,
     // the Synth's drum kit playing it when the track has no instrument. False with no track.
@@ -333,6 +334,21 @@ private:
     // voice a MIDI file beside the mix and a clip on a new track, where the clip is.
     void fugueShownMidi();
     bool writeFugue (int track, const mixer::Clip& clip, mixer::SlotPtr slot, int scene);   // true if it made any
+    // A generated MIDI file (saved as `file`) as a clip where `clip` is: on the timeline at its
+    // start, or in the same scene of the launcher. On track `target`, or on a new track named
+    // `trackName` with `track`'s fader and colour, in `tuning`, when that is -1 (the caller makes
+    // sure there is room). With launchAt >= 0 it launches on that frame.
+    void placeGenerated (int track, const mixer::Clip&, mixer::SlotPtr, int scene, midifile::SongPtr written, const QString& file,
+                         const QString& trackName, mixer::TuningChoice tuning, int target, Frame launchAt);
+    void generatedPlaced();   // the strips, the launcher and the rack shown again, and the mix marked changed
+    // The MIDI clip shown in the Device Chain: its track, its scene (or -1), the clip, its slot
+    // (null on the timeline), and the tuning it plays in. False when none is shown.
+    bool shownMidiClip (int& track, int& scene, mixer::Clip&, mixer::SlotPtr&, mixer::TuningChoice& tuning) const;
+    // Stochasticize (StochasticSection.cpp, owner 2026-10-26): a new line by Xenakis's methods
+    // (mixer/Stochastic.h), ST clouds or Markov screens, its pitches and rhythm through sieves
+    // that can come from the mode, a rhythmic mode or the clip itself; on a new track, or in
+    // place of the clip.
+    void stochasticizeShownMidi();
     // Recording (docs/recording.md; owner, 2026-10-25: "play a melody into a clip with a
     // pre-determined length that can be adjusted and the recording immediately stops, loops, and
     // the new melody is generated", and "the main method super easy to learn with the options for

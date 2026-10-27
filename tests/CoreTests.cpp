@@ -14,6 +14,7 @@
 #include "../Source/mixer/MixerEngine.h"
 #include "../Source/mixer/DrumsToMidi.h"
 #include "../Source/mixer/Rhythms.h"
+#include "../Source/mixer/Stochastic.h"
 #include "../Source/patchbay/PatchBay.h"
 #include "../Source/core/Ixml.h"
 #include "../Source/core/Metadata.h"
@@ -5564,6 +5565,115 @@ namespace
         return s;
     }
 
+    // Stochastic music (Xenakis): sieves read and written back, and lines drawn by the laws,
+    // inside their range, sieve and grid, the same for the same seed.
+    void testStochastic()
+    {
+        using namespace stochastic;
+        std::string error;
+        // Xenakis's major scale (Sieves, 1990), and its analysis back into residue classes.
+        const auto major = Sieve::parse ("(-3@2 & 4@0) | (-3@1 & 4@1) | (3@2 & 4@2) | (-3@0 & 4@3)", error);
+        check (error.empty() && major.period() == 12, "stochastic: a sieve reads, period 12");
+        check (major.points (0, 12) == std::vector<int64_t> { 0, 2, 4, 5, 7, 9, 11 }, "stochastic: the sieve is the major scale");
+        const auto back = Sieve::fromPoints ({ 0, 2, 4, 5, 7, 9, 11 }, 12);
+        check (back.points (-12, 24) == major.points (-12, 24), "stochastic: the analysis gives the same set (" + back.text() + ")");
+        check (Sieve::fromKeys (0xFFF).text() == "1@0" && Sieve::fromKeys (0x555).text() == "2@0", "stochastic: the simplest sieves");
+        for (const char* bad : { "3@", "(2@0", "2@0 |", "0@0", "x" })
+            check (Sieve::parse (bad, error).empty() && ! error.empty(), std::string ("stochastic: \"") + bad + "\" does not read");
+        check (Sieve::parse ("-2@0", error).contains (-3), "stochastic: the complement, and negative numbers");
+
+        // Every rhythmic mode turns into a sieve that gives back its onsets.
+        for (const auto& r : rhythm::rhythms())
+        {
+            const auto sieve = sieveFromRhythm (r);
+            const auto rows = rhythm::rowsPerBeat (r);
+            std::set<int64_t> onsets;
+            for (const auto& h : rhythm::hits (r))
+                onsets.insert (h.step * rows / r.lanes[(size_t) h.lane].perBeat);
+            const auto points = sieve.points (0, (int64_t) r.beats * rows);
+            check (std::vector<int64_t> (onsets.begin(), onsets.end()) == points, "stochastic: " + r.plain + " as a sieve (" + sieve.text() + ")");
+        }
+        const auto son = rhythm::findRhythm ("son clave 3-2");
+        if (son >= 0)
+            check (sieveFromRhythm (rhythm::rhythms()[(size_t) son]).text() == "16@0 | 16@3 | 16@6 | 16@10 | 16@12", "stochastic: the son clave's sieve");
+
+        // The laws: centred where they are asked, the linear law's mean distance a third of its width.
+        for (int l = 0; l < numLaws; ++l)
+        {
+            Random rng (7);
+            double sum = 0;
+            for (int i = 0; i < 20000; ++i)
+                sum += draw ((Law) l, 5.0, 1.0, rng);
+            check (std::abs (sum / 20000 - 5.0) < 0.1, std::string ("stochastic: the ") + lawName ((Law) l) + " law is centred");
+        }
+        {
+            Random rng (3);
+            double distance = 0;
+            for (int i = 0; i < 20000; ++i)
+                distance += std::abs (draw (Law::linear, 0.0, 12.0, rng));
+            check (std::abs (distance / 20000 - 4.0) < 0.2, "stochastic: the linear law of intervals, mean a/3");
+        }
+
+        for (auto method : { Method::cloud, Method::screens })
+        {
+            Settings s;
+            s.method = method;
+            s.length = 480 * 64;
+            s.density = 2.0;
+            s.low = 50;
+            s.high = 80;
+            s.root = 2;
+            s.pitches = major;   // D major
+            s.seed = 11;
+            const auto a = generate (s);
+            const auto again = generate (s);
+            check (a.error.empty() && a.notes.size() > 40 && a.notes.size() < 400, "stochastic: a line of about the density (" + std::to_string (a.notes.size()) + ")");
+            check (a.notes.size() == again.notes.size() && std::equal (a.notes.begin(), a.notes.end(), again.notes.begin(),
+                   [] (const Note& x, const Note& y) { return x.start == y.start && x.end == y.end && x.pitch == y.pitch && x.velocity == y.velocity; }),
+                   "stochastic: the same seed draws the same line");
+            bool inside = true;
+            for (size_t i = 0; i < a.notes.size(); ++i)
+            {
+                const auto& n = a.notes[i];
+                inside = inside && n.pitch >= 50 && n.pitch <= 80 && major.contains (n.pitch - 2) && n.start >= 0 && n.end <= s.length
+                      && n.end > n.start && n.velocity >= 1 && n.velocity <= 127 && (i == 0 || a.notes[i - 1].start <= n.start);
+                for (size_t j = 0; j < i; ++j)   // a key struck again is let go first
+                    inside = inside && ! (a.notes[j].pitch == n.pitch && a.notes[j].end > n.start);
+            }
+            check (inside, "stochastic: every note in range, in the sieve, in time and let go before it is struck again");
+            check ((method == Method::screens) == ! a.screens.empty(), "stochastic: the screens are named");
+
+            // On a grid: only its places.
+            s.grid = gridFromSieve (Sieve::parse ("16@0 | 16@3 | 16@6 | 16@10 | 16@12", error), 120, s.length);
+            check (s.grid.size() == 5 * 16, "stochastic: the clave's grid over 16 bars");
+            const auto g = generate (s);
+            bool onGrid = ! g.notes.empty();
+            for (const auto& n : g.notes)
+                onGrid = onGrid && std::binary_search (s.grid.begin(), s.grid.end(), n.start);
+            check (onGrid, "stochastic: notes start only on the grid");
+        }
+        Settings none;
+        none.low = 61;
+        none.high = 61;
+        none.pitches = major;
+        check (! generate (none).error.empty(), "stochastic: a sieve with no key in range says so");
+
+        // A MIDI file's own notes and onsets as sieves, and the line back as a MIDI file.
+        midifile::Song song;
+        for (int i = 0; i < 4; ++i)
+        {
+            song.events.push_back ({ i * 480, 0x90, (uint8_t) (60 + 4 * (i % 2)), 100 });
+            song.events.push_back ({ i * 480 + 240, 0x80, (uint8_t) (60 + 4 * (i % 2)), 0 });
+        }
+        check (pitchSieveOf (song, 0).points (0, 12) == std::vector<int64_t> { 0, 4 }, "stochastic: the clip's notes as a pitch sieve");
+        check (rhythmSieveOf (song, 120, 16).text() == "4@0", "stochastic: the clip's onsets as a rhythm sieve");
+        Settings small;
+        small.seed = 4;
+        const auto line = generate (small);
+        const auto written = toSong (song, line.notes, 2);
+        check (written->noteCount() == (int) line.notes.size() && written->channelsUsed == (1u << 2), "stochastic: the line as a MIDI file");
+    }
+
     void testPluginMeasure()
     {
         // A wire: flat, no delay, no distortion, no aliasing, no compression.
@@ -6617,6 +6727,7 @@ int main()
     testControlSurfaces();
     testDrumsToMidi();
     testRhythms();
+    testStochastic();
     testPluginMeasure();
 
     if (failures == 0)

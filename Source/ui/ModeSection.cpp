@@ -188,6 +188,12 @@ void MainWindow::registerModeCommands()
             return statusBar()->showMessage (tr ("Pick a MIDI clip in the mixer first"), 5000);
         mixerWin->fugueShown();
     })->setStatusTip (tr ("A fugue on the MIDI clip shown in the mixer as its subject, in the mode"));
+    add ("mode.stochasticize", tr ("&stochasticize..."), [this]
+    {
+        if (mixerWin == nullptr || ! mixerWin->showsMidiClip())
+            return statusBar()->showMessage (tr ("Pick a MIDI clip in the mixer first"), 5000);
+        mixerWin->stochasticizeShown();
+    })->setStatusTip (tr ("A new line beside the MIDI clip shown in the mixer, by Xenakis's methods, its pitches sieved from the mode"));
 }
 
 void MainWindow::fillModeMenu (QMenu* menu)
@@ -314,9 +320,10 @@ void MainWindow::fillModeMenu (QMenu* menu)
 
     menu->addSeparator();
     const auto clip = mixerWin != nullptr && mixerWin->showsMidiClip();
-    for (const auto* id : { "mode.tuneTrack", "mode.toClip", "mode.counterpoint", "mode.fugue" })
+    for (const auto* id : { "mode.tuneTrack", "mode.toClip", "mode.counterpoint", "mode.fugue", "mode.stochasticize" })
     {
-        const auto dialog = QLatin1String (id) == QLatin1String ("mode.counterpoint") || QLatin1String (id) == QLatin1String ("mode.fugue");
+        const auto dialog = QLatin1String (id) == QLatin1String ("mode.counterpoint") || QLatin1String (id) == QLatin1String ("mode.fugue")
+                            || QLatin1String (id) == QLatin1String ("mode.stochasticize");
         auto* a = commands.action (QString::fromLatin1 (id));
         a->setEnabled (m.system >= 0 || dialog);
         if (QLatin1String (id) != QLatin1String ("mode.tuneTrack"))
