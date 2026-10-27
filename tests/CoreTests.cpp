@@ -7778,6 +7778,32 @@ namespace
         check (near (g.notes[0].bendAt (120), 200.0, 1.0e-9) && near (g.notes[0].bendAt (240), 0.0, 1.0e-9), "note editor: gamak to the degree above");
         clearCurves (g);
         check (g.notes[0].curve.empty(), "note editor: curves cleared");
+
+        // Tuning changes within a clip: rast, then from bar 2 sléndro; saved as markers and read back.
+        Sequence m;
+        m.notes.push_back ({ 0, 480, 6300.0, 100 });
+        m.notes.push_back ({ 1920, 480, 6300.0, 100 });
+        const auto sl = fromTuning (mixer::tuningSystems()[(size_t) std::max (0, slendro)], 0);
+        changeSystem (m, 1920, sl);
+        check (systemAt (m, r, 0).name == r.name && systemAt (m, r, 1920).name == sl.name, "note editor: the system in force");
+        m.markers.push_back ({ 960, "verse" });
+        changeSystem (m, 0, r);
+        std::string why;
+        const auto bytes = midifile::bytes (*encode (m, {}).song);
+        const auto reread = midifile::parse (bytes.data(), bytes.size(), why);
+        const auto mb = reread ? decode (*reread) : Sequence {};
+        check (mb.systems.size() == 2 && mb.systems[1].tick == 1920 && mb.systems[1].system.name == sl.name && mb.systems[1].system.size() == sl.size()
+                   && near (mb.systems[1].system.degrees[2], sl.degrees[2], 1.0e-6) && mb.systems[1].system.names == sl.names
+                   && mb.systems[0].system.family == "maqam" && mb.markers.size() == 1 && mb.markers[0].text == "verse",
+               "note editor: the systems through a file's markers, the other markers kept");
+        // An edit by each stretch's system: up a degree is rast's in the first, sléndro's in the second.
+        bySystem (m, r, [] (Sequence& q, const PitchSystem& sys) { transposeSteps (q, sys, 1); });
+        check (near (m.notes[0].pitch, 6500.0, 1.0e-6) && near (m.notes[1].pitch, sl.pitchOf (sl.nearestStep (6300.0) + 1), 1.0e-6)
+                   && ! m.notes[0].selected && ! m.notes[1].selected,
+               "note editor: an edit in each stretch's own system");
+        check (removeSystemChange (m, 2000) && m.systems.size() == 1 && systemAt (m, twelveTet(), 2000).name == r.name, "note editor: a change taken out");
+        PitchSystem junk;
+        check (! parseSystemMarker ("verse", junk) && ! parseSystemMarker ("PHI system: x | y | tonic a | period 1200 | 0 |", junk), "note editor: other markers are not systems");
     }
 
 int main()

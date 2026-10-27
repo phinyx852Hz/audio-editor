@@ -72,6 +72,14 @@ private:
     void loadKeyboardMap();
     void exportScala();
     void setSystem (noteedit::PitchSystem);
+    // Tuning changes within the clip: the rows show the system in force at the step cursor.
+    const noteedit::PitchSystem& systemAt (int64_t tick) const;
+    void showSystemAt (int64_t tick);
+    void selectSystemItem (const noteedit::PitchSystem&);   // the System and root boxes, quietly
+    void changeSystemHere();
+    void removeSystemHere();
+    // An edit on the picked notes, each stretch of the clip in its own system.
+    void editBySystem (const std::function<void (noteedit::Sequence&, const noteedit::PitchSystem&)>&);
     void edit (const std::function<void (noteedit::Sequence&)>&);
     void undo();
     void redo();
@@ -97,7 +105,9 @@ private:
     midifile::Song original;
     noteedit::Sequence seq, ghosts;
     std::vector<noteedit::Sequence> undoList, redoList;
-    noteedit::PitchSystem system;
+    noteedit::PitchSystem system;   // the one shown: in force at the step cursor
+    noteedit::PitchSystem base;     // the clip's, before its first tuning change
+    std::vector<noteedit::PitchSystem> otherSystems;   // read from the clip, in the System box
     std::unique_ptr<phi::scala::Scale> scala;
     std::unique_ptr<phi::scala::KeyboardMap> keyboardMap;
     QString scalaName;

@@ -65,6 +65,16 @@ namespace
 
     double hzOf (double pitch) { return 440.0 * std::pow (2.0, (pitch - 6900.0) / 1200.0); }
 
+    bool sameSystem (const PitchSystem& a, const PitchSystem& b)
+    {
+        if (a.name != b.name || std::abs (a.tonic - b.tonic) > 1.0e-6 || std::abs (a.period - b.period) > 1.0e-6 || a.size() != b.size())
+            return false;
+        for (int i = 0; i < a.size(); ++i)
+            if (std::abs (a.degrees[(size_t) i] - b.degrees[(size_t) i]) > 1.0e-6)
+                return false;
+        return true;
+    }
+
     QString barText (int64_t tick, int tpq)
     {
         const auto bar = (int64_t) 4 * tpq;
@@ -201,6 +211,33 @@ protected:
             g.drawLine (QPointF (x, rulerHeight), QPointF (x, gridBottom));
         }
 
+        // Tuning changes: where a stretch is in another system than the rows, its degrees drawn
+        // across it.
+        if (! ed.seq.systems.empty())
+        {
+            const auto high = pitchAt (top, false), low = pitchAt (top + gridHeight(), false);
+            for (size_t k = 0; k <= ed.seq.systems.size(); ++k)
+            {
+                const auto& sys = k == 0 ? ed.base : ed.seq.systems[k - 1].system;
+                if (sameSystem (sys, ed.system))
+                    continue;
+                const auto x0 = std::max ((double) keyWidth, xOf (k == 0 ? 0 : ed.seq.systems[k - 1].tick));
+                const auto x1 = k < ed.seq.systems.size() ? std::min ((double) w, xOf (ed.seq.systems[k].tick)) : (double) w;
+                if (x1 <= x0)
+                    continue;
+                auto c = QColor (0xe0, 0x8a, 0x2a);
+                c.setAlphaF (0.07);
+                g.fillRect (QRectF (x0, rulerHeight, x1 - x0, gridHeight()), c);
+                for (auto st : sys.steps (low - 50.0, high + 50.0))
+                {
+                    const auto y = rulerHeight + centerY (sys.pitchOf (st)) - top;
+                    c.setAlphaF (sys.degreeOf (st) == 0 ? 0.8 : 0.45);
+                    g.setPen (QPen (c, sys.degreeOf (st) == 0 ? 1.4 : 0.8));
+                    g.drawLine (QPointF (x0, y), QPointF (x1, y));
+                }
+            }
+        }
+
         // Ghosts: the notes before the restyle.
         if (ed.ghostBox->isChecked())
         {
@@ -249,9 +286,10 @@ protected:
             }
             if (r.width() > 28 && r.height() >= 9)
             {
-                const auto step = ed.system.nearestStep (n.pitch);
-                const auto off = n.pitch - ed.system.pitchOf (step);
-                auto text = QString::fromStdString (label (ed.system, step, naming()));
+                const auto& sys = ed.systemAt (n.start);
+                const auto step = sys.nearestStep (n.pitch);
+                const auto off = n.pitch - sys.pitchOf (step);
+                auto text = QString::fromStdString (label (sys, step, naming()));
                 if (std::abs (off) >= 0.5)
                     text += QStringLiteral (" ") + QString::fromStdString (centsText (off));
                 g.setPen (pal.color (QPalette::HighlightedText));
@@ -322,6 +360,16 @@ protected:
             g.drawLine (QPointF (x, rulerHeight - 6), QPointF (x, rulerHeight));
             g.drawText (QPointF (x + 3, rulerHeight - 7), QString::number (t / barTicks + 1));
         }
+        // The tuning changes, flagged with their system's name.
+        for (const auto& c : ed.seq.systems)
+        {
+            const auto x = xOf (c.tick);
+            if (x < keyWidth || x > w)
+                continue;
+            g.fillRect (QRectF (x, 2, 3, rulerHeight - 2), QColor (0xe0, 0x8a, 0x2a));
+            g.drawText (QPointF (x + 5, 11), QString::fromStdString (c.system.name));
+        }
+        g.fillRect (QRect (0, 0, keyWidth, rulerHeight), pal.color (QPalette::Window));
         g.drawText (QRectF (4, 0, keyWidth - 8, rulerHeight), Qt::AlignVCenter | Qt::AlignLeft,
                     QString::fromStdString (ed.system.name.size() > 14 ? ed.system.name.substr (0, 13) + "…" : ed.system.name));
 
@@ -384,6 +432,7 @@ protected:
             ed.step.position = snapTick (tickAt (x), false);
             if (! ed.playTimer->isActive())
                 ed.playheadTick = ed.step.position;
+            ed.showSystemAt (ed.step.position);
             viewport()->update();
             return;
         }
@@ -754,6 +803,9 @@ private:
     void newNote (int64_t t, double pitch)
     {
         const auto start = snapTick (t, false);
+        // On a degree of the rows shown, but after a tuning change: that stretch's nearest degree.
+        if (const auto& sys = ed.systemAt (start); std::abs (pitch - ed.system.pitchOf (ed.system.nearestStep (pitch))) < 1.0e-6 && ! sameSystem (sys, ed.system))
+            pitch = sys.pitchOf (sys.nearestStep (pitch));
         const auto length = ed.noteLength();
         ed.edit ([&] (Sequence& s)
         {
@@ -1508,33 +1560,39 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     menu->addSeparator();
     menu->addAction (tr ("Velocity..."), this, &MidiEditor::velocityDialog);
     menu->addSeparator();
-    menu->addAction (tr ("Up a Degree (Up)"), this, [this] { edit ([this] (Sequence& s) { transposeSteps (s, system, 1); }); });
-    menu->addAction (tr ("Down a Degree (Down)"), this, [this] { edit ([this] (Sequence& s) { transposeSteps (s, system, -1); }); });
-    menu->addAction (tr ("Up a Period (Shift+Up)"), this, [this] { edit ([this] (Sequence& s) { transposeSteps (s, system, system.size()); }); });
-    menu->addAction (tr ("Down a Period (Shift+Down)"), this, [this] { edit ([this] (Sequence& s) { transposeSteps (s, system, -system.size()); }); });
-    menu->addAction (tr ("Snap to the System's Degrees"), this, [this] { edit ([this] (Sequence& s) { snapToSystem (s, system); }); });
+    const auto bySys = [this] (auto f) { return [this, f] { editBySystem (f); }; };
+    menu->addAction (tr ("Up a Degree (Up)"), this, bySys ([] (Sequence& s, const PitchSystem& sys) { transposeSteps (s, sys, 1); }));
+    menu->addAction (tr ("Down a Degree (Down)"), this, bySys ([] (Sequence& s, const PitchSystem& sys) { transposeSteps (s, sys, -1); }));
+    menu->addAction (tr ("Up a Period (Shift+Up)"), this, bySys ([] (Sequence& s, const PitchSystem& sys) { transposeSteps (s, sys, sys.size()); }));
+    menu->addAction (tr ("Down a Period (Shift+Down)"), this, bySys ([] (Sequence& s, const PitchSystem& sys) { transposeSteps (s, sys, -sys.size()); }));
+    menu->addAction (tr ("Snap to the System's Degrees"), this, bySys ([] (Sequence& s, const PitchSystem& sys) { snapToSystem (s, sys); }));
     menu->addAction (tr ("Restyle into This System..."), this, &MidiEditor::restyleDialog);
     // Ornaments (owner, 2026-10-26: "pitch curves for meend, gamaka and glides, plus PHI rāga's
-    // ornaments"), as curves on the picked notes, in the system shown.
+    // ornaments"), as curves on the picked notes, each in the system it is in.
     auto* ornaments = menu->addMenu (tr ("Ornaments"));
     const auto beat = [this] { return (int64_t) seq.ticksPerQuarter; };
     const auto bpm = [this] { return host.bpm > 0.0 ? host.bpm : seq.tempos.empty() ? 120.0 : 60.0e6 / seq.tempos.front().microsPerQuarter; };
-    ornaments->addAction (tr ("mīṇḍ to the next note, through the degrees"), this, [this] { edit ([this] (Sequence& s) { glideToNext (s, system, 0.4, true); }); });
-    ornaments->addAction (tr ("Glide to the next note"), this, [this] { edit ([this] (Sequence& s) { glideToNext (s, system, 0.5, false); }); });
-    ornaments->addAction (tr ("Slide in from the degree below"), this, [this, beat] { edit ([this, beat] (Sequence& s) { slideIn (s, system, -1, beat() / 4); }); });
-    ornaments->addAction (tr ("Slide in from the degree above"), this, [this, beat] { edit ([this, beat] (Sequence& s) { slideIn (s, system, 1, beat() / 4); }); });
-    ornaments->addAction (tr ("kaṇ from the degree above"), this, [this, beat] { edit ([this, beat] (Sequence& s) { kan (s, system, 1, beat() / 8); }); });
-    ornaments->addAction (tr ("kaṇ from the degree below"), this, [this, beat] { edit ([this, beat] (Sequence& s) { kan (s, system, -1, beat() / 8); }); });
+    ornaments->addAction (tr ("mīṇḍ to the next note, through the degrees"), this, [this] { editBySystem ([] (Sequence& s, const PitchSystem& sys) { glideToNext (s, sys, 0.4, true); }); });
+    ornaments->addAction (tr ("Glide to the next note"), this, [this] { editBySystem ([] (Sequence& s, const PitchSystem& sys) { glideToNext (s, sys, 0.5, false); }); });
+    ornaments->addAction (tr ("Slide in from the degree below"), this, [this, beat] { editBySystem ([beat] (Sequence& s, const PitchSystem& sys) { slideIn (s, sys, -1, beat() / 4); }); });
+    ornaments->addAction (tr ("Slide in from the degree above"), this, [this, beat] { editBySystem ([beat] (Sequence& s, const PitchSystem& sys) { slideIn (s, sys, 1, beat() / 4); }); });
+    ornaments->addAction (tr ("kaṇ from the degree above"), this, [this, beat] { editBySystem ([beat] (Sequence& s, const PitchSystem& sys) { kan (s, sys, 1, beat() / 8); }); });
+    ornaments->addAction (tr ("kaṇ from the degree below"), this, [this, beat] { editBySystem ([beat] (Sequence& s, const PitchSystem& sys) { kan (s, sys, -1, beat() / 8); }); });
     ornaments->addSeparator();
     ornaments->addAction (tr ("āndolan (a slow swing under the note)"), this, [this, bpm] { edit ([this, bpm] (Sequence& s) { swing (s, 30.0, 1.5, bpm(), true); }); });
-    ornaments->addAction (tr ("gamak (a shake to the degree above)"), this, [this, bpm] { edit ([this, bpm] (Sequence& s) { gamak (s, system, 5.0, bpm()); }); });
+    ornaments->addAction (tr ("gamak (a shake to the degree above)"), this, [this, bpm] { editBySystem ([bpm] (Sequence& s, const PitchSystem& sys) { gamak (s, sys, 5.0, bpm()); }); });
     ornaments->addAction (tr ("Vibrato"), this, [this, bpm] { edit ([this, bpm] (Sequence& s) { swing (s, 25.0, 5.5, bpm(), false); }); });
     ornaments->addSeparator();
-    ornaments->addAction (tr ("murkī (above, the note, below)"), this, [this, beat] { edit ([this, beat] (Sequence& s) { turn (s, system, { 0, 1, 0, -1, 0 }, beat() / 12); }); });
-    ornaments->addAction (tr ("khaṭkā (from above, round the note)"), this, [this, beat] { edit ([this, beat] (Sequence& s) { turn (s, system, { 1, 0, -1, 0 }, beat() / 12); }); });
-    ornaments->addAction (tr ("zamzama (the note and the one above, quickly)"), this, [this, beat] { edit ([this, beat] (Sequence& s) { turn (s, system, { 1, 0, 1, 0, -1, 0 }, beat() / 16); }); });
+    ornaments->addAction (tr ("murkī (a quick turn above and below the note)"), this, [this, beat] { editBySystem ([beat] (Sequence& s, const PitchSystem& sys) { turn (s, sys, { 0, 1, 0, -1, 0 }, beat() / 12); }); });
+    ornaments->addAction (tr ("khaṭkā (from above, round the note)"), this, [this, beat] { editBySystem ([beat] (Sequence& s, const PitchSystem& sys) { turn (s, sys, { 1, 0, -1, 0 }, beat() / 12); }); });
+    ornaments->addAction (tr ("zamzama (the note and the one above, quickly)"), this, [this, beat] { editBySystem ([beat] (Sequence& s, const PitchSystem& sys) { turn (s, sys, { 1, 0, 1, 0, -1, 0 }, beat() / 16); }); });
     ornaments->addSeparator();
     ornaments->addAction (tr ("Clear the Curves"), this, on ([] (Sequence& s) { clearCurves (s); }));
+    // Tuning changes (owner, 2026-10-26: "tuning changes within a piece").
+    auto* changes = menu->addMenu (tr ("Tuning Changes"));
+    changes->addAction (tr ("Change the System at the Cursor..."), this, &MidiEditor::changeSystemHere);
+    changes->addAction (tr ("Take Out the Change in Force at the Cursor"), this, &MidiEditor::removeSystemHere);
+    changes->addAction (tr ("Take Out All the Changes"), this, on ([] (Sequence& s) { s.systems.clear(); }));
     menu->addSeparator();
     menu->addAction (tr ("Select All (Ctrl+A)"), this, [this] { selectAll (seq, true); changed(); });
     menu->addAction (tr ("Select None"), this, [this] { selectAll (seq, false); changed(); });
@@ -1591,6 +1649,14 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     }
     else
         system = twelveTet (host.root);
+    // The system the clip was saved in, and its tuning changes, from its markers.
+    if (! seq.systems.empty() && seq.systems.front().tick == 0)
+    {
+        system = seq.systems.front().system;
+        seq.systems.erase (seq.systems.begin());
+        selectSystemItem (system);
+    }
+    base = system;
     const auto e = suggestedEncoding (seq);
     encodingBox->setCurrentIndex (encodingBox->findData ((int) e));
     step.length = step.step = noteLength();
@@ -1630,6 +1696,11 @@ void MidiEditor::systemChosen()
         loadScala();
         return;
     }
+    if (choice <= -10 && -choice - 10 < (int) otherSystems.size())
+    {
+        setSystem (otherSystems[(size_t) (-choice - 10)]);
+        return;
+    }
     if (choice == -2 && scala != nullptr)
     {
         // A Scala scale: on the root, unless its keyboard map says where.
@@ -1645,12 +1716,87 @@ void MidiEditor::systemChosen()
 
 void MidiEditor::setSystem (PitchSystem s)
 {
+    // In a stretch after a tuning change, the change's system; else the clip's.
+    const auto at = step.position;
+    if (std::any_of (seq.systems.begin(), seq.systems.end(), [at] (const SystemChange& c) { return c.tick <= at; }))
+        edit ([&] (Sequence& q) { changeSystem (q, std::max_element (q.systems.begin(), q.systems.end(), [at] (const SystemChange& a, const SystemChange& b)
+                                                                                    { return (a.tick <= at ? a.tick : -1) < (b.tick <= at ? b.tick : -1); })->tick, s); });
+    else
+        base = s;
     system = std::move (s);
     roll->rebuild();
     roll->showNotes();
     if (spectrum->isVisible())
         spectrum->showNotes();
     changed();
+}
+
+const PitchSystem& MidiEditor::systemAt (int64_t tick) const { return noteedit::systemAt (seq, base, tick); }
+
+void MidiEditor::showSystemAt (int64_t tick)
+{
+    const auto& s = systemAt (tick);
+    if (sameSystem (s, system))
+        return;
+    system = s;
+    selectSystemItem (system);
+    roll->rebuild();
+    if (spectrum->isVisible())
+        spectrum->update();
+    viewsUpdate();
+    updateInfo();
+}
+
+void MidiEditor::selectSystemItem (const PitchSystem& s)
+{
+    const QSignalBlocker blockSystem (systemBox), blockRoot (rootBox);
+    rootBox->setCurrentIndex (((int) std::lround (s.tonic / 100.0) % 12 + 12) % 12);
+    // A tuning of PHI's on that root, 12-TET, the Scala scale open, else one read from the clip.
+    const auto root = rootBox->currentIndex();
+    if (sameSystem (s, twelveTet (root)))
+    {
+        systemBox->setCurrentIndex (systemBox->findData (-1));
+        return;
+    }
+    const auto& all = mixer::tuningSystems();
+    for (int t = 0; t < (int) all.size(); ++t)
+        if (sameSystem (s, fromTuning (all[(size_t) t], root)))
+        {
+            systemBox->setCurrentIndex (systemBox->findData (t));
+            return;
+        }
+    for (size_t i = 0; i < otherSystems.size(); ++i)
+        if (sameSystem (s, otherSystems[i]))
+        {
+            systemBox->setCurrentIndex (systemBox->findData (-10 - (int) i));
+            return;
+        }
+    otherSystems.push_back (s);
+    systemBox->insertItem (1, tr ("%1 (from the clip)").arg (QString::fromStdString (s.name)), -10 - (int) (otherSystems.size() - 1));
+    systemBox->setCurrentIndex (1);
+}
+
+void MidiEditor::changeSystemHere()
+{
+    if (step.position <= 0)
+    {
+        QMessageBox::information (this, tr ("Tuning Changes"), tr ("Put the step cursor where the new system starts (click the ruler), then change it there."));
+        return;
+    }
+    edit ([this] (Sequence& s) { changeSystem (s, step.position, system); });
+    // The system from here on is picked next.
+    systemBox->setFocus();
+    systemBox->showPopup();
+}
+
+void MidiEditor::removeSystemHere()
+{
+    edit ([this] (Sequence& s) { removeSystemChange (s, step.position); });
+}
+
+void MidiEditor::editBySystem (const std::function<void (Sequence&, const PitchSystem&)>& f)
+{
+    edit ([&] (Sequence& s) { bySystem (s, base, f); });
 }
 
 void MidiEditor::loadScala()
@@ -1809,6 +1955,7 @@ void MidiEditor::changed()
     }
     else
         encodingNote->setText (host.system >= 0 ? tr ("The track's tuning plays the keys") : QString());
+    showSystemAt (step.position);
     roll->refresh();
     viewsUpdate();
     updateInfo();
@@ -1845,14 +1992,15 @@ void MidiEditor::updateInfo()
     else
     {
         const auto& n = *picked.front();
-        const auto stepAt = system.nearestStep (n.pitch);
-        const auto off = n.pitch - system.pitchOf (stepAt);
+        const auto& sys = systemAt (n.start);
+        const auto stepAt = sys.nearestStep (n.pitch);
+        const auto off = n.pitch - sys.pitchOf (stepAt);
         auto text = picked.size() > 1 ? tr ("%1 notes picked, the first: ").arg (picked.size()) : QString();
         text += tr ("%1 · %2, degree %3 of %4 · %5 Hz")
                     .arg (barText (n.start, seq.ticksPerQuarter),
-                          QString::fromStdString (label (system, stepAt, naming)) + (std::abs (off) >= 0.5 ? QStringLiteral (" ") + QString::fromStdString (centsText (off)) : QString()))
-                    .arg (system.degreeOf (stepAt) + 1)
-                    .arg (system.size())
+                          QString::fromStdString (label (sys, stepAt, naming)) + (std::abs (off) >= 0.5 ? QStringLiteral (" ") + QString::fromStdString (centsText (off)) : QString()))
+                    .arg (sys.degreeOf (stepAt) + 1)
+                    .arg (sys.size())
                     .arg (hzOf (n.pitch), 0, 'f', 2);
         if (n.channel == 9)
             text += tr (" · drums");
@@ -1884,7 +2032,10 @@ void MidiEditor::infoEdited()
             else if (changedBox == infoLength)
                 n.length = length;
             else if (changedBox == infoPitch)
-                n.pitch = std::clamp (system.pitchOf (system.nearestStep (n.pitch)) + off, 0.0, 12700.0);
+            {
+                const auto& sys = systemAt (n.start);
+                n.pitch = std::clamp (sys.pitchOf (sys.nearestStep (n.pitch)) + off, 0.0, 12700.0);
+            }
         }
     });
     // Typing in the boxes one change after another is one undo step.
@@ -1978,7 +2129,8 @@ void MidiEditor::restyleDialog()
     for (auto& n : ghosts.notes)
         n.selected = false;
     const auto byDegree = how->currentIndex() == 0;
-    edit ([&] (Sequence& s) { restyle (s, source, system, byDegree); });
+    // Into the system each stretch of the clip is in, when its tuning changes.
+    editBySystem ([&] (Sequence& s, const PitchSystem& to) { restyle (s, source, to, byDegree); });
 }
 
 double MidiEditor::pitchForKey (int key) const
@@ -2078,6 +2230,7 @@ void MidiEditor::keyPressEvent (QKeyEvent* e)
         if (e->key() == Qt::Key_Left || e->key() == Qt::Key_Right)
         {
             step.position = std::max<int64_t> (0, step.position + (e->key() == Qt::Key_Left ? -step.step : step.step));
+            showSystemAt (step.position);
             roll->refresh();
             return;
         }
@@ -2100,7 +2253,7 @@ void MidiEditor::keyPressEvent (QKeyEvent* e)
             if (alt)
                 edit ([dir] (Sequence& s) { transposeCents (s, dir); });
             else
-                edit ([this, dir, shift] (Sequence& s) { transposeSteps (s, system, dir * (shift ? system.size() : 1)); });
+                editBySystem ([dir, shift] (Sequence& s, const PitchSystem& sys) { transposeSteps (s, sys, dir * (shift ? sys.size() : 1)); });
             for (const auto& n : seq.notes)
                 if (n.selected)
                 {
@@ -2260,6 +2413,9 @@ midifile::SongPtr MidiEditor::result() const
     auto s = seq;
     for (auto& n : s.notes)
         n.selected = false;
+    // The clip's own system, kept with it as a marker at the start, before its changes.
+    if (s.systems.empty() || s.systems.front().tick > 0)
+        s.systems.insert (s.systems.begin(), { 0, base });
     return encode (s, encodeOptions()).song;
 }
 

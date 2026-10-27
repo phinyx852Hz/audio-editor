@@ -7,9 +7,11 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 #include <map>
 #include <memory>
 #include <numeric>
+#include <sstream>
 
 namespace noteedit
 {
@@ -385,6 +387,14 @@ namespace noteedit
         s.ticksPerQuarter = song.ticksPerQuarter > 0 ? song.ticksPerQuarter : 480;
         s.tempos = song.tempos.empty() ? std::vector<midifile::Tempo> { midifile::Tempo {} } : song.tempos;
         s.trackNames = song.trackNames;
+        for (const auto& m : song.markers)
+        {
+            PitchSystem ps;
+            if (parseSystemMarker (m.text, ps))
+                s.systems.push_back ({ m.tick, std::move (ps) });
+            else
+                s.markers.push_back (m);
+        }
         s.lastTick = song.lastTick;
 
         std::array<ChannelState, 16> ch {};
@@ -507,6 +517,145 @@ namespace noteedit
         }
         s.sort();
         return s;
+    }
+
+    //==========================================================================
+    const PitchSystem& systemAt (const Sequence& s, const PitchSystem& before, int64_t tick)
+    {
+        const PitchSystem* in = &before;
+        for (const auto& c : s.systems)
+            if (c.tick <= tick)
+                in = &c.system;
+        return *in;
+    }
+
+    void changeSystem (Sequence& s, int64_t tick, const PitchSystem& system)
+    {
+        tick = std::max<int64_t> (0, tick);
+        for (auto& c : s.systems)
+            if (c.tick == tick)
+            {
+                c.system = system;
+                return;
+            }
+        s.systems.push_back ({ tick, system });
+        std::stable_sort (s.systems.begin(), s.systems.end(), [] (const auto& a, const auto& b) { return a.tick < b.tick; });
+    }
+
+    bool removeSystemChange (Sequence& s, int64_t tick)
+    {
+        for (auto i = (int) s.systems.size() - 1; i >= 0; --i)
+            if (s.systems[(size_t) i].tick <= tick)
+            {
+                s.systems.erase (s.systems.begin() + i);
+                return true;
+            }
+        return false;
+    }
+
+    void bySystem (Sequence& s, const PitchSystem& before, const std::function<void (Sequence&, const PitchSystem&)>& edit)
+    {
+        s.sort();
+        const auto picked = s.anySelected();
+        std::vector<bool> target (s.notes.size(), false);
+        for (auto i : s.targets())
+            target[i] = true;
+        // The stretches: before the first change, then from each change to the next.
+        std::vector<int64_t> from { std::numeric_limits<int64_t>::min() };
+        for (const auto& c : s.systems)
+            from.push_back (c.tick);
+        for (size_t k = 0; k < from.size(); ++k)
+        {
+            const auto to = k + 1 < from.size() ? from[k + 1] : std::numeric_limits<int64_t>::max();
+            if (k + 1 < from.size() && to <= from[k])
+                continue;
+            bool any = false;
+            for (size_t i = 0; i < s.notes.size(); ++i)
+            {
+                const auto in = s.notes[i].start >= from[k] && s.notes[i].start < to;
+                s.notes[i].selected = in && target[i];
+                any |= s.notes[i].selected;
+            }
+            if (! any)
+                continue;
+            const auto& sys = k == 0 ? before : s.systems[k - 1].system;
+            edit (s, sys);
+            // Notes of one start may have changed places: their flags go with them.
+            target.resize (s.notes.size(), false);
+            for (size_t i = 0; i < s.notes.size(); ++i)
+                if (s.notes[i].start >= from[k] && s.notes[i].start < to)
+                    target[i] = s.notes[i].selected;
+        }
+        for (size_t i = 0; i < s.notes.size(); ++i)
+            s.notes[i].selected = picked && target[i];
+    }
+
+    namespace
+    {
+        const std::string markerPrefix = "PHI system: ";
+    }
+
+    std::string systemMarker (const PitchSystem& p)
+    {
+        std::ostringstream out;
+        out.imbue (std::locale::classic());
+        out.precision (10);
+        out << markerPrefix << p.name << " | " << p.family << " | tonic " << p.tonic << " | period " << p.period << " |";
+        for (auto d : p.degrees)
+            out << ' ' << d;
+        out << " |";
+        for (size_t i = 0; i < p.names.size(); ++i)
+            out << (i == 0 ? " " : ",") << p.names[i];
+        return out.str();
+    }
+
+    bool parseSystemMarker (const std::string& text, PitchSystem& p)
+    {
+        if (text.rfind (markerPrefix, 0) != 0)
+            return false;
+        std::vector<std::string> parts;
+        size_t at = markerPrefix.size();
+        for (;;)
+        {
+            const auto bar = text.find (" |", at);
+            parts.push_back (text.substr (at, bar == std::string::npos ? std::string::npos : bar - at));
+            if (bar == std::string::npos)
+                break;
+            at = bar + 2;
+            if (at < text.size() && text[at] == ' ')
+                ++at;
+        }
+        if (parts.size() < 5)
+            return false;
+        PitchSystem r;
+        r.name = parts[0];
+        r.family = parts[1];
+        const auto number = [] (const std::string& t, const char* key, double& v)
+        {
+            std::istringstream in (t);
+            in.imbue (std::locale::classic());
+            std::string k;
+            return (bool) (in >> k >> v) && k == key;
+        };
+        if (! number (parts[2], "tonic", r.tonic) || ! number (parts[3], "period", r.period) || r.period <= 0.0)
+            return false;
+        std::istringstream degrees (parts[4]);
+        degrees.imbue (std::locale::classic());
+        for (double d; degrees >> d;)
+            r.degrees.push_back (d);
+        if (r.degrees.empty() || ! std::is_sorted (r.degrees.begin(), r.degrees.end()))
+            return false;
+        if (parts.size() > 5 && ! parts[5].empty())
+        {
+            std::string name;
+            std::istringstream names (parts[5]);
+            while (std::getline (names, name, ','))
+                r.names.push_back (name);
+            if (r.names.size() != r.degrees.size())
+                r.names.clear();
+        }
+        p = std::move (r);
+        return true;
     }
 
     Encoding suggestedEncoding (const Sequence& s)
@@ -684,6 +833,10 @@ namespace noteedit
         song->ticksPerQuarter = s.ticksPerQuarter;
         song->tempos = s.tempos;
         song->trackNames = s.trackNames;
+        song->markers = s.markers;
+        for (const auto& c : s.systems)
+            song->markers.push_back ({ c.tick, systemMarker (c.system) });
+        std::stable_sort (song->markers.begin(), song->markers.end(), [] (const auto& a, const auto& b) { return a.tick < b.tick; });
         for (const auto& x : out)
         {
             song->events.push_back (x.e);

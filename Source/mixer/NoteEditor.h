@@ -92,6 +92,14 @@ namespace noteedit
         double bendAt (int64_t ticksIn) const;   // the curve's cents that far into the note
     };
 
+    // A tuning change within a clip (owner, 2026-10-26: "tuning changes within a piece"): from its
+    // tick on, the notes are in this system (a modulation, a rāga-mālā, a pathet change).
+    struct SystemChange
+    {
+        int64_t tick = 0;
+        PitchSystem system;
+    };
+
     struct Sequence
     {
         int ticksPerQuarter = 480;
@@ -99,6 +107,10 @@ namespace noteedit
         std::vector<midifile::Event> other;      // controllers, programs, pressure, bends between notes
         std::vector<midifile::Tempo> tempos { midifile::Tempo {} };
         std::vector<std::string> trackNames;
+        std::vector<midifile::Marker> markers;   // the file's markers, apart from the systems
+        // The systems the clip is in, in time order: one at 0 is the clip's own; with none the
+        // editor's choice holds throughout. Saved as markers ("PHI system: ...").
+        std::vector<SystemChange> systems;
         int64_t lastTick = 0;                    // the clip's length; at least the last note's end
 
         void sort();
@@ -137,6 +149,19 @@ namespace noteedit
     Encoded encode (const Sequence&, const EncodeOptions&);
     // Keys when every note sits on a key and none is curved, else MPE.
     Encoding suggestedEncoding (const Sequence&);
+
+    // The system in force at a tick: the last change at or before it, else `before`.
+    const PitchSystem& systemAt (const Sequence&, const PitchSystem& before, int64_t tick);
+    // A change to `system` at the tick, replacing one there.
+    void changeSystem (Sequence&, int64_t tick, const PitchSystem&);
+    // The change in force at the tick taken out (the one before it then holds on); false if none.
+    bool removeSystemChange (Sequence&, int64_t tick);
+    // An edit made on the targets in each stretch of the clip with that stretch's system (each
+    // note by the system it starts in). The edit must keep the notes' count and starts.
+    void bySystem (Sequence&, const PitchSystem& before, const std::function<void (Sequence&, const PitchSystem&)>&);
+    // A system as a marker's text and back: its name, family, tonic, period, degrees and names.
+    std::string systemMarker (const PitchSystem&);
+    bool parseSystemMarker (const std::string&, PitchSystem&);
 
     //==========================================================================
     // Edits, each on the targets (the picked notes, else all). A grid is in ticks.

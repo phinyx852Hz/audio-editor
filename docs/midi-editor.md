@@ -41,6 +41,29 @@ fast edits do, and Ctrl+Z on the tracks puts the clip back.
   mixer/NoteEditor.h); a new mode in mixer/Tunings.cpp takes its family's names, and a mode whose
   degrees have names of their own lists them in `TuningSystem::names`.
 
+## Tuning changes within a clip
+
+Owner, 2026-10-26: "tuning changes within a piece". A clip can change system part way: a
+modulation from rāst to bayātī, a rāga-mālā, sléndro to pélog, a new pathet.
+
+- **Functions > Tuning Changes > Change the System at the Cursor...**: click the ruler where the
+  new system starts, choose this, then pick the system from there on in **System**. The change is
+  flagged in the ruler with its name.
+- The rows show the system in force at the step cursor: click the ruler in another stretch and the
+  rows, the names and the System box follow it. The stretches in another system are tinted, with
+  their degrees drawn across them, so both are seen at once.
+- Picking a system in **System** sets the one in force at the cursor; before the first change it
+  is the clip's own.
+- A note keeps its pitch when a change is put in; **Snap**, **Up** and **Down** a degree, the
+  ornaments and **Restyle** each work in the system of the stretch a note starts in, so restyling a
+  12-TET melody over a change moves each half into its own system. A drawn note lands on the
+  degrees of its stretch.
+- **Take Out the Change in Force at the Cursor** and **Take Out All the Changes** remove them.
+- The clip's system and its changes are saved in its MIDI file as markers ("PHI system: ...", its
+  name, tonic, period, degrees and names), so the clip opens in them again, even a Scala scale's.
+  Saved as MPE or pitch bend, every change sounds as written on any synth; saved as keys, the
+  track's single tuning plays them, so MPE is the choice for a clip whose tuning changes.
+
 ## The rising spectrum and the scale wheel
 
 - **View: Rising spectrum** (owner, 2026-10-26: "the vertical MIDI view ... with a spectral frequency
@@ -157,6 +180,6 @@ MIDIRestyle (MIT) for restyling by degree, the ghosts, A/B and pitch bend shared
 XenRoll (GPL-3.0) for cent-accurate notes, moving a note by the cent, and MPE; Blue's PianoRoll for
 rows that follow a Scala scale; Intonara for the pitch axis; Cubase for the tools, the info line,
 the lanes, quantise and step input. Ideas only: no code from any of them is used. Next, as agreed
-with the owner: hum or sing to notes, tuning changes within a clip, and MTS-ESP.
+with the owner: hum or sing to notes, and MTS-ESP.
 
 The code: mixer/NoteEditor.h (the model, plain C++, with tests), core/Scala.h, ui/MidiEditor.h.
