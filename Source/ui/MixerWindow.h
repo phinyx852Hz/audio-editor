@@ -219,6 +219,10 @@ public:
     // playhead, or of a timeline clip into the track's next empty slot.
     void slotToTimeline (int track, int scene);
     void clipToLauncher (int track, uint32_t id);
+    // A rhythm from the Mode menu's rhythmic modes (RhythmSection.cpp): saved as a MIDI file
+    // with the mix's edits, `stem` naming it, and placed on the selected track at the playhead,
+    // the Synth's drum kit playing it when the track has no instrument. False with no track.
+    bool addRhythm (const midifile::Song&, const QString& stem);
 
 Q_SIGNALS:
     void mixdownRequested();

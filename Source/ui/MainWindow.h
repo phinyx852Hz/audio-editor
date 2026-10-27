@@ -446,6 +446,11 @@ private:
     // has, for the MIDI clip, counterpoint, the fugue and the PHI synth's tuning together.
     void registerModeCommands();
     void fillModeMenu (QMenu*);
+    // Its rhythmic modes (RhythmSection.cpp, docs/rhythms.md): a rhythm put on the selected
+    // mixer track, written into a new Tracker pattern, or saved as a MIDI file.
+    void fillRhythmMenu (QMenu*);
+    void useRhythm (int index);
+    void rhythmToTracker (int index, int cycles, double bpm);
     // Control surfaces and MIDI Learn (ControlSection.cpp, docs/control-surfaces.md): Launchpads,
     // Launchkeys and Push play the mixer's launcher, strips and transport, lit in the tracks'
     // colours; any other controller's knobs and buttons are mapped by MIDI Learn.

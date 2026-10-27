@@ -13,6 +13,7 @@
 #include "../Source/mixer/Fugue.h"
 #include "../Source/mixer/MixerEngine.h"
 #include "../Source/mixer/DrumsToMidi.h"
+#include "../Source/mixer/Rhythms.h"
 #include "../Source/patchbay/PatchBay.h"
 #include "../Source/core/Ixml.h"
 #include "../Source/core/Metadata.h"
@@ -6368,6 +6369,51 @@ namespace
         }
     }
 
+    // The Mode menu's rhythmic modes: every pattern the length of its cycle, and each a MIDI file
+    // that reads back with its notes; the tāls' and tāḷams' structures as the sources give them.
+    void testRhythms()
+    {
+        const auto& all = rhythm::rhythms();
+        check (all.size() > 100, "rhythms: the library is there (" + std::to_string (all.size()) + ")");
+        for (const auto& r : all)
+        {
+            check (rhythm::valid (r), "rhythm " + r.plain + ": every lane is one cycle long, the sections add up");
+            for (const auto c : r.name)
+                check (! (c >= 'A' && c <= 'Z'), "rhythm " + r.plain + ": the name is lower case");
+            check (std::count_if (all.begin(), all.end(), [&] (const rhythm::Rhythm& o) { return o.plain == r.plain; }) == 1,
+                   "rhythm " + r.plain + ": its plain name is its own");
+            const auto song = rhythm::toSong (r, 2, r.bpm);
+            std::string error;
+            const auto bytes = midifile::bytes (*song);
+            const auto back = midifile::parse (bytes.data(), bytes.size(), error);
+            check (back != nullptr && back->noteCount() == song->noteCount() && song->noteCount() > 0,
+                   "rhythm " + r.plain + ": a MIDI file with its notes");
+            check (song->lastTick == 2 * r.beats * 480, "rhythm " + r.plain + ": two cycles long");
+        }
+        auto find = [&] (const char* plain) -> const rhythm::Rhythm& { return all[(size_t) std::max (0, rhythm::findRhythm (plain))]; };
+        check (rhythm::findRhythm ("tintal") >= 0 && find ("tintal").beats == 16 && find ("tintal").sections == std::vector<int> { 4, 4, 4, 4 },
+               "tīntāl: 16 mātrās, 4+4+4+4");
+        check (find ("jhaptal").beats == 10 && find ("rupak").beats == 7 && find ("ektal").beats == 12 && find ("dhamar").beats == 14,
+               "jhaptāl 10, rūpak 7, ektāl 12, dhamār 14 mātrās");
+        check (find ("caturasra jati triputa talam (adi talam)").beats == 8, "ādi tāḷam: 8 akṣaras (4+2+2)");
+        check (find ("misra jati jhampa talam").beats == 10 && find ("khanda jati ata talam").beats == 14
+                   && find ("sankirna jati dhruva talam").beats == 29 && find ("tisra jati eka talam").beats == 3,
+               "sūḷādi tāḷas: laghu by jāti, drutam 2, anudrutam 1");
+        int talams = 0;
+        for (const auto& r : all)
+            talams += r.group == "south indian tāḷam" && r.subgroup != "cāpu";
+        check (talams == 35, "the 35 sūḷādi tāḷas: seven tāḷas in five jātis");
+        // The tracker writes a row for the finest step: tīntāl's ṭhekā is a bol a mātrā, ektāl's has tirakiṭa.
+        check (rhythm::rowsPerBeat (find ("tintal")) == 1 && rhythm::rowsPerBeat (find ("ektal")) == 4
+                   && rhythm::rowsPerBeat (find ("trap triplet hats")) == 12,
+               "rows a beat: the steps every sound falls on");
+        // A held note (the medieval modes' long) lasts its tempora.
+        const auto& primus = find ("modus primus");
+        const auto hits = rhythm::hits (primus);
+        check (std::any_of (hits.begin(), hits.end(), [] (const rhythm::Hit& h) { return h.length == 2; }), "modus primus: the long held two tempora");
+        check (rhythm::drumName (39) == "hand clap" && rhythm::drumName (81) == "open triangle" && rhythm::drumName (20).empty(), "general midi drum names");
+    }
+
     // Control surfaces and MIDI Learn (docs/control-surfaces.md).
     void testControlSurfaces()
     {
@@ -6570,6 +6616,7 @@ int main()
     testRecording();
     testControlSurfaces();
     testDrumsToMidi();
+    testRhythms();
     testPluginMeasure();
 
     if (failures == 0)
