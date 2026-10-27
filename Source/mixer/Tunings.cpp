@@ -162,14 +162,21 @@ namespace mixer
             const auto laras = [&] (std::string name, std::string plain, const char* family, const std::map<int, double>& tones,
                                     std::initializer_list<int> use, int from)
             {
-                std::vector<double> c;
+                std::vector<std::pair<double, int>> at;
                 for (auto tone : use)
                 {
                     auto d = tones.at (tone) - tones.at (from);
-                    c.push_back (d < 0 ? d + 1200.0 : d);
+                    at.push_back ({ d < 0 ? d + 1200.0 : d, tone });
                 }
-                std::sort (c.begin(), c.end());
-                all.push_back ({ std::move (name), std::move (plain), family, std::move (c), 0 });
+                std::sort (at.begin(), at.end());
+                std::vector<double> c;
+                std::vector<std::string> numbers;
+                for (auto [d, tone] : at)
+                {
+                    c.push_back (d);
+                    numbers.push_back (std::to_string (tone));
+                }
+                all.push_back ({ std::move (name), std::move (plain), family, std::move (c), 0, std::move (numbers) });
             };
             laras ("sléndro", "slendro", "javanese gamelan", slendro, { 1, 2, 3, 5, 6 }, 1);
             laras ("sléndro pathet nem", "slendro pathet nem", "javanese gamelan", slendro, { 1, 2, 3, 5, 6 }, 2);
@@ -190,7 +197,7 @@ namespace mixer
             // in its common reading on the keys (da mi na ti la, numbered 1 to 5 from the top, as
             // C B G F E), from la upward.
             all.push_back ({ "salendro", "salendro", "sundanese gamelan", { 0, 240, 480, 720, 960 }, 0 });
-            all.push_back ({ "degung", "degung", "sundanese gamelan", { 0, 100, 300, 700, 800 }, 0 });
+            all.push_back ({ "degung", "degung", "sundanese gamelan", { 0, 100, 300, 700, 800 }, 0, { "la", "ti", "na", "mi", "da" } });
             // Shona mbira (owner, 2026-10-26: "mode and tuning systems from Zimbabwe, especially from
             // the Shona people"). Mbira dzavadzimu tunings are one heptatonic gamut read from
             // different keys, as Garikayi Tirikoti's mbira orchestra plays one scale from seven

@@ -15,6 +15,7 @@
 #include "../core/Dsp.h"
 #include "../core/Phi.h"
 #include "../mixer/Counterpoint.h"
+#include "MidiEditor.h"
 #include "../engine/AudioCapture.h"
 #include "../engine/AudioEngine.h"
 
@@ -6083,8 +6084,8 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     inspectorLayout = new QVBoxLayout (inspectorArea);
     inspectorLayout->setContentsMargins (0, 0, 0, 0);
     inspectorLayout->setSpacing (4);
-    // A MIDI clip picked: its fast edits at the top (owner, 2026-10-25). No notes are picked or
-    // moved by hand; R reverses it.
+    // A MIDI clip picked: its fast edits at the top (owner, 2026-10-25), and the MIDI editor for
+    // picking and moving the notes by hand (owner, 2026-10-26); R reverses it.
     midiClipBox = new QFrame (inspectorArea);
     midiClipBox->setObjectName (QStringLiteral ("midiClipBox"));
     midiClipBox->setStyleSheet (QStringLiteral ("QFrame#midiClipBox { border: 1px solid palette(mid); border-radius: 4px; }"));
@@ -6171,10 +6172,15 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
                               "scene to cubify the whole scene)"));
         grid->addWidget (cube, 4, 2, 1, 2);
         connect (cube, &QPushButton::clicked, this, [this] { cubifyShownMidi(); });
+        auto* notesButton = new QPushButton (tr ("Edit Notes..."), midiClipBox);
+        notesButton->setToolTip (tr ("The MIDI editor: the notes on a piano roll in 12-TET, or in a mode, raga, maqam, laras or Scala "
+                                     "scale, with step input, quantise, restyle and MPE"));
+        grid->addWidget (notesButton, 5, 0, 1, 4);
         auto* hint = new QLabel (tr ("R reverses it"), midiClipBox);
         hint->setForegroundRole (QPalette::PlaceholderText);
-        grid->addWidget (hint, 5, 0, 1, 4);
+        grid->addWidget (hint, 6, 0, 1, 4);
         connect (counterpoint, &QPushButton::clicked, this, [this] { counterpointShownMidi(); });
+        connect (notesButton, &QPushButton::clicked, this, [this] { noteEditorShownMidi(); });
 
         connect (phi, &QToolButton::clicked, this, [this] { phiShownMidi(); });
         connect (duplicate, &QPushButton::clicked, this, [this] { editShownMidi ([] (const midifile::Song& s) { return midifile::duplicated (s); }, tr ("Duplicated into one clip")); });
@@ -6459,6 +6465,62 @@ void MixerWindow::phiShownMidi()
 {
     const auto turn = phiTurn++;
     editShownMidi ([turn] (const midifile::Song& s) { return midifile::phiShuffle (s, turn); }, tr ("Φ: the notes dealt out again"));
+}
+
+void MixerWindow::noteEditorShownMidi()
+{
+    if (! showingClip || ! clipView->showsMidi())
+        return;
+    const auto track = clipView->shownTrack();
+    const auto id = clipView->shownId();
+    const auto scene = clipView->shownScene();
+    mixer::Clip clip;
+    mixer::SlotPtr slot;
+    if (id != 0)
+    {
+        for (const auto& c : engine.clips (track))
+            if (c.id == id)
+                clip = c;
+    }
+    else if (scene >= 0 && (slot = slots[(size_t) track][(size_t) scene]) != nullptr)
+        clip = slot->clip;
+    if (clip.midi == nullptr || clip.midi->song == nullptr)
+        return;
+    auto song = clip.midi->song;
+    if (song->ticksPerQuarter <= 0)
+    {
+        status->setText (tr ("This MIDI file counts in SMPTE time, so it cannot be edited here."));
+        return;
+    }
+    if (clip.reversed)
+        song = midifile::reversed (*song);   // edited as it is heard
+    const auto tuning = slot != nullptr ? mixer::tuningInForce (slot->tuning, sceneTunings[(size_t) scene], info[(size_t) track].tuning)
+                                        : info[(size_t) track].tuning;
+
+    MidiEditor::Host host;
+    // Auditions and the editor's playback go to the clip's track, and are not taken as step input.
+    host.play = [this] (uint8_t s, uint8_t a, uint8_t b) { engine.liveMidi (s, a, b, false); };
+    host.system = tuning.system;
+    host.root = tuning.root;
+    host.bpm = followTempoBox->isChecked() ? tempoBox->value() : 0.0;
+    host.folder = folder();
+    host.title = QFileInfo (QString::fromStdString (clip.midi->path)).completeBaseName();
+    const auto armed = engine.liveTrack();
+    engine.setLiveTrack (track);
+    MidiEditor editor (*song, host, this);
+    // The MIDI keyboard's notes, for step input (they reach the track as they always do).
+    auto* target = &editor;
+    engine.setLiveListener ([target] (uint8_t s, uint8_t a, uint8_t b)
+    {
+        QMetaObject::invokeMethod (target, [target, s, a, b] { target->midiIn (s, a, b); }, Qt::QueuedConnection);
+    });
+    const auto accepted = editor.exec() == QDialog::Accepted;
+    engine.setLiveListener (nullptr);
+    engine.setLiveTrack (armed);
+    if (! accepted)
+        return;
+    const auto edited = editor.result();
+    editShownMidi ([edited] (const midifile::Song&) { return edited; }, editor.summary());
 }
 
 void MixerWindow::counterpointShownMidi()

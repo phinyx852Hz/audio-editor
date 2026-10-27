@@ -49,7 +49,7 @@ VCV Rack's component graphics (CC-BY-NC-4.0) are replaced in Cardinal with PHI's
 | [Vamp plugin SDK](https://www.vamp-plugins.org) | Chris Cannam, Centre for Digital Music, Queen Mary University of London | BSD-style | Vamp analysis |
 | [QM Vamp Plugins](https://github.com/c4dm/qm-vamp-plugins) and [qm-dsp](https://github.com/c4dm/qm-dsp) | Centre for Digital Music, Queen Mary University of London | GPL-2.0-or-later | Beats, tempo, key, onsets |
 | [libmysofa](https://github.com/hoene/libmysofa) | Symonics GmbH (Christian Hoene) | BSD-3-Clause | HRTF sets |
-| MIT KEMAR HRTF set | Bill Gardner and Keith Martin, MIT Media Lab | | Binaural |
+| MIT KEMAR HRTF set | Bill Gardner and Keith Martin, MIT Media Lab | Free to use, citing its authors | Binaural |
 | [projectM](https://github.com/projectM-visualizer/projectm) | The projectM team | LGPL-2.1 | MilkDrop |
 | [Cream of the Crop](https://github.com/projectM-visualizer/presets-cream-of-the-crop) | Curated by ISOSCELES; presets by their authors, released freely | | MilkDrop presets (an optional download) |
 | [FFmpeg](https://ffmpeg.org), with [x265](https://www.videolan.org/developers/x265.html) and [x264](https://www.videolan.org/developers/x264.html) | The FFmpeg and VideoLAN developers | LGPL-2.1-or-later (GPL-2.0-or-later as most distributions build it) | Audio formats, video, streaming; the system's copy |

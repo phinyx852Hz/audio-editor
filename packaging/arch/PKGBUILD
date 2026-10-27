@@ -5,7 +5,9 @@ pkgrel=1
 pkgdesc="Φ PHI: keyboard-first audio editor and mastering suite for Linux"
 arch=('x86_64')
 url="https://github.com/phinyx852Hz/audio-editor"
-license=('AGPL-3.0-only' 'GPL-3.0-only' 'GPL-2.0-or-later' 'LGPL-3.0-or-later' 'BSD-3-Clause' 'MIT' 'Apache-2.0' 'OFL-1.1' 'LicenseRef-Nyquist')
+# Every licence in the package (docs/foundations.md)
+license=('AGPL-3.0-only' 'GPL-3.0-only' 'GPL-3.0-or-later' 'GPL-2.0-or-later' 'LGPL-3.0-or-later' 'LGPL-2.1-or-later'
+         'BSD-3-Clause' 'BSD-2-Clause' 'MIT' 'ISC' '0BSD' 'Zlib' 'Apache-2.0' 'OFL-1.1' 'CC-BY-4.0' 'LicenseRef-Nyquist')
 # ffmpeg encodes and decodes the compressed formats, taglib writes their tags
 # libusb drives Push 2 and 3's displays
 # libsndfile is for Nyquist and the stock plugins; cairo, libglvnd and the X libraries (xcb-util-wm for OctaSine), fftw (Vaporizer2) and curl (Overtonium) for the stock plugins

@@ -53,11 +53,13 @@ target_sources(${APP_ID} PRIVATE
     Source/mixer/MidiFile.cpp
     Source/mixer/Tunings.cpp
     Source/mixer/WorldModes.cpp
+    Source/mixer/NoteEditor.cpp
     Source/mixer/RagaInstrument.cpp
     Source/mixer/Counterpoint.cpp
     Source/mixer/Fugue.cpp
     Source/mixer/Stochastic.cpp
     Source/mixer/Cubify.cpp
+    Source/mixer/Serial.cpp
     Source/mixer/Rhythms.cpp
     Source/mixer/Minimalize.cpp
     Source/mixer/Instruments.cpp
@@ -92,6 +94,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/PhiVoice.cpp
     Source/core/PhiPhaser.cpp
     Source/core/PhiTuning.cpp
+    Source/core/Scala.cpp
     Source/core/PhiRaga.cpp
     Source/core/PhiRagas.cpp
     Source/core/PhiSitar.cpp
@@ -169,6 +172,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/SamplerWindow.cpp
     Source/ui/SlicerWindow.cpp
     Source/ui/MixerWindow.cpp
+    Source/ui/MidiEditor.cpp
     Source/ui/MixerRecording.cpp
     Source/ui/MixerFugue.cpp
     Source/ui/MixerMinimalize.cpp
@@ -180,6 +184,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/RhythmSection.cpp
     Source/ui/StochasticSection.cpp
     Source/ui/CubifySection.cpp
+    Source/ui/SerialSection.cpp
     Source/ui/PanelNavigation.cpp
     Source/ui/PatchBayWindow.cpp
     Source/ui/PatchBaySection.cpp
@@ -414,11 +419,14 @@ if(PHI_BUILD_TESTS)
         Source/mixer/MidiFile.cpp
         Source/mixer/Tunings.cpp
         Source/mixer/WorldModes.cpp
+        Source/mixer/NoteEditor.cpp
+    Source/mixer/NoteEditor.cpp
         Source/mixer/RagaInstrument.cpp
         Source/mixer/Counterpoint.cpp
         Source/mixer/Fugue.cpp
         Source/mixer/Stochastic.cpp
         Source/mixer/Cubify.cpp
+        Source/mixer/Serial.cpp
         Source/mixer/Rhythms.cpp
         Source/mixer/Minimalize.cpp
         Source/mixer/Instruments.cpp
@@ -455,6 +463,8 @@ if(PHI_BUILD_TESTS)
         Source/core/PhiVoice.cpp
         Source/core/PhiPhaser.cpp
         Source/core/PhiTuning.cpp
+        Source/core/Scala.cpp
+    Source/core/Scala.cpp
         Source/core/PhiRaga.cpp
         Source/core/PhiRagas.cpp
         Source/core/PhiSitar.cpp

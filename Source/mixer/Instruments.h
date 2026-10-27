@@ -5,6 +5,7 @@
 // both. Each instrument turns notes into stereo audio. Plain C++: the built-in
 // Synth, a Sampler and a Slicer are here; plugin instruments (VST3, LV2, CLAP) are
 // made by the engine (AudioEngine::loadInstrumentPlugin).
+#include "../core/PhiTuning.h"
 #include "../sampler/SamplerEngine.h"
 #include "../sampler/SlicerEngine.h"
 
@@ -75,7 +76,7 @@ namespace mixer
     // polyphonic synth (sine, triangle, saw or square through a low-pass filter, with
     // an envelope), and General MIDI drums on channel 10 made from noise and sweeps.
     // Channel volume (CC7), expression (CC11), pan (CC10), sustain (CC64) and pitch
-    // bend (±2 semitones) follow the file. It plays the tuning in force too (2026-10-27): every
+    // bend (±2 semitones, or what RPN 0 sets; MPE's zone when one is set up) follow the file. It plays the tuning in force too (2026-10-27): every
     // mode and tuning of Tunings.h, from the Mode menu or the Inspector, key by key, as PHI Synth
     // (the stock synth being built on its own) will through setTuning.
     struct SynthSettings
@@ -126,11 +127,11 @@ namespace mixer
         struct Channel
         {
             float volume = 100.0f / 127.0f, expression = 1.0f, pan = 0.0f;
-            double bend = 0.0;
             bool pedal = false;
         };
         void noteOn (int channel, int note, float velocity);
         void noteOff (int channel, int note);
+        void resetMpe();
         Voice& freeVoice();
         float noise();
 
@@ -143,6 +144,7 @@ namespace mixer
         double rate = 48000.0;
         std::array<Voice, maxVoices> voice {};
         std::array<Channel, 16> channel {};
+        phi::Mpe mpe;
         unsigned clock = 0;
         uint32_t seed = 22222;
     };

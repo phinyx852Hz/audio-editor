@@ -405,8 +405,10 @@ private:
     QString findFile() const;                     // the file highlighted in Find, when Find has the keyboard
     void keepFindFocus (QWidget* had);            // after F7 or F8 from Find
     void midiInputsDialog();
-    void openMidiInputs();
+    void openMidiInputs();      // every input but those turned off (by name) and the surfaces' own
+    void lookForMidiInputs();   // again, if inputs were plugged in or taken out
     void updateMidiStatus();
+    std::vector<std::string> midiDevicesSeen;   // the inputs there at the last openMidiInputs
     std::unique_ptr<sampler::Engine> samplerEngine;
     class SamplerWindow* samplerWin = nullptr;
     DockablePanel* samplerPanel = nullptr;
@@ -451,6 +453,9 @@ private:
     void fillRhythmMenu (QMenu*);
     void useRhythm (int index);
     void rhythmToTracker (int index, int cycles, double bpm);
+    // Twelve-tone rows (SerialSection.cpp, docs/serial.md): a row, its matrix and a looping
+    // serial piece in one to four voices, put in the mixer's launcher or saved as a MIDI file.
+    void serialDialog();
     // Control surfaces and MIDI Learn (ControlSection.cpp, docs/control-surfaces.md): Launchpads,
     // Launchkeys and Push play the mixer's launcher, strips and transport, lit in the tracks'
     // colours; any other controller's knobs and buttons are mapped by MIDI Learn.

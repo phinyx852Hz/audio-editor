@@ -33,6 +33,12 @@ device plugged in or taken out is picked up or let go by itself. Untick one to u
 MIDI controller instead. The port a surface uses is kept out of the MIDI Inputs list; its other
 ports stay there, so a Launchkey's keys still play the armed track as a keyboard.
 
+Every other MIDI input (Sample > MIDI Inputs) plays from the moment it is plugged in, looked for
+every two seconds like the surfaces; untick one there to keep it out. Inputs are remembered by
+name, since ALSA numbers a device afresh each time it is plugged in. (Until 2026-10-27 the ticked
+inputs were kept by those numbers, and nothing plugged in after PHI's first run was opened, so
+keyboards went silent while a surface's own pads still played.)
+
 On a surface's pads there are three views, as in Live:
 
 - **Session**: the clip launcher. Columns are tracks, rows are scenes. A clip is lit in its

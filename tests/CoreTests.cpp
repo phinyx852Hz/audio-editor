@@ -8,6 +8,8 @@
 #include "../Source/sampler/SlicerEngine.h"
 #include "../Source/mixer/MidiFile.h"
 #include "../Source/mixer/Tunings.h"
+#include "../Source/mixer/NoteEditor.h"
+#include "../Source/core/Scala.h"
 #include "../Source/mixer/RagaInstrument.h"
 #include "../Source/mixer/Counterpoint.h"
 #include "../Source/mixer/Fugue.h"
@@ -17,6 +19,7 @@
 #include "../Source/mixer/DrumsToMidi.h"
 #include "../Source/mixer/Rhythms.h"
 #include "../Source/mixer/Stochastic.h"
+#include "../Source/mixer/Serial.h"
 #include "../Source/patchbay/PatchBay.h"
 #include "../Source/core/Ixml.h"
 #include "../Source/core/Metadata.h"
@@ -61,6 +64,7 @@
 #include <fstream>
 #include <functional>
 #include <iterator>
+#include <map>
 #include <random>
 #include <set>
 #include <string>
@@ -5872,6 +5876,252 @@ namespace
                "cubify: messiaen's modes of limited transposition are listed");
     }
 
+    void testSerial()
+    {
+        using namespace serial;
+        auto rowNamed = [] (const std::string& start)
+        {
+            for (const auto& h : historical())
+                if (std::string (h.name).rfind (start, 0) == 0)
+                    return h.row;
+            return Row {};
+        };
+        const auto op25 = rowNamed ("schoenberg: suite for piano, op. 25");
+        Row read {}, numbers {};
+        std::string error;
+        check (parse ("E F G C# F# Eb Ab D B C A Bb", read, error) && read == op25
+               && parse ("4,5,7,1,6,3,8,2,e,0,9,t", numbers, error) && numbers == op25 && text (op25, true) == "e f g c♯ f♯ e♭ a♭ d b c a b♭",
+               "serial: a row as note names or numbers");
+        check (! parse ("e f g c# f# eb ab d b c a", read, error) && ! parse ("e e g c# f# eb ab d b c a bb", read, error)
+               && ! parse ("0 1 2 3 4 5 6 7 8 9 10 12", read, error), "serial: not a row");
+        check (transform (op25, { Form::i, 0 }) == Row { 4, 3, 1, 7, 2, 5, 0, 6, 9, 8, 11, 10 }
+               && transform (op25, { Form::r, 0 }) == Row { 10, 9, 0, 11, 2, 8, 3, 6, 1, 7, 5, 4 }
+               && transform (op25, { Form::ri, 2 }) == Row { 0, 1, 10, 11, 8, 2, 7, 4, 9, 3, 5, 6 }
+               && transform (op25, { Form::p, 3 })[0] == 7, "serial: p, i, r and ri");
+        std::vector<Statement> plan;
+        check (parseStatements ("p0 RI5, i11 r3", plan, error) && plan.size() == 4 && plan[1] == Statement { Form::ri, 5 }
+               && text (plan) == "p0 ri5 i11 r3" && ! parseStatements ("p12", plan, error) && ! parseStatements ("x3", plan, error),
+               "serial: the forms' labels");
+        const auto m = matrix (op25);
+        bool square = m[0] == op25;
+        for (int k = 0; k < 12; ++k)
+        {
+            Row column;
+            for (int i = 0; i < 12; ++i)
+                column[(size_t) i] = m[(size_t) i][(size_t) k];
+            square = square && isRow (std::vector<int> (m[(size_t) k].begin(), m[(size_t) k].end()))
+                     && m[(size_t) k] == transform (op25, { Form::p, primeLevelOfRow (op25, k) })
+                     && column == transform (op25, { Form::i, inversionLevelOfColumn (op25, k) });
+        }
+        check (square, "serial: the matrix, its rows the p forms and its columns the i forms");
+        check (allInterval (rowNamed ("berg: lyric suite")) && ! allInterval (op25), "serial: the lyric suite's is an all-interval row");
+        const auto op33a = rowNamed ("schoenberg: piano piece, op. 33a");
+        const auto with = combinatorial (op33a);
+        check (std::find (with.begin(), with.end(), Statement { Form::i, 5 }) != with.end() && describe (op33a).find ("inversional with i5") != std::string::npos,
+               "serial: op. 33a is combinatorial with i5");
+        bool partners = true;
+        for (int f = 0; f < 4; ++f)
+            for (int n = 0; n < 12; ++n)
+            {
+                const Statement st { (Form) f, n };
+                const auto a = transform (op25, st), b = transform (op25, partner (op25, st));
+                unsigned bits = 0;
+                for (int k = 0; k < 6; ++k)
+                    bits |= (1u << a[(size_t) k]) | (1u << b[(size_t) k]);
+                partners = partners && bits == 0xFFFu && ! (partner (op25, st) == st);
+            }
+        check (partners, "serial: every form's partner completes its first hexachord");
+        const auto path = walk (op25, 20, 3);
+        bool steps = path.size() == 20 && path[0] == Statement { Form::p, 0 };
+        for (size_t k = 1; k < path.size(); ++k)
+            steps = steps && ! (path[k] == path[k - 1]);
+        check (steps && walk (op25, 20, 3) == path && walk (op25, 20, 4) != path, "serial: a walk through the matrix, the same for a seed");
+        bool chance = true;
+        for (uint32_t seed = 1; seed < 20; ++seed)
+        {
+            const auto r = randomRow (seed), a = randomAllInterval (seed);
+            chance = chance && isRow (std::vector<int> (r.begin(), r.end())) && isRow (std::vector<int> (a.begin(), a.end())) && allInterval (a);
+        }
+        check (chance, "serial: rows and all-interval rows by chance");
+        int missing = 0;
+        const auto taken = rowOf ({ 62, 60, 74, 64, 61 }, missing);
+        check (missing == 8 && taken[0] == 2 && taken[1] == 0 && taken[2] == 4 && taken[3] == 1 && taken[4] == 3, "serial: a row from a melody");
+
+        // A piece: every twelve notes of a line all twelve, in the range, the bars asked for.
+        Settings s;
+        s.row = op25;
+        s.bars = 4;
+        auto aggregates = [] (const std::vector<Note>& notes, size_t from, size_t count)
+        {
+            unsigned bits = 0;
+            for (size_t k = from; k < from + count && k < notes.size(); ++k)
+                bits |= 1u << (notes[k].pitch % 12);
+            return bits == 0xFFFu;
+        };
+        auto one = compose (s);
+        bool whole = one.error.empty() && one.voices.size() == 1 && one.voices[0].notes.size() == 24 && one.length == 4 * 1920;
+        for (size_t k = 0; whole && k < one.voices[0].notes.size(); k += 12)
+            whole = aggregates (one.voices[0].notes, k, 12);
+        for (const auto& n : one.voices[0].notes)
+            whole = whole && n.pitch >= s.low && n.pitch <= s.high && n.end > n.start;
+        check (whole, "serial: whole rows, in the range, the bars asked for");
+        const auto song = toSong (one.voices[0], one.length, 480, 100.0, 2);
+        check (song->noteCount() == 24 && song->lastTick == one.length && song->channelsUsed == (1u << 2), "serial: a voice as a MIDI file that loops");
+        s.plan = { { Form::ri, 3 }, { Form::i, 0 } };
+        const auto planned = compose (s);
+        check (planned.voices[0].statements == std::vector<Statement> { { Form::ri, 3 }, { Form::i, 0 } }
+               && planned.voices[0].notes[0].pitch % 12 == transform (op25, { Form::ri, 3 })[0], "serial: the plan");
+
+        // Canon and mirror canon: the comes is the dux later (inverted).
+        s.plan.clear();
+        s.voices = 2;
+        s.relation = Voices::canon;
+        s.delay = 4;
+        const auto canon = compose (s);
+        bool follows = canon.voices.size() == 2 && canon.voices[1].notes.size() == canon.voices[0].notes.size() && canon.voices[1].name == "comes";
+        for (size_t k = 0; follows && k < canon.voices[0].notes.size(); ++k)
+            follows = canon.voices[1].notes[k].start == canon.voices[0].notes[k].start + 480
+                      && canon.voices[1].notes[k].pitch % 12 == canon.voices[0].notes[k].pitch % 12;
+        check (follows && canon.voices[0].notes.back().pitch > 0, "serial: a canon");
+        s.relation = Voices::mirror;
+        const auto mirror = compose (s);
+        bool mirrored = mirror.voices.size() == 2;
+        for (size_t k = 0; mirrored && k < mirror.voices[0].statements.size(); ++k)
+        {
+            const auto a = mirror.voices[0].statements[k], b = mirror.voices[1].statements[k];
+            mirrored = a.level == b.level && (a.form == Form::p ? b.form == Form::i : a.form == Form::i ? b.form == Form::p : a.form == Form::r ? b.form == Form::ri : b.form == Form::r);
+        }
+        check (mirrored, "serial: a mirror canon");
+        // Combinatorial pairs: each hexachord with its complement at once.
+        s.row = op33a;
+        s.relation = Voices::combinatorial;
+        const auto pair = compose (s);
+        bool complete = pair.voices.size() == 2 && pair.voices[0].notes.size() == pair.voices[1].notes.size();
+        for (size_t k = 0; complete && k < pair.voices[0].notes.size(); k += 6)
+        {
+            unsigned bits = 0;
+            for (size_t j = k; j < k + 6; ++j)
+                bits |= (1u << (pair.voices[0].notes[j].pitch % 12)) | (1u << (pair.voices[1].notes[j].pitch % 12));
+            complete = bits == 0xFFFu && pair.voices[0].notes[k].start == pair.voices[1].notes[k].start;
+        }
+        check (complete, "serial: combinatorial pairs make aggregates");
+        // Chords, serial durations and a frozen register.
+        s.voices = 1;
+        s.chord = 3;
+        s.rhythm = Rhythm::serial;
+        s.unit = 1;
+        s.reg = Register::fixed;
+        s.bars = 8;
+        const auto chords = compose (s);
+        const auto& notes = chords.voices[0].notes;
+        bool stacked = ! notes.empty() && notes.size() % 12 == 0;
+        int frozen[12];
+        std::fill (std::begin (frozen), std::end (frozen), -1);
+        for (size_t k = 0; stacked && k < notes.size(); ++k)
+        {
+            if (k % 3 != 0)
+                stacked = notes[k].start == notes[k - k % 3].start;
+            auto& f = frozen[notes[k].pitch % 12];
+            stacked = stacked && (f < 0 || f == notes[k].pitch);
+            f = notes[k].pitch;
+        }
+        // The first chord's length: its first note's place in p0, in sixteenths.
+        const auto first = transform (op33a, chords.voices[0].statements[0])[0];
+        const auto place = std::find (op33a.begin(), op33a.end(), first) - op33a.begin();
+        check (stacked && notes[3].start - notes[0].start == 120 * (place + 1), "serial: trichords, serial durations and a frozen register");
+        check (! compose ([&] { auto bad = s; bad.chord = 5; return bad; }()).error.empty()
+               && ! compose ([&] { auto bad = s; bad.low = 60; bad.high = 66; return bad; }()).error.empty(), "serial: what cannot be written");
+        check (compose (s).commentary == chords.commentary && ! chords.commentary.empty(), "serial: the same seed, the same piece");
+
+        // Babbitt. Time points: each note on its pitch class's twelfth of the modulus (12 sixteenths here), the next time it comes round.
+        Settings tp;
+        tp.row = op25;
+        tp.rhythm = Rhythm::timePoint;
+        tp.unit = 1;
+        tp.bars = 3;
+        const auto points = compose (tp);
+        bool onPoints = ! points.voices[0].notes.empty() && points.error.empty();
+        int64_t lastStart = -1;
+        for (const auto& n : points.voices[0].notes)
+        {
+            onPoints = onPoints && (n.start / 120) % 12 == (n.pitch - op25[0] + 120) % 12 && n.start > lastStart;
+            lastStart = n.start;
+        }
+        check (onPoints && points.voices[0].notes[0].start == 0 && points.length >= 3 * 1920 && points.length % 1920 == 0,
+               "serial: babbitt's time points");
+        // Derived rows: the cell's forms fill out the aggregate.
+        Row derivedRow {};
+        bool cells = derive ({ 0, 1, 3 }, 5, derivedRow, error) && isRow (std::vector<int> (derivedRow.begin(), derivedRow.end()))
+                     && derivedRow[0] == 0 && derivedRow[1] == 1 && derivedRow[2] == 3;
+        for (int k = 0; cells && k < 12; k += 3)
+        {
+            // Every trichord of it is the cell's shape: {0, 1, 3} or its inversion {0, 2, 3}, transposed.
+            std::array<int, 3> t { derivedRow[(size_t) k], derivedRow[(size_t) k + 1], derivedRow[(size_t) k + 2] };
+            std::sort (t.begin(), t.end());
+            bool shaped = false;
+            for (int r = 0; r < 3 && ! shaped; ++r)
+            {
+                const auto a = (t[(size_t) (r + 1) % 3] - t[(size_t) r] + 12) % 12, b = (t[(size_t) (r + 2) % 3] - t[(size_t) r] + 12) % 12;
+                shaped = (a == 1 && b == 3) || (a == 2 && b == 3);
+            }
+            cells = shaped;
+        }
+        Row tetra {};
+        check (cells && derive ({ 0, 1, 2, 3 }, 1, tetra, error) && ! derive ({ 0, 1 }, 1, tetra, error) && ! derive ({ 0, 4, 4 }, 1, tetra, error),
+               "serial: babbitt's derived rows");
+        // Source sets: a row on one is combinatorial in all four forms.
+        bool sets = true;
+        for (int set = 0; set < 6; ++set)
+        {
+            const auto r = fromSourceSet (set, 9);
+            sets = sets && sourceSetOf (r) == set && describe (r).find ("all-combinatorial") != std::string::npos;
+        }
+        check (sets && sourceSetOf (op25) == -1 && sourceSets()[5].pcs[5] == 10, "serial: babbitt's all-combinatorial source sets");
+        // Arrays: every block all twelve notes across the voices, each voice a segment of it.
+        Settings ar;
+        ar.row = op25;
+        ar.voices = 4;
+        ar.relation = Voices::array;
+        ar.bars = 4;
+        const auto arr = compose (ar);
+        bool blocks = arr.voices.size() == 4 && arr.error.empty() && arr.voices[0].name == "lyne 1";
+        for (size_t b = 0; blocks && b < arr.voices[0].statements.size(); ++b)
+        {
+            unsigned bits = 0;
+            for (const auto& v : arr.voices)
+                for (size_t k = b * 3; k < b * 3 + 3; ++k)
+                    bits |= 1u << (v.notes[k].pitch % 12);
+            blocks = bits == 0xFFFu && arr.voices[0].notes[b * 3].start == arr.voices[3].notes[b * 3].start;
+        }
+        // Block 0 gives voice 1 the first trichord, block 1 the second.
+        const auto second = transform (op25, arr.voices[0].statements[1]);
+        check (blocks && arr.voices[0].statements.size() >= 2 && arr.voices[0].notes[0].pitch % 12 == transform (op25, arr.voices[0].statements[0])[0]
+               && arr.voices[0].notes[3].pitch % 12 == second[3], "serial: babbitt's arrays");
+
+        // A fugue on a twelve-tone subject answers it at the fifth exactly, even when a tonal answer is asked for.
+        counterpoint::Line subject;
+        for (int k = 0; k < 12; ++k)
+            subject.push_back ({ k * 480, k * 480 + 480, 60 + op25[(size_t) k], 90 });
+        fugue::Settings f;
+        f.voices = 2;
+        f.answer = fugue::Answer::tonal;
+        f.mode = counterpoint::Mode::chromatic ((op25[0] + 5) % 12);   // the subject begins on the dominant, which a tonal answer answers a fourth up
+        const auto fg = fugue::generate (subject, 480, f);
+        bool real = fg.plan.size() > 1 && fg.plan[1].what == "answer";
+        if (real)
+        {
+            const auto& voice = fg.voices[(size_t) fg.plan[1].voice];
+            std::vector<int> heard;
+            for (const auto& x : voice)
+                if (x.start >= fg.plan[1].start && x.start < fg.plan[1].end)
+                    heard.push_back (x.pitch % 12);
+            real = heard.size() == 12;
+            for (size_t k = 0; real && k < 12; ++k)
+                real = heard[k] == (op25[k] + 7) % 12;
+        }
+        check (real, "serial: the fugue answers a twelve-tone subject real");
+    }
+
     void testStochastic()
     {
         using namespace stochastic;
@@ -6978,6 +7228,185 @@ namespace
         }
     }
 
+    void testScala()
+    {
+        using namespace phi::scala;
+        std::string error;
+        Scale s;
+        const char* meantone =
+            "! meantone.scl\n!\n1/4-comma meantone\n 4\n!\n 193.15686\n 5/4 major third\n 3/2\n 2/1\n";
+        check (parseScl (meantone, s, error) && s.size() == 4 && s.description == "1/4-comma meantone", "scala: a .scl is read");
+        check (near (s.cents[1], 386.3137, 0.001) && near (s.period(), 1200.0, 1.0e-9), "scala: ratios read as cents");
+        check (s.degrees().size() == 4 && s.degrees()[0] == 0.0, "scala: the degrees within the period, the tonic first");
+        Scale back;
+        check (parseScl (writeScl (s, "meantone.scl"), back, error) && back.text[1] == "5/4" && near (back.cents[0], s.cents[0], 1.0e-4),
+               "scala: written back, a ratio stays a ratio");
+        check (! parseScl ("x\n 3\n 100.0\n", s, error) && ! error.empty(), "scala: a count the pitches don't match is refused");
+        check (! parseScl ("x\n 1\n -3/2\n", s, error), "scala: a negative ratio is refused");
+
+        // A linear map: key 60 the tonic at middle C; each key the next degree.
+        Scale twelve = fromCents ({ 0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100 });
+        const auto map = linearMap (60);
+        check (near (keyHz (twelve, map, 69), 440.0, 1.0e-6) && near (keyHz (twelve, map, 48), 130.8128, 1.0e-3),
+               "scala: twelve equal steps on a linear map is 12-TET");
+        Scale five = fromCents ({ 0, 240, 480, 720, 960 });
+        const auto t = toTuning (five, linearMap (60));
+        check (near (t.hz (65) / t.hz (60), 2.0, 1.0e-9) && near (phi::Tuning::ratioToCents (t.hz (61) / t.hz (60)), 240.0, 1.0e-6),
+               "scala: five steps a key, the octave five keys up");
+
+        KeyboardMap kbm;
+        const char* whiteKeys = "! white.kbm\n12\n0\n127\n60\n69\n440.0\n7\n0\nx\n1\nx\n2\n3\nx\n4\nx\n5\nx\n6\n";
+        check (parseKbm (whiteKeys, kbm, error) && kbm.size == 12 && kbm.mapping[1] == -1 && kbm.mapping[11] == 6, "scala: a .kbm is read");
+        Scale seven = fromCents ({ 0, 200, 400, 500, 700, 900, 1100 });
+        check (keyHz (seven, kbm, 61) == 0.0 && near (keyHz (seven, kbm, 72) / keyHz (seven, kbm, 60), 2.0, 1.0e-9)
+                   && near (keyHz (seven, kbm, 69), 440.0, 1.0e-9),
+               "scala: a mapped key plays its degree, an x plays nothing, the reference key its frequency");
+        KeyboardMap again;
+        check (parseKbm (writeKbm (kbm), again, error) && again.mapping == kbm.mapping && again.octaveDegree == 7, "scala: a .kbm written back");
+    }
+
+    void testNoteEditor()
+    {
+        using namespace noteedit;
+        // A pitch system from a maqam, and its names.
+        const auto rast = mixer::findTuning ("rast");
+        check (rast >= 0, "note editor: rast is a tuning");
+        const auto r = fromTuning (mixer::tuningSystems()[(size_t) rast], 0);
+        check (r.size() == 7 && near (r.pitchOf (2), 6350.0, 1.0e-9) && near (r.pitchOf (7), 7200.0, 1.0e-9) && near (r.pitchOf (-1), 5850.0, 1.0e-9),
+               "note editor: rast's degrees from C, up and down");
+        check (r.nearestStep (6340.0) == 2 && r.nearestStep (7190.0) == 7 && r.nearestStep (5000.0) < 0, "note editor: the nearest degree");
+        check (label (r, 2, Naming::tradition) == "E½♭4", "note editor: a maqam's neutral third spelled E half-flat: " + label (r, 2, Naming::tradition));
+        check (letterName (6000.0 + 1050.0, true) == "B½♭4" && letterName (6450.0, true) == "E½♯4", "note editor: quarter-tone letters");
+        check (letterName (6914.0, false) == "A4 +14", "note editor: a letter and the cents off it");
+        const auto steps = r.steps (6000.0, 7200.0);
+        check (steps.size() == 8 && steps.front() == 0 && steps.back() == 7, "note editor: the rows of an octave");
+
+        const auto yaman = mixer::findTuning ("yaman (kalyan)");
+        check (yaman >= 0, "note editor: yaman is a tuning");
+        if (yaman >= 0)
+        {
+            const auto y = fromTuning (mixer::tuningSystems()[(size_t) yaman], 2);
+            check (label (y, 0, Naming::tradition) == "S" && label (y, 3, Naming::tradition) == "M"
+                       && label (y, 7, Naming::tradition) == "S\xCC\x87" && label (y, -1, Naming::tradition) == "N\xCC\xA3",
+                   "note editor: sargam, tīvra ma, a dot above and below for the octave");
+        }
+        const auto slendro = mixer::findTuning ("slendro");
+        check (slendro >= 0 && label (fromTuning (mixer::tuningSystems()[(size_t) slendro], 0), 3, Naming::tradition) == "5",
+               "note editor: sléndro's tones by their kepatihan numbers (no 4)");
+        const auto gong = mixer::findTuning ("shang");
+        check (gong >= 0 && label (fromTuning (mixer::tuningSystems()[(size_t) gong], 2), 0, Naming::tradition).rfind ("shāng", 0) == 0,
+               "note editor: the shāng mode starts on shāng");
+        check (label (twelveTet(), 13, Naming::degrees) == "2'" && label (twelveTet(), 1, Naming::letters) == "C♯4", "note editor: degrees and letters");
+
+        // Decode and encode: MPE keeps a pitch between the keys and comes back the same.
+        Sequence s;
+        s.notes.push_back ({ 0, 480, 6350.0, 100 });
+        s.notes.push_back ({ 0, 480, 6700.0, 90 });
+        s.notes.push_back ({ 480, 240, 7050.0, 80 });
+        s.notes.push_back ({ 480, 240, 3600.0, 110, 64, 9 });   // a drum
+        check (suggestedEncoding (s) == Encoding::mpe, "note editor: notes between keys want MPE");
+        const auto mpe = encode (s, {});
+        check (mpe.clashes == 0 && mpe.song->noteCount() == 4, "note editor: MPE, a channel a note");
+        {
+            phi::Mpe zone;
+            std::map<int, double> heard;
+            for (const auto& e : mpe.song->events)
+            {
+                const auto m = zone.handle (e.status, e.data1, e.data2);
+                if (m.kind == phi::Mpe::Kind::noteOn && m.channel != 9)
+                    heard[(int) std::lround (100.0 * (m.key + zone.expression (m.channel).bendSemitones))] = 1;
+            }
+            check (heard.count (6350) && heard.count (6700) && heard.count (7050), "note editor: an MPE synth hears each pitch");
+        }
+        auto back = decode (*mpe.song);
+        check (back.notes.size() == 4, "note editor: decoded, every note");
+        bool same = back.notes.size() == 4;
+        s.sort();   // in the order decode() gives: by start, then pitch
+        for (size_t i = 0; same && i < 4; ++i)
+            same = near (back.notes[i].pitch, s.notes[i].pitch, 0.6) && back.notes[i].length == s.notes[i].length;
+        check (same, "note editor: MPE round trip keeps pitch and length");
+        check (back.other.empty(), "note editor: the MPE set-up and the notes' bends are not left as events");
+        {
+            const auto bytes = midifile::bytes (*mpe.song);
+            std::string why;
+            const auto file = midifile::parse (bytes.data(), bytes.size(), why);
+            const auto again = file != nullptr ? decode (*file) : Sequence {};
+            check (again.notes.size() == 4 && near (again.notes[1].pitch, s.notes[1].pitch, 0.6) && again.other.empty(),
+                   "note editor: an MPE clip written as a .mid and read back");
+        }
+        const auto drum = std::find_if (back.notes.begin(), back.notes.end(), [] (const Note& n) { return n.channel == 9; });
+        check (drum != back.notes.end() && drum->pitch == 3600.0, "note editor: drums stay on channel 10");
+
+        EncodeOptions shared;
+        shared.encoding = Encoding::bendChannels;
+        shared.bendRange = 2.0;
+        Sequence chord;
+        for (int i = 0; i < 6; ++i)
+            chord.notes.push_back ({ 0, 480, 6000.0 + 200.0 * i + (i % 2 ? 50.0 : 0.0) });
+        const auto bend = encode (chord, shared);
+        check (bend.channels == 2 && decode (*bend.song).notes.size() == 6, "note editor: notes bent alike share a channel");
+        const auto keys = encode (chord, { Encoding::keys });
+        check (keys.channels == 1 && decode (*keys.song).notes[1].pitch == 6300.0, "note editor: keys, each note on its nearest key");
+
+        // Edits.
+        Sequence q;
+        q.notes.push_back ({ 10, 100, 6000.0 });
+        q.notes.push_back ({ 130, 100, 6200.0 });
+        q.notes.push_back ({ 250, 300, 6400.0 });
+        quantizeStarts (q, 120);
+        check (q.notes[0].start == 0 && q.notes[1].start == 120 && q.notes[2].start == 240, "note editor: quantised to the grid");
+        legato (q);
+        check (q.notes[0].length == 120 && q.notes[1].length == 120, "note editor: legato");
+        q.notes[1].selected = true;
+        transposeSteps (q, twelveTet(), 2);
+        check (q.notes[1].pitch == 6400.0 && q.notes[0].pitch == 6000.0, "note editor: only the picked note moves");
+        selectAll (q, false);
+        transposeSteps (q, r, 1);   // into rast, a degree up
+        check (near (q.notes[0].pitch, 6200.0, 1e-9) && near (q.notes[2].pitch, 6500.0, 1e-9), "note editor: a degree up in rast");
+        splitAt (q, 300);
+        check (q.notes.size() == 4, "note editor: split");
+        glue (q);
+        check (q.notes.size() == 3, "note editor: glued again");
+        rampVelocity (q, 40, 120);
+        check (q.notes.front().velocity == 40 && q.notes.back().velocity == 120, "note editor: velocity ramp");
+
+        // Restyle: C major's degrees into sléndro keep the line rising.
+        Sequence melody;
+        for (int i = 0; i < 8; ++i)
+            melody.notes.push_back ({ i * 120, 120, 6000.0 + (double[]) { 0, 200, 400, 500, 700, 900, 1100, 1200 }[i] });
+        const auto key = detectKey (melody);
+        check (key.root == 0 && ! key.minor, "note editor: C major found");
+        const auto ionian = fromTuning (mixer::tuningSystems()[(size_t) mixer::findTuning ("ionian")], 0);
+        const auto to = fromTuning (mixer::tuningSystems()[(size_t) slendro], 0);
+        restyle (melody, ionian, to);
+        bool rising = true;
+        for (size_t i = 1; i < melody.notes.size(); ++i)
+            rising = rising && melody.notes[i].pitch > melody.notes[i - 1].pitch;
+        check (rising && near (melody.notes[5].pitch, 7200.0, 1e-6), "note editor: restyled by degree, the contour kept");
+
+        // Step input: three notes, a rest, a chord.
+        Sequence st;
+        StepInput in;
+        stepNote (st, in, 6000.0);
+        stepNote (st, in, 6200.0);
+        stepRest (st, in);
+        in.chord = true;
+        stepNote (st, in, 6400.0);
+        stepNote (st, in, 6700.0);
+        check (st.notes.size() == 4 && st.notes[2].start == 360 && st.notes[3].start == 360 && in.position == 360, "note editor: step input");
+        in.chord = false;
+        stepRest (st, in);
+        stepBack (st, in);
+        check (st.notes.size() == 2 && in.position == 360, "note editor: step back deletes the step's notes");
+
+        // A controller lane.
+        drawLane (st, 1, 0, 0, 480, 0, 127, 120);
+        const auto pts = lanePoints (st, 1, 0);
+        check (pts.size() == 5 && pts.front().value == 0 && pts.back().value == 127, "note editor: a modulation ramp drawn");
+        eraseLane (st, 1, 0, 0, 240);
+        check (lanePoints (st, 1, 0).size() == 2, "note editor: part of a lane erased");
+    }
+
 int main()
 {
     testStorage();
@@ -7027,6 +7456,8 @@ int main()
     testSitar();
     testTunings();
     testWorldModes();
+    testScala();
+    testNoteEditor();
     testCounterpoint();
     testFugue();
     testMinimalize();
@@ -7036,6 +7467,7 @@ int main()
     testRhythms();
     testStochastic();
     testCubify();
+    testSerial();
     testPluginMeasure();
 
     if (failures == 0)

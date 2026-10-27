@@ -31,6 +31,9 @@ namespace mixer
                               // "korean folk mode", "equal"
         std::vector<double> cents;   // the degrees above the tonic, from 0, within the period
         int divisions = 0;           // an equal temperament: this many steps to the octave (else 0)
+        // The tradition's name for each degree, when the family's own names (NoteEditor.cpp) can't
+        // be worked out from the cents: the kepatihan number of each gamelan tone. Else empty.
+        std::vector<std::string> names;
 
         // Where it is from, for the Mode menu's world atlas (owner, 2026-10-27; WorldModes.cpp):
         // the people, cultures, nations or empires it belongs to (origins()' names), whether it
