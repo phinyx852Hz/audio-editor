@@ -1334,23 +1334,24 @@ namespace mixer
                 keyLevels[(size_t) i][(size_t) k] = std::max (std::abs (sumL[k]), std::abs (sumR[k]));
             if (withLive)
                 meter (i, sumL, sumR, frames);
-            if (routed != nullptr)
+            // A bounce takes the track alone, never through the Pre-Master.
+            const bool toBus = s.toBus.load() && only < 0;
+            if (routed != nullptr && ! toBus)
             {
                 routed->trackOutput (i, blockOffset, sumL, sumR, frames);
                 continue;
             }
-            // A bounce takes the track alone, never through the Pre-Master.
-            auto& toL = s.toBus.load() && only < 0 ? busL : mixL;
-            auto& toR = s.toBus.load() && only < 0 ? busR : mixR;
+            auto& toL = toBus ? busL : mixL;
+            auto& toR = toBus ? busR : mixR;
             for (int k = 0; k < frames; ++k)
             {
                 toL[(size_t) k] += sumL[k];
                 toR[(size_t) k] += sumR[k];
             }
         }
-        // The Pre-Master, before the returns: its sends feed them too. With a patch the tracks
-        // go to the patch instead, and it is left out.
-        if (only < 0 && routed == nullptr)
+        // The Pre-Master, before the returns: its sends feed them too. With the patchbay it goes
+        // with the returns into the Mix Bus (the tracks sent to it skip their own patch).
+        if (only < 0)
             renderBus (frames, jumped, withLive);
         // The returns: each through its effect, pan, fader and mute, then with the tracks.
         if (only < 0)
