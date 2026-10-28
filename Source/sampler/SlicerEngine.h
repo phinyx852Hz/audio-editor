@@ -15,6 +15,7 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <utility>
@@ -131,12 +132,15 @@ namespace slicer
         // The step sequencer (StepSequencer.h), played inside render(), to the frame.
         // Its own transport and tempo, or a clock to follow (the Mixer's): `clock` gives the
         // beat and tempo where the block starts and whether it is running. Any thread.
-        Song song() const;
+        std::unique_ptr<Song> song() const;   // a copy (on the heap: it is a megabyte)
         void setSong (const Song&);
         Pattern pattern (int index) const;
         void setPattern (int index, const Pattern&);
         void setLane (int pattern, int lane, const Lane&);
         void setTempo (double bpm);
+        double tempo() const;
+        std::vector<int> chain() const;
+        bool chainOn() const;
         void setBars (int pattern, int bars);
         void setSwing (int pattern, int swing);
         void setChain (const std::vector<int>& patterns, bool on);
@@ -199,12 +203,13 @@ namespace slicer
         std::array<std::atomic<double>, maxVoices> heads {};
         std::array<std::atomic<int>, maxVoices> headPads {};   // -1: on the kit's sample
 
-        Song steps;
+        std::unique_ptr<Song> steps = std::make_unique<Song>();
         std::array<bool, numLanes> laneUsed {};   // the playing pattern's lanes with steps on
         std::array<Planned, maxPlanned> planned {};
         int plannedCount = 0;
         Clock follow;
         bool following = false;    // the clock ran last block
+        double clockWas = 0.0;     // the clock's last reading
         double beat = 0.0;         // where the next block starts
         double origin = 0.0;       // the beat the playing pattern started on
         int playingIndex = 0, chainAt = 0;

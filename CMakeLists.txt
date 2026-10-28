@@ -175,6 +175,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/SamplerWindow.cpp
     Source/ui/SlicerKit.cpp
     Source/ui/SlicerWindow.cpp
+    Source/ui/StepSequencerView.cpp
     Source/ui/MixerWindow.cpp
     Source/ui/MidiEditor.cpp
     Source/ui/MixerRecording.cpp

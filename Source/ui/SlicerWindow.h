@@ -4,6 +4,7 @@
 #include "../core/AudioData.h"
 #include "../core/BeatGrid.h"
 #include "../sampler/SlicerEngine.h"
+#include "StepSequencerView.h"
 
 #include <QTimer>
 #include <QWidget>
@@ -121,7 +122,8 @@ private:
 // hold sounds of its own instead, up to four layers. Laid out for Push's 8x8 grid (four
 // banks at a time) or chromatically. Played from MIDI, by clicking, or from the computer
 // keyboard: Z X C V are pads 1 to 4, A S D F 5 to 8, Q W E R 9 to 12 and 1 2 3 4 13 to 16
-// of the bank showing; 5 6 7 8 9 0 - = choose banks A to H.
+// of the bank showing; 5 6 7 8 9 0 - = choose banks A to H. Steps shows the bank's pads
+// in the step sequencer instead of the pads (Space plays and stops it).
 class SlicerWindow final : public QWidget
 {
     Q_OBJECT
@@ -140,6 +142,8 @@ public:
     // goes onto the chosen pad's layer to try; Keep keeps it, Undo Swap puts back what was there.
     bool hotSwapping() const;
     void hotSwap (const QString& path);
+    // The Mixer's beat and tempo, for the step sequencer's Follow Mixer.
+    void setMixerClock (std::function<slicer::Engine::Clock()> make);
 
 Q_SIGNALS:
     void refreshRequested();
@@ -180,6 +184,7 @@ private:
     void endHotSwap (bool keep);
     void saveKit();
     void loadKit();
+    void showPage (int page);   // 0: the pads, 1: the steps
     double soundRate() const;   // the rate pads' own sounds are read at
     void changed();             // the kit was edited here: to the engine and the views
 
@@ -240,6 +245,9 @@ private:
     QCheckBox* hotSwapBox;
     QPushButton* keepSwap;
     QPushButton* undoSwap;
+    QStackedWidget* pages;
+    QButtonGroup* pageButtons;
+    StepSequencerView* stepsView;
     QTimer redraw;
     std::vector<std::pair<int, int>> heldKeys;   // scan code, pad
     bool updating = false;

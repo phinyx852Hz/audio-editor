@@ -2122,6 +2122,11 @@ namespace
         clockRuns = true;
         e.render (l3.data(), r3.data(), 512);
         check (e.isPlaying() && near (l3[240 + 10], x[10], 1.0e-5), "steps: following, plays from the clock's beat");
+        e.render (l3.data(), r3.data(), 512);   // the clock not read again yet: plays on
+        check (near (e.playingBeat(), 0.99 + 1024.0 / 24000.0, 1.0e-9), "steps: following, a clock that has not moved yet is no jump");
+        clockBeat = 3.0;
+        e.render (l3.data(), r3.data(), 512);
+        check (near (e.playingBeat(), 3.0 + 512.0 / 24000.0, 1.0e-9), "steps: following, the clock moved");
         e.setClock ({});
     }
 

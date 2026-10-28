@@ -194,7 +194,107 @@ namespace slicerkit
         return k;
     }
 
-    bool saveKitFile (const QString& path, const slicer::Kit& kit, const sampler::SamplePtr& sample, double rate, QString& error)
+    QJsonObject songToJson (const slicer::Song& song)
+    {
+        const slicer::Step plain;
+        const slicer::Lane fresh;
+        QJsonArray patterns;
+        for (int i = 0; i < slicer::numPatterns; ++i)
+        {
+            const auto& p = song.patterns[(size_t) i];
+            QJsonArray lanes;
+            for (int n = 0; n < slicer::numLanes; ++n)
+            {
+                const auto& l = p.lanes[(size_t) n];
+                QJsonArray steps;
+                for (int k = 0; k < slicer::maxSteps; ++k)
+                {
+                    const auto& s = l.step[(size_t) k];
+                    if (! s.on && s.velocity == plain.velocity && s.gate == plain.gate && s.pitch == plain.pitch && s.chance == plain.chance
+                        && s.repeats == plain.repeats && s.ramp == plain.ramp && s.shift == plain.shift)
+                        continue;
+                    QJsonObject o { { "at", k } };
+                    if (s.on) o.insert ("on", true);
+                    if (s.velocity != plain.velocity) o.insert ("velocity", s.velocity);
+                    if (s.gate != plain.gate) o.insert ("gate", s.gate);
+                    if (s.pitch != plain.pitch) o.insert ("pitch", s.pitch);
+                    if (s.chance != plain.chance) o.insert ("chance", s.chance);
+                    if (s.repeats != plain.repeats) o.insert ("repeats", s.repeats);
+                    if (s.ramp != plain.ramp) o.insert ("ramp", s.ramp);
+                    if (s.shift != plain.shift) o.insert ("shift", s.shift);
+                    steps.append (o);
+                }
+                if (steps.isEmpty() && l.steps == fresh.steps && l.rate == fresh.rate && l.direction == fresh.direction && l.offset == fresh.offset
+                    && l.swing == fresh.swing && l.mute == fresh.mute && l.solo == fresh.solo)
+                    continue;
+                lanes.append (QJsonObject { { "pad", n }, { "steps", l.steps }, { "rate", (int) l.rate }, { "direction", (int) l.direction },
+                                            { "offset", l.offset }, { "swing", l.swing }, { "mute", l.mute }, { "solo", l.solo }, { "step", steps } });
+            }
+            if (lanes.isEmpty() && p.bars == 1 && p.swing == 0)
+                continue;
+            patterns.append (QJsonObject { { "index", i }, { "bars", p.bars }, { "swing", p.swing }, { "lanes", lanes } });
+        }
+        QJsonArray chain;
+        for (int i = 0; i < song.chainLength; ++i)
+            chain.append (song.chain[(size_t) i]);
+        return { { "bpm", song.bpm }, { "beatsPerBar", song.beatsPerBar }, { "chain", chain }, { "chainOn", song.chainOn }, { "patterns", patterns } };
+    }
+
+    std::unique_ptr<slicer::Song> songFromJson (const QJsonObject& o)
+    {
+        auto song = std::make_unique<slicer::Song>();
+        song->bpm = std::clamp (o.value ("bpm").toDouble (120.0), 20.0, 400.0);
+        song->beatsPerBar = std::clamp (o.value ("beatsPerBar").toInt (4), 1, 16);
+        for (const auto c : o.value ("chain").toArray())
+            if (const auto p = c.toInt (-1); p >= 0 && p < slicer::numPatterns && song->chainLength < slicer::maxChain)
+                song->chain[(size_t) song->chainLength++] = (int8_t) p;
+        song->chainOn = o.value ("chainOn").toBool() && song->chainLength > 0;
+        for (const auto pv : o.value ("patterns").toArray())
+        {
+            const auto po = pv.toObject();
+            const auto i = po.value ("index").toInt (-1);
+            if (i < 0 || i >= slicer::numPatterns)
+                continue;
+            auto& p = song->patterns[(size_t) i];
+            p.bars = (uint8_t) std::clamp (po.value ("bars").toInt (1), 1, 16);
+            p.swing = (uint8_t) std::clamp (po.value ("swing").toInt (0), 0, 100);
+            for (const auto lv : po.value ("lanes").toArray())
+            {
+                const auto lo = lv.toObject();
+                const auto n = lo.value ("pad").toInt (-1);
+                if (n < 0 || n >= slicer::numLanes)
+                    continue;
+                auto& l = p.lanes[(size_t) n];
+                l.steps = (uint8_t) std::clamp (lo.value ("steps").toInt (16), 1, slicer::maxSteps);
+                l.rate = (slicer::Rate) std::clamp (lo.value ("rate").toInt ((int) slicer::Rate::sixteenth), 0, (int) slicer::Rate::count - 1);
+                l.direction = (slicer::Direction) std::clamp (lo.value ("direction").toInt (0), 0, 3);
+                l.offset = (uint8_t) std::clamp (lo.value ("offset").toInt (0), 0, slicer::maxSteps - 1);
+                l.swing = (uint8_t) std::clamp (lo.value ("swing").toInt (0), 0, 100);
+                l.mute = lo.value ("mute").toBool();
+                l.solo = lo.value ("solo").toBool();
+                for (const auto sv : lo.value ("step").toArray())
+                {
+                    const auto so = sv.toObject();
+                    const auto k = so.value ("at").toInt (-1);
+                    if (k < 0 || k >= slicer::maxSteps)
+                        continue;
+                    auto& s = l.step[(size_t) k];
+                    s.on = so.value ("on").toBool();
+                    s.velocity = (uint8_t) std::clamp (so.value ("velocity").toInt (s.velocity), 1, 127);
+                    s.gate = (uint8_t) std::clamp (so.value ("gate").toInt (s.gate), 1, 100);
+                    s.pitch = (int8_t) std::clamp (so.value ("pitch").toInt (s.pitch), -24, 24);
+                    s.chance = (uint8_t) std::clamp (so.value ("chance").toInt (s.chance), 0, 100);
+                    s.repeats = (uint8_t) std::clamp (so.value ("repeats").toInt (s.repeats), 1, slicer::maxRepeats);
+                    s.ramp = (int8_t) std::clamp (so.value ("ramp").toInt (s.ramp), -100, 100);
+                    s.shift = (int8_t) std::clamp (so.value ("shift").toInt (s.shift), -50, 50);
+                }
+            }
+        }
+        return song;
+    }
+
+    bool saveKitFile (const QString& path, const slicer::Kit& kit, const sampler::SamplePtr& sample, double rate, QString& error,
+                      const slicer::Song* song)
     {
         const QFileInfo info (path);
         const auto base = info.absoluteDir();
@@ -214,6 +314,8 @@ namespace slicerkit
             const auto wav = base.filePath (folder + QStringLiteral ("/Pad %1 layer %2.wav").arg (pad + 1).arg (layer + 1));
             return needFolder() && saveSound (s, rate, wav, why) ? wav : QString();
         }));
+        if (song != nullptr)
+            root.insert ("song", songToJson (*song));
         QFile f (path);
         if (! f.open (QIODevice::WriteOnly | QIODevice::Truncate) || f.write (QJsonDocument (root).toJson()) < 0)
         {
@@ -250,6 +352,8 @@ namespace slicerkit
                 out.problems << tr ("The kit's sample %1 could not be read (%2)").arg (wav, why);
         }
         out.kit = fromJson (root.value ("kit").toObject(), base, rate, &out.problems);
+        if (root.contains ("song"))
+            out.song = songFromJson (root.value ("song").toObject());
         // Where layers start and end is in frames at the rate the kit was saved at.
         const auto saved = root.value ("rate").toDouble (rate);
         if (saved > 0.0 && std::abs (saved - rate) > 0.5)
