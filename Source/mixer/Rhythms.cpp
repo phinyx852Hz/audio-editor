@@ -590,6 +590,17 @@ namespace rhythm
                   lane ("snare", gm::snare, 4, "..o.X.o..o.oX.o."),
                   lane ("closed hi-hat", gm::closedHat, 4, "xxxx.xxxxxxx.xxx"),
                   lane ("open hi-hat", gm::openHat, 4, "....x.......x...") }));
+            // Kuku as afrodrumming.com teaches it: two djembes in 8ths, the first's one bar
+            // (bass, tone tone, slap) against the second's two. Djembe 1 on the congas, djembe 2
+            // on the bongos, so the two stay apart.
+            all.push_back (groove ("kuku", "kuku", w, {}, 8, { 4, 4 }, 120,
+                "Guinea: a dance song for two djembes, the first a one-bar pattern, the second a two-bar answer (beginners' arrangement, no dunun).",
+                { lane ("djembe 1, bass", gm::lowConga, 2, "x.......x......."),
+                  lane ("djembe 1, tone", gm::openHiConga, 2, "..xx......xx...."),
+                  lane ("djembe 1, slap", gm::muteHiConga, 2, "......x.......x."),
+                  lane ("djembe 2, bass", gm::lowBongo, 2, "x...x..........."),
+                  lane ("djembe 2, tone", gm::hiBongo, 2, "........x.x.xx..") },
+                "djembe 1: gu – go do – – pa – (twice); djembe 2: gu – – – du – – – | go – do – go do – –"));
 
             // North African: Egyptian and Maghrebi iqāʿāt, dum (the darbuka's middle) and tak (its rim).
             const std::string n = "North Africa";

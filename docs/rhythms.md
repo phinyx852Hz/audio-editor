@@ -171,13 +171,19 @@ bombo).
 Still to come: chacarera, marinera, maracatu, ijexá, partido alto, festejo and joropo. Haitian
 konpa and Mexican son jarocho too. Each waits for a transcription that can be cited.
 
-## Africa: West Africa (6) and North Africa (6)
+## Africa: West Africa (7) and North Africa (6)
 
 West African:
 
 - agbekɔ, with the standard 12/8 bell (gankogui), the axatse rattle and the kagan
 - the fume-fume, gahu, shiko and soukous timelines
 - afrobeat
+- kuku, from Guinea, as [afrodrumming.com](https://afrodrumming.com/djembe-rhythm-kuku/) writes it
+  for two djembes: djembe 1's one bar (bass on 1, tones on 2 and 2+, slap on 4, said gu go do pa)
+  against djembe 2's two (bass on 1 and 3, then tones on 1, 2, 3 and 3+). General MIDI has no
+  djembe, so djembe 1 plays on the congas (bass low conga, tone open high conga, slap muted high
+  conga) and djembe 2 on the bongos. Load djembe samples in the Retro Sampler for the real sound.
+  The page has no dunun parts, so none are added.
 
 North African:
 
@@ -185,8 +191,8 @@ North African:
   (open high conga)
 - gnāwa, with the qarāqib and the gumbrī's beat
 
-Not yet included: the Mande djembe rhythms (kuku, soli, dundunba). Their parts differ between
-teachers, and they wait to be checked against Tontinkan.
+Not yet included: soli and dundunba, and kuku's dunun. Their parts differ between teachers, and
+they wait for a source that can be cited (Tontinkan did not answer; afrodrumming.com has only kuku).
 
 ## West Asia: iqāʿāt (38)
 
@@ -383,6 +389,8 @@ Timelines and claves:
 - Godfried T. Toussaint, "A Mathematical Analysis of African, Brazilian, and Cuban Clave Rhythms"
   (Bridges, 2002): son, rumba, gahu, shiko, soukous, bossa nova, and the 12/8 standard pattern.
 - David Locke, *Drum Gahu* (White Cliffs Media, 1987).
+- [Djembe Rhythm – Kuku](https://afrodrumming.com/djembe-rhythm-kuku/) and
+  [the notation](https://afrodrumming.com/djembe-lesson-2-notation/), Al Paton, afrodrumming.com.
 - Kofi Agawu, *The African Imagination in Music* (Oxford University Press, 2016).
 
 The rhythm generator:

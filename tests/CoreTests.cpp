@@ -7288,6 +7288,12 @@ namespace
         check (find ("sudasi").lanes[1].hits.find ('o') != std::string::npos && find ("sudasi").counting.find ("ka") != std::string::npos,
                "sudāsī: the light tak-ka between");
         check (find ("dawr hindi").counting == "dum tak tak | dum – tak –", "dawr hindī counted 3+4");
+        // kuku as afrodrumming.com writes it: djembe 1 bass on 1, tones on 2 and 2+, slap on 4; djembe 2 over two bars.
+        const auto& kuku = find ("kuku");
+        check (kuku.group == "West Africa" && kuku.beats == 8 && kuku.lanes.size() == 5
+                   && kuku.lanes[1].hits == "..xx......xx...." && kuku.lanes[2].hits == "......x.......x."
+                   && kuku.lanes[4].hits == "........x.x.xx..",
+               "kuku: djembe 1's bar twice against djembe 2's two bars");
         check (rhythm::findRhythm ("maqsum") >= 0 && find ("maqsum").group == "North Africa", "maqsūm stays in North Africa, not repeated");
         check (rhythm::drumName (39) == "hand clap" && rhythm::drumName (81) == "open triangle" && rhythm::drumName (20).empty(), "general midi drum names");
 
