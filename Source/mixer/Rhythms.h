@@ -4,9 +4,9 @@
 // Rhythmic modes (owner, 2026-10-26): the cycles and grooves of many traditions as drum
 // patterns the mixer, the Tracker and a MIDI file can play. The North Indian tāls with their
 // ṭhekās, the South Indian sūḷādi sapta tāḷas in all five jātis and the cāpu tāḷas, the classic
-// breakbeats, trap, the six rhythmic modes of Notre-Dame, and timelines and grooves of the
-// Caribbean, South America, West and North Africa and Korea. Every name is lower case
-// (owner), transliterated: IAST for Sanskrit and Hindi, IJMES for Arabic, the Revised
+// breakbeats, trap, the six rhythmic modes of Notre-Dame, timelines and grooves of the
+// Caribbean, South America, West and North Africa and Korea, and Maqam World's iqāʿāt. Every
+// name is lower case (owner), transliterated: IAST for Sanskrit and Hindi, IJMES for Arabic, the Revised
 // Romanization for Korean, each language's own spelling for the rest. docs/rhythms.md cites
 // the sources. Our own code and transcriptions. Plain C++, no JUCE or Qt.
 #include "MidiFile.h"

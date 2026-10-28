@@ -7417,6 +7417,30 @@ namespace
         }
         check (rhythm::region ("iqāʿāt") == "West Asia" && rhythm::region ("medieval (ars antiqua)") == "Europe",
                "regions: west asia, and europe as one region among the others");
+        // The iqāʿāt as Maqam World notates them: their time signatures, groupings and strokes.
+        int iqaat = 0;
+        for (const auto& r : all)
+            iqaat += r.group == "iqāʿāt";
+        check (iqaat == 38, "iqāʿāt: samāʿī thaqīl and the 37 others from Maqam World (" + std::to_string (iqaat) + ")");
+        check (find ("wahda").lanes[0].hits == "x......." && find ("wahda").lanes[1].hits == "...x..x.", "waḥda: one dum, then tak on 4 and 7");
+        check (find ("wahda w-nuss").lanes[1].hits == "...x..x.....x..." && find ("wahda w-nuss").lanes[1].perBeat == 4,
+               "waḥda w-nuṣṣ: the first tak half an eighth late");
+        check (find ("aqsaq").beats == 9 && find ("aqsaq").sections == std::vector<int> { 2, 2, 2, 3 }, "aqṣāq: 9/8, 2+2+2+3");
+        check (find ("awis").beats == 11 && find ("zarafat").beats == 13 && find ("khush rank").beats == 17
+                   && find ("murabbaa").beats == 13 && find ("muhajjar").beats == 14 && find ("awfar masri").beats == 19
+                   && find ("fakhit").beats == 20 && find ("warshan arabi").beats == 32 && find ("sittatu ashar masri").beats == 32,
+               "the long cycles: ʿawīṣ 11/8, ẓarāfāt 13/8, khūsh rānk 17/8, murabbaʿ 13/4, muḥajjar 14/4, awfar 19/4, fākhit 20/4, the 32/4s");
+        check (find ("muhajjar").lanes[0].hits.rfind ("xxx", 0) == 0, "muḥajjar: three dums to open");
+        check (find ("sudasi").lanes[1].hits.find ('o') != std::string::npos && find ("sudasi").counting.find ("ka") != std::string::npos,
+               "sudāsī: the light tak-ka between");
+        check (find ("dawr hindi").counting == "dum tak tak | dum – tak –", "dawr hindī counted 3+4");
+        // kuku as afrodrumming.com writes it: djembe 1 bass on 1, tones on 2 and 2+, slap on 4; djembe 2 over two bars.
+        const auto& kuku = find ("kuku");
+        check (kuku.group == "West Africa" && kuku.beats == 8 && kuku.lanes.size() == 5
+                   && kuku.lanes[1].hits == "..xx......xx...." && kuku.lanes[2].hits == "......x.......x."
+                   && kuku.lanes[4].hits == "........x.x.xx..",
+               "kuku: djembe 1's bar twice against djembe 2's two bars");
+        check (rhythm::findRhythm ("maqsum") >= 0 && find ("maqsum").group == "North Africa", "maqsūm stays in North Africa, not repeated");
         check (rhythm::drumName (39) == "hand clap" && rhythm::drumName (81) == "open triangle" && rhythm::drumName (20).empty(), "general midi drum names");
 
         // Layakārī: the ṭhekā twice, three and four times as fast, the claps and waves as they were.
