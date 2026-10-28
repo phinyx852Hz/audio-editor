@@ -41,6 +41,92 @@ fast edits do, and Ctrl+Z on the tracks puts the clip back.
   mixer/NoteEditor.h); a new mode in mixer/Tunings.cpp takes its family's names, and a mode whose
   degrees have names of their own lists them in `TuningSystem::names`.
 
+## Hum or sing to notes
+
+**Hum or Sing...** (beside Step input): sing, hum, whistle or play a melody into the audio input
+(the mixer's, through PipeWire), or open a recording of one, and its notes are put in from the
+step cursor, in the system in force there. The note heard is shown as you sing, by the system's
+own names.
+
+- A note starts where the voice settles on a degree and ends where it stops or settles on another.
+  A move shorter than **A new note after** (60 ms) is an ornament of the note it is in; a
+  note hardly on its own degree is the slide into the next and starts it.
+- **On the system's degrees** puts each note on its degree (else at the pitch sung, to the cent).
+- **Keep the slides and shakes as pitch curves**: where the voice moved more than 20 cents off
+  the note (a mīṇḍ, a gamak, a kaṇ), the note keeps what was sung as its curve; steady singing is
+  left steady.
+- **Starts and lengths on the grid** quantises them; loudness is the velocity.
+- **Play the clip from the cursor while recording** sings along with what is there. The cursor
+  moves to the end of each take, so the next carries on; Ctrl+Z takes a take out.
+- The pitch is found by YIN (core/Pitch.h, the same tracker as the sound editor's pitch tools),
+  from 55 Hz to 1600 Hz: one voice or instrument at a time.
+
+## Tuning changes within a clip
+
+Owner, 2026-10-26: "tuning changes within a piece". A clip can change system part way: a
+modulation from rāst to bayātī, a rāga-mālā, sléndro to pélog, a new pathet.
+
+- **Functions > Tuning Changes > Change the System at the Cursor...**: click the ruler where the
+  new system starts, choose this, then pick the system from there on in **System**. The change is
+  flagged in the ruler with its name.
+- The rows show the system in force at the step cursor: click the ruler in another stretch and the
+  rows, the names and the System box follow it. The stretches in another system are tinted, with
+  their degrees drawn across them, so both are seen at once.
+- Picking a system in **System** sets the one in force at the cursor; before the first change it
+  is the clip's own.
+- A note keeps its pitch when a change is put in; **Snap**, **Up** and **Down** a degree, the
+  ornaments and **Restyle** each work in the system of the stretch a note starts in, so restyling a
+  12-TET melody over a change moves each half into its own system. A drawn note lands on the
+  degrees of its stretch.
+- **Take Out the Change in Force at the Cursor** and **Take Out All the Changes** remove them.
+- The clip's system and its changes are saved in its MIDI file as markers ("PHI system: ...", its
+  name, tonic, period, degrees and names), so the clip opens in them again, even a Scala scale's.
+  Saved as MPE or pitch bend, every change sounds as written on any synth; saved as keys, the
+  track's single tuning plays them, so MPE is the choice for a clip whose tuning changes.
+
+## The rising spectrum and the scale wheel
+
+- **View: Rising spectrum** (owner, 2026-10-26: "the vertical MIDI view ... with a spectral frequency
+  view to show the frequencies rolling up"): frequency across on a log scale, time down the page.
+  Each note is drawn at its fundamental, its harmonics (**harmonics**, 1 to 32) fading above it, so
+  a chord shows as the comb of partials it puts in the air, in any tuning. The system's degrees are
+  the lines, named along the bottom with the frequencies, the twelve keys dotted where they differ.
+  While it plays, the notes roll up past the line where they sound. Click a note to pick it; Ctrl
+  and the wheel zoom across, Shift and the wheel move across, Alt and the wheel stretch time.
+- **Wheel** (after MIDIRestyle's scale wheel and XenRoll's clock diagram): the period as a circle,
+  the tonic at the top, each degree at its true angle against the twelve keys' ticks, so rāst's
+  neutral third sits between the major and minor ones and yaman's just-intonation ga a little
+  under the piano's E. The bars in from the rim show how long each degree sounds in the clip. The
+  notes sounding at the playhead (or the step cursor, or the picked notes) are marked at their own
+  angles and joined, each line with its interval in cents (the interval clock). Under it, how rough
+  they sound together (Sethares' model of Plomp and Levelt's roughness, over each note's
+  harmonics), in any tuning.
+
+## Pitch curves and ornaments
+
+Owner, 2026-10-26: "pitch curves for meend, gamaka and glides, plus PHI rāga's ornaments". A note
+can carry a pitch curve: points of time into the note and cents off its pitch, straight lines
+between. It is drawn over the note in the roll (orange) and bends each partial in the rising
+spectrum.
+
+- The **Curve** tool (6): drag across a note and its pitch follows the mouse, on the system's
+  degrees (Alt: to the cent); drag back to redraw from there. Right-click clears the curve.
+- **Functions > Ornaments**, on the picked notes (or all), in the system shown, each replacing the
+  curve a note had:
+  - **mīṇḍ** to the next note through the degrees between, each touched a moment as a pulled
+    string touches them, or a smooth **glide**; of a chord there, the nearest note is the goal;
+  - a **slide in** from the degree below or above, and **kaṇ**, the degree above or below touched
+    as the note starts;
+  - **āndolan**, a slow swing under the note, **gamak**, a shake to the degree above and back, and
+    **vibrato**, timed by the tempo;
+  - **murkī** (the note, above, the note, below, the note), **khaṭkā** and **zamzama**;
+  - **Clear the Curves**.
+- A split note's curve goes with each half; glued notes join theirs.
+- Saved, a curved note's bends are sent on its channel while it sounds (one each 48th of a beat, when it changes): with MPE
+  and pitch bend by channel it has a channel to itself, so no other note is bent with it; saved as
+  keys, on the note's own channel over the track's tuning. A bent clip read back gets its curves
+  back. Pitch bend by channel's ±2 semitones limits a curve to two semitones; MPE's ±48 does not.
+
 ## Restyle
 
 **Functions > Restyle into This System...** (after MIDIRestyle, by Aaron Brata Aditama, MIT): every
@@ -53,9 +139,9 @@ ghosts (dashed), and **Original** plays the clip as it was, switching while it p
 
 ## Editing, as in Cubase's Key Editor
 
-- Tools (1 to 5): **Pick** (click, Shift-click, drag a box; drag a note to move it, its right
+- Tools (1 to 6): **Pick** (click, Shift-click, drag a box; drag a note to move it, its right
   edge to stretch it; Alt moves by the cent), **Draw** (click and drag to the length; Ctrl-click
-  or a double-click with Pick does the same), **Erase**, **Split**, **Glue**. Right-click deletes.
+  or a double-click with Pick does the same), **Erase**, **Split**, **Glue**, **Curve** (above). Right-click deletes.
 - **Snap** and the grid (1/1 to 1/32, triplets), the **Length** of new notes, **Quantise** with a
   strength and swing (Q).
 - **Functions**: quantise starts, ends and lengths; legato; fixed lengths; delete overlaps (same
@@ -100,6 +186,21 @@ A note's pitch is kept in cents, so it can be anywhere. What the clip's file hol
   its pitch. A track with a tuning of its own should be set to 12-TET for a bent clip, or the two
   add up; the editor says so.
 
+## MTS-ESP
+
+**Mode › tuning › send the tuning to mts-esp synths** makes PHI the MTS-ESP tuning master (ODDSound's MIDI
+Tuning Standard, External Shared Platform): Surge XT, Vital, Pianoteq and the other synths that
+follow MTS-ESP, as plug-ins in PHI or in another program, play every key in the tuning in force
+on the live track (its playing clip's, the scene's or its own), as the PHI synth does, and show
+its name. A clip saved as keys then plays in its mode on those synths too. It needs ODDSound's
+free libMTS library (github.com/ODDSound/MTS-ESP, in /usr/local/lib), which PHI does not
+include: when it is missing, turning this on offers **Install libMTS**, which downloads ODDSound's
+build for the computer's processor from their repository and puts it in place, asking for the
+password (then restart PHI). By hand: `curl -L -o libMTS.so
+https://raw.githubusercontent.com/ODDSound/MTS-ESP/main/libMTS/Linux/x86_64/libMTS.so` and
+`sudo install -m 755 libMTS.so /usr/local/lib/libMTS.so`; PHI includes only ODDSound's small master code (third_party/MTS-ESP), whose licence lets
+anyone use it. Only one program can be the master: PHI says so when another is.
+
 ## Scala files
 
 PHI reads and writes Scala's .scl scales and .kbm keyboard maps with its own code
@@ -113,8 +214,7 @@ its key at its own pitch.
 MIDIRestyle (MIT) for restyling by degree, the ghosts, A/B and pitch bend shared by channel;
 XenRoll (GPL-3.0) for cent-accurate notes, moving a note by the cent, and MPE; Blue's PianoRoll for
 rows that follow a Scala scale; Intonara for the pitch axis; Cubase for the tools, the info line,
-the lanes, quantise and step input. Ideas only: no code from any of them is used. Next, as agreed
-with the owner: pitch curves drawn on notes (meend, gamaka, glides), PHI rāga's ornaments, a scale
-wheel; then a staff view and MusicXML, tuning changes within a clip, and a consonance display.
+the lanes, quantise and step input. Ideas only: no code from any of them is used, apart from ODDSound's
+MTS-ESP master library, which XenRoll also uses.
 
 The code: mixer/NoteEditor.h (the model, plain C++, with tests), core/Scala.h, ui/MidiEditor.h.

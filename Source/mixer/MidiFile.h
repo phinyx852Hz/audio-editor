@@ -28,6 +28,14 @@ namespace midifile
         double microsPerQuarter = 500000.0;   // 120 BPM
     };
 
+    // A marker meta event (FF 06): a name at a tick. The MIDI editor keeps the tuning system a
+    // clip is in, and where it changes, in these.
+    struct Marker
+    {
+        int64_t tick = 0;
+        std::string text;
+    };
+
     struct Song
     {
         int format = 0;              // 0, 1 or 2
@@ -36,6 +44,7 @@ namespace midifile
         std::vector<Event> events;   // every track's, in time order (file order when at the same tick)
         std::vector<Tempo> tempos;   // in time order; at least one, at tick 0
         std::vector<std::string> trackNames;
+        std::vector<Marker> markers; // in time order
         int64_t lastTick = 0;        // the last event of any kind, end of track included
         uint16_t channelsUsed = 0;   // a bit per channel that has notes
 
@@ -51,8 +60,8 @@ namespace midifile
     SongPtr parse (const uint8_t* data, size_t size, std::string& error);
     SongPtr read (const std::string& path, std::string& error);
 
-    // Written back as a type 0 file: the tempo map, the channel events and the end of track at
-    // lastTick. Files in SMPTE time are left alone (empty bytes, false).
+    // Written back as a type 0 file: the tempo map, the markers, the channel events and the end of
+    // track at lastTick. Files in SMPTE time are left alone (empty bytes, false).
     std::vector<uint8_t> bytes (const Song&);
     bool write (const Song&, const std::string& path, std::string& error);
 

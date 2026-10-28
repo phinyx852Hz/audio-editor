@@ -325,6 +325,17 @@ void MainWindow::fillModeMenu (QMenu* menu)
     connect (equal, &QAction::toggled, this, [m, choose] (bool on) { auto next = m; next.equal = on; choose (next); });
 
     use (tuningMenu, "mode.tuneTrack");
+    // MTS-ESP (owner, 2026-10-26): the synths that follow it play the live track's tuning too.
+    if (mixerWin != nullptr)
+    {
+        auto* mts = tuningMenu->addAction (tr ("send the tuning to &mts-esp synths"));
+        mts->setCheckable (true);
+        mts->setChecked (mixerWin->mtsEspOn());
+        mts->setStatusTip (tr ("PHI as the MTS-ESP master: Surge XT, Vital, Pianoteq and the other synths that follow MTS-ESP "
+                               "play in the tuning in force on the live track, as the PHI synth does (needs ODDSound's libMTS)"));
+        auto* mixer = mixerWin;
+        connect (mts, &QAction::toggled, this, [mixer] (bool on) { mixer->setMtsEsp (on); });
+    }
 
     fillRhythmMenu (menu->addMenu (tr ("r&hythm")));
 }

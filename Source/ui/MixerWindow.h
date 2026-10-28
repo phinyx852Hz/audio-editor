@@ -92,6 +92,8 @@ private:
 // The clip launcher (docs/clip-launcher.md, Performance > Clip Launcher) takes the place of
 // the tracks across time: a grid of slots, tracks across and scenes down, with the rack of
 // the selected track on its left and the strips made compact below.
+namespace mixer { class MtsEsp; }
+
 class MixerWindow final : public QWidget
 {
     Q_OBJECT
@@ -209,6 +211,10 @@ public:
     bool tuneSelectedTrack (mixer::TuningChoice);
     bool modeShownMidi (int root, uint16_t keys, int below, const QString& what);
     bool showsMidiClip() const;
+    // MTS-ESP (mixer/MtsEsp.h): synths that follow it play in the live track's tuning in force.
+    bool mtsEspOn() const;
+    void setMtsEsp (bool on);
+    void installLibMts();   // downloads ODDSound's libMTS and installs it, when the user agrees
     void counterpointShown() { counterpointShownMidi(); }
     void fugueShown() { fugueShownMidi(); }
     // The editor's track (owner, 2026-10-26): one track of the mix, Audio only, MIDI only or
@@ -593,6 +599,7 @@ private:
         std::weak_ptr<mixer::Instrument> instrument;
     };
     std::array<HeardTuning, mixer::maxTracks> heardTunings;
+    std::unique_ptr<mixer::MtsEsp> mtsEsp;   // running while it is on
     std::set<std::pair<int, int>> loadingSlots;        // track and scene of files still loading
     QSplitter* splitter;
     QSplitter* sideSplitter;

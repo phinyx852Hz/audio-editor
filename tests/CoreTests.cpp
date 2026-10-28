@@ -7998,6 +7998,144 @@ namespace
         check (pts.size() == 5 && pts.front().value == 0 && pts.back().value == 127, "note editor: a modulation ramp drawn");
         eraseLane (st, 1, 0, 0, 240);
         check (lanePoints (st, 1, 0).size() == 2, "note editor: part of a lane erased");
+
+        // The views' measures.
+        check (roughness ({ 6000.0 }) == 0.0, "note editor: one note is not rough");
+        const auto fifth = roughness ({ 6000.0, 6700.0 }), semitone = roughness ({ 6000.0, 6100.0 }), tritone = roughness ({ 6000.0, 6600.0 });
+        const auto octave = roughness ({ 6000.0, 7200.0 }), neutral = roughness ({ 6000.0, 6350.0 });
+        check (octave < fifth && fifth < tritone && tritone < semitone, "note editor: octave, fifth, tritone, semitone, roughest last");
+        check (neutral > roughness ({ 6000.0, 6400.0 }) * 0.5 && neutral < semitone, "note editor: a neutral third between");
+        check (soundingAt (st, 0).size() == 1 && soundingAt (st, 100000).empty(), "note editor: what sounds at a tick");
+        const auto use = degreeUsage (st, twelveTet());
+        check (use.size() == 12 && use[0] == 120.0 && use[2] == 120.0, "note editor: how long each degree sounds");
+
+        // Pitch curves: a glide written, sent as MPE bends, and read back as the same curve.
+        Sequence g;
+        g.notes.push_back ({ 0, 480, 6000.0, 100 });
+        g.notes.push_back ({ 480, 480, 6700.0, 100 });
+        g.notes[0].selected = true;
+        glideToNext (g, twelveTet(), 0.5, false);
+        check (g.notes[0].curve.size() == 3 && near (g.notes[0].bendAt (240), 0.0, 1.0e-9) && near (g.notes[0].bendAt (480), 700.0, 1.0e-9)
+                   && near (g.notes[0].bendAt (360), 350.0, 1.0) && g.notes[1].curve.empty(),
+               "note editor: a glide to the next note from halfway");
+        const auto curvedBack = decode (*encode (g, {}).song);
+        check (curvedBack.notes.size() == 2 && ! curvedBack.notes[0].curve.empty() && near (curvedBack.notes[0].bendAt (470), 700.0 * 470.0 / 480.0 * 2.0 - 700.0, 12.0)
+                   && near (curvedBack.notes[0].bendAt (100), 0.0, 1.0) && near (curvedBack.notes[1].pitch, 6700.0, 0.1) && curvedBack.notes[1].curve.empty(),
+               "note editor: a curve through MPE and back");
+        auto crowd = g;
+        crowd.notes.push_back ({ 100, 100, 6000.0, 100 });
+        const auto withBends = encode (crowd, { Encoding::bendChannels, 2.0, true });
+        int bendsOn = 0;
+        for (const auto& e : withBends.song->events)
+            bendsOn += e.kind() == 0xE0 ? 1 : 0;
+        const auto crowdBack = decode (*withBends.song);
+        check (bendsOn >= 10 && crowdBack.notes.size() == 3 && crowdBack.notes[1].start == 100 && crowdBack.notes[1].channel != crowdBack.notes[0].channel,
+               "note editor: a curved note keeps its channel to itself");
+        glideToNext (g, twelveTet(), 0.0, true);
+        check (near (g.notes[0].bendAt (480 / 7), 100.0, 1.0e-9), "note editor: mīṇḍ touches each degree on the way");
+        splitAt (g, 240);
+        check (g.notes.size() == 3 && near (g.notes[1].bendAt (0), g.notes[0].bendAt (240), 1.0e-9), "note editor: a split curve carries on where it was cut");
+        glue (g);
+        check (g.notes.size() == 2 && near (g.notes[0].bendAt (480), 700.0, 1.0e-9), "note editor: glued back, the curve whole");
+        g.notes[0].selected = true;
+        turn (g, r, { 0, 1, 0, -1, 0 }, 40);
+        check (near (g.notes[0].bendAt (45), 200.0, 1.0e-9) && near (g.notes[0].bendAt (125), -150.0, 1.0e-9) && near (g.notes[0].bendAt (479), 0.0, 1.0e-9),
+               "note editor: murkī, a degree of rast above and below");
+        kan (g, r, 1, 30);
+        check (near (g.notes[0].bendAt (0), 200.0, 1.0e-9) && near (g.notes[0].bendAt (30), 0.0, 1.0e-9), "note editor: kaṇ");
+        swing (g, 30.0, 4.0, 120.0, true);
+        double low = 0.0, high = -1.0e9;
+        for (int64_t t = 0; t < 480; t += 5)
+        {
+            low = std::min (low, g.notes[0].bendAt (t));
+            high = std::max (high, g.notes[0].bendAt (t));
+        }
+        check (low < -29.0 && high <= 1.0e-9, "note editor: āndolan swings under the pitch");
+        gamak (g, r, 4.0, 120.0);
+        check (near (g.notes[0].bendAt (120), 200.0, 1.0e-9) && near (g.notes[0].bendAt (240), 0.0, 1.0e-9), "note editor: gamak to the degree above");
+        clearCurves (g);
+        check (g.notes[0].curve.empty(), "note editor: curves cleared");
+
+        // Tuning changes within a clip: rast, then from bar 2 sléndro; saved as markers and read back.
+        Sequence m;
+        m.notes.push_back ({ 0, 480, 6300.0, 100 });
+        m.notes.push_back ({ 1920, 480, 6300.0, 100 });
+        const auto sl = fromTuning (mixer::tuningSystems()[(size_t) std::max (0, slendro)], 0);
+        changeSystem (m, 1920, sl);
+        check (systemAt (m, r, 0).name == r.name && systemAt (m, r, 1920).name == sl.name, "note editor: the system in force");
+        m.markers.push_back ({ 960, "verse" });
+        changeSystem (m, 0, r);
+        std::string why;
+        const auto bytes = midifile::bytes (*encode (m, {}).song);
+        const auto reread = midifile::parse (bytes.data(), bytes.size(), why);
+        const auto mb = reread ? decode (*reread) : Sequence {};
+        check (mb.systems.size() == 2 && mb.systems[1].tick == 1920 && mb.systems[1].system.name == sl.name && mb.systems[1].system.size() == sl.size()
+                   && near (mb.systems[1].system.degrees[2], sl.degrees[2], 1.0e-6) && mb.systems[1].system.names == sl.names
+                   && mb.systems[0].system.family == "maqam" && mb.markers.size() == 1 && mb.markers[0].text == "verse",
+               "note editor: the systems through a file's markers, the other markers kept");
+        // An edit by each stretch's system: up a degree is rast's in the first, sléndro's in the second.
+        bySystem (m, r, [] (Sequence& q, const PitchSystem& sys) { transposeSteps (q, sys, 1); });
+        check (near (m.notes[0].pitch, 6500.0, 1.0e-6) && near (m.notes[1].pitch, sl.pitchOf (sl.nearestStep (6300.0) + 1), 1.0e-6)
+                   && ! m.notes[0].selected && ! m.notes[1].selected,
+               "note editor: an edit in each stretch's own system");
+        check (removeSystemChange (m, 2000) && m.systems.size() == 1 && systemAt (m, twelveTet(), 2000).name == r.name, "note editor: a change taken out");
+        // Hum to notes: C4 for half a second (a blip to D in it), G4, a breath, then E4 slid into from D.
+        std::vector<Heard> heard;
+        for (int i = 0; i < 160; ++i)
+        {
+            const auto t = i * 0.01;
+            double p = -1.0;
+            if (t < 0.5)
+                p = (t >= 0.30 && t < 0.32) ? 6200.0 : 6000.0 + 4.0 * std::sin (t * 30.0);
+            else if (t < 1.0)
+                p = 6700.0;
+            else if (t >= 1.2)
+                p = t < 1.3 ? 6200.0 + (t - 1.2) / 0.1 * 200.0 : 6400.0;
+            heard.push_back ({ t, p, p < 0.0 ? 0.0 : 0.5 });
+        }
+        const auto sung = notesFromPitch (heard, twelveTet(), {}, 480, 120.0, 960);
+        check (sung.size() == 3 && near (sung[0].pitch, 6000.0, 1.0e-9) && near (sung[1].pitch, 6700.0, 1.0e-9) && near (sung[2].pitch, 6400.0, 1.0e-9),
+               "note editor: hummed notes, a blip and a slide not notes of their own");
+        check (sung.size() == 3 && sung[0].start == 960 && std::abs (sung[0].length - 480) <= 10 && sung[1].start == 960 + 480 && std::abs (sung[2].start - (960 + 1152)) <= 2,
+               "note editor: hummed notes in time, at the tempo");
+        check (sung.size() == 3 && sung[0].bendAt (290) > 150.0 && sung[1].curve.empty() && ! sung[2].curve.empty() && sung[2].bendAt (0) < -150.0 && near (sung[2].bendAt (300), 0.0, 1.0e-9),
+               "note editor: the blip and the slide kept as curves, steady singing left steady");
+        check (sung.size() == 3 && sung[0].velocity > 100 && sung[0].velocity < 127, "note editor: hummed loudness as velocity");
+        HumOptions asSung;
+        asSung.snap = false;
+        asSung.grid = 120;
+        const auto free = notesFromPitch (heard, twelveTet(), asSung, 480, 120.0, 0);
+        check (free.size() == 3 && std::abs (free[0].pitch - 6000.0) < 5.0 && free[2].start % 120 == 0, "note editor: hummed as sung, on the grid");
+
+        // And from sound: a sung line of sines, C4 E4 G4 at 0.4 s each, heard back as those notes.
+        {
+            const double rate = 44100.0;
+            AudioData::Builder b (1, rate);
+            std::vector<float> wave;
+            for (const double hz : { 261.63, 329.63, 392.0 })
+                for (int i = 0; i < (int) (0.4 * rate); ++i)
+                    wave.push_back ((float) (0.4 * std::sin (2.0 * 3.14159265358979323846 * hz * i / rate)));
+            const float* ch[] { wave.data() };
+            b.append (ch, (int) wave.size());
+            const auto heardSines = listen (*b.finish());
+            const auto line = notesFromPitch (heardSines, twelveTet(), {}, 480, 60.0, 0);
+            check (line.size() == 3 && near (line[0].pitch, 6000.0, 1.0e-9) && near (line[1].pitch, 6400.0, 1.0e-9) && near (line[2].pitch, 6700.0, 1.0e-9)
+                       && std::abs (line[1].start - 192) < 20,
+                   "note editor: notes heard in a recording");
+        }
+
+        // A system that repeats at a fourth: the obikhod scale, 0 200 400, period 500.
+        if (const auto obikhod = mixer::findTuning ("obikhod scale"); obikhod >= 0)
+        {
+            const auto ob = fromTuning (mixer::tuningSystems()[(size_t) obikhod], 7);
+            check (near (ob.period, 500.0, 1.0e-9) && ob.size() == 3 && near (ob.pitchOf (3), ob.tonic + 500.0, 1.0e-9) && near (ob.pitchOf (5), ob.tonic + 900.0, 1.0e-9),
+                   "note editor: a system's own period (the obikhod scale at the fourth)");
+        }
+        else
+            check (false, "note editor: the obikhod scale is a tuning");
+
+        PitchSystem junk;
+        check (! parseSystemMarker ("verse", junk) && ! parseSystemMarker ("PHI system: x | y | tonic a | period 1200 | 0 |", junk), "note editor: other markers are not systems");
     }
 
 int main()

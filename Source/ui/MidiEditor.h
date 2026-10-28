@@ -10,6 +10,7 @@
 // input from the MIDI keyboard or the computer's. Restyle, after MIDIRestyle, moves a melody into
 // another system degree by degree, the notes it had kept as ghosts behind. Saved as plain keys,
 // MPE or pitch bend by channel (NoteEditor.h).
+#include "../core/AudioData.h"
 #include "../mixer/NoteEditor.h"
 
 #include <QDialog>
@@ -18,6 +19,7 @@
 #include <memory>
 #include <vector>
 
+class AudioCapture;
 class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
@@ -42,6 +44,9 @@ public:
         double bpm = 0.0;    // the mixer's tempo when the clip follows it, else 0 (the file's)
         QString folder;      // where to look for .scl and .kbm files
         QString title;       // the clip's name
+        QString inputSource; // the audio input to hum into (a PipeWire target); empty the first input
+        // Reads a sound file (to hear its melody), null with the reason when it cannot.
+        std::function<AudioDataPtr (const QString& path, QString& error)> loadAudio;
     };
 
     MidiEditor (const midifile::Song&, Host, QWidget* parent);
@@ -54,6 +59,8 @@ public:
     void midiIn (uint8_t status, uint8_t data1, uint8_t data2);
 
     class Roll;
+    class Spectrum;
+    class Wheel;
 
 protected:
     void keyPressEvent (QKeyEvent*) override;
@@ -61,6 +68,8 @@ protected:
 
 private:
     friend class Roll;
+    friend class Spectrum;
+    friend class Wheel;
 
     void buildSystems();
     void systemChosen();
@@ -68,14 +77,27 @@ private:
     void loadKeyboardMap();
     void exportScala();
     void setSystem (noteedit::PitchSystem);
+    // Tuning changes within the clip: the rows show the system in force at the step cursor.
+    const noteedit::PitchSystem& systemAt (int64_t tick) const;
+    void showSystemAt (int64_t tick);
+    void selectSystemItem (const noteedit::PitchSystem&);   // the System and root boxes, quietly
+    void changeSystemHere();
+    void removeSystemHere();
+    // An edit on the picked notes, each stretch of the clip in its own system.
+    void editBySystem (const std::function<void (noteedit::Sequence&, const noteedit::PitchSystem&)>&);
     void edit (const std::function<void (noteedit::Sequence&)>&);
     void undo();
     void redo();
     void changed();          // the sequence changed: the roll, the info line, the encoding's note
+    void viewsUpdate();      // the spectrum and the wheel, after a change or as the playhead moves
+    int64_t nowTick() const; // what the wheel shows: the playhead, else the step cursor
     void updateInfo();
     void infoEdited();
     void restyleDialog();
     void velocityDialog();
+    void humDialog();        // hum or sing to notes, or a recording's melody
+    void putInHeard (const std::vector<noteedit::Heard>&, const noteedit::HumOptions&);
+    double tempo() const;    // beats a minute: the mixer's, else the file's
     void togglePlay();
     void startPlay (bool original);
     void stopPlay();
@@ -91,7 +113,9 @@ private:
     midifile::Song original;
     noteedit::Sequence seq, ghosts;
     std::vector<noteedit::Sequence> undoList, redoList;
-    noteedit::PitchSystem system;
+    noteedit::PitchSystem system;   // the one shown: in force at the step cursor
+    noteedit::PitchSystem base;     // the clip's, before its first tuning change
+    std::vector<noteedit::PitchSystem> otherSystems;   // read from the clip, in the System box
     std::unique_ptr<phi::scala::Scale> scala;
     std::unique_ptr<phi::scala::KeyboardMap> keyboardMap;
     QString scalaName;
@@ -100,6 +124,11 @@ private:
     int64_t chordAt = -1;
 
     Roll* roll = nullptr;
+    Spectrum* spectrum = nullptr;
+    Wheel* wheel = nullptr;
+    QComboBox* viewBox = nullptr;
+    QCheckBox* wheelBox = nullptr;
+    QSpinBox* harmonicsBox = nullptr;
     QComboBox* systemBox = nullptr;
     QComboBox* rootBox = nullptr;
     QComboBox* namingBox = nullptr;
@@ -131,6 +160,7 @@ private:
     size_t infoMark = (size_t) -1;   // the undo list's size after the last typed change
 
     // Playback in the editor: the encoded notes sent at their times.
+    std::unique_ptr<AudioCapture> capture;   // the audio input, while humming
     QTimer* playTimer = nullptr;
     struct Timed { double seconds; uint8_t status, data1, data2; };
     std::vector<Timed> playing;

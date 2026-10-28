@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MidiEditor.h"
+#include "ModeAtlas.h"
 
 #include "../core/Scala.h"
+#include "../engine/AudioCapture.h"
 #include "../mixer/Tunings.h"
 
 #include <QAbstractScrollArea>
@@ -40,7 +42,7 @@ using namespace noteedit;
 
 namespace
 {
-    enum Tool { toolPick, toolDraw, toolErase, toolSplit, toolGlue };
+    enum Tool { toolPick, toolDraw, toolErase, toolSplit, toolGlue, toolCurve };
 
     constexpr int keyWidth = 96, rulerHeight = 22, laneHeight = 110, laneGap = 6;
     constexpr int laneVelocity = -1;
@@ -64,6 +66,16 @@ namespace
     }
 
     double hzOf (double pitch) { return 440.0 * std::pow (2.0, (pitch - 6900.0) / 1200.0); }
+
+    bool sameSystem (const PitchSystem& a, const PitchSystem& b)
+    {
+        if (a.name != b.name || std::abs (a.tonic - b.tonic) > 1.0e-6 || std::abs (a.period - b.period) > 1.0e-6 || a.size() != b.size())
+            return false;
+        for (int i = 0; i < a.size(); ++i)
+            if (std::abs (a.degrees[(size_t) i] - b.degrees[(size_t) i]) > 1.0e-6)
+                return false;
+        return true;
+    }
 
     QString barText (int64_t tick, int tpq)
     {
@@ -201,6 +213,33 @@ protected:
             g.drawLine (QPointF (x, rulerHeight), QPointF (x, gridBottom));
         }
 
+        // Tuning changes: where a stretch is in another system than the rows, its degrees drawn
+        // across it.
+        if (! ed.seq.systems.empty())
+        {
+            const auto high = pitchAt (top, false), low = pitchAt (top + gridHeight(), false);
+            for (size_t k = 0; k <= ed.seq.systems.size(); ++k)
+            {
+                const auto& sys = k == 0 ? ed.base : ed.seq.systems[k - 1].system;
+                if (sameSystem (sys, ed.system))
+                    continue;
+                const auto x0 = std::max ((double) keyWidth, xOf (k == 0 ? 0 : ed.seq.systems[k - 1].tick));
+                const auto x1 = k < ed.seq.systems.size() ? std::min ((double) w, xOf (ed.seq.systems[k].tick)) : (double) w;
+                if (x1 <= x0)
+                    continue;
+                auto c = QColor (0xe0, 0x8a, 0x2a);
+                c.setAlphaF (0.07);
+                g.fillRect (QRectF (x0, rulerHeight, x1 - x0, gridHeight()), c);
+                for (auto st : sys.steps (low - 50.0, high + 50.0))
+                {
+                    const auto y = rulerHeight + centerY (sys.pitchOf (st)) - top;
+                    c.setAlphaF (sys.degreeOf (st) == 0 ? 0.8 : 0.45);
+                    g.setPen (QPen (c, sys.degreeOf (st) == 0 ? 1.4 : 0.8));
+                    g.drawLine (QPointF (x0, y), QPointF (x1, y));
+                }
+            }
+        }
+
         // Ghosts: the notes before the restyle.
         if (ed.ghostBox->isChecked())
         {
@@ -229,11 +268,30 @@ protected:
             g.setPen (QPen (n.selected ? pal.color (QPalette::Text) : c.darker (160), 1.0));
             g.setBrush (c);
             g.drawRoundedRect (r, 2, 2);
+            if (! n.curve.empty())
+            {
+                // Its pitch curve, through the rows it bends to.
+                QPainterPath path;
+                const auto every = std::max<int64_t> (1, (int64_t) (2.0 / pixelsPerTick));
+                for (int64_t t = 0; t <= n.length; t = t == n.length ? t + 1 : std::min (n.length, t + every))
+                {
+                    const QPointF at (xOf (n.start + t), rulerHeight + centerY (n.pitch + n.bendAt (t)) - top);
+                    if (t == 0)
+                        path.moveTo (at);
+                    else
+                        path.lineTo (at);
+                }
+                g.setPen (QPen (n.selected ? pal.color (QPalette::Text) : QColor (0xe0, 0x8a, 0x2a), 2.0));
+                g.setBrush (Qt::NoBrush);
+                g.drawPath (path);
+                g.setBrush (c);
+            }
             if (r.width() > 28 && r.height() >= 9)
             {
-                const auto step = ed.system.nearestStep (n.pitch);
-                const auto off = n.pitch - ed.system.pitchOf (step);
-                auto text = QString::fromStdString (label (ed.system, step, naming()));
+                const auto& sys = ed.systemAt (n.start);
+                const auto step = sys.nearestStep (n.pitch);
+                const auto off = n.pitch - sys.pitchOf (step);
+                auto text = QString::fromStdString (label (sys, step, naming()));
                 if (std::abs (off) >= 0.5)
                     text += QStringLiteral (" ") + QString::fromStdString (centsText (off));
                 g.setPen (pal.color (QPalette::HighlightedText));
@@ -304,6 +362,16 @@ protected:
             g.drawLine (QPointF (x, rulerHeight - 6), QPointF (x, rulerHeight));
             g.drawText (QPointF (x + 3, rulerHeight - 7), QString::number (t / barTicks + 1));
         }
+        // The tuning changes, flagged with their system's name.
+        for (const auto& c : ed.seq.systems)
+        {
+            const auto x = xOf (c.tick);
+            if (x < keyWidth || x > w)
+                continue;
+            g.fillRect (QRectF (x, 2, 3, rulerHeight - 2), QColor (0xe0, 0x8a, 0x2a));
+            g.drawText (QPointF (x + 5, 11), QString::fromStdString (c.system.name));
+        }
+        g.fillRect (QRect (0, 0, keyWidth, rulerHeight), pal.color (QPalette::Window));
         g.drawText (QRectF (4, 0, keyWidth - 8, rulerHeight), Qt::AlignVCenter | Qt::AlignLeft,
                     QString::fromStdString (ed.system.name.size() > 14 ? ed.system.name.substr (0, 13) + "…" : ed.system.name));
 
@@ -366,6 +434,7 @@ protected:
             ed.step.position = snapTick (tickAt (x), false);
             if (! ed.playTimer->isActive())
                 ed.playheadTick = ed.step.position;
+            ed.showSystemAt (ed.step.position);
             viewport()->update();
             return;
         }
@@ -394,12 +463,25 @@ protected:
         const auto t = tickAt (x);
         if (e->button() == Qt::RightButton)
         {
-            if (hit >= 0)
+            if (hit >= 0 && tool == toolCurve)
+                ed.edit ([hit] (Sequence& s) { s.notes[(size_t) hit].curve.clear(); });
+            else if (hit >= 0)
                 ed.edit ([hit] (Sequence& s) { s.notes.erase (s.notes.begin() + hit); });
             return;
         }
         switch (tool)
         {
+            case toolCurve:
+                if (hit >= 0)
+                {
+                    ed.undoList.push_back (ed.seq);
+                    ed.redoList.clear();
+                    before = ed.seq;
+                    drawn = hit;
+                    drag = Drag::curve;
+                    curveMoved (e->position(), e->modifiers() & Qt::AltModifier);
+                }
+                return;
             case toolErase:
                 if (hit >= 0)
                 {
@@ -566,12 +648,18 @@ protected:
             case Drag::laneErase:
                 laneMoved (e->position());
                 break;
+            case Drag::curve:
+                curveMoved (e->position(), free);
+                break;
             case Drag::none: break;
         }
     }
 
     void mouseReleaseEvent (QMouseEvent*) override
     {
+        if (drag == Drag::curve && ! ed.undoList.empty() && drawn >= 0 && (size_t) drawn < ed.seq.notes.size()
+            && ed.seq.notes[(size_t) drawn].curve == before.notes[(size_t) drawn].curve)
+            ed.undoList.pop_back();
         if ((drag == Drag::move || drag == Drag::resize) && ! ed.undoList.empty())
         {
             // A click that moved nothing leaves no undo step.
@@ -620,7 +708,7 @@ protected:
     }
 
 private:
-    enum class Drag { none, move, resize, drawing, erasing, rubber, lane, laneErase };
+    enum class Drag { none, move, resize, drawing, erasing, rubber, lane, laneErase, curve };
 
     double rowHeight() const { return rowPixels; }
     double pixelsPerCent() const { return rowPixels / 100.0 * std::max (1.0, 1200.0 / std::max (1.0, ed.system.period) * ed.system.size() / 12.0); }
@@ -717,6 +805,9 @@ private:
     void newNote (int64_t t, double pitch)
     {
         const auto start = snapTick (t, false);
+        // On a degree of the rows shown, but after a tuning change: that stretch's nearest degree.
+        if (const auto& sys = ed.systemAt (start); std::abs (pitch - ed.system.pitchOf (ed.system.nearestStep (pitch))) < 1.0e-6 && ! sameSystem (sys, ed.system))
+            pitch = sys.pitchOf (sys.nearestStep (pitch));
         const auto length = ed.noteLength();
         ed.edit ([&] (Sequence& s)
         {
@@ -736,6 +827,25 @@ private:
                 drawn = (int) i;
         drag = Drag::drawing;
         ed.audition (pitch, ed.step.velocity);
+    }
+
+    // The Curve tool: the note's pitch drawn where the mouse goes, on the degrees unless Alt is
+    // held; a drag back in time redraws from there.
+    void curveMoved (QPointF p, bool free)
+    {
+        if (drawn < 0 || (size_t) drawn >= ed.seq.notes.size())
+            return;
+        auto& n = ed.seq.notes[(size_t) drawn];
+        const auto t = std::clamp<int64_t> (tickAt (p.x()) - n.start, 0, n.length);
+        const auto cents = pitchAt (p.y() - rulerHeight + verticalScrollBar()->value(), ! free) - n.pitch;
+        if (n.curve.empty())
+            n.curve.push_back ({ 0, 0.0 });
+        std::erase_if (n.curve, [&] (const auto& q) { return q.first >= t && q.first > 0; });
+        if (n.curve.empty() || n.curve.back().first < t)
+            n.curve.push_back ({ t, cents });
+        else
+            n.curve.back().second = cents;
+        ed.changed();
     }
 
     void laneMoved (QPointF p)
@@ -789,6 +899,382 @@ private:
 };
 
 //==============================================================================
+// The rising spectrum (owner, 2026-10-26: "the vertical MIDI view ... with a spectral frequency
+// view to show the frequencies rolling up as a representation of the notes"): frequency across
+// on a log scale, time down the page, each note drawn at its fundamental and its harmonics
+// fading above it, so what a chord puts in the air shows as a comb of lines. The system's degrees
+// are the lines across the bottom, named, with the twelve keys dotted where they differ. While it
+// plays, the notes roll up past the line where they sound.
+class MidiEditor::Spectrum final : public QWidget
+{
+public:
+    explicit Spectrum (MidiEditor& e) : QWidget (&e), ed (e)
+    {
+        setMinimumSize (640, 360);
+        setFocusPolicy (Qt::StrongFocus);
+        setMouseTracking (true);
+    }
+
+    void showNotes()
+    {
+        double low = 1.0e9, high = -1.0e9;
+        for (const auto& n : ed.seq.notes)
+        {
+            low = std::min (low, n.pitch);
+            high = std::max (high, n.pitch);
+        }
+        if (low > high)
+            low = high = ed.system.tonic;
+        lowCents = std::max (1500.0, low - 1200.0);
+        highCents = std::min (13500.0, high + 1200.0 * std::log2 (std::max (2, ed.harmonicsBox->value())) + 600.0);
+        topTick = 0;
+        update();
+    }
+
+    void keyPressEvent (QKeyEvent* e) override { ed.keyPressEvent (e); }
+
+protected:
+    void paintEvent (QPaintEvent*) override
+    {
+        QPainter g (this);
+        const auto pal = palette();
+        g.fillRect (rect(), pal.color (QPalette::Base));
+        const auto w = width(), h = height() - rulerHeight;
+        const auto playing = ed.playTimer->isActive() && ed.playheadTick >= 0;
+        const auto ppt = pixelsPerTick();
+        // Time down the page; while it plays the playhead holds still near the bottom and the notes rise.
+        const auto yOf = [&] (int64_t t)
+        {
+            if (playing)
+                return h * 0.8 - (double) (ed.playheadTick - t) * ppt;
+            return (double) (t - topTick) * ppt;
+        };
+
+        // The degrees, across the whole range, and the keys dotted where the system has none.
+        auto faint = pal.color (QPalette::Mid);
+        faint.setAlphaF (0.35);
+        if (! ed.system.isTwelveTet())
+        {
+            g.setPen (QPen (faint, 0.5, Qt::DotLine));
+            for (int key = (int) std::ceil (lowCents / 100.0); key * 100.0 <= highCents; ++key)
+                g.drawLine (QPointF (xOf (key * 100.0), 0), QPointF (xOf (key * 100.0), h));
+        }
+        auto small = font();
+        small.setPointSizeF (std::max (6.5, small.pointSizeF() * 0.8));
+        g.setFont (small);
+        double lastLabel = -1.0e9;
+        for (auto st : ed.system.steps (lowCents, highCents))
+        {
+            const auto x = xOf (ed.system.pitchOf (st));
+            const auto tonic = ed.system.degreeOf (st) == 0;
+            g.setPen (QPen (tonic ? pal.color (QPalette::Highlight) : pal.color (QPalette::Mid), tonic ? 1.2 : 0.5));
+            g.drawLine (QPointF (x, 0), QPointF (x, h));
+            if (x - lastLabel > 26.0 || tonic)
+            {
+                g.setPen (tonic ? pal.color (QPalette::Highlight) : pal.color (QPalette::WindowText));
+                g.drawText (QRectF (x - 30, h + 2, 60, 14), Qt::AlignCenter,
+                            QString::fromStdString (label (ed.system, st, (Naming) ed.namingBox->currentData().toInt())));
+                lastLabel = x;
+            }
+        }
+        // Frequencies along the bottom.
+        g.setPen (pal.color (QPalette::PlaceholderText));
+        for (double hz : { 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0 })
+        {
+            const auto c = 6900.0 + 1200.0 * std::log2 (hz / 440.0);
+            if (c < lowCents || c > highCents)
+                continue;
+            g.drawText (QRectF (xOf (c) - 30, h + 15, 60, 13), Qt::AlignCenter,
+                        hz >= 1000.0 ? QStringLiteral ("%1 kHz").arg (hz / 1000.0) : QStringLiteral ("%1 Hz").arg (hz));
+        }
+
+        // Bars across, faintly.
+        const auto bar = (int64_t) 4 * ed.seq.ticksPerQuarter;
+        auto barColour = pal.color (QPalette::Mid);
+        barColour.setAlphaF (0.3);
+        g.setPen (QPen (barColour, 0.5));
+        for (int64_t t = 0; t <= ed.seq.end() + bar; t += bar)
+            if (const auto y = yOf (t); y >= 0 && y <= h)
+                g.drawLine (QPointF (0, y), QPointF (w, y));
+
+        // The ghosts, then the notes: the fundamental, and each harmonic fainter and thinner.
+        const auto harmonics = ed.harmonicsBox->value();
+        const auto drawNote = [&] (const Note& n, bool ghost)
+        {
+            const auto y0 = yOf (n.start), y1 = yOf (n.end());
+            if (y1 < 0 || y0 > h)
+                return;
+            QColor c = ghost ? pal.color (QPalette::Text) : n.selected ? pal.color (QPalette::Highlight) : QColor (0x4f, 0x9d, 0xd8);
+            if (! ghost && n.channel == 9)
+                c = QColor (0xc8, 0x8a, 0x3a);
+            const auto sounding = playing && n.start <= ed.playheadTick && n.end() > ed.playheadTick;
+            for (int k = 1; k <= (ghost ? 1 : harmonics); ++k)
+            {
+                const auto pc = n.pitch + 1200.0 * std::log2 ((double) k);
+                if (pc > highCents)
+                    break;
+                const auto x = xOf (pc);
+                auto col = c;
+                col.setAlphaF (ghost ? 0.25 : std::clamp ((0.35 + 0.65 * n.velocity / 127.0) / std::pow ((double) k, 0.8) * (sounding ? 1.6 : 1.0), 0.05, 1.0));
+                const auto width = k == 1 ? 5.0 : std::max (1.0, 3.0 / std::sqrt ((double) k));
+                if (! n.curve.empty() && ! ghost)
+                {
+                    // A curved note: each partial follows the bend.
+                    QPainterPath path;
+                    constexpr int samples = 32;
+                    for (int i = 0; i <= samples; ++i)
+                    {
+                        const auto t = n.length * i / samples;
+                        const QPointF at (xOf (pc + n.bendAt (t)), yOf (n.start + t));
+                        if (i == 0)
+                            path.moveTo (at);
+                        else
+                            path.lineTo (at);
+                    }
+                    g.setPen (QPen (col, width, Qt::SolidLine, Qt::FlatCap));
+                    g.setBrush (Qt::NoBrush);
+                    g.drawPath (path);
+                    continue;
+                }
+                g.fillRect (QRectF (x - width / 2.0, std::max (0.0, y0), width, std::min ((double) h, y1) - std::max (0.0, y0)), col);
+            }
+        };
+        if (ed.ghostBox->isChecked())
+            for (const auto& n : ed.ghosts.notes)
+                drawNote (n, true);
+        for (const auto& n : ed.seq.notes)
+            drawNote (n, false);
+
+        // The line where notes sound, the step cursor.
+        if (playing)
+        {
+            g.setPen (QPen (pal.color (QPalette::Text), 1.5));
+            g.drawLine (QPointF (0, h * 0.8), QPointF (w, h * 0.8));
+        }
+        else if (ed.stepBox->isChecked())
+        {
+            g.setPen (QPen (QColor (0xe0, 0x50, 0x50), 2.0));
+            const auto y = yOf (ed.step.position);
+            g.drawLine (QPointF (0, y), QPointF (w, y));
+        }
+        g.fillRect (QRect (0, h, w, rulerHeight), Qt::transparent);
+    }
+
+    void mousePressEvent (QMouseEvent* e) override
+    {
+        setFocus();
+        // A note picked by its fundamental: the nearest under the click.
+        const auto t = topTick + (int64_t) std::lround (e->position().y() / pixelsPerTick());
+        const auto c = centsAt (e->position().x());
+        int best = -1;
+        double bestDistance = 1.0e9;
+        for (size_t i = 0; i < ed.seq.notes.size(); ++i)
+        {
+            const auto& n = ed.seq.notes[i];
+            if (t < n.start || t > n.end())
+                continue;
+            const auto d = std::abs (xOf (n.pitch) - xOf (c));
+            if (d < bestDistance && d < 8.0)
+            {
+                bestDistance = d;
+                best = (int) i;
+            }
+        }
+        if (! (e->modifiers() & Qt::ShiftModifier))
+            selectAll (ed.seq, false);
+        if (best >= 0)
+        {
+            ed.seq.notes[(size_t) best].selected = true;
+            ed.audition (ed.seq.notes[(size_t) best].pitch, ed.seq.notes[(size_t) best].velocity);
+        }
+        else
+            ed.audition (ed.system.pitchOf (ed.system.nearestStep (c)));
+        ed.changed();
+    }
+
+    void wheelEvent (QWheelEvent* e) override
+    {
+        const auto steps = e->angleDelta().y() / 120.0;
+        if (e->modifiers() & Qt::ControlModifier)
+        {
+            // Zoom across, about the pointer.
+            const auto at = centsAt (e->position().x());
+            const auto f = std::pow (0.85, steps);
+            lowCents = std::max (0.0, at - (at - lowCents) * f);
+            highCents = std::min (14400.0, at + (highCents - at) * f);
+        }
+        else if (e->modifiers() & Qt::ShiftModifier)
+        {
+            const auto shift = (highCents - lowCents) * 0.1 * -steps;
+            lowCents = std::max (0.0, lowCents + shift);
+            highCents = std::min (14400.0, highCents + shift);
+        }
+        else if (e->modifiers() & Qt::AltModifier)
+            zoomY = std::clamp (zoomY * std::pow (1.2, steps), 0.1, 10.0);
+        else
+            topTick = std::max<int64_t> (0, topTick - (int64_t) std::lround (steps * 60.0 / pixelsPerTick()));
+        update();
+    }
+
+private:
+    static constexpr int rulerHeight = 30;
+    double pixelsPerTick() const { return 0.25 * zoomY; }
+    double xOf (double cents) const { return (cents - lowCents) / std::max (1.0, highCents - lowCents) * width(); }
+    double centsAt (double x) const { return lowCents + x / std::max (1, width()) * (highCents - lowCents); }
+
+    MidiEditor& ed;
+    double lowCents = 3600.0, highCents = 10800.0, zoomY = 1.0;
+    int64_t topTick = 0;
+};
+
+//==============================================================================
+// The scale wheel and the interval clock (after MIDIRestyle's degree view and XenRoll's clock
+// diagram): the period as a circle, the tonic at the top, each degree at its true angle against
+// the twelve keys' ticks, so a neutral third sits between the major and minor. The ring outside
+// shows how long each degree sounds in the clip. The notes sounding at the playhead (or the step
+// cursor, or the picked ones) are lit, joined by lines marked with their intervals in cents, and
+// the meter says how rough they are together.
+class MidiEditor::Wheel final : public QWidget
+{
+public:
+    explicit Wheel (MidiEditor& e) : QWidget (&e), ed (e) { setFixedWidth (280); }
+
+protected:
+    void paintEvent (QPaintEvent*) override
+    {
+        QPainter g (this);
+        g.setRenderHint (QPainter::Antialiasing);
+        const auto pal = palette();
+        g.fillRect (rect(), pal.color (QPalette::Window));
+        const auto size = std::min (width() - 20.0, height() - 90.0);
+        const QPointF centre (width() / 2.0, 14 + size / 2.0);
+        const auto radius = size / 2.0 - 26.0;
+        const auto period = ed.system.period > 0 ? ed.system.period : 1200.0;
+        const auto at = [&] (double cents, double r)
+        {
+            const auto a = cents / period * 2.0 * 3.141592653589793;
+            return QPointF (centre.x() + r * std::sin (a), centre.y() - r * std::cos (a));
+        };
+        g.setPen (QPen (pal.color (QPalette::Mid), 1.0));
+        g.setBrush (pal.color (QPalette::Base));
+        g.drawEllipse (centre, radius, radius);
+        // The twelve keys' ticks (by the octave, whatever the period).
+        g.setPen (QPen (pal.color (QPalette::Mid), 1.0));
+        for (int k = 0; k < 12; ++k)
+            g.drawLine (at (k * 100.0 * period / 1200.0, radius - 6), at (k * 100.0 * period / 1200.0, radius));
+
+        // How long each degree sounds: a bar in from the rim, longer the more it sounds.
+        const auto use = degreeUsage (ed.seq, ed.system);
+        const auto most = std::max (1.0, *std::max_element (use.begin(), use.end()));
+        auto useColour = pal.color (QPalette::Highlight);
+        useColour.setAlphaF (0.35);
+        for (int d = 0; d < ed.system.size(); ++d)
+        {
+            if (use[(size_t) d] <= 0.0)
+                continue;
+            const auto len = 4.0 + 22.0 * use[(size_t) d] / most;
+            g.setPen (QPen (useColour, 5.0, Qt::SolidLine, Qt::FlatCap));
+            g.drawLine (at (ed.system.degrees[(size_t) d], radius - 8), at (ed.system.degrees[(size_t) d], radius - 8 - len));
+        }
+
+        // What sounds now.
+        std::vector<double> now;
+        const auto playing = ed.playTimer->isActive() || ed.stepBox->isChecked();
+        if (playing)
+            for (auto i : soundingAt (ed.seq, ed.nowTick()))
+                if (ed.seq.notes[i].channel != 9)
+                    now.push_back (ed.seq.notes[i].pitch);
+        if (now.empty())
+            for (const auto& n : ed.seq.notes)
+                if (n.selected && n.channel != 9)
+                    now.push_back (n.pitch);
+        const auto within = [&] (double p)
+        {
+            auto c = std::fmod (p - ed.system.tonic, period);
+            return c < 0 ? c + period : c;
+        };
+        // Each place on the wheel once (an octave doubling is the same place).
+        std::vector<double> places;
+        for (auto p : now)
+        {
+            const auto c = within (p);
+            if (std::none_of (places.begin(), places.end(), [&] (double x) { return std::abs (x - c) < 0.5; }))
+                places.push_back (c);
+        }
+
+        // The degrees, named, lit when they sound.
+        auto small = font();
+        small.setPointSizeF (std::max (6.5, small.pointSizeF() * 0.85));
+        g.setFont (small);
+        const auto naming = (Naming) ed.namingBox->currentData().toInt();
+        for (int d = 0; d < ed.system.size(); ++d)
+        {
+            const auto c = ed.system.degrees[(size_t) d];
+            bool lit = false;
+            for (auto p : now)
+                lit = lit || std::abs (within (p) - c) < 1.0 || std::abs (within (p) - c - period) < 1.0;
+            g.setPen (Qt::NoPen);
+            g.setBrush (lit ? pal.color (QPalette::Highlight) : d == 0 ? pal.color (QPalette::Highlight).darker (130) : pal.color (QPalette::Text));
+            g.drawEllipse (at (c, radius), lit ? 6.0 : 3.5, lit ? 6.0 : 3.5);
+            if (ed.system.size() <= 24 || d % std::max (1, ed.system.size() / 24) == 0)
+            {
+                g.setPen (pal.color (QPalette::WindowText));
+                // The name without its octave (the degree is in the tonic's period, so no dots).
+                auto name = QString::fromStdString (label (ed.system, d, naming)).section (QLatin1Char (' '), 0, 0);
+                if (naming == Naming::letters || (naming == Naming::tradition && name.size() > 1 && name.back().isDigit()))
+                    name.remove (QRegularExpression (QStringLiteral ("-?\\d+$")));
+                const auto p = at (c, radius + 15);
+                g.drawText (QRectF (p.x() - 24, p.y() - 8, 48, 16), Qt::AlignCenter, name);
+            }
+        }
+
+        // The interval clock: each pair joined, the interval in cents at the middle.
+        g.setFont (small);
+        for (size_t i = 0; i < places.size(); ++i)
+            for (size_t j = i + 1; j < places.size(); ++j)
+            {
+                const auto a = at (places[i], radius), b = at (places[j], radius);
+                g.setPen (QPen (pal.color (QPalette::Highlight), 1.5));
+                g.drawLine (a, b);
+                if (places.size() > 4)
+                    continue;   // too many to read: the lines alone
+                // The interval the shorter way round, as a chord's inversion is heard.
+                auto interval = std::abs (places[j] - places[i]);
+                interval = std::min (interval, period - interval);
+                g.setPen (pal.color (QPalette::Text));
+                g.drawText (QRectF ((a.x() + b.x()) / 2 - 22, (a.y() + b.y()) / 2 - 7, 44, 14), Qt::AlignCenter,
+                            QString::number ((int) std::lround (interval)) + QStringLiteral ("¢"));
+            }
+        // Each sounding note: a mark at its own angle, so one off its degree shows.
+        for (auto c : places)
+        {
+            g.setPen (QPen (QColor (0xe0, 0x50, 0x50), 2.0));
+            g.drawLine (at (c, radius - 8), at (c, radius + 6));
+        }
+
+        // The consonance meter.
+        const auto r = roughness (now);
+        const auto level = r / (r + 0.35);
+        const QRectF meter (16, centre.y() + size / 2.0 + 18, width() - 32, 10);
+        g.setPen (QPen (pal.color (QPalette::Mid), 1.0));
+        g.setBrush (pal.color (QPalette::Base));
+        g.drawRect (meter);
+        g.setPen (Qt::NoPen);
+        g.setBrush (QColor::fromHsvF ((1.0 - level) * 0.33, 0.7, 0.85));
+        g.drawRect (QRectF (meter.left(), meter.top(), meter.width() * level, meter.height()));
+        g.setPen (pal.color (QPalette::WindowText));
+        g.drawText (QRectF (meter.left(), meter.bottom() + 2, meter.width(), 16), Qt::AlignLeft,
+                    now.size() < 2 ? MidiEditor::tr ("Play or pick notes: how rough they sound")
+                                   : MidiEditor::tr ("Roughness %1 (Sethares)").arg (r, 0, 'f', 2));
+        g.drawText (QRectF (meter.left(), meter.bottom() + 18, meter.width(), 16), Qt::AlignLeft,
+                    QString::fromStdString (ed.system.name) + QStringLiteral (" · ") + QString::fromStdString (letterName (ed.system.tonic, false)));
+    }
+
+private:
+    MidiEditor& ed;
+};
+
+//==============================================================================
 MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     : QDialog (parent), host (std::move (h)), original (song)
 {
@@ -814,8 +1300,9 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
                                                     { tr ("Draw"), tr ("Click to put a note, drag to its length; Alt puts it between the degrees (2)") },
                                                     { tr ("Erase"), tr ("Click or drag over notes to delete them (3)") },
                                                     { tr ("Split"), tr ("Cut a note in two where you click (4)") },
-                                                    { tr ("Glue"), tr ("Join a note to the next of its pitch (5)") } };
-    for (int i = 0; i < 5; ++i)
+                                                    { tr ("Glue"), tr ("Join a note to the next of its pitch (5)") },
+                                                    { tr ("Curve"), tr ("Drag across a note to draw its pitch curve, a mīṇḍ or gamak, on the degrees (Alt: freely); right-click clears it (6)") } };
+    for (int i = 0; i < 6; ++i)
     {
         auto* b = new QToolButton (this);
         b->setText (toolNames[i].first);
@@ -896,6 +1383,33 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     systemBox->setToolTip (tr ("What the rows are: 12-TET, a mode, raga, maqam, dastgah, laras, mbira tuning, lü or tori, or a "
                                "Scala file. The notes keep their pitches; Functions > Snap or Restyle moves them into it"));
     systems->addWidget (systemBox, 2);
+    // The atlas (ModeAtlas.h): every mode and tuning by region, tradition and people, and a search.
+    auto* atlas = new QToolButton (this);
+    atlas->setText (tr ("Atlas"));
+    atlas->setToolTip (tr ("Find a mode or tuning by region, tradition and people, or search them all"));
+    atlas->setPopupMode (QToolButton::InstantPopup);
+    auto* atlasMenu = new QMenu (atlas);
+    atlas->setMenu (atlasMenu);
+    const auto pickSystem = [this] (int index)
+    {
+        if (const auto at = systemBox->findData (index); at >= 0)
+        {
+            systemBox->setCurrentIndex (at);
+            systemChosen();
+        }
+    };
+    connect (atlasMenu, &QMenu::aboutToShow, this, [this, atlasMenu, pickSystem]
+    {
+        atlasMenu->clear();
+        atlasMenu->addAction (tr ("Search..."), this, [this, pickSystem]
+        {
+            if (const auto index = modeatlas::find (this, mixer::melodic | mixer::tuning, tr ("Find a Mode or Tuning")); index >= 0)
+                pickSystem (index);
+        });
+        atlasMenu->addSeparator();
+        modeatlas::fill (atlasMenu, mixer::melodic | mixer::tuning, systemBox->currentData().toInt(), pickSystem);
+    });
+    systems->addWidget (atlas);
     systems->addWidget (new QLabel (tr ("on"), this));
     rootBox = new QComboBox (this);
     for (const auto* n : rootNames)
@@ -930,6 +1444,23 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     scalaButton->setMenu (scalaMenu);
     scalaButton->setToolTip (tr ("Scala tuning files, read and written by PHI itself"));
     systems->addWidget (scalaButton);
+    systems->addWidget (new QLabel (tr ("View"), this));
+    viewBox = new QComboBox (this);
+    viewBox->addItem (tr ("Piano roll"));
+    viewBox->addItem (tr ("Rising spectrum"));
+    viewBox->setToolTip (tr ("The rising spectrum: frequency across, time down, each note at its fundamental with its harmonics, "
+                             "rolling up while it plays. Ctrl+wheel zooms across, Shift+wheel moves, Alt+wheel stretches time"));
+    systems->addWidget (viewBox);
+    harmonicsBox = new QSpinBox (this);
+    harmonicsBox->setRange (1, 32);
+    harmonicsBox->setValue (8);
+    harmonicsBox->setPrefix (tr ("harmonics "));
+    harmonicsBox->setToolTip (tr ("How many of each note's harmonics the rising spectrum draws"));
+    systems->addWidget (harmonicsBox);
+    wheelBox = new QCheckBox (tr ("Wheel"), this);
+    wheelBox->setToolTip (tr ("The scale wheel: each degree at its true angle against the twelve keys, how long each sounds, "
+                              "and the notes sounding now joined with their intervals, with how rough they sound together"));
+    systems->addWidget (wheelBox);
     ghostBox = new QCheckBox (tr ("Ghosts"), this);
     ghostBox->setChecked (true);
     ghostBox->setToolTip (tr ("The notes as they were before the last restyle, drawn behind"));
@@ -937,7 +1468,16 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     layout->addLayout (systems);
 
     roll = new Roll (*this);
-    layout->addWidget (roll, 1);
+    spectrum = new Spectrum (*this);
+    spectrum->hide();
+    wheel = new Wheel (*this);
+    wheel->hide();
+    auto* views = new QHBoxLayout;
+    views->setSpacing (6);
+    views->addWidget (roll, 1);
+    views->addWidget (spectrum, 1);
+    views->addWidget (wheel);
+    layout->addLayout (views, 1);
 
     // The lane and step input.
     auto* lanes = new QHBoxLayout;
@@ -974,6 +1514,13 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     octaveBox->setToolTip (tr ("Where the computer's keys play: A S D F... are the degrees up from the tonic in this period, Q W E R... "
                                "the period above, Z X C V... the one below"));
     lanes->addWidget (octaveBox);
+    auto* hum = new QToolButton (this);
+    hum->setText (tr ("Hum or Sing..."));
+    hum->setToolTip (tr ("Sing, hum or play a melody into the audio input, or open a recording: its notes are put in at the step cursor, "
+                         "on the system's degrees, its slides and shakes kept as curves"));
+    connect (hum, &QToolButton::clicked, this, &MidiEditor::humDialog);
+    lanes->addSpacing (10);
+    lanes->addWidget (hum);
     lanes->addStretch (1);
     layout->addLayout (lanes);
 
@@ -1049,12 +1596,39 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     menu->addSeparator();
     menu->addAction (tr ("Velocity..."), this, &MidiEditor::velocityDialog);
     menu->addSeparator();
-    menu->addAction (tr ("Up a Degree (Up)"), this, [this] { edit ([this] (Sequence& s) { transposeSteps (s, system, 1); }); });
-    menu->addAction (tr ("Down a Degree (Down)"), this, [this] { edit ([this] (Sequence& s) { transposeSteps (s, system, -1); }); });
-    menu->addAction (tr ("Up a Period (Shift+Up)"), this, [this] { edit ([this] (Sequence& s) { transposeSteps (s, system, system.size()); }); });
-    menu->addAction (tr ("Down a Period (Shift+Down)"), this, [this] { edit ([this] (Sequence& s) { transposeSteps (s, system, -system.size()); }); });
-    menu->addAction (tr ("Snap to the System's Degrees"), this, [this] { edit ([this] (Sequence& s) { snapToSystem (s, system); }); });
+    const auto bySys = [this] (auto f) { return [this, f] { editBySystem (f); }; };
+    menu->addAction (tr ("Up a Degree (Up)"), this, bySys ([] (Sequence& s, const PitchSystem& sys) { transposeSteps (s, sys, 1); }));
+    menu->addAction (tr ("Down a Degree (Down)"), this, bySys ([] (Sequence& s, const PitchSystem& sys) { transposeSteps (s, sys, -1); }));
+    menu->addAction (tr ("Up a Period (Shift+Up)"), this, bySys ([] (Sequence& s, const PitchSystem& sys) { transposeSteps (s, sys, sys.size()); }));
+    menu->addAction (tr ("Down a Period (Shift+Down)"), this, bySys ([] (Sequence& s, const PitchSystem& sys) { transposeSteps (s, sys, -sys.size()); }));
+    menu->addAction (tr ("Snap to the System's Degrees"), this, bySys ([] (Sequence& s, const PitchSystem& sys) { snapToSystem (s, sys); }));
     menu->addAction (tr ("Restyle into This System..."), this, &MidiEditor::restyleDialog);
+    // Ornaments (owner, 2026-10-26: "pitch curves for meend, gamaka and glides, plus PHI rāga's
+    // ornaments"), as curves on the picked notes, each in the system it is in.
+    auto* ornaments = menu->addMenu (tr ("Ornaments"));
+    const auto beat = [this] { return (int64_t) seq.ticksPerQuarter; };
+    const auto bpm = [this] { return tempo(); };
+    ornaments->addAction (tr ("mīṇḍ to the next note, through the degrees"), this, [this] { editBySystem ([] (Sequence& s, const PitchSystem& sys) { glideToNext (s, sys, 0.4, true); }); });
+    ornaments->addAction (tr ("Glide to the next note"), this, [this] { editBySystem ([] (Sequence& s, const PitchSystem& sys) { glideToNext (s, sys, 0.5, false); }); });
+    ornaments->addAction (tr ("Slide in from the degree below"), this, [this, beat] { editBySystem ([beat] (Sequence& s, const PitchSystem& sys) { slideIn (s, sys, -1, beat() / 4); }); });
+    ornaments->addAction (tr ("Slide in from the degree above"), this, [this, beat] { editBySystem ([beat] (Sequence& s, const PitchSystem& sys) { slideIn (s, sys, 1, beat() / 4); }); });
+    ornaments->addAction (tr ("kaṇ from the degree above"), this, [this, beat] { editBySystem ([beat] (Sequence& s, const PitchSystem& sys) { kan (s, sys, 1, beat() / 8); }); });
+    ornaments->addAction (tr ("kaṇ from the degree below"), this, [this, beat] { editBySystem ([beat] (Sequence& s, const PitchSystem& sys) { kan (s, sys, -1, beat() / 8); }); });
+    ornaments->addSeparator();
+    ornaments->addAction (tr ("āndolan (a slow swing under the note)"), this, [this, bpm] { edit ([this, bpm] (Sequence& s) { swing (s, 30.0, 1.5, bpm(), true); }); });
+    ornaments->addAction (tr ("gamak (a shake to the degree above)"), this, [this, bpm] { editBySystem ([bpm] (Sequence& s, const PitchSystem& sys) { gamak (s, sys, 5.0, bpm()); }); });
+    ornaments->addAction (tr ("Vibrato"), this, [this, bpm] { edit ([this, bpm] (Sequence& s) { swing (s, 25.0, 5.5, bpm(), false); }); });
+    ornaments->addSeparator();
+    ornaments->addAction (tr ("murkī (a quick turn above and below the note)"), this, [this, beat] { editBySystem ([beat] (Sequence& s, const PitchSystem& sys) { turn (s, sys, { 0, 1, 0, -1, 0 }, beat() / 12); }); });
+    ornaments->addAction (tr ("khaṭkā (from above, round the note)"), this, [this, beat] { editBySystem ([beat] (Sequence& s, const PitchSystem& sys) { turn (s, sys, { 1, 0, -1, 0 }, beat() / 12); }); });
+    ornaments->addAction (tr ("zamzama (the note and the one above, quickly)"), this, [this, beat] { editBySystem ([beat] (Sequence& s, const PitchSystem& sys) { turn (s, sys, { 1, 0, 1, 0, -1, 0 }, beat() / 16); }); });
+    ornaments->addSeparator();
+    ornaments->addAction (tr ("Clear the Curves"), this, on ([] (Sequence& s) { clearCurves (s); }));
+    // Tuning changes (owner, 2026-10-26: "tuning changes within a piece").
+    auto* changes = menu->addMenu (tr ("Tuning Changes"));
+    changes->addAction (tr ("Change the System at the Cursor..."), this, &MidiEditor::changeSystemHere);
+    changes->addAction (tr ("Take Out the Change in Force at the Cursor"), this, &MidiEditor::removeSystemHere);
+    changes->addAction (tr ("Take Out All the Changes"), this, on ([] (Sequence& s) { s.systems.clear(); }));
     menu->addSeparator();
     menu->addAction (tr ("Select All (Ctrl+A)"), this, [this] { selectAll (seq, true); changed(); });
     menu->addAction (tr ("Select None"), this, [this] { selectAll (seq, false); changed(); });
@@ -1072,11 +1646,21 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     });
     connect (systemBox, &QComboBox::activated, this, &MidiEditor::systemChosen);
     connect (rootBox, &QComboBox::activated, this, &MidiEditor::systemChosen);
-    connect (namingBox, &QComboBox::activated, this, [this] { roll->refresh(); updateInfo(); });
+    connect (namingBox, &QComboBox::activated, this, [this] { roll->refresh(); viewsUpdate(); updateInfo(); });
     connect (rowsBox, &QComboBox::activated, this, [this] (int i) { roll->byPitch = i == 1; roll->rebuild(); roll->showNotes(); });
     connect (gridBox, &QComboBox::activated, this, [this] { roll->refresh(); });
     connect (lengthBox, &QComboBox::activated, this, [this] { step.length = step.step = noteLength(); });
-    connect (ghostBox, &QCheckBox::toggled, this, [this] { roll->refresh(); });
+    connect (ghostBox, &QCheckBox::toggled, this, [this] { roll->refresh(); viewsUpdate(); });
+    connect (viewBox, &QComboBox::activated, this, [this] (int i)
+    {
+        roll->setVisible (i == 0);
+        spectrum->setVisible (i == 1);
+        if (i == 1)
+            spectrum->showNotes();
+        (i == 0 ? (QWidget*) roll : spectrum)->setFocus();
+    });
+    connect (harmonicsBox, &QSpinBox::valueChanged, this, [this] { viewsUpdate(); });
+    connect (wheelBox, &QCheckBox::toggled, this, [this] (bool b) { wheel->setVisible (b); });
     connect (stepBox, &QCheckBox::toggled, this, [this] (bool b) { if (b) roll->setFocus(); roll->refresh(); });
     connect (laneBox, &QComboBox::activated, this, [this] { roll->refresh(); });
     connect (laneChannelBox, &QSpinBox::valueChanged, this, [this] { roll->refresh(); });
@@ -1101,6 +1685,14 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     }
     else
         system = twelveTet (host.root);
+    // The system the clip was saved in, and its tuning changes, from its markers.
+    if (! seq.systems.empty() && seq.systems.front().tick == 0)
+    {
+        system = seq.systems.front().system;
+        seq.systems.erase (seq.systems.begin());
+        selectSystemItem (system);
+    }
+    base = system;
     const auto e = suggestedEncoding (seq);
     encodingBox->setCurrentIndex (encodingBox->findData ((int) e));
     step.length = step.step = noteLength();
@@ -1140,6 +1732,11 @@ void MidiEditor::systemChosen()
         loadScala();
         return;
     }
+    if (choice <= -10 && -choice - 10 < (int) otherSystems.size())
+    {
+        setSystem (otherSystems[(size_t) (-choice - 10)]);
+        return;
+    }
     if (choice == -2 && scala != nullptr)
     {
         // A Scala scale: on the root, unless its keyboard map says where.
@@ -1155,10 +1752,87 @@ void MidiEditor::systemChosen()
 
 void MidiEditor::setSystem (PitchSystem s)
 {
+    // In a stretch after a tuning change, the change's system; else the clip's.
+    const auto at = step.position;
+    if (std::any_of (seq.systems.begin(), seq.systems.end(), [at] (const SystemChange& c) { return c.tick <= at; }))
+        edit ([&] (Sequence& q) { changeSystem (q, std::max_element (q.systems.begin(), q.systems.end(), [at] (const SystemChange& a, const SystemChange& b)
+                                                                                    { return (a.tick <= at ? a.tick : -1) < (b.tick <= at ? b.tick : -1); })->tick, s); });
+    else
+        base = s;
     system = std::move (s);
     roll->rebuild();
     roll->showNotes();
+    if (spectrum->isVisible())
+        spectrum->showNotes();
     changed();
+}
+
+const PitchSystem& MidiEditor::systemAt (int64_t tick) const { return noteedit::systemAt (seq, base, tick); }
+
+void MidiEditor::showSystemAt (int64_t tick)
+{
+    const auto& s = systemAt (tick);
+    if (sameSystem (s, system))
+        return;
+    system = s;
+    selectSystemItem (system);
+    roll->rebuild();
+    if (spectrum->isVisible())
+        spectrum->update();
+    viewsUpdate();
+    updateInfo();
+}
+
+void MidiEditor::selectSystemItem (const PitchSystem& s)
+{
+    const QSignalBlocker blockSystem (systemBox), blockRoot (rootBox);
+    rootBox->setCurrentIndex (((int) std::lround (s.tonic / 100.0) % 12 + 12) % 12);
+    // A tuning of PHI's on that root, 12-TET, the Scala scale open, else one read from the clip.
+    const auto root = rootBox->currentIndex();
+    if (sameSystem (s, twelveTet (root)))
+    {
+        systemBox->setCurrentIndex (systemBox->findData (-1));
+        return;
+    }
+    const auto& all = mixer::tuningSystems();
+    for (int t = 0; t < (int) all.size(); ++t)
+        if (sameSystem (s, fromTuning (all[(size_t) t], root)))
+        {
+            systemBox->setCurrentIndex (systemBox->findData (t));
+            return;
+        }
+    for (size_t i = 0; i < otherSystems.size(); ++i)
+        if (sameSystem (s, otherSystems[i]))
+        {
+            systemBox->setCurrentIndex (systemBox->findData (-10 - (int) i));
+            return;
+        }
+    otherSystems.push_back (s);
+    systemBox->insertItem (1, tr ("%1 (from the clip)").arg (QString::fromStdString (s.name)), -10 - (int) (otherSystems.size() - 1));
+    systemBox->setCurrentIndex (1);
+}
+
+void MidiEditor::changeSystemHere()
+{
+    if (step.position <= 0)
+    {
+        QMessageBox::information (this, tr ("Tuning Changes"), tr ("Put the step cursor where the new system starts (click the ruler), then change it there."));
+        return;
+    }
+    edit ([this] (Sequence& s) { changeSystem (s, step.position, system); });
+    // The system from here on is picked next.
+    systemBox->setFocus();
+    systemBox->showPopup();
+}
+
+void MidiEditor::removeSystemHere()
+{
+    edit ([this] (Sequence& s) { removeSystemChange (s, step.position); });
+}
+
+void MidiEditor::editBySystem (const std::function<void (Sequence&, const PitchSystem&)>& f)
+{
+    edit ([&] (Sequence& s) { bySystem (s, base, f); });
 }
 
 void MidiEditor::loadScala()
@@ -1300,7 +1974,10 @@ void MidiEditor::changed()
         && suggestedEncoding (seq) != Encoding::keys)
         encodingBox->setCurrentIndex (encodingBox->findData ((int) Encoding::mpe));
     const auto encoding = (Encoding) encodingBox->currentData().toInt();
-    if (encoding == Encoding::keys && suggestedEncoding (seq) != Encoding::keys)
+    const auto curved = std::any_of (seq.notes.begin(), seq.notes.end(), [] (const Note& n) { return ! n.curve.empty() && n.channel != 9; });
+    if (encoding == Encoding::keys && curved)
+        encodingNote->setText (tr ("The pitch curves are sent as pitch bend on each note's channel, over the track's tuning"));
+    else if (encoding == Encoding::keys && suggestedEncoding (seq) != Encoding::keys)
         encodingNote->setText (tr ("Some notes are between the keys: saved as keys they are rounded, unless the track's tuning has them"));
     else if (encoding != Encoding::keys)
     {
@@ -1314,8 +1991,23 @@ void MidiEditor::changed()
     }
     else
         encodingNote->setText (host.system >= 0 ? tr ("The track's tuning plays the keys") : QString());
+    showSystemAt (step.position);
     roll->refresh();
+    viewsUpdate();
     updateInfo();
+}
+
+void MidiEditor::viewsUpdate()
+{
+    if (spectrum->isVisible())
+        spectrum->update();
+    if (wheel->isVisible())
+        wheel->update();
+}
+
+int64_t MidiEditor::nowTick() const
+{
+    return playTimer->isActive() && playheadTick >= 0 ? playheadTick : step.position;
 }
 
 void MidiEditor::updateInfo()
@@ -1336,14 +2028,15 @@ void MidiEditor::updateInfo()
     else
     {
         const auto& n = *picked.front();
-        const auto stepAt = system.nearestStep (n.pitch);
-        const auto off = n.pitch - system.pitchOf (stepAt);
+        const auto& sys = systemAt (n.start);
+        const auto stepAt = sys.nearestStep (n.pitch);
+        const auto off = n.pitch - sys.pitchOf (stepAt);
         auto text = picked.size() > 1 ? tr ("%1 notes picked, the first: ").arg (picked.size()) : QString();
         text += tr ("%1 · %2, degree %3 of %4 · %5 Hz")
                     .arg (barText (n.start, seq.ticksPerQuarter),
-                          QString::fromStdString (label (system, stepAt, naming)) + (std::abs (off) >= 0.5 ? QStringLiteral (" ") + QString::fromStdString (centsText (off)) : QString()))
-                    .arg (system.degreeOf (stepAt) + 1)
-                    .arg (system.size())
+                          QString::fromStdString (label (sys, stepAt, naming)) + (std::abs (off) >= 0.5 ? QStringLiteral (" ") + QString::fromStdString (centsText (off)) : QString()))
+                    .arg (sys.degreeOf (stepAt) + 1)
+                    .arg (sys.size())
                     .arg (hzOf (n.pitch), 0, 'f', 2);
         if (n.channel == 9)
             text += tr (" · drums");
@@ -1375,13 +2068,256 @@ void MidiEditor::infoEdited()
             else if (changedBox == infoLength)
                 n.length = length;
             else if (changedBox == infoPitch)
-                n.pitch = std::clamp (system.pitchOf (system.nearestStep (n.pitch)) + off, 0.0, 12700.0);
+            {
+                const auto& sys = systemAt (n.start);
+                n.pitch = std::clamp (sys.pitchOf (sys.nearestStep (n.pitch)) + off, 0.0, 12700.0);
+            }
         }
     });
     // Typing in the boxes one change after another is one undo step.
     if (merge)
         undoList.pop_back();
     infoMark = undoList.size();
+}
+
+double MidiEditor::tempo() const
+{
+    return host.bpm > 0.0 ? host.bpm : seq.tempos.empty() ? 120.0 : 60.0e6 / seq.tempos.front().microsPerQuarter;
+}
+
+void MidiEditor::putInHeard (const std::vector<Heard>& heard, const HumOptions& options)
+{
+    const auto at = step.position;
+    auto notes = notesFromPitch (heard, systemAt (at), options, seq.ticksPerQuarter, tempo(), at);
+    if (notes.empty())
+        return;
+    int64_t end = at;
+    for (const auto& n : notes)
+        end = std::max (end, n.end());
+    edit ([&] (Sequence& s)
+    {
+        selectAll (s, false);
+        for (auto& n : notes)
+        {
+            n.selected = true;
+            s.notes.push_back (n);
+        }
+        s.sort();
+        s.lastTick = std::max (s.lastTick, s.end());
+    });
+    // The next take goes on after this one.
+    step.position = grid() > 0 ? (end + grid() - 1) / grid() * grid() : end;
+    changed();
+}
+
+void MidiEditor::humDialog()
+{
+    QDialog d (this);
+    d.setWindowTitle (tr ("Hum or Sing to Notes"));
+    auto* form = new QVBoxLayout (&d);
+    auto* intro = new QLabel (tr ("Sing, hum, whistle or play a melody: its notes are put in from the step cursor (%1), in %2.")
+                                  .arg (barText (step.position, seq.ticksPerQuarter), QString::fromStdString (systemAt (step.position).name)), &d);
+    intro->setWordWrap (true);
+    form->addWidget (intro);
+
+    auto* sourceBox = new QComboBox (&d);
+    auto* record = new QPushButton (tr ("Record"), &d);
+    record->setCheckable (true);
+    auto* fromFile = new QPushButton (tr ("From a Recording..."), &d);
+    auto* heardLabel = new QLabel (tr ("Heard: nothing yet"), &d);
+    auto* snap = new QCheckBox (tr ("On the system's degrees (else as sung, to the cent)"), &d);
+    snap->setChecked (true);
+    auto* curves = new QCheckBox (tr ("Keep the slides and shakes as pitch curves (mīṇḍ, gamak)"), &d);
+    curves->setChecked (true);
+    auto* quantise = new QCheckBox (tr ("Starts and lengths on the grid"), &d);
+    auto* holdMs = new QSpinBox (&d);
+    holdMs->setRange (20, 400);
+    holdMs->setValue (60);
+    holdMs->setSuffix (tr (" ms"));
+    holdMs->setToolTip (tr ("How long the voice must stay on a new degree for a new note; shorter moves are ornaments of the note"));
+    auto* playAlong = new QCheckBox (tr ("Play the clip from the cursor while recording"), &d);
+    auto* status = new QLabel (&d);
+    status->setWordWrap (true);
+
+    if (! AudioCapture::isAvailable())
+    {
+        sourceBox->addItem (tr ("This build of PHI has no PipeWire, so no audio input"));
+        sourceBox->setEnabled (false);
+        record->setEnabled (false);
+    }
+    else
+    {
+        if (capture == nullptr)
+            capture = std::make_unique<AudioCapture>();
+        if (! capture->isConnected())
+            if (const auto why = capture->connect(); ! why.empty())
+                status->setText (tr ("The audio input could not be opened: %1").arg (QString::fromStdString (why)));
+        for (const auto& source : capture->sources())
+        {
+            const auto kind = source.kind == CaptureSource::Kind::input ? tr ("Input") : source.kind == CaptureSource::Kind::desktop ? tr ("Desktop")
+                                                                                                                                    : tr ("Application");
+            sourceBox->addItem (tr ("%1: %2").arg (kind, QString::fromStdString (source.name)), QString::fromStdString (source.target));
+            // The mixer's audio input, else the first input.
+            if ((! host.inputSource.isEmpty() && QString::fromStdString (source.target) == host.inputSource)
+                || (host.inputSource.isEmpty() && source.kind == CaptureSource::Kind::input && sourceBox->property ("picked").isNull()))
+            {
+                sourceBox->setCurrentIndex (sourceBox->count() - 1);
+                sourceBox->setProperty ("picked", true);
+            }
+        }
+        if (sourceBox->count() == 0)
+        {
+            sourceBox->addItem (tr ("No audio input"));
+            record->setEnabled (false);
+        }
+    }
+    fromFile->setEnabled ((bool) host.loadAudio);
+
+    auto* row = new QHBoxLayout;
+    row->addWidget (sourceBox, 1);
+    row->addWidget (record);
+    form->addLayout (row);
+    form->addWidget (heardLabel);
+    form->addWidget (fromFile, 0, Qt::AlignLeft);
+    form->addSpacing (6);
+    form->addWidget (snap);
+    form->addWidget (curves);
+    form->addWidget (quantise);
+    auto* holdRow = new QHBoxLayout;
+    holdRow->addWidget (new QLabel (tr ("A new note after"), &d));
+    holdRow->addWidget (holdMs);
+    holdRow->addWidget (new QLabel (tr ("on a degree"), &d));
+    holdRow->addStretch (1);
+    form->addLayout (holdRow);
+    form->addWidget (playAlong);
+    form->addWidget (status);
+    auto* buttons = new QDialogButtonBox (QDialogButtonBox::Close, &d);
+    form->addWidget (buttons);
+    connect (buttons, &QDialogButtonBox::rejected, &d, &QDialog::reject);
+
+    const auto options = [&]
+    {
+        HumOptions o;
+        o.snap = snap->isChecked();
+        o.curves = curves->isChecked();
+        o.holdSeconds = holdMs->value() / 1000.0;
+        o.grid = quantise->isChecked() ? grid() : 0;
+        return o;
+    };
+    const auto putIn = [&] (const std::vector<Heard>& heard)
+    {
+        const auto before = seq.notes.size();
+        putInHeard (heard, options());
+        const auto added = (int) (seq.notes.size() - before);
+        status->setText (added > 0 ? tr ("%n note(s) put in; Ctrl+Z takes them out. The cursor is now at %1, for the next take.", nullptr, added)
+                                         .arg (barText (step.position, seq.ticksPerQuarter))
+                                   : tr ("No notes were heard: a single voice or instrument, clearly, works best."));
+        intro->setText (tr ("Sing, hum, whistle or play a melody: its notes are put in from the step cursor (%1), in %2.")
+                            .arg (barText (step.position, seq.ticksPerQuarter), QString::fromStdString (systemAt (step.position).name)));
+    };
+
+    // Recording: what comes in is kept, and its pitch shown as it is sung.
+    std::vector<float> take;
+    int rate = 48000;
+    QTimer timer;
+    timer.setInterval (50);
+    connect (&timer, &QTimer::timeout, &d, [&]
+    {
+        std::vector<float> block (4096);
+        for (int n; (n = capture->read (block.data(), (int) block.size())) > 0;)
+            take.insert (take.end(), block.begin(), block.begin() + n);
+        if (take.size() < 2048)
+            return;
+        AudioData::Builder b (1, rate);
+        const auto from = take.size() - std::min<size_t> (take.size(), (size_t) rate / 5);
+        const float* ch[] { take.data() + from };
+        b.append (ch, (int) (take.size() - from));
+        const auto now = listen (*b.finish());
+        for (auto it = now.rbegin(); it != now.rend(); ++it)
+            if (it->pitch >= 0.0)
+            {
+                const auto& sys = systemAt (step.position);
+                const auto st = sys.nearestStep (it->pitch);
+                const auto off = it->pitch - sys.pitchOf (st);
+                heardLabel->setText (tr ("Heard: %1 %2 · %3 Hz").arg (QString::fromStdString (label (sys, st, (Naming) namingBox->currentData().toInt())),
+                                                                      QString::fromStdString (centsText (off)))
+                                         .arg (hzOf (it->pitch), 0, 'f', 1));
+                return;
+            }
+        heardLabel->setText (tr ("Heard: no clear pitch"));
+    });
+    const auto stopRecording = [&]
+    {
+        timer.stop();
+        if (capture != nullptr && capture->isRunning())
+        {
+            std::vector<float> block (4096);
+            for (int n; (n = capture->read (block.data(), (int) block.size())) > 0;)
+                take.insert (take.end(), block.begin(), block.begin() + n);
+            capture->stop();
+        }
+        if (playTimer->isActive())
+            stopPlay();
+        record->setText (tr ("Record"));
+        if (take.empty())
+            return;
+        AudioData::Builder b (1, rate);
+        const float* ch[] { take.data() };
+        b.append (ch, (int) take.size());
+        take.clear();
+        putIn (listen (*b.finish()));
+    };
+    connect (record, &QPushButton::toggled, &d, [&] (bool on)
+    {
+        if (! on)
+        {
+            stopRecording();
+            return;
+        }
+        const auto target = sourceBox->currentData().toString().toStdString();
+        CaptureSource source;
+        for (const auto& s2 : capture->sources())
+            if (s2.target == target)
+                source = s2;
+        take.clear();
+        rate = 48000;
+        if (const auto why = capture->start (source, rate, 1); ! why.empty())
+        {
+            status->setText (tr ("The audio input could not start: %1").arg (QString::fromStdString (why)));
+            const QSignalBlocker block (record);
+            record->setChecked (false);
+            return;
+        }
+        rate = capture->sampleRate();
+        if (playAlong->isChecked())
+        {
+            playheadTick = step.position;
+            startPlay (false);
+        }
+        record->setText (tr ("Stop"));
+        status->setText (tr ("Recording: sing, then Stop."));
+        timer.start();
+    });
+    connect (fromFile, &QPushButton::clicked, &d, [&]
+    {
+        const auto file = QFileDialog::getOpenFileName (&d, tr ("A Recording of a Melody"), host.folder,
+                                                        tr ("Sound files (*.wav *.flac *.ogg *.mp3 *.aif *.aiff *.m4a *.opus);;All files (*)"));
+        if (file.isEmpty())
+            return;
+        QString why;
+        QApplication::setOverrideCursor (Qt::WaitCursor);
+        const auto audio = host.loadAudio (file, why);
+        const auto heard = audio != nullptr ? listen (*audio) : std::vector<Heard> {};
+        QApplication::restoreOverrideCursor();
+        if (audio == nullptr)
+        {
+            status->setText (tr ("%1 could not be read: %2").arg (QFileInfo (file).fileName(), why));
+            return;
+        }
+        putIn (heard);
+    });
+    d.exec();
+    stopRecording();
 }
 
 void MidiEditor::velocityDialog()
@@ -1469,7 +2405,8 @@ void MidiEditor::restyleDialog()
     for (auto& n : ghosts.notes)
         n.selected = false;
     const auto byDegree = how->currentIndex() == 0;
-    edit ([&] (Sequence& s) { restyle (s, source, system, byDegree); });
+    // Into the system each stretch of the clip is in, when its tuning changes.
+    editBySystem ([&] (Sequence& s, const PitchSystem& to) { restyle (s, source, to, byDegree); });
 }
 
 double MidiEditor::pitchForKey (int key) const
@@ -1569,6 +2506,7 @@ void MidiEditor::keyPressEvent (QKeyEvent* e)
         if (e->key() == Qt::Key_Left || e->key() == Qt::Key_Right)
         {
             step.position = std::max<int64_t> (0, step.position + (e->key() == Qt::Key_Left ? -step.step : step.step));
+            showSystemAt (step.position);
             roll->refresh();
             return;
         }
@@ -1591,7 +2529,7 @@ void MidiEditor::keyPressEvent (QKeyEvent* e)
             if (alt)
                 edit ([dir] (Sequence& s) { transposeCents (s, dir); });
             else
-                edit ([this, dir, shift] (Sequence& s) { transposeSteps (s, system, dir * (shift ? system.size() : 1)); });
+                editBySystem ([dir, shift] (Sequence& s, const PitchSystem& sys) { transposeSteps (s, sys, dir * (shift ? sys.size() : 1)); });
             for (const auto& n : seq.notes)
                 if (n.selected)
                 {
@@ -1611,7 +2549,7 @@ void MidiEditor::keyPressEvent (QKeyEvent* e)
         case Qt::Key_Space:
             togglePlay();
             return;
-        case Qt::Key_1: case Qt::Key_2: case Qt::Key_3: case Qt::Key_4: case Qt::Key_5:
+        case Qt::Key_1: case Qt::Key_2: case Qt::Key_3: case Qt::Key_4: case Qt::Key_5: case Qt::Key_6:
             if (! ctrl)
             {
                 const auto t = e->key() - Qt::Key_1;
@@ -1705,6 +2643,7 @@ void MidiEditor::stopPlay()
             host.play (0xB0, (uint8_t) cc, (uint8_t) v);
     playButton->setText (tr ("Play"));
     roll->refresh();
+    viewsUpdate();
 }
 
 void MidiEditor::playTick()
@@ -1728,6 +2667,7 @@ void MidiEditor::playTick()
                 hi = mid;
         }
         playheadTick = lo;
+        viewsUpdate();
         if (playAt >= playing.size() && now > playSong->lengthSeconds (host.bpm) + 0.3)
         {
             playheadTick = 0;
@@ -1749,6 +2689,9 @@ midifile::SongPtr MidiEditor::result() const
     auto s = seq;
     for (auto& n : s.notes)
         n.selected = false;
+    // The clip's own system, kept with it as a marker at the start, before its changes.
+    if (s.systems.empty() || s.systems.front().tick > 0)
+        s.systems.insert (s.systems.begin(), { 0, base });
     return encode (s, encodeOptions()).song;
 }
 

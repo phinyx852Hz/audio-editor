@@ -19,6 +19,8 @@
 #include <string>
 #include <vector>
 
+class AudioData;
+
 namespace phi::scala { struct Scale; struct KeyboardMap; }
 
 namespace mixer { struct TuningSystem; }
@@ -83,8 +85,21 @@ namespace noteedit
         int release = 64;                // note-off velocity
         int channel = 0;                 // the file's (drums stay on channel 10, index 9)
         bool selected = false;
+        // Its pitch curve (owner, 2026-10-26: "pitch curves for meend, gamaka and glides"): points of
+        // (ticks from its start, cents off its pitch), in time order, straight lines between; before
+        // the first and after the last the curve holds. Empty: the note holds its pitch.
+        std::vector<std::pair<int64_t, double>> curve;
         int64_t end() const { return start + length; }
         int key() const;                 // the nearest key, 0..127
+        double bendAt (int64_t ticksIn) const;   // the curve's cents that far into the note
+    };
+
+    // A tuning change within a clip (owner, 2026-10-26: "tuning changes within a piece"): from its
+    // tick on, the notes are in this system (a modulation, a rāga-mālā, a pathet change).
+    struct SystemChange
+    {
+        int64_t tick = 0;
+        PitchSystem system;
     };
 
     struct Sequence
@@ -94,6 +109,10 @@ namespace noteedit
         std::vector<midifile::Event> other;      // controllers, programs, pressure, bends between notes
         std::vector<midifile::Tempo> tempos { midifile::Tempo {} };
         std::vector<std::string> trackNames;
+        std::vector<midifile::Marker> markers;   // the file's markers, apart from the systems
+        // The systems the clip is in, in time order: one at 0 is the clip's own; with none the
+        // editor's choice holds throughout. Saved as markers ("PHI system: ...").
+        std::vector<SystemChange> systems;
         int64_t lastTick = 0;                    // the clip's length; at least the last note's end
 
         void sort();
@@ -109,6 +128,8 @@ namespace noteedit
     // MPE set-up messages are taken into the notes; every other event is kept in `other`.
     Sequence decode (const midifile::Song&);
 
+    // Saving, a curved note's pitch is sent as bends on its own channel every so many ticks (keys:
+    // on the note's channel, as a file's pitch wheel would be).
     enum class Encoding
     {
         keys,           // each note on its nearest key, on its own channel, no bend: the track's tuning plays it
@@ -128,8 +149,21 @@ namespace noteedit
         int channels = 0;     // channels used for notes
     };
     Encoded encode (const Sequence&, const EncodeOptions&);
-    // Keys when every note sits on a key, else MPE.
+    // Keys when every note sits on a key and none is curved, else MPE.
     Encoding suggestedEncoding (const Sequence&);
+
+    // The system in force at a tick: the last change at or before it, else `before`.
+    const PitchSystem& systemAt (const Sequence&, const PitchSystem& before, int64_t tick);
+    // A change to `system` at the tick, replacing one there.
+    void changeSystem (Sequence&, int64_t tick, const PitchSystem&);
+    // The change in force at the tick taken out (the one before it then holds on); false if none.
+    bool removeSystemChange (Sequence&, int64_t tick);
+    // An edit made on the targets in each stretch of the clip with that stretch's system (each
+    // note by the system it starts in). The edit must keep the notes' count and starts.
+    void bySystem (Sequence&, const PitchSystem& before, const std::function<void (Sequence&, const PitchSystem&)>&);
+    // A system as a marker's text and back: its name, family, tonic, period, degrees and names.
+    std::string systemMarker (const PitchSystem&);
+    bool parseSystemMarker (const std::string&, PitchSystem&);
 
     //==========================================================================
     // Edits, each on the targets (the picked notes, else all). A grid is in ticks.
@@ -161,6 +195,60 @@ namespace noteedit
     // 0..11 and whether it is minor.
     struct Key { int root = 0; bool minor = false; };
     Key detectKey (const Sequence&);
+
+    //==========================================================================
+    // Ornaments: pitch curves written onto the targets, each replacing the curve a note had.
+    // Durations are in ticks; depths in cents.
+    // Mīṇḍ, a glide: from `from` (0..1 of the note) to its end the pitch moves to the next note's
+    // (the next start after it, the nearest of a chord); `throughDegrees` touches each degree between on the way, as a
+    // sitar's pulled string does, else it slides.
+    void glideToNext (Sequence&, const PitchSystem&, double from = 0.5, bool throughDegrees = true);
+    // In from a degree below (steps < 0) or above, over `ticks`.
+    void slideIn (Sequence&, const PitchSystem&, int steps, int64_t ticks);
+    // Āndolan, vibrato: a swing of `depth` cents at `rateHz` (a beat being a quarter at `bpm`);
+    // `below` swings under the pitch only (āndolan), else either side (vibrato).
+    void swing (Sequence&, double depth, double rateHz, double bpm, bool below);
+    // Gamak: a shake to the degree above and back, `rateHz` times a second.
+    void gamak (Sequence&, const PitchSystem&, double rateHz, double bpm);
+    // Kaṇ: the degree above (steps 1) or below (-1) touched for `ticks` as the note starts.
+    void kan (Sequence&, const PitchSystem&, int steps, int64_t ticks);
+    // A turn, each step `ticks` long, in degrees from the note: murkī {0, 1, 0, -1, 0}, khaṭkā
+    // {1, 0, -1, 0}, zamzama {1, 0, 1, 0, -1, 0}.
+    void turn (Sequence&, const PitchSystem&, const std::vector<int>& degrees, int64_t ticks);
+    void clearCurves (Sequence&);
+
+    //==========================================================================
+    // Hum or sing to notes (owner, 2026-10-26). The pitch heard over time, a point every few
+    // milliseconds (from pitch::track): its time, its pitch in cents (below 0 where there is none)
+    // and its loudness (RMS, 0..1).
+    struct Heard { double seconds = 0.0; double pitch = -1.0; double level = 0.0; };
+    struct HumOptions
+    {
+        bool snap = true;             // each note on the degree of the system nearest it, else as sung
+        bool curves = true;           // the slides and shakes kept as the notes' pitch curves
+        double holdSeconds = 0.06;    // how long a new degree must hold to start a new note
+        double shortestSeconds = 0.08;   // shorter notes are taken into the next one (a slide in)
+        int64_t grid = 0;             // starts and lengths onto it, in ticks; 0 not
+    };
+    // The notes sung, from `at` on, at a tempo. A degree held starts a note; a note ends where the
+    // voice stops or moves to another degree and stays there. A curve is kept only where the voice
+    // moved more than 20 cents off the note (a mīṇḍ, a gamak): steady singing is left steady.
+    std::vector<Note> notesFromPitch (const std::vector<Heard>&, const PitchSystem&, const HumOptions&,
+                                      int ticksPerQuarter, double bpm, int64_t at);
+    // The pitch heard in a recording (a voice, a flute, a sitar's melody), by pitch::track (YIN,
+    // core/Pitch.h), each point with its loudness.
+    std::vector<Heard> listen (const AudioData&);
+
+    //==========================================================================
+    // What the views show (owner, 2026-10-26: a scale wheel, an interval clock and a consonance display).
+    // The notes sounding at a tick: started and not ended.
+    std::vector<size_t> soundingAt (const Sequence&, int64_t tick);
+    // How rough pitches sound together: Sethares' fit (1993) of Plomp and Levelt's curve, summed
+    // over the partials of each pair of notes (harmonic, the k-th at 0.88^k). 0 for one note; a
+    // unison or octave is low, a semitone or a tritone high, in any tuning.
+    double roughness (const std::vector<double>& pitches, int partials = 6);
+    // How long each degree of the system sounds over the whole sequence, in ticks (drums left out).
+    std::vector<double> degreeUsage (const Sequence&, const PitchSystem&);
 
     //==========================================================================
     // Step input (Cubase): notes entered at a cursor that moves on by a step.
