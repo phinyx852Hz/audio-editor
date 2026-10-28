@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**77 pull requests:** 76 merged, 1 open.
+**78 pull requests:** 76 merged, 2 open.
 
 ## Contents
 
@@ -176,6 +176,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#64](https://github.com/phinyx852Hz/audio-editor/pull/64) | Add a self-updating pull request index | merged |  | `Source/core/PhiRagas.cpp`<br>`Source/ui/MixerWindow.cpp`<br>`Source/mixer/Fugue.cpp` |
 | [#66](https://github.com/phinyx852Hz/audio-editor/pull/66) | Minimalize: arrange a scene or the timeline by Reich's and Glass's processes | merged |  | `Source/core/PhiRagas.cpp`<br>`Source/ui/MixerWindow.cpp`<br>`Source/mixer/Rhythms.cpp` |
 | [#72](https://github.com/phinyx852Hz/audio-editor/pull/72) | MIDI inputs: remember them by name, and open them when plugged in | merged |  | `Source/ui/SamplerSection.cpp`<br>`Source/ui/ControlSection.cpp`<br>`docs/control-surfaces.md` |
+| [#78](https://github.com/phinyx852Hz/audio-editor/pull/78) | Simplest phase 1: sound shaping and a Simpler-style layout | open |  | `Source/ui/SamplerWindow.cpp`<br>`Source/sampler/SamplerEngine.cpp`<br>`tests/CoreTests.cpp` |
 
 ## By number
 
@@ -258,3 +259,4 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#75](https://github.com/phinyx852Hz/audio-editor/pull/75) | Spectrum: 20 FFT windows, Welch averaging, zero padding, multitaper, Selector hold colours | Changes to the Analysis Meters' Spectrum card, based on the FFT size and windowing reference document. *(auto)* | merged | 2026-10-28 | Analysis and meters |
 | [#76](https://github.com/phinyx852Hz/audio-editor/pull/76) | Editor track without the timeline row; delete/add mixer tracks; Pre-Master bus; spatial mixing | Editor track (Shift+F4): the user asked to drop the middle section and have the MIDI editor below act as the recorder. *(auto)* | open | 2026-10-27 | Editing and warping |
 | [#77](https://github.com/phinyx852Hz/audio-editor/pull/77) | Slicer: a 128-pad drum machine with layers and sounds of their own | Phase 1 of the Slicer plan, a drum machine after Cubase's Drum Machine and Ableton's Drum Rack. *(auto)* | merged | 2026-10-28 | Editing and warping |
+| [#78](https://github.com/phinyx852Hz/audio-editor/pull/78) | Simplest phase 1: sound shaping and a Simpler-style layout | Phase 1 of the Simplest plan: the sound-shaping features from the Cubase Sampler Control resources, laid out the way Live's Simpler does it. *(auto)* | open | 2026-10-28 | Not yet sorted |
