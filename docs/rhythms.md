@@ -54,6 +54,7 @@ triplets while the kick stays in 16ths.
 | Arabic | IJMES | maqsūm, ṣaʿīdī |
 | Korean | Revised Romanization | jungjungmori, gutgeori |
 | Ewe | its own orthography | agbekɔ |
+| Turkish | its own spelling | çiftetelli, yürük semai |
 | Spanish and Portuguese | their own spelling | güiro, baião, cha-cha-chá |
 | Latin | its own spelling | modus primus |
 
@@ -185,15 +186,65 @@ North African:
 - gnāwa, with the qarāqib and the gumbrī's beat
 
 Not yet included: the Mande djembe rhythms (kuku, soli, dundunba). Their parts differ between
-teachers.
+teachers, and they wait to be checked against Tontinkan.
 
-## West Asia: iqāʿāt (1)
+## West Asia: iqāʿāt (38)
 
-samāʿī thaqīl is the 10/8 of the samāʿī, grouped 3+2+2+3. Dum falls on eighths 1, 6 and 7, and
-tak on 4 and 8.
+Every iqāʿ in [Maqam World's index](https://ftp.maqamworld.com/en/iqaa.php) that is not already
+under North Africa, each read from the notation image on its own page. Each page writes the strokes under the staff as D (dum), T
+(tak), t, k or Ka (the lighter tak of the other hand) and s (a rest); dum is the low conga, tak
+the open high conga, and the light taks are soft taks. Where a page gives two forms (aqṣāq,
+awfar maṣrī, bambī, sudāsī) or several metres (hajaʿ in 4/4, 2/4 and 6/4), the first is used.
+The sections follow the page's dashed bar lines. Maqam World gives no tempos, so each tempo is
+only a starting point.
 
-Not included yet: çiftetelli, wahda w-nuṣṣ and the other long Arab and Ottoman cycles. They can be
-added from Maqam World's iqāʿ pages once each one is checked.
+| iqāʿ | metre | strokes | page |
+|---|---|---|---|
+| samāʿī thaqīl | 10/8, 3+2+2+3 | D s s T s D D T s s | [samai_thaqil](https://ftp.maqamworld.com/en/iqaa/samai_thaqil.php) |
+| waḥda | 4/4 | D s s T s s T s | [wahda](https://ftp.maqamworld.com/en/iqaa/wahda.php) |
+| waḥda ṣaghīra | 2/4 | D s T T | [wahda_saghira](https://ftp.maqamworld.com/en/iqaa/wahda_saghira.php) |
+| waḥda kabīra | 8/4, 4+4 | D T T D s T s (dotted quarters, then quarters) | [wahda_kabira](https://ftp.maqamworld.com/en/iqaa/wahda_kabira.php) |
+| waḥda w-nuṣṣ | 4/4, 2+2 | D T T D s T s (in 16ths: the first tak half an eighth late) | [wahda_w_nuss](https://ftp.maqamworld.com/en/iqaa/wahda_w_nuss.php) |
+| fox | 2/4 | D T D T | [fox](https://ftp.maqamworld.com/en/iqaa/fox.php) |
+| karāchī | 2/4 | T s T D | [karachi](https://ftp.maqamworld.com/en/iqaa/karachi.php) |
+| fallāḥī | 2/4 | D Ka T Ka D T | [fallahi](https://ftp.maqamworld.com/en/iqaa/fallahi.php) |
+| hajaʿ (hacha‘) | 4/4, 2+2 | D s T T T s T T | [hachaa](https://ftp.maqamworld.com/en/iqaa/hachaa.php) |
+| nawarī | 4/4, 2+2 | T D s T D s T s | [nawari](https://ftp.maqamworld.com/en/iqaa/nawari.php) |
+| rumba | 4/4 | D s s T s s D s | [rumba](https://ftp.maqamworld.com/en/iqaa/rumba.php) |
+| zaffa | 4/4, 2+2 | D T Ka T T D T T s | [zaffa](https://ftp.maqamworld.com/en/iqaa/zaffa.php) |
+| çiftetelli | 8/4, 4+4 | D T T T T D D T s | [ciftetelli](https://ftp.maqamworld.com/en/iqaa/ciftetelli.php) |
+| maṣmūdī kabīr | 8/4, 4+4 | D D s T D s T T | [masmudi_kabir](https://ftp.maqamworld.com/en/iqaa/masmudi_kabir.php) |
+| bambī | 8/4 | D s T s T s T s D D | [bambi](https://ftp.maqamworld.com/en/iqaa/bambi.php) |
+| sudāsī | 6/4, 2+2+2 | D t k T D D t k T D D s T s | [sudasi](https://ftp.maqamworld.com/en/iqaa/sudasi.php) |
+| samāʿī dārij | 3/4 | D T T | [samai_darij](https://ftp.maqamworld.com/en/iqaa/samai_darij.php) |
+| samāʿī saraband | 3/8 | D T T | [samai_saraband](https://ftp.maqamworld.com/en/iqaa/samai_saraband.php) |
+| yürük semai | 6/8, 3+3 | D T T D T s | [yuruk_semai](https://ftp.maqamworld.com/en/iqaa/yuruk_semai.php) |
+| thurayyā | 5/8 | D s T s T | [thurayya](https://ftp.maqamworld.com/en/iqaa/thurayya.php) |
+| dawr hindī | 7/8, 3+4 | D T T D s T s | [dawr_hindi](https://ftp.maqamworld.com/en/iqaa/dawr_hindi.php) |
+| qatāqūftī | 8/8, 3+2+3 | D T T D s T s T | [katakufti](https://ftp.maqamworld.com/en/iqaa/katakufti.php) |
+| aqṣāq | 9/8, 2+2+2+3 | D s T s D s T s T | [aqsaq](https://ftp.maqamworld.com/en/iqaa/aqsaq.php) |
+| jurjīna | 10/8, 3+2+2+3 | D s T T s D s T s s | [jurjina](https://ftp.maqamworld.com/en/iqaa/jurjina.php) |
+| ʿawīṣ | 11/8, 3+4+4 | D s T D s T T D D s T | [awis](https://ftp.maqamworld.com/en/iqaa/awis.php) |
+| ẓarāfāt (dharafat) | 13/8, 3+3+4+3 | D s s T s s D s D D T s s | [dharafat](https://ftp.maqamworld.com/en/iqaa/dharafat.php) |
+| khūsh rānk (khosh rang) | 17/8, 3+4+3+4+3 | D s T D s D D T s T T s D D T s T | [khosh_rang](https://ftp.maqamworld.com/en/iqaa/khosh_rang.php) |
+| nawākht | 7/4, 3+4 | D s T D s T T | [nawakht](https://ftp.maqamworld.com/en/iqaa/nawakht.php) |
+| mudawwar shāmī | 10/4, 2+2+2+2+2 | T s D s T s D D D s | [mudawwar](https://ftp.maqamworld.com/en/iqaa/mudawwar.php) |
+| mudawwar maṣrī | 12/4, six of 2 | T s D s T s D D D s T s | [mudawwar](https://ftp.maqamworld.com/en/iqaa/mudawwar.php) |
+| murabbaʿ | 13/4, 3+4+4+2 | D T T D s T s T s T T D s | [murabbaa](https://ftp.maqamworld.com/en/iqaa/murabbaa.php) |
+| muḥajjar | 14/4, seven of 2 | D D D s T s D s T s T s T T | [muhajjar](https://ftp.maqamworld.com/en/iqaa/muhajjar.php) |
+| mukhammas | 16/4, 4+4+4+4 | D s D s D s T s T s T T D s T T | [mukhammas](https://ftp.maqamworld.com/en/iqaa/mukhammas.php) |
+| nawākht hindī | 16/4, 2+3+4+3+4 | D D D s T D s T T D s T D s T T | [nawakht_hindi](https://ftp.maqamworld.com/en/iqaa/nawakht_hindi.php) |
+| awfar maṣrī | 19/4, 4+4+4+3+4 | D s D s s s T s T s D s D T s T s s s | [awfar](https://ftp.maqamworld.com/en/iqaa/awfar.php) |
+| fākhit | 20/4, five of 4 | D T D D D, T s T s, T T D s, T T D s, T s T T | [fakhit](https://ftp.maqamworld.com/en/iqaa/fakhit.php) |
+| sittatu ʿashar maṣrī | 32/4, eight of 4 | D s T s ×3, D s D s, T s D s, T s T s, D s s s, T s T s | [sittatu_ashar](https://ftp.maqamworld.com/en/iqaa/sittatu_ashar.php) |
+| warshān ʿarabī | 32/4, 4+2+4+2+4+4+4+4+4 | D s s s, T s, D s s s, T s, D T s T, T s T T, D s D D, T T s T, T s T T | [warshan_arabi](https://ftp.maqamworld.com/en/iqaa/warshan_arabi.php) |
+
+Names follow IJMES from the Arabic script of Maqam World's Arabic pages, with its vowels, and
+Maqam World's own spelling in brackets where it differs much. çiftetelli and yürük semai are
+Turkish usul and keep their Turkish spelling; rumba and fox keep theirs.
+
+Maqam World's ayyūb is D s D T, without the ka the North African ayyūb has before its second dum;
+that one is left as it was.
 
 ## Laya and naḍai
 
@@ -357,7 +408,8 @@ Arabic and Maghrebi rhythms:
 
 - A. J. Racy, *Making Music in the Arab World* (Cambridge University Press, 2003).
 - Deborah Kapchan, *Traveling Spirit Masters* (Wesleyan University Press, 2007): Gnawa.
-- [Maqam World, iqāʿāt](https://ftp.maqamworld.com/en/iqaa.php), and
+- [Maqam World, iqāʿāt](https://ftp.maqamworld.com/en/iqaa.php): every iqāʿ's page and notation image,
+  linked in the table under West Asia, and the Arabic pages for the names; and
   [samāʿī thaqīl counted in 10](https://www.oudforguitarists.com/count-to-10-samai-rhythm-samai-thaqil/)
   (beats 1, 4, 6, 7 and 8 accented, 3+2+2+3).
 

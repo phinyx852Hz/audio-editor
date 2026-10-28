@@ -619,6 +619,117 @@ namespace rhythm
         }
 
         //======================================================================
+        // The iqāʿāt of Maqam World's index (ftp.maqamworld.com/en/iqaa.php), each read from its
+        // page's notation: D dum, T tak, t and k the lighter taks (ka), . a rest or the note
+        // before ringing on, `perBeat` steps to the beat of the time signature. Where a page
+        // gives two forms, the first. The Egyptian iqāʿāt under North Africa and samāʿī thaqīl
+        // above are not repeated.
+        void addIqaat (std::vector<Rhythm>& all)
+        {
+            struct Iqa { const char* name; const char* plain; const char* ipa; int beats; int perBeat; std::vector<int> sections;
+                         const char* strokes; double bpm; const char* about; };
+            const Iqa iqaat[] {
+                { "waḥda", "wahda", nullptr, 4, 2, { 4 }, "D..T..T.", 80,
+                  "4/4, one dum to the bar: the main iqāʿ under the voice in 20th-century ṭarab, leaving the singer room." },
+                { "waḥda ṣaghīra", "wahda saghira", nullptr, 2, 2, { 2 }, "D.TT", 100,
+                  "2/4, waḥda's one dum in a short bar (also waḥda basīṭa), for songs and instrumental phrases." },
+                { "waḥda kabīra", "wahda kabira", nullptr, 8, 2, { 4, 4 }, "D..T..T.D...T...", 70,
+                  "8/4, waḥda stretched over two bars (also waḥda sunbāṭī), mid-20th-century songs and instrumental music." },
+                { "waḥda w-nuṣṣ", "wahda w-nuss", nullptr, 4, 4, { 2, 2 }, "D..T..T.D...T...", 90,
+                  "4/4, \"one and a half\": maqsūm with its first tak half an eighth late, popular in mid-20th-century ṭarab." },
+                { "fox", "fox", "fɒks", 2, 2, { 2 }, "DTDT", 130,
+                  "2/4, plain and often very fast (probably from the foxtrot): the main iqāʿ of the Ottoman longa." },
+                { "karāchī", "karachi", nullptr, 2, 2, { 2 }, "T.TD", 90,
+                  "2/4, lazy and slowish, though it often moves to and from malfūf." },
+                { "fallāḥī", "fallahi", nullptr, 2, 4, { 2 }, "DkTkD.T.", 120,
+                  "Egypt: a fast 2/4 for folk music; like maqsūm at double speed but flowing, dum and tak hardly contrasted." },
+                { "hajaʿ", "hajaa", nullptr, 4, 2, { 2, 2 }, "D.TTT.TT", 100,
+                  "4/4 (Maqam World spells it hacha‘): Sufi music, especially percussion-only pieces; from a folk iqāʿ in 2/4." },
+                { "nawarī", "nawari", nullptr, 4, 2, { 2, 2 }, "TD.TD.T.", 110,
+                  "4/4, a variation on ṣaʿīdī and baladī for Levantine folk music and the dabke line dance." },
+                { "rumba", "rumba", nullptr, 4, 2, { 4 }, "D..T..D.", 100,
+                  "4/4, an Arabic adaptation of the Latin American dance, in fashion from the 1930s." },
+                { "zaffa", "zaffa", nullptr, 4, 4, { 2, 2 }, "D.TkT.T.D.T.T...", 90,
+                  "4/4, named after the wedding procession; also a modulation from slowed-down baladī and maqsūm." },
+                { "çiftetelli", "ciftetelli", nullptr, 8, 2, { 4, 4 }, "D.TT.TT.D.D.T...", 90,
+                  "8/4 (also played in 4/4), a Turkish usul that became popular in Arabic music." },
+                { "maṣmūdī kabīr", "masmudi kabir", nullptr, 8, 1, { 4, 4 }, "DD.TD.TT", 90,
+                  "8/4, one of the most popular rhythms of 20th-century ṭarab; baladī is maṣmūdī ṣaghīr." },
+                { "bambī", "bambi", nullptr, 8, 2, { 8 }, "D..T..T..T..D.D.", 70,
+                  "Egypt: a stretched-out 8/4 under improvisations and sparse vocal sections, usually begun from the dum before last." },
+                { "sudāsī", "sudasi", nullptr, 6, 4, { 2, 2, 2 }, "D.tkT.D.D.tkT.D.D...T...", 100,
+                  "6/4, \"based on six\": Lebanese and Palestinian folk line dances such as the dabke." },
+                { "samāʿī dārij", "samai darij", nullptr, 3, 1, { 3 }, "DTT", 120,
+                  "3/4, for songs and instrumental pieces, and the iqāʿ of the dārij form." },
+                { "samāʿī saraband", "samai saraband", nullptr, 3, 1, { 3 }, "DTT", 240,
+                  "3/8, light and fast (also samāʿī ṭāʾir, \"flying\"), for the muwashshaḥ." },
+                { "yürük semai", "yuruk semai", nullptr, 6, 1, { 3, 3 }, "DTTDT.", 200,
+                  "6/8, a Turkish usul (also yugrug), popular in the muwashshaḥ; quickening, it can move to samāʿī dārij or saraband." },
+                { "thurayyā", "thurayya", nullptr, 5, 1, { 5 }, "D.T.T", 200,
+                  "5/8 (also aqṣāq turkī), very rare, for the muwashshaḥ." },
+                { "dawr hindī", "dawr hindi", nullptr, 7, 1, { 3, 4 }, "DTTD.T.", 200,
+                  "7/8, 3+4: a favourite of the muwashshaḥ." },
+                { "qatāqūftī", "qataqufti", nullptr, 8, 1, { 3, 2, 3 }, "DTTD.T.T", 200,
+                  "8/8, 3+2+3, rare, for the muwashshaḥ." },
+                { "aqṣāq", "aqsaq", nullptr, 9, 1, { 2, 2, 2, 3 }, "D.T.D.T.T", 200,
+                  "9/8, 2+2+2+3, much used in the muwashshaḥ: an eighth short of samāʿī thaqīl, and played straight into it in a waṣla." },
+                { "jurjīna", "jurjina", nullptr, 10, 1, { 3, 2, 2, 3 }, "D.TT.D.T..", 200,
+                  "10/8, 3+2+2+3: Iraq and Iran, the Turkish and Kurdish repertoires, sometimes Tunisian mālūf." },
+                { "ʿawīṣ", "awis", nullptr, 11, 1, { 3, 4, 4 }, "D.TD.TTDD.T", 200,
+                  "11/8, 3+4+4, mostly for the muwashshaḥ." },
+                { "ẓarāfāt", "zarafat", nullptr, 13, 1, { 3, 3, 4, 3 }, "D..T..D.DDT..", 200,
+                  "13/8, 3+3+4+3 (Maqam World: dharafat), mostly for the muwashshaḥ; elsewhere it lends a classical colour." },
+                { "khūsh rānk", "khush rank", nullptr, 17, 1, { 3, 4, 3, 4, 3 }, "D.TD.DDT.TT.DDT.T", 200,
+                  "17/8, 3+4+3+4+3 (also khōsh rang), very rare: one known muwashshaḥ and a few modern pieces." },
+                { "nawākht", "nawakht", nullptr, 7, 1, { 3, 4 }, "D.TD.TT", 90,
+                  "7/4, 3+4, popular in the muwashshaḥ, at a mellow speed." },
+                { "mudawwar shāmī", "mudawwar shami", nullptr, 10, 1, { 2, 2, 2, 2, 2 }, "T.D.T.DDD.", 100,
+                  "10/4, \"round\", of the Levant, for the muwashshaḥ." },
+                { "mudawwar maṣrī", "mudawwar masri", nullptr, 12, 1, { 2, 2, 2, 2, 2, 2 }, "T.D.T.DDD.T.", 100,
+                  "12/4, the Egyptian mudawwar, for the muwashshaḥ." },
+                { "murabbaʿ", "murabbaa", nullptr, 13, 1, { 3, 4, 4, 2 }, "DTTD.T.T.TTD.", 100,
+                  "13/4, 3+4+4+2, mostly in the muwashshaḥ (the name means squared, not its length)." },
+                { "muḥajjar", "muhajjar", nullptr, 14, 1, { 2, 2, 2, 2, 2, 2, 2 }, "DDD.T.D.T.T.TT", 100,
+                  "14/4, \"turned to stone\", known by its three dums to begin, popular in the muwashshaḥ." },
+                { "mukhammas", "mukhammas", nullptr, 16, 1, { 4, 4, 4, 4 }, "D.D.D.T.T.TTD.TT", 100,
+                  "16/4, mostly in the muwashshaḥ (the name means based on five, not its length)." },
+                { "nawākht hindī", "nawakht hindi", nullptr, 16, 1, { 2, 3, 4, 3, 4 }, "DDD.TD.TTD.TD.TT", 100,
+                  "16/4, 2+3+4+3+4, mostly in the muwashshaḥ." },
+                { "awfar maṣrī", "awfar masri", nullptr, 19, 1, { 4, 4, 4, 3, 4 }, "D.D...T.T.D.DT.T...", 100,
+                  "19/4, popular in the muwashshaḥ; its second form ends dum – tak tak." },
+                { "fākhit", "fakhit", nullptr, 20, 2, { 4, 4, 4, 4, 4 }, "D.T.D.DDT...T...T.T.D...T.T.D...T...T.T.", 90,
+                  "20/4, five bars of 4/4, rare outside the muwashshaḥ." },
+                { "sittatu ʿashar maṣrī", "sittatu ashar masri", nullptr, 32, 1, { 4, 4, 4, 4, 4, 4, 4, 4 }, "D.T.D.T.D.T.D.D.T.D.T.T.D...T.T.", 100,
+                  "32/4, \"Egyptian sixteen\", eight bars of 4/4, rare, mostly in the muwashshaḥ." },
+                { "warshān ʿarabī", "warshan arabi", nullptr, 32, 2, { 4, 2, 4, 2, 4, 4, 4, 4, 4 },
+                  "D.......T...D.......T...D..T..T.T...T.T.D...D.D.T..T..T.T...T.T.", 100,
+                  "32/4, eight bars of 4/4, rare, mostly in the muwashshaḥ." },
+            };
+            for (const auto& q : iqaat)
+            {
+                const std::string strokes = q.strokes;
+                std::string dum, tak, counting;
+                size_t step = 0, section = 0, end = (size_t) q.sections[0] * (size_t) q.perBeat;
+                for (auto c : strokes)
+                {
+                    if (step == end && step < strokes.size())
+                    {
+                        counting += " |";
+                        end += (size_t) q.sections[++section] * (size_t) q.perBeat;
+                    }
+                    dum += c == 'D' ? 'x' : '.';
+                    tak += c == 'T' ? 'x' : (c == 't' || c == 'k') ? 'o' : '.';
+                    if (! counting.empty())
+                        counting += ' ';
+                    counting += c == 'D' ? "dum" : c == 'T' || c == 't' ? "tak" : c == 'k' ? "ka" : "–";
+                    ++step;
+                }
+                all.push_back (groove (q.name, q.plain, "iqāʿāt", q.ipa != nullptr ? q.ipa : "", q.beats, q.sections, q.bpm, q.about,
+                                       { lane ("dum", gm::lowConga, q.perBeat, dum), lane ("tak", gm::openHiConga, q.perBeat, tak) }, counting));
+            }
+        }
+
+        //======================================================================
         // Korean jangdan on the janggu: kung on the left head (gungpyeon), deok on the right
         // (chaepyeon), deong both together, gi a grace note and deoreoreo a roll, by pulse.
         Rhythm jangdan (std::string name, std::string about, int beats, int perBeat, std::vector<int> sections, double bpm,
@@ -679,6 +790,7 @@ namespace rhythm
             addCaribbean (all);
             addSouthAmerican (all);
             addAfrican (all);
+            addIqaat (all);
             addKorean (all);
             return all;
         }
