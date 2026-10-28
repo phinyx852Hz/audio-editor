@@ -147,8 +147,12 @@ public:
     // else a new one. An error, or empty.
     QString applyEqCuts (int track, const std::vector<std::pair<double, double>>& cuts);
 
-    void addTrack();
-    void removeTrack();
+    void addTrack();      // after the selected track
+    void removeTrack();   // the selected track
+    // A new track at `at` (0-based), the ones from there on moving along; and track `index`
+    // deleted (asked first when something is on it), the ones after it moving up.
+    void insertTrack (int at);
+    void deleteTrack (int index);
 
     // The clip launcher in the upper area, or the tracks across time.
     void showLauncher (bool on);
@@ -259,6 +263,7 @@ protected:
     void changeEvent (QEvent*) override;
     void closeEvent (class QCloseEvent*) override;
     bool focusNextPrevChild (bool next) override;
+    bool eventFilter (QObject*, QEvent*) override;
 
 private:
     friend class MixerStrip;
@@ -270,6 +275,7 @@ private:
     friend class TrackDevices;
     friend class ClipView;
     friend class EditorTrack;
+    friend class BusStripWidget;
 
     // What the window keeps about a track besides the engine's settings.
     struct TrackInfo
@@ -283,6 +289,10 @@ private:
         mixer::TuningChoice tuning;  // the PHI synth's, when neither the clip nor the scene has one
     };
 
+    void copyTrack (int from, int to);
+    void clearTrack (int track);
+    bool readyToMoveTracks (int from);
+    void moveDuckKeys (const std::function<int (int)>& moved);
     void rebuildStrips();
     void select (int index);         // 0..7 a track, 8 the master
     void tick();
@@ -322,6 +332,39 @@ private:
     void moveInsert (int track, int insert, int to);
     void reorderInserts (int track, const std::vector<int>& order);   // the engine's indices in their new order
     QJsonArray insertsJson (int track) const;
+    QString insertOwner (int track) const;   // "track 2, “Bass”", or "the Pre-Master" (mixer::busTrack)
+    int insertLimit (int track) const;
+    void refreshInsertsOf (int track);
+    // The Pre-Master (owner, 2026-10-28): its strip under the launcher's scenes, its settings in the project.
+    class BusStripWidget* busStrip = nullptr;
+    QJsonObject busJson() const;
+    void loadBus (const QJsonObject&, QStringList& problems);
+    // Spatial mixing (owner, 2026-10-28; MixerSpatial.cpp, docs/spatial-mixing.md): the project's
+    // Spatial mode, the decoder it is heard through (headphones and speakers, kept in the
+    // settings: they are the studio's, not the project's), and the room view of where it all is.
+    friend class RoomView;
+    friend class SpatialDialog;
+    bool spatialMode() const;
+    void setSpatialMode (bool on);
+    void applySpatial();      // the decoder made again from the settings, for the engine and the device
+    void spatialMoved();      // a panner changed: the strips, the Inspector and the room views follow
+    void showSpatialDialog();
+    QJsonObject spatialJson() const;
+    void loadSpatial (const QJsonObject&);
+    class QPushButton* spatialButton = nullptr;
+    class RoomView* roomView = nullptr;            // in the Inspector, in Spatial mode
+    QPointer<class SpatialDialog> spatialDialog;
+    QString spatialStatus;                         // what the decoder is, or why it could not be made
+    std::vector<ambi::Speaker> spatialSpeakers;    // the speakers' layout, for the room views
+    double sceneYaw = 0.0;
+    // The strips line up with the launcher's columns: the Pre-Master's as wide as the scenes',
+    // each track's as wide as its clips' (laneWidth, shared with the grid).
+    static constexpr int laneMargin = 4, sceneColumn = 130, minLane = 100, maxLane = 150;
+    static constexpr int stripGap = 4, stripMargin = laneMargin + stripGap / 2;
+    class QScrollArea* stripScroll = nullptr;
+    int laneWidth() const;
+    void applyStripWidths();
+    void routeToBus (int track, bool on);   // the track (and the Q-Linked ones) to the Pre-Master, or back to the master
     void loadInserts (int track, const QJsonArray&, QStringList& problems);
     void stripsMenu (QPoint at);     // which sections the strips show, and how wide they are
     // An instrument or effect dropped on a track (its strip, or the Device Chain): the

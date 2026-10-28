@@ -547,8 +547,6 @@ namespace ambi
 
     namespace
     {
-        using EarFilters = std::array<std::vector<std::vector<float>>, 2>;   // [ear][channel]
-
         // The ambisonic channels' filters for each ear: a dense virtual layout heard through the HRTF.
         std::shared_ptr<const EarFilters> buildEarFilters (const std::string& hrtfPath, int order, double rate, std::string& error)
         {
@@ -635,6 +633,11 @@ namespace ambi
             }
             return made;
         }
+    }
+
+    std::shared_ptr<const EarFilters> binauralFilters (const std::string& hrtfPath, int order, double rate, std::string& error)
+    {
+        return earFilters (hrtfPath, order, rate, error);
     }
 
     AudioDataPtr decodeBinaural (const AudioData& d, const std::string& hrtfPath, std::string& error, std::atomic<float>* progress)

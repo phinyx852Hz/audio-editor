@@ -710,6 +710,47 @@ namespace
         std::array<std::array<float, maxChannels>, 2> custom {};
     };
 
+    // Spatial mixing's speakers (mixer::Engine::takeSpeakers): their feeds added to the device's
+    // outputs after everything else, past the stereo pair the headphones (or the file) are on.
+    class SpeakerSource final : public juce::AudioSource
+    {
+    public:
+        explicit SpeakerSource (juce::AudioSource& in) : input (in) {}
+
+        void prepareToPlay (int blockSize, double sampleRate) override
+        {
+            input.prepareToPlay (blockSize, sampleRate);
+            outs.resize ((size_t) maxOutputs);
+        }
+        void releaseResources() override { input.releaseResources(); }
+
+        void getNextAudioBlock (const juce::AudioSourceChannelInfo& info) override
+        {
+            input.getNextAudioBlock (info);
+            std::unique_lock lock (mutex, std::try_to_lock);
+            if (! lock.owns_lock() || ! feed)
+                return;
+            const auto n = std::min (info.buffer->getNumChannels(), maxOutputs);
+            outs.resize ((size_t) maxOutputs);   // sized in prepareToPlay; never grows here
+            for (int ch = 0; ch < n; ++ch)
+                outs[(size_t) ch] = info.buffer->getWritePointer (ch, info.startSample);
+            feed (outs.data(), n, info.numSamples);
+        }
+
+        void set (AudioEngine::SpeakerFeed f)
+        {
+            std::lock_guard lock (mutex);
+            feed = std::move (f);
+        }
+        static constexpr int maxOutputs = 64;
+
+    private:
+        juce::AudioSource& input;
+        std::mutex mutex;
+        AudioEngine::SpeakerFeed feed;
+        std::vector<float*> outs = std::vector<float*> ((size_t) maxOutputs);
+    };
+
     juce::AudioFormatManager& formats()
     {
         static juce::AudioFormatManager fm;
@@ -728,7 +769,7 @@ struct AudioEngine::Impl
     {
         // The thread that creates the MessageManager becomes JUCE's message thread.
         juce::MessageManager::getInstance();
-        player.setSource (&monitor);
+        player.setSource (&speakers);
         document.clock = &masterSource.clock;
     }
 
@@ -749,9 +790,11 @@ struct AudioEngine::Impl
     InstrumentSource instrument { live };
     MeterSource meter { instrument };
     MonitorSource monitor { meter };
+    SpeakerSource speakers { monitor };
     juce::AudioSourcePlayer player;
     double sourceRate = 0.0;
     int sourceChannels = 0;
+    int speakerOutputs = 0;   // the outputs spatial mixing's speakers need, from the first
 };
 
 AudioEngine::AudioEngine() : impl (std::make_unique<Impl>()) {}
@@ -855,6 +898,13 @@ void AudioEngine::setInstrument (LiveRender render)
 }
 
 bool AudioEngine::hasInstrument() const { return impl->instrument.active.load(); }
+
+void AudioEngine::setSpeakerFeed (SpeakerFeed feed, int outputsNeeded)
+{
+    impl->speakers.set (std::move (feed));
+    impl->speakerOutputs = std::clamp (outputsNeeded, 0, SpeakerSource::maxOutputs);
+    useOutputsFor (impl->sourceChannels);
+}
 
 void AudioEngine::playOneShot (OneShot render)
 {
@@ -989,11 +1039,13 @@ void AudioEngine::useOutputsFor (int channels)
         return;
 
     impl->monitor.alsaOrder = device->getTypeName().containsIgnoreCase ("ALSA");
-    if (! impl->monitor.separate.load())
+    // Spatial mixing's speakers need theirs whatever the file's channels are heard on.
+    const auto need = std::max (impl->monitor.separate.load() ? channels : 0, impl->speakerOutputs);
+    if (need <= 2)
         return;
 
     const auto available = device->getOutputChannelNames().size();
-    const auto wanted = std::clamp (channels, 2, std::max (2, available));
+    const auto wanted = std::clamp (need, 2, std::max (2, available));
     if (device->getActiveOutputChannels().countNumberOfSetBits() >= wanted)
         return;
 

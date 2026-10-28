@@ -71,6 +71,8 @@ namespace
     }
 }
 
+QStringList spatialHrtfFiles() { return hrtfFiles(); }
+
 void MainWindow::binauralRender()
 {
     if (refuseAlbumEdit())

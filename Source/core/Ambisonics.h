@@ -3,7 +3,9 @@
 
 #include "AudioData.h"
 
+#include <array>
 #include <atomic>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -64,6 +66,11 @@ namespace ambi
     // Headphones: the scene through an HRTF set (SOFA file), always stereo. Empty with `error` set on failure.
     AudioDataPtr decodeBinaural (const AudioData&, const std::string& hrtfPath, std::string& error,
                                  std::atomic<float>* progress = nullptr);
+
+    // The filters decodeBinaural uses, for a live decoder: each ACN channel's impulse response
+    // for each ear at `rate`. Built once per file, order and rate. Null with `error` set on failure.
+    using EarFilters = std::array<std::vector<std::vector<float>>, 2>;   // [ear][channel]
+    std::shared_ptr<const EarFilters> binauralFilters (const std::string& hrtfPath, int order, double rate, std::string& error);
 
     // Where the sound energy is: a cols x rows map (azimuth -180 to 180 left to right,
     // elevation 90 to -90 top to bottom), each value the mean power of a max-rE beam.

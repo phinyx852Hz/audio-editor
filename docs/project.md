@@ -27,12 +27,18 @@ and `Ctrl+S` on one saves a `.phi` beside it, leaving the old file alone.
     {
       "name": "DR", "colour": "#c0392b",
       "trim": 0, "fader": -3.5, "pan": 0, "invertLeft": false, "invertRight": false,
-      "mute": false, "solo": false, "transpose": 0, "channels": 65535,
+      "mute": false, "solo": false, "transpose": 0, "channels": 65535, "toPreMaster": false,
+      "spatial": { "azimuth": -30, "elevation": 0, "spread": 60, "distance": 1 },
       "clips": [ { "kind": "audio", "file": "Audio/kick.wav", "start": 0, "offset": 0,
                    "length": 4.2, "muted": false, "reversed": false } ],
       "instrument": { "kind": "synth", "state": "..." }
     }
   ],
+  "preMaster": { "trim": 0, "fader": 0, "pan": 0, "width": 1, "mute": false,
+                 "sends": [ { "db": -100, "pre": false }, { "db": -100, "pre": false } ],
+                 "inserts": [ { "id": "<plugin id>", "name": "Glue", "state": "...", "bypassed": false, "mix": 1 } ],
+                 "spatial": { "azimuth": 0, "elevation": 0, "spread": 60, "distance": 0.7 } },
+  "spatial": { "on": true, "yaw": 0 },
   "patchbay": {
     "links": [ { "from": "track2", "to": "fx1", "gain": -6 } ],
     "synths": [ { "id": "synth", "name": "Synth", "state": "..." }, null, null, null ],
@@ -50,6 +56,13 @@ and `Ctrl+S` on one saves a `.phi` beside it, leaving the old file alone.
   `mixbus`, `fx1`..`4`, `main`), as in `settings.ini`, so the numbering inside the patchbay can
   change. A synth or effect already in its slot with the same id keeps running and takes the
   saved settings. The grid's rows and columns are a matter of layout and stay in `settings.ini`.
+- `preMaster` is the bus the tracks with `toPreMaster` go to instead of the master (up to four
+  inserts); a project without it has every track going to the master.
+- `spatial` at the root is the project's Spatial mode and how far the scene is turned; each
+  track, `preMaster` and each of `returns` keeps its 3D panner under `spatial`
+  ([spatial-mixing.md](spatial-mixing.md)). The headphones, HRTF set, speakers and first output
+  are the studio's, so they stay in `settings.ini` under `mixer/spatial`. A project without
+  `spatial` is stereo.
 - New Project clears the patchbay's synths and effects and puts every patch back to default.
 
 ## In the code

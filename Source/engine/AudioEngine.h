@@ -175,6 +175,11 @@ public:
     // stereo at deviceSampleRate(). Empty: none.
     void setInstrument (LiveRender render);
     bool hasInstrument() const;
+    // Spatial mixing's speakers (mixer::Engine::takeSpeakers): `feed` adds to the device's outputs
+    // (outs: numOuts channels, frames long) on the audio thread, after everything else. The device
+    // opens `outputsNeeded` outputs when it has them. Empty: none.
+    using SpeakerFeed = std::function<void (float* const* outs, int numOuts, int frames)>;
+    void setSpeakerFeed (SpeakerFeed feed, int outputsNeeded);
     // A sound played once on top of everything (the Φ synth's sound as the splash opens):
     // `render` adds to left and right at deviceSampleRate() and returns false once it has ended.
     using OneShot = std::function<bool (float* left, float* right, int numFrames)>;
