@@ -188,7 +188,7 @@ A note's pitch is kept in cents, so it can be anywhere. What the clip's file hol
 
 ## MTS-ESP
 
-**Mode > send the tuning to mts-esp synths** makes PHI the MTS-ESP tuning master (ODDSound's MIDI
+**Mode › tuning › send the tuning to mts-esp synths** makes PHI the MTS-ESP tuning master (ODDSound's MIDI
 Tuning Standard, External Shared Platform): Surge XT, Vital, Pianoteq and the other synths that
 follow MTS-ESP, as plug-ins in PHI or in another program, play every key in the tuning in force
 on the live track (its playing clip's, the scene's or its own), as the PHI synth does, and show

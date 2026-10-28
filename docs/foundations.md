@@ -72,6 +72,8 @@ How a part ships, in the tables:
 | [Nyquist](https://www.cs.cmu.edu/~music/nyquist/) (libnyquist) | 3.16, from Audacity 3.7.9 | Roger B. Dannenberg (Carnegie Mellon University); XLISP by David Betz; Nyx by Dominic Mazzoni | BSD-style (Nyquist and XLISP notices, `third_party/libnyquist/nyquist/license.txt`) | static | `third_party/libnyquist` | Nyquist effects |
 | STK (inside Nyquist, `nyqstk/`) | Nyquist's copy | Perry R. Cook and Gary P. Scavone | STK licence (MIT-like); shipped under Nyquist's terms | static | | Nyquist's physical models |
 | [MilkyPlay](https://github.com/milkytracker/MilkyTracker) | commit e3ceb05 (2026-09-10), changed for PHI | Peter "pailes" Barth and the MilkyTracker contributors | BSD-3-Clause (New BSD, in each file's header) | static | `third_party/milkyplay` | Tracker1's module player |
+| [MTS-ESP](https://github.com/ODDSound/MTS-ESP) master library | `Master/` as XenRoll carries it (libMTS 1.03 era) | ODDSound Ltd | 0BSD-style (permission to use, copy, modify and distribute, in each file's header) | static | `third_party/MTS-ESP` | MTS-ESP output (`Source/mixer/MtsEsp.cpp`) |
+| libMTS (ODDSound) | ODDSound's Linux build | ODDSound Ltd | the repository's 0BSD-style licence; closed source | download (Mode › tuning, at the user's request, into `/usr/local/lib`) | | MTS-ESP output; not shipped by us |
 | PortAudio stand-in | | PHI | AGPL-3.0-only | static | `third_party/nyquist-shim` | Lets Nyquist build without PortAudio |
 
 ## 3. Code by others in this repository
@@ -82,6 +84,7 @@ How a part ships, in the tables:
 | `share/nyquist/` | Audacity 3.7.9 `nyquist/` (the Nyquist runtime in Lisp, and STK's `rawwaves/`) | Nyquist's licence; rawwaves STK's | none |
 | `share/nyquist-plug-ins/` (18 files) | Audacity 3.7.9's Nyquist plug-ins, by Steve Daulton, David R. Sky, Dominic Mazzoni and others | GPL-2.0-or-later (each file); the GPL-2.0-only ones were left out | none |
 | `third_party/milkyplay/` | MilkyTracker's `src/milkyplay` | BSD-3-Clause | driver manager replaced (`AudioDriverManager_PHI.cpp`), `version.h` added, `PlayerSTD::ExternalNotes` added (marked `PHI`) |
+| `third_party/MTS-ESP/` | ODDSound's MTS-ESP `Master/libMTSMaster.{h,cpp}` | 0BSD-style | none |
 | `Source/tracker/PatternText.cpp`, `Source/tracker/PatternText.h` | MilkyTracker `tracker/PatternTools.cpp` (Copyright 2009 Peter Barth): effect conversions and names, `convertEffectsFromFT2`, `convertVolumeToEffect` | GPL-3.0-or-later | adapted |
 | `Source/tracker/TrackerEdit.cpp` | MilkyTracker `tracker/ModuleEditor.cpp` and `tracker/PatternEditor.cpp` (Copyright 2009 Peter Barth) | GPL-3.0-or-later | adapted |
 | `Source/tracker/TrackerEngine.h` | names the MilkyTracker editing it uses (`TrackerEdit.cpp`) | AGPL-3.0-only (PHI's own) | |
@@ -152,6 +155,7 @@ Built by `cmake/Instruments.cmake`, installed beside the stock plugins with thei
 | Slicer (`Source/sampler/SlicerEngine.cpp`) | Ninjas2 (Clearly Broken Software) | GPL-3.0 | the design |
 | Scala tuning files (PR #68, `Source/core/Scala.cpp`) | the published [.scl](https://www.huygens-fokker.org/scala/scl_format.html) and .kbm format descriptions (Manuel Op de Coul) | | the file formats; no Scala code |
 | Restyle (PR #68) | MIDIRestyle (Aaron Brata Aditama) | MIT | the idea of moving a melody into another system |
+| MIDI editor views and curves (`Source/ui/MidiEditor.cpp`, `Source/mixer/NoteEditor.cpp`) | [XenRoll](https://github.com/ankalot/xenroll) (cent-accurate notes, its clock diagram); MIDIRestyle's scale wheel; Intonara's pitch axis; Cubase's Key Editor | GPL-3.0 (XenRoll); MIT (MIDIRestyle); others their own | ideas only |
 | Feels and the rhythm generator (PR #70) | Hydrogen's swing and humanize; Music Pattern Generator; Stochas; Subsequence | GPL-2.0-or-later (Hydrogen); GPL-3.0 (Stochas); others their own | ideas only |
 | Fugue (`Source/mixer/Fugue.cpp`) | surveyed: Melodizer (GPL-3.0), foox and CounterPointer (MIT), Strasheela, FuX; unlicensed generators not used | | the textbook form only (`docs/mixer.md`) |
 | cubify (`Source/mixer/Cubify.cpp`) | [hmt](https://hackage.haskell.org/package/hmt) (Rohan Drape); Agon, Andreatta, Assayag and Schaub's OpenMusic reconstruction | hmt's own | checked against, no code (`docs/cubify.md`) |
@@ -169,6 +173,7 @@ Built by `cmake/Instruments.cmake`, installed beside the stock plugins with thei
 - CLAP, VST3, LV2, LADSPA and Vamp plugin interfaces.
 - SOFA (AES69) HRTF files; AmbiX (ACN, SN3D) and FuMa (Furse-Malham) ambisonics.
 - Scala `.scl` and `.kbm` (PR #68).
+- MTS-ESP (ODDSound's MIDI Tuning Standard, External Shared Platform).
 - The freedesktop.org desktop entry, shared MIME info and icon specifications (`packaging/`).
 
 ## 10. Algorithms and papers behind the DSP
@@ -196,6 +201,7 @@ Built by `cmake/Instruments.cmake`, installed beside the stock plugins with thei
 | Sonify's spiral (`Source/core/Sonify.cpp`) | Vogel's sunflower model (Helmut Vogel, 1979) and the golden angle |
 | Euclidean rhythms (PR #70) | Bjorklund's algorithm; Toussaint, "The Euclidean algorithm generates traditional musical rhythms" (Bridges, 2005) |
 | Key finding (PR #68) | Krumhansl and Kessler's probe-tone profiles (1982) |
+| Roughness in the MIDI editor's wheel (`Source/mixer/NoteEditor.cpp`) | William A. Sethares, "Local consonance and the relationship between timbre and scale", *JASA* 94 (1993), fitting Plomp and Levelt, *JASA* 38 (1965) |
 | Time stretching (`Source/core/TimeStretch.cpp`) | Rubber Band for most modes (section 2); a phase vocoder for Smooth, overlapping grains for Texture, Paulstretch's algorithm for Ambient |
 | Raga strings (`Source/core/PhiSitar.cpp`) | digital waveguide strings (Julius O. Smith) |
 | Random numbers (`Source/mixer/Stochastic.cpp`) | splitmix64 and xorshift generators |

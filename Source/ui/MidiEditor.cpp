@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MidiEditor.h"
+#include "ModeAtlas.h"
 
 #include "../core/Scala.h"
 #include "../engine/AudioCapture.h"
@@ -1382,6 +1383,33 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     systemBox->setToolTip (tr ("What the rows are: 12-TET, a mode, raga, maqam, dastgah, laras, mbira tuning, lü or tori, or a "
                                "Scala file. The notes keep their pitches; Functions > Snap or Restyle moves them into it"));
     systems->addWidget (systemBox, 2);
+    // The atlas (ModeAtlas.h): every mode and tuning by region, tradition and people, and a search.
+    auto* atlas = new QToolButton (this);
+    atlas->setText (tr ("Atlas"));
+    atlas->setToolTip (tr ("Find a mode or tuning by region, tradition and people, or search them all"));
+    atlas->setPopupMode (QToolButton::InstantPopup);
+    auto* atlasMenu = new QMenu (atlas);
+    atlas->setMenu (atlasMenu);
+    const auto pickSystem = [this] (int index)
+    {
+        if (const auto at = systemBox->findData (index); at >= 0)
+        {
+            systemBox->setCurrentIndex (at);
+            systemChosen();
+        }
+    };
+    connect (atlasMenu, &QMenu::aboutToShow, this, [this, atlasMenu, pickSystem]
+    {
+        atlasMenu->clear();
+        atlasMenu->addAction (tr ("Search..."), this, [this, pickSystem]
+        {
+            if (const auto index = modeatlas::find (this, mixer::melodic | mixer::tuning, tr ("Find a Mode or Tuning")); index >= 0)
+                pickSystem (index);
+        });
+        atlasMenu->addSeparator();
+        modeatlas::fill (atlasMenu, mixer::melodic | mixer::tuning, systemBox->currentData().toInt(), pickSystem);
+    });
+    systems->addWidget (atlas);
     systems->addWidget (new QLabel (tr ("on"), this));
     rootBox = new QComboBox (this);
     for (const auto* n : rootNames)

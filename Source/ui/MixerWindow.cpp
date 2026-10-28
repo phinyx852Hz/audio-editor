@@ -10146,7 +10146,7 @@ void MixerWindow::installLibMts()
         QMessageBox::warning (this, tr ("MTS-ESP"), tr ("libMTS was downloaded but could not be put in place.") + QStringLiteral ("\n\n") + manual);
         return;
     }
-    QMessageBox::information (this, tr ("MTS-ESP"), tr ("libMTS is installed. Restart PHI, then turn on Mode › send the tuning to mts-esp synths."));
+    QMessageBox::information (this, tr ("MTS-ESP"), tr ("libMTS is installed. Restart PHI, then turn on Mode › tuning › send the tuning to mts-esp synths."));
 }
 
 bool MixerWindow::mtsEspOn() const { return mtsEsp != nullptr && mtsEsp->running(); }

@@ -7847,6 +7847,16 @@ namespace
                    "note editor: notes heard in a recording");
         }
 
+        // A system that repeats at a fourth: the obikhod scale, 0 200 400, period 500.
+        if (const auto obikhod = mixer::findTuning ("obikhod scale"); obikhod >= 0)
+        {
+            const auto ob = fromTuning (mixer::tuningSystems()[(size_t) obikhod], 7);
+            check (near (ob.period, 500.0, 1.0e-9) && ob.size() == 3 && near (ob.pitchOf (3), ob.tonic + 500.0, 1.0e-9) && near (ob.pitchOf (5), ob.tonic + 900.0, 1.0e-9),
+                   "note editor: a system's own period (the obikhod scale at the fourth)");
+        }
+        else
+            check (false, "note editor: the obikhod scale is a tuning");
+
         PitchSystem junk;
         check (! parseSystemMarker ("verse", junk) && ! parseSystemMarker ("PHI system: x | y | tonic a | period 1200 | 0 |", junk), "note editor: other markers are not systems");
     }

@@ -203,13 +203,15 @@ namespace noteedit
         s.family = t.family;
         s.names = t.names;
         s.tonic = 6000.0 + 100.0 * std::clamp (root, 0, 11);
-        // Sorted within the octave, the names kept with their degrees.
+        // What it repeats at: the octave, or a fourth, a tritave, a single step (Tunings.h).
+        s.period = t.period > 0.0 ? t.period : 1200.0;
+        // Sorted within the period, the names kept with their degrees.
         std::vector<std::pair<double, std::string>> at;
         for (size_t i = 0; i < t.cents.size(); ++i)
         {
-            auto c = std::fmod (t.cents[i], 1200.0);
+            auto c = std::fmod (t.cents[i], s.period);
             if (c < 0)
-                c += 1200.0;
+                c += s.period;
             at.push_back ({ c, i < t.names.size() ? t.names[i] : std::string() });
         }
         std::sort (at.begin(), at.end(), [] (const auto& a, const auto& b) { return a.first < b.first; });
