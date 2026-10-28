@@ -344,7 +344,12 @@ namespace
                  { "loop", s.loop }, { "loopStart", (double) s.loopStart }, { "loopEnd", (double) s.loopEnd }, { "root", s.rootNote },
                  { "transpose", s.transpose }, { "detune", s.detune }, { "gain", s.gainDb }, { "pan", s.pan }, { "velocity", s.velocity },
                  { "attack", s.attack }, { "decay", s.decay }, { "sustain", s.sustain }, { "release", s.release },
-                 { "fadeIn", s.fadeIn }, { "fadeOut", s.fadeOut }, { "voices", s.voices } };
+                 { "fadeIn", s.fadeIn }, { "fadeOut", s.fadeOut }, { "voices", s.voices },
+                 { "loopMode", (int) s.loopMode }, { "loopCrossfade", s.loopCrossfade }, { "reverse", s.reverse },
+                 { "fixedPitch", s.fixedPitch }, { "keyLow", s.keyLow }, { "keyHigh", s.keyHigh }, { "glide", s.glide },
+                 { "fingered", s.fingered }, { "legato", s.legato }, { "gate", s.gate }, { "filter", s.filter },
+                 { "filterType", (int) s.filterType }, { "steep", s.steep }, { "cutoff", s.cutoff }, { "resonance", s.resonance },
+                 { "drive", s.drive }, { "keyFollow", s.keyFollow }, { "filterVelocity", s.filterVelocity }, { "quality", (int) s.quality } };
     }
 
     sampler::Settings samplerFromJson (const QJsonObject& o)
@@ -369,6 +374,25 @@ namespace
         s.fadeIn = o.value ("fadeIn").toDouble (0);
         s.fadeOut = o.value ("fadeOut").toDouble (0.01);
         s.voices = o.value ("voices").toInt (8);
+        s.loopMode = (sampler::LoopMode) std::clamp (o.value ("loopMode").toInt (0), 0, (int) sampler::LoopMode::alternateUntilRelease);
+        s.loopCrossfade = o.value ("loopCrossfade").toDouble (0);
+        s.reverse = o.value ("reverse").toBool (false);
+        s.fixedPitch = o.value ("fixedPitch").toBool (false);
+        s.keyLow = o.value ("keyLow").toInt (0);
+        s.keyHigh = o.value ("keyHigh").toInt (127);
+        s.glide = o.value ("glide").toDouble (0);
+        s.fingered = o.value ("fingered").toBool (false);
+        s.legato = o.value ("legato").toBool (false);
+        s.gate = o.value ("gate").toBool (false);
+        s.filter = o.value ("filter").toBool (false);
+        s.filterType = (sampler::FilterType) std::clamp (o.value ("filterType").toInt (0), 0, (int) sampler::FilterType::notch);
+        s.steep = o.value ("steep").toBool (false);
+        s.cutoff = o.value ("cutoff").toDouble (5000);
+        s.resonance = o.value ("resonance").toDouble (0.2);
+        s.drive = o.value ("drive").toDouble (0);
+        s.keyFollow = o.value ("keyFollow").toDouble (0);
+        s.filterVelocity = o.value ("filterVelocity").toDouble (0);
+        s.quality = (sampler::Quality) std::clamp (o.value ("quality").toInt (0), 0, (int) sampler::Quality::turntable78);
         return s;
     }
 

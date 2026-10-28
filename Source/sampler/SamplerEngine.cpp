@@ -54,6 +54,8 @@ namespace sampler
         std::lock_guard g (lock);
         current = s;
         current.voices = std::clamp (s.voices, 1, maxVoices);
+        current.keyLow = std::clamp (s.keyLow, 0, 127);
+        current.keyHigh = std::clamp (s.keyHigh, current.keyLow, 127);
     }
 
     Settings Engine::settings() const
@@ -68,16 +70,37 @@ namespace sampler
         return data;
     }
 
-    void Engine::start (Voice& v, int note, float velocity)
+    void Engine::start (Voice& v, int note, float velocity, double fromPitch)
     {
         v = {};
         v.active = v.held = true;
         v.note = note;
+        v.pitch = note;
         v.velocity = std::clamp (velocity, 0.0f, 1.0f);
         v.position = (double) std::max<Frame> (0, current.start);
-        v.stage = current.attack > 0.0 ? 0 : 1;
-        v.level = current.attack > 0.0 ? 0.0 : 1.0;
+        const bool classic = current.mode == Mode::classic;
+        v.stage = classic && current.attack > 0.0 ? 0 : 1;
+        v.level = classic && current.attack > 0.0 ? 0.0 : 1.0;
         v.age = ++clock;
+        glideTo (v, note, fromPitch);
+    }
+
+    void Engine::glideTo (Voice& v, int note, double fromPitch)
+    {
+        v.note = note;
+        // Fingered: only from a key still held (the caller passes -1 otherwise).
+        if (current.glide > 0.0 && fromPitch >= 0.0 && std::abs (fromPitch - note) > 1.0e-9)
+        {
+            v.pitch = fromPitch;
+            v.glideLeft = std::max<Frame> (1, (Frame) (current.glide * rate));
+            v.glideStep = ((double) note - fromPitch) / (double) v.glideLeft;
+        }
+        else
+        {
+            v.pitch = note;
+            v.glideLeft = 0;
+        }
+        lastPitch = note;
     }
 
     void Engine::releaseVoice (Voice& v)
@@ -88,8 +111,26 @@ namespace sampler
             v.sustained = true;
             return;
         }
-        if (current.mode == Mode::classic)
+        if (current.mode == Mode::classic || current.gate)
             v.stage = 3;
+    }
+
+    void Engine::push (int note)
+    {
+        pop (note);
+        if (stacked < (int) stack.size())
+            stack[(size_t) stacked++] = note;
+    }
+
+    void Engine::pop (int note)
+    {
+        for (int i = 0; i < stacked; ++i)
+            if (stack[(size_t) i] == note)
+            {
+                std::copy (stack.begin() + i + 1, stack.begin() + stacked, stack.begin() + i);
+                --stacked;
+                return;
+            }
     }
 
     void Engine::noteOn (int note, float velocity)
@@ -100,8 +141,32 @@ namespace sampler
             return;
         }
         std::lock_guard g (lock);
-        if (data == nullptr || note < 0 || note > 127)
+        if (data == nullptr || note < 0 || note > 127 || note < current.keyLow || note > current.keyHigh)
             return;
+        const bool othersHeld = stacked > 0;
+        push (note);
+        // Glide comes from the last note, or with Fingered only from one still held.
+        const auto from = current.fingered && ! othersHeld ? -1.0 : lastPitch;
+
+        if (current.voices == 1)
+        {
+            // One voice: a key held over another moves it (legato) or starts it again.
+            Voice* playing = nullptr;
+            for (auto& v : voice)
+                if (v.active)
+                    playing = &v;
+            if (playing != nullptr && current.legato && othersHeld && playing->held)
+            {
+                glideTo (*playing, note, playing->pitch);
+                return;
+            }
+            const auto pitchNow = playing != nullptr && othersHeld ? playing->pitch : from;
+            for (auto& v : voice)
+                v.active = false;
+            start (voice[0], note, velocity, pitchNow);
+            return;
+        }
+
         // A free voice, else the oldest released one, else the oldest.
         int used = 0;
         for (const auto& v : voice)
@@ -121,12 +186,27 @@ namespace sampler
                     chosen = &v;
         }
         if (chosen != nullptr)
-            start (*chosen, note, velocity);
+            start (*chosen, note, velocity, from);
     }
 
     void Engine::noteOff (int note)
     {
         std::lock_guard g (lock);
+        pop (note);
+        if (current.voices == 1 && stacked > 0)
+        {
+            // One voice: letting go of the key that sounds goes back to the last one still held.
+            for (auto& v : voice)
+                if (v.active && v.held && v.note == note)
+                {
+                    const auto back = stack[(size_t) stacked - 1];
+                    if (current.legato)
+                        glideTo (v, back, v.pitch);
+                    else
+                        start (v, back, v.velocity, v.pitch);
+                    return;
+                }
+        }
         for (auto& v : voice)
             if (v.active && v.held && v.note == note)
                 releaseVoice (v);
@@ -136,6 +216,7 @@ namespace sampler
     {
         std::lock_guard g (lock);
         pedal = false;
+        stacked = 0;
         for (auto& v : voice)
             if (v.active)
             {
@@ -148,6 +229,7 @@ namespace sampler
     {
         std::lock_guard g (lock);
         pedal = false;
+        stacked = 0;
         for (auto& v : voice)
             v.active = false;
     }
@@ -167,7 +249,7 @@ namespace sampler
                 if (v.active && v.sustained)
                 {
                     v.sustained = false;
-                    if (current.mode == Mode::classic)
+                    if (current.mode == Mode::classic || current.gate)
                         v.stage = 3;
                 }
     }
@@ -176,11 +258,58 @@ namespace sampler
     {
         // Cubic (Catmull-Rom) between the neighbours, so transposed notes stay smooth.
         const auto n = (Frame) x.size();
+        if (current.reverse)
+            position = (double) (n - 1) - position;
         const auto i = (Frame) std::floor (position);
         const auto t = (float) (position - (double) i);
         auto at = [&] (Frame k) { return k >= 0 && k < n ? x[(size_t) k] : 0.0f; };
         const auto a = at (i - 1), b = at (i), c = at (i + 1), d = at (i + 2);
         return b + 0.5f * t * (c - a + t * (2.0f * a - 5.0f * b + 4.0f * c - d + t * (3.0f * (b - c) + d - a)));
+    }
+
+    namespace
+    {
+        // One state-variable filter (Simper's trapezoidal form): low, band and high at once.
+        struct FilterCoefficients
+        {
+            double a1 = 1.0, a2 = 0.0, a3 = 0.0, k = 2.0;
+            FilterCoefficients (double cutoff, double rate, double k_) : k (k_)
+            {
+                const auto g = std::tan (M_PI * std::clamp (cutoff, 20.0, 0.45 * rate) / rate);
+                a1 = 1.0 / (1.0 + g * (g + k));
+                a2 = g * a1;
+                a3 = g * a2;
+            }
+            FilterCoefficients() = default;
+        };
+
+        double filtered (double x, double* state, const FilterCoefficients& c, FilterType type)
+        {
+            const auto v3 = x - state[1];
+            const auto v1 = c.a1 * state[0] + c.a2 * v3;
+            const auto v2 = state[1] + c.a2 * state[0] + c.a3 * v3;
+            state[0] = 2.0 * v1 - state[0];
+            state[1] = 2.0 * v2 - state[1];
+            switch (type)
+            {
+                case FilterType::highPass: return x - c.k * v1 - v2;
+                case FilterType::bandPass: return v1 * c.k;   // unity at the centre
+                case FilterType::notch: return x - c.k * v1;
+                default: return v2;
+            }
+        }
+
+        // Vintage and Turntable: the rate and bits the sound is brought down to.
+        double vintageRate (Quality q)
+        {
+            switch (q)
+            {
+                case Quality::vintage: return 26040.0;
+                case Quality::turntable45: return 26040.0 * 33.333 / 45.0;
+                case Quality::turntable78: return 26040.0 * 33.333 / 78.0;
+                default: return 0.0;
+            }
+        }
     }
 
     void Engine::render (float* left, float* right, int frames)
@@ -200,27 +329,73 @@ namespace sampler
         const auto begin = (double) std::clamp<Frame> (s.start, 0, (Frame) end - 1);
         const auto loopEnd = (double) (s.loopEnd < 0 ? (Frame) end : std::clamp<Frame> (s.loopEnd, (Frame) begin + 1, (Frame) end));
         const auto loopStart = (double) std::clamp<Frame> (s.loopStart, (Frame) begin, (Frame) loopEnd - 1);
-        const bool looping = s.mode == Mode::classic && s.loop && loopEnd - loopStart >= 2.0;
+        const auto loopLength = loopEnd - loopStart;
+        const bool looping = s.mode == Mode::classic && s.loop && loopLength >= 2.0;
+        const bool alternate = s.loopMode == LoopMode::alternate || s.loopMode == LoopMode::alternateUntilRelease;
+        // The seam is blended with what comes just before the loop's start, so there must be some.
+        const auto crossfade = alternate ? 0.0 : std::min ({ s.loopCrossfade * rate, loopStart, loopLength / 2.0 });
         const auto gain = std::pow (10.0, s.gainDb / 20.0);
         const auto leftGain = (float) (gain * std::min (1.0, 1.0 - s.pan)), rightGain = (float) (gain * std::min (1.0, 1.0 + s.pan));
         const auto attackStep = s.attack > 0.0 ? 1.0 / (s.attack * rate) : 1.0;
         const auto decayCoeff = fall (s.decay, rate), releaseCoeff = fall (s.release, rate);
         const auto sustain = std::clamp (s.sustain, 0.0, 1.0);
         const auto fadeInFrames = s.fadeIn * rate, fadeOutFrames = s.fadeOut * rate;
+        const auto gateStep = 1.0 / (std::max (s.fadeOut, 0.002) * rate);
+        const auto drive = s.drive > 0.0 ? std::pow (10.0, s.drive / 20.0) : 1.0;
+        const auto driveNorm = 1.0 / std::tanh (drive);
+        // Resonance from flat (2, no peak) to almost ringing; a 24 dB filter's second stage stays flat.
+        const auto k = 2.0 - 1.96 * std::clamp (s.resonance, 0.0, 1.0);
+        const auto holdStep = vintageRate (s.quality) / rate;
+        constexpr int control = 16;   // frames between updates of pitch and cutoff
+
+        auto loopOn = [&] (const Voice& v)
+        {
+            if (! looping)
+                return false;
+            switch (s.loopMode)
+            {
+                case LoopMode::once: return v.loops < 1;
+                case LoopMode::untilRelease:
+                case LoopMode::alternateUntilRelease: return v.held || v.sustained;
+                default: return true;
+            }
+        };
 
         std::array<bool, 128> on {};
-        for (size_t k = 0; k < voice.size(); ++k)
+        for (size_t n = 0; n < voice.size(); ++n)
         {
-            auto& v = voice[k];
+            auto& v = voice[n];
             if (! v.active)
             {
-                heads[k].store (-1.0, std::memory_order_relaxed);
+                heads[n].store (-1.0, std::memory_order_relaxed);
                 continue;
             }
-            const auto step = std::pow (2.0, ((double) (v.note - s.rootNote) + s.transpose + s.detune / 100.0 + bend * s.bendRange) / 12.0);
             const auto velocityGain = (float) (1.0 - std::clamp (s.velocity, 0.0, 1.0) * (1.0 - (double) v.velocity * v.velocity));
+            double step = 1.0;
+            FilterCoefficients first, second;
             for (int i = 0; i < frames && v.active; ++i)
             {
+                if (i % control == 0)
+                {
+                    if (v.glideLeft > 0)
+                    {
+                        const auto by = std::min<Frame> (v.glideLeft, control);
+                        v.pitch += v.glideStep * (double) by;
+                        v.glideLeft -= by;
+                        if (v.glideLeft == 0)
+                            v.pitch = v.note;
+                    }
+                    const auto played = s.fixedPitch ? (double) s.rootNote : v.pitch;
+                    step = std::pow (2.0, (played - s.rootNote + s.transpose + s.detune / 100.0 + bend * s.bendRange) / 12.0);
+                    if (s.filter)
+                    {
+                        const auto cutoff = s.cutoff * std::pow (2.0, s.keyFollow * (v.pitch - s.rootNote) / 12.0
+                                                                       - 4.0 * std::clamp (s.filterVelocity, 0.0, 1.0) * (1.0 - v.velocity));
+                        first = FilterCoefficients (cutoff, rate, k);
+                        second = FilterCoefficients (cutoff, rate, std::sqrt (2.0));
+                    }
+                }
+
                 double amp = 1.0;
                 if (s.mode == Mode::oneShot)
                 {
@@ -229,6 +404,16 @@ namespace sampler
                         amp = std::min (amp, played / fadeInFrames);
                     if (fadeOutFrames > 0.0)
                         amp = std::min (amp, (end - v.position) / fadeOutFrames);
+                    if (v.stage == 3)
+                    {
+                        v.level -= gateStep;
+                        if (v.level <= 0.0)
+                        {
+                            v.active = false;
+                            break;
+                        }
+                        amp *= v.level;
+                    }
                 }
                 else
                 {
@@ -269,16 +454,80 @@ namespace sampler
                         break;
                     }
                 }
+
+                // The sound here, blended towards the loop's start just before its end.
+                const bool loopNow = loopOn (v);
+                double l = sampleAt (data->left, v.position), r = sampleAt (data->right, v.position);
+                if (loopNow && crossfade > 0.0 && v.forward && v.position > loopEnd - crossfade)
+                {
+                    const auto w = (v.position - (loopEnd - crossfade)) / crossfade;
+                    const auto from = std::sqrt (1.0 - w), to = std::sqrt (w);
+                    l = l * from + sampleAt (data->left, v.position - loopLength) * to;
+                    r = r * from + sampleAt (data->right, v.position - loopLength) * to;
+                }
+                if (holdStep > 0.0)
+                {
+                    // Vintage: new values only at the lower rate, at 12 bits.
+                    v.holdPhase += holdStep;
+                    if (v.holdPhase >= 1.0)
+                    {
+                        v.holdPhase -= std::floor (v.holdPhase);
+                        v.kept[0] = std::round ((float) l * 2048.0f) / 2048.0f;
+                        v.kept[1] = std::round ((float) r * 2048.0f) / 2048.0f;
+                    }
+                    l = v.kept[0];
+                    r = v.kept[1];
+                }
+                if (s.filter)
+                {
+                    if (s.drive > 0.0)
+                    {
+                        l = std::tanh (l * drive) * driveNorm;
+                        r = std::tanh (r * drive) * driveNorm;
+                    }
+                    l = filtered (l, v.filter[0][0], first, s.filterType);
+                    r = filtered (r, v.filter[0][1], first, s.filterType);
+                    if (s.steep)
+                    {
+                        l = filtered (l, v.filter[1][0], second, s.filterType);
+                        r = filtered (r, v.filter[1][1], second, s.filterType);
+                    }
+                }
                 const auto a = (float) std::max (0.0, amp) * velocityGain;
-                left[i] += sampleAt (data->left, v.position) * a * leftGain;
-                right[i] += sampleAt (data->right, v.position) * a * rightGain;
-                v.position += step;
-                if (looping && v.position >= loopEnd)
-                    v.position -= loopEnd - loopStart;
-                else if (v.position >= end)
-                    v.active = false;
+                left[i] += (float) l * a * leftGain;
+                right[i] += (float) r * a * rightGain;
+
+                if (v.forward)
+                {
+                    v.position += step;
+                    if (loopNow && v.position >= loopEnd)
+                    {
+                        if (alternate)
+                        {
+                            v.position = std::max (loopStart, loopEnd - (v.position - loopEnd));
+                            v.forward = false;
+                        }
+                        else
+                            v.position -= loopLength;
+                        ++v.loops;
+                    }
+                    else if (v.position >= end)
+                        v.active = false;
+                }
+                else
+                {
+                    v.position -= step;
+                    if (! loopNow)
+                        v.forward = true;   // let go: on to the end
+                    else if (v.position < loopStart)
+                    {
+                        v.position = std::min (loopEnd, loopStart + (loopStart - v.position));
+                        v.forward = true;
+                        ++v.loops;
+                    }
+                }
             }
-            heads[k].store (v.active ? v.position : -1.0, std::memory_order_relaxed);
+            heads[n].store (v.active ? v.position : -1.0, std::memory_order_relaxed);
             if (v.active)
                 on[(size_t) v.note] = true;
         }

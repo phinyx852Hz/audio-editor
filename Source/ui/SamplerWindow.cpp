@@ -2,6 +2,7 @@
 #include "SamplerWindow.h"
 #include "Theme.h"
 
+#include <QButtonGroup>
 #include <QCheckBox>
 #include <QApplication>
 #include <QHideEvent>
@@ -21,6 +22,7 @@
 #include <QPainter>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -67,6 +69,15 @@ void SampleView::setSample (sampler::SamplePtr s, double r)
     update();
 }
 
+void SampleView::setReversed (bool r)
+{
+    if (r == reversed)
+        return;
+    reversed = r;
+    buildPeaks();
+    update();
+}
+
 void SampleView::setMarkers (Frame start, Frame end, Frame loopStart, Frame loopEnd, bool loop)
 {
     markers[0] = start;
@@ -109,7 +120,8 @@ void SampleView::buildPeaks()
         float lo = 0.0f, hi = 0.0f;
         for (Frame i = from; i < std::min (to, n); ++i)
         {
-            const auto v = 0.5f * (sample->left[(size_t) i] + sample->right[(size_t) i]);
+            const auto at = (size_t) (reversed ? n - 1 - i : i);
+            const auto v = 0.5f * (sample->left[at] + sample->right[at]);
             lo = std::min (lo, v);
             hi = std::max (hi, v);
         }
@@ -346,9 +358,21 @@ SamplerWindow::SamplerWindow (sampler::Engine& e, QWidget* parent)
     midiStatus = new QLabel (this);
     midiStatus->setAlignment (Qt::AlignRight | Qt::AlignVCenter);
 
-    modeBox = new QComboBox (this);
-    modeBox->addItems ({ tr ("Classic"), tr ("1-Shot") });
-    modeBox->setToolTip (tr ("Classic loops while a key is held and fades by the envelope; 1-Shot plays the whole sound, whatever the key does"));
+    // The mode as two buttons, as Simpler's: each shows only the controls it has.
+    modeButtons = new QButtonGroup (this);
+    auto* classicButton = new QPushButton (tr ("&Classic"), this);
+    classicButton->setToolTip (tr ("A pitched instrument: loops while a key is held and fades by the envelope"));
+    auto* shotButton = new QPushButton (tr ("&1-Shot"), this);
+    shotButton->setToolTip (tr ("Drum hits and phrases: plays the whole sound, with only fades"));
+    for (auto* b : { classicButton, shotButton })
+        b->setCheckable (true);
+    modeButtons->addButton (classicButton, 0);
+    modeButtons->addButton (shotButton, 1);
+    auto* edit = new QToolButton (this);
+    edit->setText (tr ("&Edit"));
+    edit->setCheckable (true);
+    edit->setToolTip (tr ("Show the rest: loop modes, pitch, filter type, key range, quality and the sample tools"));
+    editButton = edit;
     loopBox = new QCheckBox (tr ("&Loop"), this);
     loopBox->setToolTip (tr ("Classic: keep playing the shaded part while the key is held"));
     snapBox = new QCheckBox (tr ("S&nap to zero"), this);
@@ -358,7 +382,7 @@ SamplerWindow::SamplerWindow (sampler::Engine& e, QWidget* parent)
     followBox->setChecked (true);
     followBox->setToolTip (tr ("Edits you make to this sound in the editor reach Simplest straight away"));
     auto* refresh = new QPushButton (tr ("&Refresh"), this);
-    refresh->setToolTip (tr ("Take the sound from the editor again"));
+    refresh->setToolTip (tr ("Take the sound from the editor again (after Crop, the whole sound comes back)"));
     auto* midi = new QPushButton (tr ("&MIDI Inputs..."), this);
 
     auto real = [this] (double lo, double hi, double step, int decimals, const QString& suffix)
@@ -380,17 +404,22 @@ SamplerWindow::SamplerWindow (sampler::Engine& e, QWidget* parent)
         b->setAccelerated (true);
         return b;
     };
-    gainBox = real (-48.0, 12.0, 0.5, 1, tr (" dB"));
+    auto notes = [this]
+    {
+        auto* b = new QComboBox (this);
+        for (int n = 0; n < 128; ++n)
+            b->addItem (noteName (n));
+        return b;
+    };
+    gainBox = real (-48.0, 24.0, 0.5, 1, tr (" dB"));
     panBox = whole (-100, 100, 5, QString());
     panBox->setToolTip (tr ("-100 is left, 100 right"));
     transposeBox = whole (-48, 48, 1, tr (" st"));
     detuneBox = whole (-50, 50, 1, tr (" ct"));
-    rootBox = new QComboBox (this);
-    for (int n = 0; n < 128; ++n)
-        rootBox->addItem (noteName (n));
+    rootBox = notes();
     rootBox->setToolTip (tr ("The key that plays the sound at its own pitch"));
     voicesBox = whole (1, sampler::Engine::maxVoices, 1, QString());
-    voicesBox->setToolTip (tr ("How many notes can sound at once; 1 is monophonic"));
+    voicesBox->setToolTip (tr ("How many notes can sound at once; 1 is monophonic (with Legato and the held keys remembered)"));
     velocityBox = whole (0, 100, 5, tr (" %"));
     velocityBox->setToolTip (tr ("How much softer notes are quieter; 0% plays every note at full level"));
     attackBox = real (0.0, 10000.0, 5.0, 0, tr (" ms"));
@@ -399,8 +428,58 @@ SamplerWindow::SamplerWindow (sampler::Engine& e, QWidget* parent)
     releaseBox = real (1.0, 20000.0, 10.0, 0, tr (" ms"));
     fadeInBox = real (0.0, 2000.0, 1.0, 0, tr (" ms"));
     fadeOutBox = real (0.0, 2000.0, 1.0, 0, tr (" ms"));
+    gateBox = new QComboBox (this);
+    gateBox->addItems ({ tr ("Trigger"), tr ("Gate") });
+    gateBox->setToolTip (tr ("Trigger plays to the end whatever the key does; Gate fades out over Fade out when the key is let go"));
+
+    filterBox = new QCheckBox (tr ("Filter"), this);
+    filterBox->setToolTip (tr ("Shape the tone with a filter on every note"));
+    cutoffBox = whole (20, 20000, 50, tr (" Hz"));
+    resonanceBox = whole (0, 100, 5, tr (" %"));
+    filterTypeBox = new QComboBox (this);
+    filterTypeBox->addItems ({ tr ("Low pass"), tr ("High pass"), tr ("Band pass"), tr ("Notch") });
+    steepBox = new QCheckBox (tr ("24 dB"), this);
+    steepBox->setToolTip (tr ("A steeper filter: 24 dB an octave instead of 12"));
+    driveBox = real (0.0, 36.0, 1.0, 1, tr (" dB"));
+    driveBox->setToolTip (tr ("Saturation before the filter"));
+    keyFollowBox = whole (0, 100, 10, tr (" %"));
+    keyFollowBox->setToolTip (tr ("How far the cutoff follows the key; at 100% it moves an octave for each octave played"));
+    filterVelocityBox = whole (0, 100, 10, tr (" %"));
+    filterVelocityBox->setToolTip (tr ("How far soft notes close the filter (up to four octaves), so harder playing is brighter"));
+
+    loopModeBox = new QComboBox (this);
+    loopModeBox->addItems ({ tr ("Continuous"), tr ("Alternate"), tr ("Once"), tr ("Until release"), tr ("Alternate until release") });
+    loopModeBox->setToolTip (tr ("Continuous and Alternate (back and forth) loop for as long as the note sounds; Once goes round one time; "
+                                 "the Until release modes stop looping when the key is let go and play on to the end"));
+    crossfadeBox = real (0.0, 2000.0, 5.0, 0, tr (" ms"));
+    crossfadeBox->setToolTip (tr ("Blend the loop's end into its start, so the seam does not click (forward loops)"));
+    qualityBox = new QComboBox (this);
+    qualityBox->addItems ({ tr ("Standard"), tr ("Vintage"), tr ("Turntable 45"), tr ("Turntable 78") });
+    qualityBox->setToolTip (tr ("Vintage plays at 12 bits and 26 kHz as early samplers did; Turntable 45 and 78 go further, "
+                                "as a record sampled fast and tuned down"));
+    reverseBox = new QCheckBox (tr ("Re&verse"), this);
+    reverseBox->setToolTip (tr ("Play the sound backwards (the sound itself is left as it is)"));
+    fixedBox = new QCheckBox (tr ("Fi&xed pitch"), this);
+    fixedBox->setToolTip (tr ("Every key plays the sound at its own pitch"));
+    glideBox = real (0.0, 5000.0, 10.0, 0, tr (" ms"));
+    glideBox->setToolTip (tr ("How long a note takes to slide from the last one; 0 is off"));
+    fingeredBox = new QCheckBox (tr ("Fingered"), this);
+    fingeredBox->setToolTip (tr ("Glide only between notes played legato (one held while the next starts)"));
+    legatoBox = new QCheckBox (tr ("Legato"), this);
+    legatoBox->setToolTip (tr ("With one voice: a key played over a held one changes the pitch without starting the sound again"));
+    keyLowBox = notes();
+    keyLowBox->setToolTip (tr ("The lowest key that plays"));
+    keyHighBox = notes();
+    keyHighBox->setToolTip (tr ("The highest key that plays"));
+    auto* cropButton = new QPushButton (tr ("Cro&p"), this);
+    cropButton->setToolTip (tr ("Keep only what is between S and E, as a copy (the editor's sound is left as it is)"));
+    auto* normalizeButton = new QPushButton (tr ("Normali&ze"), this);
+    normalizeButton->setToolTip (tr ("Set Gain so the loudest peak between S and E reaches 0 dB"));
 
     auto* top = new QHBoxLayout;
+    top->addWidget (classicButton);
+    top->addWidget (shotButton);
+    top->addSpacing (12);
     top->addWidget (followBox);
     top->addStretch (1);
     top->addWidget (refresh);
@@ -418,36 +497,64 @@ SamplerWindow::SamplerWindow (sampler::Engine& e, QWidget* parent)
         l->addWidget (w);
         return box;
     };
-    // Two short rows, so the Sampler fits a side panel.
-    auto* controls = new QGridLayout;
-    controls->addWidget (labelled (tr ("M&ode"), modeBox), 0, 0);
-    controls->addWidget (labelled (tr ("&Gain"), gainBox), 0, 1);
-    controls->addWidget (labelled (tr ("&Pan"), panBox), 0, 2);
-    controls->addWidget (labelled (tr ("&Transpose"), transposeBox), 0, 3);
-    controls->addWidget (labelled (tr ("&Detune"), detuneBox), 0, 4);
-    controls->addWidget (labelled (tr ("Roo&t key"), rootBox), 1, 0);
-    controls->addWidget (labelled (tr ("&Voices"), voicesBox), 1, 1);
-    controls->addWidget (labelled (tr ("V&elocity"), velocityBox), 1, 2);
-    auto* checks = new QVBoxLayout;
-    checks->addWidget (loopBox);
-    checks->addWidget (snapBox);
-    controls->addLayout (checks, 1, 3, 1, 2);
-    controls->setColumnStretch (5, 1);
+    auto row = [this] (std::initializer_list<QWidget*> widgets)
+    {
+        auto* box = new QWidget (this);
+        auto* l = new QHBoxLayout (box);
+        l->setContentsMargins (0, 0, 0, 0);
+        for (auto* w : widgets)
+            l->addWidget (w);
+        return box;
+    };
 
-    envelopeRow = new QWidget (this);
-    auto* env = new QHBoxLayout (envelopeRow);
-    env->setContentsMargins (0, 0, 0, 0);
-    env->addWidget (labelled (tr ("&Attack"), attackBox));
-    env->addWidget (labelled (tr ("Deca&y"), decayBox));
-    env->addWidget (labelled (tr ("&Sustain"), sustainBox));
-    env->addWidget (labelled (tr ("&Release"), releaseBox));
-    env->addStretch (1);
-    fadeRow = new QWidget (this);
-    auto* fades = new QHBoxLayout (fadeRow);
-    fades->setContentsMargins (0, 0, 0, 0);
-    fades->addWidget (labelled (tr ("Fade &in"), fadeInBox));
-    fades->addWidget (labelled (tr ("Fade o&ut"), fadeOutBox));
-    fades->addStretch (1);
+    // One row, as Simpler's: the controls a sound needs most.
+    envelopeRow = row ({ labelled (tr ("&Attack"), attackBox), labelled (tr ("Deca&y"), decayBox),
+                         labelled (tr ("&Sustain"), sustainBox), labelled (tr ("&Release"), releaseBox) });
+    fadeRow = row ({ labelled (tr ("P&lay"), gateBox), labelled (tr ("Fade &in"), fadeInBox), labelled (tr ("Fade o&ut"), fadeOutBox) });
+    auto* filterRow = row ({ labelled (QString(), filterBox), labelled (tr ("Cutoff"), cutoffBox), labelled (tr ("Resonance"), resonanceBox) });
+    auto* main = new QHBoxLayout;
+    main->addWidget (labelled (tr ("&Gain"), gainBox));
+    main->addWidget (labelled (tr ("&Transpose"), transposeBox));
+    main->addWidget (labelled (tr ("V&oices"), voicesBox));
+    main->addWidget (envelopeRow);
+    main->addWidget (fadeRow);
+    main->addSpacing (8);
+    main->addWidget (filterRow);
+    main->addStretch (1);
+    main->addWidget (labelled (QString(), loopBox), 0, Qt::AlignBottom);
+    main->addWidget (edit, 0, Qt::AlignBottom);
+
+    // Edit: everything else, in four short groups.
+    editPanel = new QWidget (this);
+    auto* more = new QGridLayout (editPanel);
+    more->setContentsMargins (0, 4, 0, 0);
+    auto heading = [this] (const QString& text)
+    {
+        auto* l = new QLabel (text, this);
+        auto f = l->font();
+        f.setBold (true);
+        l->setFont (f);
+        return l;
+    };
+    more->addWidget (heading (tr ("Sample")), 0, 0);
+    more->addWidget (row ({ reverseBox, snapBox, cropButton, normalizeButton }), 0, 1);
+    more->addWidget (heading (tr ("Loop")), 1, 0);
+    loopRow = row ({ labelled (tr ("Loop mode"), loopModeBox), labelled (tr ("Crossfade"), crossfadeBox) });
+    more->addWidget (row ({ loopRow, labelled (tr ("&Quality"), qualityBox) }), 1, 1);
+    more->addWidget (heading (tr ("Pitch")), 2, 0);
+    more->addWidget (row ({ labelled (tr ("Roo&t key"), rootBox), labelled (tr ("&Detune"), detuneBox), labelled (tr ("Glide"), glideBox),
+                            labelled (QString(), fingeredBox), labelled (QString(), legatoBox), labelled (QString(), fixedBox) }), 2, 1);
+    more->addWidget (heading (tr ("Keys")), 3, 0);
+    more->addWidget (row ({ labelled (tr ("Lo&west"), keyLowBox), labelled (tr ("&Highest"), keyHighBox),
+                            labelled (tr ("Velocity"), velocityBox), labelled (tr ("Pan"), panBox) }), 3, 1);
+    more->addWidget (heading (tr ("Filter")), 4, 0);
+    more->addWidget (row ({ labelled (tr ("Type"), filterTypeBox), labelled (QString(), steepBox), labelled (tr ("Drive"), driveBox),
+                            labelled (tr ("&Key follow"), keyFollowBox), labelled (tr ("Velocity"), filterVelocityBox) }), 4, 1);
+    for (auto* w : editPanel->findChildren<QWidget*> (QString(), Qt::FindDirectChildrenOnly))
+        if (auto* l = qobject_cast<QHBoxLayout*> (w->layout()))
+            l->addStretch (1);
+    more->setColumnStretch (1, 1);
+    editPanel->hide();
 
     status->setWordWrap (true);
     midiStatus->setAlignment (Qt::AlignLeft | Qt::AlignVCenter);
@@ -460,9 +567,8 @@ SamplerWindow::SamplerWindow (sampler::Engine& e, QWidget* parent)
     soundSide->addLayout (top);
     soundSide->addWidget (view, 1);
     auto* controlSide = new QVBoxLayout;
-    controlSide->addLayout (controls);
-    controlSide->addWidget (envelopeRow);
-    controlSide->addWidget (fadeRow);
+    controlSide->addLayout (main);
+    controlSide->addWidget (editPanel);
     controlSide->addWidget (piano);
     piano->hide();   // the computer keyboard and MIDI play it; the piano stays for later
     controlSide->addWidget (status);
@@ -483,13 +589,22 @@ SamplerWindow::SamplerWindow (sampler::Engine& e, QWidget* parent)
     connect (piano, &PianoKeys::released, this, [this] (int note) { engine.noteOff (note); });
     connect (refresh, &QPushButton::clicked, this, &SamplerWindow::refreshRequested);
     connect (midi, &QPushButton::clicked, this, &SamplerWindow::midiInputsRequested);
-    connect (modeBox, &QComboBox::currentIndexChanged, this, &SamplerWindow::fromControls);
-    connect (rootBox, &QComboBox::currentIndexChanged, this, &SamplerWindow::fromControls);
-    for (auto* b : { loopBox, snapBox })
+    connect (modeButtons, &QButtonGroup::idClicked, this, &SamplerWindow::fromControls);
+    connect (edit, &QToolButton::toggled, this, [this] (bool on)
+    {
+        editPanel->setVisible (on);
+        adjustSize();
+    });
+    connect (reverseBox, &QCheckBox::toggled, this, &SamplerWindow::reverse);
+    connect (cropButton, &QPushButton::clicked, this, &SamplerWindow::crop);
+    connect (normalizeButton, &QPushButton::clicked, this, &SamplerWindow::normalize);
+    for (auto* b : { rootBox, gateBox, filterTypeBox, loopModeBox, qualityBox, keyLowBox, keyHighBox })
+        connect (b, &QComboBox::currentIndexChanged, this, &SamplerWindow::fromControls);
+    for (auto* b : { loopBox, snapBox, filterBox, steepBox, fixedBox, fingeredBox, legatoBox })
         connect (b, &QCheckBox::toggled, this, &SamplerWindow::fromControls);
-    for (auto* b : { gainBox, attackBox, decayBox, releaseBox, fadeInBox, fadeOutBox })
+    for (auto* b : { gainBox, attackBox, decayBox, releaseBox, fadeInBox, fadeOutBox, driveBox, crossfadeBox, glideBox })
         connect (b, &QDoubleSpinBox::valueChanged, this, &SamplerWindow::fromControls);
-    for (auto* b : { panBox, transposeBox, detuneBox, voicesBox, velocityBox, sustainBox })
+    for (auto* b : { panBox, transposeBox, detuneBox, voicesBox, velocityBox, sustainBox, cutoffBox, resonanceBox, keyFollowBox, filterVelocityBox })
         connect (b, &QSpinBox::valueChanged, this, &SamplerWindow::fromControls);
 
     // The playheads and lit keys follow the sound.
@@ -535,7 +650,8 @@ void SamplerWindow::setMidiStatus (const QString& text) { midiStatus->setText (t
 void SamplerWindow::toControls()
 {
     updating = true;
-    modeBox->setCurrentIndex (settings.mode == sampler::Mode::classic ? 0 : 1);
+    const bool classic = settings.mode == sampler::Mode::classic;
+    modeButtons->button (classic ? 0 : 1)->setChecked (true);
     loopBox->setChecked (settings.loop);
     gainBox->setValue (settings.gainDb);
     panBox->setValue ((int) std::lround (settings.pan * 100.0));
@@ -550,12 +666,38 @@ void SamplerWindow::toControls()
     releaseBox->setValue (settings.release * 1000.0);
     fadeInBox->setValue (settings.fadeIn * 1000.0);
     fadeOutBox->setValue (settings.fadeOut * 1000.0);
+    gateBox->setCurrentIndex (settings.gate ? 1 : 0);
+    filterBox->setChecked (settings.filter);
+    cutoffBox->setValue ((int) std::lround (settings.cutoff));
+    resonanceBox->setValue ((int) std::lround (settings.resonance * 100.0));
+    filterTypeBox->setCurrentIndex ((int) settings.filterType);
+    steepBox->setChecked (settings.steep);
+    driveBox->setValue (settings.drive);
+    keyFollowBox->setValue ((int) std::lround (settings.keyFollow * 100.0));
+    filterVelocityBox->setValue ((int) std::lround (settings.filterVelocity * 100.0));
+    loopModeBox->setCurrentIndex ((int) settings.loopMode);
+    crossfadeBox->setValue (settings.loopCrossfade * 1000.0);
+    qualityBox->setCurrentIndex ((int) settings.quality);
+    reverseBox->setChecked (settings.reverse);
+    fixedBox->setChecked (settings.fixedPitch);
+    glideBox->setValue (settings.glide * 1000.0);
+    fingeredBox->setChecked (settings.fingered);
+    legatoBox->setChecked (settings.legato);
+    keyLowBox->setCurrentIndex (std::clamp (settings.keyLow, 0, 127));
+    keyHighBox->setCurrentIndex (std::clamp (settings.keyHigh, 0, 127));
     updating = false;
-    const bool classic = settings.mode == sampler::Mode::classic;
-    loopBox->setEnabled (classic);
+
+    // Only what the mode has, as Simpler: Classic has the envelope and loop, 1-Shot its fades.
+    loopBox->setVisible (classic);
     envelopeRow->setVisible (classic);
     fadeRow->setVisible (! classic);
+    loopRow->setEnabled (classic && settings.loop);
+    for (auto* w : std::initializer_list<QWidget*> { cutoffBox, resonanceBox, filterTypeBox, steepBox, driveBox, keyFollowBox, filterVelocityBox })
+        w->setEnabled (settings.filter);
+    fingeredBox->setEnabled (settings.glide > 0.0);
+    legatoBox->setEnabled (settings.voices == 1);
     piano->setRootNote (settings.rootNote);
+    view->setReversed (settings.reverse);
     view->setMarkers (settings.start, settings.end, settings.loopStart, settings.loopEnd, classic && settings.loop);
 }
 
@@ -563,7 +705,7 @@ void SamplerWindow::fromControls()
 {
     if (updating)
         return;
-    settings.mode = modeBox->currentIndex() == 0 ? sampler::Mode::classic : sampler::Mode::oneShot;
+    settings.mode = modeButtons->checkedId() == 1 ? sampler::Mode::oneShot : sampler::Mode::classic;
     settings.loop = loopBox->isChecked();
     settings.gainDb = gainBox->value();
     settings.pan = panBox->value() / 100.0;
@@ -578,8 +720,85 @@ void SamplerWindow::fromControls()
     settings.release = releaseBox->value() / 1000.0;
     settings.fadeIn = fadeInBox->value() / 1000.0;
     settings.fadeOut = fadeOutBox->value() / 1000.0;
+    settings.gate = gateBox->currentIndex() == 1;
+    settings.filter = filterBox->isChecked();
+    settings.cutoff = cutoffBox->value();
+    settings.resonance = resonanceBox->value() / 100.0;
+    settings.filterType = (sampler::FilterType) filterTypeBox->currentIndex();
+    settings.steep = steepBox->isChecked();
+    settings.drive = driveBox->value();
+    settings.keyFollow = keyFollowBox->value() / 100.0;
+    settings.filterVelocity = filterVelocityBox->value() / 100.0;
+    settings.loopMode = (sampler::LoopMode) loopModeBox->currentIndex();
+    settings.loopCrossfade = crossfadeBox->value() / 1000.0;
+    settings.quality = (sampler::Quality) qualityBox->currentIndex();
+    settings.fixedPitch = fixedBox->isChecked();
+    settings.glide = glideBox->value() / 1000.0;
+    settings.fingered = fingeredBox->isChecked();
+    settings.legato = legatoBox->isChecked();
+    settings.keyLow = keyLowBox->currentIndex();
+    settings.keyHigh = std::max (settings.keyLow, keyHighBox->currentIndex());
     engine.setSettings (settings);
     toControls();
+}
+
+// Reverse leaves the sound as it is and plays it from the end; the markers are
+// turned round with it, so the same part plays (backwards).
+void SamplerWindow::reverse (bool on)
+{
+    if (updating || on == settings.reverse)
+        return;
+    const auto s = engine.sample();
+    if (s != nullptr)
+    {
+        const auto n = s->length();
+        const auto start = settings.start, end = settings.end, loopStart = settings.loopStart, loopEnd = settings.loopEnd;
+        settings.start = n - end;
+        settings.end = n - start;
+        settings.loopStart = n - loopEnd;
+        settings.loopEnd = n - loopStart;
+    }
+    settings.reverse = on;
+    engine.setSettings (settings);
+    toControls();
+}
+
+// Crop keeps a copy of what is between S and E; the editor's sound is not touched,
+// so Follow editor goes off until Refresh brings the whole sound back.
+void SamplerWindow::crop()
+{
+    const auto s = engine.sample();
+    if (s == nullptr || (settings.start <= 0 && settings.end >= s->length()))
+        return;
+    const auto n = s->length();
+    const auto from = settings.reverse ? n - settings.end : settings.start;
+    const auto to = settings.reverse ? n - settings.start : settings.end;
+    auto cropped = std::make_shared<sampler::Sample>();
+    cropped->left.assign (s->left.begin() + from, s->left.begin() + to);
+    cropped->right.assign (s->right.begin() + from, s->right.begin() + to);
+    const auto shift = settings.start;
+    settings.loopStart -= shift;
+    settings.loopEnd -= shift;
+    settings.end -= shift;
+    settings.start = 0;
+    followBox->setChecked (false);
+    setSample (cropped, rate, name.endsWith (tr (" (cropped)")) ? name : name + tr (" (cropped)"), true);
+}
+
+void SamplerWindow::normalize()
+{
+    const auto s = engine.sample();
+    if (s == nullptr)
+        return;
+    const auto n = s->length();
+    const auto from = std::clamp<Frame> (settings.reverse ? n - settings.end : settings.start, 0, n);
+    const auto to = std::clamp<Frame> (settings.reverse ? n - settings.start : settings.end, from, n);
+    float peak = 0.0f;
+    for (auto i = from; i < to; ++i)
+        peak = std::max ({ peak, std::abs (s->left[(size_t) i]), std::abs (s->right[(size_t) i]) });
+    if (peak <= 0.0f)
+        return;
+    gainBox->setValue (-20.0 * std::log10 ((double) peak));   // within the box's range
 }
 
 Frame SamplerWindow::snap (Frame f) const

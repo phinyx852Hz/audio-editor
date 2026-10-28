@@ -8,6 +8,8 @@
 #include <functional>
 #include <vector>
 
+class QAbstractButton;
+class QButtonGroup;
 class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
@@ -24,6 +26,7 @@ public:
     SampleView (sampler::Engine&, QWidget* parent);
     void setSample (sampler::SamplePtr, double rate);
     void setMarkers (Frame start, Frame end, Frame loopStart, Frame loopEnd, bool showLoop);
+    void setReversed (bool);   // drawn back to front, as it plays
     QSize sizeHint() const override { return { 620, 130 }; }
     QSize minimumSizeHint() const override { return { 300, 90 }; }
 
@@ -47,7 +50,7 @@ private:
     double rate = 48000.0;
     std::vector<std::pair<float, float>> peaks;   // per pixel column, both channels together
     Frame markers[4] { 0, 0, 0, 0 };
-    bool showLoop = true;
+    bool showLoop = true, reversed = false;
     int dragging = -1;
 };
 
@@ -82,7 +85,8 @@ private:
 };
 
 // Sample > Sampler: one sound across the keyboard. Played from MIDI or the computer keyboard (A to K as the white keys with W, E, T, Y, U as the
-// black ones, as in Live; Z and X octave down and up, C and V velocity down and up).
+// black ones, as in Live; Z and X octave down and up, C and V velocity down and up). As Live's Simpler, the
+// mode picks which controls there are, one row of them shows, and Edit opens the rest.
 class SamplerWindow final : public QWidget
 {
     Q_OBJECT
@@ -119,6 +123,9 @@ private:
     void fromControls();
     void toControls();
     void markerMoved (int which, Frame position);
+    void reverse (bool);
+    void crop();
+    void normalize();
     void showStatus();
     Frame snap (Frame) const;
     int noteForKey (const class QKeyEvent*) const;
@@ -133,7 +140,9 @@ private:
     QLabel* title;
     QLabel* status;
     QLabel* midiStatus;
-    QComboBox* modeBox;
+    QButtonGroup* modeButtons;
+    QAbstractButton* editButton;
+    QWidget* editPanel;
     QCheckBox* loopBox;
     QCheckBox* snapBox;
     QCheckBox* followBox;
@@ -150,8 +159,28 @@ private:
     QDoubleSpinBox* releaseBox;
     QDoubleSpinBox* fadeInBox;
     QDoubleSpinBox* fadeOutBox;
+    QComboBox* gateBox;
+    QCheckBox* filterBox;
+    QSpinBox* cutoffBox;
+    QSpinBox* resonanceBox;
+    QComboBox* filterTypeBox;
+    QCheckBox* steepBox;
+    QDoubleSpinBox* driveBox;
+    QSpinBox* keyFollowBox;
+    QSpinBox* filterVelocityBox;
+    QComboBox* loopModeBox;
+    QDoubleSpinBox* crossfadeBox;
+    QComboBox* qualityBox;
+    QCheckBox* reverseBox;
+    QCheckBox* fixedBox;
+    QDoubleSpinBox* glideBox;
+    QCheckBox* fingeredBox;
+    QCheckBox* legatoBox;
+    QComboBox* keyLowBox;
+    QComboBox* keyHighBox;
     QWidget* envelopeRow;
     QWidget* fadeRow;
+    QWidget* loopRow;
     QTimer redraw;
     int octave = 3;                       // the A key plays C of this octave (C3 = MIDI 60 as in Live)
     int keyVelocity = 100;
