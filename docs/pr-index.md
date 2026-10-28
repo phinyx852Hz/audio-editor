@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**81 pull requests:** 78 merged, 3 open.
+**81 pull requests:** 79 merged, 2 open.
 
 ## Contents
 
@@ -39,7 +39,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#68](https://github.com/phinyx852Hz/audio-editor/pull/68) | MIDI editor: a piano roll in 12-TET or any PHI tuning, with Scala files, restyle and MPE | merged |  | `Source/ui/MidiEditor.cpp`<br>`Source/mixer/NoteEditor.cpp`<br>`Source/core/Scala.cpp` |
 | [#76](https://github.com/phinyx852Hz/audio-editor/pull/76) | Editor track without the timeline row; delete/add mixer tracks; Pre-Master bus; spatial mixing | merged |  | `Source/ui/MixerWindow.cpp`<br>`Source/ui/MixerSpatial.cpp`<br>`Source/mixer/MixerEngine.cpp` |
 | [#77](https://github.com/phinyx852Hz/audio-editor/pull/77) | Slicer: a 128-pad drum machine with layers and sounds of their own | merged |  | `Source/ui/SlicerWindow.cpp`<br>`Source/sampler/SlicerEngine.cpp`<br>`Source/ui/SlicerKit.cpp` |
-| [#79](https://github.com/phinyx852Hz/audio-editor/pull/79) | Slicer phase 2: step sequencer (Cubase Pattern Editor / FL Studio Channel Rack) | open |  | `Source/ui/StepSequencerView.cpp`<br>`Source/sampler/SlicerEngine.cpp`<br>`Source/ui/StepSequencerView.h` |
+| [#79](https://github.com/phinyx852Hz/audio-editor/pull/79) | Slicer phase 2: step sequencer (Cubase Pattern Editor / FL Studio Channel Rack) | merged |  | `Source/ui/StepSequencerView.cpp`<br>`Source/sampler/SlicerEngine.cpp`<br>`Source/ui/StepSequencerView.h` |
 | [#80](https://github.com/phinyx852Hz/audio-editor/pull/80) | MIDI editor: rising spectrum, scale wheel, pitch curves and ornaments, tuning changes, hum to notes, MTS-ESP | open |  | `Source/ui/MidiEditor.cpp`<br>`Source/mixer/NoteEditor.cpp`<br>`tests/CoreTests.cpp` |
 
 ### Analysis and meters
@@ -263,6 +263,6 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#76](https://github.com/phinyx852Hz/audio-editor/pull/76) | Editor track without the timeline row; delete/add mixer tracks; Pre-Master bus; spatial mixing | Editor track (Shift+F4): the user asked to drop the middle section and have the MIDI editor below act as the recorder. *(auto)* | merged | 2026-10-28 | Editing and warping |
 | [#77](https://github.com/phinyx852Hz/audio-editor/pull/77) | Slicer: a 128-pad drum machine with layers and sounds of their own | Phase 1 of the Slicer plan, a drum machine after Cubase's Drum Machine and Ableton's Drum Rack. *(auto)* | merged | 2026-10-28 | Editing and warping |
 | [#78](https://github.com/phinyx852Hz/audio-editor/pull/78) | Simplest phase 1: sound shaping and a Simpler-style layout | Phase 1 of the Simplest plan: the sound-shaping features from the Cubase Sampler Control resources, laid out the way Live's Simpler does it. *(auto)* | open | 2026-10-28 | Not yet sorted |
-| [#79](https://github.com/phinyx852Hz/audio-editor/pull/79) | Slicer phase 2: step sequencer (Cubase Pattern Editor / FL Studio Channel Rack) | Phase 2 of the Slicer plan: a step sequencer that plays the kit's pads. *(auto)* | open | 2026-10-28 | Editing and warping |
+| [#79](https://github.com/phinyx852Hz/audio-editor/pull/79) | Slicer phase 2: step sequencer (Cubase Pattern Editor / FL Studio Channel Rack) | Phase 2 of the Slicer plan: a step sequencer that plays the kit's pads. *(auto)* | merged | 2026-10-28 | Editing and warping |
 | [#80](https://github.com/phinyx852Hz/audio-editor/pull/80) | MIDI editor: rising spectrum, scale wheel, pitch curves and ornaments, tuning changes, hum to notes, MTS-ESP | The second stage of the MIDI editor (#68), with every item the owner asked for in the thread. *(auto)* | open | 2026-10-28 | Editing and warping |
 | [#81](https://github.com/phinyx852Hz/audio-editor/pull/81) | Rhythms: the iqāʿāt of Maqam World's index, and kuku | Adds the 37 iqāʿāt from Maqam World's index that the library didn't have yet. *(auto)* | merged | 2026-10-28 | Modes, tunings and composition |
