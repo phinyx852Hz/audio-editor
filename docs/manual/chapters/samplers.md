@@ -36,15 +36,27 @@ Both open in windows of their own, so they get the room they need whatever panel
 
 ## The Slicer {#slicer}
 
-[]{.ix t="Slicer"}The Slicer, after Ninjas2, cuts a sound into slices on 64 pads. `F8` sends the selection, or the whole file, to it; with no file open it opens empty.
+[]{.ix t="Slicer"}The Slicer is a drum machine of 128 pads, after Ninjas2, Cubase's Drum Machine and Ableton's Drum Rack. It cuts a sound into slices across the pads, and any pad can hold sounds of its own instead. `F8` sends the selection, or the whole file, to it; with no file open it opens empty.
 
-![The Slicer: slices over the waveform, and four banks of pads.](images/slicer.png)
+![The Slicer: slices over the waveform, and the pads.](images/slicer.png)
 
-**Slicing.** Slice by **transients** (with a sensitivity), **equal parts** (2 to 64), the file's **beat grid** (bars, beats, eighths or sixteenths) or the editor's **markers**. Drag a slice line to move it, double-click to add one, right-click a line to remove it.
+**Slicing.** Slice by **transients** (with a sensitivity), **equal parts** (2 to 128), the file's **beat grid** (bars, beats, eighths or sixteenths) or the editor's **markers**. Drag a slice line to move it, double-click to add one, right-click a line to remove it. Slicing again leaves pads with sounds of their own alone.
 
-**Pads.** The pads come in four banks of 16, A to D, laid out for Push's 8 × 8 grid in User mode: bank A bottom left, B bottom right, C top left, D top right. Or choose **Chromatic**, 16 notes a bank from C1 as in Live's drum racks.
+**Pads.** The pads come in eight banks of 16, A to H, in a row across the top as in Cubase. They are laid out for Push's 8 × 8 grid in User mode: bank A bottom left, B bottom right, C top left, D top right. **Push plays** puts banks E to H on the grid instead; the four banks off the grid answer the notes left over (100 to 127, then 0 to 35). Or choose **Chromatic**: pad n is MIDI note n, 16 notes a bank, as in Cubase, so C1 is pad C5. Kits from before 128 pads open on the same notes.
 
-Each pad has its own gain, pan, pitch, reverse, **One shot** or **Gate** play, attack, release and **choke group** (so a closed hi-hat cuts off an open one). The kit has velocity and voices.
+An empty pad shows only its note, a pad with one sound its name, and a layered pad **Multi**.
+
+**Sounds of their own.** Drop audio files on a pad (several fill the pads after it), or right-click it and choose **Load Sound**. A pad with its own sound shows that sound in the waveform, with the part it plays shaded.
+
+**Each pad** has its own gain, pan, pitch, **One shot** or **Gate** play, attack, release, **choke group** (1 to 16, so a closed hi-hat cuts off an open one), **Mute**, **Solo** and **Receive**, the MIDI note it answers. Auto is its note in the layout; pads given the same note play together. The kit has velocity and voices (1 to 64; each layer of a hit takes one).
+
+**Layers.** **Edit** shows the chosen pad's four layers, one at a time. Each is a slice or a sound, with on/off, level, tune, start, end, fade in, fade out and reverse, and all of a pad's layers play at once.
+
+**The pad menu.** Right-click a pad to rename it, give it one of 16 colours, mute or solo it, load a sound, cut, copy, paste or reset it, or reset every mute, solo or pad. Drag a pad onto another to swap them; each keeps the note it answers.
+
+**Hot swap.** Under Edit, turn on **Hot swap** and send sounds from the Find panel with `F8` (or drop them on the window). Each goes onto the chosen pad's layer to try, keeping that layer's level, tune and fades. **Keep** keeps it; **Undo Swap** puts back what was there.
+
+**Kits.** **Save Kit** writes the whole kit as a `.phikit` file, with the sample in a `Sounds` folder beside it. Pads' own sounds stay where their files are. **Load Kit** opens one. A mixer track's Slicer keeps its kit in the `.phi` project the same way.
 
 **Playing.** Click slices or pads (higher on a pad is louder), play them from Push or any MIDI pads, or from the computer keyboard:
 
@@ -54,7 +66,7 @@ Each pad has its own gain, pan, pitch, reverse, **One shot** or **Gate** play, a
 | `A` `S` `D` `F` | The second row |
 | `Q` `W` `E` `R` | The third row |
 | `1` `2` `3` `4` | The top row |
-| `5` `6` `7` `8` | Choose bank A to D |
+| `5` `6` `7` `8` `9` `0` `-` `=` | Choose bank A to H |
 
 A pad hit from MIDI becomes the one you edit. Follow editor, `Ctrl+F8` (refresh) and `Shift+F8` (window) work as for Simplest.
 

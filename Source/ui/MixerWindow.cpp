@@ -9,6 +9,7 @@
 #include "SamplerWindow.h"
 #include "ExtremeSettings.h"
 #include "Settings.h"
+#include "SlicerKit.h"
 #include "SlicerWindow.h"
 #include "Theme.h"
 #include "TransportBar.h"
@@ -290,6 +291,18 @@ namespace
         return MixerWindow::tr ("Audio files (%1);;All files (*)").arg (patterns.join (QLatin1Char (' ')));
     }
 
+    // The Sample menu's Slicer has something to play: its sample, or pads with sounds of their own.
+    bool slicerHasSound (const std::pair<sampler::SamplePtr, slicer::Kit>& s)
+    {
+        if (s.first != nullptr)
+            return true;
+        for (const auto& p : s.second.pads)
+            for (const auto& l : p.layers)
+                if (l.used && l.sound != nullptr)
+                    return true;
+        return false;
+    }
+
     AudioDataPtr soundAsAudio (const sampler::Sample& s, double rate)
     {
         AudioData::Builder b (2, rate);
@@ -336,50 +349,6 @@ namespace
         s.fadeOut = o.value ("fadeOut").toDouble (0.01);
         s.voices = o.value ("voices").toInt (8);
         return s;
-    }
-
-    QJsonObject kitJson (const slicer::Kit& k)
-    {
-        QJsonArray pads;
-        for (int i = 0; i < slicer::numPads; ++i)
-        {
-            const auto& p = k.pads[(size_t) i];
-            if (! p.used)
-                continue;
-            pads.append (QJsonObject { { "pad", i }, { "start", (double) p.start }, { "end", (double) p.end }, { "gain", p.gainDb },
-                                       { "pan", p.pan }, { "pitch", p.pitch }, { "reverse", p.reverse }, { "gate", p.play == slicer::Play::gate },
-                                       { "attack", p.attack }, { "release", p.release }, { "choke", p.choke } });
-        }
-        return { { "pads", pads }, { "velocity", k.velocity }, { "voices", k.voices },
-                 { "layout", k.layout == slicer::Layout::push ? "push" : "chromatic" } };
-    }
-
-    slicer::Kit kitFromJson (const QJsonObject& o)
-    {
-        slicer::Kit k;
-        for (const auto& v : o.value ("pads").toArray())
-        {
-            const auto p = v.toObject();
-            const auto i = p.value ("pad").toInt (-1);
-            if (i < 0 || i >= slicer::numPads)
-                continue;
-            auto& pad = k.pads[(size_t) i];
-            pad.used = true;
-            pad.start = (Frame) p.value ("start").toDouble();
-            pad.end = (Frame) p.value ("end").toDouble();
-            pad.gainDb = p.value ("gain").toDouble();
-            pad.pan = p.value ("pan").toDouble();
-            pad.pitch = p.value ("pitch").toDouble();
-            pad.reverse = p.value ("reverse").toBool();
-            pad.play = p.value ("gate").toBool() ? slicer::Play::gate : slicer::Play::oneShot;
-            pad.attack = p.value ("attack").toDouble (0.0005);
-            pad.release = p.value ("release").toDouble (0.03);
-            pad.choke = p.value ("choke").toInt();
-        }
-        k.velocity = o.value ("velocity").toDouble (0.6);
-        k.voices = o.value ("voices").toInt (16);
-        k.layout = o.value ("layout").toString() == QLatin1String ("chromatic") ? slicer::Layout::chromatic : slicer::Layout::push;
-        return k;
     }
 
     // Paths in a mix are kept relative to it, so a folder of mix and files can move.
@@ -7668,7 +7637,7 @@ void MixerWindow::setInstrumentKind (int track, int choice, const QString& plugi
     if ((choice == samplerChoice || choice == slicerChoice) && ! restoring)
     {
         const auto fromMenu = choice == samplerChoice ? (hooks.samplerSound ? hooks.samplerSound().first != nullptr : false)
-                                                      : (hooks.slicerSound ? hooks.slicerSound().first != nullptr : false);
+                                                      : (hooks.slicerSound ? slicerHasSound (hooks.slicerSound()) : false);
         if (fromMenu)
             takeInstrumentSound (track);
         else
@@ -7747,16 +7716,16 @@ void MixerWindow::takeInstrumentSound (int track)
     else if (inst->kind() == mixer::Instrument::Kind::slicer && hooks.slicerSound)
     {
         auto [sound, kit] = hooks.slicerSound();
-        if (sound == nullptr)
+        if (! slicerHasSound ({ sound, kit }))
         {
-            status->setText (tr ("The Slicer has no sound yet: send one with F8 first."));
+            status->setText (tr ("The Slicer has no sound yet: send one with F8 first, or drop sounds on its pads."));
             return;
         }
         auto& s = static_cast<mixer::SlicerInstrument&> (*inst);
         s.engine().setSample (sound);
         s.engine().setKit (kit);
         s.samplePath.clear();
-        info[(size_t) track].sound = soundAsAudio (*sound, rate());
+        info[(size_t) track].sound = sound != nullptr ? soundAsAudio (*sound, rate()) : nullptr;
     }
     else
         return;
@@ -8859,7 +8828,18 @@ bool MixerWindow::writeMix (const QString& file, QString& error)
                 case mixer::Instrument::Kind::slicer:
                 {
                     auto& sl = static_cast<mixer::SlicerInstrument&> (*inst);
-                    io = { { "kind", "slicer" }, { "sound", soundFile (sl.engine().sample(), sl.samplePath) }, { "kit", kitJson (sl.engine().kit()) } };
+                    io = { { "kind", "slicer" }, { "sound", soundFile (sl.engine().sample(), sl.samplePath) }, { "kit", slicerkit::toJson (sl.engine().kit(), base, [&] (const sampler::Sample& padSound, int pad, int layer)
+                         {
+                             // A pad's own sound that came from no file goes beside the mix too.
+                             const auto folderName = QFileInfo (file).completeBaseName() + tr (" Samples");
+                             base.mkpath (folderName);
+                             const auto wav = base.filePath (folderName + QStringLiteral ("/Track %1 pad %2 layer %3.wav").arg (i + 1).arg (pad + 1).arg (layer + 1));
+                             QString why;
+                             if (slicerkit::saveSound (padSound, rate(), wav, why))
+                                 return wav;
+                             error = tr ("Track %1's pad %2 could not be saved: %3").arg (i + 1).arg (pad + 1).arg (why);
+                             return QString();
+                         }) } };
                     break;
                 }
                 case mixer::Instrument::Kind::plugin:
@@ -9033,7 +9013,10 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
             else if (inst != nullptr && inst->kind() == mixer::Instrument::Kind::slicer)
             {
                 auto& sl = static_cast<mixer::SlicerInstrument&> (*inst);
-                sl.engine().setKit (kitFromJson (io.value ("kit").toObject()));
+                QStringList missing;
+                sl.engine().setKit (slicerkit::fromJson (io.value ("kit").toObject(), base, rate(), &missing));
+                for (const auto& m : missing)
+                    problems << tr ("Track %1: %2").arg (i + 1).arg (m);
             }
         }
         else if (kind == QLatin1String ("plugin"))

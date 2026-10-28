@@ -51,7 +51,7 @@ void MainWindow::registerSamplerCommands()
     add ("sample.refresh", tr ("&Refresh from Editor"), { KS (Qt::CTRL | Qt::Key_F7) }, [this] { sendToSampler (true); })
         ->setStatusTip (tr ("Take the sound Simplest came from again, keeping its start, end and loop"));
     add ("slice.send", tr ("Send to Sli&cer"), { KS (Qt::Key_F8) }, [this] { sendToSlicer (false); })
-        ->setStatusTip (tr ("Cut the selection (or the whole file) into slices on 64 pads in the Slicer; later edits follow it"));
+        ->setStatusTip (tr ("Cut the selection (or the whole file) into slices on the Slicer's 128 pads; later edits follow it"));
     add ("slice.window", tr ("Slicer W&indow"), { KS (Qt::SHIFT | Qt::Key_F8) }, [this] { showSlicer(); });
     add ("slice.refresh", tr ("Re&fresh Slicer from Editor"), { KS (Qt::CTRL | Qt::Key_F8) }, [this] { sendToSlicer (true); })
         ->setStatusTip (tr ("Take the sound the Slicer came from again, keeping its slices"));
@@ -350,6 +350,13 @@ void MainWindow::loadSamplerFile (const QString& path)
 void MainWindow::loadSlicerFile (const QString& path)
 {
     const auto rate = engine.deviceSampleRate() > 0.0 ? engine.deviceSampleRate() : 48000.0;
+    // Hot swap: the sound goes onto the chosen pad to try instead.
+    if (slicerWin != nullptr && slicerWin->hotSwapping())
+    {
+        showSlicer();
+        slicerWin->hotSwap (path);
+        return;
+    }
     slicerTab = -1;
     slicerPath.clear();
     slicerSource = nullptr;
@@ -409,6 +416,9 @@ void MainWindow::instrumentClosed()
 
 void MainWindow::showSlicer()
 {
+    // Sounds dropped on its pads are read at the rate it plays at.
+    if (slicerEngine->sample() == nullptr && engine.deviceSampleRate() > 0.0)
+        slicerEngine->prepare (engine.deviceSampleRate());
     midiTarget = 1;
     playInstruments();
     slicerPanel->show (true);

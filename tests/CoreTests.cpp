@@ -1886,13 +1886,26 @@ namespace
         // Push layout: bottom-left 4x4 is bank A, pad 1 at the bottom left; every note round-trips.
         check (slicer::padForNote (36, slicer::Layout::push) == 0 && slicer::padForNote (40, slicer::Layout::push) == 16
                && slicer::padForNote (68, slicer::Layout::push) == 32 && slicer::padForNote (99, slicer::Layout::push) == 63
-               && slicer::padForNote (44, slicer::Layout::push) == 4 && slicer::padForNote (35, slicer::Layout::push) == -1,
+               && slicer::padForNote (44, slicer::Layout::push) == 4,
                "slicer: Push notes to banks A-D");
+        // The notes left over play banks E to H; page 1 swaps the halves.
+        check (slicer::padForNote (100, slicer::Layout::push) == 64 && slicer::padForNote (35, slicer::Layout::push) == 127
+               && slicer::padForNote (36, slicer::Layout::push, 1) == 64 && slicer::padForNote (100, slicer::Layout::push, 1) == 0,
+               "slicer: Push's other notes and page play banks E-H");
+        check (slicer::padForNote (36, slicer::Layout::chromatic) == 36 && slicer::noteForPad (0, slicer::Layout::chromatic) == 0,
+               "slicer: chromatic pad n is note n");
         bool round = true;
-        for (int n = 36; n < 100; ++n)
+        std::vector<bool> seen (slicer::numPads, false);
+        for (int n = 0; n < 128; ++n)
             for (const auto layout : { slicer::Layout::push, slicer::Layout::chromatic })
-                round = round && slicer::noteForPad (slicer::padForNote (n, layout), layout) == n;
-        check (round, "slicer: notes and pads round-trip");
+                for (const int page : { 0, 1 })
+                {
+                    const auto pad = slicer::padForNote (n, layout, page);
+                    round = round && pad >= 0 && slicer::noteForPad (pad, layout, page) == n;
+                    if (layout == slicer::Layout::push && page == 0 && pad >= 0)
+                        seen[(size_t) pad] = true;
+                }
+        check (round && std::all_of (seen.begin(), seen.end(), [] (bool b) { return b; }), "slicer: notes and pads round-trip, all 128 pads");
 
         const auto cuts = slicer::slicesFromCuts ({ 1000, 1010, 5000 }, 8000, 100);
         check (cuts.size() == 3 && cuts[0] == std::pair<Frame, Frame> (0, 1000) && cuts[1] == std::pair<Frame, Frame> (1000, 5000)
@@ -1917,11 +1930,11 @@ namespace
         slicer::assign (kit, slicer::equalSlices (8000, 4));
         for (auto& pad : kit.pads)
             pad.attack = 0.0;
-        kit.pads[2].reverse = true;
+        kit.pads[2].layers[0].reverse = true;
         kit.pads[0].choke = kit.pads[1].choke = 1;
         kit.pads[3].play = slicer::Play::gate;
         e.setKit (kit);
-        check (! kit.pads[4].used, "slicer: pads past the slices are empty");
+        check (! kit.pads[4].used(), "slicer: pads past the slices are empty");
 
         auto play = [&] (int frames)
         {
@@ -1954,6 +1967,60 @@ namespace
         e.letGo (0);
         play (200);
         check (e.isSounding (0), "slicer: one-shot pads play on when let go");
+        e.panic();
+
+        // A pad with a sound of its own, a second layer on top, and the notes they answer.
+        AudioData::Builder ob (1, rate);
+        std::vector<float> own (1000, 0.25f);
+        const float* op[1] { own.data() };
+        ob.append (op, (int) own.size());
+        const auto ownSound = sampler::makeSample (*ob.finish());
+        slicer::placeSound (kit, 100, 0, ownSound, "own.wav");
+        kit.pads[100].attack = 0.0;
+        e.setKit (kit);
+        e.hit (100, 1.0f);
+        out = play (100);
+        check (near (out[10], 0.25, 1.0e-5), "slicer: a pad plays a sound of its own");
+        slicer::placeSound (kit, 100, 1, ownSound, "own.wav");
+        e.setKit (kit);
+        e.hit (100, 1.0f);
+        out = play (100);
+        check (near (out[10], 0.5, 1.0e-5) && kit.pads[100].layerCount() == 2, "slicer: a pad's layers sound together");
+        e.panic();
+        e.noteOn (slicer::noteForPad (100, kit.layout), 1.0f);
+        play (10);
+        check (e.isSounding (100), "slicer: a pad answers its note");
+        e.panic();
+        kit.pads[100].receive = 20;
+        kit.pads[1].receive = 20;
+        e.setKit (kit);
+        e.noteOn (20, 1.0f);
+        play (10);
+        check (e.isSounding (100) && e.isSounding (1), "slicer: pads with the same Receive note play together");
+        e.panic();
+
+        kit.pads[100].mute = true;
+        e.setKit (kit);
+        e.hit (100, 1.0f);
+        out = play (100);
+        check (out[10] == 0.0f, "slicer: a muted pad is silent");
+        kit.pads[100].mute = false;
+        kit.pads[1].solo = true;
+        e.setKit (kit);
+        e.hit (100, 1.0f);
+        out = play (100);
+        check (out[10] == 0.0f, "slicer: a pad not soloed is silent while another is");
+        kit.pads[1].solo = false;
+        e.panic();
+
+        // Slicing again leaves a pad's own sound alone; swapping keeps the notes where they were.
+        slicer::assign (kit, slicer::equalSlices (8000, 128));
+        check (kit.pads[100].layers[0].sound == ownSound && kit.pads[127].isSlice() && kit.pads[101].layers[0].start == 8000 * 100 / 128,
+               "slicer: slicing skips pads with their own sound");
+        kit.pads[5].receive = 70;
+        slicer::swapPads (kit, 5, 100);
+        check (kit.pads[5].layers[0].sound == ownSound && kit.pads[100].isSlice() && kit.pads[5].receive == 70,
+               "slicer: swapping pads swaps their sounds, not their notes");
     }
 
     void testCurvedFade()
