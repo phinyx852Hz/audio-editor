@@ -27,6 +27,7 @@
 #include "../Source/core/RiffChunks.h"
 #include "../Source/core/Xmp.h"
 #include "../Source/core/Fft.h"
+#include "../Source/core/Windows.h"
 #include "../Source/core/Album.h"
 #include "../Source/core/Nyquist.h"
 #include "../Source/core/Repair.h"
@@ -60,12 +61,14 @@
 
 #include <algorithm>
 #include <chrono>
+#include <complex>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
 #include <functional>
 #include <iterator>
 #include <map>
+#include <numeric>
 #include <random>
 #include <set>
 #include <string>
@@ -2057,6 +2060,94 @@ namespace
         Album empty;
         check (empty.mixdown() != nullptr && empty.mixdown()->length() == 0, "album: empty mixdown");
     }
+    // Every window is symmetric about the middle and peaks at 1; the ones with a design
+    // sidelobe level reach it (measured on a 16x zero-padded spectrum).
+    void testWindows()
+    {
+        const int n = 256, pad = 16, points = n * pad / 2;
+        const auto highestSidelobeDb = [&] (const std::vector<double>& w)
+        {
+            std::vector<double> magnitude ((size_t) points);
+            for (int f = 0; f < points; ++f)
+            {
+                std::complex<double> sum;
+                for (int i = 0; i < n; ++i)
+                    sum += w[(size_t) i] * std::polar (1.0, -2.0 * M_PI * f * i / (n * pad));
+                magnitude[(size_t) f] = std::abs (sum);
+            }
+            int f = 1;
+            while (f < points - 1 && magnitude[(size_t) f + 1] < magnitude[(size_t) f])
+                ++f;   // the main lobe's first null
+            return 20.0 * std::log10 (*std::max_element (magnitude.begin() + f, magnitude.end()) / magnitude[0]);
+        };
+
+        for (int kind = 0; kind < windows::numKinds; ++kind)
+        {
+            const auto w = windows::make (kind, n);
+            const auto label = "window " + std::to_string (kind);
+            check ((int) w.size() == n, label + " size");
+            double asymmetry = 0.0;
+            for (int i = 1; i < n; ++i)
+                asymmetry = std::max (asymmetry, std::abs (w[(size_t) i] - w[(size_t) (n - i)]));
+            check (asymmetry < 1.0e-12, label + " is symmetric");
+            check (near (w[(size_t) n / 2], 1.0, 1.0e-8) && near (*std::max_element (w.begin(), w.end()), 1.0, 1.0e-8), label + " peaks at 1 in the middle");
+        }
+
+        const std::vector<std::pair<int, double>> designed {
+            { windows::hann, -31.0 }, { windows::hamming, -42.0 }, { windows::blackman, -58.0 }, { windows::blackmanHarris, -92.0 },
+            { windows::nuttall, -93.0 }, { windows::blackmanNuttall, -97.5 }, { windows::kaiser140, -140.0 }, { windows::kaiser180, -180.0 } };
+        for (const auto& [kind, limit] : designed)
+            check (highestSidelobeDb (windows::make (kind, n)) <= limit, "window " + std::to_string (kind) + " sidelobes");
+        check (near (highestSidelobeDb (windows::make (windows::chebyshev, n)), -windows::chebyshevSidelobeDb, 0.5), "Dolph-Chebyshev sidelobes all at its level");
+
+        // The largest FFT size stays finite (the Chebyshev's polynomial and Kaiser's Bessel function).
+        for (int kind : { (int) windows::chebyshev, (int) windows::kaiser180 })
+        {
+            const auto w = windows::make (kind, 32768);
+            check (std::all_of (w.begin(), w.end(), [] (double v) { return std::isfinite (v) && v > -1.0e-9; }), "window " + std::to_string (kind) + " at 32768");
+        }
+
+        // Slepian tapers (NW 4): orthonormal, symmetric even and odd, and as concentrated in
+        // +-4 bins as Percival and Walden tabulate (the 7th about 0.937).
+        {
+            const int length = 512;
+            const double bandwidth = 4.0 / length;
+            const auto tapers = windows::dpss (length, 4.0, 7);
+            check (tapers.size() == 7, "dpss count");
+            double worst = 0.0;
+            for (size_t a = 0; a < tapers.size(); ++a)
+                for (size_t b = 0; b < tapers.size(); ++b)
+                {
+                    double dot = 0.0;
+                    for (int i = 0; i < length; ++i)
+                        dot += tapers[a][(size_t) i] * tapers[b][(size_t) i];
+                    worst = std::max (worst, std::abs (dot - (a == b ? 1.0 : 0.0)));
+                }
+            check (worst < 1.0e-9, "dpss orthonormal");
+            const double expected[] { 0.99999999997, 0.9999999724, 0.9999987915, 0.9999675878, 0.9994104943, 0.9925077219, 0.9366649347 };
+            for (size_t k = 0; k < tapers.size(); ++k)
+            {
+                const auto& v = tapers[k];
+                double concentration = 0.0, asymmetry = 0.0;
+                for (int i = 0; i < length; ++i)
+                {
+                    asymmetry = std::max (asymmetry, std::abs (v[(size_t) i] - (k % 2 == 0 ? 1.0 : -1.0) * v[(size_t) (length - 1 - i)]));
+                    for (int j = 0; j < length; ++j)
+                        concentration += v[(size_t) i] * v[(size_t) j]
+                                         * (i == j ? 2.0 * bandwidth : std::sin (2.0 * M_PI * bandwidth * (i - j)) / (M_PI * (i - j)));
+                }
+                check (asymmetry < 1.0e-9, "dpss " + std::to_string (k) + " symmetry");
+                check (near (concentration, expected[k], 1.0e-6), "dpss " + std::to_string (k) + " concentration");
+            }
+            check (std::accumulate (tapers[0].begin(), tapers[0].end(), 0.0) > 0.0 && tapers[1][100] > 0.0, "dpss signs");
+            const auto large = windows::dpss (32768, 4.0, 7);
+            double largeDot = 0.0;
+            for (size_t i = 0; i < large[0].size(); ++i)
+                largeDot += large[0][i] * large[6][i];
+            check (std::abs (largeDot) < 1.0e-9 && std::all_of (large[6].begin(), large[6].end(), [] (double v) { return std::isfinite (v); }), "dpss at 32768");
+        }
+    }
+
     void testSpectrumView()
     {
         using namespace spectrum;
@@ -7573,6 +7664,7 @@ int main()
     testLayouts();
     testStereoize();
     testSpectrum();
+    testWindows();
     testSpectrumView();
     testGenerate();
     testPitch();
