@@ -1272,6 +1272,206 @@ namespace
         e.noteOn (64, 1.0f);
         play (512);
         check (! e.isSounding (60) && e.isSounding (62) && e.isSounding (64), "sampler: the oldest voice is taken when all are busy");
+        e.panic();
+
+        // Phase 1 sound shaping. From a clean start each time.
+        auto fresh = [&]
+        {
+            sampler::Settings t;
+            t.attack = t.decay = 0.0;
+            t.sustain = 1.0;
+            t.release = 0.01;
+            t.velocity = 0.0;
+            t.loop = false;
+            return t;
+        };
+        auto peakOf = [] (const std::vector<float>& v, size_t from, size_t to)
+        {
+            double p = 0;
+            for (size_t i = from; i < std::min (to, v.size()); ++i)
+                p = std::max (p, (double) std::abs (v[i]));
+            return p;
+        };
+
+        // Reverse plays the sample from its end; Fixed Pitch ignores the key.
+        s = fresh();
+        s.reverse = true;
+        e.setSettings (s);
+        e.noteOn (60, 1.0f);
+        {
+            auto [rev, revR] = play (1000);
+            double off = 0;
+            for (size_t i = 0; i < rev.size(); ++i)
+                off = std::max (off, (double) std::abs (rev[i] - x[x.size() - 1 - i]));
+            check (off < 1.0e-5, "sampler: Reverse plays the sample backwards");
+        }
+        e.panic();
+        s = fresh();
+        s.fixedPitch = true;
+        e.setSettings (s);
+        e.noteOn (72, 1.0f);
+        {
+            auto [fixed, fixedR] = play (24000);
+            check (near (crossings (fixed, 0, 24000), 100, 2), "sampler: Fixed Pitch plays every key at the root's pitch");
+        }
+        e.panic();
+
+        // The key range leaves other keys silent.
+        s = fresh();
+        s.keyLow = 48;
+        s.keyHigh = 72;
+        e.setSettings (s);
+        e.noteOn (80, 1.0f);
+        play (512);
+        check (! e.isSounding (80), "sampler: keys outside the range do not play");
+        e.noteOn (60, 1.0f);
+        play (512);
+        check (e.isSounding (60), "sampler: keys inside the range play");
+        e.panic();
+
+        // Loop modes: Once goes round one time then ends; Until Release stops looping when let go;
+        // Alternate turns round at the loop's end.
+        s = fresh();
+        s.loop = true;
+        s.loopStart = 24000;
+        s.loopEnd = 48000;
+        s.loopMode = sampler::LoopMode::once;
+        e.setSettings (s);
+        e.noteOn (60, 1.0f);
+        {
+            auto [once, onceR] = play (96000);
+            check (peakOf (once, 60000, 70000) > 0.4 && peakOf (once, 73000, 96000) < 1.0e-6, "sampler: Loop Once goes round one time");
+        }
+        e.panic();
+        s.loopMode = sampler::LoopMode::untilRelease;
+        s.release = 5.0;
+        e.setSettings (s);
+        e.noteOn (60, 1.0f);
+        play (60000);
+        e.noteOff (60);
+        play (40000);
+        check (! e.isSounding (60), "sampler: Until Release plays on to the end once let go");
+        e.panic();
+        s.loopMode = sampler::LoopMode::continuous;
+        e.setSettings (s);
+        e.noteOn (60, 1.0f);
+        play (60000);
+        e.noteOff (60);
+        play (40000);
+        check (e.isSounding (60), "sampler: Continuous keeps looping through the release");
+        e.panic();
+        s.loopMode = sampler::LoopMode::alternate;
+        s.release = 0.01;
+        e.setSettings (s);
+        e.noteOn (60, 1.0f);
+        play (50000);
+        const auto there = e.playheads()[0];
+        play (2000);
+        check (there > 0.0 && e.playheads()[0] < there, "sampler: Alternate plays back from the loop's end");
+        e.panic();
+
+        // A loop crossfade still lands on the loop's start at the seam.
+        s.loopMode = sampler::LoopMode::continuous;
+        s.loopCrossfade = 0.05;
+        e.setSettings (s);
+        e.noteOn (60, 1.0f);
+        {
+            auto [xf, xfR] = play (60000);
+            check (peakOf (xf, 46000, 52000) > 0.4, "sampler: a crossfaded loop keeps its level over the seam");
+        }
+        e.panic();
+
+        // The filter: a low pass at 200 Hz takes 5 kHz away, a high pass takes 100 Hz away.
+        {
+            AudioData::Builder hb (1, rate);
+            std::vector<float> hi (48000);
+            for (size_t i = 0; i < hi.size(); ++i)
+                hi[i] = (float) (0.5 * std::sin (2.0 * M_PI * 5000.0 * (double) i / rate));
+            const float* hp[1] { hi.data() };
+            hb.append (hp, (int) hi.size());
+            sampler::Engine f;
+            f.prepare (rate);
+            f.setSample (sampler::makeSample (*hb.finish()));
+            auto t = fresh();
+            t.filter = true;
+            t.cutoff = 200.0;
+            t.resonance = 0.0;
+            t.steep = true;
+            f.setSettings (t);
+            f.noteOn (60, 1.0f);
+            std::vector<float> l (9600, 0.0f), r (9600, 0.0f);
+            f.render (l.data(), r.data(), 9600);
+            check (peakOf (l, 4800, 9600) < 0.5 * 0.002, "sampler: a 24 dB low pass at 200 Hz takes away 5 kHz");
+        }
+        s = fresh();
+        s.filter = true;
+        s.filterType = sampler::FilterType::highPass;
+        s.cutoff = 2000.0;
+        s.resonance = 0.0;
+        e.setSettings (s);
+        e.noteOn (60, 1.0f);
+        {
+            auto [high, highR] = play (9600);
+            check (peakOf (high, 4800, 9600) < 0.5 * 0.01, "sampler: a high pass at 2 kHz takes away 100 Hz");
+        }
+        e.panic();
+
+        // One voice: legato moves the note without starting again; letting go goes back to the held key.
+        s = fresh();
+        s.voices = 1;
+        s.legato = true;
+        e.setSettings (s);
+        e.noteOn (60, 1.0f);
+        play (4800);
+        e.noteOn (64, 1.0f);
+        play (512);
+        check (e.isSounding (64) && ! e.isSounding (60) && e.playheads()[0] > 5000.0, "sampler: legato changes pitch without restarting");
+        e.noteOff (64);
+        play (512);
+        check (e.isSounding (60), "sampler: letting go goes back to the key still held");
+        e.panic();
+
+        // Glide: an octave jump takes the glide time to arrive.
+        s = fresh();
+        s.voices = 1;
+        s.glide = 0.1;
+        e.setSettings (s);
+        e.noteOn (60, 1.0f);
+        play (480);
+        e.noteOn (72, 1.0f);
+        {
+            auto [gl, glR] = play (24000);
+            const auto early = crossings (gl, 0, 2400), late = crossings (gl, 12000, 14400);
+            check (early < late - 3 && near (late, 20, 2), "sampler: glide slides up to the new note");
+        }
+        e.panic();
+
+        // 1-Shot Gate fades out when let go; Trigger plays on.
+        s = fresh();
+        s.mode = sampler::Mode::oneShot;
+        s.gate = true;
+        s.fadeOut = 0.01;
+        e.setSettings (s);
+        e.noteOn (60, 1.0f);
+        play (4800);
+        e.noteOff (60);
+        play (2000);
+        check (! e.isSounding (60), "sampler: 1-Shot Gate stops when let go");
+        e.panic();
+
+        // Vintage: 12 bits, so every value is a step of 1/2048.
+        s = fresh();
+        s.quality = sampler::Quality::vintage;
+        e.setSettings (s);
+        e.noteOn (60, 1.0f);
+        {
+            auto [vin, vinR] = play (4800);
+            bool steps = true;
+            for (const auto v : vin)
+                steps = steps && std::abs (v * 2048.0f - std::round (v * 2048.0f)) < 1.0e-3f;
+            check (steps && peakOf (vin, 0, 4800) > 0.4, "sampler: Vintage plays at 12 bits");
+        }
+        e.panic();
     }
 
 
