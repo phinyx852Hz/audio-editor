@@ -50,6 +50,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/MidSide.cpp
     Source/sampler/SamplerEngine.cpp
     Source/sampler/SlicerEngine.cpp
+    Source/sampler/StepSequencer.cpp
     Source/mixer/MidiFile.cpp
     Source/mixer/Tunings.cpp
     Source/mixer/Atlas.cpp
@@ -420,6 +421,7 @@ if(PHI_BUILD_TESTS)
         Source/core/MidSide.cpp
         Source/sampler/SamplerEngine.cpp
         Source/sampler/SlicerEngine.cpp
+        Source/sampler/StepSequencer.cpp
         Source/mixer/MidiFile.cpp
         Source/mixer/Tunings.cpp
         Source/mixer/Atlas.cpp
