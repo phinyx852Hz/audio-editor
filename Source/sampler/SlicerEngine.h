@@ -9,10 +9,13 @@
 // Ableton's Drum Rack, written for PHI). Plain C++: pads may be hit from any thread,
 // render() runs on the audio thread. Sounds are given at the rate render() runs at.
 #include "SamplerEngine.h"
+#include "StepSequencer.h"
 
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <functional>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <utility>
@@ -26,6 +29,7 @@ namespace slicer
     constexpr int maxLayers = 4;
     constexpr int numColours = 16;
     constexpr int numChokes = 16;
+    static_assert (numLanes == numPads, "the step sequencer has a lane for each pad");
 
     enum class Play { oneShot, gate };   // gate: stops when the pad is let go
 
@@ -113,7 +117,7 @@ namespace slicer
         Kit kit() const;
         sampler::SamplePtr sample() const;
 
-        void hit (int pad, float velocity);   // velocity 0..1
+        void hit (int pad, float velocity, double semitones = 0.0);   // velocity 0..1
         void letGo (int pad);
         void noteOn (int note, float velocity);   // MIDI: every pad that answers the note
         void noteOff (int note);
@@ -125,17 +129,65 @@ namespace slicer
         // Positions of the playing voices: on the kit's sample (pad -1), or on a pad's own first layer.
         std::vector<double> playheads (int pad = -1) const;
 
+        // The step sequencer (StepSequencer.h), played inside render(), to the frame.
+        // Its own transport and tempo, or a clock to follow (the Mixer's): `clock` gives the
+        // beat and tempo where the block starts and whether it is running. Any thread.
+        std::unique_ptr<Song> song() const;   // a copy (on the heap: it is a megabyte)
+        void setSong (const Song&);
+        Pattern pattern (int index) const;
+        void setPattern (int index, const Pattern&);
+        void setLane (int pattern, int lane, const Lane&);
+        void setTempo (double bpm);
+        double tempo() const;
+        std::vector<int> chain() const;
+        bool chainOn() const;
+        void setBars (int pattern, int bars);
+        void setSwing (int pattern, int swing);
+        void setChain (const std::vector<int>& patterns, bool on);
+        void play();
+        void stop();               // its own transport; held notes let go
+        bool isPlaying() const { return running.load (std::memory_order_relaxed); }
+        void queuePattern (int index);   // plays next, from the next bar (at once when stopped)
+        int playingPattern() const { return patternNow.load (std::memory_order_relaxed); }
+        int queuedPattern() const { return patternQueued.load (std::memory_order_relaxed); }
+        double playingBeat() const { return beatNow.load (std::memory_order_relaxed); }   // from the pattern's start
+        // Recording: pads hit while the pattern plays land on its nearest steps.
+        void setRecording (bool on) { recording.store (on); }
+        bool isRecording() const { return recording.load(); }
+        unsigned recorded() const { return recordCount.load (std::memory_order_relaxed); }   // goes up as steps are recorded
+        using Clock = std::function<bool (double& beat, double& bpm)>;
+        void setClock (Clock);     // empty: its own transport
+        bool followsClock() const;
+
     private:
         struct Voice
         {
             bool active = false, held = false, releasing = false;
             int pad = 0, layer = 0;
             float velocity = 1.0f;
+            double pitch = 0.0;   // semitones, from the step that hit it
             double position = 0.0, level = 0.0, fastRelease = 0.0;
             unsigned age = 0;
         };
 
         void rebuildNotes();
+        void hitLocked (int pad, float velocity, double semitones, bool played = true);   // played: by hand, not the sequencer
+        void letGoLocked (int pad);
+        void renderVoices (float* left, float* right, int frames);
+        void sequence (float* left, float* right, int frames);
+        void schedule (double from, double to);   // the steps that start in [from, to)
+        void switchPattern (int index, double at);
+        void releaseSequenced();
+
+        // A hit or a let-go the sequencer has coming, at a beat.
+        struct Planned
+        {
+            double beat = 0.0;
+            int pad = 0;
+            float velocity = 0.0f;   // 0: let go
+            double pitch = 0.0;
+        };
+        static constexpr int maxPlanned = 2048;
 
         mutable std::mutex lock;
         double rate = 48000.0;
@@ -150,5 +202,21 @@ namespace slicer
         std::array<std::atomic<bool>, numPads> sounding {};
         std::array<std::atomic<double>, maxVoices> heads {};
         std::array<std::atomic<int>, maxVoices> headPads {};   // -1: on the kit's sample
+
+        std::unique_ptr<Song> steps = std::make_unique<Song>();
+        std::array<bool, numLanes> laneUsed {};   // the playing pattern's lanes with steps on
+        std::array<Planned, maxPlanned> planned {};
+        int plannedCount = 0;
+        Clock follow;
+        bool following = false;    // the clock ran last block
+        double clockWas = 0.0;     // the clock's last reading
+        double beat = 0.0;         // where the next block starts
+        double origin = 0.0;       // the beat the playing pattern started on
+        int playingIndex = 0, chainAt = 0;
+        uint32_t random = 0x12345678u;
+        std::atomic<bool> running { false }, recording { false };
+        std::atomic<int> patternNow { 0 }, patternQueued { -1 };
+        std::atomic<double> beatNow { 0.0 };
+        std::atomic<unsigned> recordCount { 0 };
     };
 }

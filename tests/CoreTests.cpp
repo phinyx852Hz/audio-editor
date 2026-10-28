@@ -2112,6 +2112,7 @@ namespace
         check (near (out[10], 0.25, 1.0e-5), "slicer: a pad plays a sound of its own");
         slicer::placeSound (kit, 100, 1, ownSound, "own.wav");
         e.setKit (kit);
+        e.panic();   // the first hit would still be fading out under the second
         e.hit (100, 1.0f);
         out = play (100);
         check (near (out[10], 0.5, 1.0e-5) && kit.pads[100].layerCount() == 2, "slicer: a pad's layers sound together");
@@ -2150,6 +2151,112 @@ namespace
         slicer::swapPads (kit, 5, 100);
         check (kit.pads[5].layers[0].sound == ownSound && kit.pads[100].isSlice() && kit.pads[5].receive == 70,
                "slicer: swapping pads swaps their sounds, not their notes");
+    }
+
+    void testStepSequencer()
+    {
+        // Where a lane's steps fall, and which step each plays.
+        slicer::Lane lane;
+        lane.steps = 3;
+        check (slicer::stepIndex (lane, 0) == 0 && slicer::stepIndex (lane, 3) == 0 && slicer::stepIndex (lane, 5) == 2, "steps: forward wraps at the lane's length");
+        lane.direction = slicer::Direction::backward;
+        check (slicer::stepIndex (lane, 0) == 2 && slicer::stepIndex (lane, 2) == 0, "steps: backward");
+        lane.direction = slicer::Direction::alternate;
+        check (slicer::stepIndex (lane, 1) == 1 && slicer::stepIndex (lane, 2) == 2 && slicer::stepIndex (lane, 3) == 1 && slicer::stepIndex (lane, 4) == 0,
+               "steps: alternate turns at each end");
+        lane.direction = slicer::Direction::random;
+        bool same = true, inside = true;
+        for (int k = 0; k < 50; ++k)
+        {
+            same = same && slicer::stepIndex (lane, k) == slicer::stepIndex (lane, k);
+            inside = inside && slicer::stepIndex (lane, k) >= 0 && slicer::stepIndex (lane, k) < 3;
+        }
+        check (same && inside, "steps: random draws the same step each time through");
+        slicer::Pattern swung;
+        swung.swing = 100;
+        slicer::Lane even;
+        check (near (slicer::stepTime (even, swung, 1), 0.25 + 0.125, 1.0e-12) && near (slicer::stepTime (even, swung, 2), 0.5, 1.0e-12),
+               "steps: swing moves every other step");
+
+        // A pattern played to the frame: 1/16 at 120 BPM is 6000 frames at 48 kHz.
+        const double rate = 48000.0;
+        AudioData::Builder b (1, rate);
+        std::vector<float> x (48000);
+        for (size_t i = 0; i < x.size(); ++i)
+            x[i] = 0.1f + (float) i / 48000.0f;
+        const float* p[1] { x.data() };
+        b.append (p, (int) x.size());
+        slicer::Engine e;
+        e.prepare (rate);
+        e.setSample (sampler::makeSample (*b.finish()));
+        slicer::Kit kit;
+        kit.velocity = 0.0;
+        slicer::assign (kit, { { 0, 3000 }, { 10000, 13000 } });
+        for (auto& pad : kit.pads)
+            pad.attack = 0.0;
+        e.setKit (kit);
+        slicer::Pattern pattern;
+        pattern.lanes[0].step[4].on = true;    // beat 1
+        pattern.lanes[1].step[2].on = true;    // beat 0.5, twice
+        pattern.lanes[1].step[2].repeats = 2;
+        e.setPattern (0, pattern);
+        e.play();
+        std::vector<float> out (30000, 0.0f), r (30000, 0.0f);
+        for (int at = 0; at < 30000; at += 256)
+        {
+            const auto n = std::min (256, 30000 - at);
+            e.render (out.data() + at, r.data() + at, n);
+        }
+        check (out[23990] == 0.0f && near (out[24000 + 10], x[10], 1.0e-5), "steps: a step plays on its frame");
+        check (near (out[12000 + 5], x[10005], 1.0e-5) && near (out[15000 + 5], x[10005], 1.0e-5), "steps: repeats hit within the step");
+        check (e.playingBeat() > 1.2 && e.isPlaying(), "steps: the transport runs");
+        e.stop();
+        check (! e.isPlaying(), "steps: stop");
+
+        // Chance 0 never plays; a queued pattern starts on the next bar.
+        pattern.lanes[0].step[4].chance = 0;
+        e.setPattern (0, pattern);
+        slicer::Pattern other;
+        other.lanes[0].step[0].on = true;
+        e.setPattern (1, other);
+        e.panic();
+        e.play();
+        std::vector<float> l2 (48000 * 3, 0.0f), r2 (l2.size(), 0.0f);
+        bool queued = false;
+        for (int at = 0; at < (int) l2.size(); at += 512)
+        {
+            if (at >= 30000 && ! queued)
+            {
+                e.queuePattern (1);
+                queued = true;
+            }
+            e.render (l2.data() + at, r2.data() + at, std::min (512, (int) l2.size() - at));
+        }
+        check (l2[24000 + 10] == 0.0f, "steps: chance 0 never plays");
+        check (e.playingPattern() == 1 && l2[96000 - 2] == 0.0f && near (l2[96000 + 10], x[10], 1.0e-5), "steps: a queued pattern starts on the bar line");
+        e.stop();
+
+        // Following a clock: it plays only while the clock runs, from the clock's beat.
+        double clockBeat = 0.0;
+        bool clockRuns = false;
+        e.setClock ([&] (double& at, double& bpm) { at = clockBeat; bpm = 120.0; return clockRuns; });
+        e.queuePattern (0);
+        pattern.lanes[0].step[4].chance = 100;
+        e.setPattern (0, pattern);
+        e.panic();
+        std::vector<float> l3 (512, 0.0f), r3 (512, 0.0f);
+        clockBeat = 0.99;
+        e.render (l3.data(), r3.data(), 512);
+        check (! e.isPlaying(), "steps: following, still while the clock is stopped");
+        clockRuns = true;
+        e.render (l3.data(), r3.data(), 512);
+        check (e.isPlaying() && near (l3[240 + 10], x[10], 1.0e-5), "steps: following, plays from the clock's beat");
+        e.render (l3.data(), r3.data(), 512);   // the clock not read again yet: plays on
+        check (near (e.playingBeat(), 0.99 + 1024.0 / 24000.0, 1.0e-9), "steps: following, a clock that has not moved yet is no jump");
+        clockBeat = 3.0;
+        e.render (l3.data(), r3.data(), 512);
+        check (near (e.playingBeat(), 3.0 + 512.0 / 24000.0, 1.0e-9), "steps: following, the clock moved");
+        e.setClock ({});
     }
 
     void testCurvedFade()
@@ -7922,6 +8029,8 @@ int main()
     testCurvedFade();
     testMidSide();
     testSampler();
+    testSlicer();
+    testStepSequencer();
     testMidiFile();
     testMidiEdits();
     testMixer();

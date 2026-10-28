@@ -37,6 +37,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <tuple>
 
 namespace
 {
@@ -656,6 +657,18 @@ SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
     bankRow->addWidget (pageLabel);
     bankRow->addWidget (pageBox);
     bankRow->addStretch (1);
+    pageButtons = new QButtonGroup (this);
+    for (const auto& [id, text, tip] : { std::tuple { 0, tr ("Pads"), tr ("The pads and the chosen pad's settings") },
+                                         std::tuple { 1, tr ("Steps"), tr ("The step sequencer: patterns played on the bank's pads") } })
+    {
+        auto* button = new QPushButton (text, this);
+        button->setCheckable (true);
+        button->setFocusPolicy (Qt::NoFocus);
+        button->setToolTip (tip);
+        pageButtons->addButton (button, id);
+        bankRow->addWidget (button);
+    }
+    pageButtons->button (0)->setChecked (true);
 
     // The chosen pad's settings, and the kit's.
     auto real = [this] (double lo, double hi, double step, int decimals, const QString& suffix)
@@ -785,7 +798,9 @@ SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
     layerForm->addRow (swapRow);
     editArea->setVisible (false);
 
-    auto* middle = new QHBoxLayout;
+    auto* padsPage = new QWidget (this);
+    auto* middle = new QHBoxLayout (padsPage);
+    middle->setContentsMargins (0, 0, 0, 0);
     middle->addWidget (pads, 1);
     middle->addSpacing (16);
     middle->addLayout (padForm);
@@ -796,13 +811,27 @@ SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
     midiStatus->setAlignment (Qt::AlignLeft | Qt::AlignVCenter);
     midiStatus->setWordWrap (true);
 
+    // The pads, or the step sequencer playing them.
+    PadLooks looks;
+    looks.name = [this] (int pad)
+    {
+        const auto& p = kit.pads[(size_t) pad];
+        const auto sound = soundName (p);
+        return padName (pad) + QLatin1Char (' ') + (sound.isEmpty() ? noteName (kit.receiveNote (pad)) : sound);
+    };
+    looks.colour = [this] (int pad) { return padColour (kit.pads[(size_t) pad].colour); };
+    stepsView = new StepSequencerView (engine, std::move (looks), this);
+    pages = new QStackedWidget (this);
+    pages->addWidget (padsPage);
+    pages->addWidget (stepsView);
+
     auto* layout = new QVBoxLayout (this);
     layout->addWidget (title);
     layout->addLayout (top);
     layout->addWidget (view, 1);
     layout->addLayout (method);
     layout->addLayout (bankRow);
-    layout->addLayout (middle, 2);
+    layout->addWidget (pages, 2);
     layout->addWidget (status);
     layout->addWidget (midiStatus);
 
@@ -906,6 +935,9 @@ SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
     connect (keepSwap, &QPushButton::clicked, this, [this] { endHotSwap (true); });
     connect (undoSwap, &QPushButton::clicked, this, [this] { endHotSwap (false); });
 
+    connect (pageButtons, &QButtonGroup::idClicked, this, &SlicerWindow::showPage);
+    connect (stepsView, &StepSequencerView::padChosen, this, [this] (int pad) { select (pad); });
+
     // Pads light as they sound; a pad hit from MIDI becomes the one being edited.
     redraw.setInterval (33);
     connect (&redraw, &QTimer::timeout, this, [this]
@@ -932,6 +964,7 @@ SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
     connect (qApp, &QApplication::focusChanged, this, &SlicerWindow::focusMoved);
     setKit (kit);
     select (0);
+    showPage (std::clamp (stored.value (QStringLiteral ("slicer/page"), 0).toInt(), 0, 1));
     showStatus();
     adjustSize();
     pads->setFocus();
@@ -1104,6 +1137,7 @@ void SlicerWindow::setKit (const slicer::Kit& k)
     engine.setKit (kit);
     view->setKit (kit);
     pads->setKit (kit);
+    stepsView->looksChanged();
     updating = true;
     layoutBox->setCurrentIndex (kit.layout == slicer::Layout::chromatic ? 1 : 0);
     pageBox->setCurrentIndex (kit.pushPage);
@@ -1123,6 +1157,7 @@ void SlicerWindow::select (int pad)
     setBank (selected / slicer::padsPerBank);
     view->setSelected (selected);
     pads->setSelected (selected);
+    stepsView->setSelected (selected);
     padToControls();
 }
 
@@ -1131,7 +1166,20 @@ void SlicerWindow::setBank (int b)
     bank = std::clamp (b, 0, slicer::numBanks - 1);
     banks->button (bank)->setChecked (true);
     pads->setBank (bank);
+    stepsView->setBank (bank);
     showStatus();
+}
+
+void SlicerWindow::showPage (int page)
+{
+    pageButtons->button (page)->setChecked (true);
+    pages->setCurrentIndex (page);
+    appSettings().setValue (QStringLiteral ("slicer/page"), page);
+}
+
+void SlicerWindow::setMixerClock (std::function<slicer::Engine::Clock()> make)
+{
+    stepsView->setMixerClock (std::move (make));
 }
 
 void SlicerWindow::padToControls()
@@ -1421,7 +1469,8 @@ void SlicerWindow::saveKit()
         file += QStringLiteral (".phikit");
     stored.setValue (QStringLiteral ("slicer/kitFolder"), QFileInfo (file).absolutePath());
     QString error;
-    if (! slicerkit::saveKitFile (file, kit, sample, soundRate(), error))
+    const auto song = engine.song();
+    if (! slicerkit::saveKitFile (file, kit, sample, soundRate(), error, song.get()))
         status->setText (tr ("The kit could not be saved: %1").arg (error));
     else
         status->setText (error.isEmpty() ? tr ("Saved %1").arg (QFileInfo (file).fileName())
@@ -1445,6 +1494,11 @@ void SlicerWindow::loadKit()
     }
     engine.panic();
     kit = loaded.kit;
+    if (loaded.song != nullptr)
+    {
+        engine.setSong (*loaded.song);
+        stepsView->refresh();
+    }
     if (loaded.sample != nullptr)
     {
         followBox->setChecked (false);   // the kit's sample came from no tab
@@ -1474,6 +1528,11 @@ void SlicerWindow::keyPressEvent (QKeyEvent* e)
     }
     if (e->isAutoRepeat())
         return;
+    if (e->key() == Qt::Key_Space && pages->currentIndex() == 1)
+    {
+        stepsView->playOrStop();
+        return;
+    }
     const auto code = scanCodeOf (e);
     for (int b = 0; b < slicer::numBanks; ++b)
         if (code == bankKeys[b])
