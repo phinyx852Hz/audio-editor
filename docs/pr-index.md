@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**76 pull requests:** 74 merged, 2 open.
+**76 pull requests:** 75 merged, 1 open.
 
 ## Contents
 
@@ -37,7 +37,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#17](https://github.com/phinyx852Hz/audio-editor/pull/17) | Quantize panel: hitpoints, grooves and more warp algorithms | merged | Warp menu, Quantize Panel (Shift+Q) | `Source/ui/QuantizePanel.cpp`<br>`Source/ui/QuantizeSection.cpp`<br>`Source/core/Quantize.cpp` |
 | [#44](https://github.com/phinyx852Hz/audio-editor/pull/44) | Add Paulstretch extreme stretching (Ambient mode, Extreme Stretch) | merged | Warp menu, Extreme Stretch (Ctrl+Shift+X) | `Source/core/Paulstretch.cpp`<br>`Source/ui/WarpSection.cpp` |
 | [#68](https://github.com/phinyx852Hz/audio-editor/pull/68) | MIDI editor: a piano roll in 12-TET or any PHI tuning, with Scala files, restyle and MPE | merged |  | `Source/ui/MidiEditor.cpp`<br>`Source/mixer/NoteEditor.cpp`<br>`Source/core/Scala.cpp` |
-| [#76](https://github.com/phinyx852Hz/audio-editor/pull/76) | Editor track without the timeline row; delete/add mixer tracks; Pre-Master bus | open |  | `Source/ui/MixerWindow.cpp`<br>`Source/mixer/MixerEngine.cpp`<br>`Source/mixer/MixerEngine.h` |
+| [#76](https://github.com/phinyx852Hz/audio-editor/pull/76) | Editor track without the timeline row; delete/add mixer tracks; Pre-Master bus; spatial mixing | open |  | `Source/ui/MixerWindow.cpp`<br>`Source/ui/MixerSpatial.cpp`<br>`Source/mixer/MixerEngine.cpp` |
 
 ### Analysis and meters
 
@@ -49,7 +49,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#13](https://github.com/phinyx852Hz/audio-editor/pull/13) | Ambisonics visualizer: speaker layouts up to 9.1.6 and 7.1.8, and a Channels view | merged | Analysis Meters, Ambisonics card, Options | `Source/ui/AmbiVisualizer.cpp` |
 | [#24](https://github.com/phinyx852Hz/audio-editor/pull/24) | Add a CPU meter to the status bar | merged | Status bar; View menu, CPU Meter | `Source/ui/MainWindow.cpp`<br>`Source/engine/AudioEngine.cpp` |
 | [#48](https://github.com/phinyx852Hz/audio-editor/pull/48) | Add the Plugin Analyzer, Forensic Φ and the Aliasing scope | merged | Analyze menu, Plugin Analyzer | `Source/core/PluginMeasure.cpp`<br>`Source/core/PhiForensics.cpp`<br>`Source/ui/PluginAnalyzer.cpp` |
-| [#75](https://github.com/phinyx852Hz/audio-editor/pull/75) | Spectrum: 20 FFT windows, Welch averaging, zero padding, multitaper, Selector hold colours | open | 1. Windows (Options > Window): | `Source/core/Windows.cpp`<br>`Source/ui/AnalysisWindow.cpp`<br>`tests/CoreTests.cpp` |
+| [#75](https://github.com/phinyx852Hz/audio-editor/pull/75) | Spectrum: 20 FFT windows, Welch averaging, zero padding, multitaper, Selector hold colours | merged | 1. Windows (Options > Window): | `Source/core/Windows.cpp`<br>`Source/ui/AnalysisWindow.cpp`<br>`tests/CoreTests.cpp` |
 
 ### Mastering
 
@@ -254,5 +254,5 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#72](https://github.com/phinyx852Hz/audio-editor/pull/72) | MIDI inputs: remember them by name, and open them when plugged in | PHI detected the Novation keyboards, the Push 2 and the Launchpad Mini, but the keyboards played no synths. *(auto)* | merged | 2026-10-27 | Not yet sorted |
 | [#73](https://github.com/phinyx852Hz/audio-editor/pull/73) | Mode menu: modes and tunings by region, tradition and person | This puts the owner's Mode Research (2026-10-26) into PHI's one shared list of systems, mixer::tuningSystems(). *(auto)* | merged | 2026-10-27 | Modes, tunings and composition |
 | [#74](https://github.com/phinyx852Hz/audio-editor/pull/74) | Reorganize the menu bar: four menus become submenus, rest A to Z | Album is now a submenu and the first item in Master. *(auto)* | merged | 2026-10-27 | Interface and branding |
-| [#75](https://github.com/phinyx852Hz/audio-editor/pull/75) | Spectrum: 20 FFT windows, Welch averaging, zero padding, multitaper, Selector hold colours | Changes to the Analysis Meters' Spectrum card, based on the FFT size and windowing reference document. *(auto)* | open | 2026-10-27 | Analysis and meters |
-| [#76](https://github.com/phinyx852Hz/audio-editor/pull/76) | Editor track without the timeline row; delete/add mixer tracks; Pre-Master bus | Editor track (Shift+F4): the user asked to drop the middle section and have the MIDI editor below act as the recorder. *(auto)* | open | 2026-10-27 | Editing and warping |
+| [#75](https://github.com/phinyx852Hz/audio-editor/pull/75) | Spectrum: 20 FFT windows, Welch averaging, zero padding, multitaper, Selector hold colours | Changes to the Analysis Meters' Spectrum card, based on the FFT size and windowing reference document. *(auto)* | merged | 2026-10-28 | Analysis and meters |
+| [#76](https://github.com/phinyx852Hz/audio-editor/pull/76) | Editor track without the timeline row; delete/add mixer tracks; Pre-Master bus; spatial mixing | Editor track (Shift+F4): the user asked to drop the middle section and have the MIDI editor below act as the recorder. *(auto)* | open | 2026-10-27 | Editing and warping |
