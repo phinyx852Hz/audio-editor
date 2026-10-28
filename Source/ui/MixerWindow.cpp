@@ -16,6 +16,7 @@
 #include "../core/Phi.h"
 #include "../mixer/Counterpoint.h"
 #include "MidiEditor.h"
+#include "MixerSpatial.h"
 #include "../engine/AudioCapture.h"
 #include "../engine/AudioEngine.h"
 
@@ -259,6 +260,23 @@ namespace
         const auto amount = (int) std::lround (std::abs (pan) * 100.0f);
         return amount == 0 ? QStringLiteral ("C") : QString::number (amount) + (pan < 0 ? QStringLiteral ("L") : QStringLiteral ("R"));
     }
+
+    // A 3D panner (Spatial mode) in a project, and back.
+    QJsonObject placeJson (const mixer::Panner3d& p)
+    {
+        return { { "azimuth", p.azimuth.load() }, { "elevation", p.elevation.load() }, { "spread", p.spread.load() }, { "distance", p.distance.load() } };
+    }
+
+    void loadPlace (mixer::Panner3d& p, const QJsonValue& v, float spread)
+    {
+        const auto o = v.toObject();
+        p.azimuth = (float) std::clamp (o.value ("azimuth").toDouble(), -180.0, 180.0);
+        p.elevation = (float) std::clamp (o.value ("elevation").toDouble(), -90.0, 90.0);
+        p.spread = (float) std::clamp (o.value ("spread").toDouble (spread), 0.0, 360.0);
+        p.distance = (float) std::clamp (o.value ("distance").toDouble (1.0), 0.0, (double) mixer::spatial::maxDistance);
+    }
+
+    QString degreeText (float degrees) { return QStringLiteral ("%1°").arg (std::lround (degrees)); }
 
     QString hzText (float hz)
     {
@@ -756,6 +774,53 @@ public:
                                                 "A track of mono files has none"));
         widthLabel = new QLabel (this);
         widthPart = knobColumn (widthDial, widthLabel, MixerWindow::tr ("Width"));
+        // Spatial mode's 3D panner (MixerSpatial.cpp), in place of pan and width: the strip has
+        // the azimuth (and the distance when it is not compact), the Inspector all four.
+        auto spaceDial = [this] (int minimum, int maximum, int origin, const QString& tip)
+        {
+            auto* dial = new Potentiometer (this);
+            dial->setRange (minimum, maximum);
+            dial->setFixedSize (knob, knob);
+            dial->setFocusPolicy (Qt::NoFocus);
+            static_cast<Potentiometer*> (dial)->setOrigin (origin);
+            dial->setToolTip (tip);
+            dial->installEventFilter (this);
+            return dial;
+        };
+        azDial = spaceDial (-180, 180, 0, MixerWindow::tr ("Azimuth: where it is around you, 0° ahead, 90° to the right, ±180° behind (double-click: ahead)"));
+        elDial = spaceDial (-90, 90, 0, MixerWindow::tr ("Elevation: 90° overhead, -90° below (double-click: level)"));
+        spreadDial = spaceDial (0, 360, 0, MixerWindow::tr ("Spread: how far apart its left and right are, 0° (a point) to 360° (all around; double-click: 60°)"));
+        distDial = spaceDial (0, 100, 10, MixerWindow::tr ("Distance: 1 is the speakers' ring; nearer fills the room around you, farther is quieter, out to 10 "
+                                                           "(double-click: 1)"));
+        azLabel = new QLabel (this);
+        elLabel = new QLabel (this);
+        spreadLabel = new QLabel (this);
+        distLabel = new QLabel (this);
+        azPart = knobColumn (azDial, azLabel, MixerWindow::tr ("Az"));
+        distPart = knobColumn (distDial, distLabel, MixerWindow::tr ("Dist"));
+        spaceExtra = new QWidget (this);
+        {
+            auto* row = new QHBoxLayout (spaceExtra);
+            row->setContentsMargins (0, 0, 0, 0);
+            row->setSpacing (2);
+            row->addWidget (knobColumn (elDial, elLabel, MixerWindow::tr ("Elev")));
+            row->addWidget (knobColumn (spreadDial, spreadLabel, MixerWindow::tr ("Spread")));
+        }
+        const auto placeBy = [this] (QDial* dial, std::function<void (mixer::Panner3d&, int)> set)
+        {
+            QObject::connect (dial, &QDial::valueChanged, this, [this, set] (int v)
+            {
+                if (updating)
+                    return;
+                window.forLinked (index, [&set, v] (mixer::Strip& x, bool) { set (x.placed, v); });
+                window.spatialMoved();
+                window.changed();
+            });
+        };
+        placeBy (azDial, [] (mixer::Panner3d& p, int v) { p.azimuth = (float) v; });
+        placeBy (elDial, [] (mixer::Panner3d& p, int v) { p.elevation = (float) v; });
+        placeBy (spreadDial, [] (mixer::Panner3d& p, int v) { p.spread = (float) v; });
+        placeBy (distDial, [] (mixer::Panner3d& p, int v) { p.distance = (float) v / 10.0f; });
         auto* sendRow = new QHBoxLayout;
         sendRow->setSpacing (2);
         for (int r = 0; r < mixer::numReturns; ++r)
@@ -856,7 +921,10 @@ public:
         panRow->addWidget (trimPart);
         panRow->addWidget (panColumnPart);
         panRow->addWidget (widthPart);
+        panRow->addWidget (azPart);
+        panRow->addWidget (distPart);
         sectionLayout->addLayout (panRow);
+        sectionLayout->addWidget (spaceExtra);
 
         muteButton = smallButton (MixerWindow::tr ("M"), MixerWindow::tr ("Mute (M)"), true);
         soloButton = smallButton (MixerWindow::tr ("S"), MixerWindow::tr ("Solo (S): soloed tracks are heard, the others are not"), true);
@@ -1101,6 +1169,7 @@ public:
     {
         const auto shown = window.stripSections;
         const auto mode = (mixer::TrackMode) strip().mode.load();
+        const bool spatial = window.spatialMode();
         if (inspecting)
         {
             // Everything the strips leave out; the Strips menu picks the sections.
@@ -1117,7 +1186,10 @@ public:
             panPart->setVisible ((shown & panSection) != 0);
             trimPart->setVisible (true);   // the pre-gain, in both places (owner, 2026-10-28)
             panColumnPart->setVisible (false);
-            widthPart->setVisible (true);
+            widthPart->setVisible (! spatial);
+            azPart->setVisible (spatial);
+            distPart->setVisible (spatial);
+            spaceExtra->setVisible (spatial);
             refreshInserts();
             setMinimumWidth (180);
             setMaximumWidth (QWIDGETSIZE_MAX);
@@ -1135,7 +1207,11 @@ public:
         addInsertButton->setVisible (! compact);
         sendPart->setVisible (compact || (shown & sendSection) != 0);
         panPart->setVisible ((shown & panSection) != 0 || compact);
-        widthPart->setVisible (! compact);
+        panColumnPart->setVisible (! spatial);
+        widthPart->setVisible (! compact && ! spatial);
+        azPart->setVisible (spatial);
+        distPart->setVisible (spatial && ! compact);
+        spaceExtra->setVisible (false);
         trimPart->setVisible (true);
         fader->setMinimumHeight (compact ? compactFader : 0);
         refreshInserts();
@@ -1369,6 +1445,26 @@ public:
         fader->setValue (faderPosition (s.faderDb.load()));
         updating = false;
         showValues();
+        showPlace();
+    }
+
+    // The 3D panner's dials (Spatial mode); a track sent to the Pre-Master is placed with it.
+    void showPlace()
+    {
+        updating = true;
+        const auto& p = strip().placed;
+        azDial->setValue ((int) std::lround (p.azimuth.load()));
+        elDial->setValue ((int) std::lround (p.elevation.load()));
+        spreadDial->setValue ((int) std::lround (p.spread.load()));
+        distDial->setValue ((int) std::lround (p.distance.load() * 10.0f));
+        azLabel->setText (degreeText (p.azimuth.load()));
+        elLabel->setText (degreeText (p.elevation.load()));
+        spreadLabel->setText (degreeText (p.spread.load()));
+        distLabel->setText (QString::number (p.distance.load(), 'f', 1));
+        const bool own = ! strip().toBus.load();
+        for (QWidget* x : std::initializer_list<QWidget*> { azDial, elDial, spreadDial, distDial, azLabel, elLabel, spreadLabel, distLabel })
+            x->setEnabled (own);
+        updating = false;
     }
 
     void showValues()
@@ -1458,7 +1554,13 @@ protected:
     {
         if (e->type() == QEvent::MouseButtonDblClick)
         {
-            if (o == trimDial)
+            if (o == azDial || o == elDial)
+                static_cast<QDial*> (o)->setValue (0);
+            else if (o == spreadDial)
+                spreadDial->setValue ((int) mixer::Panner3d::defaultSpread);
+            else if (o == distDial)
+                distDial->setValue (10);
+            else if (o == trimDial)
                 trimDial->setValue (0);
             else if (o == panDial)
                 panDial->setValue (0);
@@ -1605,6 +1707,17 @@ public:
     QListWidget* insertList;
     QDial* widthDial;
     QLabel* widthLabel;
+    QDial* azDial;
+    QDial* elDial;
+    QDial* spreadDial;
+    QDial* distDial;
+    QLabel* azLabel;
+    QLabel* elLabel;
+    QLabel* spreadLabel;
+    QLabel* distLabel;
+    QWidget* azPart;
+    QWidget* distPart;
+    QWidget* spaceExtra;   // the elevation and spread, in the Inspector
     QFrame* colourBar;
     QFrame* nameBox;
     QWidget* modePart;
@@ -4472,6 +4585,17 @@ public:
         panLabel = new QLabel (this);
         layout->addWidget (panDial, 0, Qt::AlignHCenter);
         layout->addWidget (panLabel, 0, Qt::AlignHCenter);
+        // In Spatial mode, where it is around you (its elevation, spread and distance in the room view).
+        azDial = new Potentiometer (this);
+        azDial->setRange (-180, 180);
+        azDial->setFixedSize (knob, knob);
+        azDial->setFocusPolicy (Qt::NoFocus);
+        static_cast<Potentiometer*> (azDial)->setOrigin (0);
+        azDial->setToolTip (MixerWindow::tr ("The return's azimuth: 0° ahead, 90° to the right (double-click: ahead). Its elevation, spread "
+                                             "and distance are set in the room view (Spatial...)"));
+        azLabel = new QLabel (this);
+        layout->addWidget (azDial, 0, Qt::AlignHCenter);
+        layout->addWidget (azLabel, 0, Qt::AlignHCenter);
         muteButton = new QPushButton (MixerWindow::tr ("M"), this);
         muteButton->setCheckable (true);
         muteButton->setFocusPolicy (Qt::NoFocus);
@@ -4513,9 +4637,36 @@ public:
             window.changed();
         });
         panDial->installEventFilter (this);
+        QObject::connect (azDial, &QDial::valueChanged, this, [this] (int v)
+        {
+            if (updating)
+                return;
+            controls().placed.azimuth = (float) v;
+            window.spatialMoved();
+            window.changed();
+        });
+        azDial->installEventFilter (this);
     }
 
     mixer::ReturnStrip& controls() { return window.engine.returnStrip (index); }
+
+    void applyLayout()
+    {
+        const bool spatial = window.spatialMode();
+        panDial->setVisible (! spatial);
+        panLabel->setVisible (! spatial);
+        azDial->setVisible (spatial);
+        azLabel->setVisible (spatial);
+    }
+
+    void showPlace()
+    {
+        updating = true;
+        const auto az = controls().placed.azimuth.load();
+        azDial->setValue ((int) std::lround (az));
+        azLabel->setText (degreeText (az));
+        updating = false;
+    }
 
     void refresh()
     {
@@ -4529,6 +4680,7 @@ public:
         fader->setValue (faderPosition (c.faderDb.load()));
         value->setText (dbText (c.faderDb.load()));
         updating = false;
+        showPlace();
     }
 
     void tick (double seconds) { meter->setLevels (window.engine.takeMeter (mixer::returnIndex + index), seconds); }
@@ -4536,9 +4688,9 @@ public:
 protected:
     bool eventFilter (QObject* o, QEvent* e) override
     {
-        if (o == panDial && e->type() == QEvent::MouseButtonDblClick)
+        if ((o == panDial || o == azDial) && e->type() == QEvent::MouseButtonDblClick)
         {
-            panDial->setValue (0);
+            static_cast<QDial*> (o)->setValue (0);
             return true;
         }
         return QFrame::eventFilter (o, e);
@@ -4551,6 +4703,8 @@ private:
     QPushButton* effectButton;
     QDial* panDial;
     QLabel* panLabel;
+    QDial* azDial;
+    QLabel* azLabel;
     QPushButton* muteButton;
     QSlider* fader;
     LevelMeter* meter;
@@ -4634,10 +4788,24 @@ public:
         widthLabel = new QLabel (this);
         auto* knobRow = new QHBoxLayout;
         knobRow->setSpacing (0);
+        // In Spatial mode the 3D panner's azimuth and distance in place of pan and width (all four in the room view).
+        azDial = pot (-180, 180, MixerWindow::tr ("The Pre-Master's azimuth: 0° ahead, 90° to the right (double-click: ahead); "
+                                                  "the tracks sent to it are placed with it"));
+        static_cast<Potentiometer*> (azDial)->setOrigin (0);
+        distDial = pot (0, 100, MixerWindow::tr ("The Pre-Master's distance: 1 is the speakers' ring, out to 10 (double-click: 1)"));
+        static_cast<Potentiometer*> (distDial)->setOrigin (10);
+        azLabel = new QLabel (this);
+        distLabel = new QLabel (this);
         knobRow->addWidget (column (trimDial, trimLabel, MixerWindow::tr ("Trim")));
-        knobRow->addWidget (column (panDial, panLabel, MixerWindow::tr ("Pan")));
-        knobRow->addWidget (column (widthDial, widthLabel, MixerWindow::tr ("Width")));
+        panColumn = column (panDial, panLabel, MixerWindow::tr ("Pan"));
+        widthColumn = column (widthDial, widthLabel, MixerWindow::tr ("Width"));
+        azColumn = column (azDial, azLabel, MixerWindow::tr ("Az"));
+        distColumn = column (distDial, distLabel, MixerWindow::tr ("Dist"));
+        for (auto* part : { panColumn, widthColumn, azColumn, distColumn })
+            knobRow->addWidget (part);
         layout->addLayout (knobRow);
+        QObject::connect (azDial, &QDial::valueChanged, this, [this] (int v) { place ([v] (mixer::Panner3d& p) { p.azimuth = (float) v; }); });
+        QObject::connect (distDial, &QDial::valueChanged, this, [this] (int v) { place ([v] (mixer::Panner3d& p) { p.distance = (float) v / 10.0f; }); });
 
         muteButton = new QPushButton (MixerWindow::tr ("M"), this);
         muteButton->setCheckable (true);
@@ -4693,6 +4861,26 @@ public:
 
     mixer::BusStrip& bus() { return window.engine.busStrip(); }
 
+    void applyLayout()
+    {
+        const bool spatial = window.spatialMode();
+        panColumn->setVisible (! spatial);
+        widthColumn->setVisible (! spatial);
+        azColumn->setVisible (spatial);
+        distColumn->setVisible (spatial);
+    }
+
+    void showPlace()
+    {
+        updating = true;
+        const auto& p = bus().placed;
+        azDial->setValue ((int) std::lround (p.azimuth.load()));
+        distDial->setValue ((int) std::lround (p.distance.load() * 10.0f));
+        azLabel->setText (degreeText (p.azimuth.load()));
+        distLabel->setText (QString::number (p.distance.load(), 'f', 1));
+        updating = false;
+    }
+
     void refresh()
     {
         updating = true;
@@ -4712,6 +4900,7 @@ public:
             if (window.engine.strip (i).toBus.load())
                 from << QString::number (i + 1);
         sources->setText (from.isEmpty() ? MixerWindow::tr ("No tracks") : MixerWindow::tr ("From %1").arg (from.join (QStringLiteral (", "))));
+        showPlace();
     }
 
     void tick (double seconds) { meter->setLevels (window.engine.takeMeter (mixer::busIndex), seconds); }
@@ -4724,6 +4913,8 @@ protected:
             if (o == trimDial) { trimDial->setValue (0); return true; }
             if (o == panDial) { panDial->setValue (0); return true; }
             if (o == widthDial) { widthDial->setValue (100); return true; }
+            if (o == azDial) { azDial->setValue (0); return true; }
+            if (o == distDial) { distDial->setValue (10); return true; }
             for (auto* dial : sendDials)
                 if (o == dial) { dial->setValue (0); return true; }
         }
@@ -4762,6 +4953,15 @@ private:
         v->addWidget (dial, 0, Qt::AlignHCenter);
         v->addWidget (label, 0, Qt::AlignHCenter);
         return part;
+    }
+
+    void place (const std::function<void (mixer::Panner3d&)>& change)
+    {
+        if (updating)
+            return;
+        change (bus().placed);
+        window.spatialMoved();
+        window.changed();
     }
 
     void set (const std::function<void (mixer::BusStrip&)>& change)
@@ -4824,6 +5024,14 @@ private:
     std::array<QLabel*, mixer::numReturns> sendLabels {};
     QDial* trimDial;
     QDial* panDial;
+    QDial* azDial;
+    QDial* distDial;
+    QLabel* azLabel;
+    QLabel* distLabel;
+    QWidget* panColumn;
+    QWidget* widthColumn;
+    QWidget* azColumn;
+    QWidget* distColumn;
     QDial* widthDial;
     QLabel* trimLabel;
     QLabel* panLabel;
@@ -6298,6 +6506,10 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     bypassInsertsButton->setCheckable (true);
     bypassSendsButton = button (tr ("Bypass Sends"), tr ("Leave out every send, to hear the mix without the returns"));
     bypassSendsButton->setCheckable (true);
+    // Spatial mixing (owner, 2026-10-28): lit while the project is in Spatial mode.
+    spatialButton = button (tr ("Spatial..."), tr ("Spatial mixing: each track placed around you by a 3D panner, heard binaurally on headphones "
+                                                  "and on your speaker array at once. Opens its settings and the room view"));
+    spatialButton->setCheckable (true);
     auto* addButton = button (tr ("+ Track"), tr ("Add a track after the selected one, up to 8 (Ctrl+T)"));
     auto* removeButton = button (tr ("− Track"), tr ("Delete the selected track (Delete, Ctrl+Shift+T)"));
     auto* openButton = button (tr ("Open..."), tr ("Open a project (Ctrl+O): the mix, the patchbay and the view"));
@@ -6317,6 +6529,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     top->addWidget (qLinkButton);
     top->addWidget (bypassInsertsButton);
     top->addWidget (bypassSendsButton);
+    top->addWidget (spatialButton);
     top->addWidget (stripsButton);
     top->addWidget (midiButton);
     top->addWidget (addButton);
@@ -6602,6 +6815,10 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     }
     audioClipBox->hide();
     inspectorLayout->addWidget (audioClipBox);
+    // In Spatial mode, the room from above under the selected track's strip.
+    roomView = new RoomView (*this, inspectorArea);
+    roomView->hide();
+    inspectorLayout->addWidget (roomView);
     inspectorLayout->addWidget (rack);
     inspectorLayout->addStretch (1);
     inspectorScroll = new QScrollArea (this);
@@ -6721,6 +6938,11 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     engine.launchQuantise = quantiseBeats[quantiseBox->currentIndex()];
     connect (bypassInsertsButton, &QPushButton::toggled, this, [this] (bool on) { engine.bypassInserts = on; });
     connect (bypassSendsButton, &QPushButton::toggled, this, [this] (bool on) { engine.bypassSends = on; });
+    connect (spatialButton, &QPushButton::clicked, this, [this]
+    {
+        spatialButton->setChecked (spatialMode());   // lit by the mode, not the click
+        showSpatialDialog();
+    });
     connect (stripsButton, &QPushButton::clicked, this, [this, stripsButton] { stripsMenu (stripsButton->mapToGlobal (QPoint (0, stripsButton->height()))); });
     connect (addButton, &QPushButton::clicked, this, [this] { addTrack(); });
     connect (removeButton, &QPushButton::clicked, this, [this] { removeTrack(); });
@@ -6778,7 +7000,11 @@ void MixerWindow::rebuildStrips()
         strips[(size_t) i]->refresh();
     }
     for (auto* r : returnStrips)
+    {
+        r->applyLayout();
         r->refresh();
+    }
+    busStrip->applyLayout();
     busStrip->refresh();
     applyStripWidths();
     refreshInspector();
@@ -6789,6 +7015,67 @@ void MixerWindow::rebuildStrips()
     refreshTransport();
 }
 
+void MixerWindow::setSpatialMode (bool on)
+{
+    if (on && ! spatialMode())
+    {
+        // The first time: each track where its pan had it, the rest ahead.
+        bool untouched = true;
+        for (int i = 0; i < engine.numTracks(); ++i)
+        {
+            const auto p = engine.strip (i).placed.place();
+            untouched = untouched && p.azimuth == 0.0f && p.elevation == 0.0f && p.distance == 1.0f && p.spread == mixer::Panner3d::defaultSpread;
+        }
+        // Then each track where its pan had it, the centred ones spread across the front; the
+        // Pre-Master nearer, the returns a little farther, so none hides another in the room view.
+        if (untouched)
+        {
+            const auto count = engine.numTracks();
+            for (int i = 0; i < count; ++i)
+            {
+                const auto pan = std::clamp (engine.strip (i).pan.load(), -1.0f, 1.0f);
+                engine.strip (i).placed.azimuth = pan != 0.0f ? pan * 90.0f : count == 1 ? 0.0f : -60.0f + 120.0f * (float) i / (float) (count - 1);
+            }
+            engine.busStrip().placed.distance = 0.7f;
+            for (int r = 0; r < mixer::numReturns; ++r)
+                engine.returnStrip (r).placed.distance = 1.4f + 0.4f * (float) r;
+        }
+    }
+    const bool was = spatialMode();
+    engine.spatialOn = on;
+    applySpatial();
+    for (auto* strip : strips)
+        strip->applyLayout();
+    for (auto* r : returnStrips)
+        r->applyLayout();
+    busStrip->applyLayout();
+    if (inspectorStrip != nullptr)
+        inspectorStrip->applyLayout();
+    roomView->setVisible (on);
+    {
+        const QSignalBlocker block (spatialButton);
+        spatialButton->setChecked (on);
+    }
+    if (spatialDialog != nullptr)
+        spatialDialog->refresh();
+    if (was != on && ! restoring)
+        changed();
+}
+
+void MixerWindow::spatialMoved()
+{
+    for (int i = 0; i < engine.numTracks(); ++i)
+        strips[(size_t) i]->showPlace();
+    if (inspectorStrip != nullptr)
+        inspectorStrip->showPlace();
+    for (auto* r : returnStrips)
+        r->showPlace();
+    busStrip->showPlace();
+    roomView->update();
+    if (spatialDialog != nullptr)
+        spatialDialog->update();
+}
+
 void MixerWindow::routeToBus (int track, bool on)
 {
     forLinked (track, [on] (mixer::Strip& s, bool) { s.toBus = on; });
@@ -6796,6 +7083,7 @@ void MixerWindow::routeToBus (int track, bool on)
         strips[(size_t) i]->refresh();
     busStrip->refresh();
     lanes->update();
+    spatialMoved();
     changed();
 }
 
@@ -7766,6 +8054,7 @@ void MixerWindow::copyTrack (int from, int to)
     b.monitor = a.monitor.load();
     b.inputChannels = a.inputChannels.load();
     b.toBus = a.toBus.load();
+    b.placed.set (a.placed.place());
     engine.setClips (to, engine.clips (from));
     engine.setInstrument (to, engine.instrument (from));
     engine.setInserts (to, engine.inserts (from));
@@ -7820,6 +8109,7 @@ void MixerWindow::clearTrack (int k)
     s.lowCutSlope = s.highCutSlope = 12;
     s.delayMs = 0.0f;
     s.width = 1.0f;
+    s.placed.set ({});
     for (int r = 0; r < mixer::numReturns; ++r)
     {
         s.sendDb[(size_t) r] = -100.0f;
@@ -8858,6 +9148,7 @@ void MixerWindow::defaultReturns (int only)
             c.faderDb = 0.0f;
             c.pan = 0.0f;
             c.mute = false;
+            c.placed.set ({ 0.0f, 0.0f, mixer::Panner3d::returnSpread, 1.0f });
             setReturnEffect (r, r == 0 ? space : echo);
         }
     // A: a plate-like 1.8 s; B: a dotted eighth at the tempo, 30 % feedback; both fully wet.
@@ -8946,7 +9237,7 @@ QJsonArray MixerWindow::returnsJson() const
     {
         auto& c = engine.returnStrip (r);
         const auto fx = engine.returnEffect (r);
-        QJsonObject o { { "fader", c.faderDb.load() }, { "pan", c.pan.load() }, { "mute", c.mute.load() } };
+        QJsonObject o { { "fader", c.faderDb.load() }, { "pan", c.pan.load() }, { "mute", c.mute.load() }, { "spatial", placeJson (c.placed) } };
         if (fx != nullptr)
             o.insert ("effect", QJsonObject { { "id", QString::fromStdString (fx->pluginId()) }, { "name", QString::fromStdString (fx->name()) },
                                               { "state", QString::fromStdString (fx->state()) } });
@@ -8964,6 +9255,7 @@ void MixerWindow::loadReturns (const QJsonArray& list, QStringList& problems)
         c.faderDb = (float) o.value ("fader").toDouble();
         c.pan = (float) o.value ("pan").toDouble();
         c.mute = o.value ("mute").toBool();
+        loadPlace (c.placed, o.value ("spatial"), mixer::Panner3d::returnSpread);
         const auto e = o.value ("effect").toObject();
         mixer::EffectPtr made;
         if (! e.isEmpty())
@@ -8986,7 +9278,7 @@ QJsonObject MixerWindow::busJson() const
     for (int r = 0; r < mixer::numReturns; ++r)
         sends.append (QJsonObject { { "db", b.sendDb[(size_t) r].load() }, { "pre", b.sendPre[(size_t) r].load() } });
     return { { "trim", b.trimDb.load() }, { "fader", b.faderDb.load() }, { "pan", b.pan.load() }, { "width", b.width.load() },
-             { "mute", b.mute.load() }, { "sends", sends }, { "inserts", insertsJson (mixer::busTrack) } };
+             { "mute", b.mute.load() }, { "sends", sends }, { "inserts", insertsJson (mixer::busTrack) }, { "spatial", placeJson (b.placed) } };
 }
 
 void MixerWindow::loadBus (const QJsonObject& o, QStringList& problems)
@@ -8997,6 +9289,7 @@ void MixerWindow::loadBus (const QJsonObject& o, QStringList& problems)
     b.pan = (float) std::clamp (o.value ("pan").toDouble(), -1.0, 1.0);
     b.width = (float) std::clamp (o.value ("width").toDouble (1.0), 0.0, 2.0);
     b.mute = o.value ("mute").toBool();
+    loadPlace (b.placed, o.value ("spatial"), mixer::Panner3d::defaultSpread);
     const auto sends = o.value ("sends").toArray();
     for (int r = 0; r < mixer::numReturns; ++r)
     {
@@ -9301,6 +9594,7 @@ bool MixerWindow::newMix()
         s.duckKey = -1;
         s.duckBelowHz = 0.0f;
         s.toBus = false;
+        s.placed.set ({});
         for (int r = 0; r < mixer::numReturns; ++r)
         {
             s.sendDb[(size_t) r] = -100.0f;
@@ -9343,6 +9637,7 @@ bool MixerWindow::newMix()
         b.faderDb = b.pan = 0.0f;
         b.width = 1.0f;
         b.mute = false;
+        b.placed.set ({});
         for (int r = 0; r < mixer::numReturns; ++r)
         {
             b.sendDb[(size_t) r] = -100.0f;
@@ -9350,6 +9645,8 @@ bool MixerWindow::newMix()
         }
         engine.setInserts (mixer::busTrack, {});
     }
+    sceneYaw = 0.0;
+    setSpatialMode (false);
     restoring = false;
     path.clear();
     modified = false;
@@ -9457,7 +9754,7 @@ bool MixerWindow::writeMix (const QString& file, QString& error)
                                     { "key", s.duckKey.load() }, { "below", s.duckBelowHz.load() } } },
             { "sends", QJsonArray { QJsonObject { { "db", s.sendDb[0].load() }, { "pre", s.sendPre[0].load() } },
                                     QJsonObject { { "db", s.sendDb[1].load() }, { "pre", s.sendPre[1].load() } } } },
-            { "tuning", tuningJson (t.tuning) }, { "toPreMaster", s.toBus.load() },
+            { "tuning", tuningJson (t.tuning) }, { "toPreMaster", s.toBus.load() }, { "spatial", placeJson (s.placed) },
         };
         // The clips, in seconds so a mix opens the same at any rate.
         QJsonArray clips;
@@ -9555,7 +9852,7 @@ bool MixerWindow::writeMix (const QString& file, QString& error)
     QJsonObject root {
         { "phinyxProject", 1 }, { "phinyxMix", 3 }, { "tempo", tempoBox->value() }, { "beatsPerBar", beatsBox->value() }, { "midiFollowsTempo", followTempoBox->isChecked() },
         { "master", engine.masterDb.load() }, { "armed", engine.liveTrack() }, { "tracks", tracks }, { "launcher", launcher },
-        { "returns", returnsJson() }, { "preMaster", busJson() },
+        { "returns", returnsJson() }, { "preMaster", busJson() }, { "spatial", spatialJson() },
     };
     if (hooks.projectState)
     {
@@ -9630,6 +9927,7 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
         s.mute = o.value ("mute").toBool();
         s.solo = o.value ("solo").toBool();
         s.toBus = o.value ("toPreMaster").toBool();
+        loadPlace (s.placed, o.value ("spatial"), mixer::Panner3d::defaultSpread);
         const auto lowCut = o.value ("lowCut").toObject(), highCut = o.value ("highCut").toObject();
         s.lowCut = lowCut.value ("on").toBool();
         s.lowCutHz = (float) lowCut.value ("hz").toDouble (80.0);
@@ -9760,6 +10058,7 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
     if (root.contains (QStringLiteral ("returns")))
         loadReturns (root.value ("returns").toArray(), problems);
     loadBus (root.value ("preMaster").toObject(), problems);
+    loadSpatial (root.value ("spatial").toObject());
 
     // The launcher (version 3 on).
     const auto launcher = root.value ("launcher").toObject();

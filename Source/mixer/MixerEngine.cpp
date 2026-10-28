@@ -257,6 +257,17 @@ namespace mixer
             returnL[(size_t) r].resize (block);
             returnR[(size_t) r].resize (block);
         }
+        for (int c = 0; c < spatial::channels; ++c)
+        {
+            scene[(size_t) c].resize (block);
+            sceneAt[(size_t) c] = scene[(size_t) c].data();
+        }
+        for (int l = 0; l < spatial::maxSpeakers; ++l)
+        {
+            feeds[(size_t) l].resize (block);
+            feedAt[(size_t) l] = feeds[(size_t) l].data();
+        }
+        speakerQueue.resize ((size_t) queueFrames * spatial::maxSpeakers);
         events.reserve (1024);
         liveQueue.reserve (256);
         liveTaken.reserve (256);
@@ -480,6 +491,72 @@ namespace mixer
     {
         const std::lock_guard<std::mutex> l (lock);
         return index == busTrack ? busInserts : lanes[(size_t) index].inserts;
+    }
+
+    void Engine::setDecoder (std::shared_ptr<spatial::Decoder> d)
+    {
+        const std::lock_guard<std::mutex> l (lock);
+        std::swap (spatialDecoder, d);
+    }   // the old decoder is let go here, after the lock
+
+    std::shared_ptr<spatial::Decoder> Engine::decoder() const
+    {
+        const std::lock_guard<std::mutex> l (lock);
+        return spatialDecoder;
+    }
+
+    void Engine::place (const float* left, const float* right, int frames, const Panner3d& panner, spatial::Gains& last, bool jumped)
+    {
+        const auto now = spatial::gains (panner.place());
+        spatial::encode (left, right, frames, jumped ? now : last, now, sceneAt.data());
+        last = now;
+    }
+
+    void Engine::feedSpeakers (int frames)
+    {
+        const auto count = spatialDecoder->speakerCount();
+        if (count != queueChannels || spatialDecoder->setup().firstOutput != queueFirst)
+        {
+            queueChannels = count;
+            queueFirst = spatialDecoder->setup().firstOutput;
+            queued = taken = 0;
+        }
+        if (count == 0)
+            return;
+        const auto master = dbToGain (masterDb.load());
+        for (int k = 0; k < frames; ++k)
+        {
+            const auto g = speakerGain + (master - speakerGain) * (float) (k + 1) / (float) frames;
+            auto* frame = speakerQueue.data() + (size_t) ((queued + (uint64_t) k) % queueFrames) * (size_t) count;
+            for (int l = 0; l < count; ++l)
+                frame[l] = feeds[(size_t) l][(size_t) k] * g;
+        }
+        speakerGain = master;
+        queued += (uint64_t) frames;
+        if (queued - taken > (uint64_t) queueFrames)
+            taken = queued - (uint64_t) queueFrames;   // nobody is taking them: keep the newest
+    }
+
+    void Engine::takeSpeakers (float* const* outs, int numOuts, int frames)
+    {
+        const auto count = queueChannels;
+        if (count == 0 || ! spatialOn.load())
+        {
+            taken = queued;
+            return;
+        }
+        // Behind by more than a few blocks (a callback skipped): catch up to the newest.
+        if (queued - taken > (uint64_t) (frames + 4 * block))
+            taken = queued - (uint64_t) frames;
+        const auto have = (int) std::min<uint64_t> (queued - taken, (uint64_t) frames);
+        for (int k = 0; k < have; ++k)
+        {
+            const auto* frame = speakerQueue.data() + (size_t) ((taken + (uint64_t) k) % queueFrames) * (size_t) count;
+            for (int l = 0; l < count; ++l)
+                if (const auto ch = queueFirst + l; ch >= 0 && ch < numOuts)
+                    outs[ch][k] += frame[l];
+        }
+        taken += (uint64_t) have;
     }
 
     bool Engine::anyToBus() const
@@ -1026,6 +1103,10 @@ namespace mixer
         std::fill (mixR.begin(), mixR.begin() + frames, 0.0f);
         std::fill (busL.begin(), busL.begin() + frames, 0.0f);
         std::fill (busR.begin(), busR.begin() + frames, 0.0f);
+        const bool spatialMix = spatialOn.load() && only < 0 && spatialDecoder != nullptr;
+        if (spatialMix)
+            for (auto& c : scene)
+                std::fill (c.begin(), c.begin() + frames, 0.0f);
         for (int r = 0; r < numReturns; ++r)
         {
             std::fill (returnL[(size_t) r].begin(), returnL[(size_t) r].begin() + frames, 0.0f);
@@ -1212,7 +1293,9 @@ namespace mixer
             const auto trim = dbToGain (s.trimDb.load());
             const auto fader = audible ? (bouncing ? 1.0f : dbToGain (s.faderDb.load())) : 0.0f;
             const auto level = trim * fader;
-            const auto pan = bouncing ? 0.0f : std::clamp (s.pan.load(), -1.0f, 1.0f);
+            // In Spatial mode the 3D panner places it instead of pan and width.
+            const bool placing = spatialMix && ! s.toBus.load();
+            const auto pan = bouncing || placing ? 0.0f : std::clamp (s.pan.load(), -1.0f, 1.0f);
             const auto signL = s.invertLeft.load() ? -1.0f : 1.0f, signR = s.invertRight.load() ? -1.0f : 1.0f;
             const auto balanceL = std::min (1.0f, 1.0f - pan), balanceR = std::min (1.0f, 1.0f + pan);
             const auto angle = (pan + 1.0f) * 0.25f * 3.14159265f;
@@ -1224,7 +1307,7 @@ namespace mixer
             // What the strip does besides gains: the cuts, the inserts and the width.
             t.lowCut.update (s.lowCut.load(), s.lowCutHz.load(), s.lowCutSlope.load(), false, rate.load());
             t.highCut.update (s.highCut.load(), s.highCutHz.load(), s.highCutSlope.load(), true, rate.load());
-            const auto width = t.mono ? 1.0f : std::clamp (s.width.load(), 0.0f, 2.0f);
+            const auto width = t.mono || placing ? 1.0f : std::clamp (s.width.load(), 0.0f, 2.0f);
             const bool insertsOn = ! bypassInserts.load();
             const bool anyInsert = insertsOn && std::any_of (t.inserts.begin(), t.inserts.end(), [] (const Insert& x) { return ! x.bypassed; });
             // The sends (none in a bounce); a pre-fader one needs the signal before the fader.
@@ -1336,6 +1419,11 @@ namespace mixer
                 meter (i, sumL, sumR, frames);
             // A bounce takes the track alone, never through the Pre-Master.
             const bool toBus = s.toBus.load() && only < 0;
+            if (spatialMix && ! toBus)
+            {
+                place (sumL, sumR, frames, s.placed, trackPlaces[(size_t) i], jumped);
+                continue;
+            }
             if (routed != nullptr && ! toBus)
             {
                 routed->trackOutput (i, blockOffset, sumL, sumR, frames);
@@ -1352,7 +1440,7 @@ namespace mixer
         // The Pre-Master, before the returns: its sends feed them too. With the patchbay it goes
         // with the returns into the Mix Bus (the tracks sent to it skip their own patch).
         if (only < 0)
-            renderBus (frames, jumped, withLive);
+            renderBus (frames, jumped, withLive, spatialMix);
         // The returns: each through its effect, pan, fader and mute, then with the tracks.
         if (only < 0)
             for (int r = 0; r < numReturns; ++r)
@@ -1363,7 +1451,7 @@ namespace mixer
                     fx->process (rl, rr, frames);
                 const auto& rs = returnStrips[(size_t) r];
                 const auto level = rs.mute.load() ? 0.0f : dbToGain (rs.faderDb.load());
-                const auto pan = std::clamp (rs.pan.load(), -1.0f, 1.0f);
+                const auto pan = spatialMix ? 0.0f : std::clamp (rs.pan.load(), -1.0f, 1.0f);
                 const float gains[2] = { level * std::min (1.0f, 1.0f - pan), level * std::min (1.0f, 1.0f + pan) };
                 auto& was = returnGain[(size_t) r];
                 if (jumped)
@@ -1373,12 +1461,24 @@ namespace mixer
                 was = { gains[0], gains[1] };
                 if (withLive)
                     meter (returnIndex + r, rl, rr, frames);
+                if (spatialMix)
+                {
+                    place (rl, rr, frames, rs.placed, returnPlaces[(size_t) r], jumped);
+                    continue;
+                }
                 for (int k = 0; k < frames; ++k)
                 {
                     mixL[(size_t) k] += rl[k];
                     mixR[(size_t) k] += rr[k];
                 }
             }
+        // The scene decoded: the headphone mix joins the stereo out, the speakers get their feeds.
+        if (spatialMix)
+        {
+            spatialDecoder->process (sceneAt.data(), frames, mixL.data(), mixR.data(), feedAt.data());
+            if (withLive)
+                feedSpeakers (frames);
+        }
         if (routed != nullptr)
         {
             // The patch has the tracks, and does the master; the returns go to its Mix Bus.
@@ -1424,7 +1524,7 @@ namespace mixer
         }
     }
 
-    void Engine::renderBus (int frames, bool jumped, bool withLive)
+    void Engine::renderBus (int frames, bool jumped, bool withLive, bool spatialMix)
     {
         auto* bl = busL.data();
         auto* br = busR.data();
@@ -1436,7 +1536,7 @@ namespace mixer
         busTrim = trim;
         if (! bypassInserts.load())
             runInserts (busInserts, bl, br, frames);
-        const auto width = std::clamp (bus.width.load(), 0.0f, 2.0f);
+        const auto width = spatialMix ? 1.0f : std::clamp (bus.width.load(), 0.0f, 2.0f);
         if (jumped)
             busWidth = width;
         if (std::abs (width - 1.0f) > 1.0e-4f || std::abs (busWidth - 1.0f) > 1.0e-4f)
@@ -1463,7 +1563,7 @@ namespace mixer
             std::copy (br, br + frames, sendPreR.begin());
         }
         const auto fader = audible ? dbToGain (bus.faderDb.load()) : 0.0f;
-        const auto pan = std::clamp (bus.pan.load(), -1.0f, 1.0f);
+        const auto pan = spatialMix ? 0.0f : std::clamp (bus.pan.load(), -1.0f, 1.0f);
         const auto gainL = fader * std::min (1.0f, 1.0f - pan), gainR = fader * std::min (1.0f, 1.0f + pan);
         if (jumped)
         {
@@ -1490,6 +1590,11 @@ namespace mixer
         }
         if (withLive)
             meter (busIndex, bl, br, frames);
+        if (spatialMix)
+        {
+            place (bl, br, frames, bus.placed, busPlace, jumped);
+            return;
+        }
         for (int k = 0; k < frames; ++k)
         {
             mixL[(size_t) k] += bl[k];
@@ -1526,6 +1631,11 @@ namespace mixer
                 fx->reset();
         for (auto& x : busInserts)
             x.effect->reset();
+        // A spatial mix down is the headphone mix, from silence and with the decoder's delay taken out.
+        const bool spatialMix = spatialOn.load() && only < 0 && spatialDecoder != nullptr;
+        if (spatialMix)
+            spatialDecoder->reset();
+        int skip = spatialMix ? spatialDecoder->latency() : 0;
         for (auto& k : keyLevels)
             std::fill (k.begin(), k.end(), 0.0f);
         stopPending = false;
@@ -1546,8 +1656,11 @@ namespace mixer
             }
             const auto n = (int) std::min<Frame> (block, end + maxTail - at);
             renderBlock (left.data(), right.data(), n, at, true, false);
-            const float* ptrs[2] = { left.data(), right.data() };
-            out.append (ptrs, n);
+            const auto drop = std::min (skip, n);
+            skip -= drop;
+            const float* ptrs[2] = { left.data() + drop, right.data() + drop };
+            if (n > drop)
+                out.append (ptrs, n - drop);
             at += n;
             if (at > end)
             {
@@ -1573,6 +1686,8 @@ namespace mixer
             t.held = {};
             t.relocate = true;
         }
+        if (spatialMix)
+            spatialDecoder->reset();
         expected = -1;
         only = -1;
         for (auto& m : meters)

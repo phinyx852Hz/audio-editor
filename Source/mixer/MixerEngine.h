@@ -14,6 +14,7 @@
 #include "Effect.h"
 #include "Instruments.h"
 #include "MidiFile.h"
+#include "Spatial.h"
 #include "Tunings.h"
 #include "../core/AudioData.h"
 
@@ -36,6 +37,17 @@ namespace mixer
     constexpr int busIndex = returnIndex + numReturns;   // meters: 11 the Pre-Master
     constexpr int busTrack = maxTracks;                  // inserts() and setInserts(): 8 the Pre-Master's
     constexpr int maxBusInserts = 4;
+
+    // A source's 3D panner, in Spatial mode (Spatial.h): its place in the scene.
+    struct Panner3d
+    {
+        static constexpr float defaultSpread = 60.0f, returnSpread = 120.0f;   // a return's reverb wraps wider
+        std::atomic<float> azimuth { 0.0f }, elevation { 0.0f }, spread { defaultSpread }, distance { 1.0f };
+        Panner3d() = default;
+        explicit Panner3d (float spreadDegrees) : spread (spreadDegrees) {}
+        void set (const spatial::Place& p) { azimuth = p.azimuth; elevation = p.elevation; spread = p.spread; distance = p.distance; }
+        spatial::Place place() const { return { azimuth.load(), elevation.load(), spread.load(), distance.load() }; }
+    };
 
     // An audio file on a track, already at the mixer's rate.
     struct AudioClip
@@ -224,6 +236,7 @@ namespace mixer
         std::atomic<int> monitor { monitorAuto };
         std::atomic<int> inputChannels { 0 };       // 0 the stereo pair, 1 the left alone, 2 the right alone (both sides)
         std::atomic<bool> toBus { false };          // after the fader into the Pre-Master, not the master
+        Panner3d placed;                            // in Spatial mode, in place of pan and width
     };
 
     // The Pre-Master's controls; its inserts are set on the engine (busTrack).
@@ -236,6 +249,7 @@ namespace mixer
         std::atomic<bool> mute { false };
         std::array<std::atomic<float>, numReturns> sendDb { -100.0f, -100.0f };
         std::array<std::atomic<bool>, numReturns> sendPre { false, false };
+        Panner3d placed;
     };
 
     // A return's controls: its effect (fully wet) is set on the engine.
@@ -244,6 +258,7 @@ namespace mixer
         std::atomic<float> faderDb { 0.0f };
         std::atomic<float> pan { 0.0f };    // balance
         std::atomic<bool> mute { false };
+        Panner3d placed { Panner3d::returnSpread };
     };
     constexpr float maxDelayMs = 500.0f;
     constexpr float minCutHz = 20.0f, maxCutHz = 20000.0f;
@@ -317,6 +332,17 @@ namespace mixer
         // Every track's inserts, or every send, left out at once; the mix keeps them. Bounces
         // and mix downs follow them too: they render what you hear.
         std::atomic<bool> bypassInserts { false }, bypassSends { false };
+
+        // Spatial mode (Spatial.h): the tracks (but the ones sent to the Pre-Master), the
+        // Pre-Master and the returns go into one ambisonic scene by their 3D panners, which the
+        // decoder turns into the headphone mix (the stereo out, as the master is otherwise) and
+        // the speakers' feeds. Without a decoder the mix stays stereo. A bounce stays stereo.
+        std::atomic<bool> spatialOn { false };
+        void setDecoder (std::shared_ptr<spatial::Decoder>);   // UI thread; the old one is let go here
+        std::shared_ptr<spatial::Decoder> decoder() const;
+        // The speakers' feeds the last blocks made, added to the device's outputs from the decoder's
+        // first output on (outs: numOuts channels, frames long). On the audio thread, after render().
+        void takeSpeakers (float* const* outs, int numOuts, int frames);
 
         // Transport.
         void play();
@@ -566,7 +592,9 @@ namespace mixer
         bool launcherBusy() const;
         void meter (int index, const float* left, const float* right, int frames);
         void runInserts (Inserts&, float* left, float* right, int frames);   // in order, each at its Mix
-        void renderBus (int frames, bool jumped, bool withLive);   // busL and busR through the Pre-Master, into the mix
+        void renderBus (int frames, bool jumped, bool withLive, bool spatialMix);   // busL and busR through the Pre-Master, into the mix or the scene
+        void place (const float* left, const float* right, int frames, const Panner3d&, spatial::Gains& last, bool jumped);   // into the scene
+        void feedSpeakers (int frames);   // the decoder's feeds, at the master's level, into the speakers' queue
         void layers (int index, Track&, const Strip&, TrackMode, bool hasMono, int frames, bool jumped);
         // Recording, on the audio thread with the lock held.
         bool recordsAudio (int track) const;
@@ -590,6 +618,20 @@ namespace mixer
         std::vector<float> busL, busR;
         float busTrim = 1.0f, busGainL = 1.0f, busGainR = 1.0f, busWidth = 1.0f;   // last block's
         std::array<float, numReturns> busSendGain {};
+        // Spatial mode.
+        std::shared_ptr<spatial::Decoder> spatialDecoder;
+        std::array<std::vector<float>, spatial::channels> scene;
+        std::array<float*, spatial::channels> sceneAt {};
+        std::array<spatial::Gains, maxTracks> trackPlaces {};
+        spatial::Gains busPlace {};
+        std::array<spatial::Gains, numReturns> returnPlaces {};
+        std::array<std::vector<float>, spatial::maxSpeakers> feeds;
+        std::array<float*, spatial::maxSpeakers> feedAt {};
+        static constexpr int queueFrames = 8192;
+        std::vector<float> speakerQueue;    // interleaved, queueChannels a frame
+        uint64_t queued = 0, taken = 0;     // frames written and read; audio thread only
+        int queueChannels = 0, queueFirst = 0;
+        float speakerGain = 1.0f;
         std::array<ReturnStrip, numReturns> returnStrips;
         std::array<EffectPtr, numReturns> returnEffects;
         std::array<std::array<float, 2>, numReturns> returnGain {};   // last block's, left and right

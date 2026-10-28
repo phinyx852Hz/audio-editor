@@ -1682,6 +1682,104 @@ namespace
             check (near (heard(), one, 1.0e-4), "mixer: the Pre-Master's fader");
         }
 
+        // Spatial mode: the tracks placed in a 3rd-order scene, decoded to headphones and speakers.
+        {
+            namespace sp = mixer::spatial;
+            const auto w1 = sp::gains ({ 0.0f, 0.0f, 0.0f, 1.0f })[0][0], w2 = sp::gains ({ 0.0f, 0.0f, 0.0f, 2.0f })[0][0];
+            check (near (w1, 1.0, 1.0e-6) && near (20.0 * std::log10 (w2 / w1), -1.5, 1.0e-3), "spatial: beyond the ring a source falls 1.5 dB a unit");
+            const auto close = sp::gains ({ 90.0f, 0.0f, 0.0f, 0.0f });
+            check (near (close[0][0], 1.0, 1.0e-6) && std::abs (close[0][1]) + std::abs (close[0][3]) < 1.0e-6,
+                   "spatial: at the listener a source is all around (omni only)");
+            const auto wide = sp::gains ({ 0.0f, 0.0f, 90.0f, 1.0f });
+            check (wide[0][1] > 0.5f && wide[1][1] < -0.5f, "spatial: a stereo source's sides are spread to the left and right");
+
+            mixer::Engine t;
+            t.prepare (rate);
+            t.setNumTracks (2);
+            t.setClips (0, { mixer::makeClip (dcClip, 0) });
+            std::vector<float> a (480), b (480);
+            auto play = [&]
+            {
+                t.setPosition (0);
+                t.play();
+                std::fill (a.begin(), a.end(), 0.0f);
+                std::fill (b.begin(), b.end(), 0.0f);
+                t.render (a.data(), b.data(), 480);
+            };
+            play();
+            const auto stereoL = a[200];
+            t.spatialOn = true;
+            play();
+            check (near (a[200], stereoL, 1.0e-6), "spatial: without a decoder the mix stays stereo");
+
+            // Four speakers around, from output 3; headphones as a stereo decode.
+            sp::Decoder::Setup setup;
+            const std::vector<ambi::Speaker> square { { "FL", -45.0, 0.0, false }, { "FR", 45.0, 0.0, false },
+                                                      { "BL", -135.0, 0.0, false }, { "BR", 135.0, 0.0, false } };
+            setup.speakers = ambi::decoder (sp::order, square);
+            setup.firstOutput = 2;
+            t.setDecoder (std::make_shared<sp::Decoder> (setup));
+            auto& placed = t.strip (0).placed;
+            placed.set ({ 90.0f, 0.0f, 0.0f, 1.0f });
+            t.strip (0).pan = -1.0f;   // the panner, not pan, places it
+            play();
+            check (b[200] > 3.0f * std::abs (a[200]), "spatial: a track placed to the right is heard on the right of the headphones");
+            std::vector<std::vector<float>> outs (6, std::vector<float> (480, 0.0f));
+            std::vector<float*> ptrs;
+            for (auto& o : outs)
+                ptrs.push_back (o.data());
+            t.takeSpeakers (ptrs.data(), 6, 480);   // the device takes each block's feeds as it plays
+            for (auto& o : outs)
+                std::fill (o.begin(), o.end(), 0.0f);
+            placed.set ({ 45.0f, 0.0f, 0.0f, 1.0f });
+            play();
+            t.takeSpeakers (ptrs.data(), 6, 480);
+            const auto fr = std::abs (outs[3][200]), others = std::max ({ std::abs (outs[2][200]), std::abs (outs[4][200]), std::abs (outs[5][200]) });
+            check (fr > 0.05f && fr > 2.0f * others && std::abs (outs[0][200]) < 1.0e-9f,
+                   "spatial: a track at 45° right is loudest on the front-right speaker, from the first speaker's output on");
+            t.masterDb = -100.0f;
+            play();
+            for (auto& o : outs)
+                std::fill (o.begin(), o.end(), 0.0f);
+            t.takeSpeakers (ptrs.data(), 6, 480);
+            check (std::abs (outs[3][400]) < 1.0e-4f, "spatial: the master fader turns the speakers down too");
+            t.masterDb = 0.0f;
+
+            // Binaural: the scene through each channel's filters, one partition (64 frames) late.
+            auto ears = std::make_shared<ambi::EarFilters>();
+            for (int ear = 0; ear < 2; ++ear)
+            {
+                (*ears)[(size_t) ear].assign (sp::channels, std::vector<float> { 0.0f });
+                (*ears)[(size_t) ear][0] = { 1.0f };   // W alone, unchanged
+            }
+            sp::Decoder::Setup phones;
+            phones.ears = ears;
+            sp::Decoder binaural (phones);
+            check (binaural.latency() == 64 && binaural.speakerCount() == 0, "spatial: the binaural decode is a partition late, with no speakers");
+            std::vector<std::vector<float>> scene (sp::channels, std::vector<float> (100, 0.0f));
+            std::vector<float*> sceneAt;
+            for (auto& c : scene)
+                sceneAt.push_back (c.data());
+            for (int k = 0; k < 100; ++k)
+                scene[0][(size_t) k] = (float) (k + 1);
+            std::vector<float> l (100, 0.0f), r (100, 0.0f);
+            binaural.process (sceneAt.data(), 100, l.data(), r.data(), nullptr);
+            check (l[63] == 0.0f && near (l[64], 1.0, 1.0e-5) && near (r[99], 36.0, 1.0e-4), "spatial: the binaural decode's delay and filters");
+            // Turned a quarter to the right, a source ahead is on the right.
+            sp::Decoder::Setup turned;
+            turned.yaw = 90.0;
+            sp::Decoder turner (turned);
+            for (auto& c : scene)
+                std::fill (c.begin(), c.end(), 0.0f);
+            const auto ahead = sp::gains ({ 0.0f, 0.0f, 0.0f, 1.0f });
+            for (int c = 0; c < sp::channels; ++c)
+                std::fill (scene[(size_t) c].begin(), scene[(size_t) c].end(), ahead[0][(size_t) c]);
+            std::fill (l.begin(), l.end(), 0.0f);
+            std::fill (r.begin(), r.end(), 0.0f);
+            turner.process (sceneAt.data(), 100, l.data(), r.data(), nullptr);
+            check (r[50] > 3.0f * std::abs (l[50]), "spatial: the scene turned to the right");
+        }
+
         // Reversed: an audio clip plays from its end; a MIDI file's notes run backwards.
         {
             mixer::Engine t;

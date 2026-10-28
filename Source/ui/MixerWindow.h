@@ -339,6 +339,24 @@ private:
     class BusStripWidget* busStrip = nullptr;
     QJsonObject busJson() const;
     void loadBus (const QJsonObject&, QStringList& problems);
+    // Spatial mixing (owner, 2026-10-28; MixerSpatial.cpp, docs/spatial-mixing.md): the project's
+    // Spatial mode, the decoder it is heard through (headphones and speakers, kept in the
+    // settings: they are the studio's, not the project's), and the room view of where it all is.
+    friend class RoomView;
+    friend class SpatialDialog;
+    bool spatialMode() const;
+    void setSpatialMode (bool on);
+    void applySpatial();      // the decoder made again from the settings, for the engine and the device
+    void spatialMoved();      // a panner changed: the strips, the Inspector and the room views follow
+    void showSpatialDialog();
+    QJsonObject spatialJson() const;
+    void loadSpatial (const QJsonObject&);
+    class QPushButton* spatialButton = nullptr;
+    class RoomView* roomView = nullptr;            // in the Inspector, in Spatial mode
+    QPointer<class SpatialDialog> spatialDialog;
+    QString spatialStatus;                         // what the decoder is, or why it could not be made
+    std::vector<ambi::Speaker> spatialSpeakers;    // the speakers' layout, for the room views
+    double sceneYaw = 0.0;
     // The strips line up with the launcher's columns: the Pre-Master's as wide as the scenes',
     // each track's as wide as its clips' (laneWidth, shared with the grid).
     static constexpr int laneMargin = 4, sceneColumn = 130, minLane = 100, maxLane = 150;
