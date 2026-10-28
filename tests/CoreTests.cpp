@@ -1651,6 +1651,37 @@ namespace
             check (std::abs (a[200]) < 1.0e-6, "mixer: a muted clip is silent");
         }
 
+        // The Pre-Master: a track sent to it plays through its trim, mute and fader into the master.
+        {
+            mixer::Engine t;
+            t.prepare (rate);
+            t.setNumTracks (2);
+            t.setClips (0, { mixer::makeClip (dcClip, 0) });
+            t.setClips (1, { mixer::makeClip (dcClip, 0) });
+            std::vector<float> a (480), b (480);
+            auto heard = [&]
+            {
+                t.setPosition (0);
+                t.play();
+                std::fill (a.begin(), a.end(), 0.0f);
+                std::fill (b.begin(), b.end(), 0.0f);
+                t.render (a.data(), b.data(), 480);
+                return (double) a[200];
+            };
+            const auto one = 0.5 * std::sqrt (0.5);
+            check (near (heard(), 2.0 * one, 1.0e-4), "mixer: both tracks go to the master by default");
+            t.strip (1).toBus = true;
+            check (near (heard(), 2.0 * one, 1.0e-4) && t.anyToBus(), "mixer: the Pre-Master at 0 dB passes a track as it is");
+            t.busStrip().mute = true;
+            check (near (heard(), one, 1.0e-4), "mixer: a muted Pre-Master silences the tracks sent to it, not the others");
+            t.busStrip().mute = false;
+            t.busStrip().trimDb = 20.0f * (float) std::log10 (2.0);
+            check (near (heard(), 3.0 * one, 1.0e-3), "mixer: the Pre-Master's trim");
+            t.busStrip().trimDb = 0.0f;
+            t.busStrip().faderDb = -100.0f;
+            check (near (heard(), one, 1.0e-4), "mixer: the Pre-Master's fader");
+        }
+
         // Reversed: an audio clip plays from its end; a MIDI file's notes run backwards.
         {
             mixer::Engine t;

@@ -263,6 +263,7 @@ protected:
     void changeEvent (QEvent*) override;
     void closeEvent (class QCloseEvent*) override;
     bool focusNextPrevChild (bool next) override;
+    bool eventFilter (QObject*, QEvent*) override;
 
 private:
     friend class MixerStrip;
@@ -274,6 +275,7 @@ private:
     friend class TrackDevices;
     friend class ClipView;
     friend class EditorTrack;
+    friend class BusStripWidget;
 
     // What the window keeps about a track besides the engine's settings.
     struct TrackInfo
@@ -330,6 +332,21 @@ private:
     void moveInsert (int track, int insert, int to);
     void reorderInserts (int track, const std::vector<int>& order);   // the engine's indices in their new order
     QJsonArray insertsJson (int track) const;
+    QString insertOwner (int track) const;   // "track 2, “Bass”", or "the Pre-Master" (mixer::busTrack)
+    int insertLimit (int track) const;
+    void refreshInsertsOf (int track);
+    // The Pre-Master (owner, 2026-10-28): its strip under the launcher's scenes, its settings in the project.
+    class BusStripWidget* busStrip = nullptr;
+    QJsonObject busJson() const;
+    void loadBus (const QJsonObject&, QStringList& problems);
+    // The strips line up with the launcher's columns: the Pre-Master's as wide as the scenes',
+    // each track's as wide as its clips' (laneWidth, shared with the grid).
+    static constexpr int laneMargin = 4, sceneColumn = 130, minLane = 100, maxLane = 150;
+    static constexpr int stripGap = 4, stripMargin = laneMargin + stripGap / 2;
+    class QScrollArea* stripScroll = nullptr;
+    int laneWidth() const;
+    void applyStripWidths();
+    void routeToBus (int track, bool on);   // the track (and the Q-Linked ones) to the Pre-Master, or back to the master
     void loadInserts (int track, const QJsonArray&, QStringList& problems);
     void stripsMenu (QPoint at);     // which sections the strips show, and how wide they are
     // An instrument or effect dropped on a track (its strip, or the Device Chain): the

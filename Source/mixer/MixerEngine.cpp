@@ -243,7 +243,7 @@ namespace mixer
     Engine::Engine()
     {
         for (auto* v : { &mixL, &mixR, &trackL, &trackR, &instL, &instR, &monoBuf, &outL, &outR, &sendPreL, &sendPreR, &audL, &audR, &dryL, &dryR, &duckGains,
-                         &inL, &inR })
+                         &inL, &inR, &busL, &busR })
             v->resize (block);
         inputFifo.resize (2 * 16384);
         inScratch.resize (2 * 4096);
@@ -281,6 +281,8 @@ namespace mixer
         for (auto& fx : returnEffects)
             if (fx != nullptr)
                 fx->prepare (rate.load(), block);
+        for (auto& x : busInserts)
+            x.effect->prepare (rate.load(), block);
         expected = -1;
     }
 
@@ -352,18 +354,19 @@ namespace mixer
 
     void Engine::setInserts (int index, Inserts list)
     {
-        if (index < 0 || index >= maxTracks)
+        if (index < 0 || index > busTrack)
             return;
         list.erase (std::remove_if (list.begin(), list.end(), [] (const Insert& x) { return x.effect == nullptr; }), list.end());
-        if ((int) list.size() > maxInserts)
-            list.resize ((size_t) maxInserts);
+        const auto most = index == busTrack ? maxBusInserts : maxInserts;
+        if ((int) list.size() > most)
+            list.resize ((size_t) most);
         // Effects new to the track are prepared before it hears them.
         const auto old = inserts (index);
         for (auto& x : list)
             if (std::none_of (old.begin(), old.end(), [&] (const Insert& o) { return o.effect == x.effect; }))
                 x.effect->prepare (rate.load(), block);
         const std::lock_guard<std::mutex> l (lock);
-        std::swap (lanes[(size_t) index].inserts, list);
+        std::swap (index == busTrack ? busInserts : lanes[(size_t) index].inserts, list);
     }   // the effects taken out are let go here, after the lock
 
     void Engine::setReturnEffect (int index, EffectPtr effect)
@@ -476,7 +479,15 @@ namespace mixer
     Inserts Engine::inserts (int index) const
     {
         const std::lock_guard<std::mutex> l (lock);
-        return lanes[(size_t) index].inserts;
+        return index == busTrack ? busInserts : lanes[(size_t) index].inserts;
+    }
+
+    bool Engine::anyToBus() const
+    {
+        for (int i = 0; i < tracks.load(); ++i)
+            if (strips[(size_t) i].toBus.load())
+                return true;
+        return false;
     }
 
     bool Engine::monoClips (const Clips& clips)
@@ -1013,6 +1024,8 @@ namespace mixer
 
         std::fill (mixL.begin(), mixL.begin() + frames, 0.0f);
         std::fill (mixR.begin(), mixR.begin() + frames, 0.0f);
+        std::fill (busL.begin(), busL.begin() + frames, 0.0f);
+        std::fill (busR.begin(), busR.begin() + frames, 0.0f);
         for (int r = 0; r < numReturns; ++r)
         {
             std::fill (returnL[(size_t) r].begin(), returnL[(size_t) r].begin() + frames, 0.0f);
@@ -1260,25 +1273,7 @@ namespace mixer
                 t.lowCut.process (sumL, sumR, frames);
                 t.highCut.process (sumL, sumR, frames);
                 if (insertsOn)
-                    for (auto& x : t.inserts)
-                    {
-                        if (x.bypassed)
-                            continue;
-                        // A slot's Mix below 100 % keeps some of what went in: parallel processing.
-                        const auto mix = std::clamp (x.mix, 0.0f, 1.0f);
-                        if (mix < 0.999f)
-                        {
-                            std::copy (sumL, sumL + frames, dryL.begin());
-                            std::copy (sumR, sumR + frames, dryR.begin());
-                        }
-                        x.effect->process (sumL, sumR, frames);
-                        if (mix < 0.999f)
-                            for (int k = 0; k < frames; ++k)
-                            {
-                                sumL[k] = dryL[(size_t) k] + (sumL[k] - dryL[(size_t) k]) * mix;
-                                sumR[k] = dryR[(size_t) k] + (sumR[k] - dryR[(size_t) k]) * mix;
-                            }
-                    }
+                    runInserts (t.inserts, sumL, sumR, frames);
                 if (std::abs (width - 1.0f) > 1.0e-4f || std::abs (t.width - 1.0f) > 1.0e-4f)
                 {
                     const auto step = (width - t.width) / (float) frames;
@@ -1344,12 +1339,19 @@ namespace mixer
                 routed->trackOutput (i, blockOffset, sumL, sumR, frames);
                 continue;
             }
+            // A bounce takes the track alone, never through the Pre-Master.
+            auto& toL = s.toBus.load() && only < 0 ? busL : mixL;
+            auto& toR = s.toBus.load() && only < 0 ? busR : mixR;
             for (int k = 0; k < frames; ++k)
             {
-                mixL[(size_t) k] += sumL[k];
-                mixR[(size_t) k] += sumR[k];
+                toL[(size_t) k] += sumL[k];
+                toR[(size_t) k] += sumR[k];
             }
         }
+        // The Pre-Master, before the returns: its sends feed them too. With a patch the tracks
+        // go to the patch instead, and it is left out.
+        if (only < 0 && routed == nullptr)
+            renderBus (frames, jumped, withLive);
         // The returns: each through its effect, pan, fader and mute, then with the tracks.
         if (only < 0)
             for (int r = 0; r < numReturns; ++r)
@@ -1398,6 +1400,102 @@ namespace mixer
             meter (masterIndex, left, right, frames);
     }
 
+    void Engine::runInserts (Inserts& list, float* left, float* right, int frames)
+    {
+        for (auto& x : list)
+        {
+            if (x.bypassed)
+                continue;
+            // A slot's Mix below 100 % keeps some of what went in: parallel processing.
+            const auto mix = std::clamp (x.mix, 0.0f, 1.0f);
+            if (mix < 0.999f)
+            {
+                std::copy (left, left + frames, dryL.begin());
+                std::copy (right, right + frames, dryR.begin());
+            }
+            x.effect->process (left, right, frames);
+            if (mix < 0.999f)
+                for (int k = 0; k < frames; ++k)
+                {
+                    left[k] = dryL[(size_t) k] + (left[k] - dryL[(size_t) k]) * mix;
+                    right[k] = dryR[(size_t) k] + (right[k] - dryR[(size_t) k]) * mix;
+                }
+        }
+    }
+
+    void Engine::renderBus (int frames, bool jumped, bool withLive)
+    {
+        auto* bl = busL.data();
+        auto* br = busR.data();
+        const auto trim = dbToGain (std::clamp (bus.trimDb.load(), -24.0f, 24.0f));
+        if (jumped)
+            busTrim = trim;
+        scaleRamped (bl, frames, busTrim, trim);
+        scaleRamped (br, frames, busTrim, trim);
+        busTrim = trim;
+        if (! bypassInserts.load())
+            runInserts (busInserts, bl, br, frames);
+        const auto width = std::clamp (bus.width.load(), 0.0f, 2.0f);
+        if (jumped)
+            busWidth = width;
+        if (std::abs (width - 1.0f) > 1.0e-4f || std::abs (busWidth - 1.0f) > 1.0e-4f)
+        {
+            const auto step = (width - busWidth) / (float) frames;
+            for (int k = 0; k < frames; ++k)
+            {
+                const auto w = busWidth + step * (float) (k + 1);
+                const auto mid = 0.5f * (bl[k] + br[k]), side = 0.5f * (bl[k] - br[k]) * w;
+                bl[k] = mid + side;
+                br[k] = mid - side;
+            }
+        }
+        busWidth = width;
+        // A pre-fader send takes it here, after the inserts and width.
+        const bool audible = ! bus.mute.load();
+        std::array<float, numReturns> sends {};
+        for (int r = 0; r < numReturns; ++r)
+            sends[(size_t) r] = ! audible || bypassSends.load() ? 0.0f : dbToGain (bus.sendDb[(size_t) r].load());
+        const bool anyPre = std::any_of (bus.sendPre.begin(), bus.sendPre.end(), [] (const std::atomic<bool>& p) { return p.load(); });
+        if (anyPre)
+        {
+            std::copy (bl, bl + frames, sendPreL.begin());
+            std::copy (br, br + frames, sendPreR.begin());
+        }
+        const auto fader = audible ? dbToGain (bus.faderDb.load()) : 0.0f;
+        const auto pan = std::clamp (bus.pan.load(), -1.0f, 1.0f);
+        const auto gainL = fader * std::min (1.0f, 1.0f - pan), gainR = fader * std::min (1.0f, 1.0f + pan);
+        if (jumped)
+        {
+            busGainL = gainL;
+            busGainR = gainR;
+        }
+        scaleRamped (bl, frames, busGainL, gainL);
+        scaleRamped (br, frames, busGainR, gainR);
+        busGainL = gainL;
+        busGainR = gainR;
+        for (int r = 0; r < numReturns; ++r)
+        {
+            auto& was = busSendGain[(size_t) r];
+            const auto g = sends[(size_t) r];
+            if (jumped)
+                was = g;
+            if (g > 0.0f || was > 0.0f)
+            {
+                const bool pre = bus.sendPre[(size_t) r].load();
+                addRamped (returnL[(size_t) r].data(), pre ? sendPreL.data() : bl, frames, was, g);
+                addRamped (returnR[(size_t) r].data(), pre ? sendPreR.data() : br, frames, was, g);
+            }
+            was = g;
+        }
+        if (withLive)
+            meter (busIndex, bl, br, frames);
+        for (int k = 0; k < frames; ++k)
+        {
+            mixL[(size_t) k] += bl[k];
+            mixR[(size_t) k] += br[k];
+        }
+    }
+
     AudioDataPtr Engine::mixdown (double tailSeconds, std::string& error, std::atomic<float>* progress, const std::atomic<bool>* cancel,
                                   int onlyTrack)
     {
@@ -1425,6 +1523,8 @@ namespace mixer
         for (auto& fx : returnEffects)
             if (fx != nullptr)
                 fx->reset();
+        for (auto& x : busInserts)
+            x.effect->reset();
         for (auto& k : keyLevels)
             std::fill (k.begin(), k.end(), 0.0f);
         stopPending = false;
