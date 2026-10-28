@@ -3516,6 +3516,23 @@ namespace
         check (std::abs (l[300]) < 1.0e-6, "patchbay: and its mute");
         m.strip (0).mute = false;
 
+        // A track sent to the Pre-Master leaves its patch: the Pre-Master goes into the Mix Bus.
+        m.strip (0).toBus = true;
+        render (0.25f);
+        render (0.25f);
+        check (std::abs (l[300]) < 1.0e-6, "patchbay: a track sent to the Pre-Master skips its own patch");
+        bay.connect (node::mixBus, node::mainOut);
+        render (0.25f);
+        render (0.25f);
+        check (near (l[300], 0.5, 1.0e-4), "patchbay: the Pre-Master is heard through the Mix Bus");
+        m.busStrip().mute = true;
+        render (0.25f);
+        render (0.25f);
+        check (std::abs (l[300]) < 1.0e-6, "patchbay: and the Pre-Master's mute");
+        m.busStrip().mute = false;
+        m.strip (0).toBus = false;
+        bay.disconnect (node::mixBus, node::mainOut);
+
         // A track's own audio, routed away from the Mix Bus, is heard only where it is patched.
         AudioData::Builder b (1, rate);
         std::vector<float> half (48000, 0.5f);
