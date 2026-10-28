@@ -37,7 +37,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#17](https://github.com/phinyx852Hz/audio-editor/pull/17) | Quantize panel: hitpoints, grooves and more warp algorithms | merged | Warp menu, Quantize Panel (Shift+Q) | `Source/ui/QuantizePanel.cpp`<br>`Source/ui/QuantizeSection.cpp`<br>`Source/core/Quantize.cpp` |
 | [#44](https://github.com/phinyx852Hz/audio-editor/pull/44) | Add Paulstretch extreme stretching (Ambient mode, Extreme Stretch) | merged | Warp menu, Extreme Stretch (Ctrl+Shift+X) | `Source/core/Paulstretch.cpp`<br>`Source/ui/WarpSection.cpp` |
 | [#68](https://github.com/phinyx852Hz/audio-editor/pull/68) | MIDI editor: a piano roll in 12-TET or any PHI tuning, with Scala files, restyle and MPE | merged |  | `Source/ui/MidiEditor.cpp`<br>`Source/mixer/NoteEditor.cpp`<br>`Source/core/Scala.cpp` |
-| [#76](https://github.com/phinyx852Hz/audio-editor/pull/76) | Editor track without the timeline row; delete/add mixer tracks; Pre-Master bus | open |  | `Source/ui/MixerWindow.cpp`<br>`Source/mixer/MixerEngine.cpp`<br>`Source/mixer/MixerEngine.h` |
+| [#76](https://github.com/phinyx852Hz/audio-editor/pull/76) | Editor track without the timeline row; delete/add mixer tracks; Pre-Master bus | open |  | `Source/ui/MixerWindow.cpp`<br>`Source/mixer/MixerEngine.cpp`<br>`tests/CoreTests.cpp` |
 
 ### Analysis and meters
 
