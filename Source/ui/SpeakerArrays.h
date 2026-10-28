@@ -24,6 +24,9 @@ namespace speakerarrays
     void remove (const QString& name);
 }
 
+// The HRTF sets (.sofa) found: your own, then PHI's, then the system's (SpatialSection.cpp).
+QStringList spatialHrtfFiles();
+
 // Spatial > Speaker Arrays: make, change and delete your arrays, seen from above and the side.
 class SpeakerArraysDialog final : public QDialog
 {

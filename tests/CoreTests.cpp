@@ -1854,6 +1854,135 @@ namespace
             check (std::abs (a[200]) < 1.0e-6, "mixer: a muted clip is silent");
         }
 
+        // The Pre-Master: a track sent to it plays through its trim, mute and fader into the master.
+        {
+            mixer::Engine t;
+            t.prepare (rate);
+            t.setNumTracks (2);
+            t.setClips (0, { mixer::makeClip (dcClip, 0) });
+            t.setClips (1, { mixer::makeClip (dcClip, 0) });
+            std::vector<float> a (480), b (480);
+            auto heard = [&]
+            {
+                t.setPosition (0);
+                t.play();
+                std::fill (a.begin(), a.end(), 0.0f);
+                std::fill (b.begin(), b.end(), 0.0f);
+                t.render (a.data(), b.data(), 480);
+                return (double) a[200];
+            };
+            const auto one = 0.5 * std::sqrt (0.5);
+            check (near (heard(), 2.0 * one, 1.0e-4), "mixer: both tracks go to the master by default");
+            t.strip (1).toBus = true;
+            check (near (heard(), 2.0 * one, 1.0e-4) && t.anyToBus(), "mixer: the Pre-Master at 0 dB passes a track as it is");
+            t.busStrip().mute = true;
+            check (near (heard(), one, 1.0e-4), "mixer: a muted Pre-Master silences the tracks sent to it, not the others");
+            t.busStrip().mute = false;
+            t.busStrip().trimDb = 20.0f * (float) std::log10 (2.0);
+            check (near (heard(), 3.0 * one, 1.0e-3), "mixer: the Pre-Master's trim");
+            t.busStrip().trimDb = 0.0f;
+            t.busStrip().faderDb = -100.0f;
+            check (near (heard(), one, 1.0e-4), "mixer: the Pre-Master's fader");
+        }
+
+        // Spatial mode: the tracks placed in a 3rd-order scene, decoded to headphones and speakers.
+        {
+            namespace sp = mixer::spatial;
+            const auto w1 = sp::gains ({ 0.0f, 0.0f, 0.0f, 1.0f })[0][0], w2 = sp::gains ({ 0.0f, 0.0f, 0.0f, 2.0f })[0][0];
+            check (near (w1, 1.0, 1.0e-6) && near (20.0 * std::log10 (w2 / w1), -1.5, 1.0e-3), "spatial: beyond the ring a source falls 1.5 dB a unit");
+            const auto close = sp::gains ({ 90.0f, 0.0f, 0.0f, 0.0f });
+            check (near (close[0][0], 1.0, 1.0e-6) && std::abs (close[0][1]) + std::abs (close[0][3]) < 1.0e-6,
+                   "spatial: at the listener a source is all around (omni only)");
+            const auto wide = sp::gains ({ 0.0f, 0.0f, 90.0f, 1.0f });
+            check (wide[0][1] > 0.5f && wide[1][1] < -0.5f, "spatial: a stereo source's sides are spread to the left and right");
+
+            mixer::Engine t;
+            t.prepare (rate);
+            t.setNumTracks (2);
+            t.setClips (0, { mixer::makeClip (dcClip, 0) });
+            std::vector<float> a (480), b (480);
+            auto play = [&]
+            {
+                t.setPosition (0);
+                t.play();
+                std::fill (a.begin(), a.end(), 0.0f);
+                std::fill (b.begin(), b.end(), 0.0f);
+                t.render (a.data(), b.data(), 480);
+            };
+            play();
+            const auto stereoL = a[200];
+            t.spatialOn = true;
+            play();
+            check (near (a[200], stereoL, 1.0e-6), "spatial: without a decoder the mix stays stereo");
+
+            // Four speakers around, from output 3; headphones as a stereo decode.
+            sp::Decoder::Setup setup;
+            const std::vector<ambi::Speaker> square { { "FL", -45.0, 0.0, false }, { "FR", 45.0, 0.0, false },
+                                                      { "BL", -135.0, 0.0, false }, { "BR", 135.0, 0.0, false } };
+            setup.speakers = ambi::decoder (sp::order, square);
+            setup.firstOutput = 2;
+            t.setDecoder (std::make_shared<sp::Decoder> (setup));
+            auto& placed = t.strip (0).placed;
+            placed.set ({ 90.0f, 0.0f, 0.0f, 1.0f });
+            t.strip (0).pan = -1.0f;   // the panner, not pan, places it
+            play();
+            check (b[200] > 3.0f * std::abs (a[200]), "spatial: a track placed to the right is heard on the right of the headphones");
+            std::vector<std::vector<float>> outs (6, std::vector<float> (480, 0.0f));
+            std::vector<float*> ptrs;
+            for (auto& o : outs)
+                ptrs.push_back (o.data());
+            t.takeSpeakers (ptrs.data(), 6, 480);   // the device takes each block's feeds as it plays
+            for (auto& o : outs)
+                std::fill (o.begin(), o.end(), 0.0f);
+            placed.set ({ 45.0f, 0.0f, 0.0f, 1.0f });
+            play();
+            t.takeSpeakers (ptrs.data(), 6, 480);
+            const auto fr = std::abs (outs[3][200]), others = std::max ({ std::abs (outs[2][200]), std::abs (outs[4][200]), std::abs (outs[5][200]) });
+            check (fr > 0.05f && fr > 2.0f * others && std::abs (outs[0][200]) < 1.0e-9f,
+                   "spatial: a track at 45° right is loudest on the front-right speaker, from the first speaker's output on");
+            t.masterDb = -100.0f;
+            play();
+            for (auto& o : outs)
+                std::fill (o.begin(), o.end(), 0.0f);
+            t.takeSpeakers (ptrs.data(), 6, 480);
+            check (std::abs (outs[3][400]) < 1.0e-4f, "spatial: the master fader turns the speakers down too");
+            t.masterDb = 0.0f;
+
+            // Binaural: the scene through each channel's filters, one partition (64 frames) late.
+            auto ears = std::make_shared<ambi::EarFilters>();
+            for (int ear = 0; ear < 2; ++ear)
+            {
+                (*ears)[(size_t) ear].assign (sp::channels, std::vector<float> { 0.0f });
+                (*ears)[(size_t) ear][0] = { 1.0f };   // W alone, unchanged
+            }
+            sp::Decoder::Setup phones;
+            phones.ears = ears;
+            sp::Decoder binaural (phones);
+            check (binaural.latency() == 64 && binaural.speakerCount() == 0, "spatial: the binaural decode is a partition late, with no speakers");
+            std::vector<std::vector<float>> scene (sp::channels, std::vector<float> (100, 0.0f));
+            std::vector<float*> sceneAt;
+            for (auto& c : scene)
+                sceneAt.push_back (c.data());
+            for (int k = 0; k < 100; ++k)
+                scene[0][(size_t) k] = (float) (k + 1);
+            std::vector<float> l (100, 0.0f), r (100, 0.0f);
+            binaural.process (sceneAt.data(), 100, l.data(), r.data(), nullptr);
+            check (l[63] == 0.0f && near (l[64], 1.0, 1.0e-5) && near (r[99], 36.0, 1.0e-4), "spatial: the binaural decode's delay and filters");
+            // Turned a quarter to the right, a source ahead is on the right.
+            sp::Decoder::Setup turned;
+            turned.yaw = 90.0;
+            sp::Decoder turner (turned);
+            for (auto& c : scene)
+                std::fill (c.begin(), c.end(), 0.0f);
+            const auto ahead = sp::gains ({ 0.0f, 0.0f, 0.0f, 1.0f });
+            for (int c = 0; c < sp::channels; ++c)
+                std::fill (scene[(size_t) c].begin(), scene[(size_t) c].end(), ahead[0][(size_t) c]);
+            std::fill (l.begin(), l.end(), 0.0f);
+            std::fill (r.begin(), r.end(), 0.0f);
+            turner.process (sceneAt.data(), 100, l.data(), r.data(), nullptr);
+            check (r[50] > 3.0f * std::abs (l[50]), "spatial: the scene turned to the right");
+        }
+
         // Reversed: an audio clip plays from its end; a MIDI file's notes run backwards.
         {
             mixer::Engine t;
@@ -2183,6 +2312,7 @@ namespace
         check (near (out[10], 0.25, 1.0e-5), "slicer: a pad plays a sound of its own");
         slicer::placeSound (kit, 100, 1, ownSound, "own.wav");
         e.setKit (kit);
+        e.panic();   // the first hit would still be fading out under the second
         e.hit (100, 1.0f);
         out = play (100);
         check (near (out[10], 0.5, 1.0e-5) && kit.pads[100].layerCount() == 2, "slicer: a pad's layers sound together");
@@ -2221,6 +2351,112 @@ namespace
         slicer::swapPads (kit, 5, 100);
         check (kit.pads[5].layers[0].sound == ownSound && kit.pads[100].isSlice() && kit.pads[5].receive == 70,
                "slicer: swapping pads swaps their sounds, not their notes");
+    }
+
+    void testStepSequencer()
+    {
+        // Where a lane's steps fall, and which step each plays.
+        slicer::Lane lane;
+        lane.steps = 3;
+        check (slicer::stepIndex (lane, 0) == 0 && slicer::stepIndex (lane, 3) == 0 && slicer::stepIndex (lane, 5) == 2, "steps: forward wraps at the lane's length");
+        lane.direction = slicer::Direction::backward;
+        check (slicer::stepIndex (lane, 0) == 2 && slicer::stepIndex (lane, 2) == 0, "steps: backward");
+        lane.direction = slicer::Direction::alternate;
+        check (slicer::stepIndex (lane, 1) == 1 && slicer::stepIndex (lane, 2) == 2 && slicer::stepIndex (lane, 3) == 1 && slicer::stepIndex (lane, 4) == 0,
+               "steps: alternate turns at each end");
+        lane.direction = slicer::Direction::random;
+        bool same = true, inside = true;
+        for (int k = 0; k < 50; ++k)
+        {
+            same = same && slicer::stepIndex (lane, k) == slicer::stepIndex (lane, k);
+            inside = inside && slicer::stepIndex (lane, k) >= 0 && slicer::stepIndex (lane, k) < 3;
+        }
+        check (same && inside, "steps: random draws the same step each time through");
+        slicer::Pattern swung;
+        swung.swing = 100;
+        slicer::Lane even;
+        check (near (slicer::stepTime (even, swung, 1), 0.25 + 0.125, 1.0e-12) && near (slicer::stepTime (even, swung, 2), 0.5, 1.0e-12),
+               "steps: swing moves every other step");
+
+        // A pattern played to the frame: 1/16 at 120 BPM is 6000 frames at 48 kHz.
+        const double rate = 48000.0;
+        AudioData::Builder b (1, rate);
+        std::vector<float> x (48000);
+        for (size_t i = 0; i < x.size(); ++i)
+            x[i] = 0.1f + (float) i / 48000.0f;
+        const float* p[1] { x.data() };
+        b.append (p, (int) x.size());
+        slicer::Engine e;
+        e.prepare (rate);
+        e.setSample (sampler::makeSample (*b.finish()));
+        slicer::Kit kit;
+        kit.velocity = 0.0;
+        slicer::assign (kit, { { 0, 3000 }, { 10000, 13000 } });
+        for (auto& pad : kit.pads)
+            pad.attack = 0.0;
+        e.setKit (kit);
+        slicer::Pattern pattern;
+        pattern.lanes[0].step[4].on = true;    // beat 1
+        pattern.lanes[1].step[2].on = true;    // beat 0.5, twice
+        pattern.lanes[1].step[2].repeats = 2;
+        e.setPattern (0, pattern);
+        e.play();
+        std::vector<float> out (30000, 0.0f), r (30000, 0.0f);
+        for (int at = 0; at < 30000; at += 256)
+        {
+            const auto n = std::min (256, 30000 - at);
+            e.render (out.data() + at, r.data() + at, n);
+        }
+        check (out[23990] == 0.0f && near (out[24000 + 10], x[10], 1.0e-5), "steps: a step plays on its frame");
+        check (near (out[12000 + 5], x[10005], 1.0e-5) && near (out[15000 + 5], x[10005], 1.0e-5), "steps: repeats hit within the step");
+        check (e.playingBeat() > 1.2 && e.isPlaying(), "steps: the transport runs");
+        e.stop();
+        check (! e.isPlaying(), "steps: stop");
+
+        // Chance 0 never plays; a queued pattern starts on the next bar.
+        pattern.lanes[0].step[4].chance = 0;
+        e.setPattern (0, pattern);
+        slicer::Pattern other;
+        other.lanes[0].step[0].on = true;
+        e.setPattern (1, other);
+        e.panic();
+        e.play();
+        std::vector<float> l2 (48000 * 3, 0.0f), r2 (l2.size(), 0.0f);
+        bool queued = false;
+        for (int at = 0; at < (int) l2.size(); at += 512)
+        {
+            if (at >= 30000 && ! queued)
+            {
+                e.queuePattern (1);
+                queued = true;
+            }
+            e.render (l2.data() + at, r2.data() + at, std::min (512, (int) l2.size() - at));
+        }
+        check (l2[24000 + 10] == 0.0f, "steps: chance 0 never plays");
+        check (e.playingPattern() == 1 && l2[96000 - 2] == 0.0f && near (l2[96000 + 10], x[10], 1.0e-5), "steps: a queued pattern starts on the bar line");
+        e.stop();
+
+        // Following a clock: it plays only while the clock runs, from the clock's beat.
+        double clockBeat = 0.0;
+        bool clockRuns = false;
+        e.setClock ([&] (double& at, double& bpm) { at = clockBeat; bpm = 120.0; return clockRuns; });
+        e.queuePattern (0);
+        pattern.lanes[0].step[4].chance = 100;
+        e.setPattern (0, pattern);
+        e.panic();
+        std::vector<float> l3 (512, 0.0f), r3 (512, 0.0f);
+        clockBeat = 0.99;
+        e.render (l3.data(), r3.data(), 512);
+        check (! e.isPlaying(), "steps: following, still while the clock is stopped");
+        clockRuns = true;
+        e.render (l3.data(), r3.data(), 512);
+        check (e.isPlaying() && near (l3[240 + 10], x[10], 1.0e-5), "steps: following, plays from the clock's beat");
+        e.render (l3.data(), r3.data(), 512);   // the clock not read again yet: plays on
+        check (near (e.playingBeat(), 0.99 + 1024.0 / 24000.0, 1.0e-9), "steps: following, a clock that has not moved yet is no jump");
+        clockBeat = 3.0;
+        e.render (l3.data(), r3.data(), 512);
+        check (near (e.playingBeat(), 3.0 + 512.0 / 24000.0, 1.0e-9), "steps: following, the clock moved");
+        e.setClock ({});
     }
 
     void testCurvedFade()
@@ -3842,6 +4078,23 @@ namespace
         render (0.25f);
         check (std::abs (l[300]) < 1.0e-6, "patchbay: and its mute");
         m.strip (0).mute = false;
+
+        // A track sent to the Pre-Master leaves its patch: the Pre-Master goes into the Mix Bus.
+        m.strip (0).toBus = true;
+        render (0.25f);
+        render (0.25f);
+        check (std::abs (l[300]) < 1.0e-6, "patchbay: a track sent to the Pre-Master skips its own patch");
+        bay.connect (node::mixBus, node::mainOut);
+        render (0.25f);
+        render (0.25f);
+        check (near (l[300], 0.5, 1.0e-4), "patchbay: the Pre-Master is heard through the Mix Bus");
+        m.busStrip().mute = true;
+        render (0.25f);
+        render (0.25f);
+        check (std::abs (l[300]) < 1.0e-6, "patchbay: and the Pre-Master's mute");
+        m.busStrip().mute = false;
+        m.strip (0).toBus = false;
+        bay.disconnect (node::mixBus, node::mainOut);
 
         // A track's own audio, routed away from the Mix Bus, is heard only where it is patched.
         AudioData::Builder b (1, rate);
@@ -7471,6 +7724,30 @@ namespace
         }
         check (rhythm::region ("iqāʿāt") == "West Asia" && rhythm::region ("medieval (ars antiqua)") == "Europe",
                "regions: west asia, and europe as one region among the others");
+        // The iqāʿāt as Maqam World notates them: their time signatures, groupings and strokes.
+        int iqaat = 0;
+        for (const auto& r : all)
+            iqaat += r.group == "iqāʿāt";
+        check (iqaat == 38, "iqāʿāt: samāʿī thaqīl and the 37 others from Maqam World (" + std::to_string (iqaat) + ")");
+        check (find ("wahda").lanes[0].hits == "x......." && find ("wahda").lanes[1].hits == "...x..x.", "waḥda: one dum, then tak on 4 and 7");
+        check (find ("wahda w-nuss").lanes[1].hits == "...x..x.....x..." && find ("wahda w-nuss").lanes[1].perBeat == 4,
+               "waḥda w-nuṣṣ: the first tak half an eighth late");
+        check (find ("aqsaq").beats == 9 && find ("aqsaq").sections == std::vector<int> { 2, 2, 2, 3 }, "aqṣāq: 9/8, 2+2+2+3");
+        check (find ("awis").beats == 11 && find ("zarafat").beats == 13 && find ("khush rank").beats == 17
+                   && find ("murabbaa").beats == 13 && find ("muhajjar").beats == 14 && find ("awfar masri").beats == 19
+                   && find ("fakhit").beats == 20 && find ("warshan arabi").beats == 32 && find ("sittatu ashar masri").beats == 32,
+               "the long cycles: ʿawīṣ 11/8, ẓarāfāt 13/8, khūsh rānk 17/8, murabbaʿ 13/4, muḥajjar 14/4, awfar 19/4, fākhit 20/4, the 32/4s");
+        check (find ("muhajjar").lanes[0].hits.rfind ("xxx", 0) == 0, "muḥajjar: three dums to open");
+        check (find ("sudasi").lanes[1].hits.find ('o') != std::string::npos && find ("sudasi").counting.find ("ka") != std::string::npos,
+               "sudāsī: the light tak-ka between");
+        check (find ("dawr hindi").counting == "dum tak tak | dum – tak –", "dawr hindī counted 3+4");
+        // kuku as afrodrumming.com writes it: djembe 1 bass on 1, tones on 2 and 2+, slap on 4; djembe 2 over two bars.
+        const auto& kuku = find ("kuku");
+        check (kuku.group == "West Africa" && kuku.beats == 8 && kuku.lanes.size() == 5
+                   && kuku.lanes[1].hits == "..xx......xx...." && kuku.lanes[2].hits == "......x.......x."
+                   && kuku.lanes[4].hits == "........x.x.xx..",
+               "kuku: djembe 1's bar twice against djembe 2's two bars");
+        check (rhythm::findRhythm ("maqsum") >= 0 && find ("maqsum").group == "North Africa", "maqsūm stays in North Africa, not repeated");
         check (rhythm::drumName (39) == "hand clap" && rhythm::drumName (81) == "open triangle" && rhythm::drumName (20).empty(), "general midi drum names");
 
         // Layakārī: the ṭhekā twice, three and four times as fast, the claps and waves as they were.
@@ -7952,6 +8229,8 @@ int main()
     testCurvedFade();
     testMidSide();
     testSampler();
+    testSlicer();
+    testStepSequencer();
     testMidiFile();
     testMidiEdits();
     testMixer();

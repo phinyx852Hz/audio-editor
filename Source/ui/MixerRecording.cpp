@@ -699,6 +699,9 @@ QString MixerWindow::saveTake (const mixer::Recorded& rec, QString& error)
 void MixerWindow::keepRecorded()
 {
     const auto taken = engine.takeRecorded();
+    // The editor's track's newest take opens in the clip editor: the slot, or the timeline clip.
+    int openScene = -1;
+    uint32_t openClip = 0;
     for (const auto& rec : taken)
     {
         const auto track = rec.track;
@@ -742,6 +745,8 @@ void MixerWindow::keepRecorded()
             }
             const auto file = saveTake (rec, error);
             slots[(size_t) track][(size_t) scene] = engine.slot (track, scene);
+            if (! file.isEmpty() && track == editorTrack())
+                openScene = scene, openClip = 0;
             if (file.isEmpty())
                 say (error);
             else
@@ -763,6 +768,8 @@ void MixerWindow::keepRecorded()
             }
             const auto file = saveTake (rec, error);
             slots[(size_t) track][(size_t) scene] = engine.slot (track, scene);
+            if (! file.isEmpty() && track == editorTrack())
+                openScene = scene, openClip = 0;
             if (file.isEmpty())
                 say (error);
             else
@@ -815,6 +822,8 @@ void MixerWindow::keepRecorded()
             clip.id = nextClipId++;
             passes.push_back (clip.id);
             list.push_back (clip);
+            if (track == editorTrack())
+                openScene = -1, openClip = clip.id;   // the MIDI one when the take has both, as it comes last
         };
         if (rec.audio != nullptr)
         {
@@ -839,6 +848,12 @@ void MixerWindow::keepRecorded()
         refreshViews();
         updateInput();
     }
+    if (openClip != 0)
+        showTimelineClip (editorTrack(), openClip);
+    else if (openScene >= 0)
+        showSlotClip (editorTrack(), openScene);
+    if (openClip != 0 || openScene >= 0)
+        refreshEditorTrack();
     refreshRecording();
 }
 

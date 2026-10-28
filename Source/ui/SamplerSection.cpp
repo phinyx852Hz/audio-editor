@@ -106,6 +106,19 @@ void MainWindow::registerSamplerCommands()
     connect (slicerWin, &SlicerWindow::activated, this, [this] { midiTarget = 1; });
     connect (slicerWin, &SlicerWindow::closed, this, [this] { instrumentClosed(); });
     connect (slicerWin, &SlicerWindow::fileDropped, this, &MainWindow::loadSlicerFile);
+    // Follow Mixer: the step sequencer reads the Mixer's transport on the audio thread.
+    slicerWin->setMixerClock ([this]
+    {
+        return slicer::Engine::Clock ([this] (double& beat, double& bpm)
+        {
+            const auto* m = mixerEngine.get();
+            if (m == nullptr || ! m->isPlaying() || m->sampleRate() <= 0.0)
+                return false;
+            bpm = m->tempo.load();
+            beat = (double) m->position() / m->sampleRate() * bpm / 60.0;
+            return true;
+        });
+    });
     slicerPanel = new DockablePanel (*this, QStringLiteral ("slicerPanel"), tr ("Slicer"), scrolling (slicerWin), Qt::LeftDockWidgetArea);
     splitDockWidget (samplerPanel->dock(), chainPanel->dock(), Qt::Vertical);   // the chain goes under Simplest
     splitDockWidget (findPanel->dock(), slicerPanel->dock(), Qt::Vertical);

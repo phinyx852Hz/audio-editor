@@ -12,6 +12,7 @@
 #include <QString>
 #include <QStringList>
 #include <functional>
+#include <memory>
 
 namespace slicerkit
 {
@@ -31,13 +32,20 @@ namespace slicerkit
     // Kits from before 128 pads open as they were (Chromatic ones on the same notes).
     slicer::Kit fromJson (const QJsonObject&, const QDir& base, double rate, QStringList* problems = nullptr);
 
-    // A kit file: the kit, and its sample as a WAV in "<name> Sounds" beside it.
-    bool saveKitFile (const QString& path, const slicer::Kit&, const sampler::SamplePtr& sample, double rate, QString& error);
+    // The step sequencer's patterns (sampler/StepSequencer.h): only the lanes and steps that
+    // differ from new ones are written.
+    QJsonObject songToJson (const slicer::Song&);
+    std::unique_ptr<slicer::Song> songFromJson (const QJsonObject&);
+
+    // A kit file: the kit, its patterns (if given) and its sample as a WAV in "<name> Sounds" beside it.
+    bool saveKitFile (const QString& path, const slicer::Kit&, const sampler::SamplePtr& sample, double rate, QString& error,
+                      const slicer::Song* song = nullptr);
     struct Loaded
     {
         slicer::Kit kit;
         sampler::SamplePtr sample;
         AudioDataPtr audio;
+        std::unique_ptr<slicer::Song> song;   // null: a kit saved without patterns
         QStringList problems;
     };
     bool loadKitFile (const QString& path, double rate, Loaded& out, QString& error);

@@ -204,9 +204,26 @@ namespace slicer
         return data;
     }
 
-    void Engine::hit (int pad, float velocity)
+    void Engine::hit (int pad, float velocity, double semitones)
     {
         std::lock_guard g (lock);
+        hitLocked (pad, velocity, semitones);
+        // Recording: the hit lands on the nearest step of the pad's lane.
+        if (recording.load() && running.load() && pad >= 0 && pad < numPads)
+        {
+            auto& pattern = steps->patterns[(size_t) playingIndex];
+            auto& lane = pattern.lanes[(size_t) pad];
+            const auto k = (int64_t) std::llround ((beat - origin) / rateBeats (lane.rate));
+            auto& s = lane.step[(size_t) stepIndex (lane, k)];
+            s.on = true;
+            s.velocity = (uint8_t) std::clamp ((int) std::lround (velocity * 127.0f), 1, 127);
+            laneUsed[(size_t) pad] = true;
+            recordCount.fetch_add (1);
+        }
+    }
+
+    void Engine::hitLocked (int pad, float velocity, double semitones, bool played)
+    {
         if (pad < 0 || pad >= numPads)
             return;
         const auto& p = current.pads[(size_t) pad];
@@ -256,11 +273,13 @@ namespace slicer
             chosen->pad = pad;
             chosen->layer = layer;
             chosen->velocity = std::clamp (velocity, 0.0f, 1.0f);
+            chosen->pitch = semitones;
             chosen->position = l.reverse ? (double) (std::min (l.end, length) - 1) : (double) std::max<Frame> (0, l.start);
             chosen->level = p.attack > 0.0 ? 0.0 : 1.0;
             chosen->age = ++clock;
         }
-        last.store (pad, std::memory_order_relaxed);
+        if (played)
+            last.store (pad, std::memory_order_relaxed);
     }
 
     void Engine::noteOn (int note, float velocity)
@@ -302,6 +321,11 @@ namespace slicer
     void Engine::letGo (int pad)
     {
         std::lock_guard g (lock);
+        letGoLocked (pad);
+    }
+
+    void Engine::letGoLocked (int pad)
+    {
         if (pad < 0 || pad >= numPads)
             return;
         for (auto& v : voice)
@@ -323,6 +347,13 @@ namespace slicer
     void Engine::render (float* left, float* right, int frames)
     {
         std::lock_guard g (lock);
+        sequence (left, right, frames);
+    }
+
+    void Engine::renderVoices (float* left, float* right, int frames)
+    {
+        if (frames <= 0)
+            return;
         std::array<bool, numPads> on {};
         bool soloing = false;
         for (const auto& p : current.pads)
@@ -343,7 +374,7 @@ namespace slicer
             const auto length = s->length();
             const auto begin = (double) std::clamp<Frame> (l.start, 0, length);
             const auto end = (double) std::clamp<Frame> (l.end, (Frame) begin, length);
-            const auto step = std::pow (2.0, (p.pitch + l.pitch) / 12.0) * (l.reverse ? -1.0 : 1.0);
+            const auto step = std::pow (2.0, (p.pitch + l.pitch + v.pitch) / 12.0) * (l.reverse ? -1.0 : 1.0);
             const bool audible = ! p.mute && (! soloing || p.solo);
             const auto gain = (audible ? std::pow (10.0, (p.gainDb + l.gainDb) / 20.0) : 0.0)
                             * (1.0 - std::clamp (current.velocity, 0.0, 1.0) * (1.0 - (double) v.velocity * v.velocity));
@@ -408,5 +439,341 @@ namespace slicer
             if (const auto v = heads[k].load (std::memory_order_relaxed); v >= 0.0 && headPads[k].load (std::memory_order_relaxed) == pad)
                 out.push_back (v);
         return out;
+    }
+
+    //==========================================================================
+    // The step sequencer.
+
+    std::unique_ptr<Song> Engine::song() const
+    {
+        auto copy = std::make_unique<Song>();
+        std::lock_guard g (lock);
+        *copy = *steps;
+        return copy;
+    }
+
+    void Engine::setSong (const Song& s)
+    {
+        std::lock_guard g (lock);
+        *steps = s;
+        steps->bpm = std::clamp (s.bpm, 20.0, 400.0);
+        steps->beatsPerBar = std::clamp (s.beatsPerBar, 1, 16);
+        steps->chainLength = std::clamp (s.chainLength, 0, maxChain);
+        playingIndex = std::clamp (playingIndex, 0, numPatterns - 1);
+        for (int i = 0; i < numLanes; ++i)
+            laneUsed[(size_t) i] = ! steps->patterns[(size_t) playingIndex].lanes[(size_t) i].empty();
+    }
+
+    Pattern Engine::pattern (int index) const
+    {
+        std::lock_guard g (lock);
+        return steps->patterns[(size_t) std::clamp (index, 0, numPatterns - 1)];
+    }
+
+    void Engine::setPattern (int index, const Pattern& p)
+    {
+        std::lock_guard g (lock);
+        index = std::clamp (index, 0, numPatterns - 1);
+        steps->patterns[(size_t) index] = p;
+        if (index == playingIndex)
+            for (int i = 0; i < numLanes; ++i)
+                laneUsed[(size_t) i] = ! p.lanes[(size_t) i].empty();
+    }
+
+    void Engine::setLane (int index, int lane, const Lane& l)
+    {
+        std::lock_guard g (lock);
+        if (index < 0 || index >= numPatterns || lane < 0 || lane >= numLanes)
+            return;
+        steps->patterns[(size_t) index].lanes[(size_t) lane] = l;
+        if (index == playingIndex)
+            laneUsed[(size_t) lane] = ! l.empty();
+    }
+
+    void Engine::setTempo (double bpm)
+    {
+        std::lock_guard g (lock);
+        steps->bpm = std::clamp (bpm, 20.0, 400.0);
+    }
+
+    double Engine::tempo() const
+    {
+        std::lock_guard g (lock);
+        return steps->bpm;
+    }
+
+    std::vector<int> Engine::chain() const
+    {
+        std::lock_guard g (lock);
+        return { steps->chain.begin(), steps->chain.begin() + steps->chainLength };
+    }
+
+    bool Engine::chainOn() const
+    {
+        std::lock_guard g (lock);
+        return steps->chainOn;
+    }
+
+    void Engine::setBars (int index, int bars)
+    {
+        std::lock_guard g (lock);
+        if (index >= 0 && index < numPatterns)
+            steps->patterns[(size_t) index].bars = (uint8_t) std::clamp (bars, 1, 16);
+    }
+
+    void Engine::setSwing (int index, int swing)
+    {
+        std::lock_guard g (lock);
+        if (index >= 0 && index < numPatterns)
+            steps->patterns[(size_t) index].swing = (uint8_t) std::clamp (swing, 0, 100);
+    }
+
+    void Engine::setChain (const std::vector<int>& patterns, bool on)
+    {
+        std::lock_guard g (lock);
+        steps->chainLength = 0;
+        for (const auto p : patterns)
+            if (p >= 0 && p < numPatterns && steps->chainLength < maxChain)
+                steps->chain[(size_t) steps->chainLength++] = (int8_t) p;
+        steps->chainOn = on && steps->chainLength > 0;
+        chainAt = 0;
+    }
+
+    void Engine::play()
+    {
+        std::lock_guard g (lock);
+        if (follow || running.load())
+            return;
+        beat = origin = 0.0;
+        plannedCount = 0;
+        chainAt = 0;
+        if (steps->chainOn && steps->chainLength > 0)
+            switchPattern (steps->chain[0], 0.0);
+        else if (const auto q = patternQueued.exchange (-1); q >= 0)
+            switchPattern (q, 0.0);
+        running.store (true);
+    }
+
+    void Engine::stop()
+    {
+        std::lock_guard g (lock);
+        if (follow)
+            return;
+        running.store (false);
+        releaseSequenced();
+    }
+
+    void Engine::setClock (Clock c)
+    {
+        std::lock_guard g (lock);
+        follow = std::move (c);
+        following = false;
+        running.store (false);
+        releaseSequenced();
+    }
+
+    bool Engine::followsClock() const
+    {
+        std::lock_guard g (lock);
+        return (bool) follow;
+    }
+
+    void Engine::queuePattern (int index)
+    {
+        std::lock_guard g (lock);
+        index = std::clamp (index, 0, numPatterns - 1);
+        if (running.load())
+            patternQueued.store (index);
+        else
+            switchPattern (index, beat);
+    }
+
+    void Engine::switchPattern (int index, double at)
+    {
+        playingIndex = std::clamp (index, 0, numPatterns - 1);
+        origin = at;
+        patternNow.store (playingIndex);
+        for (int i = 0; i < numLanes; ++i)
+            laneUsed[(size_t) i] = ! steps->patterns[(size_t) playingIndex].lanes[(size_t) i].empty();
+    }
+
+    // Stopped: what the sequencer was holding is let go, what it had coming is dropped.
+    void Engine::releaseSequenced()
+    {
+        for (int i = 0; i < plannedCount; ++i)
+            if (planned[(size_t) i].velocity <= 0.0f)
+                letGoLocked (planned[(size_t) i].pad);
+        plannedCount = 0;
+    }
+
+    void Engine::schedule (double from, double to)
+    {
+        const auto& pattern = steps->patterns[(size_t) playingIndex];
+        bool soloing = false;
+        for (int i = 0; i < numLanes; ++i)
+            soloing = soloing || (laneUsed[(size_t) i] && pattern.lanes[(size_t) i].solo);
+        auto plan = [this] (double at, int pad, float velocity, double pitch)
+        {
+            if (plannedCount < maxPlanned)
+                planned[(size_t) plannedCount++] = { at, pad, velocity, pitch };
+        };
+        for (int lane = 0; lane < numLanes; ++lane)
+        {
+            if (! laneUsed[(size_t) lane])
+                continue;
+            const auto& l = pattern.lanes[(size_t) lane];
+            if (l.mute || (soloing && ! l.solo))
+                continue;
+            const auto length = rateBeats (l.rate);
+            // Swing and shift move a step by at most a step, so a step either side is enough.
+            const auto first = (int64_t) std::floor ((from - origin) / length) - 1;
+            const auto last = (int64_t) std::ceil ((to - origin) / length) + 1;
+            for (auto k = std::max<int64_t> (0, first); k <= last; ++k)
+            {
+                const auto at = origin + stepTime (l, pattern, k);
+                if (at < from || at >= to)
+                    continue;
+                const auto& s = l.step[(size_t) stepIndex (l, k)];
+                if (! s.on)
+                    continue;
+                if (s.chance < 100)
+                {
+                    random ^= random << 13;
+                    random ^= random >> 17;
+                    random ^= random << 5;
+                    if ((int) (random % 100u) >= s.chance)
+                        continue;
+                }
+                const auto repeats = std::clamp<int> (s.repeats, 1, maxRepeats);
+                const auto each = length / repeats;
+                for (int r = 0; r < repeats; ++r)
+                {
+                    const auto ramp = repeats > 1 ? s.ramp / 100.0 * r / (repeats - 1) : 0.0;
+                    const auto velocity = (float) std::clamp (s.velocity / 127.0 * (1.0 + ramp), 0.01, 1.0);
+                    const auto hitAt = at + r * each;
+                    plan (hitAt, lane, velocity, s.pitch);
+                    plan (hitAt + each * std::clamp<int> (s.gate, 1, 100) / 100.0, lane, 0.0f, 0.0);
+                }
+            }
+        }
+    }
+
+    void Engine::sequence (float* left, float* right, int frames)
+    {
+        double bpm = steps->bpm, from = beat;
+        if (follow)
+        {
+            double at = 0.0, tempo = 120.0;
+            const bool runs = follow (at, tempo);
+            if (! runs)
+            {
+                if (following)
+                    releaseSequenced();
+                following = false;
+                running.store (false);
+                renderVoices (left, right, frames);
+                return;
+            }
+            bpm = std::clamp (tempo, 20.0, 400.0);
+            // Started, or moved: the patterns count from the clock's beat 0 (or the chain's start).
+            // The clock may be read more often than it moves (it ticks a block at a time, and this
+            // may render in parts of a block), so only a new reading far from here is a move.
+            const auto slack = std::max (0.1, 8192.0 * bpm / 60.0 / rate);
+            const bool moved = ! following || (at != clockWas && std::abs (at - beat) > slack);
+            clockWas = at;
+            if (! moved)
+                at = beat;
+            else
+            {
+                releaseSequenced();
+                chainAt = 0;
+                const auto start = steps->chainOn && steps->chainLength > 0 ? (int) steps->chain[0] : playingIndex;
+                switchPattern (start, 0.0);
+                if (steps->chainOn && steps->chainLength > 0 && at > 0.0)
+                {
+                    // Into the chain as far as the clock has got.
+                    double t = 0.0;
+                    for (;;)
+                    {
+                        const auto bars = steps->patterns[(size_t) playingIndex].bars * steps->beatsPerBar;
+                        if (t + bars > at)
+                            break;
+                        t += bars;
+                        chainAt = (chainAt + 1) % steps->chainLength;
+                        switchPattern (steps->chain[(size_t) chainAt], t);
+                    }
+                }
+            }
+            following = true;
+            running.store (true);
+            from = at;
+        }
+        else if (! running.load())
+        {
+            renderVoices (left, right, frames);
+            return;
+        }
+        const auto perFrame = bpm / 60.0 / rate;
+        const auto to = from + frames * perFrame;
+
+        // Plan the steps that start in this block, a pattern at a time: a change of pattern
+        // (queued, or the chain's next) happens on a bar line.
+        for (auto at = from; at < to;)
+        {
+            const auto bar = (double) steps->beatsPerBar;
+            auto next = to;
+            int change = -1;
+            if (const auto q = patternQueued.load(); q >= 0)
+            {
+                const auto line = std::ceil (at / bar - 1.0e-9) * bar;
+                if (line < to)
+                {
+                    next = line;
+                    change = q;
+                }
+            }
+            else if (steps->chainOn && steps->chainLength > 0)
+            {
+                const auto end = origin + steps->patterns[(size_t) playingIndex].bars * bar;
+                if (end < to)
+                {
+                    next = std::max (at, end);
+                    change = steps->chain[(size_t) ((chainAt + 1) % steps->chainLength)];
+                }
+            }
+            schedule (at, next);
+            if (change < 0)
+                break;
+            if (patternQueued.load() >= 0)
+                patternQueued.store (-1);
+            else
+                chainAt = (chainAt + 1) % steps->chainLength;
+            switchPattern (change, next);
+            at = next;
+        }
+
+        // Play what falls in this block, in order, rendering the voices between.
+        std::sort (planned.begin(), planned.begin() + plannedCount, [] (const Planned& a, const Planned& b)
+        {
+            return a.beat < b.beat || (a.beat == b.beat && a.velocity < b.velocity);   // let-goes first
+        });
+        int done = 0, rendered = 0;
+        for (; done < plannedCount && planned[(size_t) done].beat < to; ++done)
+        {
+            const auto& e = planned[(size_t) done];
+            // The first frame at or after the step (a hair's leeway for the beat's rounding).
+            const auto offset = std::clamp ((int) std::ceil ((e.beat - from) / perFrame - 1.0e-6), rendered, frames);
+            renderVoices (left + rendered, right + rendered, offset - rendered);
+            rendered = offset;
+            if (e.velocity > 0.0f)
+                hitLocked (e.pad, e.velocity, e.pitch, false);
+            else
+                letGoLocked (e.pad);
+        }
+        renderVoices (left + rendered, right + rendered, frames - rendered);
+        std::move (planned.begin() + done, planned.begin() + plannedCount, planned.begin());
+        plannedCount -= done;
+        beat = to;
+        beatNow.store (to - origin, std::memory_order_relaxed);
     }
 }

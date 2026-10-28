@@ -50,6 +50,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/MidSide.cpp
     Source/sampler/SamplerEngine.cpp
     Source/sampler/SlicerEngine.cpp
+    Source/sampler/StepSequencer.cpp
     Source/mixer/MidiFile.cpp
     Source/mixer/Tunings.cpp
     Source/mixer/Atlas.cpp
@@ -65,6 +66,7 @@ target_sources(${APP_ID} PRIVATE
     Source/mixer/Minimalize.cpp
     Source/mixer/Instruments.cpp
     Source/mixer/MixerEngine.cpp
+    Source/mixer/Spatial.cpp
     Source/mixer/Recording.cpp
     Source/mixer/DrumsToMidi.cpp
     Source/patchbay/PatchBay.cpp
@@ -174,7 +176,9 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/SamplerWindow.cpp
     Source/ui/SlicerKit.cpp
     Source/ui/SlicerWindow.cpp
+    Source/ui/StepSequencerView.cpp
     Source/ui/MixerWindow.cpp
+    Source/ui/MixerSpatial.cpp
     Source/ui/MidiEditor.cpp
     Source/ui/MixerRecording.cpp
     Source/ui/MixerFugue.cpp
@@ -420,6 +424,7 @@ if(PHI_BUILD_TESTS)
         Source/core/MidSide.cpp
         Source/sampler/SamplerEngine.cpp
         Source/sampler/SlicerEngine.cpp
+        Source/sampler/StepSequencer.cpp
         Source/mixer/MidiFile.cpp
         Source/mixer/Tunings.cpp
         Source/mixer/Atlas.cpp
@@ -436,6 +441,7 @@ if(PHI_BUILD_TESTS)
         Source/mixer/Minimalize.cpp
         Source/mixer/Instruments.cpp
         Source/mixer/MixerEngine.cpp
+        Source/mixer/Spatial.cpp
         Source/mixer/Recording.cpp
         Source/control/ControlSurface.cpp
         Source/control/Devices.cpp
