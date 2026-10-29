@@ -5,6 +5,7 @@
 
 #include "../core/Scala.h"
 #include "../engine/AudioCapture.h"
+#include "../mixer/Rhythms.h"
 #include "../mixer/Tunings.h"
 
 #include <QAbstractScrollArea>
@@ -40,6 +41,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
 
 using namespace noteedit;
 
@@ -1720,7 +1722,20 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     {
         roll->showNotes();
         roll->setFocus();
-        if (host.staff)
+        // A notation asked for by its id (the Compose menu's New Score In), else PHI's staff
+        // when the staff is (Host::staff).
+        if (! host.notation.isEmpty())
+        {
+            const auto id = host.notation.toStdString();
+            notation::Choice c;
+            if (notation::fromId (id, system, Staff::tuningsFolder().toStdString(), c))
+            {
+                staff->eachTradition = id == "tradition";
+                staff->setNotation (c, id == "phi" || id == "tradition");
+            }
+            showView (2);
+        }
+        else if (host.staff)
             showView (2);
     });
 }
@@ -1779,14 +1794,114 @@ void MidiEditor::fillNotationMenu (QMenu* menu)
     flats->setChecked (staff->flats);
     menu->addSeparator();
 
+    const auto make = [] (Kind k, std::string config = "phi:12-TET", notation::CipherStyle style = notation::CipherStyle::tradition)
+    {
+        Choice c;
+        c.kind = k;
+        c.config = std::move (config);
+        c.cipher = style;
+        return c;
+    };
+    // The beat-by-beat notations (NotationGrid.h), each tradition's own way of writing a melody.
+    item (menu, tr ("Hindustani Sargam (Bhatkhande)"), make (Kind::bhatkhande));
+    item (menu, tr ("Carnatic Swaras"), make (Kind::carnatic));
+    item (menu, tr ("Jianpu (Numbered)"), make (Kind::jianpu));
+    item (menu, tr ("Kepatihan (Gamelan, Not Angka)"), make (Kind::angka));
+    item (menu, tr ("Jeongganbo (Korean)"), make (Kind::jeongganbo));
     auto* cipher = menu->addMenu (tr ("Cipher Notation"));
-    item (cipher, tr ("The Tradition's Names (Sargam, Kepatihan)"), { Kind::cipher, {}, notation::CipherStyle::tradition });
-    item (cipher, tr ("Jianpu Numbers"), { Kind::cipher, {}, notation::CipherStyle::jianpu });
-    item (cipher, tr ("Degree Numbers"), { Kind::cipher, {}, notation::CipherStyle::degrees });
+    item (cipher, tr ("The Tradition's Names (Sargam, Kepatihan)"), make (Kind::cipher, {}, notation::CipherStyle::tradition));
+    item (cipher, tr ("Jianpu Numbers"), make (Kind::cipher, {}, notation::CipherStyle::jianpu));
+    item (cipher, tr ("Degree Numbers"), make (Kind::cipher, {}, notation::CipherStyle::degrees));
+    menu->addSeparator();
     for (const auto& b : notation::builtins())
-        item (menu, QString::fromStdString (b.title), { Kind::staff, "phi:" + b.name, {} });
+        item (menu, QString::fromStdString (b.title), make (Kind::staff, "phi:" + b.name));
     if (const auto n = notation::equalDivisions (system); n > 0 && n != 12)
-        item (menu, tr ("%1-EDO, Ups and Downs").arg (n), { Kind::staff, "edo:" + std::to_string (n), {} });
+        item (menu, tr ("%1-EDO, Ups and Downs").arg (n), make (Kind::staff, "edo:" + std::to_string (n)));
+
+    // The svaras' script.
+    auto* scripts = menu->addMenu (tr ("Script (Sargam and Swaras)"));
+    for (const auto sc : { notation::Script::roman, notation::Script::devanagari, notation::Script::bengali, notation::Script::kannada,
+                           notation::Script::tamil, notation::Script::telugu, notation::Script::malayalam })
+    {
+        auto* a = scripts->addAction (QString::fromLatin1 (notation::scriptName (sc)), this, [this, sc] { staff->script = sc; staff->refresh(); });
+        a->setCheckable (true);
+        a->setChecked (current.script == sc && (current.kind == Kind::bhatkhande || current.kind == Kind::carnatic));
+    }
+
+    // The cycle the clip counts in (a tāl, a tāḷam, a jangdan...), from the step cursor on.
+    auto* cycles = menu->addMenu (tr ("Rhythmic Cycle"));
+    const auto* inForce = noteedit::cycleAt (seq, step.position);
+    const auto setCycle = [this] (const std::string& plain, int64_t beat)
+    {
+        edit ([&] (noteedit::Sequence& s)
+        {
+            const auto* was = noteedit::cycleAt (s, step.position);
+            noteedit::Cycle c;
+            c.tick = s.cycles.empty() ? 0 : step.position;
+            c.rhythm = plain;
+            c.beat = beat > 0 ? beat : was != nullptr ? was->beat : 0;
+            if (plain.empty() && was != nullptr)
+                c.tick = was->tick;
+            noteedit::setCycle (s, c);
+        });
+        staff->refresh();
+    };
+    auto* none = cycles->addAction (tr ("None (Bars of 4/4)"), this, [setCycle] { setCycle ({}, 0); });
+    none->setCheckable (true);
+    none->setChecked (inForce == nullptr);
+    auto* beats = cycles->addMenu (tr ("Beat"));
+    const auto tpq = seq.ticksPerQuarter;
+    for (const auto& [name, ticks] : std::vector<std::pair<QString, int64_t>> { { tr ("Quarter"), tpq }, { tr ("Eighth"), tpq / 2 },
+                                                                                { tr ("Half"), 2 * tpq }, { tr ("Dotted Quarter"), tpq * 3 / 2 } })
+    {
+        auto* a = beats->addAction (name, this, [setCycle, inForce, ticks = ticks]
+        {
+            if (inForce != nullptr)
+                setCycle (inForce->rhythm, ticks);
+        });
+        a->setCheckable (true);
+        a->setEnabled (inForce != nullptr);
+        a->setChecked (inForce != nullptr && (inForce->beat > 0 ? inForce->beat : tpq) == ticks);
+    }
+    cycles->addSeparator();
+    std::map<std::string, QMenu*> groupMenus;
+    for (const auto& r : rhythm::rhythms())
+    {
+        auto*& m = groupMenus[r.group];
+        if (m == nullptr)
+            m = cycles->addMenu (QString::fromStdString (r.group));
+        auto* a = m->addAction (QString::fromStdString (r.name), this, [setCycle, plain = r.plain] { setCycle (plain, 0); });
+        a->setCheckable (true);
+        a->setChecked (inForce != nullptr && inForce->rhythm == r.plain);
+    }
+
+    // The staff's key signature: the system's own (when LilyPond has it), none, or any of LilyPond's.
+    auto* keys = menu->addMenu (tr ("Key Signature (Maqam, Makam, Dastgah)"));
+    auto* own = keys->addAction (tr ("The Mode's Own"), this, [this] { staff->key.reset(); staff->refresh(); });
+    own->setCheckable (true);
+    own->setChecked (! staff->key);
+    auto* noKey = keys->addAction (tr ("None"), this, [this] { staff->key = std::string ("none"); staff->refresh(); });
+    noKey->setCheckable (true);
+    noKey->setChecked (staff->key && *staff->key == "none");
+    keys->addSeparator();
+    // On the system's tonic for LilyPond's Arabic and Persian modes (they name none); Turkish ones on their own.
+    const auto tonicLetter = std::string (1, "cdefgab"[std::clamp ((int) std::lround (std::fmod (std::fmod (system.tonic, 1200.0) + 1200.0, 1200.0) / 1200.0 * 7.0 - 0.01), 0, 6)]);
+    std::map<std::string, QMenu*> keyMenus;
+    for (const auto& k : notation::keySignatures())
+    {
+        auto*& m = keyMenus[k.tradition];
+        if (m == nullptr)
+            m = keys->addMenu (k.tradition == "arabic" ? tr ("Arabic (LilyPond)") : k.tradition == "turkish" ? tr ("Turkish (LilyPond)") : tr ("Persian (LilyPond)"));
+        const auto value = k.tradition + ":" + k.name + "@" + (k.tonic.empty() ? tonicLetter : k.tonic);
+        auto* a = m->addAction (QString::fromStdString (k.name + (k.tonic.empty() ? "" : " (" + k.tonic + ")")), this, [this, value]
+        {
+            staff->key = value;
+            staff->refresh();
+        });
+        a->setCheckable (true);
+        a->setChecked (staff->key && *staff->key == value);
+    }
+    menu->addSeparator();
 
     // Xen Tuner's library, a submenu a folder, the configs in number order.
     auto* library = menu->addMenu (tr ("Xen Tuner"));
@@ -1807,13 +1922,13 @@ void MidiEditor::fillNotationMenu (QMenu* menu)
             return a < b;
         });
         for (const auto& f : files)
-            item (sub, QFileInfo (f).completeBaseName(), { Kind::staff, f.toStdString(), {} });
+            item (sub, QFileInfo (f).completeBaseName(), make (Kind::staff, f.toStdString()));
     }
-    menu->addAction (tr ("Open a Xen Tuner Config (.txt)..."), this, [this, pick]
+    menu->addAction (tr ("Open a Xen Tuner Config (.txt)..."), this, [this, pick, make]
     {
         const auto file = QFileDialog::getOpenFileName (this, tr ("Open a Xen Tuner Tuning Config"), host.folder, tr ("Xen Tuner configs (*.txt)"));
         if (! file.isEmpty())
-            pick ({ Kind::staff, QFileInfo (file).absoluteFilePath().toStdString(), {} }, false);
+            pick (make (Kind::staff, QFileInfo (file).absoluteFilePath().toStdString()), false);
     });
 }
 

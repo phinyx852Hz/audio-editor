@@ -15,6 +15,13 @@
 // picked notes to the next pitch the notation writes (Xen Tuner's up and down); the editor's own
 // keys (Up and Down by the system's degrees, Delete, Q, the arrows) work here as in the roll.
 // Ctrl and the wheel zoom in time.
+//
+// The beat-by-beat notations (owner, 2026-10-29; mixer/NotationGrid.h) are written in the same
+// place: Bhatkhande's sargam and the Karnatak svaras a cycle a line under the tāl's signs, jianpu
+// and not angka with their lines and dashes, jeongganbo in boxes down columns read right to left
+// (in the TteoiJeonggan font). The staff for maqams, makams and dastgahs carries LilyPond's key
+// signature. A right-click on a note gives it a lyric or a mark (a stroke, a technique, a
+// sigimsae).
 #include "MidiEditor.h"
 #include "../mixer/Notation.h"
 
@@ -22,6 +29,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 
 class QScrollBar;
 
@@ -37,6 +45,9 @@ public:
     bool automatic() const { return isAutomatic; }
     bool eachTradition = false;
     bool flats = false;   // flats before sharps, where both spell a pitch
+    // The svaras' script and the staff's key signature, when picked (else the choice's own).
+    std::optional<notation::Script> script;
+    std::optional<std::string> key;
     // The notation in force for a system, and its title for the corner.
     notation::Choice choiceFor (const noteedit::PitchSystem&) const;
     QString titleFor (const noteedit::PitchSystem&) const;
@@ -55,6 +66,7 @@ protected:
     void mouseMoveEvent (QMouseEvent*) override;
     void wheelEvent (QWheelEvent*) override;
     void keyPressEvent (QKeyEvent*) override;
+    void contextMenuEvent (QContextMenuEvent*) override;
 
 private:
     const phi::xen::Speller* spellerFor (const noteedit::PitchSystem&) const;
@@ -68,16 +80,29 @@ private:
     void fit();                           // half and highest, for the notes and the height
     void paintStaff (QPainter&, int width);
     void paintCipher (QPainter&, int width);
+    // The beat-by-beat notations: the writing for the choice, laid out in lines or in columns.
+    notation::Writing writing (const notation::Choice&) const;
+    void paintLines (QPainter&, const notation::Choice&, const notation::Writing&, int width);
+    void paintColumns (QPainter&, const notation::Writing&, int width);
+    // The staff's key signature after the clefs (and the letters it alters, for the notes).
+    void paintKey (QPainter&, const phi::xen::Speller&, const notation::Choice&, const std::array<double, 7>&);
+    std::array<std::vector<phi::xen::Symbol>, 7> keySymbols (const phi::xen::Speller&, const std::array<double, 7>&) const;
     QString describe (const noteedit::Note&) const;
 
     MidiEditor& ed;
     QScrollBar* scroll = nullptr;
+    QScrollBar* lines = nullptr;          // down the lines of a beat-by-beat writing
     double pixelsPerTick = 0.12;
     double half = 5.0;                    // pixels a staff step: half a space
     double highest = 44.0;                // the staff position at the top of the view
     notation::Choice choice;
     bool isAutomatic = true;
     QString musicFamily;                  // Bravura, when it loaded
+    QString jeongganFamily;               // TteoiJeonggan, when it loaded
+    double keyWidth = 0.0;                // the key signature's, after the clefs
+    // Where the beat-by-beat writing put each note, for clicks and hovering.
+    mutable std::vector<std::pair<QRectF, int>> hits;
+    bool writingShown = false;            // the last paint was a beat-by-beat writing
     // The spellers made, by the choice and the tonic they are anchored on.
     mutable std::map<std::string, std::unique_ptr<phi::xen::Speller>> spellers;
     mutable QString loadError;

@@ -216,16 +216,43 @@ microtonal staff notation, for every system, spelled by the config that fits the
 |---|---|
 | Arabic maqams | The half-flat (a struck flat) and the half-sharp, and the three-quarter signs as one glyph |
 | Persian dastgahs | Vaziri's koron and sori |
-| Turkish makams | Sagittal's 53-EDO notation |
+| Turkish makams | The Arel-Ezgi-Uzdilek accidentals (koma, bakiye, küçük and büyük mücenneb), in 53 commas to the octave |
 | Equal divisions | Sagittal's notation for that division when Xen Tuner has one, otherwise ups and downs (generated for any division) |
 | Ragas, gamelan, Chinese modes, just intonation and Pythagorean modes, Scala scales | HEJI: the comma arrows on sharps and flats, and anything not covered shown in cents |
 | 12-TET, jazz modes, mbira tunings | Sharps and flats, with the cents a note is off its key |
 
 **Each Tradition's Own** is the option beside it, and follows the system in force the same way. It
-writes ragas in sargam in cipher (S r R g G m M P d D n N, with a dot above or below for each octave
-up or down, Bhatkhande's way), Javanese and Balinese gamelan in kepatihan numbers, Sundanese gamelan
-in degree numbers, and Chinese modes in jianpu (1 to 7 by the semitone above the gong, ♯ or ♭
-before, dots for the octave). Every other system is written on PHI's staff as above.
+writes ragas in Bhatkhande's sargam, Karnatak melakartas and ragas in Carnatic swaras, Javanese and
+Balinese gamelan in not angka (kepatihan), Chinese modes in jianpu and Korean modes in jeongganbo,
+each as described below. Every other system is written on PHI's staff as above.
+
+### The notations written beat by beat
+
+These write the clip's melody (the highest note of a chord, drums left out) a beat at a time, in
+the rhythmic cycle it counts in, as each tradition writes it. Pick them from **Notation**:
+
+| Notation | How it is written |
+|---|---|
+| **Hindustani Sargam (Bhatkhande)** | A tāl's cycle a line, its vibhāgs between bars with × (sam), 0 (khālī) and the tālī numbers under their first mātrā. Komal svaras underlined, tīvra Ma with a stroke above, the octave in dots (mandra below, tār above). Several svaras in one mātrā share an arc beneath, ऽ holds a mātrā, – is a rest, a kaṇ is written small above, a mīṇḍ is an arc over the svaras it joins, and the words go under. |
+| **Carnatic Swaras** | The tāḷam's aṅgas between \| and the āvartanam closed with \|\|, with the aṅga signs (I₄, O, U). The svaras carry their variant as the rāga spells them (R₁ R₂ G₂ ...), a comma holds a unit, and the speed is lines over (one for two to an akṣara, two for four). The sāhityam goes under. |
+| **Jianpu (Numbered)** | 1 to 7 from the tonic, ♯ and ♭ before, octave dots, a dash for each beat a note holds, lines under for quavers and semiquavers beamed by the beat, a dot after a dotted note, 0 for a rest. |
+| **Kepatihan (Gamelan, Not Angka)** | Java's numbers in the same layout, with dots for the held beats. |
+| **Jeongganbo (Korean)** | A box (jeonggan) a beat, read down the column and the columns right to left, thick lines between the jangdan's sections. The twelve yulmyeong in hanja from hwangjong at E♭4, with the octave in their radical, a beat's notes split into rows and columns, － a held beat, △ a rest, and the sigimsae drawn in the TteoiJeonggan font. |
+
+**Script (Sargam and Swaras)** writes the svaras in Roman, Devanagari, Bengali, Kannada, Tamil,
+Telugu or Malayalam. **Rhythmic Cycle** sets the cycle the clip counts in from the step cursor on:
+a tāl, tāḷam, jangdan or other cycle from PHI's rhythms, or plain bars of 4/4. It is saved with the
+clip, so the written notations and the roll agree on where sam falls.
+
+A right-click on a note gives it a **Lyric...** (the syllable under it), a **Mark...** (a stroke,
+a bol, a technique) or a **Sigimsae** from Jeonggan's table. Both are saved in the clip's MIDI file:
+the lyric as a standard lyric event, the mark as a "PHI mark" marker. Scrolling moves through the
+lines, and a click picks the note under it as on the staff.
+
+**Key Signature (Maqam, Makam, Dastgah)** puts a key signature after the clefs on PHI's staff.
+**The Mode's Own** takes LilyPond's key for the maqam, makam or dastgah in force, moved to its
+tonic. Any of LilyPond's Arabic, Turkish and Persian keys can be picked by name instead, or
+**None**. A note in the key leaves its accidental out, and a note against it gets a natural.
 
 Any other notation can be picked from the same menu. The cipher styles are there, and so is each of PHI's
 own staff configs. Xen Tuner's whole library is under **Xen Tuner**: HEJI,
@@ -256,23 +283,21 @@ Bravura font (SMuFL, OFL-1.1), which is built into PHI.
 
 ### Notations still to come
 
-The view has two kinds, the staff and cipher (`notation::Kind` in `mixer/Notation.h`), each with a
-painter of its own in `ui/MidiStaff.cpp`. Another notation is a third kind with its own painter,
-plus an entry in `notation::suggested` for the systems it belongs to. The staff, the cipher and
-the editing do not change. The owner's source for that work is Walter Kaufmann's *Musical
-Notations of the Orient: Notational Systems of Continental East, South, and Central Asia* (Indiana
-University Press, 1967; https://archive.org/details/musicalnotations0000kauf). Going by its title
-and what is known of its contents, rather than a reading of the scan, it covers notations of
-China, Korea, Japan, Mongolia, Tibet and India. Where PHI cannot find an open-source renderer for
+The view's kinds are in `notation::Kind` (`mixer/Notation.h`). The staff and cipher each have a
+painter in `ui/MidiStaff.cpp`, and the beat-by-beat notations share one model and one painter: a
+writer in `mixer/NotationGrid.h` turns the clip into a `notation::Writing`, and the view paints it
+in lines or in columns. Another notation is a new writer, a new `Kind` and an entry in
+`notation::traditional` for the systems it belongs to.
+
+The owner's sources for the rest are two books by Walter Kaufmann. The first is *Musical Notations
+of the Orient: Notational Systems of Continental East, South, and Central Asia* (Indiana University
+Press, 1967; https://archive.org/details/musicalnotations0000kauf), covering notations of China,
+Korea, Japan, Mongolia, Tibet and India. The second is *Tibetan Buddhist Chant: Musical Notations
+and Interpretations of a Song Book by the Bkah Brgyud Pa and Sa Skya Pa Sects* (Indiana University
+Press, 1975; https://archive.org/details/tibetanbuddhistc0000kauf), the source for a future
+Tibetan dbyangs-yig (neume) view. Both are described here from their titles and what is known of
+their contents, not from a reading of the scans. Where PHI cannot find an open-source renderer for
 one of them, PHI will design its own.
-
-## Scala files
-
-PHI reads and writes Scala's .scl scales and .kbm keyboard maps with its own code
-(core/Scala.h), from the published format descriptions; the Scala program is not part of PHI.
-**Scala > Open a Scale** loads a .scl (and a .kbm of the same name beside it), **Open a Keyboard
-Map** another map, and **Save This System as .scl and .kbm** writes the system shown, its tonic on
-its key at its own pitch.
 
 ## Where it came from
 
@@ -285,5 +310,16 @@ MTS-ESP master library, which XenRoll also uses.
 Xen Tuner (GPL-3.0-or-later) for the staff notation: its config format and its parser, ported (see
 Staff notation above).
 
+For the beat-by-beat notations: Swara Notebook (Studio Kalavati, AGPL-3.0) and its sargam-spec
+(EPL-2.0 OR GPL-2.0-or-later) for Bhatkhande's sargam; Note-a-Bhairavi (ragumagu, GPL-3.0) for the
+Karnatak svaras; jianpu-ly (Silas S. Brown, Apache-2.0) for jianpu's layout; Jeongganbo Editor
+(Dongha Hwang, GPL-3.0) for the yulmyeong and their octave forms (`mixer/Jeongganbo.inc`);
+Jeonggan (Tteoieonire, GPL-3.0) for the sigimsae table and the TteoiJeonggan font (OFL-1.1); and
+LilyPond's `arabic.ly`, `turkish-makam.ly` and `persian.ly` (GPL-3.0-or-later) for the key
+signatures (`mixer/KeySignatures.inc`, made by `scripts/lilypond-keys.py`). The tables are
+ported under their own licences; the writers and painters are PHI's own. Which projects could be
+used, and which could not (CarMusTy, DiArMaqAr, Mus2, JapoScore, Swarlipi), is set out in
+`docs/foundations.md`.
+
 The code: mixer/NoteEditor.h (the model, plain C++, with tests), core/Scala.h, core/XenTuner.h,
-mixer/Notation.h (plain C++, with tests), ui/MidiEditor.h, ui/MidiStaff.h.
+mixer/Notation.h and mixer/NotationGrid.h (plain C++, with tests), ui/MidiEditor.h, ui/MidiStaff.h.
