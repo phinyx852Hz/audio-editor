@@ -217,6 +217,8 @@ by way of medieval theory, which named eight church modes after them; Glarean ad
 the *Dodecachordon* (1547), and two of his, Ionian and Aeolian, became major and minor. Twentieth
 century musicology, Harold Powers above all, widened it into a comparative idea that takes in the
 modal systems of the whole world.
+Why PHI's Mode menu divides into melody, rhythm and harmony is in
+[Mode in PHI: melody, rhythm and harmony](research:Mode%20in%20PHI%3A%20melody%2C%20rhythm%20and%20harmony).
 
 - [Mode (music)](https://en.wikipedia.org/wiki/Mode_(music)), Wikipedia.
 - Harold S. Powers, "Mode", in *The New Grove Dictionary of Music and Musicians*, ed. Stanley
