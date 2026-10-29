@@ -4845,7 +4845,7 @@ namespace
     {
         std::vector<std::string> errors;
         const auto all = phi::parseRagas (phi::builtInRagaSheets(), errors);
-        check (errors.empty() && all.size() == 175 && phi::builtInRagas().size() == 175, "raga sheets: the 175 built-in sheets read without a mistake");
+        check (errors.empty() && all.size() == 176 && phi::builtInRagas().size() == 176, "raga sheets: the 176 built-in sheets read without a mistake");
         for (const auto& e : errors)
             std::printf ("  %s\n", e.c_str());
         // Darpaṇ, made for PHI, is a mirror: each svara's reflection about Sa (and Ma) is one of its
