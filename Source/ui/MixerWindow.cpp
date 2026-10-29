@@ -11370,6 +11370,7 @@ void MixerWindow::openScore (const midifile::Song& score, mixer::TuningChoice tu
     host.bpm = tempoBox->value();
     host.folder = folder();
     host.title = title;
+    host.staff = true;   // a score opens on the staff, PHI's notation
     host.inputSource = inputSource;
     host.loadAudio = [] (const QString& file, QString& why) -> AudioDataPtr
     {

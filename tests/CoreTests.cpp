@@ -10,6 +10,8 @@
 #include "../Source/mixer/Tunings.h"
 #include "../Source/mixer/NoteEditor.h"
 #include "../Source/core/Scala.h"
+#include "../Source/core/XenTuner.h"
+#include "../Source/mixer/Notation.h"
 #include "../Source/mixer/RagaInstrument.h"
 #include "../Source/mixer/Counterpoint.h"
 #include "../Source/mixer/Fugue.h"
@@ -69,6 +71,7 @@
 #include <fstream>
 #include <functional>
 #include <iterator>
+#include <filesystem>
 #include <map>
 #include <numeric>
 #include <random>
@@ -8174,6 +8177,129 @@ namespace
         }
     }
 
+    void testXenTuner()
+    {
+        using namespace phi::xen;
+        std::string error;
+
+        // The config format: the reference, the nominals and equave, a chain; arithmetic in the numbers.
+        Config twelve;
+        check (parse ("A4: 440\n0c 200c 300c 500c 700c 800c 1000c 1200c\nbb b (100c) # x // a comment\naux(0)\n", twelve, error),
+               "xen: a 12-TET config is read");
+        check (twelve.nominals.size() == 7 && twelve.chains.size() == 1 && twelve.chains[0].central == 2 && near (twelve.equave, 1200.0, 1e-9),
+               "xen: its nominals, equave and chain");
+        check (near (twelve.referencePitch(), 6900.0, 1e-9) && twelve.referenceStaff() == 33, "xen: A4 at 440 Hz is pitch 6900, staff A4");
+        Speller sp (twelve);
+        auto cSharp = sp.best (6100.0);
+        check (cSharp.staff == 28 && cSharp.symbols.size() == 1 && cSharp.symbols[0].code == symbolCode ("#") && near (cSharp.off, 0.0, 1e-6),
+               "xen: C#4 spelled on C with a sharp");
+        auto dFlat = sp.best (6100.0, true);
+        check (dFlat.staff == 29 && dFlat.symbols.size() == 1 && dFlat.symbols[0].code == symbolCode ("b"), "xen: or D-flat, flats first");
+        check (sp.spell (6100.0).size() >= 2, "xen: its enharmonic spellings come with it");
+        auto between = sp.best (6114.0);
+        check (between.staff == 28 && near (between.off, 14.0, 1e-6), "xen: a pitch between is spelled with the cents it is off");
+        check (sp.stepsPerEquave() == 12 && near (sp.next (6000.0, 1), 6100.0, 1e-6) && near (sp.next (6000.0, -1), 5900.0, 1e-6),
+               "xen: up and down by the notated pitches");
+        check (codePoint (symbolCode ("#")) == 0xE262 && smuflName (symbolCode ("b")) == "accidentalFlat", "xen: symbols are SMuFL glyphs");
+
+        Config sums;
+        check (parse ("C4: 440*16/27\n0 9/8 81/64 4/3 3/2 27/16 243/128 2/1\nb(Math.pow(2048/2187,1)) (0) #(2187/2048)\n'-' (1200*1/53c) '+'\n", sums, error),
+               "xen: ratios, Math and text accidentals");
+        check (near (sums.referencePitch(), 6900.0 - 1200.0 * std::log2 (27.0 / 16.0), 1e-6) && near (*sums.nominals[4], 701.955, 0.001)
+                   && near (sums.chains[0].cents[2], 113.685, 0.001) && near (sums.chains[1].cents[2], 1200.0 / 53.0, 1e-9)
+                   && sums.chains[1].symbols[0][0].text == "-",
+               "xen: their values");
+        Config bad;
+        check (! parse ("A4: 440\n0c 200c 1200c\nbb b # x\n", bad, error) && ! error.empty(), "xen: a chain without its step is refused");
+        check (! parse ("hello\nworld\n", bad, error), "xen: text that is not a config is refused");
+
+        // Xen Tuner's own library: HEJI spells 5/4 above a tonic as its letter with one arrow.
+        const std::string tunings = std::string (PHI_SHARE_SOURCE_DIR) + "/xen-tuner/tunings";
+        Config heji;
+        check (read (tunings + "/heji/5 limit.txt", heji, error) && heji.ligatures.size() >= 2 && ! heji.secondary.empty(), "xen: HEJI is read");
+        const auto onC = Speller (heji).anchoredAt (6000.0);
+        const auto third = onC.best (6000.0 + 1200.0 * std::log2 (5.0 / 4.0));
+        check (third.staff == 30 && third.symbols.size() == 1 && near (third.off, 0.0, 0.01), "xen: 5/4 is E with an arrow down, in HEJI");
+        const auto fifth = onC.best (6000.0 + 1200.0 * std::log2 (3.0 / 2.0));
+        check (fifth.staff == 32 && fifth.symbols.empty() && near (fifth.off, 0.0, 0.01), "xen: 3/2 is a plain G");
+        const auto minor = onC.best (6000.0 + 1200.0 * std::log2 (6.0 / 5.0));
+        check (minor.staff == 30 && minor.symbols.size() == 1 && near (minor.off, 0.0, 0.01), "xen: 6/5 is E-flat with an arrow up, as one ligature");
+
+        // Ups and downs in 31-EDO: up and down step by step.
+        Config upDown;
+        check (read (tunings + "/updown/31edo.txt", upDown, error), "xen: ups and downs is read");
+        const auto ud = Speller (upDown).anchoredAt (6000.0);
+        check (ud.stepsPerEquave() == 31 && near (ud.next (6000.0, 1), 6000.0 + 1200.0 / 31.0, 1e-6), "xen: 31 steps, a step at a time");
+
+        // Every config shipped is read.
+        int read = 0, failed = 0;
+        for (const auto& f : std::filesystem::recursive_directory_iterator (tunings))
+            if (f.path().extension() == ".txt")
+            {
+                Config c;
+                if (phi::xen::read (f.path().string(), c, error) && Speller (c).valid())
+                    ++read;
+                else
+                {
+                    ++failed;
+                    std::printf ("  %s: %s\n", f.path().string().c_str(), error.c_str());
+                }
+            }
+        check (read > 200 && failed == 0, "xen: every tuning config shipped is read");
+
+        // PHI's notations for the traditions.
+        Config arabic;
+        check (notation::load ({ notation::Kind::staff, "phi:arabic quarter tones", {} }, tunings, arabic, error), "notation: the maqam config is read");
+        const Speller ar (arabic);
+        const auto halfFlat = ar.best (6350.0);
+        check (halfFlat.staff == 30 && halfFlat.symbols.size() == 1 && halfFlat.symbols[0].code == symbolCode ("b/"), "notation: E half-flat");
+        const auto quarters = ar.spell (6250.0);
+        check (! quarters.empty() && quarters[0].staff == 29 && quarters[0].symbols[0].code == symbolCode ("+")
+                   && std::any_of (quarters.begin(), quarters.end(), [] (const Spelling& q)
+                                   { return q.staff == 30 && q.symbols.size() == 1 && q.symbols[0].code == symbolCode ("|b"); }),
+               "notation: D half-sharp, or E three-quarter flat in one sign");
+        Config persian;
+        check (notation::load ({ notation::Kind::staff, "phi:persian koron and sori", {} }, tunings, persian, error), "notation: the dastgah config is read");
+        const auto koron = Speller (persian).best (6350.0);
+        check (koron.staff == 30 && koron.symbols.size() == 1 && codePoint (koron.symbols[0].code) == 0xE460, "notation: E koron");
+        for (const auto n : { 5, 7, 17, 19, 22, 41, 72 })
+        {
+            Config edo;
+            check (parse (notation::upsAndDowns (n), edo, error) && Speller (edo).stepsPerEquave() == n,
+                   "notation: ups and downs in " + std::to_string (n) + "-EDO writes every step");
+        }
+
+        // PHI's staff for every system by default, each tradition's own beside it.
+        const auto& all = mixer::tuningSystems();
+        const auto first = [&] (const std::string& family) -> const mixer::TuningSystem&
+        { return *std::find_if (all.begin(), all.end(), [&] (const mixer::TuningSystem& t) { return t.family == family; }); };
+        for (const auto* family : { "raga", "javanese gamelan" })
+            check (notation::suggested (noteedit::fromTuning (first (family), 0), tunings).kind == notation::Kind::staff,
+                   std::string ("notation: PHI's staff by default for ") + family);
+        check (notation::traditional (noteedit::fromTuning (first ("raga"), 0), tunings).kind == notation::Kind::cipher, "notation: a raga's own is sargam");
+        check (notation::traditional (noteedit::fromTuning (first ("javanese gamelan"), 0), tunings).kind == notation::Kind::cipher, "notation: gamelan's own is kepatihan");
+        check (notation::traditional (noteedit::fromTuning (first ("maqam"), 0), tunings).config == "phi:arabic quarter tones", "notation: a maqam's own is its half-flats");
+        check (notation::suggested (noteedit::fromTuning (first ("maqam"), 0), tunings).config == "phi:arabic quarter tones", "notation: a maqam with half-flats");
+        check (notation::suggested (noteedit::fromTuning (first ("dastgah"), 0), tunings).config == "phi:persian koron and sori", "notation: a dastgah with koron");
+        check (notation::suggested (noteedit::fromTuning (first ("church mode"), 0), tunings).config == "heji/5 limit.txt", "notation: a Pythagorean mode in HEJI");
+        check (notation::suggested (noteedit::twelveTet (0), tunings).config == "phi:12-TET", "notation: 12-TET with sharps and flats");
+        noteedit::PitchSystem edo31;
+        edo31.family = "equal";
+        for (int i = 0; i < 31; ++i)
+            edo31.degrees.push_back (i * 1200.0 / 31.0);
+        check (notation::equalDivisions (edo31) == 31 && notation::suggested (edo31, tunings).config == "sagittal/31edo revo.txt", "notation: 31-EDO in Sagittal");
+
+        // Cipher: sargam's names with the octave in dots, jianpu's numbers.
+        const auto raga = noteedit::fromTuning (first ("raga"), 0);
+        const auto sa = notation::cipher (raga, raga.tonic + 1200.0, notation::CipherStyle::tradition);
+        check (sa.name == "S" && sa.period == 1 && sa.off.empty(), "notation: Sa an octave up, a dot above");
+        noteedit::PitchSystem gong;
+        gong.family = "chinese mode";
+        gong.degrees = { 0, 200, 400, 700, 900 };
+        check (notation::cipher (gong, 6400.0, notation::CipherStyle::jianpu).name == "3" && notation::cipher (gong, 5700.0, notation::CipherStyle::jianpu).period == -1,
+               "notation: jianpu numbers, a dot below an octave down");
+    }
+
     void testScala()
     {
         using namespace phi::scala;
@@ -8545,6 +8671,7 @@ int main()
     testModeAtlas();
     testHarmonies();
     testScala();
+    testXenTuner();
     testNoteEditor();
     testCounterpoint();
     testFugue();

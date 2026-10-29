@@ -201,6 +201,71 @@ https://raw.githubusercontent.com/ODDSound/MTS-ESP/main/libMTS/Linux/x86_64/libM
 `sudo install -m 755 libMTS.so /usr/local/lib/libMTS.so`; PHI includes only ODDSound's small master code (third_party/MTS-ESP), whose licence lets
 anyone use it. Only one program can be the master: PHI says so when another is.
 
+## Staff notation
+
+**Staff** (Ctrl+Shift+N), or **View > Staff notation**, puts the clip's notes on a staff in the
+roll's place, and pressing it again brings the roll back. Both views show the same notes, and an
+edit in one shows in the other. Time runs across in proportion, as in the roll. Each note's head
+sits at its start with a line to its end, and a curved note's line follows its pitch curve up and
+down the staff, so a mīṇḍ or a gamak can be seen.
+
+**Notation** chooses what the notes are written in. **PHI Staff** (the default) is PHI's own
+microtonal staff notation, for every system, spelled by the config that fits the system in force:
+
+| System | Written on PHI's staff with |
+|---|---|
+| Arabic maqams | The half-flat (a struck flat) and the half-sharp, and the three-quarter signs as one glyph |
+| Persian dastgahs | Vaziri's koron and sori |
+| Turkish makams | Sagittal's 53-EDO notation |
+| Equal divisions | Sagittal's notation for that division when Xen Tuner has one, otherwise ups and downs (generated for any division) |
+| Ragas, gamelan, Chinese modes, just intonation and Pythagorean modes, Scala scales | HEJI: the comma arrows on sharps and flats, and anything not covered shown in cents |
+| 12-TET, jazz modes, mbira tunings | Sharps and flats, with the cents a note is off its key |
+
+**Each Tradition's Own** is the option beside it, and follows the system in force the same way. It
+writes ragas in sargam in cipher (S r R g G m M P d D n N, with a dot above or below for each octave
+up or down, Bhatkhande's way), Javanese and Balinese gamelan in kepatihan numbers, Sundanese gamelan
+in degree numbers, and Chinese modes in jianpu (1 to 7 by the semitone above the gong, ♯ or ♭
+before, dots for the octave). Every other system is written on PHI's staff as above.
+
+Any other notation can be picked from the same menu. The cipher styles are there, and so is each of PHI's
+own staff configs. Xen Tuner's whole library is under **Xen Tuner**: HEJI,
+HEWM, FJS, Sagittal (Evo and Revo, about a hundred EDOs), ups and downs, Kite, Fokker,
+Stein-Zimmermann, chromatic staves and NEJIs. **Open a Xen Tuner Config** reads a config of your
+own, written as Xen Tuner's README describes. **Flats Before Sharps** spells a pitch with a flat
+wherever a sharp or a flat would both do.
+
+A notation is moved as a whole so that the system's tonic sits on its letter. Sa is a plain C, and
+31-EDO's C has nothing over it. A note's accidentals are those of the spelling that comes nearest
+for the fewest signs. The cents it is off that spelling are written above it, as in Xen Tuner's
+"display cents". Hovering over a note shows its name and its other spellings.
+
+On the staff, a click picks a note (Shift adds to the pick), and a click on empty staff moves the
+step cursor. A double-click writes a note on that line or space, without accidentals. **Ctrl+Up**
+and **Ctrl+Down** move the picked notes to the next pitch the notation writes (Xen Tuner's up and
+down). The editor's own keys work here too: Up and Down by the system's degrees, Delete, Q, and the
+arrows. Ctrl and the mouse wheel zoom in time. The clip's markers (for example the sections of an
+Architectonics score) are shown along the top. A score from elsewhere in PHI can open straight on
+the staff by setting `MidiEditor::Host::staff`.
+
+The notation comes from [Xen Tuner](https://github.com/euwbah/musescore-xen-tuner), euwbah's
+microtonal plugin for MuseScore (GPL-3.0-or-later). PHI ports the half of it that reads tuning
+configs and works out what each notated pitch sounds (`core/XenTuner.cpp`, under Xen Tuner's own
+licence) to plain C++, with no MuseScore. It also runs it the other way round: from a pitch to its
+spelling. Xen Tuner's tuning configs ship in `share/xen-tuner/`. The symbols are drawn in Steinberg's
+Bravura font (SMuFL, OFL-1.1), which is built into PHI.
+
+### Notations still to come
+
+The view has two kinds, the staff and cipher (`notation::Kind` in `mixer/Notation.h`), each with a
+painter of its own in `ui/MidiStaff.cpp`. Another notation is a third kind with its own painter,
+plus an entry in `notation::suggested` for the systems it belongs to. The staff, the cipher and
+the editing do not change. The owner's source for that work is Walter Kaufmann's *Musical
+Notations of the Orient: Notational Systems of Continental East, South, and Central Asia* (Indiana
+University Press, 1967; https://archive.org/details/musicalnotations0000kauf). Going by its title
+and what is known of its contents, rather than a reading of the scan, it covers notations of
+China, Korea, Japan, Mongolia, Tibet and India. Where PHI cannot find an open-source renderer for
+one of them, PHI will design its own.
+
 ## Scala files
 
 PHI reads and writes Scala's .scl scales and .kbm keyboard maps with its own code
@@ -217,4 +282,8 @@ rows that follow a Scala scale; Intonara for the pitch axis; Cubase for the tool
 the lanes, quantise and step input. Ideas only: no code from any of them is used, apart from ODDSound's
 MTS-ESP master library, which XenRoll also uses.
 
-The code: mixer/NoteEditor.h (the model, plain C++, with tests), core/Scala.h, ui/MidiEditor.h.
+Xen Tuner (GPL-3.0-or-later) for the staff notation: its config format and its parser, ported (see
+Staff notation above).
+
+The code: mixer/NoteEditor.h (the model, plain C++, with tests), core/Scala.h, core/XenTuner.h,
+mixer/Notation.h (plain C++, with tests), ui/MidiEditor.h, ui/MidiStaff.h.

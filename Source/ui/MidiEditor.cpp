@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MidiEditor.h"
+#include "MidiStaff.h"
 #include "ModeAtlas.h"
 
 #include "../core/Scala.h"
@@ -13,6 +14,8 @@
 #include <QComboBox>
 #include <QDateTime>
 #include <QDialogButtonBox>
+#include <QDir>
+#include <QDirIterator>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -1448,9 +1451,27 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     viewBox = new QComboBox (this);
     viewBox->addItem (tr ("Piano roll"));
     viewBox->addItem (tr ("Rising spectrum"));
+    viewBox->addItem (tr ("Staff notation"));
     viewBox->setToolTip (tr ("The rising spectrum: frequency across, time down, each note at its fundamental with its harmonics, "
-                             "rolling up while it plays. Ctrl+wheel zooms across, Shift+wheel moves, Alt+wheel stretches time"));
+                             "rolling up while it plays. Ctrl+wheel zooms across, Shift+wheel moves, Alt+wheel stretches time. "
+                             "Staff notation: the notes written on a staff or in cipher, in the roll's place"));
     systems->addWidget (viewBox);
+    // The staff notation, toggled with the roll in the same place (owner, 2026-10-29), and what it is written in.
+    staffButton = new QToolButton (this);
+    staffButton->setText (tr ("Staff"));
+    staffButton->setCheckable (true);
+    staffButton->setShortcut (QKeySequence (tr ("Ctrl+Shift+N")));
+    staffButton->setToolTip (tr ("Toggle between the piano roll and the microtonal staff notation (Ctrl+Shift+N)"));
+    systems->addWidget (staffButton);
+    notationButton = new QToolButton (this);
+    notationButton->setText (tr ("Notation"));
+    notationButton->setPopupMode (QToolButton::InstantPopup);
+    auto* notationMenu = new QMenu (notationButton);
+    notationButton->setMenu (notationMenu);
+    notationButton->setToolTip (tr ("What the notes are written in: PHI's microtonal staff (the maqams' half-flats, koron and sori, HEJI, Sagittal), "
+                                    "each tradition's own (sargam, kepatihan, jianpu), any of Xen Tuner's notations, or a Xen Tuner config of your own"));
+    connect (notationMenu, &QMenu::aboutToShow, this, [this, notationMenu] { fillNotationMenu (notationMenu); });
+    systems->addWidget (notationButton);
     harmonicsBox = new QSpinBox (this);
     harmonicsBox->setRange (1, 32);
     harmonicsBox->setValue (8);
@@ -1470,12 +1491,15 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     roll = new Roll (*this);
     spectrum = new Spectrum (*this);
     spectrum->hide();
+    staff = new Staff (*this);
+    staff->hide();
     wheel = new Wheel (*this);
     wheel->hide();
     auto* views = new QHBoxLayout;
     views->setSpacing (6);
     views->addWidget (roll, 1);
     views->addWidget (spectrum, 1);
+    views->addWidget (staff, 1);
     views->addWidget (wheel);
     layout->addLayout (views, 1);
 
@@ -1651,14 +1675,8 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     connect (gridBox, &QComboBox::activated, this, [this] { roll->refresh(); });
     connect (lengthBox, &QComboBox::activated, this, [this] { step.length = step.step = noteLength(); });
     connect (ghostBox, &QCheckBox::toggled, this, [this] { roll->refresh(); viewsUpdate(); });
-    connect (viewBox, &QComboBox::activated, this, [this] (int i)
-    {
-        roll->setVisible (i == 0);
-        spectrum->setVisible (i == 1);
-        if (i == 1)
-            spectrum->showNotes();
-        (i == 0 ? (QWidget*) roll : spectrum)->setFocus();
-    });
+    connect (viewBox, &QComboBox::activated, this, &MidiEditor::showView);
+    connect (staffButton, &QToolButton::clicked, this, [this] (bool on) { showView (on ? 2 : 0); });
     connect (harmonicsBox, &QSpinBox::valueChanged, this, [this] { viewsUpdate(); });
     connect (wheelBox, &QCheckBox::toggled, this, [this] (bool b) { wheel->setVisible (b); });
     connect (stepBox, &QCheckBox::toggled, this, [this] (bool b) { if (b) roll->setFocus(); roll->refresh(); });
@@ -1698,7 +1716,105 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     step.length = step.step = noteLength();
     roll->rebuild();
     changed();
-    QTimer::singleShot (0, this, [this] { roll->showNotes(); roll->setFocus(); });
+    QTimer::singleShot (0, this, [this]
+    {
+        roll->showNotes();
+        roll->setFocus();
+        if (host.staff)
+            showView (2);
+    });
+}
+
+void MidiEditor::showView (int i)
+{
+    roll->setVisible (i == 0);
+    spectrum->setVisible (i == 1);
+    staff->setVisible (i == 2);
+    notationButton->setEnabled (i == 2);
+    {
+        const QSignalBlocker block (viewBox);
+        viewBox->setCurrentIndex (i);
+    }
+    staffButton->setChecked (i == 2);
+    if (i == 1)
+        spectrum->showNotes();
+    if (i == 2)
+        staff->showNotes();
+    (i == 0 ? (QWidget*) roll : i == 1 ? (QWidget*) spectrum : (QWidget*) staff)->setFocus();
+}
+
+void MidiEditor::fillNotationMenu (QMenu* menu)
+{
+    using notation::Choice;
+    using notation::Kind;
+    menu->clear();
+    const auto current = staff->choiceFor (system);
+    const auto pick = [this] (const Choice& c, bool automatic)
+    {
+        staff->setNotation (c, automatic);
+        staff->showNotes();
+    };
+    const auto item = [&] (QMenu* m, const QString& text, const Choice& c)
+    {
+        auto* a = m->addAction (text, this, [pick, c] { pick (c, false); });
+        a->setCheckable (true);
+        a->setChecked (! staff->automatic() && current == c);
+        return a;
+    };
+    const auto tunings = Staff::tuningsFolder().toStdString();
+    const auto automatic = [&] (const QString& text, const Choice& c, bool eachTradition)
+    {
+        auto* a = menu->addAction (text.arg (QString::fromStdString (notation::title (c))), this, [this, pick, eachTradition]
+        {
+            staff->eachTradition = eachTradition;
+            pick ({}, true);
+        });
+        a->setCheckable (true);
+        a->setChecked (staff->automatic() && staff->eachTradition == eachTradition);
+    };
+    automatic (tr ("PHI Staff (%1)"), notation::suggested (system, tunings), false);
+    automatic (tr ("Each Tradition's Own (%1)"), notation::traditional (system, tunings), true);
+    auto* flats = menu->addAction (tr ("Flats Before Sharps"), this, [this] (bool on) { staff->flats = on; staff->refresh(); });
+    flats->setCheckable (true);
+    flats->setChecked (staff->flats);
+    menu->addSeparator();
+
+    auto* cipher = menu->addMenu (tr ("Cipher Notation"));
+    item (cipher, tr ("The Tradition's Names (Sargam, Kepatihan)"), { Kind::cipher, {}, notation::CipherStyle::tradition });
+    item (cipher, tr ("Jianpu Numbers"), { Kind::cipher, {}, notation::CipherStyle::jianpu });
+    item (cipher, tr ("Degree Numbers"), { Kind::cipher, {}, notation::CipherStyle::degrees });
+    for (const auto& b : notation::builtins())
+        item (menu, QString::fromStdString (b.title), { Kind::staff, "phi:" + b.name, {} });
+    if (const auto n = notation::equalDivisions (system); n > 0 && n != 12)
+        item (menu, tr ("%1-EDO, Ups and Downs").arg (n), { Kind::staff, "edo:" + std::to_string (n), {} });
+
+    // Xen Tuner's library, a submenu a folder, the configs in number order.
+    auto* library = menu->addMenu (tr ("Xen Tuner"));
+    const QDir root (Staff::tuningsFolder());
+    for (const auto& folder : root.entryList (QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name))
+    {
+        auto* sub = library->addMenu (folder);
+        QStringList files;
+        QDirIterator it (root.filePath (folder), { QStringLiteral ("*.txt") }, QDir::Files, QDirIterator::Subdirectories);
+        while (it.hasNext())
+            files << root.relativeFilePath (it.next());
+        std::sort (files.begin(), files.end(), [] (const QString& a, const QString& b)
+        {
+            static const QRegularExpression number (QStringLiteral ("(\\d+)"));
+            const auto ma = number.match (QFileInfo (a).fileName()), mb = number.match (QFileInfo (b).fileName());
+            if (ma.hasMatch() && mb.hasMatch() && ma.captured (1).toInt() != mb.captured (1).toInt())
+                return ma.captured (1).toInt() < mb.captured (1).toInt();
+            return a < b;
+        });
+        for (const auto& f : files)
+            item (sub, QFileInfo (f).completeBaseName(), { Kind::staff, f.toStdString(), {} });
+    }
+    menu->addAction (tr ("Open a Xen Tuner Config (.txt)..."), this, [this, pick]
+    {
+        const auto file = QFileDialog::getOpenFileName (this, tr ("Open a Xen Tuner Tuning Config"), host.folder, tr ("Xen Tuner configs (*.txt)"));
+        if (! file.isEmpty())
+            pick ({ Kind::staff, QFileInfo (file).absoluteFilePath().toStdString(), {} }, false);
+    });
 }
 
 MidiEditor::~MidiEditor() { stopPlay(); }
@@ -2001,6 +2117,8 @@ void MidiEditor::viewsUpdate()
 {
     if (spectrum->isVisible())
         spectrum->update();
+    if (staff->isVisible())
+        staff->update();
     if (wheel->isVisible())
         wheel->update();
 }
