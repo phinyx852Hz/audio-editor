@@ -56,6 +56,7 @@ target_sources(${APP_ID} PRIVATE
     Source/mixer/Atlas.cpp
     Source/mixer/NoteEditor.cpp
     Source/mixer/Notation.cpp
+    Source/mixer/NotationGrid.cpp
     Source/mixer/MtsEsp.cpp
     Source/mixer/RagaInstrument.cpp
     Source/mixer/Counterpoint.cpp
@@ -412,9 +413,12 @@ target_compile_definitions(${APP_ID} PRIVATE
 qt_add_resources(${APP_ID} brand PREFIX "/" FILES packaging/phi.svg)
 # Bravura (Steinberg, OFL-1.1), the SMuFL music font the MIDI editor's staff notation draws in.
 qt_add_resources(${APP_ID} music PREFIX "/fonts" BASE third_party/bravura FILES third_party/bravura/Bravura.otf)
+# TteoiJeonggan (Tteoieonire, OFL-1.1), the font jeongganbo's yulmyeong and sigimsae are drawn in.
+qt_add_resources(${APP_ID} jeonggan PREFIX "/fonts" BASE third_party/tteoi-jeonggan FILES third_party/tteoi-jeonggan/TteoiJeonggan.ttf)
 # Xen Tuner's tuning configs (GPL-3.0-or-later) for the staff notation's spellings.
 install(DIRECTORY "${CMAKE_SOURCE_DIR}/share/xen-tuner/" DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/xen-tuner")
 install(FILES third_party/bravura/OFL.txt DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/${APP_ID}" RENAME Bravura-OFL.txt)
+install(FILES third_party/tteoi-jeonggan/OFL.txt DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/${APP_ID}" RENAME TteoiJeonggan-OFL.txt)
 
 install(TARGETS ${APP_ID} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES packaging/phi.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
@@ -445,6 +449,7 @@ if(PHI_BUILD_TESTS)
         Source/mixer/Atlas.cpp
         Source/mixer/NoteEditor.cpp
         Source/mixer/Notation.cpp
+        Source/mixer/NotationGrid.cpp
         Source/mixer/RagaInstrument.cpp
         Source/mixer/Counterpoint.cpp
         Source/mixer/Fugue.cpp

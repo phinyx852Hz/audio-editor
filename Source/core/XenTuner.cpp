@@ -23,6 +23,7 @@ namespace phi::xen
 #define XEN_TEXT(text, code)
         const SymbolRow symbolRows[] = {
 #include "XenSymbols.inc"
+#include "XenSymbolsPhi.inc"
         };
 #undef XEN_SYMBOL
 #undef XEN_TEXT
@@ -30,6 +31,7 @@ namespace phi::xen
 #define XEN_TEXT(text, code) TextRow { text, code },
         const TextRow textRows[] = {
 #include "XenSymbols.inc"
+#include "XenSymbolsPhi.inc"
         };
 #undef XEN_SYMBOL
 #undef XEN_TEXT

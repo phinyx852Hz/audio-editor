@@ -12,6 +12,7 @@
 #include "../Source/core/Scala.h"
 #include "../Source/core/XenTuner.h"
 #include "../Source/mixer/Notation.h"
+#include "../Source/mixer/NotationGrid.h"
 #include "../Source/mixer/RagaInstrument.h"
 #include "../Source/mixer/Counterpoint.h"
 #include "../Source/mixer/Fugue.h"
@@ -8123,8 +8124,8 @@ namespace
         for (const auto* family : { "raga", "javanese gamelan" })
             check (notation::suggested (noteedit::fromTuning (first (family), 0), tunings).kind == notation::Kind::staff,
                    std::string ("notation: PHI's staff by default for ") + family);
-        check (notation::traditional (noteedit::fromTuning (first ("raga"), 0), tunings).kind == notation::Kind::cipher, "notation: a raga's own is sargam");
-        check (notation::traditional (noteedit::fromTuning (first ("javanese gamelan"), 0), tunings).kind == notation::Kind::cipher, "notation: gamelan's own is kepatihan");
+        check (notation::traditional (noteedit::fromTuning (first ("raga"), 0), tunings).kind == notation::Kind::bhatkhande, "notation: a raga's own is Bhatkhande's sargam");
+        check (notation::traditional (noteedit::fromTuning (first ("javanese gamelan"), 0), tunings).kind == notation::Kind::angka, "notation: gamelan's own is not angka");
         check (notation::traditional (noteedit::fromTuning (first ("maqam"), 0), tunings).config == "phi:arabic quarter tones", "notation: a maqam's own is its half-flats");
         check (notation::suggested (noteedit::fromTuning (first ("maqam"), 0), tunings).config == "phi:arabic quarter tones", "notation: a maqam with half-flats");
         check (notation::suggested (noteedit::fromTuning (first ("dastgah"), 0), tunings).config == "phi:persian koron and sori", "notation: a dastgah with koron");
@@ -8145,6 +8146,106 @@ namespace
         gong.degrees = { 0, 200, 400, 700, 900 };
         check (notation::cipher (gong, 6400.0, notation::CipherStyle::jianpu).name == "3" && notation::cipher (gong, 5700.0, notation::CipherStyle::jianpu).period == -1,
                "notation: jianpu numbers, a dot below an octave down");
+    }
+
+    // The notations written beat by beat (NotationGrid), LilyPond's key signatures, and the lyrics,
+    // marks and cycles they read from the clip.
+    void testNotationViews()
+    {
+        using namespace noteedit;
+        std::string error;
+        const std::string tunings = std::string (PHI_SHARE_SOURCE_DIR) + "/xen-tuner/tunings";
+
+        // The Turkish makam staff: Arel-Ezgi-Uzdilek's commas.
+        phi::xen::Config aeu;
+        notation::Choice makam;
+        makam.config = "phi:turkish aeu";
+        check (notation::load (makam, tunings, aeu, error), "notation: the makam config is read");
+        const phi::xen::Speller turkish (aeu);
+        const double comma = 1200.0 / 53.0;
+        const auto koma = turkish.best (6000.0 + 8 * comma);
+        check (koma.staff == 29 && phi::xen::asText (koma.symbols) == "aeu-1" && near (koma.off, 0.0, 0.01), "notation: D with a koma flat");
+        const auto bakiye = turkish.best (6000.0 + 4 * comma);
+        check (bakiye.staff == 28 && phi::xen::asText (bakiye.symbols) == "aeu+4", "notation: C with a bakiye sharp");
+
+        // LilyPond's key signatures, transposed to the tonic.
+        check (notation::keySignatures().size() > 200, "notation: LilyPond's maqam, makam and dastgah keys");
+        const auto* rast = notation::findKeySignature ("turkish", "rast");
+        check (rast != nullptr, "notation: makam rast's key");
+        if (rast != nullptr)
+        {
+            const auto g = notation::transpose (*rast, 4, 0, notation::naturals ("turkish"));
+            check (near (g[3], 90.566, 0.01) && near (g[6], -22.642, 0.01), "notation: rast on G, F with a bakiye sharp and B a koma flat");
+        }
+        const auto* bayati = notation::findKeySignature ("arabic", "bayati");
+        check (bayati != nullptr, "notation: maqam bayati's key");
+        if (bayati != nullptr)
+        {
+            const auto d = notation::transpose (*bayati, 1, 0, notation::naturals ("arabic"));
+            check (near (d[2], -50.0, 1e-6) && near (d[6], -100.0, 1e-6), "notation: bayati on D, E half-flat and B flat");
+        }
+
+        // A phrase of rāg yaman in tīntāl: four svaras two to a mātrā, then four a mātrā each.
+        const auto& all = mixer::tuningSystems();
+        const auto yaman = fromTuning (all[(size_t) mixer::findTuning ("yaman (kalyan)")], 0);
+        Sequence s;
+        s.ticksPerQuarter = 480;
+        const double degrees[] = { 0, 200, 400, 600, 700, 900, 1100, 1200 };
+        int64_t at = 0;
+        for (int i = 0; i < 8; ++i)
+        {
+            Note n;
+            n.start = at;
+            n.length = i < 4 ? 240 : 480;
+            n.pitch = 6000.0 + degrees[i];
+            s.notes.push_back (n);
+            at += n.length;
+        }
+        s.notes[0].lyric = "ga";
+        s.cycles.push_back ({ 0, "tintal", 480 });
+        s.sort();
+
+        const auto bh = notation::bhatkhande (s, yaman, notation::Script::devanagari, 0, 16 * 480);
+        check (bh.beats.size() == 16 && bh.beats[0].sign == "×" && bh.beats[4].sign == "२" && bh.beats[8].sign == "०" && bh.beats[12].sign == "३",
+               "notation: tīntāl's sam, tālīs and khālī");
+        check (bh.beats[0].grouped && bh.beats[0].signs.size() == 2 && bh.beats[0].signs[0].text == "सा" && bh.beats[0].signs[0].lyric == "ga",
+               "notation: two svaras in a mātrā, the bol under Sa");
+        check (bh.beats[1].signs[1].raised && bh.beats[5].signs[0].octave == 1 && bh.beats[6].signs[0].kind == notation::Sign::Kind::rest,
+               "notation: tīvra Ma, tār Sa, then a rest");
+
+        const auto ca = notation::carnatic (s, yaman, notation::Script::roman, 0, 8 * 480);
+        check (ca.doubleBarAtCycle && ca.beats[0].signs.size() == 2 && ca.beats[0].signs[0].lines == 1 && ca.beats[2].signs[0].lines == 0,
+               "notation: Karnatak speed lines over two svaras an akṣara");
+
+        Sequence plain = s;
+        plain.cycles.clear();
+        const auto ji = notation::jianpu (plain, yaman, false, 0, 8 * 480);
+        check (ji.beats.size() == 8 && ji.beats[0].signs[0].text == "1" && ji.beats[0].signs[0].lines == 1
+                   && ji.beats[1].signs[1].before == "♯" && ji.beats[1].signs[1].text == "4" && ji.beats[6].signs[0].text == "0",
+               "notation: jianpu's numbers, quaver lines, ♯4 and a rest");
+
+        const auto jg = notation::jeongganbo (plain, yaman, 0, 8 * 480);
+        check (jg.layout == notation::Writing::columns && jg.beats[0].rows == 2 && jg.beats[2].signs[0].text == "姑" && jg.beats[6].signs[0].text == "△",
+               "notation: jeongganbo's boxes, gojeong for G, a rest");
+        int octave = 0;
+        check (notation::yulmyeong (6300.0, octave) == "黃" && octave == 0, "notation: hwangjong at E♭4");
+        check (! notation::sigimsae().empty(), "notation: the sigimsae table");
+
+        // Lyrics, marks and the cycle are saved in the clip's file and read back.
+        s.notes[2].mark = "dā";
+        const auto encoded = encode (s, {});
+        const auto decoded = decode (*encoded.song);
+        check (decoded.cycles.size() == 1 && decoded.cycles[0].rhythm == "tintal" && decoded.cycles[0].beat == 480, "notation: the cycle is saved");
+        check (decoded.notes.size() == 8 && decoded.notes[0].lyric == "ga" && decoded.notes[2].mark == "dā", "notation: a lyric and a mark are saved");
+
+        // Every notation offered by id.
+        for (const auto& system : notation::systems())
+        {
+            notation::Choice c;
+            check (notation::fromId (system.id, yaman, tunings, c), "notation: " + system.id + " is offered");
+        }
+        notation::Choice tradition;
+        check (notation::fromId ("tradition", yaman, tunings, tradition) && tradition.kind == notation::Kind::bhatkhande, "notation: a rāga's tradition writes sargam");
     }
 
     void testScala()
@@ -8518,6 +8619,7 @@ int main()
     testModeAtlas();
     testScala();
     testXenTuner();
+    testNotationViews();
     testNoteEditor();
     testCounterpoint();
     testFugue();
