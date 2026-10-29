@@ -133,4 +133,13 @@ namespace architectonics
     };
 
     Song compose (const SongSettings&);
+
+    // The song written out in full for notation and the timeline (owner, 2026-10-29: "a staff
+    // notation feature that would generate ... a composition based on architectonics function"):
+    // each colour's part from the first bar to the last, its scene's loop repeated through each
+    // section it plays in (null for a colour with no MIDI); and all of them in one file, a MIDI
+    // channel a colour (its drums on channel 10), with a marker where each section starts
+    // ("1 emergence", "12 climax").
+    std::array<midifile::SongPtr, colours> parts (const Song&, const SongSettings&);
+    midifile::SongPtr score (const Song&, const SongSettings&, const std::string& title);
 }

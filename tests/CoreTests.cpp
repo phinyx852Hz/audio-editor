@@ -7873,6 +7873,23 @@ namespace
         const auto& quiet = song.scenes.back();
         check (std::count (quiet.plays.begin(), quiet.plays.end(), true) < ar::colours && quiet.plays[1],
                "architectonics: the dissolution thins out to the pad");
+
+        // The score: every part from the first bar to the last, a channel a colour, the sections marked.
+        const auto full = ar::score (song, ss, "score");
+        std::set<int> used;
+        bool inside = true;
+        for (const auto& e : full->events)
+        {
+            used.insert (e.channel());
+            inside = inside && e.tick <= full->lastTick;
+        }
+        std::string why;
+        const auto bytes = midifile::bytes (*full);
+        const auto back = midifile::parse (bytes.data(), bytes.size(), why);
+        check (full->lastTick == 144 * 4 * 480 && full->markers.size() == song.scenes.size() && full->markers.front().text == "1 emergence"
+                   && used.count (9) == 1 && used.size() == 5 && inside && back != nullptr && back->noteCount() == full->noteCount()
+                   && ar::parts (song, ss)[1] != nullptr && ar::parts (song, ss)[0] == nullptr,
+               "architectonics: the score, a part a colour, the sections marked, as a MIDI file");
     }
 
     void testRhythmGenerator()

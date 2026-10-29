@@ -26,6 +26,8 @@ and dynamic part at the macro and meso levels: proportion by φ, and an energy a
 
 - **Compose a Song...** writes a song into the clip launcher's first empty scenes, a scene a
   section (below).
+- **Compose a Score...** writes the same composition out from the first bar to the last, for
+  notation (below).
 - **Design a Set...** shows the plan for the clip launcher's scenes as you change it. It shows
   each section as a block as wide as its bars and as tall as its energy, the scene numbers on
   the blocks, the five parts along the bottom and the golden section as a gold dashed line. A
@@ -140,6 +142,25 @@ Kept in settings.ini as architectonics/roles, loop and rhythms, beside the set's
 
 Code: `architectonics::compose` (plain C++, tested in testArchitectonics), FindPanel::pickDeal (a Φ
 deal's picks without dealing them), and MixerWindow::colourTracks, emptyScenes and composeScene.
+
+## Compose a Score
+
+The owner asked for "a staff notation feature that would generate, based on PHI that draws from
+the Selector's favorites, a composition based on architectonics function". It is the Compose a
+Song dialog with the same form, roles and mode, but it writes one file instead of scenes.
+
+- Each colour that writes notes is a part, from the first bar to the last. Its scene's loop is
+  repeated through every section it plays in, and stays silent where it does not.
+- Each part has its own MIDI channel; the rhythm stays on channel 10. A marker starts each
+  section ("1 emergence", "12 climax"). The Selector's sounds have no notes, so they are left
+  out.
+- **Open the Score** opens it in the MIDI editor, in the mode's tuning, so its rows and spelling
+  are the mode's. Once the editor's staff view lands (the staff notation work), the score will
+  open there, with each channel a voice. Kept with OK, the score goes on a new track named for
+  it (or the selected one when the mixer is full), from the start, the track tuned to the mode.
+- **Save as MIDI...** saves the score as a type 0 file.
+
+Code: `architectonics::parts` and `architectonics::score`, MixerWindow::openScore.
 
 ## Open-source references
 

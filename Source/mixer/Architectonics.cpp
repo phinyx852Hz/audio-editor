@@ -548,4 +548,103 @@ namespace architectonics
         }
         return song;
     }
+
+    namespace
+    {
+        // A colour's part, every section's loop repeated to the section's length; its notes on
+        // `channel` (-1: as written, the drums on 10).
+        midifile::SongPtr through (const Song& song, const SongSettings& ss, int colour, int channel, std::vector<midifile::Marker>* markers)
+        {
+            const auto bar = std::max (1, ss.beatsPerBar);
+            Writer w;
+            bool any = false;
+            for (const auto& sc : song.scenes)
+            {
+                const auto& x = song.plan.sections[(size_t) sc.section];
+                const auto from = (int64_t) x.start * bar * tpq, to = (int64_t) (x.start + x.bars) * bar * tpq;
+                if (markers != nullptr)
+                    markers->push_back ({ from, std::to_string (sc.section + 1) + " " + functionName (sc.function) });
+                const auto& m = sc.midi[(size_t) colour];
+                if (m == nullptr || m->lastTick <= 0)
+                    continue;
+                // The loop's notes, paired on and off, from each pass's start until the section ends.
+                for (int64_t pass = from; pass < to; pass += m->lastTick)
+                {
+                    std::map<std::pair<int, int>, std::pair<int64_t, int>> on;   // channel and key: where it began, how loud
+                    for (const auto& e : m->events)
+                    {
+                        const auto key = std::pair (e.channel(), (int) e.data1);
+                        if (e.kind() == 0x90 && e.data2 > 0)
+                            on[key] = { e.tick, e.data2 };
+                        else if ((e.kind() == 0x80 || e.kind() == 0x90) && on.count (key) != 0)
+                        {
+                            const auto [began, velocity] = on[key];
+                            const auto start = pass + began;
+                            on.erase (key);
+                            if (start >= to)
+                                continue;
+                            const auto end = std::min (to, pass + e.tick + 1);
+                            w.note ((double) start / tpq, (double) (end - start) / tpq, e.data1, velocity, channel < 0 ? e.channel() : channel);
+                            any = true;
+                        }
+                    }
+                }
+            }
+            if (! any)
+                return nullptr;
+            return w.song ("", ss.bpm, (double) song.plan.bars * bar);
+        }
+    }
+
+    std::array<midifile::SongPtr, colours> parts (const Song& song, const SongSettings& ss)
+    {
+        std::array<midifile::SongPtr, colours> out {};
+        for (int c = 0; c < colours; ++c)
+            if (ss.roles[(size_t) c] != Role::sound)
+                if (auto p = through (song, ss, c, -1, nullptr))
+                {
+                    auto named = std::make_shared<midifile::Song> (*p);
+                    named->trackNames = { roleName (ss.roles[(size_t) c]) };
+                    out[(size_t) c] = named;
+                }
+        return out;
+    }
+
+    midifile::SongPtr score (const Song& song, const SongSettings& ss, const std::string& title)
+    {
+        std::vector<midifile::Event> events;
+        std::vector<midifile::Marker> markers;
+        uint16_t channels = 0;
+        bool marked = false;
+        for (int c = 0; c < colours; ++c)
+        {
+            if (ss.roles[(size_t) c] == Role::sound)
+                continue;
+            // A channel a colour, past the drums' tenth; the rhythm keeps its own (10).
+            const auto channel = ss.roles[(size_t) c] == Role::rhythm ? -1 : c < 9 ? c : c + 1;
+            auto p = through (song, ss, c, channel, marked ? nullptr : &markers);
+            marked = true;
+            if (p == nullptr)
+                continue;
+            events.insert (events.end(), p->events.begin(), p->events.end());
+            channels |= p->channelsUsed;
+        }
+        if (! marked)   // nothing but sounds: the sections marked all the same
+            through (song, ss, 0, 0, &markers);
+        std::stable_sort (events.begin(), events.end(), [] (const midifile::Event& a, const midifile::Event& b)
+        {
+            // Offs before ons at the same tick, so a note struck again is not cut.
+            return a.tick != b.tick ? a.tick < b.tick : (a.kind() == 0x80) > (b.kind() == 0x80);
+        });
+        auto out = std::make_shared<midifile::Song>();
+        out->format = 0;
+        out->ticksPerQuarter = tpq;
+        out->tempos.push_back ({ 0, 60.0e6 / std::max (1.0, ss.bpm) });
+        out->trackNames.push_back (title);
+        out->events = std::move (events);
+        out->markers = std::move (markers);
+        out->channelsUsed = channels;
+        out->lastTick = (int64_t) song.plan.bars * std::max (1, ss.beatsPerBar) * tpq;
+        return out;
+    }
 }

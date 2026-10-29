@@ -22,6 +22,9 @@
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QDir>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QLabel>
@@ -326,6 +329,9 @@ void MainWindow::registerArchitectonicsCommands()
     add ("architectonics.compose", tr ("&Compose a Song..."), [this] { composeSongDialog(); })
         ->setStatusTip (tr ("A song in the clip launcher, a scene a section: sounds dealt from the Selector, MIDI from rhythm, "
                             "melody, harmony and tuning, all by the golden ratio"));
+    add ("architectonics.score", tr ("Compose a &Score..."), [this] { composeSongDialog (true); })
+        ->setStatusTip (tr ("The same composition written out from the first bar to the last, a part a colour of the Selector, "
+                            "opened in the MIDI editor to read as a score, then kept on a track of its own"));
     add ("architectonics.design", tr ("&Design a Set..."), [this] { architectonicsDialog(); })
         ->setStatusTip (tr ("A set from the clip launcher's scenes by the golden ratio: Fibonacci-length sections, the climax at the golden section"));
     auto* play = add ("architectonics.play", tr ("&Play the Set"), [this]
@@ -569,7 +575,7 @@ namespace
     }
 }
 
-void MainWindow::composeSongDialog()
+void MainWindow::composeSongDialog (bool asScore)
 {
     showMixer();
     if (findWidget == nullptr)
@@ -606,7 +612,7 @@ void MainWindow::composeSongDialog()
     scanSounds();
 
     QDialog dialog (this);
-    dialog.setWindowTitle (tr ("Compose a Song"));
+    dialog.setWindowTitle (asScore ? tr ("Compose a Score") : tr ("Compose a Song"));
     auto* layout = new QVBoxLayout (&dialog);
     auto* intro = new QLabel (tr ("A song in the clip launcher, a scene for every section of a form cut by the golden ratio. "
                                   "Each colour of the Selector plays a part: a sound dealt from its favourites, or MIDI written in "
@@ -747,9 +753,10 @@ void MainWindow::composeSongDialog()
     auto* buttons = new QDialogButtonBox (&dialog);
     auto* again = buttons->addButton (tr ("Deal &Again"), QDialogButtonBox::ActionRole);
     again->setToolTip (tr ("A new seed: another form, other progressions and motifs, other sounds from the Selector"));
-    auto* write = buttons->addButton (tr ("C&ompose"), QDialogButtonBox::AcceptRole);
-    write->setToolTip (tr ("Into the first empty scenes of the clip launcher"));
-    auto* writePlay = buttons->addButton (tr ("Compose and &Play"), QDialogButtonBox::AcceptRole);
+    auto* write = buttons->addButton (asScore ? tr ("&Open the Score") : tr ("C&ompose"), QDialogButtonBox::AcceptRole);
+    write->setToolTip (asScore ? tr ("The whole composition in the MIDI editor, a part a colour, the sections marked; kept, it goes on a track")
+                               : tr ("Into the first empty scenes of the clip launcher"));
+    auto* writePlay = buttons->addButton (asScore ? tr ("&Save as MIDI...") : tr ("Compose and &Play"), QDialogButtonBox::AcceptRole);
     buttons->addButton (QDialogButtonBox::Close);
     layout->addWidget (buttons);
     bool play = false;
@@ -783,6 +790,27 @@ void MainWindow::composeSongDialog()
     settings.setValue (QStringLiteral ("architectonics/rhythms"), rhythms->currentData().toString());
     if (result != QDialog::Accepted || song.plan.sections.empty())
         return;
+
+    if (asScore)
+    {
+        // The parts written out in full, the sections marked; the Selector's sounds have no notes to show.
+        const auto title = tr ("Architectonics score");
+        const auto full = arch::score (song, ss, title.toStdString());
+        if (full->noteCount() == 0)
+            return statusBar()->showMessage (tr ("Give some colours a role that writes notes (rhythm, bass, chords, arpeggio or melody) first"), 8000);
+        if (! play)
+            return mixerWin->openScore (*full, mode.tuning, title);
+        const auto folder = settings.value (QStringLiteral ("architectonics/folder"), QDir::homePath()).toString();
+        const auto file = QFileDialog::getSaveFileName (this, tr ("Save the score as MIDI"), QDir (folder).filePath (title + QStringLiteral (".mid")),
+                                                        tr ("MIDI files (*.mid *.midi)"));
+        if (file.isEmpty())
+            return;
+        settings.setValue (QStringLiteral ("architectonics/folder"), QFileInfo (file).absolutePath());
+        std::string why;
+        if (! midifile::write (*full, file.toStdString(), why))
+            return statusBar()->showMessage (tr ("%1 could not be saved: %2").arg (file, QString::fromStdString (why)), 8000);
+        return statusBar()->showMessage (tr ("%1 saved").arg (QFileInfo (file).fileName()), 5000);
+    }
 
     const auto count = (int) song.scenes.size();
     const auto start = mixerWin->emptyScenes (count);

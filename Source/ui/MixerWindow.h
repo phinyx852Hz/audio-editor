@@ -171,6 +171,10 @@ public:
     std::vector<int> colourTracks (const QStringList& names, const QList<QColor>& colours, const std::vector<bool>& wanted,
                                    const QStringList& instruments);
     int emptyScenes (int count) const;
+    // Its Compose a Score: the score opened in the MIDI editor (the staff view there, once it
+    // has one), played on the selected track; kept, it goes on a new track (else the selected
+    // one) from the start, the track tuned to `tuning`.
+    void openScore (const midifile::Song& score, mixer::TuningChoice tuning, const QString& title);
     void composeScene (int scene, const std::vector<int>& tracks, const QStringList& files,
                        const std::vector<midifile::SongPtr>& midi, mixer::TuningChoice tuning, const QString& name);
     // A file chosen in the Find panel's Selector: into the first empty slot of the track with
