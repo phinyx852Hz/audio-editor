@@ -279,6 +279,11 @@ The feature docs hold the full bibliographies; the main sources are here.
   Mead, *An Introduction to the Music of Milton Babbitt* (1994); total serialism after Messiaen and
   Boulez; music21's historical rows (section 7).
 - **Templates**: ill.Gates' Mudpies and reusable systems (the Creative Organism template).
+- **Notations of Asia** (the MIDI editor's notation views, `docs/midi-editor.md`): Walter Kaufmann,
+  *Musical Notations of the Orient* (Indiana University Press, 1967), *The Ragas of North India*
+  (1968) and *Tibetan Buddhist Chant* (1975), with his other writing on North Indian rāga and tāla.
+  Consulted for research only. No text, figures or scans from them are in PHI; the views draw their
+  own examples.
 
 ## 12. Programs that shaped features
 

@@ -295,8 +295,8 @@ Press, 1967; https://archive.org/details/musicalnotations0000kauf), covering not
 Korea, Japan, Mongolia, Tibet and India. The second is *Tibetan Buddhist Chant: Musical Notations
 and Interpretations of a Song Book by the Bkah Brgyud Pa and Sa Skya Pa Sects* (Indiana University
 Press, 1975; https://archive.org/details/tibetanbuddhistc0000kauf), the source for a future
-Tibetan dbyangs-yig (neume) view. Both are described here from their titles and what is known of
-their contents, not from a reading of the scans. Where PHI cannot find an open-source renderer for
+Tibetan dbyangs-yig (neume) view. They are consulted for research only, and no text, figures or scans from them are in PHI
+(`docs/foundations.md`, section 11). Where PHI cannot find an open-source renderer for
 one of them, PHI will design its own.
 
 ## Where it came from
