@@ -170,6 +170,9 @@ private:
 
     // Macros (MacroSection.cpp, Macros.h).
     void registerMacroCommands();
+    // The Research menu's quick reference guides (ResearchSection.cpp).
+    void registerResearchCommands();
+    void showResearchGuide (const QString& title, const QString& html);
     void toggleMacroRecording();
     void runMacro (const macro::Macro&);
     MacroRecorder* macroRecorder = nullptr;

@@ -211,6 +211,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/MacroSection.cpp
     Source/ui/Macros.cpp
     Source/ui/ToolsSection.cpp
+    Source/ui/ResearchSection.cpp
     Source/ui/AmbiDialogs.cpp
     Source/ui/AmbiScene.cpp
     Source/ui/AmbiStudio.cpp
