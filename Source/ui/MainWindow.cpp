@@ -906,7 +906,7 @@ void MainWindow::buildMenus()
                                "process.fadeShape.linear", "process.fadeShape.equalPower", "process.fadeShape.exponential",
                                "process.fadeShape.sCurve", "-", "process.reverse", "process.invert", "process.dcOffset", "-", "process.stereoize", "process.midSide", "process.convert" } },
         { tr ("&Analyze"),   { "analyze.loudness", "-", "analyze.beats", "analyze.onsets", "analyze.tempoKey", "analyze.vamp", "-", "analyze.window", "view.meters", "analyze.imagingView", "analyze.resetMeters", "-", "analyze.plugin", "-", "view.spectral", "-", "@nyquist.analyze" } },
-        { tr ("Architecto&nics"), { "architectonics.design", "-", "architectonics.play", "architectonics.deal", "architectonics.endless" } },
+        { tr ("Architecto&nics"), { "architectonics.compose", "architectonics.design", "-", "architectonics.play", "architectonics.deal", "architectonics.endless" } },
         { tr ("&Master"),    { "#album", "-", "view.master", "view.chain", "master.addPlugin", "master.bypass", "analyze.plugin", "-", "master.assistant", "-", "master.render", "master.renderNew", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
         { tr ("Mi&xer"),     { "mixer.window", "mixer.dock", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
                                "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "mixer.sendToTimeline", "-", "mixer.editorTrack", "mixer.trackToEditor", "-", "mixer.assistant" } },

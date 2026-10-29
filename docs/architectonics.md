@@ -1,6 +1,6 @@
 # Architectonics
 
-Status: the golden-ratio set designer built (2026-10-29). The second stage, Compose a Song, comes next.
+Status: built 2026-10-29. Design a Set plays the launcher's scenes as a set designed by the golden ratio. Compose a Song writes a whole song into the launcher.
 
 ## What the owner asked for (2026-10-29)
 
@@ -24,6 +24,8 @@ and dynamic part at the macro and meso levels: proportion by φ, and an energy a
 
 **Architectonics** in the menu bar, between Analyze and Master:
 
+- **Compose a Song...** writes a song into the clip launcher's first empty scenes, a scene a
+  section (below).
 - **Design a Set...** shows the plan for the clip launcher's scenes as you change it. It shows
   each section as a block as wide as its bars and as tall as its energy, the scene numbers on
   the blocks, the five parts along the bottom and the golden section as a gold dashed line. A
@@ -85,16 +87,73 @@ Kept in settings.ini as architectonics/bars, longest, order, early, climax, vari
 endless. Code: mixer/Architectonics.{h,cpp} (plain C++, tested in CoreTests' testArchitectonics),
 ui/ArchitectonicsSection.cpp.
 
-## Next: Compose a Song
+## Compose a Song
 
-The big generator will build the song in the launcher itself:
+This is one tool that builds a song structure in the clip launcher, as the owner asked. It deals
+from the Selector semi-randomly and draws on PHI's four modes. The form is the set's: the same φ
+cuts, five parts and energy arch. Every section gets a scene of its own, in order, written into
+the first run of empty scenes (32 at most, so choose longer sections for a long song). The
+scenes are named "1 emergence", "2 emergence" and so on. **Play the Set** then plays the song,
+until a set is designed or dealt from the scenes instead.
 
-- Each section's scene will be dealt from the Selector, semi-randomly as the Φ button deals,
-  with as many tracks as its energy calls for.
-- Its MIDI will be written by the four modes: rhythm from the rhythm library, by density;
-  melody in the Mode menu's mode; harmony by the section's function; and a tuning per section.
+- **Who plays** (Kurth's energy, layered as electronic music builds and breaks down): each
+  colour of the Selector has a role. As the energy rises they enter in this order: chords, bass,
+  rhythm, arpeggio, melody, then the colours that play sounds. The energy decides how many
+  play. All of them play at the climax, and they leave again through the dissolution.
+- **The roles**: each colour of the Selector gets one. They start as Live Performance names the
+  colours: PD chords, ARP arpeggio, LD melody, BA bass, DR rhythm, and FX, VOX and PR a sound
+  from the Selector.
+  - **A sound from the Selector**: a Φ deal for each of the five parts, so a part's sounds come
+    back whenever the part does. **Deal Again** deals afresh.
+  - **Rhythm** (the rhythm mode): a rhythm from the library for each part, as dense as the
+    part's energy. The disruption is a contrast: as sparse as its energy is high. Choose where
+    the rhythms come from: every rhythm that goes round in whole bars, one of the library's
+    groups, or PHI's own four on the floor with the hats as dense as the energy. Drums are on
+    channel 10.
+  - **Bass, chords and arpeggio** (the harmony mode): the chords are built from every other
+    note of the mode, a chord a bar, after Caplin's formal functions:
+    - the emergence holds the final (I);
+    - the expansion moves through a progression (I–IV–V–I, I–VI–IV–V...);
+    - the disruption takes an unstable turn that ends on the dominant;
+    - the climax has the fullest progression, with sevenths re-struck;
+    - the dissolution closes plagally, IV to I.
 
-Open-source references to study for it, by licence: OpenMusic and OM# (the maquette; GPLv3),
-IanniX (GPLv3), ossia score (GPLv3), Abjad (GPLv3), mutwo (GPLv3), music21 (BSD),
-Strasheela (GPL) and TidalCycles and Strudel (GPLv3, AGPLv3). bach and cage need Max, so they
-are reference only. PHI is AGPLv3, which can take GPLv3 code.
+    Each part keeps the progression the seed picked, moved on a chord each time it comes back
+    (Hepokoski and Darcy's rotations). The section before the climax always ends on V, and the
+    song ends on I. The bass plays whole bars, then halves, then eighths as the energy rises;
+    the arpeggio plays eighths, then sixteenths.
+  - **Melody** (the melody mode): a motif for each part, mostly steps with now and then a leap.
+    It is laid on each bar's chord, repeated and sequenced as Caplin's basic idea is. It sits
+    higher at the climax and lower at the ends, gets sparser as the energy falls, and the loop's
+    last note is a cadence on the chord's root.
+- **The mode and the tuning**: everything is in the Mode menu's mode on its final (major on c
+  until one is chosen), and every MIDI slot plays in the mode's own tuning or the one chosen
+  under Mode ▸ tuning (the slot's tuning, for the PHI synth). An equal-tempered mode stays in
+  12-TET.
+- **The instruments** come from the Selector: a colour's favourite instrument is loaded on its
+  track, else the Synth plays its MIDI.
+- **MIDI loops** of 1, 2, 4 or 8 bars, 4 to start; a rhythm's cycle may be longer than the loop.
+
+The dialog shows the form as Design a Set does, and lists every section with its part, chords,
+players and rhythm. **Compose** writes the song, and **Compose and Play** writes it and plays it.
+Kept in settings.ini as architectonics/roles, loop and rhythms, beside the set's.
+
+Code: `architectonics::compose` (plain C++, tested in testArchitectonics), FindPanel::pickDeal (a Φ
+deal's picks without dealing them), and MixerWindow::colourTracks, emptyScenes and composeScene.
+
+## Open-source references
+
+These are open-source programs to study for the next steps, with their licences. Nothing is
+ported yet, and each licence is to be checked before any code is:
+
+- OpenMusic and OM#: the maquette, a temporal design of programmed objects (GPLv3).
+- IanniX: Xenakis's UPIC as trajectories (GPLv3).
+- ossia score: nested, branching and conditional timelines (GPLv3).
+- mutwo: hierarchical events (GPLv3).
+- Abjad: algorithmic notation (GPLv3).
+- music21: analysis and corpora (BSD).
+- Strasheela: constraint-based composition (GPL).
+- TidalCycles (GPLv3) and Strudel (AGPLv3): pattern transformation.
+- bach and cage need Max, so they are reference only.
+
+PHI is AGPLv3, which can take GPLv3 code.

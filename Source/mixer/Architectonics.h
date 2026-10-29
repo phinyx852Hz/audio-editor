@@ -9,8 +9,14 @@
 // makes, by the Fibonacci numbers, or by a walk of steps of 1/φ. A seed makes each set new:
 // which part of a cut comes first, which sections are cut once more, and how the scenes are
 // walked. docs/architectonics.md. Plain C++, no JUCE or Qt.
+#include "MidiFile.h"
+
+#include <array>
 #include <cstdint>
+#include <string>
 #include <vector>
+
+namespace rhythm { struct Rhythm; }
 
 namespace architectonics
 {
@@ -75,4 +81,56 @@ namespace architectonics
 
     // A new seed from the last, by a step of √7: an irrational step, so seeds never repeat.
     double nextSeed (double seed);
+
+    // Compose a Song (owner, 2026-10-29: "one massive tool that could generate a song structure
+    // in the clip launcher. It would draw from the Selector, semi-randomly ... logic based on
+    // architectonics that draws from the four major modes of PHI: rhythm, melody, tuning, and
+    // harmony"). The form is the set's: a scene for every section, in order. Each section's
+    // energy decides how many of the Selector's colours play in it, entering one by one as the
+    // energy rises (pad, bass, drums, arpeggio, lead, then the Selector's sounds) and leaving
+    // as it falls. A colour's role says what it plays: a sound dealt from the Selector, or MIDI
+    // written from the modes: a rhythm from the library as dense as the energy (rhythm), the
+    // chords' roots (bass), the chords held (chords) or broken (arpeggio), and a line on them
+    // (melody), all in the Mode menu's mode on its final (melody and harmony); the scenes play
+    // in its tuning. The harmony follows each part's formal function (Caplin): the final held
+    // in the emergence, a progression in the expansion, an unstable turn ending on the dominant
+    // in the disruption, the fullest progression at the climax and a plagal close in the
+    // dissolution. Every section of a part takes that part's progression and motif, moved on
+    // a chord each time it comes back, so the song's material recurs and varies.
+    enum class Role { sound, rhythm, bass, chords, arpeggio, melody };
+    const char* roleName (Role);
+    constexpr int colours = 8;   // the Selector's, top first
+
+    struct SongSettings
+    {
+        Settings form;                   // bars, longest, earlyClimax, variety and seed (clips, order and climaxScene are set here)
+        std::array<Role, colours> roles { Role::sound, Role::chords, Role::arpeggio, Role::sound,
+                                          Role::melody, Role::sound, Role::bass, Role::rhythm };   // Live Performance: FX PD ARP VOX LD PR BA DR
+        std::array<bool, colours> present {};   // the colours that can play: a role that writes MIDI, or a sound dealt
+        int loopBars = 4;                // each scene's MIDI loop
+        int beatsPerBar = 4;
+        double bpm = 120.0;
+        uint16_t keys = 0xAB5;           // the mode's pitch classes above the final (bit 0 the final): major to start
+        int final = 0;                   // 0 c .. 11 b
+        std::vector<const rhythm::Rhythm*> rhythms;   // to choose from; empty: the four-on-the-floor of our own
+    };
+
+    struct Scene
+    {
+        int section = 0;                 // in the plan
+        Function function = Function::emergence;
+        double energy = 0.0;
+        std::array<bool, colours> plays {};
+        std::array<midifile::SongPtr, colours> midi {};   // for the colours whose role writes MIDI and that play
+        std::vector<int> chords;         // the progression, a degree of the mode a bar
+        std::string rhythm;              // the rhythm's name, or empty
+    };
+
+    struct Song
+    {
+        Plan plan;                       // its sections' scenes: 0, 1, 2... (the caller adds where they start)
+        std::vector<Scene> scenes;       // one a section
+    };
+
+    Song compose (const SongSettings&);
 }

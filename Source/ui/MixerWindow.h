@@ -163,6 +163,16 @@ public:
     // scene 0 first, and a scene's name ("Scene n" until renamed).
     std::vector<int> sceneClips() const;
     QString sceneName (int scene) const;
+    // Its Compose a Song: the track for each Selector colour wanted, as the Φ deal gives them
+    // (added, named and coloured when missing), with the colour's instrument loaded when it has
+    // one; -1 for a colour not wanted. The first of `count` scenes in a row empty on every
+    // track (-1: not that many left). And one scene of the song: on each colour's track its
+    // MIDI (in `tuning`), else its file, else nothing; the scene named `name`.
+    std::vector<int> colourTracks (const QStringList& names, const QList<QColor>& colours, const std::vector<bool>& wanted,
+                                   const QStringList& instruments);
+    int emptyScenes (int count) const;
+    void composeScene (int scene, const std::vector<int>& tracks, const QStringList& files,
+                       const std::vector<midifile::SongPtr>& midi, mixer::TuningChoice tuning, const QString& name);
     // A file chosen in the Find panel's Selector: into the first empty slot of the track with
     // that name (else that colour, else the selected track), and the mixer follows it there.
     void sendToLauncher (const QString& path, const QString& trackName, const QColor& colour);

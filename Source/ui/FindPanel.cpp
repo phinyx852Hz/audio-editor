@@ -984,7 +984,7 @@ void FindPanel::saveSelector() const
                                                  { QStringLiteral ("sets"), list } }).toJson());
 }
 
-void FindPanel::deal (DealTo target, bool again)
+FindPanel::DealPick FindPanel::pickDeal()
 {
     // Each colour's favourites in the set shown, by kind (sorted, so a deal number always
     // means the same pick), then one of each by phi::deal.
@@ -1024,29 +1024,33 @@ void FindPanel::deal (DealTo target, bool again)
         }
         return picked;
     };
-    QStringList names;
-    QList<QColor> colours;
+    DealPick out;
     for (int c = 0; c < numColours; ++c)
     {
-        names.push_back (markName (setIndex, c));
-        colours.push_back (colour (c));
+        out.names.push_back (markName (setIndex, c));
+        out.colours.push_back (colour (c));
     }
-    auto none = [] (const QStringList& l) { return std::all_of (l.begin(), l.end(), [] (const QString& v) { return v.isEmpty(); }); };
-
-    const auto pickedFiles = pick (files, 0.0);
-    const auto pickedInstruments = pick (instruments, phi::inverse);
-    const auto pickedEffects = pick (effects, phi::inverse * phi::inverse);
-    // With only effects marked, the deal is a Prism.
-    if (target == DealTo::automatic && none (pickedFiles) && none (pickedInstruments) && ! none (pickedEffects))
-        target = DealTo::prism;
+    out.files = pick (files, 0.0);
+    out.instruments = pick (instruments, phi::inverse);
+    out.effects = pick (effects, phi::inverse * phi::inverse);
     ++deals;
+    return out;
+}
+
+void FindPanel::deal (DealTo target, bool again)
+{
+    const auto p = pickDeal();
+    auto none = [] (const QStringList& l) { return std::all_of (l.begin(), l.end(), [] (const QString& v) { return v.isEmpty(); }); };
+    // With only effects marked, the deal is a Prism.
+    if (target == DealTo::automatic && none (p.files) && none (p.instruments) && ! none (p.effects))
+        target = DealTo::prism;
     if (target == DealTo::prism)
     {
         if (phiPrism)
-            phiPrism (pickedEffects, names, colours);
+            phiPrism (p.effects, p.names, p.colours);
     }
     else if (phiDeal)
-        phiDeal (pickedFiles, pickedInstruments, names, colours, target, again);
+        phiDeal (p.files, p.instruments, p.names, p.colours, target, again);
 }
 
 void FindPanel::dealMenu (QWidget* on, const QPoint& at)

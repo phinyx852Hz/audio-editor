@@ -384,6 +384,7 @@ private:
     // clip launcher designed by the golden ratio, generative, and played scene by scene on its bars.
     void registerArchitectonicsCommands();
     void architectonicsDialog();
+    void composeSongDialog();
     void playArchitectonics (bool on);
     class ArchitectonicsConductor* conductor = nullptr;
     void toggleVideoRecording();

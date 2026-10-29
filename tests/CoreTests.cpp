@@ -7830,6 +7830,49 @@ namespace
                "architectonics: a new seed deals a new set; the section at a bar");
         s.clips = { 0, 0 };
         check (ar::plan (s).sections.empty(), "architectonics: no clips, no set");
+
+        // Compose a Song: a scene a section; everyone at the climax; the rhythm a part's own;
+        // onto the dominant before the climax and home at the end; the MIDI loops whole bars.
+        ar::SongSettings ss;
+        ss.present.fill (true);
+        ss.form.seed = 0.42;
+        ss.keys = 0x6AD;   // dorian: 0 2 3 5 7 9 10
+        for (const auto& r : rhythm::rhythms())
+            if (r.group == rhythm::rhythms().front().group)
+                ss.rhythms.push_back (&r);
+        const auto song = ar::compose (ss);
+        bool aScene = ! song.scenes.empty() && song.scenes.size() == song.plan.sections.size(), climaxAll = false, loops = true, inMode = true;
+        std::map<ar::Function, std::string> grooves;
+        bool oneGroove = true;
+        for (size_t i = 0; i < song.scenes.size(); ++i)
+        {
+            const auto& sc = song.scenes[i];
+            aScene = aScene && song.plan.sections[i].scene == (int) i && sc.section == (int) i && (int) sc.chords.size() == ss.loopBars;
+            if (song.plan.sections[i].climax)
+                climaxAll = std::all_of (sc.plays.begin(), sc.plays.end(), [] (bool b) { return b; });
+            if (! sc.rhythm.empty())
+            {
+                oneGroove = oneGroove && (grooves.count (sc.function) == 0 || grooves[sc.function] == sc.rhythm);
+                grooves[sc.function] = sc.rhythm;
+            }
+            for (int c = 0; c < ar::colours; ++c)
+                if (const auto& m = sc.midi[(size_t) c])
+                {
+                    loops = loops && m->noteCount() > 0 && sc.plays[(size_t) c]
+                            && (ss.roles[(size_t) c] == ar::Role::rhythm ? m->lastTick % (480 * 4) == 0 : m->lastTick == 480 * 4 * ss.loopBars);
+                    if (ss.roles[(size_t) c] != ar::Role::rhythm)
+                        for (const auto& e : m->events)
+                            inMode = inMode && (e.kind() != 0x90 || (ss.keys & (1u << (e.data1 % 12))) != 0);
+                }
+        }
+        const auto before = std::find_if (song.plan.sections.begin(), song.plan.sections.end(), [] (const ar::Section& x) { return x.climax; })
+                            - song.plan.sections.begin() - 1;
+        check (aScene && climaxAll && loops && inMode && oneGroove && song.scenes.back().chords.back() == 0
+                   && before >= 0 && song.scenes[(size_t) before].chords.back() == 4,
+               "architectonics: a song, a scene a section, in the mode, everyone at the climax, a part's rhythm its own");
+        const auto& quiet = song.scenes.back();
+        check (std::count (quiet.plays.begin(), quiet.plays.end(), true) < ar::colours && quiet.plays[1],
+               "architectonics: the dissolution thins out to the pad");
     }
 
     void testRhythmGenerator()

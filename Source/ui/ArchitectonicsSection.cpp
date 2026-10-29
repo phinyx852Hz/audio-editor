@@ -7,17 +7,23 @@
 // by the energy arch, the Fibonacci numbers or a walk of steps of 1/φ. Play the Set launches
 // each section's scene on its first bar, on the exact frame of the launch clock, and stops
 // the tracks on the last; endless, it deals a new set there and carries on.
-// docs/architectonics.md.
+// Compose a Song writes the set itself: a scene a section, its sounds dealt from the Selector a
+// part at a time and its MIDI written from the Mode menu's mode, the rhythm library, harmony
+// by formal function and the mode's tuning. docs/architectonics.md.
 #include "MainWindow.h"
+#include "FindPanel.h"
 #include "MixerWindow.h"
 #include "Settings.h"
 #include "../mixer/Architectonics.h"
+#include "../mixer/Rhythms.h"
+#include "../mixer/Tunings.h"
 
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFormLayout>
+#include <QGridLayout>
 #include <QLabel>
 #include <QListWidget>
 #include <QPainter>
@@ -36,6 +42,10 @@ namespace arch = architectonics;
 
 namespace
 {
+    // The song Compose a Song wrote last, its scenes where they went: what Play the Set plays
+    // until a set is designed or dealt from the scenes instead.
+    arch::Plan composed;
+
     // What the menu and the dialog keep in settings.ini (architectonics/...), with the launcher's
     // clips filled in from the mixer.
     arch::Settings loadSettings (const MixerWindow* mixer)
@@ -313,6 +323,9 @@ void MainWindow::registerArchitectonicsCommands()
         addAction (action);
         return action;
     };
+    add ("architectonics.compose", tr ("&Compose a Song..."), [this] { composeSongDialog(); })
+        ->setStatusTip (tr ("A song in the clip launcher, a scene a section: sounds dealt from the Selector, MIDI from rhythm, "
+                            "melody, harmony and tuning, all by the golden ratio"));
     add ("architectonics.design", tr ("&Design a Set..."), [this] { architectonicsDialog(); })
         ->setStatusTip (tr ("A set from the clip launcher's scenes by the golden ratio: Fibonacci-length sections, the climax at the golden section"));
     auto* play = add ("architectonics.play", tr ("&Play the Set"), [this]
@@ -329,6 +342,7 @@ void MainWindow::registerArchitectonicsCommands()
         const auto p = arch::plan (s);
         if (p.sections.empty())
             return statusBar()->showMessage (tr ("Put clips in the clip launcher's scenes first"), 5000);
+        composed = {};   // a set from the scenes now, not the song
         if (conductor != nullptr && conductor->running())
             conductor->replace (p);
         statusBar()->showMessage (tr ("Architectonics: a new set of %1 sections, the climax at bar %2 on scene %3")
@@ -356,7 +370,7 @@ void MainWindow::playArchitectonics (bool on)
     }
     showMixer();
     mixerWin->showLauncher (true);
-    const auto p = arch::plan (loadSettings (mixerWin));
+    const auto p = ! composed.sections.empty() ? composed : arch::plan (loadSettings (mixerWin));
     if (p.sections.empty())
     {
         action->setChecked (false);
@@ -500,5 +514,306 @@ void MainWindow::architectonicsDialog()
     appSettings().setValue (QStringLiteral ("architectonics/endless"), endlessBox->isChecked());
     commands.action (QStringLiteral ("architectonics.endless"))->setChecked (endlessBox->isChecked());
     if (result == QDialog::Accepted)
+    {
+        composed = {};   // the set designed here, not the song
+        playArchitectonics (true);
+    }
+}
+
+namespace
+{
+    // The Mode menu's mode as Compose a Song uses it: its keys above the final, the final, and
+    // what the PHI synth plays it in (ModeSection.cpp keeps them; the hypo range is the
+    // melody's business there, not the song's).
+    struct ModeNow
+    {
+        uint16_t keys = 0xAB5;   // major, until a mode is chosen
+        int final = 0;
+        mixer::TuningChoice tuning;
+        QString text;
+    };
+
+    ModeNow modeNow()
+    {
+        const char* const finals[12] { "c", "c♯", "d", "e♭", "e", "f", "f♯", "g", "a♭", "a", "b♭", "b" };
+        auto settings = appSettings();
+        ModeNow m;
+        m.final = std::clamp (settings.value (QStringLiteral ("mode/final"), 0).toInt(), 0, 11);
+        const auto system = mixer::findTuning (settings.value (QStringLiteral ("mode/system")).toString().toStdString());
+        const auto tuning = mixer::findTuning (settings.value (QStringLiteral ("mode/tuning")).toString().toStdString());
+        const auto equal = settings.value (QStringLiteral ("mode/equal"), false).toBool();
+        const auto& all = mixer::tuningSystems();
+        if (system >= 0)
+        {
+            m.keys = mixer::modeKeys (all[(size_t) system]);
+            m.text = QObject::tr ("%1 on %2").arg (QString::fromStdString (all[(size_t) system].name), QString::fromUtf8 (finals[m.final]));
+        }
+        else
+            m.text = QObject::tr ("major on %1 (no mode chosen)").arg (QString::fromUtf8 (finals[m.final]));
+        if (tuning >= 0)
+        {
+            m.tuning = { tuning, all[(size_t) tuning].family == "temperament" ? 0 : m.final };
+            m.text += QObject::tr (", in %1").arg (QString::fromStdString (all[(size_t) tuning].name));
+        }
+        else if (system >= 0 && ! equal)
+            m.tuning = { system, m.final };
+        else
+            m.text += QObject::tr (", in 12-TET");
+        return m;
+    }
+
+    QString roman (int degree)
+    {
+        static const char* const numerals[] { "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII" };
+        return QString::fromLatin1 (numerals[(size_t) std::clamp (degree, 0, 11)]);
+    }
+}
+
+void MainWindow::composeSongDialog()
+{
+    showMixer();
+    if (findWidget == nullptr)
+        return;
+    auto settings = appSettings();
+    arch::SongSettings ss;
+    ss.form = loadSettings (nullptr);
+    ss.form.longest = std::max (ss.form.longest, 5);
+    const auto mode = modeNow();
+    ss.keys = mode.keys;
+    ss.final = mode.final;
+    ss.bpm = mixerEngine->tempo.load();
+    ss.beatsPerBar = mixerEngine->beatsPerBar.load();
+    ss.loopBars = std::clamp (settings.value (QStringLiteral ("architectonics/loop"), 4).toInt(), 1, 16);
+    const auto savedRoles = settings.value (QStringLiteral ("architectonics/roles")).toString().split (QLatin1Char (','));
+    for (int c = 0; c < arch::colours && c < savedRoles.size(); ++c)
+        if (bool ok = false; savedRoles[c].toInt (&ok) >= 0 && ok)
+            ss.roles[(size_t) c] = (arch::Role) std::clamp (savedRoles[c].toInt(), 0, (int) arch::Role::melody);
+
+    // The Selector's picks, a deal for each part of the song: the same sounds whenever the part
+    // comes back. The first deal also says which colours have sounds, and their instruments.
+    std::map<arch::Function, FindPanel::DealPick> picks;
+    for (auto f : { arch::Function::emergence, arch::Function::expansion, arch::Function::disruption, arch::Function::climax, arch::Function::dissolution })
+        picks[f] = findWidget->pickDeal();
+    const auto& first = picks[arch::Function::emergence];
+    std::array<bool, arch::colours> hasSound {};
+    auto scanSounds = [&]
+    {
+        hasSound = {};
+        for (const auto& [f, p] : picks)
+            for (int c = 0; c < arch::colours && c < p.files.size(); ++c)
+                hasSound[(size_t) c] = hasSound[(size_t) c] || ! p.files[c].isEmpty();
+    };
+    scanSounds();
+
+    QDialog dialog (this);
+    dialog.setWindowTitle (tr ("Compose a Song"));
+    auto* layout = new QVBoxLayout (&dialog);
+    auto* intro = new QLabel (tr ("A song in the clip launcher, a scene for every section of a form cut by the golden ratio. "
+                                  "Each colour of the Selector plays a part: a sound dealt from its favourites, or MIDI written in "
+                                  "the Mode menu's mode. The energy decides who plays, all of them at the climax."), &dialog);
+    intro->setWordWrap (true);
+    layout->addWidget (intro);
+    auto* view = new PlanView (&dialog);
+    layout->addWidget (view, 1);
+    auto* summary = new QLabel (&dialog);
+    summary->setWordWrap (true);
+    layout->addWidget (summary);
+
+    auto* columns = new QHBoxLayout;
+    auto* form = new QFormLayout;
+    const auto barSeconds = secondsPerBar (*mixerEngine);
+    auto* length = new QComboBox (&dialog);
+    for (auto n : arch::fibonacci (610))
+        if (n >= 21)
+            length->addItem (tr ("%1 bars (%2)").arg (n).arg (minutes (n * barSeconds)), n);
+    length->setCurrentIndex (std::max (0, length->findData (ss.form.bars)));
+    form->addRow (tr ("&Length"), length);
+    auto* longest = new QComboBox (&dialog);
+    for (auto n : arch::fibonacci (89))
+        if (n >= 5)
+            longest->addItem (tr ("%1 bars").arg (n), n);
+    longest->setCurrentIndex (std::max (0, longest->findData (ss.form.longest)));
+    longest->setToolTip (tr ("Longer sections make fewer scenes: the launcher has %1").arg (mixer::maxScenes));
+    form->addRow (tr ("Longest &section"), longest);
+    auto* early = new QCheckBox (tr ("Climax early, at 0.382"), &dialog);
+    early->setChecked (ss.form.earlyClimax);
+    form->addRow (QString(), early);
+    auto* variety = new QSpinBox (&dialog);
+    variety->setRange (0, 100);
+    variety->setSuffix (QStringLiteral (" %"));
+    variety->setValue ((int) std::lround (ss.form.variety * 100.0));
+    form->addRow (tr ("&Variety"), variety);
+    auto* loop = new QComboBox (&dialog);
+    for (int n : { 1, 2, 4, 8 })
+        loop->addItem (tr ("%n bar(s)", nullptr, n), n);
+    loop->setCurrentIndex (std::max (0, loop->findData (ss.loopBars)));
+    loop->setToolTip (tr ("How long each scene's MIDI is before it goes round"));
+    form->addRow (tr ("MIDI &loops"), loop);
+    auto* rhythms = new QComboBox (&dialog);
+    rhythms->addItem (tr ("every rhythm in whole bars"), QString());
+    rhythms->addItem (tr ("four on the floor (PHI's own)"), QStringLiteral ("-"));
+    for (const auto& g : rhythm::groups())
+        rhythms->addItem (QString::fromStdString (g), QString::fromStdString (g));
+    rhythms->setCurrentIndex (std::max (0, rhythms->findData (settings.value (QStringLiteral ("architectonics/rhythms")).toString())));
+    rhythms->setToolTip (tr ("Where the rhythm role takes its rhythms from, a rhythm a part, as dense as the part's energy"));
+    form->addRow (tr ("&Rhythms from"), rhythms);
+    auto* modeLabel = new QLabel (tr ("%1 (choose it in the Mode menu)").arg (mode.text), &dialog);
+    modeLabel->setWordWrap (true);
+    form->addRow (tr ("Mode"), modeLabel);
+    columns->addLayout (form, 3);
+
+    // A role for each colour of the Selector, named as the set shown names them.
+    auto* roles = new QGridLayout;
+    std::array<QComboBox*, arch::colours> roleBoxes {};
+    for (int c = 0; c < arch::colours; ++c)
+    {
+        auto* swatch = new QLabel (&dialog);
+        swatch->setFixedSize (12, 12);
+        swatch->setStyleSheet (QStringLiteral ("background: %1; border-radius: 2px;").arg (FindPanel::colour (c).name()));
+        roles->addWidget (swatch, c, 0);
+        roles->addWidget (new QLabel (c < first.names.size() ? first.names[c] : FindPanel::colourName (c), &dialog), c, 1);
+        auto* box = new QComboBox (&dialog);
+        for (int r = 0; r <= (int) arch::Role::melody; ++r)
+            box->addItem (QString::fromLatin1 (arch::roleName ((arch::Role) r)));
+        box->setCurrentIndex ((int) ss.roles[(size_t) c]);
+        roles->addWidget (box, c, 2);
+        roleBoxes[(size_t) c] = box;
+    }
+    columns->addLayout (roles, 2);
+    layout->addLayout (columns);
+
+    auto* list = new QListWidget (&dialog);
+    list->setMinimumHeight (130);
+    layout->addWidget (list);
+
+    arch::Song song;
+    auto pool = [&]
+    {
+        std::vector<const rhythm::Rhythm*> out;
+        const auto group = rhythms->currentData().toString();
+        if (group == QLatin1String ("-"))
+            return out;
+        for (const auto& r : rhythm::rhythms())
+            if (group.isEmpty() || QString::fromStdString (r.group) == group)
+                out.push_back (&r);
+        return out;
+    };
+    auto recompose = [&]
+    {
+        ss.form.bars = length->currentData().toInt();
+        ss.form.longest = longest->currentData().toInt();
+        ss.form.earlyClimax = early->isChecked();
+        ss.form.variety = variety->value() / 100.0;
+        ss.loopBars = loop->currentData().toInt();
+        ss.rhythms = pool();
+        for (int c = 0; c < arch::colours; ++c)
+        {
+            ss.roles[(size_t) c] = (arch::Role) roleBoxes[(size_t) c]->currentIndex();
+            ss.present[(size_t) c] = ss.roles[(size_t) c] != arch::Role::sound || hasSound[(size_t) c];
+        }
+        song = arch::compose (ss);
+        view->plan = song.plan;
+        view->update();
+        list->clear();
+        if (song.plan.sections.empty())
+            return summary->setText (tr ("Nothing to compose."));
+        const auto scenes = (int) song.plan.sections.size();
+        summary->setText (tr ("%1 sections over %2 bars (%3), a scene each%4; the climax at bar %5.")
+                              .arg (scenes).arg (song.plan.bars).arg (minutes (song.plan.bars * barSeconds))
+                              .arg (scenes > mixer::maxScenes ? tr (", more than the launcher's %1: choose longer sections").arg (mixer::maxScenes) : QString())
+                              .arg (song.plan.climaxBar + 1));
+        for (const auto& sc : song.scenes)
+        {
+            const auto& x = song.plan.sections[(size_t) sc.section];
+            QStringList who, chords;
+            for (int c = 0; c < arch::colours; ++c)
+                if (sc.plays[(size_t) c])
+                    who << (c < first.names.size() ? first.names[c] : FindPanel::colourName (c));
+            for (auto d : sc.chords)
+                chords << roman (d);
+            list->addItem (tr ("%1. bars %2–%3 · %4 · %5 · %6%7")
+                               .arg (sc.section + 1).arg (x.start + 1).arg (x.start + x.bars).arg (QString::fromLatin1 (arch::functionName (sc.function)))
+                               .arg (chords.join (QStringLiteral (" "))).arg (who.join (QStringLiteral (", ")))
+                               .arg (sc.rhythm.empty() ? QString() : tr (" · %1").arg (QString::fromStdString (sc.rhythm))));
+        }
+    };
+    for (auto* box : { length, longest, loop, rhythms })
+        connect (box, qOverload<int> (&QComboBox::currentIndexChanged), &dialog, recompose);
+    for (auto* box : roleBoxes)
+        connect (box, qOverload<int> (&QComboBox::currentIndexChanged), &dialog, recompose);
+    connect (early, &QCheckBox::toggled, &dialog, recompose);
+    connect (variety, qOverload<int> (&QSpinBox::valueChanged), &dialog, recompose);
+
+    auto* buttons = new QDialogButtonBox (&dialog);
+    auto* again = buttons->addButton (tr ("Deal &Again"), QDialogButtonBox::ActionRole);
+    again->setToolTip (tr ("A new seed: another form, other progressions and motifs, other sounds from the Selector"));
+    auto* write = buttons->addButton (tr ("C&ompose"), QDialogButtonBox::AcceptRole);
+    write->setToolTip (tr ("Into the first empty scenes of the clip launcher"));
+    auto* writePlay = buttons->addButton (tr ("Compose and &Play"), QDialogButtonBox::AcceptRole);
+    buttons->addButton (QDialogButtonBox::Close);
+    layout->addWidget (buttons);
+    bool play = false;
+    connect (again, &QPushButton::clicked, &dialog, [&]
+    {
+        ss.form.seed = arch::nextSeed (ss.form.seed);
+        for (auto& [f, p] : picks)
+            p = findWidget->pickDeal();
+        scanSounds();
+        recompose();
+    });
+    connect (write, &QPushButton::clicked, &dialog, [&] { play = false; dialog.accept(); });
+    connect (writePlay, &QPushButton::clicked, &dialog, [&] { play = true; dialog.accept(); });
+    connect (buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    recompose();
+    dialog.resize (760, 760);
+    const auto result = dialog.exec();
+
+    auto kept = loadSettings (nullptr);
+    kept.bars = ss.form.bars;
+    kept.longest = ss.form.longest;
+    kept.earlyClimax = ss.form.earlyClimax;
+    kept.variety = ss.form.variety;
+    kept.seed = ss.form.seed;
+    saveSettings (kept);
+    QStringList roleList;
+    for (auto r : ss.roles)
+        roleList << QString::number ((int) r);
+    settings.setValue (QStringLiteral ("architectonics/roles"), roleList.join (QLatin1Char (',')));
+    settings.setValue (QStringLiteral ("architectonics/loop"), ss.loopBars);
+    settings.setValue (QStringLiteral ("architectonics/rhythms"), rhythms->currentData().toString());
+    if (result != QDialog::Accepted || song.plan.sections.empty())
+        return;
+
+    const auto count = (int) song.scenes.size();
+    const auto start = mixerWin->emptyScenes (count);
+    if (start < 0)
+        return statusBar()->showMessage (tr ("The song needs %1 empty scenes in a row and the launcher has not got them: empty some, "
+                                             "or choose longer sections").arg (count), 8000);
+    mixerWin->showLauncher (true);
+    std::vector<bool> wanted;
+    for (auto p : ss.present)
+        wanted.push_back (p);
+    const auto tracks = mixerWin->colourTracks (first.names, first.colours, wanted, first.instruments);
+    for (const auto& sc : song.scenes)
+    {
+        QStringList files;
+        std::vector<midifile::SongPtr> midi;
+        for (int c = 0; c < arch::colours; ++c)
+        {
+            const auto& pick = picks[sc.function];
+            const auto sound = sc.plays[(size_t) c] && ss.roles[(size_t) c] == arch::Role::sound && c < pick.files.size();
+            files << (sound ? pick.files[c] : QString());
+            midi.push_back (sc.midi[(size_t) c]);
+        }
+        mixerWin->composeScene (start + sc.section, tracks, files, midi, mode.tuning,
+                                tr ("%1 %2").arg (sc.section + 1).arg (QString::fromLatin1 (arch::functionName (sc.function))));
+    }
+    composed = song.plan;
+    for (auto& x : composed.sections)
+        x.scene += start;
+    composed.climaxScene += start;
+    statusBar()->showMessage (tr ("Architectonics: a song of %1 sections in scenes %2 to %3; Play the Set plays it")
+                                  .arg (count).arg (start + 1).arg (start + count), 8000);
+    if (play)
         playArchitectonics (true);
 }
