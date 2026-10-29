@@ -733,7 +733,7 @@ namespace harmony
                         continue;
                     const auto end = c * cycleTicks + (int64_t) std::llround (at * tpq) - 1;
                     const auto key = (uint8_t) std::clamp (root + n.pitch, 0, 127);
-                    events.push_back ({ start, 1, { start, (uint8_t) (0x90 | channel), key, 80 } });
+                    events.push_back ({ start, 1, { start, (uint8_t) (0x90 | channel), key, (uint8_t) std::clamp (n.velocity, 1, 127) } });
                     events.push_back ({ end, 0, { end, (uint8_t) (0x80 | channel), key, 0 } });
                     song->channelsUsed |= (uint16_t) (1u << channel);
                 }

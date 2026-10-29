@@ -30,6 +30,47 @@ The examples are sketches that show the texture, not transcriptions. Many of the
 sing in tunings that 12-TET only approximates (Georgian, Sardinian and Bulgarian singing among
 them), and some are improvised or orally varied every time.
 
+## Harmonize in the mode
+
+Mode ▸ melody ▸ **harmonize in the mode...** (`Source/mixer/ModalHarmony.cpp`, owner
+2026-10-29) writes an accompaniment in the mode chosen in the Mode menu, on its final and in its
+own tuning, for any of PHI's melodic traditions. It can add a line through the mode on top.
+
+**Chords.** The chords follow modal harmony's rules. The final is held by its own chord or by a
+pedal, and there is no V–I. Chords move by step, and they carry the mode's characteristic note
+without a tritone. The characteristic note is the one that sets the mode apart from major or
+natural minor: dorian's sixth, mixolydian's seventh, lydian's fourth, phrygian's second.
+
+**Judged in cents.** Chords are judged by the cents the PHI synth plays, not by 12-TET names.
+Each interval is measured against the nearest just consonance (6/5, 5/4, 4/3, 3/2, 8/5 or 5/3),
+and a chord is offered only when its worst interval is within 45 cents of one. Rāst's 350-cent
+neutral third passes, about 35 cents rough. A mode with nothing that smooth on its final is heard
+over a drone instead, and the dialog says so.
+
+**Textures.** Each tradition starts from its own texture, by the mode's family:
+
+| Texture | Families |
+|---|---|
+| chords in thirds | church, Gaelic, composer, Messiaen modes; shtayger; Russian chant |
+| chords in fourths | jazz modes |
+| a drone | rāgas, melakartas, mūrchanās, grāmas; Byzantine echoi; Greek genera and species |
+| heterophony over a drone | maqāmāt, makamlar, dastgāhs, āvāz, mugam, ajnās; qenet; Chinese, Japanese, Korean, Thai and Vietnamese modes |
+| layered, as a gamelan | Javanese, Balinese and Sundanese laras and pathet |
+| interlocking dyads | the mbira tunings |
+| clusters, as the shō | the gagaku modes |
+
+Any texture can be chosen for any mode. When it is not the tradition's own, the dialog says how
+that tradition is heard.
+
+**Harmonic rhythm.** The chords change either steadily (so many beats a chord, so many chords a
+cycle) or with a rhythm from Mode ▸ rhythm. With a rhythm, the chords change at each of its
+sections and return to the final at the start of its cycle. On tīntāl they change at the four
+vibhāgs, so they are back on the final at sam. The chords can also be struck on the rhythm's
+first sound's strokes, the ṭhekā's or the clave's, with its accents louder.
+
+The result goes to the selected mixer track as a MIDI clip, with the track's PHI synth tuned to
+the mode, or to a MIDI file.
+
 ## What the literature says
 
 Western theory long treated harmony as a stack of consonances that move by rule. Studies of
