@@ -108,7 +108,9 @@ namespace phimark
 
     bool isPhiPlugin (const std::string& pluginId)
     {
-        return pluginId.rfind ("phinyx:phi-", 0) == 0;
+        // A device's id is JUCE's identifier string, format then name ("Built-in-Φ EQ-..."); the
+        // effect's own identifier ("phinyx:phi-eq") is accepted too.
+        return pluginId.rfind ("phinyx:phi-", 0) == 0 || pluginId.rfind ("Built-in-\xce\xa6 ", 0) == 0;
     }
 
     QString withoutPhi (const QString& name)

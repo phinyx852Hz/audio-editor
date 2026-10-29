@@ -46,7 +46,8 @@ namespace
         return 20.0 * std::log10 (std::abs (h) + 1.0e-12);
     }
 
-    std::string decimal (double v, int decimals) { return juce::String (v, decimals).toStdString(); }
+    // juce::String (v, 0) would give every digit, so whole numbers are rounded here.
+    std::string decimal (double v, int decimals) { return decimals <= 0 ? std::to_string (std::llround (v)) : juce::String (v, decimals).toStdString(); }
     std::string hertz (double hz) { return hz < 1000.0 ? decimal (hz, hz < 100.0 ? 1 : 0) + " Hz" : decimal (hz / 1000.0, 2) + " kHz"; }
 
     //==========================================================================
