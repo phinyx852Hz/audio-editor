@@ -20,6 +20,7 @@
 #include <QLineEdit>
 #include <QMap>
 #include <QMenu>
+#include <QPair>
 #include <QRegularExpression>
 #include <QShortcut>
 #include <QStackedWidget>
@@ -109,6 +110,7 @@ void MainWindow::registerResearchCommands()
         }
         showResearchEntry (tr ("References"), markdown);
     });
+    commands.add (QStringLiteral ("research.search"), category, tr ("&Search Research..."), {}, [this] { openResearchSearch(); });
     commands.add (QStringLiteral ("research.edit"), category, tr ("&Edit References..."), {}, [this]
     {
         // Your own copy, made from the shipped one the first time.
@@ -144,88 +146,237 @@ void MainWindow::fillResearchMenu (QMenu* menu)
     }
     if (! menu->isEmpty())
         menu->addSeparator();
+    menu->addAction (commands.action (QStringLiteral ("research.search")));
     menu->addAction (commands.action (QStringLiteral ("research.all")));
     menu->addAction (commands.action (QStringLiteral ("research.edit")));
 }
 
-// The research panel: the entry, with a find box, in the left-hand column.
+// The research panel: a search box, then the entry (or the search's results) with its links.
 class ResearchView final : public QWidget
 {
 public:
-    ResearchView (std::function<void()> onClose, QWidget* parent) : QWidget (parent)
+    struct Hooks
     {
+        std::function<void()> close, undock;
+        std::function<void (const QString&)> search;
+        std::function<void (const QUrl&)> link;   // a research: link, to another entry
+    };
+
+    ResearchView (Hooks h, QWidget* parent) : QWidget (parent), hooks (std::move (h))
+    {
+        back = button (QStringLiteral ("←"), MainWindow::tr ("Back to what was showing before"), MainWindow::tr ("Back"));
+        connect (back, &QToolButton::clicked, this, [this] { goBack(); });
         heading = new QLabel (this);
         heading->setWordWrap (true);
         auto font = heading->font();
         font.setBold (true);
         heading->setFont (font);
-        auto* close = new QToolButton (this);
-        close->setText (QStringLiteral ("✕"));
-        close->setAutoRaise (true);
-        close->setToolTip (MainWindow::tr ("Close the research panel; the panel it replaced comes back (Esc)"));
-        close->setAccessibleName (MainWindow::tr ("Close research"));
-        connect (close, &QToolButton::clicked, this, [onClose] { onClose(); });
+        undock = button (QStringLiteral ("⧉"), {}, MainWindow::tr ("Undock research"));
+        connect (undock, &QToolButton::clicked, this, [this] { hooks.undock(); });
+        auto* close = button (QStringLiteral ("✕"), MainWindow::tr ("Close the research panel; the panel it replaced comes back (Esc)"),
+                              MainWindow::tr ("Close research"));
+        connect (close, &QToolButton::clicked, this, [this] { hooks.close(); });
         auto* escape = new QShortcut (QKeySequence (Qt::Key_Escape), this);
         escape->setContext (Qt::WidgetWithChildrenShortcut);
-        connect (escape, &QShortcut::activated, this, [onClose] { onClose(); });
+        connect (escape, &QShortcut::activated, this, [this] { hooks.close(); });
 
-        find = new QLineEdit (this);
-        find->setPlaceholderText (MainWindow::tr ("Type to find; Enter finds the next one"));
-        find->setClearButtonEnabled (true);
-        find->setAccessibleName (MainWindow::tr ("Find in this reference"));
+        searchBox = new QLineEdit (this);
+        searchBox->setPlaceholderText (MainWindow::tr ("Search research: any term, then Enter"));
+        searchBox->setClearButtonEnabled (true);
+        searchBox->setAccessibleName (MainWindow::tr ("Search research"));
+        connect (searchBox, &QLineEdit::returnPressed, this, [this]
+        {
+            if (! searchBox->text().trimmed().isEmpty())
+                hooks.search (searchBox->text().trimmed());
+        });
 
         browser = new QTextBrowser (this);
-        browser->setOpenExternalLinks (true);
+        browser->setOpenLinks (false);   // research: links open entries here, the rest in the web browser
         browser->setFrameShape (QFrame::NoFrame);
-
-        const auto findNext = [this] (bool fromTop)
+        connect (browser, &QTextBrowser::anchorClicked, this, [this] (const QUrl& url)
         {
-            if (find->text().isEmpty())
-                return;
-            if (fromTop)
-                browser->moveCursor (QTextCursor::Start);
-            if (! browser->find (find->text()))
-            {
-                browser->moveCursor (QTextCursor::Start);   // round to the top
-                browser->find (find->text());
-            }
-        };
-        connect (find, &QLineEdit::textChanged, this, [findNext] { findNext (true); });
-        connect (find, &QLineEdit::returnPressed, this, [findNext] { findNext (false); });
+            if (url.scheme() == QLatin1String ("research"))
+                hooks.link (url);
+            else
+                QDesktopServices::openUrl (url);
+        });
 
         auto* top = new QHBoxLayout;
+        top->addWidget (back, 0, Qt::AlignTop);
         top->addWidget (heading, 1);
+        top->addWidget (undock, 0, Qt::AlignTop);
         top->addWidget (close, 0, Qt::AlignTop);
         auto* layout = new QVBoxLayout (this);
         layout->setContentsMargins (6, 6, 6, 6);
+        layout->addWidget (searchBox);
         layout->addLayout (top);
-        layout->addWidget (find);
         layout->addWidget (browser, 1);
         setMinimumWidth (270);
+        updateButtons (false);
     }
 
     void setEntry (const QString& title, const QString& markdown)
     {
+        if (! shownTitle.isEmpty() && shownTitle != title)
+            history.append ({ shownTitle, shownMarkdown });
+        display (title, markdown);
+    }
+
+    void updateButtons (bool poppedOut)
+    {
+        back->setEnabled (! history.isEmpty());
+        undock->setToolTip (poppedOut ? MainWindow::tr ("Dock the research panel back on the left")
+                                      : MainWindow::tr ("Undock the research panel into a window of its own"));
+    }
+
+    QWidget* reading() const { return browser; }
+    QLineEdit* search() const { return searchBox; }
+
+private:
+    QToolButton* button (const QString& text, const QString& tip, const QString& name)
+    {
+        auto* b = new QToolButton (this);
+        b->setText (text);
+        b->setAutoRaise (true);
+        b->setToolTip (tip);
+        b->setAccessibleName (name);
+        return b;
+    }
+
+    void display (const QString& title, const QString& markdown)
+    {
+        shownTitle = title;
+        shownMarkdown = markdown;
         heading->setText (title);
         browser->setAccessibleName (title);
         browser->setMarkdown (markdown);
         browser->moveCursor (QTextCursor::Start);
-        find->clear();
+        back->setEnabled (! history.isEmpty());
     }
 
-    QWidget* reading() const { return browser; }
+    void goBack()
+    {
+        if (history.isEmpty())
+            return;
+        const auto [title, markdown] = history.takeLast();
+        display (title, markdown);
+    }
 
-private:
+    Hooks hooks;
+    QToolButton* back = nullptr;
+    QToolButton* undock = nullptr;
     QLabel* heading = nullptr;
-    QLineEdit* find = nullptr;
+    QLineEdit* searchBox = nullptr;
     QTextBrowser* browser = nullptr;
+    QString shownTitle, shownMarkdown;
+    QList<QPair<QString, QString>> history;
 };
+
+namespace
+{
+    // The first sentence of an entry, for a search result.
+    QString firstSentence (const QString& markdown)
+    {
+        auto text = markdown.section (QLatin1Char ('\n'), 1).trimmed();
+        text = text.section (QStringLiteral ("\n\n"), 0, 0).simplified();
+        text.remove (QRegularExpression (QStringLiteral ("[*_`]")));
+        const auto end = text.indexOf (QStringLiteral (". "));
+        if (end > 0)
+            text = text.left (end + 1);
+        return text.length() > 220 ? text.left (217) + QStringLiteral ("...") : text;
+    }
+
+    QString researchLink (const QString& title)
+    {
+        return QStringLiteral ("research:") + QString::fromLatin1 (QUrl::toPercentEncoding (title));
+    }
+}
+
+void MainWindow::searchResearch (const QString& term)
+{
+    const auto words = term.split (QLatin1Char (' '), Qt::SkipEmptyParts);
+    const auto has = [&words] (const QString& text)
+    {
+        for (const auto& w : words)
+            if (! text.contains (w, Qt::CaseInsensitive))
+                return false;
+        return ! words.isEmpty();
+    };
+
+    const auto entries = readReferences();
+    for (const auto& e : entries)
+        if (e.title.compare (term, Qt::CaseInsensitive) == 0)
+        {
+            showResearchEntry (e.title, e.markdown);   // the very entry: straight to it
+            return;
+        }
+
+    // References whose title has the term first, then those that mention it.
+    QStringList inTitle, inText;
+    for (const auto& e : entries)
+    {
+        const auto line = QStringLiteral ("- [%1](%2): %3").arg (e.title, researchLink (e.title), firstSentence (e.markdown));
+        if (has (e.title))
+            inTitle << line;
+        else if (has (e.markdown))
+            inText << line;
+    }
+    // What in PHI goes by that name, so a term met in a menu can be looked up.
+    QStringList inPhi;
+    for (const auto& c : commands.all())
+        if (has (c.name()) && ! c.id.startsWith (QLatin1String ("research.")))
+            inPhi << QStringLiteral ("- %1 (%2)").arg (c.name(), c.category);
+    inPhi.removeDuplicates();
+    if (inPhi.size() > 12)
+        inPhi = inPhi.mid (0, 12) << QStringLiteral ("- ...");
+
+    const auto query = QString::fromLatin1 (QUrl::toPercentEncoding (term));
+    QString md;
+    if (inTitle.isEmpty() && inText.isEmpty())
+        md += tr ("No reference mentions \"%1\" yet.").arg (term) + QStringLiteral ("\n\n");
+    else
+        md += QStringLiteral ("## %1\n\n%2\n\n").arg (tr ("References"), (inTitle + inText).join (QLatin1Char ('\n')));
+    if (! inPhi.isEmpty())
+        md += QStringLiteral ("## %1\n\n%2\n\n").arg (tr ("In PHI"), inPhi.join (QLatin1Char ('\n')));
+    md += QStringLiteral ("## %1\n\n").arg (tr ("Further reading"));
+    md += QStringLiteral ("- [Wikipedia](https://en.wikipedia.org/w/index.php?search=%1)\n").arg (query);
+    md += QStringLiteral ("- [Google Scholar](https://scholar.google.com/scholar?q=%1)\n").arg (query);
+    md += QStringLiteral ("- [JSTOR](https://www.jstor.org/action/doBasicSearch?Query=%1)\n").arg (query);
+    md += QStringLiteral ("- [Internet Archive](https://archive.org/search?query=%1)\n").arg (query);
+    showResearchEntry (tr ("Search: %1").arg (term), md);
+}
 
 void MainWindow::showResearchEntry (const QString& title, const QString& markdown)
 {
     if (researchPanel == nullptr)
     {
-        researchView = new ResearchView ([this] { closeResearch(); }, this);
+        ResearchView::Hooks hooks;
+        hooks.close = [this] { closeResearch(); };
+        hooks.search = [this] (const QString& term) { searchResearch (term); };
+        hooks.link = [this] (const QUrl& url)
+        {
+            const auto title = url.path (QUrl::FullyDecoded);
+            for (const auto& e : readReferences())
+                if (e.title == title)
+                    return showResearchEntry (e.title, e.markdown);
+            searchResearch (title);
+        };
+        hooks.undock = [this]
+        {
+            // Undocked, it no longer takes anything's place; docked again, it does.
+            if (researchPanel->isPoppedOut())
+            {
+                takeLeftForResearch();
+                researchPanel->setPoppedOut (false);
+            }
+            else
+            {
+                giveBackLeftFromResearch();
+                researchPanel->setPoppedOut (true);
+            }
+            researchView->updateButtons (researchPanel->isPoppedOut());
+        };
+        researchView = new ResearchView (std::move (hooks), this);
         researchPanel = new DockablePanel (*this, QStringLiteral ("researchPanel"), tr ("Research"), researchView, Qt::LeftDockWidgetArea);
         focusFollowsMouse->addAreas ({ researchView });
         // Closed from its title bar too, the panel it replaced comes back.
@@ -236,38 +387,62 @@ void MainWindow::showResearchEntry (const QString& title, const QString& markdow
         });
     }
     researchView->setEntry (title, markdown);
-
-    // It takes the place of what is on the left now (owner, 2026-10-29): the Find panel, or
-    // the docked mixer's Inspector. Opening another entry keeps what it is to give back.
-    if (! researchShowing)
-    {
-        researchShowing = true;
-        researchHidMixerSide = mixerWin != nullptr && mixerDocked() && centralStack->currentWidget() == mixerWin;
-        researchHidFind = findPanel->isShown();
-        if (researchHidFind)
-        {
-            if (! findPanel->isPoppedOut() && ! findPanel->dock()->isFloating())
-                addDockWidget (dockWidgetArea (findPanel->dock()), researchPanel->dock());
-            hidingFindForMixer = true;   // not a hand-closed Find, so the mixer's Inspector stays put
-            findPanel->hide();
-            hidingFindForMixer = false;
-        }
-        if (researchHidMixerSide)
-            mixerWin->hideSideColumn (true);
-    }
+    if (! researchPanel->opensInWindow())
+        takeLeftForResearch();
     researchPanel->show (false);
+    researchView->updateButtons (researchPanel->isPoppedOut());
     researchView->reading()->setFocus();
 }
 
-void MainWindow::closeResearch()
+// It takes the place of what is on the left now (owner, 2026-10-29): the Find panel, or the
+// docked mixer's Inspector. Opening another entry keeps what it is to give back.
+void MainWindow::takeLeftForResearch()
+{
+    if (researchShowing)
+        return;
+    researchShowing = true;
+    researchHidMixerSide = mixerWin != nullptr && mixerDocked() && centralStack->currentWidget() == mixerWin;
+    researchHidFind = findPanel->isShown();
+    if (researchHidFind)
+    {
+        if (! findPanel->isPoppedOut() && ! findPanel->dock()->isFloating())
+            addDockWidget (dockWidgetArea (findPanel->dock()), researchPanel->dock());
+        hidingFindForMixer = true;   // not a hand-closed Find, so the mixer's Inspector stays put
+        findPanel->hide();
+        hidingFindForMixer = false;
+    }
+    if (researchHidMixerSide)
+        mixerWin->hideSideColumn (true);
+}
+
+void MainWindow::giveBackLeftFromResearch()
 {
     if (! researchShowing)
         return;
     researchShowing = false;
-    researchPanel->hide();
     if (researchHidMixerSide && mixerWin != nullptr)
         mixerWin->hideSideColumn (false);   // back to the Inspector, or the Finder it had
     if (researchHidFind && ! findPanel->isShown())
         findPanel->show (false);
     researchHidMixerSide = researchHidFind = false;
+}
+
+void MainWindow::closeResearch()
+{
+    if (researchPanel == nullptr)
+        return;
+    const bool wasShowing = researchShowing;
+    researchShowing = false;   // so hiding it does not come back here
+    researchPanel->hide();
+    researchShowing = wasShowing;
+    giveBackLeftFromResearch();
+}
+
+void MainWindow::openResearchSearch()
+{
+    if (researchPanel == nullptr || ! researchPanel->isShown())
+        showResearchEntry (tr ("Research"), tr ("Type a term in the search box above, then Enter: a mode, a rhythm, a composer, "
+                                                "a technique, anything you meet in PHI."));
+    researchView->search()->setFocus();
+    researchView->search()->selectAll();
 }

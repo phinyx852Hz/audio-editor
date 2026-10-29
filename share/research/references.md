@@ -342,13 +342,26 @@ with Babbitt's combinatoriality and time points.
 
 ## Stochastic music and sieves
 
-Xenakis's music of probabilities and his sieves, which build scales and rhythms from residue
-classes. He began with *Metastaseis* (1954) and *Pithoprakta* (1956) and set out the theory in
-*Musiques formelles* (1963), translated as *Formalized Music*.
+Stochastic music is Iannis Xenakis's name for music composed with the laws of probability: masses
+of sound (clouds of pizzicati, glissandi, grains) whose overall shape is chosen and whose single
+events follow a distribution, as gas molecules follow the kinetic theory. Sieves are his later
+tool for building scales and rhythms from residue classes, numbers that leave the same remainder.
+
+Xenakis (1922–2001), an engineer and architect who worked with Le Corbusier, reacted against the
+serialism of the 1950s, whose density he said the ear heard only as statistics. *Metastaseis*
+(1953–54) and *Pithoprakta* (1955–56) were the first stochastic works; *Achorripsis* (1956–57)
+used Poisson's law throughout, and from 1962 the ST pieces were calculated on an IBM 7090. He set
+out the theory in *Musiques formelles* (1963), translated as *Formalized Music* (1971); sieves
+came in *Nomos Alpha* (1965–66) and his article "Sieves" (1990). He founded EMAMu (1966, later CEMAMu) and built
+the UPIC drawing system (1977) and the GENDY programs of dynamic stochastic synthesis (1991).
 
 - [Iannis Xenakis](https://en.wikipedia.org/wiki/Iannis_Xenakis), Wikipedia.
-- Iannis Xenakis, *Formalized Music* (Pendragon, revised edition 1992), and "Sieves",
-  *Perspectives of New Music* 28/1 (1990).
+- [Les Amis de Xenakis](https://www.iannis-xenakis.org), the composer's archive and catalogue.
+- Iannis Xenakis, *Formalized Music: Thought and Mathematics in Composition* (Pendragon,
+  revised edition 1992), and "Sieves", *Perspectives of New Music* 28/1 (1990).
+- Thomas DeLio, "Iannis Xenakis' *Nomos Alpha*: The Dialectics of Structure and Materials",
+  *Journal of Music Theory* 24/1 (1980).
+- Nouritza Matossian, *Xenakis* (Kahn & Averill, 1986).
 
 ## Minimalism
 
