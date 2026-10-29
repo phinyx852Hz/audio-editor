@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**82 pull requests:** 81 merged, 1 open.
+**90 pull requests:** 84 merged, 6 open.
 
 ## Contents
 
@@ -41,6 +41,9 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#77](https://github.com/phinyx852Hz/audio-editor/pull/77) | Slicer: a 128-pad drum machine with layers and sounds of their own | merged |  | `Source/ui/SlicerWindow.cpp`<br>`Source/sampler/SlicerEngine.cpp`<br>`Source/ui/SlicerKit.cpp` |
 | [#79](https://github.com/phinyx852Hz/audio-editor/pull/79) | Slicer phase 2: step sequencer (Cubase Pattern Editor / FL Studio Channel Rack) | merged |  | `Source/ui/StepSequencerView.cpp`<br>`Source/sampler/SlicerEngine.cpp`<br>`Source/ui/StepSequencerView.h` |
 | [#80](https://github.com/phinyx852Hz/audio-editor/pull/80) | MIDI editor: rising spectrum, scale wheel, pitch curves and ornaments, tuning changes, hum to notes, MTS-ESP | merged |  | `Source/ui/MidiEditor.cpp`<br>`Source/mixer/NoteEditor.cpp`<br>`tests/CoreTests.cpp` |
+| [#85](https://github.com/phinyx852Hz/audio-editor/pull/85) | MIDI editor: microtonal staff notation, from Xen Tuner's notations | open | View > Staff notation | `Source/core/XenTuner.cpp`<br>`share/xen-tuner/tunings/fjs/1023odd.txt`<br>`Source/core/XenSymbols.inc` |
+| [#87](https://github.com/phinyx852Hz/audio-editor/pull/87) | MIDI editor: sargam, Carnatic swaras, jianpu, not angka, jeongganbo and maqam/makam/dastgah key signatures | open |  | `Source/mixer/NotationGrid.cpp`<br>`Source/ui/MidiStaff.cpp`<br>`Source/mixer/KeySignatures.inc` |
+| [#88](https://github.com/phinyx852Hz/audio-editor/pull/88) | Slicer: Cubase Drum Machine layout; Simplest and the Slicer dock under the editor or the mixer | open |  | `Source/ui/SlicerWindow.cpp`<br>`Source/ui/MixerWindow.cpp`<br>`Source/ui/Panels.cpp` |
 
 ### Analysis and meters
 
@@ -74,6 +77,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#45](https://github.com/phinyx852Hz/audio-editor/pull/45) | Mixer: Paulstretch on clips, Finder/Inspector column, fixed Device Chain, editor round trip | merged | Mixer, clip Inspector, Audio Clip section | `Source/ui/MixerWindow.cpp`<br>`Source/ui/ExtremeSettings.h`<br>`Source/ui/MixerSection.cpp` |
 | [#51](https://github.com/phinyx852Hz/audio-editor/pull/51) | Mixer: recording into slots and onto the timeline, live looping, audio and MIDI layers, and a full transport | merged | Mixer and Clip Launcher, Record (Ctrl+R) | `Source/mixer/Recording.cpp`<br>`Source/ui/MixerRecording.cpp`<br>`docs/recording.md` |
 | [#61](https://github.com/phinyx852Hz/audio-editor/pull/61) | Editor Track: one track of the project under the editor's waveform | merged | Mixer menu, Editor Track (Shift+F4) | `Source/ui/MixerWindow.cpp`<br>`Source/ui/MixerSection.cpp`<br>`docs/editor-track.md` |
+| [#84](https://github.com/phinyx852Hz/audio-editor/pull/84) | Architectonics: golden-ratio sets and Compose a Song for the clip launcher | open |  | `Source/ui/ArchitectonicsSection.cpp`<br>`Source/mixer/Architectonics.cpp`<br>`docs/architectonics.md` |
 
 ### Routing and racks
 
@@ -105,6 +109,8 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#70](https://github.com/phinyx852Hz/audio-editor/pull/70) | Rhythm generator, my breaks, laya and naḍai, and feels | merged | Mode > rhythm | `Source/ui/RhythmGeneratorDialog.cpp`<br>`Source/mixer/RhythmGenerator.cpp`<br>`Source/ui/RhythmSection.cpp` |
 | [#73](https://github.com/phinyx852Hz/audio-editor/pull/73) | Mode menu: modes and tunings by region, tradition and person | merged |  | `Source/mixer/Atlas.cpp`<br>`Source/ui/ModeAtlas.cpp`<br>`Source/ui/ModeSection.cpp` |
 | [#81](https://github.com/phinyx852Hz/audio-editor/pull/81) | Rhythms: the iqāʿāt of Maqam World's index, and kuku | merged | Mode > rhythm > West Asia > iqāʿāt | `Source/mixer/Rhythms.cpp`<br>`docs/rhythms.md`<br>`tests/CoreTests.cpp` |
+| [#83](https://github.com/phinyx852Hz/audio-editor/pull/83) | Mode: add a harmony submenu | merged |  | `Source/mixer/Harmonies.cpp`<br>`docs/harmony.md`<br>`Source/ui/HarmonySection.cpp` |
+| [#90](https://github.com/phinyx852Hz/audio-editor/pull/90) | PHI rāga: bahādur kauns, drafted from a recording | merged |  | `Source/core/PhiRagas.cpp`<br>`docs/mixer.md`<br>`docs/raga.md` |
 
 ### Φ effects and sounds
 
@@ -115,6 +121,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#36](https://github.com/phinyx852Hz/audio-editor/pull/36) | Play a new phase distortion sound as the Φ splash opens | merged | Startup splash | `Source/core/PhiVoice.cpp`<br>`Source/main.cpp` |
 | [#42](https://github.com/phinyx852Hz/audio-editor/pull/42) | Add the Φ Phaser, and the Φ DSP as a library the PHI synth can link | merged | Add plugin, Built-in, Φ Phaser | `Source/core/PhiPhaser.cpp`<br>`Source/engine/PhiEffects.cpp`<br>`Source/core/CMakeLists.txt` |
 | [#43](https://github.com/phinyx852Hz/audio-editor/pull/43) | Φ Compressor, Φ Multiband, Φ Limiter and Φ Chorus | merged | Add plugin, Built-in | `Source/core/PhiDynamics.cpp`<br>`Source/core/PhiChorus.cpp`<br>`Source/engine/PhiEffects.cpp` |
+| [#89](https://github.com/phinyx852Hz/audio-editor/pull/89) | Φ Modulation (PhiFlow, PhiSpace, PhiGrain, PhiMatrix) and a Cubase-style Modulators panel | open |  | `Source/core/PhiModulation.cpp`<br>`Source/ui/ModulatorsPanel.cpp`<br>`Source/core/Modulators.cpp` |
 
 ### Instruments and plugins
 
@@ -164,7 +171,8 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#39](https://github.com/phinyx852Hz/audio-editor/pull/39) | Add the PHI Gold theme and make it the default | merged | Themes (Ctrl+Shift+T) | `Source/ui/Theme.cpp`<br>`docs/themes.md` |
 | [#41](https://github.com/phinyx852Hz/audio-editor/pull/41) | Stop idle redraws and uptime-growing loudness work | merged | Meters (no visible change) | `Source/core/Dsp.cpp`<br>`Source/ui/Panels.cpp` |
 | [#74](https://github.com/phinyx852Hz/audio-editor/pull/74) | Reorganize the menu bar: four menus become submenus, rest A to Z | merged |  | `Source/ui/MainWindow.cpp`<br>`docs/manual/chapters/keyboard.md`<br>`README.md` |
-| [#82](https://github.com/phinyx852Hz/audio-editor/pull/82) | Research menu: curated references on the ideas behind PHI | open |  | `share/research/references.md`<br>`Source/ui/ResearchSection.cpp`<br>`Source/ui/MainWindow.cpp` |
+| [#82](https://github.com/phinyx852Hz/audio-editor/pull/82) | Research menu: curated references on the ideas behind PHI | merged |  | `share/research/modes-9-harmony.md`<br>`share/research/modes-1-europe.md`<br>`Source/ui/ResearchSection.cpp` |
+| [#86](https://github.com/phinyx852Hz/audio-editor/pull/86) | Compose menu: every compositional method in PHI, plus 15 more from Western and other traditions | open |  | `Source/mixer/Compose.cpp`<br>`Source/ui/ComposeSection.cpp`<br>`docs/compose.md` |
 
 ### Documentation
 
@@ -267,4 +275,12 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#79](https://github.com/phinyx852Hz/audio-editor/pull/79) | Slicer phase 2: step sequencer (Cubase Pattern Editor / FL Studio Channel Rack) | Phase 2 of the Slicer plan: a step sequencer that plays the kit's pads. *(auto)* | merged | 2026-10-28 | Editing and warping |
 | [#80](https://github.com/phinyx852Hz/audio-editor/pull/80) | MIDI editor: rising spectrum, scale wheel, pitch curves and ornaments, tuning changes, hum to notes, MTS-ESP | The second stage of the MIDI editor (#68), with every item the owner asked for in the thread. *(auto)* | merged | 2026-10-28 | Editing and warping |
 | [#81](https://github.com/phinyx852Hz/audio-editor/pull/81) | Rhythms: the iqāʿāt of Maqam World's index, and kuku | Adds the 37 iqāʿāt from Maqam World's index that the library didn't have yet. *(auto)* | merged | 2026-10-28 | Modes, tunings and composition |
-| [#82](https://github.com/phinyx852Hz/audio-editor/pull/82) | Research menu: curated references on the ideas behind PHI | Adds a top-level Research menu, in alphabetical place after Repair and before Spatial (the order from #74). *(auto)* | open | 2026-10-29 | Interface and branding |
+| [#82](https://github.com/phinyx852Hz/audio-editor/pull/82) | Research menu: curated references on the ideas behind PHI | Adds a top-level Research menu, in alphabetical place after Repair and before Spatial (the order from #74). *(auto)* | merged | 2026-10-29 | Interface and branding |
+| [#83](https://github.com/phinyx852Hz/audio-editor/pull/83) | Mode: add a harmony submenu | Adds Mode ▸ harmony, in lower case like melody, tuning and rhythm. *(auto)* | merged | 2026-10-29 | Modes, tunings and composition |
+| [#84](https://github.com/phinyx852Hz/audio-editor/pull/84) | Architectonics: golden-ratio sets and Compose a Song for the clip launcher | This adds an Architectonics menu to the menu bar, between Analyze and Master. *(auto)* | open | 2026-10-29 | Mixer and clip launcher |
+| [#85](https://github.com/phinyx852Hz/audio-editor/pull/85) | MIDI editor: microtonal staff notation, from Xen Tuner's notations | The MIDI editor gets a staff notation view in the piano roll's place. *(auto)* | open | 2026-10-29 | Editing and warping |
+| [#86](https://github.com/phinyx852Hz/audio-editor/pull/86) | Compose menu: every compositional method in PHI, plus 15 more from Western and other traditions | Built on #84, which is why it is based on #84's branch. *(auto)* | open | 2026-10-29 | Interface and branding |
+| [#87](https://github.com/phinyx852Hz/audio-editor/pull/87) | MIDI editor: sargam, Carnatic swaras, jianpu, not angka, jeongganbo and maqam/makam/dastgah key signatures | 1. *(auto)* | open | 2026-10-29 | Editing and warping |
+| [#88](https://github.com/phinyx852Hz/audio-editor/pull/88) | Slicer: Cubase Drum Machine layout; Simplest and the Slicer dock under the editor or the mixer | This PR follows the owner's direction to model the Slicer's UI on Cubase's Drum Machine: compact, nested beneath the mixer, above the Device Chain when it is... *(auto)* | open | 2026-10-29 | Editing and warping |
+| [#89](https://github.com/phinyx852Hz/audio-editor/pull/89) | Φ Modulation (PhiFlow, PhiSpace, PhiGrain, PhiMatrix) and a Cubase-style Modulators panel | This PR has three parts: *(auto)* | open | 2026-10-29 | Φ effects and sounds |
+| [#90](https://github.com/phinyx852Hz/audio-editor/pull/90) | PHI rāga: bahādur kauns, drafted from a recording | Adds a draft sheet for bahādur kauns, the last raga from the owner's teacher's list. *(auto)* | merged | 2026-10-29 | Modes, tunings and composition |
