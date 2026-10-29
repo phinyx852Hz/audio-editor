@@ -284,5 +284,5 @@ syntax?
   *Music Theory Online* (2022).
 - Philip Ewell, ["Music Theory and the White Racial Frame"](https://mtosmt.org/issues/mto.20.26.2/mto.20.26.2.ewell.php),
   *Music Theory Online* 26.2 (2020).
-- John M. McBride and others, "Melody predominates over harmony in the evolution of musical
-  scales across 96 countries" (2024), on arXiv.
+- John M. McBride and others, ["Melody predominates over harmony in the evolution of musical
+  scales across 96 countries"](https://arxiv.org/abs/2408.12633) (2024), arXiv:2408.12633.
