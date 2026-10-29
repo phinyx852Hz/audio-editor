@@ -143,9 +143,9 @@ void MainWindow::registerComposeCommands()
         };
     };
     add (QStringLiteral ("compose.counterpoint"), tr ("Species Co&unterpoint..."),
-         clipOr ((int) compose::Method::counterpoint, [this] { mixerWin->counterpointShown(); }))
+         clipOr ((int) composition::Method::counterpoint, [this] { mixerWin->counterpointShown(); }))
         ->setStatusTip (tr ("Fux's species against the MIDI clip shown in the mixer, else against a cantus firmus written for them"));
-    add (QStringLiteral ("compose.fugue"), tr ("&Fugue..."), clipOr ((int) compose::Method::fugue, [this] { mixerWin->fugueShown(); }))
+    add (QStringLiteral ("compose.fugue"), tr ("&Fugue..."), clipOr ((int) composition::Method::fugue, [this] { mixerWin->fugueShown(); }))
         ->setStatusTip (tr ("A fugue on the MIDI clip shown in the mixer as its subject, else on a subject written for it"));
     add (QStringLiteral ("compose.serial"), tr ("&12-Tone Row..."), [this] { serialDialog(); })
         ->setStatusTip (tr ("Schoenberg's and Babbitt's methods: a row, its matrix and a piece in one to four voices"));
@@ -171,10 +171,10 @@ void MainWindow::registerComposeCommands()
         ->setStatusTip (tr ("Euclidean timelines against each other (polymeter), with chance and rules"));
 
     // Each method of mixer/Compose.h.
-    for (int i = 0; i < (int) compose::methods().size(); ++i)
+    for (int i = 0; i < (int) composition::methods().size(); ++i)
     {
-        const auto& m = compose::methods()[(size_t) i];
-        if (m.method == compose::Method::counterpoint || m.method == compose::Method::fugue)
+        const auto& m = composition::methods()[(size_t) i];
+        if (m.method == composition::Method::counterpoint || m.method == composition::Method::fugue)
             continue;   // compose.counterpoint and compose.fugue above
         add (QStringLiteral ("compose.") + QString::fromLatin1 (m.id), QString::fromUtf8 (m.name) + QStringLiteral ("..."), [this, i] { composeDialog (i); })
             ->setStatusTip (QString::fromUtf8 (m.tradition) + QStringLiteral (": ") + QString::fromUtf8 (m.about));
@@ -212,7 +212,7 @@ void MainWindow::fillComposeMenu (QMenu* menu)
     {
         auto* sub = menu->addMenu (tr (title));
         sub->setToolTipsVisible (true);
-        for (const auto& m : compose::methods())
+        for (const auto& m : composition::methods())
         {
             if (std::string (m.region) != region)
                 continue;
@@ -224,14 +224,14 @@ void MainWindow::fillComposeMenu (QMenu* menu)
                 sub->addAction (a);
             }
             // The older methods where they fall in time.
-            if (m.method == compose::Method::fugue)
+            if (m.method == composition::Method::fugue)
                 sub->addAction (commands.action (QStringLiteral ("compose.serial")));
-            if (m.method == compose::Method::stochastic)
+            if (m.method == composition::Method::stochastic)
             {
                 sub->addAction (commands.action (QStringLiteral ("compose.stochasticize")));
                 sub->addAction (commands.action (QStringLiteral ("compose.cubify")));
             }
-            if (m.method == compose::Method::process)
+            if (m.method == composition::Method::process)
                 sub->addAction (commands.action (QStringLiteral ("compose.minimalize")));
         }
     }
@@ -254,9 +254,9 @@ void MainWindow::newMicrotonalScore (const QString& notation)
     // Four empty bars of 4/4 at the mixer's tempo.
     midifile::Song blank;
     blank.format = 0;
-    blank.ticksPerQuarter = compose::ticksPerQuarter;
+    blank.ticksPerQuarter = composition::ticksPerQuarter;
     blank.tempos.push_back ({ 0, 60.0e6 / std::max (1.0, mixerEngine->tempo.load()) });
-    blank.lastTick = 16 * compose::ticksPerQuarter;
+    blank.lastTick = 16 * composition::ticksPerQuarter;
     const auto title = tr ("New score");
     blank.trackNames.push_back (title.toStdString());
     mixerWin->openScore (blank, p.tuning, title, notation);
@@ -268,9 +268,9 @@ void MainWindow::composeDialog (int methodIndex)
     if (mixerWin == nullptr)
         return;
     auto settings = appSettings();
-    const auto& all = compose::methods();
+    const auto& all = composition::methods();
     if (methodIndex < 0 || methodIndex >= (int) all.size())
-        methodIndex = std::max (0, compose::find (settings.value (QStringLiteral ("compose/method")).toString().toStdString()));
+        methodIndex = std::max (0, composition::find (settings.value (QStringLiteral ("compose/method")).toString().toStdString()));
 
     QDialog dialog (this);
     dialog.setWindowTitle (tr ("Compose"));
@@ -318,8 +318,8 @@ void MainWindow::composeDialog (int methodIndex)
 
     std::random_device device;
     uint32_t seed = device();
-    compose::Result result;
-    compose::Settings cs;
+    composition::Result result;
+    composition::Settings cs;
     Pitches chosen;
     auto current = [&] { return all[(size_t) std::max (0, method->currentData().toInt())]; };
     auto recompose = [&]
@@ -331,13 +331,13 @@ void MainWindow::composeDialog (int methodIndex)
         cs.bpm = tempo->value();
         cs.seed = seed;
         chosen = pitch->currentData().toInt() == 1 ? homePitches (m.home) : modePitches();
-        if (m.method == compose::Method::spectral)   // its own cents, sent as bends: played in 12-TET
+        if (m.method == composition::Method::spectral)   // its own cents, sent as bends: played in 12-TET
             chosen.tuning = {};
         cs.mode = chosen.mode;
-        result = compose::generate (cs);
+        result = composition::generate (cs);
         summary->setText (QString::fromStdString (result.summary) + QStringLiteral ("."));
         list->clear();
-        const auto ticksPerBar = 4.0 * compose::ticksPerQuarter;
+        const auto ticksPerBar = 4.0 * composition::ticksPerQuarter;
         for (const auto& x : result.sections)
             list->addItem (tr ("bar %1 · %2").arg (1 + (int) (x.start / ticksPerBar)).arg (QString::fromStdString (x.name)));
         list->addItem (tr ("end, bar %1").arg (1 + (int) std::ceil (result.end / ticksPerBar)));
@@ -347,7 +347,7 @@ void MainWindow::composeDialog (int methodIndex)
         const auto& m = current();
         about->setText (QStringLiteral ("%1<br><i>%2</i>").arg (QString::fromUtf8 (m.about).toHtmlEscaped(), tr ("After %1").arg (QString::fromUtf8 (m.sources).toHtmlEscaped())));
         const QSignalBlocker block (parts), blockPitch (pitch);
-        parts->setRange (1, std::min (m.mostParts, compose::maxParts));
+        parts->setRange (1, std::min (m.mostParts, composition::maxParts));
         parts->setValue (std::clamp (settings.value (QStringLiteral ("compose/parts/") + QString::fromLatin1 (m.id), m.defaultParts).toInt(), 1, m.mostParts));
         QStringList names;
         int k = 0;
@@ -365,8 +365,8 @@ void MainWindow::composeDialog (int methodIndex)
             const auto same = system >= 0 && home >= 0 && mixer::tuningSystems()[(size_t) system].family == mixer::tuningSystems()[(size_t) home].family;
             pitch->setCurrentIndex (same ? 0 : 1);
         }
-        pitch->setEnabled (m.method != compose::Method::spectral);
-        if (m.method == compose::Method::spectral)
+        pitch->setEnabled (m.method != composition::Method::spectral);
+        if (m.method == composition::Method::spectral)
             pitch->setItemText (0, tr ("the harmonic series on the Mode menu's final, in exact cents"));
         recompose();
     };
@@ -402,7 +402,7 @@ void MainWindow::composeDialog (int methodIndex)
         return;
 
     const auto title = QString::fromUtf8 (current().name);
-    const auto song = compose::toSong (result, title.toStdString());
+    const auto song = composition::toSong (result, title.toStdString());
     if (! saving)
         return mixerWin->openScore (*song, chosen.tuning, title, QStringLiteral ("phi"));
     const auto folder = settings.value (QStringLiteral ("compose/folder"), QDir::homePath()).toString();

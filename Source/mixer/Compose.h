@@ -22,7 +22,7 @@
 #include <string>
 #include <vector>
 
-namespace compose
+namespace composition
 {
     constexpr int maxParts = 8;            // the mixer's eight tracks
     constexpr int ticksPerQuarter = 480;

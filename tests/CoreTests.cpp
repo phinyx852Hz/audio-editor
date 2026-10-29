@@ -7897,7 +7897,7 @@ namespace
     // parts, in its mode; and each keeps the structure its tradition gives it.
     void testCompose()
     {
-        namespace co = compose;
+        namespace co = composition;
         bool every = true, inMode = true, capped = true, files = true;
         for (const auto& m : co::methods())
         {

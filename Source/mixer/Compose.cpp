@@ -12,7 +12,7 @@
 #include <numeric>
 #include <cstring>
 
-namespace compose
+namespace composition
 {
     //==========================================================================
     const std::vector<MethodInfo>& methods()
