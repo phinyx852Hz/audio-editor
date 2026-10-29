@@ -66,6 +66,7 @@ target_sources(${APP_ID} PRIVATE
     Source/mixer/Architectonics.cpp
     Source/mixer/RhythmGenerator.cpp
     Source/mixer/Minimalize.cpp
+    Source/mixer/Compose.cpp
     Source/mixer/Instruments.cpp
     Source/mixer/MixerEngine.cpp
     Source/mixer/Spatial.cpp
@@ -192,6 +193,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/ModeAtlas.cpp
     Source/ui/RhythmSection.cpp
     Source/ui/ArchitectonicsSection.cpp
+    Source/ui/ComposeSection.cpp
     Source/ui/RhythmGeneratorDialog.cpp
     Source/ui/StochasticSection.cpp
     Source/ui/CubifySection.cpp
@@ -448,6 +450,7 @@ if(PHI_BUILD_TESTS)
         Source/mixer/Architectonics.cpp
         Source/mixer/RhythmGenerator.cpp
         Source/mixer/Minimalize.cpp
+        Source/mixer/Compose.cpp
         Source/mixer/Instruments.cpp
         Source/mixer/MixerEngine.cpp
         Source/mixer/Spatial.cpp
