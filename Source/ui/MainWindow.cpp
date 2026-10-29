@@ -918,7 +918,7 @@ void MainWindow::buildMenus()
                                "repair.brushSmaller", "repair.brushLarger", "repair.addHarmonics", "-",
                                "repair.frequencyRange", "repair.allFrequencies", "-", "view.spectral" } },
         // Every letter of Research is taken, so it shares R with Repair: Alt+R, R again moves on to it.
-        { tr ("&Research"),  { "research.effects", "research.spatialStudio", "-", "research.commands" } },
+        { tr ("&Research"),  { "@research" } },
         { tr ("Spat&ial"),   { "spatial.binaural", "process.midSide", "process.stereoize", "-", "spatial.layout", "-", "spatial.studio", "-", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.speakerArrays", "spatial.fumaToAmbix", "spatial.ambixToFuma", "-", "view.ambiScene", "analyze.imagingView" } },
         { tr ("&Sample"),    { "sample.send", "sample.window", "sample.refresh", "-", "slice.send", "slice.window", "slice.refresh", "-",
                                "instrument.granular", "instrument.retroSampler", "-", "sample.midiInputs", "control.surfaces", "control.learn", "sample.panic" } },
@@ -975,6 +975,12 @@ void MainWindow::buildMenus()
                 // Built as it opens, so its ticks follow the mode chosen and the mixer's state.
                 connect (menu, &QMenu::aboutToShow, this, [this, menu] { fillModeMenu (menu); });
                 fillModeMenu (menu);
+            }
+            else if (id == QLatin1String ("@research"))
+            {
+                // Built as it opens, from the references file the owner curates (ResearchSection.cpp).
+                connect (menu, &QMenu::aboutToShow, this, [this, menu] { fillResearchMenu (menu); });
+                fillResearchMenu (menu);
             }
             else if (id == QLatin1String ("@nyquist.generate"))
                 generateMenu = menu->addMenu (tr ("&Generate"));
