@@ -13,7 +13,7 @@ How it is read:
   the web browser.
 
 Every .md file in this folder is read: this one first, then the others by name
-(modes-europe.md, modes-west-asia.md...). A group with slashes nests: "# Modes / Europe" is a
+(modes-1-europe.md, modes-2-west-asia.md..., numbered for the order of the Mode menu). A group with slashes nests: "# Modes / Europe" is a
 Europe submenu inside Modes.
 
 PHI reads your own copies in ~/.local/share/phi/research/ when there are any (Research > Edit
@@ -271,60 +271,6 @@ The modal system of Arabic, Persian and Turkish music, with intervals between th
 - [Maqam World](https://www.maqamworld.com).
 - Chrysanthos, *Theōrētikon mega* (1832), for the moria.
 - Üzeyir Hacıbəyli, *Principles of Azerbaijani Folk Music* (1945).
-
-# Rhythm
-
-## Tāl and tāḷam
-
-The rhythmic cycles of North and South Indian music: a number of beats grouped into sections
-(vibhāg), marked by claps and waves, with a drum pattern (ṭhekā) that names the cycle.
-
-- [Tala (music)](https://en.wikipedia.org/wiki/Tala_(music)), Wikipedia.
-- Martin Clayton, *Time in Indian Music* (Oxford University Press, 2000).
-- P. Sambamoorthy, *South Indian Music*, books I–III.
-- David P. Nelson, *Solkattu Manual* (Wesleyan University Press, 2008).
-
-## Rhythmic modes
-
-The six patterns of long and short notes in twelfth- and thirteenth-century polyphony.
-
-- [Rhythmic mode](https://en.wikipedia.org/wiki/Rhythmic_mode), Wikipedia.
-- Johannes de Garlandia, *De mensurabili musica* (c. 1240).
-- William G. Waite, *The Rhythm of Twelfth-Century Polyphony* (Yale University Press, 1954).
-
-## Timelines and claves
-
-The short repeating patterns that hold an ensemble together in African and Afro-Caribbean
-music: son and rumba clave, gahu, the 12/8 standard pattern, the bossa nova.
-
-- [Clave (rhythm)](https://en.wikipedia.org/wiki/Clave_(rhythm)), Wikipedia.
-- Godfried T. Toussaint, *The Geometry of Musical Rhythm* (CRC Press, 2nd ed. 2019).
-- Kofi Agawu, *The African Imagination in Music* (Oxford University Press, 2016).
-
-## Iqāʿ
-
-The rhythmic modes of Arabic music, cycles of low (dum) and high (tak) strokes.
-
-- [Maqam World, iqāʿāt](https://ftp.maqamworld.com/en/iqaa.php).
-- A. J. Racy, *Making Music in the Arab World* (Cambridge University Press, 2003).
-
-## Jangdan
-
-The rhythmic cycles of Korean traditional music.
-
-- [Traditional Korean rhythm](https://en.wikipedia.org/wiki/Traditional_Korean_rhythm), Wikipedia.
-- Keith Howard, *Korean Musical Instruments* (Oxford University Press, 1995).
-
-## Euclidean rhythms
-
-Spreading a number of hits as evenly as possible over a number of steps, which gives many
-traditional timelines. Euclid's algorithm for the greatest common divisor (c. 300 BC) does it;
-Eric Bjorklund found the same pattern for timing neutron accelerators (2003), and Godfried
-Toussaint showed in 2005 that it gives the timelines of many musical traditions.
-
-- [Euclidean rhythm](https://en.wikipedia.org/wiki/Euclidean_rhythm), Wikipedia.
-- Godfried T. Toussaint, "The Euclidean Algorithm Generates Traditional Musical Rhythms"
-  (Bridges, 2005).
 
 # Composition
 
