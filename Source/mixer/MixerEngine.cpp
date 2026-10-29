@@ -663,7 +663,7 @@ namespace mixer
 
     void Engine::launchAt (int track, int scene, Frame clockFrame)
     {
-        if (track < 0 || track >= maxTracks || scene < 0 || scene >= maxScenes)
+        if (track < 0 || track >= maxTracks || scene < -1 || scene >= maxScenes)
             return;
         if (! playing.load())
         {
@@ -751,7 +751,7 @@ namespace mixer
                     continue;
                 t.queued = nullptr;
                 t.queuedScene = stopQueued;
-                t.queuedAt = play ? quantiseFrom (launchQuantise.load()) : now;
+                t.queuedAt = r.at >= 0 && play ? r.at : play ? quantiseFrom (launchQuantise.load()) : now;
                 continue;
             }
             t.queued = s;
