@@ -30,10 +30,12 @@ class MidiEditor::Staff final : public QWidget
 public:
     explicit Staff (MidiEditor&);
 
-    // What it writes in; `automatic` takes each system's own (notation::suggested).
+    // What it writes in; `automatic` takes PHI's staff for each system (notation::suggested), or
+    // with `eachTradition` the tradition's own (notation::traditional).
     void setNotation (const notation::Choice&, bool automatic);
     const notation::Choice& notation() const { return choice; }
     bool automatic() const { return isAutomatic; }
+    bool eachTradition = false;
     bool flats = false;   // flats before sharps, where both spell a pitch
     // The notation in force for a system, and its title for the corner.
     notation::Choice choiceFor (const noteedit::PitchSystem&) const;

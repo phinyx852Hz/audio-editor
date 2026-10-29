@@ -14,8 +14,9 @@
 //   write that way do: sargam (Bhatkhande's) for ragas, kepatihan numbers for gamelan, and jianpu,
 //   China's numbered notation.
 //
-// Each system's family has its tradition's notation (suggested()); any other can be picked. Plain
-// C++, no Qt.
+// PHI's microtonal staff is the default for every system (owner, 2026-10-29), spelled by the
+// config that fits it (suggested()); each tradition's own notation (traditional()) and any other
+// can be picked beside it. Plain C++, no Qt.
 #include "NoteEditor.h"
 #include "../core/XenTuner.h"
 
@@ -43,11 +44,14 @@ namespace notation
         bool operator== (const Choice&) const = default;
     };
 
-    // The notation a system's tradition writes in: cipher for ragas, gamelan and Chinese modes,
-    // the staff for the rest, with half-flats for maqams, koron and sori for dastgahs, HEJI for
-    // modes in just intonation, Sagittal or ups and downs for equal divisions. `tunings` is Xen
-    // Tuner's folder, looked in for a Sagittal file of the division.
+    // PHI's staff for a system, the default: half-flats for maqams, koron and sori for dastgahs,
+    // HEJI for modes in just intonation (ragas' shrutis among them), Sagittal or ups and downs for
+    // equal divisions, sharps and flats on the keys. `tunings` is Xen Tuner's folder, looked in for
+    // a Sagittal file of the division.
     Choice suggested (const noteedit::PitchSystem&, const std::string& tunings);
+    // The notation the system's tradition writes in, picked beside the default: cipher for ragas
+    // (sargam), gamelan (kepatihan) and Chinese modes (jianpu), else as suggested().
+    Choice traditional (const noteedit::PitchSystem&, const std::string& tunings);
 
     // PHI's own configs, by name ("12-TET", "arabic quarter tones", "persian koron and sori").
     struct Builtin { std::string name, title, text; };

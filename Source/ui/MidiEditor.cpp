@@ -1468,8 +1468,8 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     notationButton->setPopupMode (QToolButton::InstantPopup);
     auto* notationMenu = new QMenu (notationButton);
     notationButton->setMenu (notationMenu);
-    notationButton->setToolTip (tr ("What the staff is written in: each tradition's own (sargam, kepatihan, jianpu, the maqams' half-flats, "
-                                    "koron and sori, HEJI, Sagittal), or any of Xen Tuner's notations, or a Xen Tuner config of your own"));
+    notationButton->setToolTip (tr ("What the notes are written in: PHI's microtonal staff (the maqams' half-flats, koron and sori, HEJI, Sagittal), "
+                                    "each tradition's own (sargam, kepatihan, jianpu), any of Xen Tuner's notations, or a Xen Tuner config of your own"));
     connect (notationMenu, &QMenu::aboutToShow, this, [this, notationMenu] { fillNotationMenu (notationMenu); });
     systems->addWidget (notationButton);
     harmonicsBox = new QSpinBox (this);
@@ -1761,10 +1761,19 @@ void MidiEditor::fillNotationMenu (QMenu* menu)
         a->setChecked (! staff->automatic() && current == c);
         return a;
     };
-    auto* automatic = menu->addAction (tr ("The Tradition's Own (%1)").arg (QString::fromStdString (notation::title (notation::suggested (system, Staff::tuningsFolder().toStdString())))),
-                                       this, [pick] { pick ({}, true); });
-    automatic->setCheckable (true);
-    automatic->setChecked (staff->automatic());
+    const auto tunings = Staff::tuningsFolder().toStdString();
+    const auto automatic = [&] (const QString& text, const Choice& c, bool eachTradition)
+    {
+        auto* a = menu->addAction (text.arg (QString::fromStdString (notation::title (c))), this, [this, pick, eachTradition]
+        {
+            staff->eachTradition = eachTradition;
+            pick ({}, true);
+        });
+        a->setCheckable (true);
+        a->setChecked (staff->automatic() && staff->eachTradition == eachTradition);
+    };
+    automatic (tr ("PHI Staff (%1)"), notation::suggested (system, tunings), false);
+    automatic (tr ("Each Tradition's Own (%1)"), notation::traditional (system, tunings), true);
     auto* flats = menu->addAction (tr ("Flats Before Sharps"), this, [this] (bool on) { staff->flats = on; staff->refresh(); });
     flats->setCheckable (true);
     flats->setChecked (staff->flats);

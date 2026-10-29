@@ -8116,12 +8116,16 @@ namespace
                    "notation: ups and downs in " + std::to_string (n) + "-EDO writes every step");
         }
 
-        // Each tradition's own notation.
+        // PHI's staff for every system by default, each tradition's own beside it.
         const auto& all = mixer::tuningSystems();
         const auto first = [&] (const std::string& family) -> const mixer::TuningSystem&
         { return *std::find_if (all.begin(), all.end(), [&] (const mixer::TuningSystem& t) { return t.family == family; }); };
-        check (notation::suggested (noteedit::fromTuning (first ("raga"), 0), tunings).kind == notation::Kind::cipher, "notation: a raga in sargam");
-        check (notation::suggested (noteedit::fromTuning (first ("javanese gamelan"), 0), tunings).kind == notation::Kind::cipher, "notation: gamelan in kepatihan");
+        for (const auto* family : { "raga", "javanese gamelan" })
+            check (notation::suggested (noteedit::fromTuning (first (family), 0), tunings).kind == notation::Kind::staff,
+                   std::string ("notation: PHI's staff by default for ") + family);
+        check (notation::traditional (noteedit::fromTuning (first ("raga"), 0), tunings).kind == notation::Kind::cipher, "notation: a raga's own is sargam");
+        check (notation::traditional (noteedit::fromTuning (first ("javanese gamelan"), 0), tunings).kind == notation::Kind::cipher, "notation: gamelan's own is kepatihan");
+        check (notation::traditional (noteedit::fromTuning (first ("maqam"), 0), tunings).config == "phi:arabic quarter tones", "notation: a maqam's own is its half-flats");
         check (notation::suggested (noteedit::fromTuning (first ("maqam"), 0), tunings).config == "phi:arabic quarter tones", "notation: a maqam with half-flats");
         check (notation::suggested (noteedit::fromTuning (first ("dastgah"), 0), tunings).config == "phi:persian koron and sori", "notation: a dastgah with koron");
         check (notation::suggested (noteedit::fromTuning (first ("church mode"), 0), tunings).config == "heji/5 limit.txt", "notation: a Pythagorean mode in HEJI");

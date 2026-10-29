@@ -209,24 +209,26 @@ edit in one shows in the other. Time runs across in proportion, as in the roll. 
 sits at its start with a line to its end, and a curved note's line follows its pitch curve up and
 down the staff, so a mīṇḍ or a gamak can be seen.
 
-**Notation** chooses what the notes are written in. **The Tradition's Own** (the default) picks
-it from the system in force:
+**Notation** chooses what the notes are written in. **PHI Staff** (the default) is PHI's own
+microtonal staff notation, for every system, spelled by the config that fits the system in force:
 
-| System | Written in |
+| System | Written on PHI's staff with |
 |---|---|
-| Ragas | Sargam in cipher: S r R g G m M P d D n N, with a dot above or below for each octave up or down (Bhatkhande's way) |
-| Javanese and Balinese gamelan | Kepatihan numbers in cipher, with dots for the octave |
-| Sundanese gamelan | Degree numbers in cipher |
-| Chinese modes | Jianpu: 1 to 7 by the semitone above the gong, ♯ or ♭ before, dots for the octave |
-| Arabic maqams | The staff, with the half-flat (a struck flat) and the half-sharp, and the three-quarter signs as one glyph |
-| Persian dastgahs | The staff, with Vaziri's koron and sori |
-| Turkish makams | The staff, in Sagittal's 53-EDO notation |
+| Arabic maqams | The half-flat (a struck flat) and the half-sharp, and the three-quarter signs as one glyph |
+| Persian dastgahs | Vaziri's koron and sori |
+| Turkish makams | Sagittal's 53-EDO notation |
 | Equal divisions | Sagittal's notation for that division when Xen Tuner has one, otherwise ups and downs (generated for any division) |
-| Just intonation and Pythagorean modes, Scala scales | HEJI: the comma arrows on sharps and flats, and anything not covered shown in cents |
+| Ragas, gamelan, Chinese modes, just intonation and Pythagorean modes, Scala scales | HEJI: the comma arrows on sharps and flats, and anything not covered shown in cents |
 | 12-TET, jazz modes, mbira tunings | Sharps and flats, with the cents a note is off its key |
 
-Any other notation can be picked from the same menu. The cipher styles are there, and so is PHI's
-own staff notation for each tradition. Xen Tuner's whole library is under **Xen Tuner**: HEJI,
+**Each Tradition's Own** is the option beside it, and follows the system in force the same way. It
+writes ragas in sargam in cipher (S r R g G m M P d D n N, with a dot above or below for each octave
+up or down, Bhatkhande's way), Javanese and Balinese gamelan in kepatihan numbers, Sundanese gamelan
+in degree numbers, and Chinese modes in jianpu (1 to 7 by the semitone above the gong, ♯ or ♭
+before, dots for the octave). Every other system is written on PHI's staff as above.
+
+Any other notation can be picked from the same menu. The cipher styles are there, and so is each of PHI's
+own staff configs. Xen Tuner's whole library is under **Xen Tuner**: HEJI,
 HEWM, FJS, Sagittal (Evo and Revo, about a hundred EDOs), ups and downs, Kite, Fokker,
 Stein-Zimmermann, chromatic staves and NEJIs. **Open a Xen Tuner Config** reads a config of your
 own, written as Xen Tuner's README describes. **Flats Before Sharps** spells a pitch with a flat

@@ -100,9 +100,9 @@ namespace notation
         return s.size();
     }
 
-    Choice suggested (const noteedit::PitchSystem& s, const std::string& tunings)
+    Choice traditional (const noteedit::PitchSystem& s, const std::string& tunings)
     {
-        Choice c;
+        const Choice c;
         const auto family = lower (s.family);
         if (has (family, "raga") || has (family, "melakarta"))
             return { Kind::cipher, c.config, CipherStyle::tradition };
@@ -110,6 +110,13 @@ namespace notation
             return { Kind::cipher, c.config, has (family, "sundanese") ? CipherStyle::degrees : CipherStyle::tradition };
         if (has (family, "chinese"))
             return { Kind::cipher, c.config, CipherStyle::jianpu };
+        return suggested (s, tunings);
+    }
+
+    Choice suggested (const noteedit::PitchSystem& s, const std::string& tunings)
+    {
+        Choice c;
+        const auto family = lower (s.family);
         if (has (family, "maqam"))
             return { Kind::staff, "phi:arabic quarter tones", {} };
         if (has (family, "dastgah") || has (family, "avaz"))

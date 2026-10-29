@@ -91,7 +91,10 @@ void MidiEditor::Staff::setNotation (const notation::Choice& c, bool automatic)
 
 notation::Choice MidiEditor::Staff::choiceFor (const PitchSystem& s) const
 {
-    return isAutomatic ? notation::suggested (s, tuningsFolder().toStdString()) : choice;
+    if (! isAutomatic)
+        return choice;
+    const auto tunings = tuningsFolder().toStdString();
+    return eachTradition ? notation::traditional (s, tunings) : notation::suggested (s, tunings);
 }
 
 QString MidiEditor::Staff::titleFor (const PitchSystem& s) const
