@@ -12,9 +12,13 @@ How it is read:
   the manual, not here (owner, 2026-10-29). Markdown links, [text](https://...), open in
   the web browser.
 
-PHI reads your own copy, ~/.local/share/phi/research/references.md, when there is one
-(Research > Edit References makes it from this file and opens it). The menu reads the file
-again each time it opens, so edits show at once.
+Every .md file in this folder is read: this one first, then the others by name
+(modes-europe.md, modes-west-asia.md...). A group with slashes nests: "# Modes / Europe" is a
+Europe submenu inside Modes.
+
+PHI reads your own copies in ~/.local/share/phi/research/ when there are any (Research > Edit
+References makes them from these files and opens the folder); each wins over the shipped file
+of its name. The menu reads the files again each time it opens, so edits show at once.
 -->
 
 # Φ
@@ -203,9 +207,10 @@ distortion (1988). Software synthesizers and modular oscillators took it up agai
 
 ## Mode
 
-A mode is a way of making melody: a set of pitches with a final, a range, and the motions and
-emphases that give it its character. PHI takes the word broadly, as a concept shared by many
-cultures: the church modes and their hypo-modes, rāga, maqām and makam, the Persian dastgāh, the
+PHI takes mode in its oldest and broadest sense, from the Latin *modus*: a measure, a manner,
+a method or way. In Western art music the word narrowed to a scale with a final, a range and
+characteristic motions; PHI widens it again, to every tradition's way of making melody, rhythm,
+tuning and harmony. It is a concept shared by many cultures: the church modes and their hypo-modes, rāga, maqām and makam, the Persian dastgāh, the
 Javanese pathet, the Chinese and Japanese modes, Korean tori, and modern systems such as
 Messiaen's modes of limited transposition. In Europe the word comes from the Greek harmoniai
 by way of medieval theory, which named eight church modes after them; Glarean added four more in

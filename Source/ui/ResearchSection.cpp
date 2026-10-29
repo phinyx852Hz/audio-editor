@@ -36,51 +36,68 @@
 
 namespace
 {
-    // Your own copy, which Edit References makes; it wins over the one PHI ships with.
-    QString userReferences()
+    // Your own copies, which Edit References makes; each wins over the shipped file of its name.
+    QString userFolder()
     {
-        return QStandardPaths::writableLocation (QStandardPaths::GenericDataLocation) + QStringLiteral ("/" APP_ID "/research/references.md");
+        return QStandardPaths::writableLocation (QStandardPaths::GenericDataLocation) + QStringLiteral ("/" APP_ID "/research");
     }
 
-    // The shipped list: next to the installed binary, else the source tree.
-    QString shippedReferences()
+    // The shipped references: next to the installed binary, else the source tree.
+    QString shippedFolder()
     {
-        const auto installed = QDir (QCoreApplication::applicationDirPath()).absoluteFilePath (QStringLiteral (PHI_SHARE_RELATIVE "/research/references.md"));
-        if (QFileInfo::exists (installed))
+        const auto installed = QDir (QCoreApplication::applicationDirPath()).absoluteFilePath (QStringLiteral (PHI_SHARE_RELATIVE "/research"));
+        if (QFileInfo::exists (installed + QStringLiteral ("/references.md")))
             return QDir::cleanPath (installed);
-        return QStringLiteral (PHI_SHARE_SOURCE_DIR "/research/references.md");
+        return QStringLiteral (PHI_SHARE_SOURCE_DIR "/research");
     }
 
-    QString referencesPath()
+    // Every references file: references.md first, then the rest (modes-europe.md...) by name.
+    QStringList referenceFiles()
     {
-        const auto mine = userReferences();
-        return QFileInfo::exists (mine) ? mine : shippedReferences();
+        QMap<QString, QString> byName;
+        for (const auto& folder : { shippedFolder(), userFolder() })   // yours last, so they win
+            for (const auto& info : QDir (folder).entryInfoList ({ QStringLiteral ("*.md") }, QDir::Files))
+                byName[info.fileName()] = info.absoluteFilePath();
+        QStringList files;
+        if (byName.contains (QStringLiteral ("references.md")))
+            files << byName.take (QStringLiteral ("references.md"));
+        return files + byName.values();
     }
 
     struct Entry
     {
-        QString group, title, markdown;   // markdown: the entry's heading and all under it
+        QString group, title, markdown;   // group: "Modes / Europe" nests; markdown: the entry's heading and all under it
     };
 
-    // Read again each time the menu opens, so edits to the file show at once.
+    // Read again each time the menu opens, so edits to the files show at once.
     QList<Entry> readReferences()
     {
-        QFile file (referencesPath());
-        if (! file.open (QIODevice::ReadOnly | QIODevice::Text))
-            return {};
-        auto text = QString::fromUtf8 (file.readAll());
-        text.remove (QRegularExpression (QStringLiteral ("<!--.*?-->"), QRegularExpression::DotMatchesEverythingOption));
-
         QList<Entry> entries;
-        QString group;
-        for (const auto& line : text.split (QLatin1Char ('\n')))
+        for (const auto& path : referenceFiles())
         {
-            if (line.startsWith (QLatin1String ("# ")))
-                group = line.mid (2).trimmed();
-            else if (line.startsWith (QLatin1String ("## ")))
-                entries.append ({ group, line.mid (3).trimmed(), line + QLatin1Char ('\n') });
-            else if (! entries.isEmpty())
-                entries.last().markdown += line + QLatin1Char ('\n');
+            QFile file (path);
+            if (! file.open (QIODevice::ReadOnly | QIODevice::Text))
+                continue;
+            auto text = QString::fromUtf8 (file.readAll());
+            text.remove (QRegularExpression (QStringLiteral ("<!--.*?-->"), QRegularExpression::DotMatchesEverythingOption));
+
+            QString group;
+            bool inEntry = false;
+            for (const auto& line : text.split (QLatin1Char ('\n')))
+            {
+                if (line.startsWith (QLatin1String ("# ")))
+                {
+                    group = line.mid (2).trimmed();
+                    inEntry = false;
+                }
+                else if (line.startsWith (QLatin1String ("## ")))
+                {
+                    entries.append ({ group, line.mid (3).trimmed(), line + QLatin1Char ('\n') });
+                    inEntry = true;
+                }
+                else if (inEntry)
+                    entries.last().markdown += line + QLatin1Char ('\n');
+            }
         }
         return entries;
     }
@@ -113,16 +130,17 @@ void MainWindow::registerResearchCommands()
     commands.add (QStringLiteral ("research.search"), category, tr ("&Search Research..."), {}, [this] { openResearchSearch(); });
     commands.add (QStringLiteral ("research.edit"), category, tr ("&Edit References..."), {}, [this]
     {
-        // Your own copy, made from the shipped one the first time.
-        const auto mine = userReferences();
-        if (! QFileInfo::exists (mine))
+        // Your own copies, made from the shipped ones the first time; new shipped files join them.
+        const auto mine = userFolder();
+        QDir().mkpath (mine);
+        for (const auto& info : QDir (shippedFolder()).entryInfoList ({ QStringLiteral ("*.md") }, QDir::Files))
         {
-            QDir().mkpath (QFileInfo (mine).absolutePath());
-            QFile::copy (shippedReferences(), mine);
-            QFile (mine).setPermissions (QFile::ReadOwner | QFile::WriteOwner | QFile::ReadGroup | QFile::ReadOther);
+            const auto copy = mine + QLatin1Char ('/') + info.fileName();
+            if (! QFileInfo::exists (copy) && QFile::copy (info.absoluteFilePath(), copy))
+                QFile (copy).setPermissions (QFile::ReadOwner | QFile::WriteOwner | QFile::ReadGroup | QFile::ReadOther);
         }
         QDesktopServices::openUrl (QUrl::fromLocalFile (mine));
-        statusBar()->showMessage (tr ("The Research menu follows this file as soon as you save it"), 8000);
+        statusBar()->showMessage (tr ("The Research menu follows these files as soon as you save them"), 8000);
     });
 }
 
@@ -132,12 +150,15 @@ void MainWindow::fillResearchMenu (QMenu* menu)
     QMap<QString, QMenu*> groups;
     for (const auto& entry : readReferences())
     {
+        // "Modes / Europe" is Europe inside Modes.
         auto* into = menu;
-        if (! entry.group.isEmpty())
+        QString path;
+        for (const auto& part : entry.group.split (QLatin1Char ('/'), Qt::SkipEmptyParts))
         {
-            if (! groups.contains (entry.group))
-                groups[entry.group] = menu->addMenu (menuText (entry.group));
-            into = groups[entry.group];
+            path += QLatin1Char ('/') + part.trimmed();
+            if (! groups.contains (path))
+                groups[path] = into->addMenu (menuText (part.trimmed()));
+            into = groups[path];
         }
         const auto title = entry.title;
         const auto markdown = entry.markdown;
