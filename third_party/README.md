@@ -86,3 +86,15 @@ filler, sent unXORed to bulk endpoint 1 every 40 ms. No Ardour source is
 included; the code is PHI's own. GPL-2.0-or-later can be conveyed under GPL-3.0
 and so combined with PHI's AGPL-3.0. Ableton's Push 2 Display Interface Manual
 (https://github.com/Ableton/push-interface) documents the same protocol.
+
+## Bravura
+
+`bravura/` is Steinberg's Bravura music font (github.com/steinbergmedia/bravura, commit 37b1943):
+`Bravura.otf` from `redist/otf/`, with `OFL.txt` and `FONTLOG.txt`. Licence: SIL Open Font License
+1.1. It is built into PHI as a Qt resource for the MIDI editor's staff notation (SMuFL glyphs:
+clefs, noteheads, and the accidentals of HEJI, Sagittal, the maqams and the rest). Unchanged.
+
+## Xen Tuner's tuning configs
+
+`share/xen-tuner/` holds Xen Tuner's `tunings/` folder (github.com/euwbah/musescore-xen-tuner,
+commit 936c5c6, GPL-3.0-or-later, `share/xen-tuner/LICENSE`); see `share/xen-tuner/README.md`.
