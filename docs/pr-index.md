@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**89 pull requests:** 83 merged, 6 open.
+**90 pull requests:** 83 merged, 7 open.
 
 ## Contents
 
@@ -43,7 +43,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#80](https://github.com/phinyx852Hz/audio-editor/pull/80) | MIDI editor: rising spectrum, scale wheel, pitch curves and ornaments, tuning changes, hum to notes, MTS-ESP | merged |  | `Source/ui/MidiEditor.cpp`<br>`Source/mixer/NoteEditor.cpp`<br>`tests/CoreTests.cpp` |
 | [#85](https://github.com/phinyx852Hz/audio-editor/pull/85) | MIDI editor: microtonal staff notation, from Xen Tuner's notations | open | View > Staff notation | `Source/core/XenTuner.cpp`<br>`share/xen-tuner/tunings/fjs/1023odd.txt`<br>`Source/core/XenSymbols.inc` |
 | [#87](https://github.com/phinyx852Hz/audio-editor/pull/87) | MIDI editor: sargam, Carnatic swaras, jianpu, not angka, jeongganbo and maqam/makam/dastgah key signatures | open |  | `Source/mixer/NotationGrid.cpp`<br>`Source/ui/MidiStaff.cpp`<br>`Source/mixer/KeySignatures.inc` |
-| [#88](https://github.com/phinyx852Hz/audio-editor/pull/88) | Slicer: Cubase Drum Machine layout; Simplest and the Slicer dock under the editor or the mixer | open |  | `Source/ui/SlicerWindow.cpp`<br>`Source/ui/Panels.cpp`<br>`Source/ui/SamplerSection.cpp` |
+| [#88](https://github.com/phinyx852Hz/audio-editor/pull/88) | Slicer: Cubase Drum Machine layout; Simplest and the Slicer dock under the editor or the mixer | open |  | `Source/ui/SlicerWindow.cpp`<br>`Source/ui/MixerWindow.cpp`<br>`Source/ui/Panels.cpp` |
 
 ### Analysis and meters
 
@@ -110,6 +110,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#73](https://github.com/phinyx852Hz/audio-editor/pull/73) | Mode menu: modes and tunings by region, tradition and person | merged |  | `Source/mixer/Atlas.cpp`<br>`Source/ui/ModeAtlas.cpp`<br>`Source/ui/ModeSection.cpp` |
 | [#81](https://github.com/phinyx852Hz/audio-editor/pull/81) | Rhythms: the iqāʿāt of Maqam World's index, and kuku | merged | Mode > rhythm > West Asia > iqāʿāt | `Source/mixer/Rhythms.cpp`<br>`docs/rhythms.md`<br>`tests/CoreTests.cpp` |
 | [#83](https://github.com/phinyx852Hz/audio-editor/pull/83) | Mode: add a harmony submenu | merged |  | `Source/mixer/Harmonies.cpp`<br>`docs/harmony.md`<br>`Source/ui/HarmonySection.cpp` |
+| [#90](https://github.com/phinyx852Hz/audio-editor/pull/90) | PHI rāga: bahādur kauns, drafted from a recording | open |  | `Source/core/PhiRagas.cpp`<br>`docs/mixer.md`<br>`docs/raga.md` |
 
 ### Φ effects and sounds
 
@@ -282,3 +283,4 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#87](https://github.com/phinyx852Hz/audio-editor/pull/87) | MIDI editor: sargam, Carnatic swaras, jianpu, not angka, jeongganbo and maqam/makam/dastgah key signatures | 1. *(auto)* | open | 2026-10-29 | Editing and warping |
 | [#88](https://github.com/phinyx852Hz/audio-editor/pull/88) | Slicer: Cubase Drum Machine layout; Simplest and the Slicer dock under the editor or the mixer | This PR follows the owner's direction to model the Slicer's UI on Cubase's Drum Machine: compact, nested beneath the mixer, above the Device Chain when it is... *(auto)* | open | 2026-10-29 | Editing and warping |
 | [#89](https://github.com/phinyx852Hz/audio-editor/pull/89) | Φ Modulation (PhiFlow, PhiSpace, PhiGrain, PhiMatrix) and a Cubase-style Modulators panel | This PR has three parts: *(auto)* | open | 2026-10-29 | Φ effects and sounds |
+| [#90](https://github.com/phinyx852Hz/audio-editor/pull/90) | PHI rāga: bahādur kauns, drafted from a recording | Adds a draft sheet for bahādur kauns, the last raga from the owner's teacher's list. *(auto)* | open | 2026-10-29 | Modes, tunings and composition |
