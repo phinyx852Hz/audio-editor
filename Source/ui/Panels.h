@@ -105,6 +105,12 @@ public:
     void setPoppedOut (bool);    // also where it opens from now on
     bool opensInWindow() const    { return ownWindow; }
     void setOpensInWindow (bool w) { ownWindow = w; }
+    // Lent to a host inside another view (Simplest and the Slicer under the mixer, above its
+    // device chain): the content goes into `host`'s layout and the dock hides; showing and
+    // hiding the panel show and hide the host. takeBack() puts it back in its dock as it was.
+    void lendTo (QWidget* host);
+    void takeBack();
+    bool isLent() const { return lentTo != nullptr; }
 
 protected:
     bool eventFilter (QObject*, QEvent*) override;
@@ -118,6 +124,7 @@ private:
     QDockWidget* dockWidget;
     bool sized = false;   // widened to its content once this session
     QWidget* window = nullptr;
+    QWidget* lentTo = nullptr;
     bool ownWindow = false;   // shown in its own window rather than in its dock
     QSize windowSize;         // the size its window had when last closed
     QWidget* focusFrame = nullptr;

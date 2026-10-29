@@ -18,6 +18,7 @@
 #include "../sampler/SlicerEngine.h"
 
 #include <QDialog>
+#include <QDockWidget>
 #include <QDialogButtonBox>
 #include <QApplication>
 #include <QFileInfo>
@@ -119,9 +120,11 @@ void MainWindow::registerSamplerCommands()
             return true;
         });
     });
-    slicerPanel = new DockablePanel (*this, QStringLiteral ("slicerPanel"), tr ("Slicer"), scrolling (slicerWin), Qt::LeftDockWidgetArea);
-    splitDockWidget (samplerPanel->dock(), chainPanel->dock(), Qt::Vertical);   // the chain goes under Simplest
-    splitDockWidget (findPanel->dock(), slicerPanel->dock(), Qt::Vertical);
+    slicerPanel = new DockablePanel (*this, QStringLiteral ("slicerPanel"), tr ("Slicer"), scrolling (slicerWin), Qt::BottomDockWidgetArea);
+    // Docked along the bottom, never squeezed below a compact strip (they scroll past that).
+    for (auto* p : { samplerPanel, slicerPanel })
+        p->dock()->setMinimumHeight (std::min (p->content()->sizeHint().height() + 30, 400));
+    placeInstrumentDocks();
     panels << samplerPanel << slicerPanel;
     updateMidiStatus();
 }
@@ -241,6 +244,25 @@ void MainWindow::keepFindFocus (QWidget* had)
     };
     QTimer::singleShot (0, this, giveBack);
     QTimer::singleShot (300, this, giveBack);
+}
+
+// Simplest and the Slicer share the place along the bottom above the Device Chain, as tabs
+// (in the chain's place while it is closed); under the mixer they sit inside it instead
+// (updateInstrumentDocks).
+void MainWindow::placeInstrumentDocks()
+{
+    auto* sampler = samplerPanel->dock();
+    auto* slicerDock = slicerPanel->dock();
+    const bool samplerShown = sampler->isVisible(), slicerShown = slicerDock->isVisible();
+    for (auto* d : { sampler, slicerDock })
+    {
+        d->setFloating (false);
+        addDockWidget (Qt::BottomDockWidgetArea, d);
+    }
+    splitDockWidget (sampler, chainPanel->dock(), Qt::Vertical);   // the chain goes under them
+    tabifyDockWidget (sampler, slicerDock);
+    sampler->setVisible (samplerShown);
+    slicerDock->setVisible (slicerShown);
 }
 
 void MainWindow::showSampler()

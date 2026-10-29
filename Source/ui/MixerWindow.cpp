@@ -6889,6 +6889,14 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     layout->addWidget (transportRow);
     layout->addWidget (topScroll);
     layout->addWidget (sideSplitter, 1);
+    for (auto& host : instrumentHosts)
+    {
+        host = new QWidget (this);
+        auto* l = new QVBoxLayout (host);
+        l->setContentsMargins (0, 0, 0, 0);
+        host->hide();
+        layout->addWidget (host);
+    }
     layout->addWidget (devicePanel);
     layout->addLayout (bottom);
 

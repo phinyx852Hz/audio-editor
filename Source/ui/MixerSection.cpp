@@ -128,7 +128,7 @@ MixerWindow* MainWindow::mixerWindow()
         connect (mixerWin, &MixerWindow::playStarted, this, [this] { playInstruments(); });
         connect (mixerWin, &MixerWindow::editClipRequested, this, [this] (int track, quint32 clip) { editMixerClip (track, clip); });
         connect (mixerWin, &MixerWindow::devicePanelChanged, this, [this] { updateChainDock(); });
-        connect (centralStack, &QStackedWidget::currentChanged, this, [this] { updateChainDock(); updateFindDock(); });
+        connect (centralStack, &QStackedWidget::currentChanged, this, [this] { updateChainDock(); updateFindDock(); updateInstrumentDocks(); });
         connect (mixerWin, &MixerWindow::finderWanted, this, [this] (bool show) { mixerFinder (show); });
         // The Find panel closed by hand while it was the Finder: the Inspector takes its place.
         connect (findPanel->dock(), &QDockWidget::visibilityChanged, mixerWin, [this] (bool visible)
@@ -273,6 +273,30 @@ void MainWindow::updateChainDock()
     {
         chainHiddenForMixer = false;
         dock->show();
+    }
+}
+
+// Simplest and the Slicer sit under whatever is in front, above its Device Chain: docked
+// along the bottom under the editor, or inside the mixer, between its tracks and its chain
+// (owner, 2026-10-29: "nested beneath the mixer", as Cubase's Drum Machine in the lower zone).
+void MainWindow::updateInstrumentDocks()
+{
+    if (mixerWin == nullptr)
+        return;
+    const bool mixerInFront = mixerDocked() && centralStack->currentWidget() == mixerWin;
+    int which = 0;
+    for (auto* p : { samplerPanel, slicerPanel })
+    {
+        auto* host = mixerWin->instrumentHost (which++);
+        if (p == nullptr)
+            continue;
+        // Under the mixer's strips there is less room: it takes what the strips leave, down to
+        // a strip that still shows its top rows, and scrolls past that.
+        host->setMinimumHeight (160);
+        if (mixerInFront && ! p->isPoppedOut() && ! p->dock()->isFloating())
+            p->lendTo (host);
+        else
+            p->takeBack();
     }
 }
 

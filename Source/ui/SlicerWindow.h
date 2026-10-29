@@ -7,6 +7,7 @@
 #include "StepSequencerView.h"
 
 #include <QTimer>
+#include <array>
 #include <QWidget>
 #include <functional>
 #include <optional>
@@ -73,8 +74,8 @@ private:
 
 // One bank of 16 pads as on Push: pad 1 at the bottom left. Click to play (higher on
 // the pad is louder); lit pads sound, the outlined one is being edited. An empty pad
-// shows only its note, a pad with one sound its name, a layered pad "Multi". Drag a pad
-// onto another to swap them, drop audio files on a pad to load them (several fill
+// shows only its note, a pad with one sound its name, a layered pad "Multi"; M and S at
+// its top left mute and solo it, as on Cubase's Drum Machine. Drag a pad onto another to swap them, drop audio files on a pad to load them (several fill
 // upward from it), right-click for the pad's menu.
 class PadGrid final : public QWidget
 {
@@ -85,8 +86,8 @@ public:
     void setBank (int b) { bank = b; update(); }
     void setSelected (int pad) { selected = pad; update(); }
     void setKit (const slicer::Kit& k) { kit = k; update(); }
-    QSize sizeHint() const override { return { 270, 270 }; }
-    QSize minimumSizeHint() const override { return { 220, 220 }; }
+    QSize sizeHint() const override { return { 250, 250 }; }
+    QSize minimumSizeHint() const override { return { 200, 200 }; }
     bool hasHeightForWidth() const override { return true; }
     int heightForWidth (int w) const override { return w; }
 
@@ -96,6 +97,7 @@ Q_SIGNALS:
     void padMenu (int pad, QPoint globalPos);
     void padsSwapped (int from, int to);
     void filesDropped (int pad, const QStringList& paths);
+    void muteSoloClicked (int pad, bool solo);   // its M or S
 
 protected:
     void paintEvent (class QPaintEvent*) override;
@@ -109,6 +111,8 @@ protected:
 
 private:
     QRectF padRect (int index) const;   // index 0..15 in the bank
+    QRectF muteRect (int index) const;
+    QRectF soloRect (int index) const;
     int padAt (QPointF) const;          // -1: between pads
 
     slicer::Engine& engine;
@@ -117,8 +121,10 @@ private:
     QPointF pressedAt;
 };
 
-// Sample > Slicer: a drum machine of 128 pads in eight banks of 16 (A to H, in a row as
-// in Cubase's Drum Machine). One sound cut into slices across the pads, and any pad can
+// Sample > Slicer: a drum machine of 128 pads in eight banks of 16 (A to H), laid out as
+// Cubase's Drum Machine: the banks and pads on the left, the chosen pad's layer slots beside
+// its sound in the middle (or the step sequencer, on the Steps tab), the pad's level, pan,
+// pitch and settings on the right. Compact, to dock under the editor or the mixer. One sound cut into slices across the pads, and any pad can
 // hold sounds of its own instead, up to four layers. Laid out for Push's 8x8 grid (four
 // banks at a time) or chromatically. Played from MIDI, by clicking, or from the computer
 // keyboard: Z X C V are pads 1 to 4, A S D F 5 to 8, Q W E R 9 to 12 and 1 2 3 4 13 to 16
@@ -228,8 +234,11 @@ private:
     QCheckBox* soloBox;
     QSpinBox* receiveBox;
     QComboBox* pageBox;
-    QCheckBox* editBox;
-    QWidget* editArea;
+    QWidget* padArea;
+    std::array<QPushButton*, slicer::maxLayers> layerPowers {};
+    std::array<class Potentiometer*, slicer::maxLayers> layerLevels {};
+    std::vector<std::function<void()>> enableFollowers;   // the knobs follow their boxes' enabling
+    std::array<uint32_t, slicer::numBanks> bankLooks;      // what each bank button's icon shows
     QButtonGroup* layers;
     QCheckBox* layerOnBox;
     QLabel* layerSound;

@@ -11,6 +11,7 @@
 #include <QTimer>
 #include <QWidget>
 
+#include <algorithm>
 #include <array>
 #include <map>
 #include <set>
@@ -183,6 +184,9 @@ public:
     // instrument and inserts, or the clip picked in the launcher or the tracks. Hidden while
     // the Master strip is selected, so the editor's own chain can show.
     bool devicePanelShown() const;
+    // Where Simplest (0) and the Slicer (1) sit while the mixer is in front: under the tracks,
+    // above the Device Chain, as Cubase's lower zone. Hidden while empty.
+    QWidget* instrumentHost (int which) const { return instrumentHosts[(size_t) std::clamp (which, 0, 1)]; }
     // What the browser's Instruments and Audio Effects lists drag: "effect\n<id>",
     // "instrument\n<id>", or "synth", "sampler", "slicer".
     static QString pluginMime() { return QStringLiteral ("application/x-phi-plugin"); }
@@ -578,6 +582,7 @@ private:
     bool finderShown = true;
     void toggleDevicePanel();   // Shift+Tab over the bottom panel: the Device Chain or the clip
     QStackedWidget* devicePanel = nullptr;
+    std::array<QWidget*, 2> instrumentHosts {};
     TrackDevices* devices = nullptr;
     ClipView* clipView = nullptr;
     bool showingClip = false;
