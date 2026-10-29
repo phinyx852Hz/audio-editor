@@ -120,7 +120,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#36](https://github.com/phinyx852Hz/audio-editor/pull/36) | Play a new phase distortion sound as the Φ splash opens | merged | Startup splash | `Source/core/PhiVoice.cpp`<br>`Source/main.cpp` |
 | [#42](https://github.com/phinyx852Hz/audio-editor/pull/42) | Add the Φ Phaser, and the Φ DSP as a library the PHI synth can link | merged | Add plugin, Built-in, Φ Phaser | `Source/core/PhiPhaser.cpp`<br>`Source/engine/PhiEffects.cpp`<br>`Source/core/CMakeLists.txt` |
 | [#43](https://github.com/phinyx852Hz/audio-editor/pull/43) | Φ Compressor, Φ Multiband, Φ Limiter and Φ Chorus | merged | Add plugin, Built-in | `Source/core/PhiDynamics.cpp`<br>`Source/core/PhiChorus.cpp`<br>`Source/engine/PhiEffects.cpp` |
-| [#89](https://github.com/phinyx852Hz/audio-editor/pull/89) | Φ Modulation: PhiFlow, PhiSpace, PhiGrain and PhiMatrix in one Φ effect | open |  | `Source/core/PhiModulation.cpp`<br>`Source/engine/PhiEffects.cpp`<br>`Source/core/PhiModulation.h` |
+| [#89](https://github.com/phinyx852Hz/audio-editor/pull/89) | Φ Modulation (PhiFlow, PhiSpace, PhiGrain, PhiMatrix) and a Cubase-style Modulators panel | open |  | `Source/core/PhiModulation.cpp`<br>`Source/ui/ModulatorsPanel.cpp`<br>`Source/core/Modulators.cpp` |
 
 ### Instruments and plugins
 
@@ -281,4 +281,4 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#86](https://github.com/phinyx852Hz/audio-editor/pull/86) | Compose menu: every compositional method in PHI, plus 15 more from Western and other traditions | Built on #84, which is why it is based on #84's branch. *(auto)* | open | 2026-10-29 | Interface and branding |
 | [#87](https://github.com/phinyx852Hz/audio-editor/pull/87) | MIDI editor: sargam, Carnatic swaras, jianpu, not angka, jeongganbo and maqam/makam/dastgah key signatures | 1. *(auto)* | open | 2026-10-29 | Editing and warping |
 | [#88](https://github.com/phinyx852Hz/audio-editor/pull/88) | Slicer: Cubase Drum Machine layout; Simplest and the Slicer dock under the editor or the mixer | This PR follows the owner's direction to model the Slicer's UI on Cubase's Drum Machine: compact, nested beneath the mixer, above the Device Chain when it is... *(auto)* | open | 2026-10-29 | Editing and warping |
-| [#89](https://github.com/phinyx852Hz/audio-editor/pull/89) | Φ Modulation: PhiFlow, PhiSpace, PhiGrain and PhiMatrix in one Φ effect | This adds Φ Modulation, a new built-in Φ effect (Built-in in Add plugin, category Modulation). *(auto)* | open | 2026-10-29 | Φ effects and sounds |
+| [#89](https://github.com/phinyx852Hz/audio-editor/pull/89) | Φ Modulation (PhiFlow, PhiSpace, PhiGrain, PhiMatrix) and a Cubase-style Modulators panel | This PR has three parts: *(auto)* | open | 2026-10-29 | Φ effects and sounds |
