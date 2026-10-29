@@ -446,7 +446,6 @@ if(PHI_BUILD_TESTS)
         Source/mixer/Serial.cpp
         Source/mixer/Rhythms.cpp
         Source/mixer/Architectonics.cpp
-    Source/mixer/Architectonics.cpp
         Source/mixer/RhythmGenerator.cpp
         Source/mixer/Minimalize.cpp
         Source/mixer/Instruments.cpp
