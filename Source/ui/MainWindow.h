@@ -384,7 +384,9 @@ private:
     // clip launcher designed by the golden ratio, generative, and played scene by scene on its bars.
     void registerArchitectonicsCommands();
     void architectonicsDialog();
-    void composeSongDialog (bool score = false);   // score: for the MIDI editor's staff, not the launcher
+    // score: for the MIDI editor's staff, not the launcher; quick: no dialog, a new song at once
+    // from the last settings and a new seed (Ctrl+click on the Selector's Φ).
+    void composeSongDialog (bool score = false, bool quick = false);
     void playArchitectonics (bool on);
     class ArchitectonicsConductor* conductor = nullptr;
     void toggleVideoRecording();

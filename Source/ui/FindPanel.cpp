@@ -223,15 +223,20 @@ FindPanel::FindPanel (QWidget* home, QWidget* parent)
     connect (selectorLabel, &QLabel::customContextMenuRequested, this, [this, selectorLabel] (const QPoint& at) { selectorMenu (selectorLabel, at); });
     // The Φ random selector at the end of the Selector line: a click deals one of each
     // colour's favourite files (to the clip launcher when it is shown, else onto the
-    // mixer's tracks), Shift+click deals again in place of the last deal, right-click chooses.
+    // mixer's tracks), Shift+click deals again in place of the last deal, Ctrl+click composes a
+    // whole Architectonics song from the favourites into the launcher, right-click chooses.
     auto* dealButton = new PhiButton (tr ("Φ random selector"), side, false);
     dealButton->setToolTip (tr ("Φ random selector: deals one of each colour's favourite sounds, picked by the golden ratio, "
                                 "into a new scene of the clip launcher (when it is shown) or onto the mixer's tracks. "
-                                "Again for another combination; Shift+click replaces the last deal; right-click to choose where"));
+                                "Again for another combination; Shift+click replaces the last deal; Ctrl+click composes a whole song "
+                                "by Architectonics into the clip launcher; right-click to choose where"));
     dealButton->setContextMenuPolicy (Qt::CustomContextMenu);
     connect (dealButton, &QToolButton::clicked, this, [this]
     {
-        deal (DealTo::automatic, (QApplication::keyboardModifiers() & Qt::ShiftModifier) != 0);
+        const auto mods = QApplication::keyboardModifiers();
+        if ((mods & Qt::ControlModifier) != 0 && phiCompose)
+            return phiCompose();
+        deal (DealTo::automatic, (mods & Qt::ShiftModifier) != 0);
     });
     connect (dealButton, &QToolButton::customContextMenuRequested, this, [this, dealButton] (const QPoint& at) { dealMenu (dealButton, at); });
     auto* selectorLine = new QHBoxLayout;
@@ -1061,6 +1066,8 @@ void FindPanel::dealMenu (QWidget* on, const QPoint& at)
     menu.addAction (tr ("Φ Deal a &Prism of Effects (Device Chain)"), this, [this] { deal (DealTo::prism, false); });
     menu.addSeparator();
     menu.addAction (tr ("Deal &Again in Place of the Last (Shift+Click)"), this, [this] { deal (DealTo::automatic, true); });
+    if (phiCompose)
+        menu.addAction (tr ("Φ &Compose a Song by Architectonics (Ctrl+Click)"), this, [this] { phiCompose(); });
     menu.exec (on->mapToGlobal (at));
 }
 

@@ -575,7 +575,7 @@ namespace
     }
 }
 
-void MainWindow::composeSongDialog (bool asScore)
+void MainWindow::composeSongDialog (bool asScore, bool quick)
 {
     showMixer();
     if (findWidget == nullptr)
@@ -771,9 +771,11 @@ void MainWindow::composeSongDialog (bool asScore)
     connect (write, &QPushButton::clicked, &dialog, [&] { play = false; dialog.accept(); });
     connect (writePlay, &QPushButton::clicked, &dialog, [&] { play = true; dialog.accept(); });
     connect (buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    if (quick)
+        ss.form.seed = arch::nextSeed (ss.form.seed);   // a new song each time
     recompose();
     dialog.resize (760, 760);
-    const auto result = dialog.exec();
+    const auto result = quick ? (int) QDialog::Accepted : dialog.exec();
 
     auto kept = loadSettings (nullptr);
     kept.bars = ss.form.bars;

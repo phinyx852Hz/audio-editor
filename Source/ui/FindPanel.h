@@ -81,6 +81,8 @@ public:
         QList<QColor> colours;
     };
     DealPick pickDeal();
+    // Ctrl+click on Φ (owner, 2026-10-29): a whole Architectonics song into the clip launcher.
+    std::function<void()> phiCompose;
     // The plugin id of the instrument an item's key stands for ("plugin:..." or
     // "command:instrument...."), empty when it is not an instrument.
     std::function<QString (const QString& key)> instrumentOf;

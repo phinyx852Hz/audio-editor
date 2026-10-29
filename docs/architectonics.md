@@ -136,6 +136,13 @@ until a set is designed or dealt from the scenes instead.
   track, else the Synth plays its MIDI.
 - **MIDI loops** of 1, 2, 4 or 8 bars, 4 to start; a rhythm's cycle may be longer than the loop.
 
+**Ctrl+click on the Selector's Φ button** (owner, 2026-10-29: "holding ctrl + clicking on the
+Phi button generates a random Architectonics composition in the clip launcher") composes a new
+song at once, with no dialog. It uses the last settings and roles with a new seed, and it is
+also on the Φ button's right-click menu. A plain click still deals one scene. Each scene's
+MIDI clips open in the MIDI editor as any launcher clip does (and in its staff view, once that
+lands), to edit.
+
 The dialog shows the form as Design a Set does, and lists every section with its part, chords,
 players and rhythm. **Compose** writes the song, and **Compose and Play** writes it and plays it.
 Kept in settings.ini as architectonics/roles, loop and rhythms, beside the set's.

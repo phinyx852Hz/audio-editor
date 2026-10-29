@@ -1169,6 +1169,7 @@ void MainWindow::buildPanels()
             mixerWin->showLauncher (false);
         mixerWin->phiDeal (files, instruments, names, colours, launcher, again);
     };
+    findWidget->phiCompose = [this] { composeSongDialog (false, true); };
     // A colour's favourite instruments: instrument plugins, and the stock instruments of the
     // Sample and Synth menus (found among them by their file).
     findWidget->instrumentOf = [this] (const QString& key) -> QString
