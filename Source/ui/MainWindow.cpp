@@ -916,6 +916,8 @@ void MainWindow::buildMenus()
                                "repair.toolBox", "repair.toolLasso", "repair.toolBrush", "repair.toolSpotHeal",
                                "repair.brushSmaller", "repair.brushLarger", "repair.addHarmonics", "-",
                                "repair.frequencyRange", "repair.allFrequencies", "-", "view.spectral" } },
+        // Every letter of Research is taken, so it shares R with Repair: Alt+R, R again moves on to it.
+        { tr ("&Research"),  { "@research" } },
         { tr ("Spat&ial"),   { "spatial.binaural", "process.midSide", "process.stereoize", "-", "spatial.layout", "-", "spatial.studio", "-", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.speakerArrays", "spatial.fumaToAmbix", "spatial.ambixToFuma", "-", "view.ambiScene", "analyze.imagingView" } },
         { tr ("&Sample"),    { "sample.send", "sample.window", "sample.refresh", "-", "slice.send", "slice.window", "slice.refresh", "-",
                                "instrument.granular", "instrument.retroSampler", "-", "sample.midiInputs", "control.surfaces", "control.learn", "sample.panic" } },
@@ -940,7 +942,8 @@ void MainWindow::buildMenus()
 
     // 19 menus (23 before Album, Effect, Markers and Transport became submenus; owner,
     // 2026-10-26: "what happens when we load PHI on a small screen"): Fusion puts 7 px between titles, and at 1280 px wide with a 10 pt font the last ones went behind
-    // the » button. 2 px keeps them all in view there (1204 px at 10 pt DejaVu Sans).
+    // the » button. 2 px keeps them all in view there (1204 px at 10 pt DejaVu Sans,
+    // before Research made it 20; Research adds about 70 px).
     struct TightMenuBar : QProxyStyle
     {
         using QProxyStyle::QProxyStyle;
@@ -971,6 +974,12 @@ void MainWindow::buildMenus()
                 // Built as it opens, so its ticks follow the mode chosen and the mixer's state.
                 connect (menu, &QMenu::aboutToShow, this, [this, menu] { fillModeMenu (menu); });
                 fillModeMenu (menu);
+            }
+            else if (id == QLatin1String ("@research"))
+            {
+                // A place for the owner's research (2026-10-29); its items are still to be chosen.
+                auto* none = menu->addAction (tr ("Nothing here yet"));
+                none->setEnabled (false);
             }
             else if (id == QLatin1String ("@nyquist.generate"))
                 generateMenu = menu->addMenu (tr ("&Generate"));
