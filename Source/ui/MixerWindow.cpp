@@ -10361,6 +10361,14 @@ void MixerWindow::showSideFinder (bool finder)
         refreshInspector();
 }
 
+void MixerWindow::hideSideColumn (bool hidden)
+{
+    if (hidden)
+        sideStack->hide();
+    else
+        showSideFinder (finderShown);
+}
+
 void MixerWindow::engageTrack()
 {
     if (finderShown)

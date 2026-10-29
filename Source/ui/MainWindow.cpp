@@ -593,6 +593,7 @@ void MainWindow::registerCommands()
     registerPatchBayCommands();
     registerReferenceCommands();
     registerMacroCommands();
+    registerResearchCommands();
     add ("tools.managePlugins", Category::tools, tr ("Manage &Plug-ins..."), {}, [this] { managePlugins(); });
     add ("tools.resetConfig", Category::tools, tr ("Reset &Configuration..."), {}, [this] { resetConfiguration(); });
 
@@ -919,6 +920,8 @@ void MainWindow::buildMenus()
                                "repair.toolBox", "repair.toolLasso", "repair.toolBrush", "repair.toolSpotHeal",
                                "repair.brushSmaller", "repair.brushLarger", "repair.addHarmonics", "-",
                                "repair.frequencyRange", "repair.allFrequencies", "-", "view.spectral" } },
+        // Every letter of Research is taken, so it shares R with Repair: Alt+R, R again moves on to it.
+        { tr ("&Research"),  { "@research" } },
         { tr ("Spat&ial"),   { "spatial.binaural", "process.midSide", "process.stereoize", "-", "spatial.layout", "-", "spatial.studio", "-", "spatial.encode", "spatial.rotate", "spatial.decode", "spatial.speakerArrays", "spatial.fumaToAmbix", "spatial.ambixToFuma", "-", "view.ambiScene", "analyze.imagingView" } },
         { tr ("&Sample"),    { "sample.send", "sample.window", "sample.refresh", "-", "slice.send", "slice.window", "slice.refresh", "-",
                                "instrument.granular", "instrument.retroSampler", "-", "sample.midiInputs", "control.surfaces", "control.learn", "sample.panic" } },
@@ -941,10 +944,11 @@ void MainWindow::buildMenus()
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
     };
 
-    // 20 menus (Architectonics added 2026-10-29: the owner found room on a 13" screen; Compose took its
+    // 21 menus (Architectonics added 2026-10-29: the owner found room on a 13" screen; Compose took its
     // place the same day, Architectonics a submenu of it; 23 before Album, Effect, Markers and Transport became submenus; owner,
     // 2026-10-26: "what happens when we load PHI on a small screen"): Fusion puts 7 px between titles, and at 1280 px wide with a 10 pt font the last ones went behind
-    // the » button. 2 px keeps them all in view there (1204 px at 10 pt DejaVu Sans).
+    // the » button. 2 px keeps them all in view there (1204 px at 10 pt DejaVu Sans,
+    // before Research made it 20; Research adds about 70 px).
     struct TightMenuBar : QProxyStyle
     {
         using QProxyStyle::QProxyStyle;
@@ -978,6 +982,12 @@ void MainWindow::buildMenus()
             }
             else if (id == QLatin1String ("@compose"))
                 fillComposeMenu (menu);
+            else if (id == QLatin1String ("@research"))
+            {
+                // Built as it opens, from the references file the owner curates (ResearchSection.cpp).
+                connect (menu, &QMenu::aboutToShow, this, [this, menu] { fillResearchMenu (menu); });
+                fillResearchMenu (menu);
+            }
             else if (id == QLatin1String ("@nyquist.generate"))
                 generateMenu = menu->addMenu (tr ("&Generate"));
             else if (id.startsWith (QLatin1Char ('@')))
