@@ -2,26 +2,35 @@
 // The Research menu (owner, 2026-10-29): short references on the ideas behind PHI, each what it
 // is and its history, with links for further reading. Not a how-to; that is the manual's.
 // The entries are in share/research/references.md, which the owner curates: "# Group" makes a
-// submenu, "## Entry" an item, and the Markdown under it is what the entry's window shows.
+// submenu, "## Entry" an item, and the Markdown under it is what its panel shows.
 #include "MainWindow.h"
+#include "MixerWindow.h"
+#include "Panels.h"
 
 #include <QCoreApplication>
 #include <QDesktopServices>
-#include <QDialog>
-#include <QDialogButtonBox>
 #include <QDir>
+#include <QDockWidget>
 #include <QFile>
 #include <QFileInfo>
+#include <QFrame>
+#include <QHBoxLayout>
+#include <QKeySequence>
+#include <QLabel>
 #include <QLineEdit>
 #include <QMap>
 #include <QMenu>
 #include <QRegularExpression>
+#include <QShortcut>
 #include <QStandardPaths>
 #include <QStatusBar>
 #include <QTextBrowser>
 #include <QTextCursor>
+#include <QToolButton>
 #include <QUrl>
 #include <QVBoxLayout>
+
+#include <functional>
 
 namespace
 {
@@ -138,45 +147,126 @@ void MainWindow::fillResearchMenu (QMenu* menu)
     menu->addAction (commands.action (QStringLiteral ("research.edit")));
 }
 
+// The research panel: the entry, with a find box, in the left-hand column.
+class ResearchView final : public QWidget
+{
+public:
+    ResearchView (std::function<void()> onClose, QWidget* parent) : QWidget (parent)
+    {
+        heading = new QLabel (this);
+        heading->setWordWrap (true);
+        auto font = heading->font();
+        font.setBold (true);
+        heading->setFont (font);
+        auto* close = new QToolButton (this);
+        close->setText (QStringLiteral ("✕"));
+        close->setAutoRaise (true);
+        close->setToolTip (MainWindow::tr ("Close the research panel; the panel it replaced comes back (Esc)"));
+        close->setAccessibleName (MainWindow::tr ("Close research"));
+        connect (close, &QToolButton::clicked, this, [onClose] { onClose(); });
+        auto* escape = new QShortcut (QKeySequence (Qt::Key_Escape), this);
+        escape->setContext (Qt::WidgetWithChildrenShortcut);
+        connect (escape, &QShortcut::activated, this, [onClose] { onClose(); });
+
+        find = new QLineEdit (this);
+        find->setPlaceholderText (MainWindow::tr ("Type to find; Enter finds the next one"));
+        find->setClearButtonEnabled (true);
+        find->setAccessibleName (MainWindow::tr ("Find in this reference"));
+
+        browser = new QTextBrowser (this);
+        browser->setOpenExternalLinks (true);
+        browser->setFrameShape (QFrame::NoFrame);
+
+        const auto findNext = [this] (bool fromTop)
+        {
+            if (find->text().isEmpty())
+                return;
+            if (fromTop)
+                browser->moveCursor (QTextCursor::Start);
+            if (! browser->find (find->text()))
+            {
+                browser->moveCursor (QTextCursor::Start);   // round to the top
+                browser->find (find->text());
+            }
+        };
+        connect (find, &QLineEdit::textChanged, this, [findNext] { findNext (true); });
+        connect (find, &QLineEdit::returnPressed, this, [findNext] { findNext (false); });
+
+        auto* top = new QHBoxLayout;
+        top->addWidget (heading, 1);
+        top->addWidget (close, 0, Qt::AlignTop);
+        auto* layout = new QVBoxLayout (this);
+        layout->setContentsMargins (6, 6, 6, 6);
+        layout->addLayout (top);
+        layout->addWidget (find);
+        layout->addWidget (browser, 1);
+        setMinimumWidth (270);
+    }
+
+    void setEntry (const QString& title, const QString& markdown)
+    {
+        heading->setText (title);
+        browser->setAccessibleName (title);
+        browser->setMarkdown (markdown);
+        browser->moveCursor (QTextCursor::Start);
+        find->clear();
+    }
+
+    QWidget* reading() const { return browser; }
+
+private:
+    QLabel* heading = nullptr;
+    QLineEdit* find = nullptr;
+    QTextBrowser* browser = nullptr;
+};
+
 void MainWindow::showResearchEntry (const QString& title, const QString& markdown)
 {
-    // Not modal, so it can stay open beside the editor.
-    auto* dialog = new QDialog (this);
-    dialog->setAttribute (Qt::WA_DeleteOnClose);
-    dialog->setWindowTitle (title);
-    dialog->resize (720, 600);
-
-    auto* find = new QLineEdit (dialog);
-    find->setPlaceholderText (tr ("Type to find; Enter finds the next one"));
-    find->setClearButtonEnabled (true);
-    find->setAccessibleName (tr ("Find in this reference"));
-
-    auto* browser = new QTextBrowser (dialog);
-    browser->setAccessibleName (title);
-    browser->setOpenExternalLinks (true);
-    browser->setMarkdown (markdown);
-
-    const auto findNext = [browser, find] (bool fromTop)
+    if (researchPanel == nullptr)
     {
-        if (find->text().isEmpty())
-            return;
-        if (fromTop)
-            browser->moveCursor (QTextCursor::Start);
-        if (! browser->find (find->text()))
+        researchView = new ResearchView ([this] { closeResearch(); }, this);
+        researchPanel = new DockablePanel (*this, QStringLiteral ("researchPanel"), tr ("Research"), researchView, Qt::LeftDockWidgetArea);
+        focusFollowsMouse->addAreas ({ researchView });
+        // Closed from its title bar too, the panel it replaced comes back.
+        connect (researchPanel->dock(), &QDockWidget::visibilityChanged, this, [this] (bool visible)
         {
-            browser->moveCursor (QTextCursor::Start);   // round to the top
-            browser->find (find->text());
+            if (! visible && researchShowing && ! researchPanel->isShown())
+                closeResearch();
+        });
+    }
+    researchView->setEntry (title, markdown);
+
+    // It takes the place of what is on the left now (owner, 2026-10-29): the Find panel, or
+    // the docked mixer's Inspector. Opening another entry keeps what it is to give back.
+    if (! researchShowing)
+    {
+        researchShowing = true;
+        researchHidMixerSide = mixerWin != nullptr && mixerDocked() && centralStack->currentWidget() == mixerWin;
+        researchHidFind = findPanel->isShown();
+        if (researchHidFind)
+        {
+            if (! findPanel->isPoppedOut() && ! findPanel->dock()->isFloating())
+                addDockWidget (dockWidgetArea (findPanel->dock()), researchPanel->dock());
+            hidingFindForMixer = true;   // not a hand-closed Find, so the mixer's Inspector stays put
+            findPanel->hide();
+            hidingFindForMixer = false;
         }
-    };
-    connect (find, &QLineEdit::textChanged, dialog, [findNext] { findNext (true); });
-    connect (find, &QLineEdit::returnPressed, dialog, [findNext] { findNext (false); });
+        if (researchHidMixerSide)
+            mixerWin->hideSideColumn (true);
+    }
+    researchPanel->show (false);
+    researchView->reading()->setFocus();
+}
 
-    auto* buttons = new QDialogButtonBox (QDialogButtonBox::Close, dialog);
-    connect (buttons, &QDialogButtonBox::rejected, dialog, &QDialog::close);
-
-    auto* layout = new QVBoxLayout (dialog);
-    layout->addWidget (find);
-    layout->addWidget (browser, 1);
-    layout->addWidget (buttons);
-    dialog->show();
+void MainWindow::closeResearch()
+{
+    if (! researchShowing)
+        return;
+    researchShowing = false;
+    researchPanel->hide();
+    if (researchHidMixerSide && mixerWin != nullptr)
+        mixerWin->hideSideColumn (false);   // back to the Inspector, or the Finder it had
+    if (researchHidFind && ! findPanel->isShown())
+        findPanel->show (false);
+    researchHidMixerSide = researchHidFind = false;
 }

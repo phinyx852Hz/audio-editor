@@ -173,7 +173,11 @@ private:
     // The Research menu's references (ResearchSection.cpp, share/research/references.md).
     void registerResearchCommands();
     void fillResearchMenu (QMenu*);
-    void showResearchEntry (const QString& title, const QString& markdown);
+    void showResearchEntry (const QString& title, const QString& markdown);   // in the research panel, on the left
+    void closeResearch();      // and what it took the place of comes back
+    class ResearchView* researchView = nullptr;
+    DockablePanel* researchPanel = nullptr;
+    bool researchShowing = false, researchHidFind = false, researchHidMixerSide = false;
     void toggleMacroRecording();
     void runMacro (const macro::Macro&);
     MacroRecorder* macroRecorder = nullptr;

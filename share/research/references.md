@@ -7,7 +7,7 @@ docs/raga-darpan.md).
 How it is read:
   # A heading with one hash      a group: a submenu of the Research menu
   ## A heading with two hashes   an entry: an item in that submenu
-  Everything under an entry, to the next heading, is what its window shows: what it is and
+  Everything under an entry, to the next heading, is what its panel shows: what it is and
   its history, then the links and books for further reading. How to use it in PHI belongs in
   the manual, not here (owner, 2026-10-29). Markdown links, [text](https://...), open in
   the web browser.
