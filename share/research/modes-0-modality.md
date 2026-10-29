@@ -155,6 +155,20 @@ harmony over melody is mistaken: "If melody is 'arpeggiated' harmony, then harmo
 consolidated melody." He separates a harmonic tonality from a possibly independent melodic
 tonality, and calls their interplay *tonal counterpoint*.
 
+The book's larger argument is that Western classical music cannot be understood apart from the
+folk, dance, vernacular and popular music whose melodic and harmonic patterns kept feeding it.
+It treats folk, popular and classical music, especially from about 1770 to 1910, as one
+connected ecosystem, and follows recurring patterns (melodic, harmonic, rhythmic and formal)
+across social and stylistic lines rather than from masterpiece to masterpiece. It moves in three
+stages: melodic foundations, from children's chants to pentatonicism; a harmonic revolution, the
+rise of tonality, dissonance and competing tonal systems, traced from the simple tonic and
+dominant patterns of Italian dance music around 1500 to the chromatic music of around 1900; and a
+melodic counter-revolution, through Eastern influences, Central European dances, nineteenth
+century vernacular music, Romanticism, Modernism, the blues and early jazz. It is broad and at
+times speculative. Richard Taruskin, reviewing it in *Music & Letters*, faulted its overstatement
+and confirmation bias, yet called it "marvellously stimulating and important" for making
+musicians hear familiar music differently.
+
 ### Rameau and Rousseau
 
 Rameau's *Traité de l'harmonie* (1722) gave the first systematic account of chords, their
@@ -172,7 +186,7 @@ The plainest sign of harmony-centered thinking is the split between chord tones 
 tones. In the melody C–D–E–G–E–C over a C major chord, C, E and G belong to the chord and D is
 a passing tone between C and E: the harmony is the frame, and the melody is sorted into notes
 that belong to it and notes that decorate it. Standard teaching, from the College Board's AP
-Music Theory course to open textbooks, classifies melodic notes this way. It is useful for tonal
+Music Theory course to open textbooks such as [Introduction to Non-Chord Tones](https://musictheory.pugetsound.edu/mt21c/NonChordTonesIntroduction.html), classifies melodic notes this way. It is useful for tonal
 music, but explaining a melody by an underlying harmony is not the same as showing that the
 melody comes from it. C–D–E is also simply a rising scale gesture, with its own rhythm,
 articulation and meaning, that needs no chord.
@@ -250,12 +264,16 @@ melodic side: has anyone built a theory of *melodic syntax* as far-reaching as W
 syntax?
 
 - Peter van der Merwe, *Roots of the Classical: The Popular Origins of Western Music* (Oxford
-  University Press, 2004), chapter 2, "The Ramellian Paradigm".
+  University Press, 2004), chapter 2, ["The Ramellian Paradigm"](https://academic.oup.com/book/27570/chapter-abstract/197584037).
 - Jean-Philippe Rameau, *Traité de l'harmonie* (1722);
   [Jean-Philippe Rameau](https://en.wikipedia.org/wiki/Jean-Philippe_Rameau) and
   [Querelle des Bouffons](https://en.wikipedia.org/wiki/Querelle_des_Bouffons), Wikipedia.
-- Joel Lester, "Rameau and eighteenth-century harmonic theory", in Thomas Christensen (ed.),
+- Joel Lester, ["Rameau and eighteenth-century harmonic theory"](https://www.cambridge.org/core/books/abs/cambridge-history-of-western-music-theory/rameau-and-eighteenthcentury-harmonic-theory/D8DB6168DC88C894A0113542BB486B2C), in Thomas Christensen (ed.),
   *The Cambridge History of Western Music Theory* (Cambridge University Press, 2002).
+- ["In Search of the Oriental Origin: Rameau, Rousseau and Chinese Music in Eighteenth-Century France"](https://www.cambridge.org/core/journals/eighteenth-century-music/article/in-search-of-the-oriental-origin-rameau-rousseau-and-chinese-music-in-eighteenthcentury-france/97A5AD00B0F848FFA2221B26E1BBE384),
+  *Eighteenth-Century Music* (Cambridge University Press), on their exchanges of 1753–1754.
+- [Music Theory for the 21st-Century Classroom](https://musictheory.pugetsound.edu/mt21c/), the
+  open textbook.
 - [Nonchord tone](https://en.wikipedia.org/wiki/Nonchord_tone) and
   [Schenkerian analysis](https://en.wikipedia.org/wiki/Schenkerian_analysis), Wikipedia.
 - Edward Aldwell and Carl Schachter, *Harmony and Voice Leading*, the core text of, for example,
