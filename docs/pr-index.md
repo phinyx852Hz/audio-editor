@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**90 pull requests:** 85 merged, 5 open.
+**92 pull requests:** 88 merged, 4 open.
 
 ## Contents
 
@@ -41,8 +41,8 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#77](https://github.com/phinyx852Hz/audio-editor/pull/77) | Slicer: a 128-pad drum machine with layers and sounds of their own | merged |  | `Source/ui/SlicerWindow.cpp`<br>`Source/sampler/SlicerEngine.cpp`<br>`Source/ui/SlicerKit.cpp` |
 | [#79](https://github.com/phinyx852Hz/audio-editor/pull/79) | Slicer phase 2: step sequencer (Cubase Pattern Editor / FL Studio Channel Rack) | merged |  | `Source/ui/StepSequencerView.cpp`<br>`Source/sampler/SlicerEngine.cpp`<br>`Source/ui/StepSequencerView.h` |
 | [#80](https://github.com/phinyx852Hz/audio-editor/pull/80) | MIDI editor: rising spectrum, scale wheel, pitch curves and ornaments, tuning changes, hum to notes, MTS-ESP | merged |  | `Source/ui/MidiEditor.cpp`<br>`Source/mixer/NoteEditor.cpp`<br>`tests/CoreTests.cpp` |
-| [#85](https://github.com/phinyx852Hz/audio-editor/pull/85) | MIDI editor: microtonal staff notation, from Xen Tuner's notations | open | View > Staff notation | `Source/core/XenTuner.cpp`<br>`share/xen-tuner/tunings/fjs/1023odd.txt`<br>`Source/core/XenSymbols.inc` |
-| [#87](https://github.com/phinyx852Hz/audio-editor/pull/87) | MIDI editor: sargam, Carnatic swaras, jianpu, not angka, jeongganbo and maqam/makam/dastgah key signatures | open |  | `Source/mixer/NotationGrid.cpp`<br>`Source/ui/MidiStaff.cpp`<br>`Source/mixer/KeySignatures.inc` |
+| [#85](https://github.com/phinyx852Hz/audio-editor/pull/85) | MIDI editor: microtonal staff notation, from Xen Tuner's notations | merged | View > Staff notation | `Source/core/XenTuner.cpp`<br>`share/xen-tuner/tunings/fjs/1023odd.txt`<br>`Source/core/XenSymbols.inc` |
+| [#87](https://github.com/phinyx852Hz/audio-editor/pull/87) | MIDI editor: sargam, Carnatic swaras, jianpu, not angka, jeongganbo and maqam/makam/dastgah key signatures | merged |  | `Source/mixer/NotationGrid.cpp`<br>`Source/ui/MidiStaff.cpp`<br>`Source/mixer/KeySignatures.inc` |
 | [#88](https://github.com/phinyx852Hz/audio-editor/pull/88) | Slicer: Cubase Drum Machine layout; Simplest and the Slicer dock under the editor or the mixer | open |  | `Source/ui/SlicerWindow.cpp`<br>`Source/ui/MixerWindow.cpp`<br>`Source/ui/Panels.cpp` |
 
 ### Analysis and meters
@@ -111,6 +111,8 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#81](https://github.com/phinyx852Hz/audio-editor/pull/81) | Rhythms: the iqāʿāt of Maqam World's index, and kuku | merged | Mode > rhythm > West Asia > iqāʿāt | `Source/mixer/Rhythms.cpp`<br>`docs/rhythms.md`<br>`tests/CoreTests.cpp` |
 | [#83](https://github.com/phinyx852Hz/audio-editor/pull/83) | Mode: add a harmony submenu | merged |  | `Source/mixer/Harmonies.cpp`<br>`docs/harmony.md`<br>`Source/ui/HarmonySection.cpp` |
 | [#90](https://github.com/phinyx852Hz/audio-editor/pull/90) | PHI rāga: bahādur kauns, drafted from a recording | merged |  | `Source/core/PhiRagas.cpp`<br>`docs/mixer.md`<br>`docs/raga.md` |
+| [#91](https://github.com/phinyx852Hz/audio-editor/pull/91) | Research: the theory of mode behind melody, rhythm and harmony | merged | Modes › Mode in PHI: melody, rhythm and harmony | `share/research/modes-0-modality.md`<br>`Source/ui/ResearchSection.cpp`<br>`CMakeLists.txt` |
+| [#92](https://github.com/phinyx852Hz/audio-editor/pull/92) | Mode ▸ harmony: add modal harmony | open |  | `share/research/modes-9-harmony.md`<br>`Source/mixer/Harmonies.cpp`<br>`docs/mixer.md` |
 
 ### Φ effects and sounds
 
@@ -278,9 +280,11 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#82](https://github.com/phinyx852Hz/audio-editor/pull/82) | Research menu: curated references on the ideas behind PHI | Adds a top-level Research menu, in alphabetical place after Repair and before Spatial (the order from #74). *(auto)* | merged | 2026-10-29 | Interface and branding |
 | [#83](https://github.com/phinyx852Hz/audio-editor/pull/83) | Mode: add a harmony submenu | Adds Mode ▸ harmony, in lower case like melody, tuning and rhythm. *(auto)* | merged | 2026-10-29 | Modes, tunings and composition |
 | [#84](https://github.com/phinyx852Hz/audio-editor/pull/84) | Architectonics: golden-ratio sets and Compose a Song for the clip launcher | This adds an Architectonics menu to the menu bar, between Analyze and Master. *(auto)* | merged | 2026-10-29 | Mixer and clip launcher |
-| [#85](https://github.com/phinyx852Hz/audio-editor/pull/85) | MIDI editor: microtonal staff notation, from Xen Tuner's notations | The MIDI editor gets a staff notation view in the piano roll's place. *(auto)* | open | 2026-10-29 | Editing and warping |
-| [#86](https://github.com/phinyx852Hz/audio-editor/pull/86) | Compose menu: every compositional method in PHI, plus 15 more from Western and other traditions | Built on #84, which is why it is based on #84's branch. *(auto)* | open | 2026-10-29 | Interface and branding |
-| [#87](https://github.com/phinyx852Hz/audio-editor/pull/87) | MIDI editor: sargam, Carnatic swaras, jianpu, not angka, jeongganbo and maqam/makam/dastgah key signatures | 1. *(auto)* | open | 2026-10-29 | Editing and warping |
+| [#85](https://github.com/phinyx852Hz/audio-editor/pull/85) | MIDI editor: microtonal staff notation, from Xen Tuner's notations | The MIDI editor gets a staff notation view in the piano roll's place. *(auto)* | merged | 2026-10-29 | Editing and warping |
+| [#86](https://github.com/phinyx852Hz/audio-editor/pull/86) | Compose menu: every compositional method in PHI, plus 15 more from Western and other traditions | A Compose menu replaces the top-level Architectonics menu, and Architectonics becomes a submenu of it. *(auto)* | open | 2026-10-29 | Interface and branding |
+| [#87](https://github.com/phinyx852Hz/audio-editor/pull/87) | MIDI editor: sargam, Carnatic swaras, jianpu, not angka, jeongganbo and maqam/makam/dastgah key signatures | 1. *(auto)* | merged | 2026-10-29 | Editing and warping |
 | [#88](https://github.com/phinyx852Hz/audio-editor/pull/88) | Slicer: Cubase Drum Machine layout; Simplest and the Slicer dock under the editor or the mixer | This PR follows the owner's direction to model the Slicer's UI on Cubase's Drum Machine: compact, nested beneath the mixer, above the Device Chain when it is... *(auto)* | open | 2026-10-29 | Editing and warping |
 | [#89](https://github.com/phinyx852Hz/audio-editor/pull/89) | Φ Modulation (PhiFlow, PhiSpace, PhiGrain, PhiMatrix) and a Cubase-style Modulators panel | This PR has three parts: *(auto)* | open | 2026-10-29 | Φ effects and sounds |
 | [#90](https://github.com/phinyx852Hz/audio-editor/pull/90) | PHI rāga: bahādur kauns, drafted from a recording | Adds a draft sheet for bahādur kauns, the last raga from the owner's teacher's list. *(auto)* | merged | 2026-10-29 | Modes, tunings and composition |
+| [#91](https://github.com/phinyx852Hz/audio-editor/pull/91) | Research: the theory of mode behind melody, rhythm and harmony | Adds the owner's generalized theory of musical modality to the Research menu. *(auto)* | merged | 2026-10-29 | Modes, tunings and composition |
+| [#92](https://github.com/phinyx852Hz/audio-editor/pull/92) | Mode ▸ harmony: add modal harmony | Adds modal harmony to Mode ▸ harmony, under Western art music ▸ twentieth century. *(auto)* | open | 2026-10-29 | Modes, tunings and composition |
