@@ -112,6 +112,8 @@ namespace rhythm
 
             // The hands: a clap on sam and each tālī, a wave on each khālī.
             const auto label = split (signs, ' ');
+            r.marks = label;
+            r.marks.resize (r.sections.size(), "?");
             std::string claps (length, '.'), waves (length, '.');
             int start = 0;
             r.counting.clear();
@@ -220,6 +222,7 @@ namespace rhythm
             r.subgroup = std::move (subgroup);
             r.sections = sections;
             r.beats = std::accumulate (sections.begin(), sections.end(), 0);
+            r.marks = kinds;
             r.bpm = bpm;
             r.about = std::move (about);
             const auto n = (size_t) r.beats;

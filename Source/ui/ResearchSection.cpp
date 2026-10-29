@@ -15,6 +15,7 @@
 #include <QFileInfo>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QImage>
 #include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
@@ -22,12 +23,15 @@
 #include <QMenu>
 #include <QPair>
 #include <QRegularExpression>
+#include <QResizeEvent>
+#include <QScrollBar>
 #include <QShortcut>
 #include <QStackedWidget>
 #include <QStandardPaths>
 #include <QStatusBar>
 #include <QTextBrowser>
 #include <QTextCursor>
+#include <QTextDocument>
 #include <QToolButton>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -172,6 +176,57 @@ void MainWindow::fillResearchMenu (QMenu* menu)
     menu->addAction (commands.action (QStringLiteral ("research.edit")));
 }
 
+// An entry's text. Its images ("![...](modality-diagram.png)") come from the references' folders,
+// yours first, and shrink to the panel's width; they fit again when the panel is resized.
+class ResearchBrowser final : public QTextBrowser
+{
+public:
+    using QTextBrowser::QTextBrowser;
+
+    void display (const QString& markdown)
+    {
+        shown = markdown;
+        hasImages = false;
+        document()->clear();   // forgets the images, so they load again at the new width
+        setMarkdown (markdown);
+    }
+
+    QVariant loadResource (int type, const QUrl& name) override
+    {
+        if (type != QTextDocument::ImageResource || ! name.isRelative())
+            return QTextBrowser::loadResource (type, name);
+        const auto file = QFileInfo (name.path()).fileName();
+        for (const auto& folder : { userFolder(), shippedFolder() })
+        {
+            QImage image (folder + QLatin1Char ('/') + file);
+            if (image.isNull())
+                continue;
+            hasImages = true;
+            const auto room = viewport()->width() - 2 * int (document()->documentMargin()) - 4;
+            if (room > 0 && image.width() > room)
+                image = image.scaledToWidth (room, Qt::SmoothTransformation);
+            return QVariant::fromValue (image);
+        }
+        return {};
+    }
+
+protected:
+    void resizeEvent (QResizeEvent* e) override
+    {
+        QTextBrowser::resizeEvent (e);
+        if (hasImages && e->oldSize().width() != e->size().width())
+        {
+            const auto at = verticalScrollBar()->value();
+            display (shown);
+            verticalScrollBar()->setValue (at);
+        }
+    }
+
+private:
+    QString shown;
+    bool hasImages = false;
+};
+
 // The research panel: a search box, then the entry (or the search's results) with its links.
 class ResearchView final : public QWidget
 {
@@ -211,7 +266,7 @@ public:
                 hooks.search (searchBox->text().trimmed());
         });
 
-        browser = new QTextBrowser (this);
+        browser = new ResearchBrowser (this);
         browser->setOpenLinks (false);   // research: links open entries here, the rest in the web browser
         browser->setFrameShape (QFrame::NoFrame);
         connect (browser, &QTextBrowser::anchorClicked, this, [this] (const QUrl& url)
@@ -270,7 +325,7 @@ private:
         shownMarkdown = markdown;
         heading->setText (title);
         browser->setAccessibleName (title);
-        browser->setMarkdown (markdown);
+        browser->display (markdown);
         browser->moveCursor (QTextCursor::Start);
         back->setEnabled (! history.isEmpty());
     }
@@ -288,7 +343,7 @@ private:
     QToolButton* undock = nullptr;
     QLabel* heading = nullptr;
     QLineEdit* searchBox = nullptr;
-    QTextBrowser* browser = nullptr;
+    ResearchBrowser* browser = nullptr;
     QString shownTitle, shownMarkdown;
     QList<QPair<QString, QString>> history;
 };

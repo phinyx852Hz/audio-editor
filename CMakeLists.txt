@@ -55,6 +55,8 @@ target_sources(${APP_ID} PRIVATE
     Source/mixer/Tunings.cpp
     Source/mixer/Atlas.cpp
     Source/mixer/NoteEditor.cpp
+    Source/mixer/Notation.cpp
+    Source/mixer/NotationGrid.cpp
     Source/mixer/MtsEsp.cpp
     Source/mixer/RagaInstrument.cpp
     Source/mixer/Counterpoint.cpp
@@ -103,6 +105,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/PhiPhaser.cpp
     Source/core/PhiTuning.cpp
     Source/core/Scala.cpp
+    Source/core/XenTuner.cpp
     Source/core/PhiRaga.cpp
     Source/core/PhiRagas.cpp
     Source/core/PhiSitar.cpp
@@ -184,6 +187,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/MixerWindow.cpp
     Source/ui/MixerSpatial.cpp
     Source/ui/MidiEditor.cpp
+    Source/ui/MidiStaff.cpp
     Source/ui/MixerRecording.cpp
     Source/ui/MixerFugue.cpp
     Source/ui/MixerMinimalize.cpp
@@ -365,7 +369,7 @@ if(PHI_HAVE_PROJECTM)
 endif()
 install(FILES "${PHI_DEFAULT_HRTF}" DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/hrtf")
 # The Research menu's references (Source/ui/ResearchSection.cpp).
-install(DIRECTORY share/research/ DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/research" FILES_MATCHING PATTERN "*.md")
+install(DIRECTORY share/research/ DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/research" FILES_MATCHING PATTERN "*.md" PATTERN "*.png")
 
 # A web page behind PHI (Visualizer > Web Page) needs Qt WebEngine, a built-in Chromium of a
 # few hundred MB. It is built when Qt WebEngine is installed (qt6-webengine), unless turned off.
@@ -416,6 +420,14 @@ target_compile_definitions(${APP_ID} PRIVATE
 
 # The Φ logo: built in for the windows, and installed for the desktop's launcher.
 qt_add_resources(${APP_ID} brand PREFIX "/" FILES packaging/phi.svg)
+# Bravura (Steinberg, OFL-1.1), the SMuFL music font the MIDI editor's staff notation draws in.
+qt_add_resources(${APP_ID} music PREFIX "/fonts" BASE third_party/bravura FILES third_party/bravura/Bravura.otf)
+# TteoiJeonggan (Tteoieonire, OFL-1.1), the font jeongganbo's yulmyeong and sigimsae are drawn in.
+qt_add_resources(${APP_ID} jeonggan PREFIX "/fonts" BASE third_party/tteoi-jeonggan FILES third_party/tteoi-jeonggan/TteoiJeonggan.ttf)
+# Xen Tuner's tuning configs (GPL-3.0-or-later) for the staff notation's spellings.
+install(DIRECTORY "${CMAKE_SOURCE_DIR}/share/xen-tuner/" DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/xen-tuner")
+install(FILES third_party/bravura/OFL.txt DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/${APP_ID}" RENAME Bravura-OFL.txt)
+install(FILES third_party/tteoi-jeonggan/OFL.txt DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/${APP_ID}" RENAME TteoiJeonggan-OFL.txt)
 
 install(TARGETS ${APP_ID} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES packaging/phi.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
@@ -445,6 +457,8 @@ if(PHI_BUILD_TESTS)
         Source/mixer/Tunings.cpp
         Source/mixer/Atlas.cpp
         Source/mixer/NoteEditor.cpp
+        Source/mixer/Notation.cpp
+        Source/mixer/NotationGrid.cpp
         Source/mixer/RagaInstrument.cpp
         Source/mixer/Counterpoint.cpp
         Source/mixer/Fugue.cpp
@@ -494,6 +508,7 @@ if(PHI_BUILD_TESTS)
         Source/core/PhiPhaser.cpp
         Source/core/PhiTuning.cpp
         Source/core/Scala.cpp
+        Source/core/XenTuner.cpp
         Source/core/PhiRaga.cpp
         Source/core/PhiRagas.cpp
         Source/core/PhiSitar.cpp
