@@ -19,6 +19,7 @@
 
 #include <QDialog>
 #include <QDockWidget>
+#include <QTimer>
 #include <QDialogButtonBox>
 #include <QApplication>
 #include <QFileInfo>
@@ -121,9 +122,23 @@ void MainWindow::registerSamplerCommands()
         });
     });
     slicerPanel = new DockablePanel (*this, QStringLiteral ("slicerPanel"), tr ("Slicer"), scrolling (slicerWin), Qt::BottomDockWidgetArea);
-    // Docked along the bottom, never squeezed below a compact strip (they scroll past that).
-    for (auto* p : { samplerPanel, slicerPanel })
-        p->dock()->setMinimumHeight (std::min (p->content()->sizeHint().height() + 30, 400));
+    // The place they share with the chain takes the height of whichever is picked: compact,
+    // with no room left over (they scroll past it).
+    for (auto* p : { chainPanel, samplerPanel, slicerPanel })
+        connect (p->dock(), &QDockWidget::visibilityChanged, this, [this, p] (bool visible)
+        {
+            if (! visible)
+                return;
+            QTimer::singleShot (0, this, [this, p]
+            {
+                auto* d = p->dock();
+                if (d->isFloating() || ! d->isVisible() || dockWidgetArea (d) != Qt::BottomDockWidgetArea)
+                    return;
+                const auto wanted = std::min (p->content()->sizeHint().height() + 30, 400);
+                if (std::abs (d->height() - wanted) > 8)
+                    resizeDocks ({ d }, { wanted }, Qt::Vertical);
+            });
+        });
     placeInstrumentDocks();
     panels << samplerPanel << slicerPanel;
     updateMidiStatus();
@@ -246,11 +261,12 @@ void MainWindow::keepFindFocus (QWidget* had)
     QTimer::singleShot (300, this, giveBack);
 }
 
-// Simplest and the Slicer share the place along the bottom above the Device Chain, as tabs
-// (in the chain's place while it is closed); under the mixer they sit inside it instead
-// (updateInstrumentDocks).
+// Simplest and the Slicer take turns with the Device Chain in one place along the bottom, as
+// tabs (owner, 2026-10-29: "toggle between the device chain and the slicer in that space");
+// under the mixer they take turns with its own chain instead (updateInstrumentDocks).
 void MainWindow::placeInstrumentDocks()
 {
+    auto* chain = chainPanel->dock();
     auto* sampler = samplerPanel->dock();
     auto* slicerDock = slicerPanel->dock();
     const bool samplerShown = sampler->isVisible(), slicerShown = slicerDock->isVisible();
@@ -258,11 +274,11 @@ void MainWindow::placeInstrumentDocks()
     {
         d->setFloating (false);
         addDockWidget (Qt::BottomDockWidgetArea, d);
+        tabifyDockWidget (chain, d);
     }
-    splitDockWidget (sampler, chainPanel->dock(), Qt::Vertical);   // the chain goes under them
-    tabifyDockWidget (sampler, slicerDock);
     sampler->setVisible (samplerShown);
     slicerDock->setVisible (slicerShown);
+    chain->raise();
 }
 
 void MainWindow::showSampler()

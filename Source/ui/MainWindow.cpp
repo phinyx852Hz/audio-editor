@@ -696,8 +696,14 @@ void MainWindow::registerCommands()
     add ("view.zoomFit", Category::view, tr ("Zoom to &Fit"), { KS (Qt::CTRL | Qt::Key_0) }, [this] { waveform->zoomToFit(); });
     add ("view.zoomSelection", Category::view, tr ("Zoom to &Selection"), { KS (Qt::Key_Z) },
          [this] { if (requireSelection()) waveform->zoomToSelection(); });
-    add ("view.chain", Category::master, tr ("Device &Chain"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_C) },
-         [this] { chainPanel->toggle(); });
+    add ("view.chain", Category::master, tr ("Device &Chain"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_C) }, [this]
+    {
+        // With Simplest or the Slicer in its place under the mixer, the chain takes its turn.
+        if (mixerWin != nullptr && mixerDocked() && centralStack->currentWidget() == mixerWin && mixerWin->instrumentInFront())
+            mixerWin->showDeviceChainInFront();
+        else
+            chainPanel->toggle();
+    });
     add ("view.find", Category::view, tr ("&Find..."), { KS (Qt::CTRL | Qt::Key_F) }, [this]
     {
         // The mixer in the editor's place: the Finder and the Inspector take turns.

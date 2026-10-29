@@ -6889,6 +6889,19 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     layout->addWidget (transportRow);
     layout->addWidget (topScroll);
     layout->addWidget (sideSplitter, 1);
+    lowerTabs = new QTabBar (this);
+    lowerTabs->setFocusPolicy (Qt::NoFocus);
+    lowerTabs->setDrawBase (false);
+    lowerTabs->setExpanding (false);
+    lowerTabs->hide();
+    connect (lowerTabs, &QTabBar::tabBarClicked, this, [this] (int i)
+    {
+        if (i < 0)
+            return;
+        lowerFront = lowerTabs->tabData (i).toInt();
+        updateLowerZone();
+    });
+    layout->addWidget (lowerTabs);
     for (auto& host : instrumentHosts)
     {
         host = new QWidget (this);
@@ -7847,12 +7860,55 @@ void MixerWindow::editShownMidi (const std::function<midifile::SongPtr (const mi
 
 bool MixerWindow::devicePanelShown() const { return devicePanel != nullptr && ! devicePanel->isHidden(); }
 
+void MixerWindow::setInstrumentOpen (int which, bool open)
+{
+    which = std::clamp (which, 0, 1);
+    instrumentOpens[(size_t) which] = open;
+    if (open)
+        lowerFront = which;
+    else if (lowerFront == which)
+        lowerFront = instrumentOpens[(size_t) (1 - which)] ? 1 - which : -1;
+    updateLowerZone();
+}
+
+void MixerWindow::showDeviceChainInFront()
+{
+    lowerFront = -1;
+    updateLowerZone();
+}
+
+// One of the Device Chain and the open instruments shows in the space under the strips.
+void MixerWindow::updateLowerZone()
+{
+    for (size_t i = 0; i < instrumentHosts.size(); ++i)
+        instrumentHosts[i]->setVisible ((int) i == lowerFront && instrumentOpens[i]);
+    {
+        const QSignalBlocker quiet (lowerTabs);
+        while (lowerTabs->count() > 0)
+            lowerTabs->removeTab (0);
+        const bool any = instrumentOpens[0] || instrumentOpens[1];
+        if (any)
+        {
+            lowerTabs->setTabData (lowerTabs->addTab (tr ("Device Chain")), -1);
+            static const char* names[2] { QT_TR_NOOP ("Simplest"), QT_TR_NOOP ("Slicer") };
+            for (int i = 0; i < 2; ++i)
+                if (instrumentOpens[(size_t) i])
+                    lowerTabs->setTabData (lowerTabs->addTab (tr (names[i])), i);
+            for (int t = 0; t < lowerTabs->count(); ++t)
+                if (lowerTabs->tabData (t).toInt() == lowerFront)
+                    lowerTabs->setCurrentIndex (t);
+        }
+        lowerTabs->setVisible (any);
+    }
+    updateDevicePanel();
+}
+
 void MixerWindow::updateDevicePanel()
 {
     if (devicePanel == nullptr)
         return;
     refreshMidiClipBox();
-    const bool show = true;   // fixed along the bottom; the master's shows nothing to change
+    const bool show = lowerFront < 0;   // fixed along the bottom, unless an instrument has the place
     if (devicePanel->isHidden() == show)
     {
         devicePanel->setVisible (show);

@@ -184,9 +184,15 @@ public:
     // instrument and inserts, or the clip picked in the launcher or the tracks. Hidden while
     // the Master strip is selected, so the editor's own chain can show.
     bool devicePanelShown() const;
-    // Where Simplest (0) and the Slicer (1) sit while the mixer is in front: under the tracks,
-    // above the Device Chain, as Cubase's lower zone. Hidden while empty.
+    // Where Simplest (0) and the Slicer (1) sit while the mixer is in front: in the Device
+    // Chain's place under the strips, taking turns with it (owner, 2026-10-29: "toggle between
+    // the device chain and the slicer in that space"). Tabs over it pick which shows while one
+    // is open; opening one puts it in front.
     QWidget* instrumentHost (int which) const { return instrumentHosts[(size_t) std::clamp (which, 0, 1)]; }
+    void setInstrumentOpen (int which, bool open);
+    bool instrumentOpen (int which) const { return instrumentOpens[(size_t) std::clamp (which, 0, 1)]; }
+    bool instrumentInFront() const { return lowerFront >= 0; }
+    void showDeviceChainInFront();
     // What the browser's Instruments and Audio Effects lists drag: "effect\n<id>",
     // "instrument\n<id>", or "synth", "sampler", "slicer".
     static QString pluginMime() { return QStringLiteral ("application/x-phi-plugin"); }
@@ -583,6 +589,10 @@ private:
     void toggleDevicePanel();   // Shift+Tab over the bottom panel: the Device Chain or the clip
     QStackedWidget* devicePanel = nullptr;
     std::array<QWidget*, 2> instrumentHosts {};
+    std::array<bool, 2> instrumentOpens {};
+    int lowerFront = -1;                 // the instrument in front; -1: the Device Chain
+    class QTabBar* lowerTabs = nullptr;  // the Device Chain and the open instruments
+    void updateLowerZone();
     TrackDevices* devices = nullptr;
     ClipView* clipView = nullptr;
     bool showingClip = false;

@@ -309,31 +309,33 @@ DockablePanel::~DockablePanel()
 bool DockablePanel::isShown() const
 {
     if (lentTo != nullptr)
-        return ! lentTo->isHidden();
+        return lentOpen();
     return window != nullptr ? window->isVisible() : dockWidget->isVisible();
 }
 
-void DockablePanel::lendTo (QWidget* host)
+void DockablePanel::lendTo (QWidget* host, std::function<void (bool)> setOpen, std::function<bool()> open)
 {
     if (host == nullptr || host == lentTo || window != nullptr)
         return;
     takeBack();
     const bool shown = dockWidget->isVisible();
     lentTo = host;
+    lentSetOpen = std::move (setOpen);
+    lentOpen = std::move (open);
     dockWidget->setWidget (nullptr);
     host->layout()->addWidget (contentWidget);
     contentWidget->show();
     dockWidget->hide();
-    host->setVisible (shown);
+    lentSetOpen (shown);
 }
 
 void DockablePanel::takeBack()
 {
     if (lentTo == nullptr)
         return;
-    const bool shown = ! lentTo->isHidden();
+    const bool shown = lentOpen();
     lentTo->layout()->removeWidget (contentWidget);
-    lentTo->hide();
+    lentSetOpen (false);
     lentTo = nullptr;
     dockWidget->setWidget (contentWidget);
     dockWidget->setVisible (shown);
@@ -353,7 +355,7 @@ void DockablePanel::show (bool giveFocus)
         return;
     }
     if (lentTo != nullptr)
-        lentTo->show();
+        lentSetOpen (true);
     else if (window != nullptr)
     {
         window->show();
@@ -405,7 +407,7 @@ void DockablePanel::show (bool giveFocus)
 void DockablePanel::hide()
 {
     if (lentTo != nullptr)
-        lentTo->hide();
+        lentSetOpen (false);
     else if (window != nullptr)
         dockBack (false);
     else
@@ -431,7 +433,7 @@ void DockablePanel::setPoppedOut (bool popOut)
     {
         // Out of its host and into a window of its own.
         lentTo->layout()->removeWidget (contentWidget);
-        lentTo->hide();
+        lentSetOpen (false);
         lentTo = nullptr;
         dockWidget->setWidget (contentWidget);
     }

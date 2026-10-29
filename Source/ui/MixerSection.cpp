@@ -263,7 +263,8 @@ void MainWindow::updateChainDock()
 {
     // The mixer has its own along its bottom; the editor's would show twice.
     auto* dock = chainPanel->dock();
-    const bool mixerOwns = mixerDocked() && centralStack->currentWidget() == mixerWin && mixerWin->devicePanelShown();
+    const bool mixerOwns = mixerDocked() && centralStack->currentWidget() == mixerWin
+                        && (mixerWin->devicePanelShown() || mixerWin->instrumentInFront());
     if (mixerOwns && ! chainPanel->isPoppedOut() && dock->isVisible())
     {
         chainHiddenForMixer = true;
@@ -293,8 +294,10 @@ void MainWindow::updateInstrumentDocks()
         // Under the mixer's strips there is less room: it takes what the strips leave, down to
         // a strip that still shows its top rows, and scrolls past that.
         host->setMinimumHeight (160);
+        const int index = which - 1;
         if (mixerInFront && ! p->isPoppedOut() && ! p->dock()->isFloating())
-            p->lendTo (host);
+            p->lendTo (host, [this, index] (bool open) { mixerWin->setInstrumentOpen (index, open); },
+                       [this, index] { return mixerWin->instrumentOpen (index); });
         else
             p->takeBack();
     }
