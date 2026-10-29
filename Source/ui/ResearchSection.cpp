@@ -22,6 +22,7 @@
 #include <QMenu>
 #include <QRegularExpression>
 #include <QShortcut>
+#include <QStackedWidget>
 #include <QStandardPaths>
 #include <QStatusBar>
 #include <QTextBrowser>
