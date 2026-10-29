@@ -10761,6 +10761,15 @@ void MixerWindow::showLauncher (bool on)
 
 bool MixerWindow::launcherShown() const { return launcherArea != nullptr && ! launcherArea->isHidden(); }
 
+std::vector<int> MixerWindow::sceneClips() const
+{
+    std::vector<int> out ((size_t) numScenes, 0);
+    for (int t = 0; t < engine.numTracks(); ++t)
+        for (int s = 0; s < numScenes; ++s)
+            out[(size_t) s] += slots[(size_t) t][(size_t) s] != nullptr ? 1 : 0;
+    return out;
+}
+
 QString MixerWindow::sceneName (int scene) const
 {
     if (scene < 0 || scene >= mixer::maxScenes)
@@ -11310,6 +11319,167 @@ void MixerWindow::phiDeal (const QStringList& files, const QStringList& instrume
     for (const auto& [track, file] : deal)
         placeFiles (track, { file }, at, false);
     status->setText (tr ("Φ dealt %n sound(s) onto the tracks", nullptr, (int) deal.size()));
+}
+
+std::vector<int> MixerWindow::colourTracks (const QStringList& names, const QList<QColor>& colours, const std::vector<bool>& wanted,
+                                            const QStringList& instruments)
+{
+    const auto count = std::min ({ (int) names.size(), (int) colours.size(), (int) wanted.size(), mixer::maxTracks });
+    std::vector<int> out (wanted.size(), -1);
+    std::set<int> used;
+    bool added = false, loaded = false;
+    for (int c = 0; c < count; ++c)
+    {
+        if (! wanted[(size_t) c])
+            continue;
+        auto track = trackFor (names[c], colours[c]);
+        if (track < 0)
+        {
+            track = count - 1 - c;   // as a mix from the set has it: the top colour on the last track
+            if (track >= engine.numTracks())
+            {
+                engine.setNumTracks (track + 1);
+                info[(size_t) track].name = names[c];
+                info[(size_t) track].colour = colours[c];
+                added = true;
+            }
+        }
+        if (used.count (track) != 0)
+            continue;
+        used.insert (track);
+        out[(size_t) c] = track;
+        if (c < instruments.size() && ! instruments[c].isEmpty())
+        {
+            setInstrumentKind (track, firstPlugin, instruments[c]);
+            loaded = true;
+        }
+    }
+    if (added)
+        rebuildStrips();
+    if (loaded)
+        rack->refresh();
+    return out;
+}
+
+void MixerWindow::openScore (const midifile::Song& score, mixer::TuningChoice tuning, const QString& title)
+{
+    MidiEditor::Host host;
+    host.play = [this] (uint8_t s, uint8_t a, uint8_t b) { engine.liveMidi (s, a, b, false); };
+    host.system = tuning.system;
+    host.root = tuning.root;
+    host.bpm = tempoBox->value();
+    host.folder = folder();
+    host.title = title;
+    host.inputSource = inputSource;
+    host.loadAudio = [] (const QString& file, QString& why) -> AudioDataPtr
+    {
+        std::vector<Marker> markers;
+        Tags tags;
+        std::string error;
+        auto loaded = AudioEngine::loadFile (file.toStdString(), markers, tags, error);
+        why = QString::fromStdString (error);
+        return loaded;
+    };
+    const auto armed = engine.liveTrack();
+    if (selected < engine.numTracks())
+        engine.setLiveTrack (selected);
+    MidiEditor editor (score, host, this);
+    auto* target = &editor;
+    engine.setLiveListener ([target] (uint8_t s, uint8_t a, uint8_t b)
+    {
+        QMetaObject::invokeMethod (target, [target, s, a, b] { target->midiIn (s, a, b); }, Qt::QueuedConnection);
+    });
+    const auto accepted = editor.exec() == QDialog::Accepted;
+    engine.setLiveListener (nullptr);
+    engine.setLiveTrack (armed);
+    if (! accepted)
+        return;
+    const auto kept = editor.result();
+    if (kept == nullptr)
+        return;
+
+    // On a track of its own when there is room, named for the score.
+    auto track = selected < engine.numTracks() ? selected : 0;
+    if (engine.numTracks() < mixer::maxTracks)
+    {
+        insertTrack (engine.numTracks());
+        track = engine.numTracks() - 1;
+        info[(size_t) track].name = title;
+        rebuildStrips();
+    }
+    const auto base = editsFolder();
+    QDir().mkpath (base);
+    auto stem = title;
+    stem.replace (QRegularExpression (QStringLiteral ("[/\\\\:*?\"<>|]")), QStringLiteral ("_"));
+    QString file;
+    for (int n = 1; file.isEmpty() || QFileInfo::exists (file); ++n)
+        file = QDir (base).filePath (QStringLiteral ("%1 %2.mid").arg (stem).arg (n));
+    std::string why;
+    if (! midifile::write (*kept, file.toStdString(), why))
+    {
+        say (tr ("The score could not be saved to %1: %2").arg (file, QString::fromStdString (why)));
+        return;
+    }
+    info[(size_t) track].tuning = tuning;
+    applyTunings();
+    addFiles (track, { file }, 0);
+    changed();
+    status->setText (tr ("%1 is on %2, from the start: %3").arg (title, trackName (track), editor.summary()));
+}
+
+int MixerWindow::emptyScenes (int count) const
+{
+    for (int start = 0; start + count <= mixer::maxScenes; ++start)
+    {
+        bool empty = true;
+        for (int s = start; s < start + count && empty && s < numScenes; ++s)
+            for (int t = 0; t < engine.numTracks() && empty; ++t)
+                empty = slots[(size_t) t][(size_t) s] == nullptr && loadingSlots.count ({ t, s }) == 0;
+        if (empty)
+            return start;
+    }
+    return -1;
+}
+
+void MixerWindow::composeScene (int scene, const std::vector<int>& tracks, const QStringList& files,
+                                const std::vector<midifile::SongPtr>& midi, mixer::TuningChoice tuning, const QString& name)
+{
+    if (scene < 0 || scene >= mixer::maxScenes)
+        return;
+    if (scene >= numScenes)
+        setScenes (scene + 1);
+    sceneNames[(size_t) scene] = name;
+    const auto base = editsFolder();
+    QDir().mkpath (base);
+    for (size_t c = 0; c < tracks.size(); ++c)
+    {
+        const auto track = tracks[c];
+        if (track < 0)
+            continue;
+        if (c < midi.size() && midi[c] != nullptr)
+        {
+            auto stem = QStringLiteral ("%1 %2").arg (name, trackName (track));
+            stem.replace (QRegularExpression (QStringLiteral ("[/\\\\:*?\"<>|]")), QStringLiteral ("_"));
+            QString file;
+            for (int n = 1; file.isEmpty() || QFileInfo::exists (file); ++n)
+                file = QDir (base).filePath (QStringLiteral ("%1 %2.mid").arg (stem).arg (n));
+            std::string why;
+            if (! midifile::write (*midi[c], file.toStdString(), why))
+            {
+                status->setText (tr ("%1 could not be saved: %2").arg (file, QString::fromStdString (why)));
+                continue;
+            }
+            mixer::Slot like;
+            like.tuning = tuning;
+            loadSlot (track, scene, file, like);
+        }
+        else if ((int) c < files.size() && ! files[(int) c].isEmpty())
+            loadSlot (track, scene, files[(int) c]);
+        else
+            clearSlot (track, scene);
+    }
+    changed();
+    grid->update();
 }
 
 void MixerWindow::sendToLauncher (const QString& file, const QString& trackName, const QColor& colour)

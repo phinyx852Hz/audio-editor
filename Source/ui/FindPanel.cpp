@@ -223,15 +223,20 @@ FindPanel::FindPanel (QWidget* home, QWidget* parent)
     connect (selectorLabel, &QLabel::customContextMenuRequested, this, [this, selectorLabel] (const QPoint& at) { selectorMenu (selectorLabel, at); });
     // The Φ random selector at the end of the Selector line: a click deals one of each
     // colour's favourite files (to the clip launcher when it is shown, else onto the
-    // mixer's tracks), Shift+click deals again in place of the last deal, right-click chooses.
+    // mixer's tracks), Shift+click deals again in place of the last deal, Ctrl+click composes a
+    // whole Architectonics song from the favourites into the launcher, right-click chooses.
     auto* dealButton = new PhiButton (tr ("Φ random selector"), side, false);
     dealButton->setToolTip (tr ("Φ random selector: deals one of each colour's favourite sounds, picked by the golden ratio, "
                                 "into a new scene of the clip launcher (when it is shown) or onto the mixer's tracks. "
-                                "Again for another combination; Shift+click replaces the last deal; right-click to choose where"));
+                                "Again for another combination; Shift+click replaces the last deal; Ctrl+click composes a whole song "
+                                "by Architectonics into the clip launcher; right-click to choose where"));
     dealButton->setContextMenuPolicy (Qt::CustomContextMenu);
     connect (dealButton, &QToolButton::clicked, this, [this]
     {
-        deal (DealTo::automatic, (QApplication::keyboardModifiers() & Qt::ShiftModifier) != 0);
+        const auto mods = QApplication::keyboardModifiers();
+        if ((mods & Qt::ControlModifier) != 0 && phiCompose)
+            return phiCompose();
+        deal (DealTo::automatic, (mods & Qt::ShiftModifier) != 0);
     });
     connect (dealButton, &QToolButton::customContextMenuRequested, this, [this, dealButton] (const QPoint& at) { dealMenu (dealButton, at); });
     auto* selectorLine = new QHBoxLayout;
@@ -984,7 +989,7 @@ void FindPanel::saveSelector() const
                                                  { QStringLiteral ("sets"), list } }).toJson());
 }
 
-void FindPanel::deal (DealTo target, bool again)
+FindPanel::DealPick FindPanel::pickDeal()
 {
     // Each colour's favourites in the set shown, by kind (sorted, so a deal number always
     // means the same pick), then one of each by phi::deal.
@@ -1024,29 +1029,33 @@ void FindPanel::deal (DealTo target, bool again)
         }
         return picked;
     };
-    QStringList names;
-    QList<QColor> colours;
+    DealPick out;
     for (int c = 0; c < numColours; ++c)
     {
-        names.push_back (markName (setIndex, c));
-        colours.push_back (colour (c));
+        out.names.push_back (markName (setIndex, c));
+        out.colours.push_back (colour (c));
     }
-    auto none = [] (const QStringList& l) { return std::all_of (l.begin(), l.end(), [] (const QString& v) { return v.isEmpty(); }); };
-
-    const auto pickedFiles = pick (files, 0.0);
-    const auto pickedInstruments = pick (instruments, phi::inverse);
-    const auto pickedEffects = pick (effects, phi::inverse * phi::inverse);
-    // With only effects marked, the deal is a Prism.
-    if (target == DealTo::automatic && none (pickedFiles) && none (pickedInstruments) && ! none (pickedEffects))
-        target = DealTo::prism;
+    out.files = pick (files, 0.0);
+    out.instruments = pick (instruments, phi::inverse);
+    out.effects = pick (effects, phi::inverse * phi::inverse);
     ++deals;
+    return out;
+}
+
+void FindPanel::deal (DealTo target, bool again)
+{
+    const auto p = pickDeal();
+    auto none = [] (const QStringList& l) { return std::all_of (l.begin(), l.end(), [] (const QString& v) { return v.isEmpty(); }); };
+    // With only effects marked, the deal is a Prism.
+    if (target == DealTo::automatic && none (p.files) && none (p.instruments) && ! none (p.effects))
+        target = DealTo::prism;
     if (target == DealTo::prism)
     {
         if (phiPrism)
-            phiPrism (pickedEffects, names, colours);
+            phiPrism (p.effects, p.names, p.colours);
     }
     else if (phiDeal)
-        phiDeal (pickedFiles, pickedInstruments, names, colours, target, again);
+        phiDeal (p.files, p.instruments, p.names, p.colours, target, again);
 }
 
 void FindPanel::dealMenu (QWidget* on, const QPoint& at)
@@ -1057,6 +1066,8 @@ void FindPanel::dealMenu (QWidget* on, const QPoint& at)
     menu.addAction (tr ("Φ Deal a &Prism of Effects (Device Chain)"), this, [this] { deal (DealTo::prism, false); });
     menu.addSeparator();
     menu.addAction (tr ("Deal &Again in Place of the Last (Shift+Click)"), this, [this] { deal (DealTo::automatic, true); });
+    if (phiCompose)
+        menu.addAction (tr ("Φ &Compose a Song by Architectonics (Ctrl+Click)"), this, [this] { phiCompose(); });
     menu.exec (on->mapToGlobal (at));
 }
 

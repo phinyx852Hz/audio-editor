@@ -159,6 +159,24 @@ public:
     // The clip launcher in the upper area, or the tracks across time.
     void showLauncher (bool on);
     bool launcherShown() const;
+    // Architectonics (owner, 2026-10-29): the clips in each of the launcher's scenes shown,
+    // scene 0 first, and a scene's name ("Scene n" until renamed).
+    std::vector<int> sceneClips() const;
+    QString sceneName (int scene) const;
+    // Its Compose a Song: the track for each Selector colour wanted, as the Φ deal gives them
+    // (added, named and coloured when missing), with the colour's instrument loaded when it has
+    // one; -1 for a colour not wanted. The first of `count` scenes in a row empty on every
+    // track (-1: not that many left). And one scene of the song: on each colour's track its
+    // MIDI (in `tuning`), else its file, else nothing; the scene named `name`.
+    std::vector<int> colourTracks (const QStringList& names, const QList<QColor>& colours, const std::vector<bool>& wanted,
+                                   const QStringList& instruments);
+    int emptyScenes (int count) const;
+    // Its Compose a Score: the score opened in the MIDI editor (the staff view there, once it
+    // has one), played on the selected track; kept, it goes on a new track (else the selected
+    // one) from the start, the track tuned to `tuning`.
+    void openScore (const midifile::Song& score, mixer::TuningChoice tuning, const QString& title);
+    void composeScene (int scene, const std::vector<int>& tracks, const QStringList& files,
+                       const std::vector<midifile::SongPtr>& midi, mixer::TuningChoice tuning, const QString& name);
     // A file chosen in the Find panel's Selector: into the first empty slot of the track with
     // that name (else that colour, else the selected track), and the mixer follows it there.
     void sendToLauncher (const QString& path, const QString& trackName, const QColor& colour);
@@ -529,7 +547,6 @@ private:
     // length and reversal, a length of 0 for the whole file).
     void loadSlot (int track, int scene, const QString& path, mixer::Slot like = {}, const QString& midiLayer = {});
     mixer::MidiClipPtr launcherMidi (midifile::SongPtr, const std::string& path) const;   // whole bars long
-    QString sceneName (int scene) const;
     void editSlot (int track, int scene, const std::function<void (mixer::Slot&)>& edit);
     void clearSlot (int track, int scene);
     int firstEmptyScene (int track) const;
