@@ -4,6 +4,7 @@
 #include "../core/Phi.h"
 #include "../core/PhiChorus.h"
 #include "../core/PhiDynamics.h"
+#include "../core/PhiModulation.h"
 #include "../core/PhiPhaser.h"
 
 #include <algorithm>
@@ -1522,6 +1523,304 @@ namespace
         juce::AudioParameterChoice* voices = nullptr;
         phi::Chorus core;
     };
+    //==========================================================================
+    // Φ Modulation (core/PhiModulation.h): Flow, the sequence engine, and three effects that
+    // follow it, Space (a spectral remap), Grain (granular texture) and Matrix (an effect
+    // network whose routing changes), in that order, each with its own mix. Its window
+    // has a page for each; the card shows Flow's rate, ratio and mode and the three mixes.
+    class PhiModulationProcessor final : public MasteringEffect
+    {
+    public:
+        static constexpr const char* identifier = "phinyx:phi-modulation";
+
+        // The parameters, in the order the card and the pages use them.
+        enum Index
+        {
+            flowRate, ratio, mode, spaceMix, grainMix, matrixMix, shape, jitter, seed, smooth,
+            spaceRatio, anchor, blend, partials, tilt, spaceFlow,
+            density, size, spread, pitch, grainWidth, grainFlow, freeze,
+            events, time, feedback, tone, drive, glide, matrixWidth, matrixFlow,
+            page, numParameters
+        };
+
+        PhiModulationProcessor() : MasteringEffect ("PHI_MODULATION")
+        {
+            auto ranged = [this] (Index i, const char* id, const char* name, juce::NormalisableRange<float> range, float initial,
+                                  juce::AudioParameterFloatAttributes attributes)
+            {
+                auto p = std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { id, 1 }, name, range, initial, attributes);
+                floats[(size_t) i] = p.get();
+                addHostedParameter (std::move (p));
+            };
+            auto share = [&] (Index i, const char* id, const char* name, float initial, float most = 100.0f)
+            {
+                ranged (i, id, name, juce::NormalisableRange<float> (0.0f, most, 0.1f), initial, percent());
+            };
+            auto choice = [this] (Index i, const char* id, const char* name, juce::StringArray items, int initial)
+            {
+                auto p = std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { id, 1 }, name, items, initial);
+                choices[(size_t) i] = p.get();
+                addHostedParameter (std::move (p));
+            };
+
+            ranged (flowRate, "rate", "Flow Rate", skewed (0.01f, 20.0f, 0.001f, 0.5f), 0.1f, number (3, "Hz"));
+            ranged (ratio, "ratio", "Ratio", skewed (1.05f, 4.0f, 0.001f, 1.618f), (float) phi::ratio, number (3, ""));
+            choice (mode, "mode", "Mode", { "Periodic", "Irrational", "Fibonacci", "Hybrid" }, 1);
+            share (spaceMix, "spaceMix", "Space Mix", 0.0f);
+            share (grainMix, "grainMix", "Grain Mix", 38.2f);
+            share (matrixMix, "matrixMix", "Matrix Mix", 23.6f);
+            choice (shape, "shape", "Shape", { "Smooth", "Stepped", "Wave" }, 0);
+            share (jitter, "jitter", "Jitter", 25.0f);
+            share (seed, "seed", "Seed", 0.0f);
+            ranged (smooth, "smooth", "Smooth", skewed (0.0f, 1000.0f, 0.1f, 50.0f), 50.0f, number (1, "ms"));
+
+            ranged (spaceRatio, "spaceRatio", "Space Ratio", skewed (1.05f, 4.0f, 0.001f, 1.618f), (float) phi::ratio, number (3, ""));
+            ranged (anchor, "anchor", "Anchor", skewed (20.0f, 2000.0f, 0.1f, 220.0f), 220.0f, number (1, "Hz"));
+            share (blend, "blend", "Blend", 100.0f);
+            share (partials, "partials", "Partials", 100.0f);
+            ranged (tilt, "tilt", "Tilt", juce::NormalisableRange<float> (-6.0f, 6.0f, 0.1f), 0.0f, number (1, "dB/oct"));
+            share (spaceFlow, "spaceFlow", "Space Flow", 0.0f);
+
+            ranged (density, "density", "Density", skewed (1.0f, 89.0f, 0.1f, 13.0f), 13.0f, number (1, "/s"));
+            ranged (size, "size", "Size", skewed (10.0f, 500.0f, 0.1f, 89.0f), 89.0f, number (1, "ms"));
+            ranged (spread, "spread", "Spread", juce::NormalisableRange<float> (0.0f, 5.0f, 0.01f), 1.0f, number (2, "s"));
+            ranged (pitch, "pitch", "Pitch", juce::NormalisableRange<float> (0.0f, 12.0f, 0.01f), 0.0f, number (2, "st"));
+            share (grainWidth, "grainWidth", "Grain Width", 100.0f);
+            share (grainFlow, "grainFlow", "Grain Flow", 38.2f);
+            {
+                auto p = std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "freeze", 1 }, "Freeze", false);
+                frozen = p.get();
+                addHostedParameter (std::move (p));
+            }
+
+            ranged (events, "events", "Events", skewed (0.05f, 8.0f, 0.001f, 0.5f), 0.382f, number (3, "Hz"));
+            ranged (time, "time", "Time", skewed (10.0f, 1000.0f, 0.1f, 233.0f), 233.0f, number (1, "ms"));
+            share (feedback, "feedback", "Feedback", 61.8f, 95.0f);
+            ranged (tone, "tone", "Tone", skewed (100.0f, 8000.0f, 1.0f, 1000.0f), 1000.0f, number (0, "Hz"));
+            ranged (drive, "drive", "Drive", juce::NormalisableRange<float> (0.0f, 36.0f, 0.1f), 12.0f, number (1, "dB"));
+            ranged (glide, "glide", "Glide", skewed (5.0f, 2000.0f, 0.1f, 89.0f), 89.0f, number (1, "ms"));
+            share (matrixWidth, "matrixWidth", "Matrix Width", 100.0f);
+            share (matrixFlow, "matrixFlow", "Matrix Flow", 50.0f);
+
+            choice (page, "page", "Page", { "Flow", "Space", "Grain", "Matrix" }, 0);
+
+            space.prepare (48000.0, 2);
+            setLatencySamples (space.latency());
+        }
+
+        static juce::PluginDescription description()
+        {
+            return describe (named ("Φ Modulation"), identifier, "Modulation", 0x5048494f);   // "PHIO"
+        }
+        void fillInPluginDescription (juce::PluginDescription& d) const override { d = description(); }
+        const juce::String getName() const override { return named ("Φ Modulation"); }
+        double getTailLengthSeconds() const override { return 2.0 * phi::Matrix::maxDelaySeconds; }
+
+        void prepareToPlay (double sampleRate, int) override
+        {
+            const auto channels = std::max (1, getTotalNumInputChannels());
+            flow.prepare (sampleRate);
+            space.prepare (sampleRate, channels);
+            grain.prepare (sampleRate, channels);
+            matrix.prepare (sampleRate, channels);
+            const auto f = flowSettings();
+            flow.set (f);
+            grain.set (grainSettings(), f);
+            matrix.set (matrixSettings(), f);
+            matrix.reset();
+            setLatencySamples (space.latency());
+        }
+
+        using AudioPluginInstance::processBlock;
+        void processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override
+        {
+            const auto f = flowSettings();
+            flow.set (f);
+            auto* const* channels = buffer.getArrayOfWritePointers();
+            const auto n = buffer.getNumChannels(), frames = buffer.getNumSamples();
+
+            // Playing from the same place plays the same: when the host starts or jumps, Flow
+            // and Matrix's routing move to where they would be that far from the start.
+            bool playing = false;
+            if (auto* head = getPlayHead())
+                if (const auto position = head->getPosition(); position && position->getIsPlaying())
+                    if (const auto seconds = position->getTimeInSeconds(); seconds.hasValue())
+                    {
+                        playing = true;
+                        if (! wasPlaying || std::abs (*seconds - expectedSeconds) > 0.01)
+                        {
+                            flow.locate (*seconds);
+                            matrix.set (matrixSettings(), f);
+                            matrix.locate (*seconds);
+                        }
+                        expectedSeconds = *seconds + frames / std::max (1.0, getSampleRate());
+                    }
+            wasPlaying = playing;
+
+            // Flow output 1 moves Space's blend; 0 and 3 Grain's start and size; 2 Matrix's tone.
+            auto s = spaceSettings();
+            const auto amount = value (spaceFlow) / 100.0;
+            s.blend *= 1.0 - amount + amount * flow.output (1);
+            space.set (s);
+            space.process (channels, n, frames);
+            grain.set (grainSettings(), f);
+            grain.process (channels, n, frames, flow.output (0), flow.output (3));
+            matrix.set (matrixSettings(), f);
+            matrix.process (channels, n, frames, flow.output (2));
+
+            flow.advance (frames);
+            for (int k = 0; k < phi::Flow::numOutputs; ++k)
+                shownPosition[(size_t) k].store (flow.position (k));
+            shownBlend.store (s.blend);
+        }
+
+        DeviceDisplay display() override
+        {
+            DeviceDisplay d;
+            d.pages = { "Flow", "Space", "Grain", "Matrix" };
+            d.pageKnobs = { { flowRate, ratio, mode, shape, jitter, seed, smooth },
+                            { spaceMix, spaceRatio, anchor, blend, partials, tilt, spaceFlow },
+                            { grainMix, density, size, spread, pitch, grainWidth, grainFlow, freeze },
+                            { matrixMix, events, time, feedback, tone, drive, glide, matrixWidth, matrixFlow } };
+            d.pageParameter = page;
+            d.page = std::clamp (choices[page]->getIndex(), 0, 3);
+            const auto f = flowSettings();
+            static const char* modeNames[] { "Periodic", "Irrational", "Fibonacci", "Hybrid" };
+
+            if (d.page == 0)
+            {
+                // The next 13 events of output 1 (gold) and, over the same time, output 2 (grey).
+                d.kind = DeviceDisplay::Kind::curve;
+                const auto slow = std::max (1.0e-6, phi::Flow::outputRate (f, 0));
+                const auto seconds = 13.0 / slow;
+                const auto from0 = shownPosition[0].load(), from1 = shownPosition[1].load();
+                constexpr int points = displayPoints * 2;
+                for (int i = 0; i < points; ++i)
+                {
+                    const auto t = seconds * i / (points - 1);
+                    d.front.push_back ((float) phi::Flow::at (f, 0, from0 + t * slow));
+                    d.back.push_back ((float) phi::Flow::at (f, 1, from1 + t * phi::Flow::outputRate (f, 1)));
+                }
+                d.axis = "the next " + decimal (seconds, seconds < 10.0 ? 1 : 0) + " s";
+                d.caption = std::string (modeNames[(int) f.mode]) + " · ratio " + decimal (phi::Flow::ratioOf (f), 3) + " · outputs at";
+                for (int k = 0; k < phi::Flow::numOutputs; ++k)
+                    d.caption += (k == 0 ? " " : ", ") + decimal (phi::Flow::outputRate (f, k), 3);
+                d.caption += " Hz";
+            }
+            else if (d.page == 1)
+            {
+                // What it hears (grey) and what it makes (gold).
+                d.kind = DeviceDisplay::Kind::frequency;
+                d.lowDb = -90.0f;
+                d.highDb = 0.0f;
+                std::array<float, phi::SpectralSpace::pictureSize> heard {}, made {};
+                space.picture (heard.data(), made.data());
+                d.back.assign (heard.begin(), heard.end());
+                d.front.assign (made.begin(), made.end());
+                auto s = spaceSettings();
+                s.blend = shownBlend.load();
+                const auto a = s.anchorHz;
+                d.caption = hertz (a) + ", " + hertz (2.0 * a) + ", " + hertz (4.0 * a) + " → " + hertz (a) + ", "
+                          + hertz (phi::SpectralSpace::mappedHz (s, 2.0 * a)) + ", " + hertz (phi::SpectralSpace::mappedHz (s, 4.0 * a))
+                          + " · " + std::to_string (space.partialsFound()) + " partials · latency "
+                          + decimal (1000.0 * space.latency() / std::max (1.0, getSampleRate()), 1) + " ms";
+            }
+            else if (d.page == 2)
+            {
+                // The grains playing: how far back each started, and how loud it is now.
+                d.kind = DeviceDisplay::Kind::taps;
+                grain.picture (d.front);
+                const auto g = grainSettings();
+                d.axis = "now to " + decimal (g.spreadSeconds, 2) + " s back";
+                d.caption = decimal (g.density, 1) + " grains/s · " + decimal (g.sizeMs, 0) + " ms · ±" + decimal (g.pitch, 1) + " st"
+                          + (g.freeze ? " · frozen" : "");
+            }
+            else
+            {
+                // The four nodes and how loud each is; the route of the event now.
+                d.kind = DeviceDisplay::Kind::taps;
+                for (int node = 0; node < phi::Matrix::numNodes; ++node)
+                {
+                    d.front.push_back ((node + 0.5f) / phi::Matrix::numNodes);
+                    d.front.push_back (std::clamp (std::sqrt (matrix.level (node)), 0.0f, 1.0f));
+                }
+                d.axis = "Echo · Filter · Drive · Pitch";
+                const auto r = matrix.currentRoute();
+                d.caption = "event " + std::to_string (matrix.currentEvent()) + ": in → " + phi::Matrix::nodeName (r[0]) + " → "
+                          + phi::Matrix::nodeName (r[1]) + " → " + phi::Matrix::nodeName (r[2]) + " ↺";
+            }
+            return d;
+        }
+
+    private:
+        double value (Index i) const { return floats[(size_t) i]->get(); }
+
+        phi::Flow::Settings flowSettings() const
+        {
+            phi::Flow::Settings s;
+            s.mode = (phi::Flow::Mode) std::clamp (choices[mode]->getIndex(), 0, phi::Flow::numModes - 1);
+            s.shape = (phi::Flow::Shape) std::clamp (choices[shape]->getIndex(), 0, phi::Flow::numShapes - 1);
+            s.ratio = value (ratio);
+            s.rateHz = value (flowRate);
+            s.jitter = value (jitter) / 100.0;
+            s.seed = value (seed) / 100.0;
+            s.smoothMs = value (smooth);
+            return s;
+        }
+
+        phi::SpectralSpace::Settings spaceSettings() const
+        {
+            phi::SpectralSpace::Settings s;
+            s.ratio = value (spaceRatio);
+            s.anchorHz = value (anchor);
+            s.blend = value (blend) / 100.0;
+            s.density = value (partials) / 100.0;
+            s.tiltDb = value (tilt);
+            s.mix = value (spaceMix) / 100.0;
+            return s;
+        }
+
+        phi::Grain::Settings grainSettings() const
+        {
+            phi::Grain::Settings s;
+            s.density = value (density);
+            s.sizeMs = value (size);
+            s.spreadSeconds = value (spread);
+            s.pitch = value (pitch);
+            s.width = value (grainWidth) / 100.0;
+            s.flow = value (grainFlow) / 100.0;
+            s.mix = value (grainMix) / 100.0;
+            s.freeze = frozen->get();
+            return s;
+        }
+
+        phi::Matrix::Settings matrixSettings() const
+        {
+            phi::Matrix::Settings s;
+            s.eventsHz = value (events);
+            s.timeMs = value (time);
+            s.feedback = value (feedback) / 100.0;
+            s.toneHz = value (tone);
+            s.driveDb = value (drive);
+            s.glideMs = value (glide);
+            s.width = value (matrixWidth) / 100.0;
+            s.flow = value (matrixFlow) / 100.0;
+            s.mix = value (matrixMix) / 100.0;
+            return s;
+        }
+
+        std::array<juce::AudioParameterFloat*, numParameters> floats {};
+        std::array<juce::AudioParameterChoice*, numParameters> choices {};
+        juce::AudioParameterBool* frozen = nullptr;
+        phi::Flow flow;
+        phi::SpectralSpace space;
+        phi::Grain grain;
+        phi::Matrix matrix;
+        std::array<std::atomic<double>, phi::Flow::numOutputs> shownPosition {};
+        std::atomic<double> shownBlend { 1.0 };
+        bool wasPlaying = false;
+        double expectedSeconds = 0.0;
+    };
 }
 
 namespace phifx
@@ -1532,7 +1831,7 @@ namespace phifx
                  PhiDriftProcessor::description(), PhiPhaserProcessor::description(), PhiRhythmProcessor::description(), PhiResonatorProcessor::description(),
                  PhiStackProcessor::description(), PhiTameProcessor::description(), PhiDeresonatorProcessor::description(),
                  PhiCompressorProcessor::description(), PhiMultibandProcessor::description(), PhiLimiterProcessor::description(),
-                 PhiChorusProcessor::description() };
+                 PhiChorusProcessor::description(), PhiModulationProcessor::description() };
     }
 
     std::unique_ptr<juce::AudioPluginInstance> create (const juce::PluginDescription& d)
@@ -1554,6 +1853,7 @@ namespace phifx
         if (id == PhiMultibandProcessor::identifier)   return std::make_unique<PhiMultibandProcessor>();
         if (id == PhiLimiterProcessor::identifier)     return std::make_unique<PhiLimiterProcessor>();
         if (id == PhiChorusProcessor::identifier)      return std::make_unique<PhiChorusProcessor>();
+        if (id == PhiModulationProcessor::identifier)  return std::make_unique<PhiModulationProcessor>();
         return nullptr;
     }
 }
