@@ -20,9 +20,8 @@ Then: the notation systems belong in Compose too, PHI's own microtonal staff the
   PHI's microtonal staff. The Staff/MIDI toggle switches to the piano roll.
 - **New Score In** opens the same blank score in any other notation: each tradition's own,
   Hindustani sargam (Bhatkhande), Carnatic swaras, jianpu, kepatihan, jeongganbo, Arabic maqam staff,
-  Turkish makam staff (AEU), Persian dastgah staff (koron and sori), or degree numbers. The notation
-  systems are built in the MIDI editor's staff view (PR #85 and the notation work after it). Until
-  that lands, the editor opens on its piano roll.
+  Turkish makam staff (AEU), Persian dastgah staff (koron and sori), or degree numbers: the MIDI
+  editor's staff view and notation::systems() (mixer/Notation.h).
 - **Compose...** is one dialog for all the methods below. Choose the method, the parts (never more
   than eight), about how long, the tempo and the pitches: the Mode menu's mode, or the tradition's
   own tuning. It lists the sections it wrote. **Deal Again** writes the same form with other notes.

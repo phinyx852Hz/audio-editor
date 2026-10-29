@@ -11364,9 +11364,7 @@ std::vector<int> MixerWindow::colourTracks (const QStringList& names, const QLis
 void MixerWindow::openScore (const midifile::Song& score, mixer::TuningChoice tuning, const QString& title, const QString& notation)
 {
     MidiEditor::Host host;
-    // The staff thread's MidiEditor::Host::notation takes `notation` once it lands (PR #85 and the
-    // notation systems); until then the editor opens on its piano roll and its Staff toggle.
-    (void) notation;
+    host.notation = notation;
     host.play = [this] (uint8_t s, uint8_t a, uint8_t b) { engine.liveMidi (s, a, b, false); };
     host.system = tuning.system;
     host.root = tuning.root;

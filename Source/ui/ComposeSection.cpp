@@ -13,6 +13,7 @@
 #include "Settings.h"
 #include "../mixer/Compose.h"
 #include "../mixer/MixerEngine.h"
+#include "../mixer/Notation.h"
 #include "../mixer/Tunings.h"
 
 #include <QComboBox>
@@ -43,22 +44,6 @@ namespace
         { "africa", "A&frica" },
     };
 
-    // The notation systems the MIDI editor's staff can open on (the notation thread's
-    // notation::systems(), mixer/Notation.h), PHI's microtonal staff first and the default.
-    struct NotationChoice { const char* id; const char* title; };
-    const std::vector<NotationChoice> notations {
-        { "phi", "PHI Microtonal Staff" },
-        { "tradition", "Each Tradition's Own" },
-        { "bhatkhande", "Hindustani Sargam (Bhatkhande)" },
-        { "carnatic", "Carnatic Swaras" },
-        { "jianpu", "Jianpu (Numbered)" },
-        { "kepatihan", "Kepatihan (Gamelan)" },
-        { "jeongganbo", "Jeongganbo (Korean)" },
-        { "arabic", "Arabic Maqam Staff" },
-        { "turkish", "Turkish Makam Staff (AEU)" },
-        { "persian", "Persian Dastgah Staff (Koron and Sori)" },
-        { "degrees", "Degree Numbers" },
-    };
 
     // The pitches a method composes in: the Mode menu's mode on its final (ModeSection.cpp keeps
     // them), or a tradition's own tuning on the same final; and what the PHI synth plays it in.
@@ -187,10 +172,10 @@ void MainWindow::fillComposeMenu (QMenu* menu)
     menu->addAction (commands.action (QStringLiteral ("compose.newScore")));
     auto* in = menu->addMenu (tr ("New Score &In"));
     in->setToolTipsVisible (true);
-    for (const auto& n : notations)
+    for (const auto& n : notation::systems())   // PHI's microtonal staff first, the default
     {
-        auto* a = in->addAction (QString::fromUtf8 (n.title) + QStringLiteral ("..."));
-        const auto id = QString::fromLatin1 (n.id);
+        auto* a = in->addAction (QString::fromStdString (n.title) + QStringLiteral ("..."));
+        const auto id = QString::fromStdString (n.id);
         connect (a, &QAction::triggered, this, [this, id] { newMicrotonalScore (id); });
         if (id == QLatin1String ("phi"))
             in->addSeparator();
