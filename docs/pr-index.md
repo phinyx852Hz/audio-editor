@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**81 pull requests:** 81 merged, 0 open.
+**82 pull requests:** 81 merged, 1 open.
 
 ## Contents
 
@@ -41,6 +41,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#77](https://github.com/phinyx852Hz/audio-editor/pull/77) | Slicer: a 128-pad drum machine with layers and sounds of their own | merged |  | `Source/ui/SlicerWindow.cpp`<br>`Source/sampler/SlicerEngine.cpp`<br>`Source/ui/SlicerKit.cpp` |
 | [#79](https://github.com/phinyx852Hz/audio-editor/pull/79) | Slicer phase 2: step sequencer (Cubase Pattern Editor / FL Studio Channel Rack) | merged |  | `Source/ui/StepSequencerView.cpp`<br>`Source/sampler/SlicerEngine.cpp`<br>`Source/ui/StepSequencerView.h` |
 | [#80](https://github.com/phinyx852Hz/audio-editor/pull/80) | MIDI editor: rising spectrum, scale wheel, pitch curves and ornaments, tuning changes, hum to notes, MTS-ESP | merged |  | `Source/ui/MidiEditor.cpp`<br>`Source/mixer/NoteEditor.cpp`<br>`tests/CoreTests.cpp` |
+| [#82](https://github.com/phinyx852Hz/audio-editor/pull/82) | Add a Research menu (placeholder) between Repair and Spatial | open |  | `Source/ui/MainWindow.cpp` |
 
 ### Analysis and meters
 
@@ -266,3 +267,4 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#79](https://github.com/phinyx852Hz/audio-editor/pull/79) | Slicer phase 2: step sequencer (Cubase Pattern Editor / FL Studio Channel Rack) | Phase 2 of the Slicer plan: a step sequencer that plays the kit's pads. *(auto)* | merged | 2026-10-28 | Editing and warping |
 | [#80](https://github.com/phinyx852Hz/audio-editor/pull/80) | MIDI editor: rising spectrum, scale wheel, pitch curves and ornaments, tuning changes, hum to notes, MTS-ESP | The second stage of the MIDI editor (#68), with every item the owner asked for in the thread. *(auto)* | merged | 2026-10-28 | Editing and warping |
 | [#81](https://github.com/phinyx852Hz/audio-editor/pull/81) | Rhythms: the iqāʿāt of Maqam World's index, and kuku | Adds the 37 iqāʿāt from Maqam World's index that the library didn't have yet. *(auto)* | merged | 2026-10-28 | Modes, tunings and composition |
+| [#82](https://github.com/phinyx852Hz/audio-editor/pull/82) | Add a Research menu (placeholder) between Repair and Spatial | Adds a top-level Research menu to the menu bar, in alphabetical place after Repair and before Spatial (the order from #74). *(auto)* | open | 2026-10-29 | Editing and warping |
