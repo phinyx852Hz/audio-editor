@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**90 pull requests:** 84 merged, 6 open.
+**90 pull requests:** 85 merged, 5 open.
 
 ## Contents
 
@@ -77,7 +77,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#45](https://github.com/phinyx852Hz/audio-editor/pull/45) | Mixer: Paulstretch on clips, Finder/Inspector column, fixed Device Chain, editor round trip | merged | Mixer, clip Inspector, Audio Clip section | `Source/ui/MixerWindow.cpp`<br>`Source/ui/ExtremeSettings.h`<br>`Source/ui/MixerSection.cpp` |
 | [#51](https://github.com/phinyx852Hz/audio-editor/pull/51) | Mixer: recording into slots and onto the timeline, live looping, audio and MIDI layers, and a full transport | merged | Mixer and Clip Launcher, Record (Ctrl+R) | `Source/mixer/Recording.cpp`<br>`Source/ui/MixerRecording.cpp`<br>`docs/recording.md` |
 | [#61](https://github.com/phinyx852Hz/audio-editor/pull/61) | Editor Track: one track of the project under the editor's waveform | merged | Mixer menu, Editor Track (Shift+F4) | `Source/ui/MixerWindow.cpp`<br>`Source/ui/MixerSection.cpp`<br>`docs/editor-track.md` |
-| [#84](https://github.com/phinyx852Hz/audio-editor/pull/84) | Architectonics: golden-ratio sets and Compose a Song for the clip launcher | open |  | `Source/ui/ArchitectonicsSection.cpp`<br>`Source/mixer/Architectonics.cpp`<br>`docs/architectonics.md` |
+| [#84](https://github.com/phinyx852Hz/audio-editor/pull/84) | Architectonics: golden-ratio sets and Compose a Song for the clip launcher | merged |  | `Source/ui/ArchitectonicsSection.cpp`<br>`Source/mixer/Architectonics.cpp`<br>`docs/architectonics.md` |
 
 ### Routing and racks
 
@@ -277,7 +277,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#81](https://github.com/phinyx852Hz/audio-editor/pull/81) | Rhythms: the iqāʿāt of Maqam World's index, and kuku | Adds the 37 iqāʿāt from Maqam World's index that the library didn't have yet. *(auto)* | merged | 2026-10-28 | Modes, tunings and composition |
 | [#82](https://github.com/phinyx852Hz/audio-editor/pull/82) | Research menu: curated references on the ideas behind PHI | Adds a top-level Research menu, in alphabetical place after Repair and before Spatial (the order from #74). *(auto)* | merged | 2026-10-29 | Interface and branding |
 | [#83](https://github.com/phinyx852Hz/audio-editor/pull/83) | Mode: add a harmony submenu | Adds Mode ▸ harmony, in lower case like melody, tuning and rhythm. *(auto)* | merged | 2026-10-29 | Modes, tunings and composition |
-| [#84](https://github.com/phinyx852Hz/audio-editor/pull/84) | Architectonics: golden-ratio sets and Compose a Song for the clip launcher | This adds an Architectonics menu to the menu bar, between Analyze and Master. *(auto)* | open | 2026-10-29 | Mixer and clip launcher |
+| [#84](https://github.com/phinyx852Hz/audio-editor/pull/84) | Architectonics: golden-ratio sets and Compose a Song for the clip launcher | This adds an Architectonics menu to the menu bar, between Analyze and Master. *(auto)* | merged | 2026-10-29 | Mixer and clip launcher |
 | [#85](https://github.com/phinyx852Hz/audio-editor/pull/85) | MIDI editor: microtonal staff notation, from Xen Tuner's notations | The MIDI editor gets a staff notation view in the piano roll's place. *(auto)* | open | 2026-10-29 | Editing and warping |
 | [#86](https://github.com/phinyx852Hz/audio-editor/pull/86) | Compose menu: every compositional method in PHI, plus 15 more from Western and other traditions | Built on #84, which is why it is based on #84's branch. *(auto)* | open | 2026-10-29 | Interface and branding |
 | [#87](https://github.com/phinyx852Hz/audio-editor/pull/87) | MIDI editor: sargam, Carnatic swaras, jianpu, not angka, jeongganbo and maqam/makam/dastgah key signatures | 1. *(auto)* | open | 2026-10-29 | Editing and warping |
