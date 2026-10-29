@@ -161,6 +161,21 @@ namespace harmony
                    "stacked perfect fourths; the fourth chord and its inversions",
                    "Schoenberg, Kammersymphonie Op. 9 (1906); Hindemith, Unterweisung im Tonsatz (1937); Persichetti, Twentieth-Century Harmony (1961)", "", 66.0,
                    chords ({ "1", "2", "3", "4" }, planed ({ 0, 5, 10, 15 }, { { 0, 2 }, { 2, 2 }, { 5, 2 }, { 0, 2 } })) });
+            add ({ "modal harmony", "modal harmony", P::western, "twentieth century", "the modal revival, modal jazz and after", "c. 1890–", 1890, "chordal",
+                   "Chords built from a mode rather than a major or minor key, so the mode's own colour stays: the ear is held on its "
+                   "root by staying on the tonic chord or a pedal, the V–I cadence that would turn it back into major or minor is "
+                   "avoided, chords move by step rather than by fifth, and the chords chosen carry the mode's characteristic note "
+                   "(dorian's raised sixth, mixolydian's flat seventh, lydian's raised fourth, phrygian's flat second) without a "
+                   "tritone that would make them sound dominant. Quartal voicings keep it open. From Debussy, Fauré and Vaughan "
+                   "Williams's modal revival to Kind of Blue, My Favorite Things, Impressions and Footprints, and the ♭VII–I of rock "
+                   "and the dorian vamps of film scores. (Mode ▸ jazz has its quartal side; Renaissance modal counterpoint is the older, "
+                   "separate sense.) The example plays each mode on the same final over a pedal.",
+                   "dorian i–IV, mixolydian I–♭VII, lydian I–II, phrygian i–♭II; pedals; stacked fourths",
+                   "Pease, Jazz Composition: Theory and Practice (Berklee Press, 2003); Persichetti, Twentieth-Century Harmony (1961); "
+                   "Miller, Modal Jazz Composition and Harmony (1996); Berklee Online, 'Modal Harmony in Jazz Composition'; My New "
+                   "Microphone, Hub Guitar, Chromatone and Audiofanzine guides to modal harmony; Davis, So What (1959)", "", 76.0,
+                   { line ("pedal", "0:16"), line ("lower", "3:2 5:2 4:2 2:2 4:2 2:2 3:2 1:2"), line ("middle", "7:2 9:2 7:2 5:2 7:2 6:2 7:2 5:2"),
+                     line ("upper", "10:2 12:2 12:2 10:2 11:2 9:2 12:2 8:2") } });
             add ({ "pandiatonicism", "pandiatonicism", P::western, "twentieth century", "Aaron Copland (1900–1990)", "1930s–1940s", 1900, "chordal",
                    "Every note of a diatonic scale free to sound with every other, without functional progression: the open, added-note "
                    "sound of Copland's Appalachian Spring and Stravinsky's neoclassicism. Slonimsky's term.",
