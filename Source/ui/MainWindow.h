@@ -453,6 +453,11 @@ private:
     // Its rhythmic modes (RhythmSection.cpp, docs/rhythms.md): a rhythm put on the selected
     // mixer track, written into a new Tracker pattern, or saved as a MIDI file.
     void fillRhythmMenu (QMenu*);
+    // Its harmony (HarmonySection.cpp, docs/harmony.md): the ways voices sound together, from
+    // Western art music, jazz, the world's traditions and those grown from meeting Western
+    // harmony, each with an example for the mixer or a MIDI file.
+    void fillHarmonyMenu (QMenu*);
+    void useHarmony (int index);
     void useRhythm (const rhythm::Rhythm&);
     void useRhythmAs (const rhythm::Rhythm&, int choice, int cycles, double bpm);   // 0 mixer, 1 tracker, 2 file, 3 generator
     void rhythmToTracker (const rhythm::Rhythm&, int cycles, double bpm);

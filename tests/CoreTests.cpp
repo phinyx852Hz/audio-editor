@@ -18,6 +18,7 @@
 #include "../Source/mixer/MixerEngine.h"
 #include "../Source/mixer/DrumsToMidi.h"
 #include "../Source/mixer/Rhythms.h"
+#include "../Source/mixer/Harmonies.h"
 #include "../Source/mixer/RhythmGenerator.h"
 #include "../Source/mixer/Stochastic.h"
 #include "../Source/mixer/Serial.h"
@@ -5117,6 +5118,45 @@ namespace
         }
     }
 
+    // The Mode menu's harmony (owner, 2026-10-29): every example playable, its tuning known, each
+    // part's groups in order, jazz its own part, and the example written as a MIDI file.
+    void testHarmonies()
+    {
+        const auto& all = harmony::harmonies();
+        bool ok = all.size() >= 60, tunings = true, lower = true;
+        std::set<std::string> plains;
+        for (const auto& h : all)
+        {
+            if (! harmony::valid (h))
+                std::printf ("  invalid harmony example: %s\n", h.name.c_str());
+            ok = ok && harmony::valid (h) && plains.insert (h.plain).second && ! h.about.empty() && ! h.source.empty() && ! h.tradition.empty();
+            tunings = tunings && (h.tuning.empty() || mixer::findTuning (h.tuning) >= 0);
+            lower = lower && std::none_of (h.name.begin(), h.name.end(), [] (char c) { return c >= 'A' && c <= 'Z'; });
+        }
+        check (ok && tunings && lower, "harmony: every example valid and named once in lower case, its tuning known");
+
+        size_t listed = 0;
+        for (auto p : { harmony::Part::western, harmony::Part::jazz, harmony::Part::world, harmony::Part::meeting })
+            for (const auto& g : harmony::groups (p))
+                listed += harmony::inGroup (p, g).size();
+        const auto western = harmony::groups (harmony::Part::western);
+        check (listed == all.size() && harmony::groups (harmony::Part::jazz).size() == 1 && ! western.empty() && western.front() == "middle ages"
+               && harmony::groupTitle (harmony::Part::world, "west asia") == "West Asia" && harmony::findHarmony ("georgian polyphony") >= 0
+               && harmony::findHarmony ("sacred harp") >= 0,
+               "harmony: every one in a group, jazz its own part, the eras in order");
+
+        const auto& organum = all[(size_t) harmony::findHarmony ("parallel organum")];
+        const auto song = harmony::toSong (organum, 50, 2, 60.0);
+        int ons = 0;
+        for (const auto& e : song->events)
+            ons += e.kind() == 0x90 ? 1 : 0;
+        std::string why;
+        const auto bytes = midifile::bytes (*song);
+        auto back = midifile::parse (bytes.data(), bytes.size(), why);
+        check (ons == 2 * 14 && song->lastTick == 2 * 9 * 480 && back != nullptr && back->noteCount() == ons,
+               "harmony: the example as a MIDI file, a channel a voice, repeated");
+    }
+
     // The atlas (owner, 2026-10-27): the research's systems, each placed under its region
     // and its people or culture, non-octave scales, and the built-in Synth playing a tuning.
     void testModeAtlas()
@@ -8390,6 +8430,7 @@ int main()
     testSitar();
     testTunings();
     testModeAtlas();
+    testHarmonies();
     testScala();
     testNoteEditor();
     testCounterpoint();
