@@ -64,6 +64,7 @@ target_sources(${APP_ID} PRIVATE
     Source/mixer/Serial.cpp
     Source/mixer/Rhythms.cpp
     Source/mixer/Architectonics.cpp
+    Source/mixer/Harmonies.cpp
     Source/mixer/RhythmGenerator.cpp
     Source/mixer/Minimalize.cpp
     Source/mixer/Instruments.cpp
@@ -192,6 +193,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/ModeAtlas.cpp
     Source/ui/RhythmSection.cpp
     Source/ui/ArchitectonicsSection.cpp
+    Source/ui/HarmonySection.cpp
     Source/ui/RhythmGeneratorDialog.cpp
     Source/ui/StochasticSection.cpp
     Source/ui/CubifySection.cpp
@@ -213,6 +215,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/MacroSection.cpp
     Source/ui/Macros.cpp
     Source/ui/ToolsSection.cpp
+    Source/ui/ResearchSection.cpp
     Source/ui/AmbiDialogs.cpp
     Source/ui/AmbiScene.cpp
     Source/ui/AmbiStudio.cpp
@@ -359,6 +362,8 @@ if(PHI_HAVE_PROJECTM)
     target_link_libraries(${APP_ID} PRIVATE phi_projectm)
 endif()
 install(FILES "${PHI_DEFAULT_HRTF}" DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/hrtf")
+# The Research menu's references (Source/ui/ResearchSection.cpp).
+install(DIRECTORY share/research/ DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/research" FILES_MATCHING PATTERN "*.md")
 
 # A web page behind PHI (Visualizer > Web Page) needs Qt WebEngine, a built-in Chromium of a
 # few hundred MB. It is built when Qt WebEngine is installed (qt6-webengine), unless turned off.
@@ -446,6 +451,7 @@ if(PHI_BUILD_TESTS)
         Source/mixer/Serial.cpp
         Source/mixer/Rhythms.cpp
         Source/mixer/Architectonics.cpp
+    Source/mixer/Harmonies.cpp
         Source/mixer/RhythmGenerator.cpp
         Source/mixer/Minimalize.cpp
         Source/mixer/Instruments.cpp

@@ -442,6 +442,13 @@ case, in proper transliteration):
   3 to 7. They are also in the MIDI Clip section's mode list.
 - Kept in settings.ini as mode/system (the plain name), mode/final, mode/hypo and mode/equal.
   Code: ui/ModeSection.cpp, mixer::modeKeys, midifile::toKeys.
+- **harmony** (owner, 2026-10-29) holds 75 ways voices sound together: Western art music by era,
+  **jazz**, the world's multipart traditions by region (Georgian, Sardinian, Albanian and
+  Lithuanian singing, Central African polyphony, gamelan layering, xöömei, drones and more) and
+  those grown from meeting Western harmony (shape-note singing, Black American choral harmony,
+  barbershop, isicathamiya, highlife, bossa nova...). Picking one shows what it is and its
+  sources, and adds a short example to the selected track as a MIDI clip or saves it as a MIDI
+  file. See [harmony.md](harmony.md).
 - **rhythm** (owner, 2026-10-26; renamed from "rhythmic modes" 2026-10-27) holds 121 rhythms: North Indian tāls, South Indian tāḷams,
   breakbeats, trap, the medieval rhythmic modes, and Caribbean, South American, West and North
   African, West Asian and Korean rhythms, by region, and **my breaks**, your own drum loops transcribed from
@@ -625,7 +632,7 @@ could be applied on the clip level, track level or scene level"):
   scene under the launcher's cursor, and for the clip in the slot under it. A track plays in its
   launched clip's tuning, else that scene's, else its own; with none it is 12-TET. The section says
   which tuning the track plays in now.
-- The systems (`Source/mixer/Tunings.h`): 175 Hindustani ragas in just intonation (five-limit
+- The systems (`Source/mixer/Tunings.h`): 176 Hindustani ragas in just intonation (five-limit
   ratios, with Pythagorean komal svaras where the raga sings them low: darbārī's ga and dha, the other kānaḍās' ga,
   toḍī's and bhairav's re and dha), and each of them again equal tempered; the six church modes and six hypo-modes in Pythagorean tuning
   (a hypo-mode's root is the bottom of its range, a fourth below the final); 13 jazz modes; Messiaen's
