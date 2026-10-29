@@ -54,6 +54,7 @@
 #include "../Source/core/PhiDynamics.h"
 #include "../Source/core/PhiChorus.h"
 #include "../Source/core/PhiModulation.h"
+#include "../Source/core/Modulators.h"
 #include "../Source/core/PluginMeasure.h"
 #include "../Source/core/PhiForensics.h"
 #include "../Source/control/ControlSurface.h"
@@ -4952,6 +4953,112 @@ namespace
         }
     }
 
+    // The modulator rack: every kind stays within 0..1, plays the same twice, and does its job.
+    void testModulatorRack()
+    {
+        const double rate = 48000.0;
+        auto near = [] (double a, double b, double tolerance) { return std::abs (a - b) <= tolerance; };
+        using modrack::Kind;
+
+        std::vector<modrack::Modulator> all;
+        for (int k = 0; k < modrack::numKinds; ++k)
+            all.push_back (modrack::make ((Kind) k));
+        all[(size_t) Kind::sampleHold].values[0] = 1.0f;   // Sample & Hold catches the LFO
+        all[(size_t) Kind::shaper].values[0] = 1.0f;
+        all[(size_t) Kind::crossfader].values[0] = 1.0f;
+        all[(size_t) Kind::crossfader].values[1] = 4.0f;
+        all[(size_t) Kind::random].values[2] = 0.3f;
+
+        std::vector<float> noise (modrack::chunk);
+        auto run = [&] (std::vector<std::vector<float>>& out)
+        {
+            modrack::Rack rack;
+            rack.prepare (rate);
+            rack.set (all);
+            out.assign (all.size(), {});
+            for (int block = 0; block < 4000; ++block)
+            {
+                for (int i = 0; i < modrack::chunk; ++i)
+                    noise[(size_t) i] = block % 400 < 40 ? (float) (0.5 * std::sin (0.05 * (block * modrack::chunk + i))) : 0.0f;
+                const float* in[] { noise.data() };
+                rack.process (in, 1, modrack::chunk);
+                for (size_t m = 0; m < all.size(); ++m)
+                    out[m].push_back (rack.value ((int) m));
+            }
+        };
+        std::vector<std::vector<float>> a, b;
+        run (a);
+        run (b);
+        bool inside = true, moves = true;
+        for (size_t m = 0; m < a.size(); ++m)
+        {
+            float low = 1.0f, high = 0.0f;
+            for (const auto v : a[m])
+            {
+                inside = inside && v >= 0.0f && v <= 1.0f;
+                low = std::min (low, v);
+                high = std::max (high, v);
+            }
+            if ((Kind) m != Kind::macro)
+                moves = moves && high - low > 0.1f;
+        }
+        check (inside && a == b, "modulators stay within 0 to 1 and play the same twice");
+        check (moves, "every modulator but the macro moves");
+
+        // The LFO: a sine from 0, at the top half a cycle in.
+        {
+            modrack::Rack rack;
+            rack.prepare (rate);
+            rack.set ({ modrack::make (Kind::lfo) });
+            for (int i = 0; i < (int) (0.5 * rate) / modrack::chunk; ++i)
+                rack.process (nullptr, 0, modrack::chunk);
+            check (rack.value (0) > 0.99f, "modulator lfo: a 1 Hz sine is at its top after half a second");
+        }
+        // Random at full déjà vu... at the middle: the loop of Length values comes round again.
+        {
+            auto r = modrack::make (Kind::random);
+            r.values[2] = 0.5f;   // déjà vu: locked
+            r.values[3] = 4.0f;   // length 5
+            r.values[1] = 0.0f;   // no smoothing
+            r.values[0] = 10.0f;
+            modrack::Rack rack;
+            rack.prepare (rate);
+            rack.set ({ r });
+            std::vector<float> events;
+            float last = -1.0f;
+            for (int i = 0; i < 4000 && events.size() < 20; ++i)
+            {
+                rack.process (nullptr, 0, modrack::chunk);
+                if (rack.value (0) != last)
+                    events.push_back (last = rack.value (0));
+            }
+            bool loops = events.size() >= 15;
+            for (size_t i = 5; i < events.size(); ++i)
+                loops = loops && events[i] == events[i - 5];
+            check (loops, "modulator random: deja vu at the middle replays a loop of its length");
+        }
+        // Φ Flow gives Flow's own sequence.
+        {
+            auto f = modrack::make (Kind::phiFlow);
+            f.values[0] = 2.0f;
+            modrack::Rack rack;
+            rack.prepare (rate);
+            rack.set ({ f });
+            const int blocks = 3000;
+            for (int i = 0; i < blocks; ++i)
+                rack.process (nullptr, 0, modrack::chunk);
+            phi::Flow::Settings s;
+            s.rateHz = 2.0;
+            check (near (rack.value (0), phi::Flow::at (s, 0, 2.0 * blocks * modrack::chunk / rate), 1.0e-4), "modulator phi flow follows phi::Flow");
+        }
+        // Routes set within 0..1 between their ends.
+        modrack::Route route;
+        route.low = 0.8f;
+        route.high = 0.2f;
+        check (near (modrack::routed (route, 0.0f), 0.8, 1.0e-6) && near (modrack::routed (route, 0.5f), 0.5, 1.0e-6)
+               && near (modrack::routed (route, 1.0f), 0.2, 1.0e-6), "modulator routes run from low to high, either way round");
+    }
+
     // The PHI synth's tuning (keys to pitches, sent as MIDI Tuning Standard) and MPE.
     void testPhiTuning()
     {
@@ -8572,6 +8679,7 @@ int main()
     testPhiDynamics();
     testPhiChorus();
     testPhiModulation();
+    testModulatorRack();
     testPhiVoice();
     testPhiPhaser();
     testPhiTuning();

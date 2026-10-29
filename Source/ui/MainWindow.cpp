@@ -51,6 +51,7 @@
 #include "../engine/VampHost.h"
 #include "MasterAssistant.h"
 #include "MasterPanel.h"
+#include "ModulatorsPanel.h"
 #include "Panels.h"
 #include "QuantizePanel.h"
 #include "RecordDialog.h"
@@ -698,6 +699,8 @@ void MainWindow::registerCommands()
          [this] { if (requireSelection()) waveform->zoomToSelection(); });
     add ("view.chain", Category::master, tr ("Device &Chain"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_C) },
          [this] { chainPanel->toggle(); });
+    add ("view.modulators", Category::master, tr ("&Modulators"), {}, [this] { modulatorsPanel->toggle(); lastPanel = modulatorsPanel; });
+    commands.action (QStringLiteral ("view.modulators"))->setStatusTip (tr ("The modulator rack: LFOs, followers, steps, random and Φ Flow moving any parameter of the Device Chain's plugins"));
     add ("view.find", Category::view, tr ("&Find..."), { KS (Qt::CTRL | Qt::Key_F) }, [this]
     {
         // The mixer in the editor's place: the Finder and the Inspector take turns.
@@ -905,7 +908,7 @@ void MainWindow::buildMenus()
                                "process.fadeShape.linear", "process.fadeShape.equalPower", "process.fadeShape.exponential",
                                "process.fadeShape.sCurve", "-", "process.reverse", "process.invert", "process.dcOffset", "-", "process.stereoize", "process.midSide", "process.convert" } },
         { tr ("&Analyze"),   { "analyze.loudness", "-", "analyze.beats", "analyze.onsets", "analyze.tempoKey", "analyze.vamp", "-", "analyze.window", "view.meters", "analyze.imagingView", "analyze.resetMeters", "-", "analyze.plugin", "-", "view.spectral", "-", "@nyquist.analyze" } },
-        { tr ("&Master"),    { "#album", "-", "view.master", "view.chain", "master.addPlugin", "master.bypass", "analyze.plugin", "-", "master.assistant", "-", "master.render", "master.renderNew", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
+        { tr ("&Master"),    { "#album", "-", "view.master", "view.chain", "view.modulators", "master.addPlugin", "master.bypass", "analyze.plugin", "-", "master.assistant", "-", "master.render", "master.renderNew", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
         { tr ("Mi&xer"),     { "mixer.window", "mixer.dock", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
                                "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "mixer.sendToTimeline", "-", "mixer.editorTrack", "mixer.trackToEditor", "-", "mixer.assistant" } },
         { tr ("Mo&de"),      { "@mode" } },
@@ -926,7 +929,7 @@ void MainWindow::buildMenus()
                                "tracker.recordStereo", "tracker.recordMulti", "-", "tracker.resetTracks", "tracker.about" } },
         { tr ("&Tools"),     { "#markers", "-", "tools.macroRecord", "tools.macroApply", "tools.macros", "-", "tools.batch", "-", "tools.managePlugins", "-", "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan", "-", "tools.resetConfig" } },
         { tr ("&View"),      { "#transport", "-", "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
-                               "view.overview", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "view.cpuMeter", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "analyze.window", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "view.fullScreen", "-",
+                               "view.overview", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "view.cpuMeter", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.master", "view.chain", "view.modulators", "view.history", "view.markers", "view.meters", "analyze.window", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "view.fullScreen", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
         { tr ("Visuali&zer"), { "view.visualizer", "view.visualizerFullScreen", "view.visualizerBehind", "-",
                                "view.visualizerNext", "view.visualizerPrevious", "view.visualizerChoose", "-",
@@ -1124,6 +1127,8 @@ void MainWindow::buildPanels()
     connect (chainRow, &ChainRow::chainChanged, this, [this]
     {
         masterWidget->refresh();
+        if (modulatorsWidget != nullptr)
+            modulatorsWidget->refresh();
         commands.action (QStringLiteral ("master.bypass"))->setChecked (engine.isMasterBypassed());
     });
     connect (chainRow, &ChainRow::analyzeRequested, this, &MainWindow::analyzeSlot);
@@ -1136,6 +1141,13 @@ void MainWindow::buildPanels()
     chainPanel->dock()->show();
     // No title bar: the cards say what it is (owner, 2026-10-25). View still shows, hides and pops it out.
     chainPanel->dock()->setTitleBarWidget (new QWidget (chainPanel->dock()));
+
+    // The modulator rack in the bottom zone with the Device Chain, as in Cubase.
+    modulatorsWidget = new ModulatorsPanel (engine, this);
+    modulatorsPanel = new DockablePanel (*this, QStringLiteral ("modulatorsPanel"), tr ("Modulators"), modulatorsWidget, Qt::BottomDockWidgetArea);
+    tabifyDockWidget (chainPanel->dock(), modulatorsPanel->dock());
+    chainPanel->dock()->raise();
+    connect (modulatorsPanel->dock(), &QDockWidget::visibilityChanged, this, [this] (bool shown) { if (shown) modulatorsWidget->refresh(); });
 
     findWidget = new FindPanel (waveform, this);
     findWidget->collect = [this] { return findItems(); };
@@ -1254,7 +1266,7 @@ void MainWindow::buildPanels()
     ambiSceneView = new AmbiScene (this);
     ambiSceneView->setFocusPolicy (Qt::StrongFocus);
     ambiScenePanel = new DockablePanel (*this, QStringLiteral ("ambiScenePanel"), tr ("Ambisonic Scene"), ambiSceneView, Qt::RightDockWidgetArea);
-    panels = { masterPanel, chainPanel, metersPanel, markerPanel, historyPanel, diagnosticsPanel, findPanel, referencesPanel, ambiScenePanel };
+    panels = { masterPanel, chainPanel, modulatorsPanel, metersPanel, markerPanel, historyPanel, diagnosticsPanel, findPanel, referencesPanel, ambiScenePanel };
     buildQuantizePanel();
 
     new DockCornerDrag (*this);   // drag where three or four panels meet to resize both ways
@@ -1439,6 +1451,7 @@ void MainWindow::restoreLayout()
 
         const auto problems = QString::fromStdString (engine.restoreMasterSection());
         masterWidget->refresh();
+        modulatorsWidget->refresh();
         commands.action (QStringLiteral ("master.bypass"))->setChecked (engine.isMasterBypassed());
         if (! problems.isEmpty())
             QMessageBox::warning (this, tr ("Master Section"), tr ("Some plugins could not be loaded:\n%1").arg (problems));

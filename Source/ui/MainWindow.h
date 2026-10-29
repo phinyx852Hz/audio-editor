@@ -695,6 +695,8 @@ private:
     MasterPanel* masterWidget = nullptr;
     DockablePanel* masterPanel = nullptr;
     ChainRow* chainRow = nullptr;
+    class ModulatorsPanel* modulatorsWidget = nullptr;
+    DockablePanel* modulatorsPanel = nullptr;
     DockablePanel* chainPanel = nullptr;
     DockablePanel* historyPanel = nullptr;
     DockablePanel* markerPanel = nullptr;

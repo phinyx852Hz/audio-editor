@@ -96,6 +96,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/Phi.cpp
     Source/core/PhiDynamics.cpp
     Source/core/PhiModulation.cpp
+    Source/core/Modulators.cpp
     Source/core/PhiChorus.cpp
     Source/core/PhiVoice.cpp
     Source/core/PhiPhaser.cpp
@@ -157,6 +158,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/AlbumFile.cpp
     Source/ui/AlbumView.cpp
     Source/ui/ChainRow.cpp
+    Source/ui/ModulatorsPanel.cpp
     Source/ui/PrismEditor.cpp
     Source/ui/DesktopShortcuts.cpp
     Source/ui/MasterPanel.cpp
@@ -479,6 +481,7 @@ if(PHI_BUILD_TESTS)
         Source/core/Phi.cpp
         Source/core/PhiDynamics.cpp
         Source/core/PhiModulation.cpp
+        Source/core/Modulators.cpp
         Source/core/PhiChorus.cpp
         Source/core/PhiVoice.cpp
         Source/core/PhiPhaser.cpp

@@ -1,6 +1,6 @@
 # Keyboard Shortcuts {#shortcuts}
 
-[]{.ix t="Keyboard shortcuts!list"}Every command in PHI, 304 of them, with the keys it has when PHI is first installed. Commands without keys can still be found in the command palette (`Ctrl+Shift+P`), and any of them can be given keys in Options > Keyboard Shortcuts (`Ctrl+Shift+K`); see [Changing shortcuts](#change-shortcuts).
+[]{.ix t="Keyboard shortcuts!list"}Every command in PHI, 305 of them, with the keys it has when PHI is first installed. Commands without keys can still be found in the command palette (`Ctrl+Shift+P`), and any of them can be given keys in Options > Keyboard Shortcuts (`Ctrl+Shift+K`); see [Changing shortcuts](#change-shortcuts).
 
 Commands are grouped as the command palette groups them, which is mostly by menu. Where a command has more than one set of keys, they are separated by a slash.
 
@@ -256,6 +256,7 @@ The few `Super` keys are the desktop's standard keys for closing and full screen
 | Device Chain | `Ctrl+Shift+C` |
 | Master Assistant | `Alt+Shift+M` |
 | Master Section | `Ctrl+Shift+E` |
+| Modulators |  |
 | Render in Place | `Ctrl+Shift+Enter` |
 | Render to New Tab | `Ctrl+Alt+Shift+Enter` |
 | Scan Plugins | `Ctrl+Alt+Shift+S` |
