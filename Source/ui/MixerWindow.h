@@ -194,6 +194,8 @@ public:
     void showSideFinder (bool finder);
     bool sideFinderShown() const { return finderShown; }
     void engageTrack();   // a track clicked or picked: the Inspector takes the Finder's place
+    // The column hidden while the editor's research panel takes its place, then given back as it was.
+    void hideSideColumn (bool hidden);
     // The parts of the mixer that take the keyboard when pointed at (Focus Follows Mouse).
     QList<QWidget*> focusAreas() const;
     // A sound from the editor into the launcher (owner, 2026-10-25): saved as a WAV beside the

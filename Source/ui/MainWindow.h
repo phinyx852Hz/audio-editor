@@ -170,6 +170,18 @@ private:
 
     // Macros (MacroSection.cpp, Macros.h).
     void registerMacroCommands();
+    // The Research menu's references (ResearchSection.cpp, share/research/references.md).
+    void registerResearchCommands();
+    void fillResearchMenu (QMenu*);
+    void showResearchEntry (const QString& title, const QString& markdown);   // in the research panel, on the left
+    void closeResearch();      // and what it took the place of comes back
+    void searchResearch (const QString& term);   // the references, PHI's own names and further reading
+    void openResearchSearch();                   // the panel, with the keyboard in its search box
+    void takeLeftForResearch();
+    void giveBackLeftFromResearch();
+    class ResearchView* researchView = nullptr;
+    DockablePanel* researchPanel = nullptr;
+    bool researchShowing = false, researchHidFind = false, researchHidMixerSide = false;
     void toggleMacroRecording();
     void runMacro (const macro::Macro&);
     MacroRecorder* macroRecorder = nullptr;
