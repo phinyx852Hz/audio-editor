@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**90 pull requests:** 83 merged, 7 open.
+**90 pull requests:** 84 merged, 6 open.
 
 ## Contents
 
@@ -110,7 +110,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#73](https://github.com/phinyx852Hz/audio-editor/pull/73) | Mode menu: modes and tunings by region, tradition and person | merged |  | `Source/mixer/Atlas.cpp`<br>`Source/ui/ModeAtlas.cpp`<br>`Source/ui/ModeSection.cpp` |
 | [#81](https://github.com/phinyx852Hz/audio-editor/pull/81) | Rhythms: the iqāʿāt of Maqam World's index, and kuku | merged | Mode > rhythm > West Asia > iqāʿāt | `Source/mixer/Rhythms.cpp`<br>`docs/rhythms.md`<br>`tests/CoreTests.cpp` |
 | [#83](https://github.com/phinyx852Hz/audio-editor/pull/83) | Mode: add a harmony submenu | merged |  | `Source/mixer/Harmonies.cpp`<br>`docs/harmony.md`<br>`Source/ui/HarmonySection.cpp` |
-| [#90](https://github.com/phinyx852Hz/audio-editor/pull/90) | PHI rāga: bahādur kauns, drafted from a recording | open |  | `Source/core/PhiRagas.cpp`<br>`docs/mixer.md`<br>`docs/raga.md` |
+| [#90](https://github.com/phinyx852Hz/audio-editor/pull/90) | PHI rāga: bahādur kauns, drafted from a recording | merged |  | `Source/core/PhiRagas.cpp`<br>`docs/mixer.md`<br>`docs/raga.md` |
 
 ### Φ effects and sounds
 
@@ -283,4 +283,4 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#87](https://github.com/phinyx852Hz/audio-editor/pull/87) | MIDI editor: sargam, Carnatic swaras, jianpu, not angka, jeongganbo and maqam/makam/dastgah key signatures | 1. *(auto)* | open | 2026-10-29 | Editing and warping |
 | [#88](https://github.com/phinyx852Hz/audio-editor/pull/88) | Slicer: Cubase Drum Machine layout; Simplest and the Slicer dock under the editor or the mixer | This PR follows the owner's direction to model the Slicer's UI on Cubase's Drum Machine: compact, nested beneath the mixer, above the Device Chain when it is... *(auto)* | open | 2026-10-29 | Editing and warping |
 | [#89](https://github.com/phinyx852Hz/audio-editor/pull/89) | Φ Modulation (PhiFlow, PhiSpace, PhiGrain, PhiMatrix) and a Cubase-style Modulators panel | This PR has three parts: *(auto)* | open | 2026-10-29 | Φ effects and sounds |
-| [#90](https://github.com/phinyx852Hz/audio-editor/pull/90) | PHI rāga: bahādur kauns, drafted from a recording | Adds a draft sheet for bahādur kauns, the last raga from the owner's teacher's list. *(auto)* | open | 2026-10-29 | Modes, tunings and composition |
+| [#90](https://github.com/phinyx852Hz/audio-editor/pull/90) | PHI rāga: bahādur kauns, drafted from a recording | Adds a draft sheet for bahādur kauns, the last raga from the owner's teacher's list. *(auto)* | merged | 2026-10-29 | Modes, tunings and composition |
