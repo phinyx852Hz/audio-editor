@@ -258,11 +258,13 @@ syntax?
   *The Cambridge History of Western Music Theory* (Cambridge University Press, 2002).
 - [Nonchord tone](https://en.wikipedia.org/wiki/Nonchord_tone) and
   [Schenkerian analysis](https://en.wikipedia.org/wiki/Schenkerian_analysis), Wikipedia.
-- Edward Aldwell and Carl Schachter, *Harmony and Voice Leading*.
-- Richard Cohn, "Why We Don't Teach Meter, and Why We Should", *Journal of Music Theory
-  Pedagogy* 29 (2015).
-- Justin London, "A Bevy of Biases", *Music Theory Online* (2022).
-- Philip Ewell, ["Music Theory and the White Racial Frame"](https://mtosmt.org/issues/mto.20.26.2/mto.20.26.2.ewell.html),
+- Edward Aldwell and Carl Schachter, *Harmony and Voice Leading*, the core text of, for example,
+  the University of Alabama's [four-semester theory sequence](https://music.ua.edu/undergraduate-programs/transfer-exam-in-music-theory/).
+- Richard Cohn, ["Why We Don't Teach Meter, and Why We Should"](https://digitalcollections.lipscomb.edu/jmtp/vol29/iss1/1/),
+  *Journal of Music Theory Pedagogy* 29 (2015).
+- Justin London, ["A Bevy of Biases"](https://www.mtosmt.org/ojs/index.php/mto/article/view/812),
+  *Music Theory Online* (2022).
+- Philip Ewell, ["Music Theory and the White Racial Frame"](https://mtosmt.org/issues/mto.20.26.2/mto.20.26.2.ewell.php),
   *Music Theory Online* 26.2 (2020).
 - John M. McBride and others, "Melody predominates over harmony in the evolution of musical
   scales across 96 countries" (2024), on arXiv.
