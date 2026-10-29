@@ -10753,6 +10753,15 @@ void MixerWindow::showLauncher (bool on)
 
 bool MixerWindow::launcherShown() const { return launcherArea != nullptr && ! launcherArea->isHidden(); }
 
+std::vector<int> MixerWindow::sceneClips() const
+{
+    std::vector<int> out ((size_t) numScenes, 0);
+    for (int t = 0; t < engine.numTracks(); ++t)
+        for (int s = 0; s < numScenes; ++s)
+            out[(size_t) s] += slots[(size_t) t][(size_t) s] != nullptr ? 1 : 0;
+    return out;
+}
+
 QString MixerWindow::sceneName (int scene) const
 {
     if (scene < 0 || scene >= mixer::maxScenes)

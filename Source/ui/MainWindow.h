@@ -380,6 +380,12 @@ private:
     // The Performance menu (PerformanceSection.cpp, Source/performance): records PHI's
     // window, cameras and sound to MP4 and streams them live.
     void registerPerformanceCommands();
+    // The Architectonics menu (ArchitectonicsSection.cpp, docs/architectonics.md): a set for the
+    // clip launcher designed by the golden ratio, generative, and played scene by scene on its bars.
+    void registerArchitectonicsCommands();
+    void architectonicsDialog();
+    void playArchitectonics (bool on);
+    class ArchitectonicsConductor* conductor = nullptr;
     void toggleVideoRecording();
     void toggleStreaming();
     void performanceSettings();

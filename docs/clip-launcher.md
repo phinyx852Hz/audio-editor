@@ -98,6 +98,13 @@ A WAV (or any audio file PHI reads) becomes an audio clip; a MIDI file becomes a
 plays the track's instrument (the Synth is chosen for a track that has none). A MIDI loop is made
 whole bars long, at the tempo it plays at.
 
+### Architectonics
+
+The Architectonics menu (owner, 2026-10-29) plays the launcher's scenes as a set designed by the
+golden ratio. The set is cut into Fibonacci-length sections, with the climax at 0.618 of the way
+on the fullest scene. Each scene is launched on its bar, and every new deal gives a new set. See
+[architectonics.md](architectonics.md).
+
 ## Playing
 
 - **Launching.** A click on a clip's ▶, a double-click on the clip, or Enter on the cursor launches

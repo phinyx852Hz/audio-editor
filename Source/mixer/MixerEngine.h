@@ -367,7 +367,8 @@ namespace mixer
         void launchScene (int scene);         // every track's slot in it; tracks with none stop
         // A launch on a given frame of the launch clock while it runs: a loop just recorded
         // starts on the bar line it was recorded up to. One in the past plays from where it
-        // has got to since, in time with that frame.
+        // has got to since, in time with that frame. Scene -1 (or an empty slot) stops the
+        // track on that frame: Architectonics ends a set on its last bar.
         void launchAt (int track, int scene, Frame clockFrame);
         void stopTrack (int track) { launch (track, -1); }
         void stopAll();                       // every track's clip, at the next quantise

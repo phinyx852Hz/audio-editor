@@ -18,6 +18,7 @@
 #include "../Source/mixer/MixerEngine.h"
 #include "../Source/mixer/DrumsToMidi.h"
 #include "../Source/mixer/Rhythms.h"
+#include "../Source/mixer/Architectonics.h"
 #include "../Source/mixer/RhythmGenerator.h"
 #include "../Source/mixer/Stochastic.h"
 #include "../Source/mixer/Serial.h"
@@ -7779,6 +7780,58 @@ namespace
                "the naḍai in the name, unless caturaśra");
     }
 
+    // Architectonics (owner, 2026-10-29): a set by the golden ratio. Every section a Fibonacci
+    // number of bars, back to back over the whole set; the climax at the golden section on the
+    // fullest scene; never the same scene twice running; and a new seed a new set.
+    void testArchitectonics()
+    {
+        namespace ar = architectonics;
+        check (ar::fibonacci (144) == std::vector<int> { 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144 } && ar::isFibonacci (89) && ! ar::isFibonacci (90),
+               "architectonics: the Fibonacci numbers");
+        ar::Settings s;
+        s.clips = { 2, 4, 0, 6, 8, 3, 5, 7, 1 };
+        s.seed = 0.3;
+        for (auto order : { ar::Order::arch, ar::Order::fibonacci, ar::Order::phiWalk })
+        {
+            s.order = order;
+            const auto p = ar::plan (s);
+            bool fib = ! p.sections.empty(), contiguous = true, apart = true, scenes = true;
+            int at = 0, climaxes = 0;
+            for (size_t i = 0; i < p.sections.size(); ++i)
+            {
+                const auto& x = p.sections[i];
+                fib = fib && ar::isFibonacci (x.bars) && x.bars <= s.longest;
+                contiguous = contiguous && x.start == at;
+                at += x.bars;
+                apart = apart && (i == 0 || x.scene != p.sections[i - 1].scene);
+                scenes = scenes && x.scene >= 0 && x.scene < (int) s.clips.size() && s.clips[(size_t) x.scene] > 0;
+                if (x.climax)
+                {
+                    ++climaxes;
+                    check (x.start == 89 && x.scene == 4 && x.energy == 1.0 && x.function == ar::Function::climax,
+                           "architectonics: the climax at the golden section of 144, on the fullest scene");
+                }
+            }
+            check (fib && contiguous && at == 144 && apart && scenes && climaxes == 1 && p.climaxBar == 89
+                       && p.sections.front().function == ar::Function::emergence && p.sections.back().function == ar::Function::dissolution,
+                   "architectonics: Fibonacci sections over the whole set, in five parts, no scene twice running");
+        }
+        s.earlyClimax = true;
+        check (ar::plan (s).climaxBar == 55, "architectonics: an early climax at 1/φ² of the way");
+        s.earlyClimax = false;
+        const auto one = ar::plan (s);
+        s.seed = ar::nextSeed (s.seed);
+        const auto two = ar::plan (s);
+        bool differ = one.sections.size() != two.sections.size();
+        for (size_t i = 0; ! differ && i < one.sections.size(); ++i)
+            differ = one.sections[i].bars != two.sections[i].bars || one.sections[i].scene != two.sections[i].scene;
+        check (differ && ar::sectionAt (one, 0.0) == 0 && ar::sectionAt (one, 144.0) == -1 && ar::sectionAt (one, 89.5) >= 0
+                   && one.sections[(size_t) ar::sectionAt (one, 89.5)].climax,
+               "architectonics: a new seed deals a new set; the section at a bar");
+        s.clips = { 0, 0 };
+        check (ar::plan (s).sections.empty(), "architectonics: no clips, no set");
+    }
+
     void testRhythmGenerator()
     {
         // Toussaint (2005): the tresillo E(3,8), the cinquillo E(5,8), the bembé bell E(7,12) turned.
@@ -8400,6 +8453,7 @@ int main()
     testDrumsToMidi();
     testRhythms();
     testRhythmGenerator();
+    testArchitectonics();
     testStochastic();
     testCubify();
     testSerial();
