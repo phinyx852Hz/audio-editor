@@ -52,6 +52,9 @@ public:
         // Opens on the staff notation instead of the piano roll (MidiStaff.h): a score from
         // Architectonics, say.
         bool staff = false;
+        // Opens on this notation (notation::systems()' id: "phi" PHI's staff, "bhatkhande",
+        // "jeongganbo"...); empty: as `staff` says.
+        QString notation;
     };
 
     MidiEditor (const midifile::Song&, Host, QWidget* parent);

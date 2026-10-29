@@ -94,6 +94,14 @@ and so combined with PHI's AGPL-3.0. Ableton's Push 2 Display Interface Manual
 1.1. It is built into PHI as a Qt resource for the MIDI editor's staff notation (SMuFL glyphs:
 clefs, noteheads, and the accidentals of HEJI, Sagittal, the maqams and the rest). Unchanged.
 
+## TteoiJeonggan
+
+`tteoi-jeonggan/` is the TteoiJeonggan font from Jeonggan, Tteoieonire's jeongganbo editor
+(github.com/Tteoieonire/Jeonggan, GPL-3.0; the font OFL-1.1). `TteoiJeonggan.ttf` is the project's
+WOFF2 converted to TrueType with fontTools, nothing else changed; `OFL.txt` carries the licence. It
+is built into PHI as a Qt resource for the MIDI editor's jeongganbo (the yulmyeong in hanja and the
+sigimsae, which the font draws as ligatures).
+
 ## Xen Tuner's tuning configs
 
 `share/xen-tuner/` holds Xen Tuner's `tunings/` folder (github.com/euwbah/musescore-xen-tuner,
