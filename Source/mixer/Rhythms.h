@@ -41,6 +41,10 @@ namespace rhythm
         int beats = 4;          // in one cycle: mātrās, akṣaras, beats of the bar or bars
         std::vector<int> sections;   // vibhāgs, aṅgas, halves of a clave... in beats, adding up to `beats`
         std::string counting;   // the cycle as it is spoken or counted: the ṭhekā's bols, kriyās, strokes
+        // Each section's sign, as the notations write it under (or over) its first beat: a tāl's
+        // x (sam), 0 (khālī) or tālī number; a tāḷam's aṅga ("laghu", "drutam", "anudrutam") or a
+        // cāpu's beat group. Empty for the rest.
+        std::vector<std::string> marks;
         std::string about;
         double bpm = 100.0;     // a usual tempo, in beats
         std::vector<Lane> lanes;

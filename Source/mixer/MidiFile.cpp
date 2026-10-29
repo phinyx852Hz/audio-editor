@@ -189,6 +189,8 @@ namespace midifile
                         name.assign ((const char*) tr.p, len);
                     else if (type == 0x06)
                         song->markers.push_back ({ tick, std::string ((const char*) tr.p, len) });
+                    else if (type == 0x05)
+                        song->lyrics.push_back ({ tick, std::string ((const char*) tr.p, len) });
                     tr.p += len;
                     song->lastTick = std::max (song->lastTick, tick);
                     if (type == 0x2F)
@@ -253,6 +255,7 @@ namespace midifile
 
         std::stable_sort (song->tempos.begin(), song->tempos.end(), [] (const Tempo& a, const Tempo& b) { return a.tick < b.tick; });
         std::stable_sort (song->markers.begin(), song->markers.end(), [] (const Marker& a, const Marker& b) { return a.tick < b.tick; });
+        std::stable_sort (song->lyrics.begin(), song->lyrics.end(), [] (const Marker& a, const Marker& b) { return a.tick < b.tick; });
         if (song->tempos.empty() || song->tempos.front().tick > 0)
             song->tempos.insert (song->tempos.begin(), Tempo {});
         return song;
@@ -388,6 +391,13 @@ namespace midifile
         for (const auto& m : song.markers)
         {
             Item item { m.tick, 0, { 0xFF, 0x06 } };
+            putVlq (item.data, (uint32_t) m.text.size());
+            item.data.insert (item.data.end(), m.text.begin(), m.text.end());
+            items.push_back (std::move (item));
+        }
+        for (const auto& m : song.lyrics)
+        {
+            Item item { m.tick, 0, { 0xFF, 0x05 } };
             putVlq (item.data, (uint32_t) m.text.size());
             item.data.insert (item.data.end(), m.text.begin(), m.text.end());
             items.push_back (std::move (item));
