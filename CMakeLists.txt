@@ -363,7 +363,7 @@ if(PHI_HAVE_PROJECTM)
 endif()
 install(FILES "${PHI_DEFAULT_HRTF}" DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/hrtf")
 # The Research menu's references (Source/ui/ResearchSection.cpp).
-install(DIRECTORY share/research/ DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/research" FILES_MATCHING PATTERN "*.md")
+install(DIRECTORY share/research/ DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/research" FILES_MATCHING PATTERN "*.md" PATTERN "*.png")
 
 # A web page behind PHI (Visualizer > Web Page) needs Qt WebEngine, a built-in Chromium of a
 # few hundred MB. It is built when Qt WebEngine is installed (qt6-webengine), unless turned off.

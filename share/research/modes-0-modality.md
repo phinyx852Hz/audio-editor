@@ -1,7 +1,8 @@
 <!--
 Modality: the framework behind Mode > melody, rhythm and harmony, as the owner proposes it.
 It comes first under Modes, so it explains the menu before the traditions. The owner's own
-text, edited only for the panel: third person and plain links.
+text, edited only for the panel: third person and plain links. The diagram is
+modality-diagram.png beside this file; an image of that name in your research folder wins.
 -->
 
 # Modes
@@ -22,6 +23,8 @@ The theory distinguishes three primary categories:
    and rhythmic gestures are organized and realized through time.
 3. **Harmonic mode**: the manner in which simultaneous pitches, sonorities, harmonic
    relationships and their transformations are organized and realized through time.
+
+![Melodic, rhythmic and harmonic mode around musical modality](modality-diagram.png)
 
 The significant conceptual move is that modality becomes a general principle of musical
 organization rather than a property exclusive to pitch systems. It is a potentially productive
