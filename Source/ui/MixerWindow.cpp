@@ -83,6 +83,7 @@
 #include <QtConcurrent>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <functional>
 #include <map>
@@ -444,6 +445,23 @@ namespace
     }
 
     enum Choice { noInstrument, synthChoice, samplerChoice, slicerChoice, ragaChoice, prismChoice, firstPlugin };
+
+    // Whether the lanes and the launcher have something moving to show: playing, counting in,
+    // a launcher clip playing or queued, a take, or a drag. Otherwise they only show edits,
+    // and a few repaints a second do (each one, over the Visualizer, repaints what lies under).
+    bool mixMoving (mixer::Engine& engine)
+    {
+        if (engine.isPlaying() || engine.countingIn() || QApplication::mouseButtons() != Qt::NoButton)
+            return true;
+        for (int t = 0; t < engine.numTracks(); ++t)
+        {
+            const auto launch = engine.launchInfo (t);
+            if (launch.playing >= 0 || launch.queued >= 0 || engine.recordInfo (t).state != mixer::RecordState::none)
+                return true;
+        }
+        return false;
+    }
+    constexpr int idleRepaintTicks = 8;   // about 4 a second at the mixer's 30
 }
 
 //==============================================================================
@@ -455,6 +473,14 @@ LevelMeter::LevelMeter (QWidget* parent) : QWidget (parent)
 
 void LevelMeter::setLevels (const mixer::Meter& m, double seconds)
 {
+    // What is drawn, to repaint only when it changes: below -60 dB a bar sits at the bottom,
+    // so a silent meter stops repainting (with the Visualizer behind, the whole mixer would).
+    const auto drawn = [this]
+    {
+        const auto shown = [] (float x) { return x > 1.0e-3f ? x : 0.0f; };
+        return std::array { shown (peak[0]), shown (peak[1]), shown (rms[0]), shown (rms[1]), shown (hold[0]), shown (hold[1]), clipped ? 1.0f : 0.0f };
+    };
+    const auto before = drawn();
     for (int c = 0; c < 2; ++c)
     {
         // The bar falls at 24 dB a second; the hold stays 1.5 seconds.
@@ -470,7 +496,8 @@ void LevelMeter::setLevels (const mixer::Meter& m, double seconds)
         highest = std::max (highest, m.peak[c]);
         clipped = clipped || m.peak[c] >= 1.0f;
     }
-    update();
+    if (drawn() != before)
+        update();
 }
 
 void LevelMeter::clear()
@@ -6443,10 +6470,13 @@ private:
         recordingNote->setVisible (take.state != mixer::RecordState::none);
         static_cast<TransportButton*> (playButton)->setSymbol (window.engine.isPlaying() || window.engine.countingIn() ? TransportButton::Symbol::pause
                                                                                                                        : TransportButton::Symbol::play);
-        if (gridScroll->isVisible())
-            grid->update();
-        lanes->follow();
-        lanes->update();
+        if (mixMoving (window.engine) || slow % idleRepaintTicks == 0)
+        {
+            if (gridScroll->isVisible())
+                grid->update();
+            lanes->follow();
+            lanes->update();
+        }
         if (++slow % 30 == 0 && ! trackBox->view()->isVisible())
             refresh();   // names and colours changed in the mixer
         else if (slow % 10 == 0)
@@ -8500,14 +8530,16 @@ void MixerWindow::tick()
     masterMeter->setLevels (engine.takeMeter (mixer::masterIndex), seconds);
     masterPeak->setText (peakText (masterMeter->highestPeak()));
     refreshTransport();
-    if (lanes->isVisible())
+    const bool redraw = mixMoving (engine) || ++idleTicks % idleRepaintTicks == 0;
+    if (lanes->isVisible() && redraw)
     {
         lanes->follow();
         lanes->update();
     }
     if (launcherArea->isVisible())
     {
-        grid->update();
+        if (redraw)
+            grid->update();
         rack->tick();
     }
 }

@@ -234,6 +234,12 @@ void VisualizerView::addSamples (const std::vector<float>& left, const std::vect
     }
     if (n > 0)
         lastSamplesAt = clock.elapsed();
+    for (size_t i = 0; i < n; ++i)
+        if (std::abs (left[i]) > silence || std::abs (right[i]) > silence)
+        {
+            lastSoundAt = clock.elapsed();
+            break;
+        }
 #if PHI_HAVE_PROJECTM
     if (milk != nullptr && isMilkDrop())
         milk->addSamples (left.data(), right.data(), n);
@@ -271,6 +277,17 @@ void VisualizerView::setSonifyMarks (double scan, std::vector<sonify::Spot> spot
 
 void VisualizerView::tick()
 {
+    // Silent for a while: a third of the frame rate. Behind PHI every widget over the view
+    // repaints with it, so this is most of what an idle PHI costs. A picture or a frame for
+    // the sonifier still gets every tick.
+    if (clock.elapsed() - lastSoundAt > quietAfterMs && ! isPicture() && frameWanted.isEmpty())
+    {
+        if (++quietTicks % 3 != 0)
+            return;
+    }
+    else
+        quietTicks = 0;
+
     analyse();
     if (isRain())
     {

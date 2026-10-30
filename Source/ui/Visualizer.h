@@ -116,6 +116,10 @@ private:
     std::vector<float> ringLeft, ringRight;
     size_t ringPos = 0;
     qint64 lastSamplesAt = 0;
+    qint64 lastSoundAt = 0;   // when a sample was last above silence
+    int quietTicks = 0;
+    static constexpr float silence = 1.0e-5f;   // -100 dBFS
+    static constexpr qint64 quietAfterMs = 2000;
     QElapsedTimer clock;
     qint64 lastTick = 0;
 
