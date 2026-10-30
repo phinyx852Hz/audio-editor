@@ -45,6 +45,7 @@ namespace midifile
         std::vector<Tempo> tempos;   // in time order; at least one, at tick 0
         std::vector<std::string> trackNames;
         std::vector<Marker> markers; // in time order
+        std::vector<Marker> lyrics;  // lyric meta events (FF 05), in time order: a syllable at a note's start
         int64_t lastTick = 0;        // the last event of any kind, end of track included
         uint16_t channelsUsed = 0;   // a bit per channel that has notes
 

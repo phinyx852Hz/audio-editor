@@ -72,6 +72,17 @@ public:
     std::function<void (const QStringList& files, const QStringList& instruments, const QStringList& names,
                         const QList<QColor>& colours, DealTo, bool again)> phiDeal;
     std::function<void (const QStringList& effects, const QStringList& names, const QList<QColor>& colours)> phiPrism;
+    // One deal's picks without dealing them (Architectonics' Compose a Song deals a scene at a
+    // time itself): a file, an instrument and an effect per colour, each empty when the colour
+    // has none, and the colours' names and colours. The next deal picks the next combination.
+    struct DealPick
+    {
+        QStringList files, instruments, effects, names;
+        QList<QColor> colours;
+    };
+    DealPick pickDeal();
+    // Ctrl+click on Φ (owner, 2026-10-29): a whole Architectonics song into the clip launcher.
+    std::function<void()> phiCompose;
     // The plugin id of the instrument an item's key stands for ("plugin:..." or
     // "command:instrument...."), empty when it is not an instrument.
     std::function<QString (const QString& key)> instrumentOf;

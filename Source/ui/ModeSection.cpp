@@ -217,7 +217,7 @@ void MainWindow::fillModeMenu (QMenu* menu)
     // Ticked: the mode, or its hypo-mode when the range is that.
     const auto shown = church (m.system) && m.hypo == mixer::Hypo::fifth ? hypoMode (m.system) : m.system;
 
-    // Only three things under Mode (owner, 2026-10-27): melody, tuning and rhythm. "melody" holds
+    // Under Mode (owner, 2026-10-27; harmony 2026-10-29): melody, harmony, tuning and rhythm. "melody" holds
     // the modes and scales by region, then by tradition (nation, culture, empire) and person, with
     // the final, the range and what is done with the mode; "tuning" the tunings the same way, with
     // the equal divisions and tune the track; "rhythm" the rhythms (RhythmSection.cpp).
@@ -304,6 +304,8 @@ void MainWindow::fillModeMenu (QMenu* menu)
     auto* cube = commands.action (QStringLiteral ("mode.cubify"));
     cube->setEnabled (mixerWin != nullptr);
     melodyMenu->addAction (cube);
+
+    fillHarmonyMenu (menu->addMenu (tr ("h&armony")));
 
     auto* tuningMenu = menu->addMenu (tr ("tunin&g"));
     tuningMenu->setToolTipsVisible (true);

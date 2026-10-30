@@ -9,7 +9,8 @@
 // snap and quantise, a velocity or controller lane, an info line for the picked notes, and step
 // input from the MIDI keyboard or the computer's. Restyle, after MIDIRestyle, moves a melody into
 // another system degree by degree, the notes it had kept as ghosts behind. Saved as plain keys,
-// MPE or pitch bend by channel (NoteEditor.h).
+// MPE or pitch bend by channel (NoteEditor.h). The staff notation (MidiStaff.h) takes the roll's
+// place at the toggle, the same notes written on a staff in Xen Tuner's notations or in cipher.
 #include "../core/AudioData.h"
 #include "../mixer/NoteEditor.h"
 
@@ -24,6 +25,7 @@ class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
 class QLabel;
+class QMenu;
 class QSpinBox;
 class QTimer;
 class QToolButton;
@@ -47,6 +49,12 @@ public:
         QString inputSource; // the audio input to hum into (a PipeWire target); empty the first input
         // Reads a sound file (to hear its melody), null with the reason when it cannot.
         std::function<AudioDataPtr (const QString& path, QString& error)> loadAudio;
+        // Opens on the staff notation instead of the piano roll (MidiStaff.h): a score from
+        // Architectonics, say.
+        bool staff = false;
+        // Opens on this notation (notation::systems()' id: "phi" PHI's staff, "bhatkhande",
+        // "jeongganbo"...); empty: as `staff` says.
+        QString notation;
     };
 
     MidiEditor (const midifile::Song&, Host, QWidget* parent);
@@ -60,6 +68,7 @@ public:
 
     class Roll;
     class Spectrum;
+    class Staff;
     class Wheel;
 
 protected:
@@ -69,6 +78,7 @@ protected:
 private:
     friend class Roll;
     friend class Spectrum;
+    friend class Staff;
     friend class Wheel;
 
     void buildSystems();
@@ -76,6 +86,9 @@ private:
     void loadScala();
     void loadKeyboardMap();
     void exportScala();
+    // The piano roll (0), the rising spectrum (1) or the staff notation (2), in the same place.
+    void showView (int);
+    void fillNotationMenu (QMenu*);
     void setSystem (noteedit::PitchSystem);
     // Tuning changes within the clip: the rows show the system in force at the step cursor.
     const noteedit::PitchSystem& systemAt (int64_t tick) const;
@@ -125,6 +138,9 @@ private:
 
     Roll* roll = nullptr;
     Spectrum* spectrum = nullptr;
+    Staff* staff = nullptr;
+    QToolButton* staffButton = nullptr;   // the toggle: the staff notation or the piano roll
+    QToolButton* notationButton = nullptr;
     Wheel* wheel = nullptr;
     QComboBox* viewBox = nullptr;
     QCheckBox* wheelBox = nullptr;

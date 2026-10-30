@@ -170,6 +170,18 @@ private:
 
     // Macros (MacroSection.cpp, Macros.h).
     void registerMacroCommands();
+    // The Research menu's references (ResearchSection.cpp, share/research/references.md).
+    void registerResearchCommands();
+    void fillResearchMenu (QMenu*);
+    void showResearchEntry (const QString& title, const QString& markdown);   // in the research panel, on the left
+    void closeResearch();      // and what it took the place of comes back
+    void searchResearch (const QString& term);   // the references, PHI's own names and further reading
+    void openResearchSearch();                   // the panel, with the keyboard in its search box
+    void takeLeftForResearch();
+    void giveBackLeftFromResearch();
+    class ResearchView* researchView = nullptr;
+    DockablePanel* researchPanel = nullptr;
+    bool researchShowing = false, researchHidFind = false, researchHidMixerSide = false;
     void toggleMacroRecording();
     void runMacro (const macro::Macro&);
     MacroRecorder* macroRecorder = nullptr;
@@ -380,6 +392,15 @@ private:
     // The Performance menu (PerformanceSection.cpp, Source/performance): records PHI's
     // window, cameras and sound to MP4 and streams them live.
     void registerPerformanceCommands();
+    // The Architectonics menu (ArchitectonicsSection.cpp, docs/architectonics.md): a set for the
+    // clip launcher designed by the golden ratio, generative, and played scene by scene on its bars.
+    void registerArchitectonicsCommands();
+    void architectonicsDialog();
+    // score: for the MIDI editor's staff, not the launcher; quick: no dialog, a new song at once
+    // from the last settings and a new seed (Ctrl+click on the Selector's Φ).
+    void composeSongDialog (bool score = false, bool quick = false);
+    void playArchitectonics (bool on);
+    class ArchitectonicsConductor* conductor = nullptr;
     void toggleVideoRecording();
     void toggleStreaming();
     void performanceSettings();
@@ -453,6 +474,11 @@ private:
     // Its rhythmic modes (RhythmSection.cpp, docs/rhythms.md): a rhythm put on the selected
     // mixer track, written into a new Tracker pattern, or saved as a MIDI file.
     void fillRhythmMenu (QMenu*);
+    // Its harmony (HarmonySection.cpp, docs/harmony.md): the ways voices sound together, from
+    // Western art music, jazz, the world's traditions and those grown from meeting Western
+    // harmony, each with an example for the mixer or a MIDI file.
+    void fillHarmonyMenu (QMenu*);
+    void useHarmony (int index);
     void useRhythm (const rhythm::Rhythm&);
     void useRhythmAs (const rhythm::Rhythm&, int choice, int cycles, double bpm);   // 0 mixer, 1 tracker, 2 file, 3 generator
     void rhythmToTracker (const rhythm::Rhythm&, int cycles, double bpm);

@@ -89,6 +89,12 @@ namespace noteedit
         // (ticks from its start, cents off its pitch), in time order, straight lines between; before
         // the first and after the last the curve holds. Empty: the note holds its pitch.
         std::vector<std::pair<int64_t, double>> curve;
+        // What the notations write with it that a pitch and a time cannot say (owner, 2026-10-29:
+        // "keeping the tradition-specific info"): the syllable sung on it (a bandish's or kṛti's
+        // sāhitya, a song's lyric; saved as a lyric event), and a mark of how it is played: a
+        // stroke, a fingering, a technique, an ornament's own sign (a sitar's dā or rā, a koto's
+        // oshide, a sigimsae; saved as a marker, "PHI mark: <key>: ...").
+        std::string lyric, mark;
         int64_t end() const { return start + length; }
         int key() const;                 // the nearest key, 0..127
         double bendAt (int64_t ticksIn) const;   // the curve's cents that far into the note
@@ -102,6 +108,16 @@ namespace noteedit
         PitchSystem system;
     };
 
+    // A rhythmic cycle (owner, 2026-10-29: tāl, tāḷam, jangdan, usul): from its tick on, the clip
+    // counts in the cycle of rhythm::rhythms() named `rhythm` (its plain name), a beat (a mātrā, an
+    // akṣara, a jeonggan) `beat` ticks long (0: a quarter), the cycle's first beat (sam) at `tick`.
+    struct Cycle
+    {
+        int64_t tick = 0;
+        std::string rhythm;
+        int64_t beat = 0;
+    };
+
     struct Sequence
     {
         int ticksPerQuarter = 480;
@@ -113,6 +129,8 @@ namespace noteedit
         // The systems the clip is in, in time order: one at 0 is the clip's own; with none the
         // editor's choice holds throughout. Saved as markers ("PHI system: ...").
         std::vector<SystemChange> systems;
+        // The cycles it counts in, in time order (saved as markers, "PHI cycle: ..."); none: bars of 4/4.
+        std::vector<Cycle> cycles;
         int64_t lastTick = 0;                    // the clip's length; at least the last note's end
 
         void sort();
@@ -161,6 +179,12 @@ namespace noteedit
     // An edit made on the targets in each stretch of the clip with that stretch's system (each
     // note by the system it starts in). The edit must keep the notes' count and starts.
     void bySystem (Sequence&, const PitchSystem& before, const std::function<void (Sequence&, const PitchSystem&)>&);
+    // The cycle in force at a tick (null: none, bars of 4/4), and a cycle set from its tick on
+    // (an empty rhythm takes the one there out).
+    const Cycle* cycleAt (const Sequence&, int64_t tick);
+    void setCycle (Sequence&, const Cycle&);
+    std::string cycleMarker (const Cycle&);
+    bool parseCycleMarker (const std::string&, Cycle&);
     // A system as a marker's text and back: its name, family, tonic, period, degrees and names.
     std::string systemMarker (const PitchSystem&);
     bool parseSystemMarker (const std::string&, PitchSystem&);
