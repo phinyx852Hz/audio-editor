@@ -22,6 +22,22 @@ namespace x11
     // tiling it. Elsewhere windows float anyway, at the size they were given.
     void floatWindow (const std::string& title, int width, int height);
 
+    // Makes Ctrl+W, Super+W and Super+F reach this plugin window even while the plugin's
+    // own view (an X window of its own, often on its own X connection) has the keyboard,
+    // so they close the window or take it full screen whatever has the focus inside it.
+    // A desktop that binds one of them itself (Omarchy's Super+W and Super+F) still gets it
+    // first, and does the same.
+    void grabWindowKeys (void* nativeWindowHandle);
+
+    // Super (Mod4) is held now. JUCE does not report it with a key, so a grabbed Super+F
+    // reaches the window as a plain F; this tells the two apart.
+    bool superHeld();
+
+    // Takes the window full screen, or back (_NET_WM_STATE_FULLSCREEN, which Hyprland,
+    // KDE, GNOME and most X window managers honour). JUCE's own setFullScreen only
+    // maximises a window with a title bar.
+    void toggleFullScreen (void* nativeWindowHandle);
+
     // If the window manager kills a plugin window's X connection (a forced
     // close), Xlib would end the whole program. After this, only plugin
     // windows stop working; the editor keeps running.

@@ -138,6 +138,9 @@ public:
                     const BeatGrid& grid, const std::vector<Frame>& markers);
     bool followsEditor() const;
     void setMidiStatus (const QString&);
+    // A track's instrument editor in the mixer: closing it (Ctrl+W) leaves the instrument
+    // playing, so notes that are sounding ring on. Otherwise closing silences it at once.
+    void keepPlayingWhenClosed (bool keep) { keepsPlaying = keep; }
     // Hot swap: while it is on, a sound sent here (F8 in Find, or dropped on the window)
     // goes onto the chosen pad's layer to try; Keep keeps it, Undo Swap puts back what was there.
     bool hotSwapping() const;
@@ -251,4 +254,5 @@ private:
     QTimer redraw;
     std::vector<std::pair<int, int>> heldKeys;   // scan code, pad
     bool updating = false;
+    bool keepsPlaying = false;
 };

@@ -1638,11 +1638,13 @@ bool SlicerWindow::eventFilter (QObject* o, QEvent* e)
 
 void SlicerWindow::hideEvent (QHideEvent* e)
 {
-    // Closed (not minimised with the main window): silent at once.
+    // Closed (not minimised with the main window): silent at once, unless it is a track's
+    // instrument, which plays on without its editor.
     QWidget::hideEvent (e);
     if (e->spontaneous())
         return;
     releaseKeys();
-    engine.panic();
+    if (! keepsPlaying)
+        engine.panic();
     Q_EMIT closed();
 }

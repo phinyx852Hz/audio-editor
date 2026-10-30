@@ -54,6 +54,14 @@ and the corner to resize it; it grows to show all its rays. It opens again where
 that size, floating over whatever is there (owner, 2026-10-25), as long as that place is still
 inside the window; else it rises from its card.
 
+Ctrl+Alt+P, or Window along its top, pops it out of the main window into a window of its own,
+the way REAPER's FX windows float (owner, 2026-10-30: "I like having the edit of any effect,
+process or instrument pop out as well... just like reaper"), and back over the chain again. In its
+own window the desktop places and moves it (its header drags it), Super+F takes it full screen,
+and it opens that way, at that size, until it is popped back in. Ctrl+W closes it either way and
+docks the Prism; it never closes the file behind it. The Prism keeps playing whether its editor
+is open or not.
+
 Inside: the name (F2), the split and the crossovers along the top, the macros, then a row per ray
 with its gain, M, S and its devices as cards, ending with Add plugin. Plugins drag between rays.
 A Prism inside a Prism opens in place (Enter or Open), with the way back out at the top left; Esc
@@ -63,7 +71,8 @@ Keys in the editor: Left/Right pick a device, Up/Down a ray, Shift+Left/Right se
 Ctrl+G groups them into a Prism inside this one and Ctrl+Shift+G ungroups one, Insert adds a
 plugin, Delete removes it, B bypasses it, Enter or E opens it (its window, or the Prism),
 Ctrl+Left/Right moves it along its ray, Ctrl+Up/Down to the next ray, M mutes and S solos the
-ray, Ctrl+T adds a ray, Esc goes back out.
+ray, Ctrl+T adds a ray, Ctrl+Alt+P pops it out into its own window and back, Esc goes back out,
+Ctrl+W docks it.
 
 ## Macros
 

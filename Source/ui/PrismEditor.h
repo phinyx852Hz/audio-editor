@@ -23,8 +23,11 @@ class QVBoxLayout;
 
 // A Prism popped out of its card in the Device Chain to be edited: it rises out of
 // the card, floating over the window, and sinks back into it when done (Esc, the
-// Dock button, or Open on the card again). It is part of the window, not a window
-// of its own, so it opens in the same place on every desktop, Wayland too.
+// Dock button, or Open on the card again). It is part of the window, so it opens in
+// the same place on every desktop, Wayland too. Ctrl+Alt+P (or Window) pops it out
+// into a window of its own instead, as REAPER's FX windows are, and back; it then
+// opens that way until popped back in. Ctrl+W closes it either way (docks it), and
+// Super+F takes it full screen in its own window.
 //
 // Along the top: the way in (a Prism inside a Prism opens in place, and the path
 // back is shown), the split and its crossovers. Then the eight macros: Map arms a
@@ -59,6 +62,7 @@ Q_SIGNALS:
 protected:
     bool event (QEvent*) override;
     void keyPressEvent (QKeyEvent*) override;
+    void closeEvent (QCloseEvent*) override;
     void paintEvent (QPaintEvent*) override;
     void mousePressEvent (QMouseEvent*) override;
     bool eventFilter (QObject*, QEvent*) override;
@@ -113,6 +117,8 @@ private:
     void renameRay (int ray);
     void deviceKnobClicked (int ray, int device, int knob);
     QRect cardRect() const;
+    QRect overlayRect() const;   // where it floats over the window, in the window's coordinates
+    void setOwnWindow (bool);    // a window of its own, or back over the window
     int wantedHeight() const;   // the docked card, in the window's coordinates
     void animateTo (const QRect&, std::function<void()> then);
     static bool handles (const QKeyEvent*);
@@ -142,6 +148,8 @@ private:
     QString lastSignature;
     QPoint dragFrom;
     bool dragging = false, closing = false;
+    bool ownWindow = false;          // popped out of the window (Ctrl+Alt+P)
+    QPointer<QWidget> home;          // the window it floats over
     QPointer<QWidget> dockCard;
     QTimer timer;
 };

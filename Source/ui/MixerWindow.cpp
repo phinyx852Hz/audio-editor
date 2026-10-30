@@ -8681,7 +8681,9 @@ void MixerWindow::editInstrument (int track)
         {
             auto& s = static_cast<mixer::SamplerInstrument&> (*inst);
             auto* w = new SamplerWindow (s.engine(), this);
+            w->setWindowFlag (Qt::Window);   // its own window over the mixer, not inside it
             w->setAttribute (Qt::WA_DeleteOnClose);
+            w->keepPlayingWhenClosed (true);
             if (const auto sound = s.engine().sample(); sound != nullptr)
                 w->setSample (sound, rate(), title, true);
             w->setWindowTitle (tr ("Sampler: %1").arg (title));
@@ -8692,7 +8694,9 @@ void MixerWindow::editInstrument (int track)
         {
             auto& s = static_cast<mixer::SlicerInstrument&> (*inst);
             auto* w = new SlicerWindow (s.engine(), this);
+            w->setWindowFlag (Qt::Window);   // its own window over the mixer, not inside it
             w->setAttribute (Qt::WA_DeleteOnClose);
+            w->keepPlayingWhenClosed (true);
             if (const auto sound = s.engine().sample(); sound != nullptr)
                 w->setSample (sound, t.sound != nullptr ? t.sound : soundAsAudio (*sound, rate()), rate(), title, true, BeatGrid {}, {});
             w->setWindowTitle (tr ("Slicer: %1").arg (title));

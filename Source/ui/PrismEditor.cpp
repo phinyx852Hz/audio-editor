@@ -29,6 +29,7 @@
 #include <QSizeGrip>
 #include <QToolButton>
 #include <QVBoxLayout>
+#include <QWindow>
 
 #include <algorithm>
 #include <cmath>
@@ -71,7 +72,7 @@ namespace
 
 //==============================================================================
 PrismEditor::PrismEditor (AudioEngine& e, int s, std::uint64_t id, QWidget* window)
-    : QFrame (window), engine (e), slot (s), uid (id)
+    : QFrame (window), engine (e), slot (s), uid (id), home (window)
 {
     setFocusPolicy (Qt::StrongFocus);
     setAccessibleName (tr ("Prism editor"));
@@ -164,7 +165,11 @@ PrismEditor::PrismEditor (AudioEngine& e, int s, std::uint64_t id, QWidget* wind
         sync();
     });
     top->addWidget (mapButton);
-    auto* dockButton = button (tr ("Dock"), tr ("Put the Prism back in its card (Esc)"), header);
+    auto* windowButton = button (tr ("Window"), tr ("Pop it out into a window of its own, or back over the chain (Ctrl+Alt+P); "
+                                                    "Super+F then takes it full screen"), header);
+    connect (windowButton, &QToolButton::clicked, this, [this] { setOwnWindow (! ownWindow); });
+    top->addWidget (windowButton);
+    auto* dockButton = button (tr ("Dock"), tr ("Put the Prism back in its card (Esc, Ctrl+W)"), header);
     connect (dockButton, &QToolButton::clicked, this, &PrismEditor::dock);
     top->addWidget (dockButton);
     outer->addWidget (header);
@@ -354,7 +359,7 @@ void PrismEditor::rebuild()
     showSelection();
 
     // Grows (upwards, away from the chain) to show every ray, as far as the window allows.
-    if (isVisible() && ! closing && parentWidget() != nullptr)
+    if (isVisible() && ! closing && ! ownWindow && parentWidget() != nullptr)
     {
         const auto h = wantedHeight();
         if (h != height())
@@ -937,10 +942,9 @@ void PrismEditor::animateTo (const QRect& target, std::function<void()> then)
     animation->start (QAbstractAnimation::DeleteWhenStopped);
 }
 
-void PrismEditor::popOut (QWidget* card)
+QRect PrismEditor::overlayRect() const
 {
-    dockCard = card;
-    auto* parent = parentWidget();
+    auto* parent = home != nullptr ? home.data() : parentWidget();
     const auto from = cardRect();
     const auto w = std::clamp (900, 420, std::max (420, parent->width() - 24));
     const auto h = wantedHeight();
@@ -954,11 +958,65 @@ void PrismEditor::popOut (QWidget* card)
         last.isValid() && last.width() >= 420 && parent->rect().adjusted (-40, 0, 40, 0).contains (last.topLeft())
         && last.right() <= parent->width() + 40 && last.top() + 40 <= parent->height())
         to = QRect (last.topLeft(), QSize (std::min (last.width(), parent->width()), std::max (h, std::min (last.height(), parent->height()))));
+    return to;
+}
 
-    setGeometry (from);
+void PrismEditor::popOut (QWidget* card)
+{
+    dockCard = card;
+    // Popped out into its own window last time: it opens that way again.
+    if (appSettings().value (QStringLiteral ("prism/ownWindow"), false).toBool())
+    {
+        setOwnWindow (true);
+        return;
+    }
+    const auto to = overlayRect();
+    setGeometry (cardRect());
     show();
     raise();
     animateTo (to, {});
+    setFocus (Qt::OtherFocusReason);
+}
+
+void PrismEditor::setOwnWindow (bool on)
+{
+    if (closing || home == nullptr)
+        return;
+    if (on == ownWindow && isVisible())
+        return;
+    for (auto* animation : findChildren<QPropertyAnimation*>())
+        animation->stop();   // still rising from its card
+    if (on)
+    {
+        if (isVisible() && ! ownWindow)
+            appSettings().setValue (QStringLiteral ("prism/place"), geometry());
+        const auto size = appSettings().value (QStringLiteral ("prism/windowSize")).toSize();
+        ownWindow = true;
+        if (auto* shadow = graphicsEffect())
+            shadow->setEnabled (false);
+        setParent (home, Qt::Window);   // a window of its own, kept above PHI's
+        setWindowTitle (QStringLiteral ("%1 - %2").arg (QString::fromStdString (engine.prismInfo (prismPath()).name),
+                                                        QStringLiteral (APP_DISPLAY_NAME)));
+        resize (size.isValid() && size.width() >= 420 ? size : QSize (std::max (width(), 900), std::max (height(), wantedHeight())));
+        show();
+        raise();
+        activateWindow();
+    }
+    else
+    {
+        if (isFullScreen())
+            showNormal();
+        appSettings().setValue (QStringLiteral ("prism/windowSize"), size());
+        ownWindow = false;
+        setParent (home);   // back over the window
+        if (auto* shadow = graphicsEffect())
+            shadow->setEnabled (true);
+        setGeometry (overlayRect());
+        show();
+        raise();
+        home->activateWindow();
+    }
+    appSettings().setValue (QStringLiteral ("prism/ownWindow"), ownWindow);
     setFocus (Qt::OtherFocusReason);
 }
 
@@ -969,6 +1027,17 @@ void PrismEditor::dock()
     closing = true;
     timer.stop();
     engine.prismLearnController (prismPath(), -1);
+    if (ownWindow)
+    {
+        // A window of its own just closes; the keys go back to the chain.
+        appSettings().setValue (QStringLiteral ("prism/windowSize"), size());
+        hide();
+        if (home != nullptr)
+            home->activateWindow();
+        Q_EMIT docked (true);
+        deleteLater();
+        return;
+    }
     appSettings().setValue (QStringLiteral ("prism/place"), geometry());   // it opens there next time
     animateTo (cardRect(), [this]
     {
@@ -985,7 +1054,8 @@ void PrismEditor::dockNow()
     closing = true;
     timer.stop();
     if (isVisible())
-        appSettings().setValue (QStringLiteral ("prism/place"), geometry());
+        appSettings().setValue (ownWindow ? QStringLiteral ("prism/windowSize") : QStringLiteral ("prism/place"),
+                                ownWindow ? QVariant (size()) : QVariant (geometry()));
     hide();
     Q_EMIT docked (false);
     deleteLater();
@@ -997,9 +1067,11 @@ void PrismEditor::paintEvent (QPaintEvent*)
     QPainter g (this);
     g.setRenderHint (QPainter::Antialiasing);
     const auto r = QRectF (rect()).adjusted (0.5, 0.5, -0.5, -0.5);
+    // A window of its own fills to its square corners.
+    const auto radius = ownWindow ? 0.0 : 10.0;
     g.setPen (QPen (palette().color (QPalette::Highlight), 1.0));
     g.setBrush (palette().color (QPalette::Window));
-    g.drawRoundedRect (r, 10, 10);
+    g.drawRoundedRect (r, radius, radius);
 
     // A band of spectrum along the top edge.
     QLinearGradient band (r.topLeft(), r.topRight());
@@ -1022,6 +1094,13 @@ bool PrismEditor::eventFilter (QObject* watched, QEvent* e)
     if (watched == header)
     {
         auto* m = static_cast<QMouseEvent*> (e);
+        if (e->type() == QEvent::MouseButtonPress && m->button() == Qt::LeftButton && ownWindow)
+        {
+            // In a window of its own, the window manager moves it.
+            if (auto* handle = windowHandle())
+                handle->startSystemMove();
+            return true;
+        }
         if (e->type() == QEvent::MouseButtonPress && m->button() == Qt::LeftButton)
         {
             dragging = true;
@@ -1113,8 +1192,10 @@ bool PrismEditor::handles (const QKeyEvent* k)
 {
     const auto mods = k->modifiers() & ~Qt::KeypadModifier;
     const auto key = k->key();
+    if (mods == (Qt::ControlModifier | Qt::AltModifier))
+        return key == Qt::Key_P;   // its own window and back
     if (mods == Qt::ControlModifier)
-        return key == Qt::Key_Left || key == Qt::Key_Right || key == Qt::Key_Up || key == Qt::Key_Down || key == Qt::Key_G || key == Qt::Key_T;
+        return key == Qt::Key_W || key == Qt::Key_Left || key == Qt::Key_Right || key == Qt::Key_Up || key == Qt::Key_Down || key == Qt::Key_G || key == Qt::Key_T;
     if (mods == (Qt::ControlModifier | Qt::ShiftModifier))
         return key == Qt::Key_G;
     if (mods == Qt::ShiftModifier)
@@ -1130,6 +1211,14 @@ bool PrismEditor::handles (const QKeyEvent* k)
         default:
             return false;
     }
+}
+
+void PrismEditor::closeEvent (QCloseEvent* e)
+{
+    // Its own window closed (Ctrl+W, Super+W, the title bar): it docks.
+    QFrame::closeEvent (e);
+    if (! closing)
+        dock();
 }
 
 bool PrismEditor::event (QEvent* e)
@@ -1149,6 +1238,18 @@ void PrismEditor::keyPressEvent (QKeyEvent* k)
     if (! handles (k) || rayViews.empty())
     {
         QFrame::keyPressEvent (k);
+        return;
+    }
+    // Ctrl+W closes the editor (it docks), never the file behind it; Ctrl+Alt+P pops it
+    // out into its own window and back.
+    if (k->key() == Qt::Key_W)
+    {
+        dock();
+        return;
+    }
+    if (k->key() == Qt::Key_P)
+    {
+        setOwnWindow (! ownWindow);
         return;
     }
 
