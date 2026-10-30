@@ -495,6 +495,9 @@ private:
     void registerControlCommands();
     void controlSurfacesDialog();
     void midiLearnDialog();
+    void midiMapMode (bool on);                        // Ctrl+M: the mixer's controls mapped by a click (MidiMapOverlay)
+    QPointer<class MidiMapOverlay> mapOverlay;
+    bool mapOpenedLearnDialog = false;                 // closed again when map mode ends
     void controlTick();                                // their commands done, their lights sent
     void controlCommand (const control::Command&);
     void saveMidiMappings();

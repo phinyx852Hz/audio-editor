@@ -3,6 +3,7 @@
 // and 3 found by their ports and driven as Ableton and Bitwig drive them, and any controller's
 // knobs and buttons mapped to the mixer and transport by MIDI Learn.
 #include "MainWindow.h"
+#include "MidiMapOverlay.h"
 #include "MixerWindow.h"
 #include "Settings.h"
 #include "../control/MidiLearn.h"
@@ -23,6 +24,7 @@
 #include <QListWidget>
 #include <QPainter>
 #include <QPushButton>
+#include <QShortcut>
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QTableWidget>
@@ -86,6 +88,15 @@ void MainWindow::registerControlCommands()
     add ("control.learn", tr ("MIDI &Learn..."), [this] { midiLearnDialog(); })
         ->setStatusTip (tr ("Map any controller's knobs, faders and buttons (keytars, Intech Grid...) to the mixer and the transport"));
 
+    // Live's MIDI Map mode: every mappable control in the mixer lit, click one and move a control.
+    // An application shortcut, so it works in the mixer popped out too.
+    auto* mapMode = commands.add (QStringLiteral ("control.mapMode"), category, tr ("MIDI &Map Mode"), { QKeySequence (Qt::CTRL | Qt::Key_M) },
+                                  [this] { midiMapMode (mapOverlay == nullptr); });
+    mapMode->setShortcutContext (Qt::ApplicationShortcut);
+    mapMode->setCheckable (true);
+    mapMode->setStatusTip (tr ("Lights every mixer and launcher control: click one, then move a knob or press a button on any MIDI controller to map it"));
+    addAction (mapMode);
+
     surfaces = std::make_unique<ControlSurfaces>();
     midiLearn = std::make_unique<control::Learn>();
 
@@ -125,6 +136,8 @@ void MainWindow::registerControlCommands()
                     controlCommand (c);
                 if (learned)
                 {
+                    if (mapOverlay != nullptr)
+                        mapOverlay->learned();
                     saveMidiMappings();
                     const auto* t = control::targetOf (learned->target);
                     statusBar()->showMessage (tr ("Learned: %1 does %2").arg (QString::fromStdString (control::describeSource (*learned)),
@@ -145,6 +158,47 @@ void MainWindow::registerControlCommands()
             openMidiInputs();
         controlTimer.start();
     });
+}
+
+void MainWindow::midiMapMode (bool on)
+{
+    if (auto* action = commands.action (QStringLiteral ("control.mapMode")))
+        action->setChecked (on);
+    if (! on)
+    {
+        if (mapOverlay != nullptr)
+            mapOverlay->deleteLater();
+        mapOverlay = nullptr;
+        midiLearn->cancel();
+        if (learnDialog != nullptr && mapOpenedLearnDialog)
+            learnDialog->close();
+        mapOpenedLearnDialog = false;
+        return;
+    }
+    if (mapOverlay != nullptr)
+        return;
+    showMixer();
+    auto* overlay = new MidiMapOverlay (*mixerWin, *midiLearn);
+    mapOverlay = overlay;
+    overlay->mappingsChanged = [this]
+    {
+        saveMidiMappings();
+        if (learnDialogRefresh)
+            learnDialogRefresh();
+    };
+    overlay->finished = [this] { midiMapMode (false); };
+    connect (mixerWin, &MixerWindow::closed, overlay, [this] { midiMapMode (false); });
+    // The mappings beside it, as Live shows them in its browser's place.
+    mapOpenedLearnDialog = learnDialog == nullptr;
+    midiLearnDialog();
+    if (learnDialog != nullptr && mapOpenedLearnDialog)
+    {
+        const auto at = mixerWin->window()->geometry();
+        learnDialog->resize (520, 300);   // small, in a corner, clear of the strips
+        learnDialog->move (std::max (at.left(), at.right() - learnDialog->width() - 20), at.top() + 40);
+    }
+    mixerWin->window()->activateWindow();
+    overlay->setFocus();
 }
 
 void MainWindow::controlCommand (const control::Command& c)
@@ -427,11 +481,12 @@ void MainWindow::midiLearnDialog()
     }
     auto* dialog = new QDialog (this);
     dialog->setAttribute (Qt::WA_DeleteOnClose);
-    dialog->setWindowTitle (tr ("MIDI Learn"));
+    dialog->setWindowTitle (tr ("MIDI Mappings"));
     learnDialog = dialog;
     auto* layout = new QVBoxLayout (dialog);
     auto* about = new QLabel (tr ("Choose what a control should do, press Learn, then move the knob or fader, or press the key, pad or "
                                   "button, on any keyboard or controller (a keytar's buttons and strips, an Intech Grid's encoders). "
+                                  "Or press Ctrl+M (MIDI Map Mode) and click the mixer's own fader, knob or button. "
                                   "A mapped control no longer plays notes. Endless encoders: set their Mode to the relative kind they send."),
                               dialog);
     about->setWordWrap (true);
@@ -540,6 +595,8 @@ void MainWindow::midiLearnDialog()
         saveMidiMappings();
         fill();
     });
+    auto* removeKey = new QShortcut (QKeySequence::Delete, table, nullptr, nullptr, Qt::WidgetShortcut);
+    connect (removeKey, &QShortcut::activated, remove, &QPushButton::click);
     connect (clear, &QPushButton::clicked, dialog, [this, fill]
     {
         midiLearn->setMappings ({});

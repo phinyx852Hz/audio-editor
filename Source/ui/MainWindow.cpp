@@ -913,7 +913,7 @@ void MainWindow::buildMenus()
                                "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "mixer.sendToTimeline", "-", "mixer.editorTrack", "mixer.trackToEditor", "-", "mixer.assistant" } },
         { tr ("Mo&de"),      { "@mode" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "-", "options.keymap", "options.theme", "options.waveformColors" } },
-        { tr ("Performan&ce"), { "performance.launcher", "-", "control.surfaces", "control.learn", "-", "performance.record", "performance.stream", "-", "performance.settings", "performance.folder" } },
+        { tr ("Performan&ce"), { "performance.launcher", "-", "control.surfaces", "control.learn", "control.mapMode", "-", "performance.record", "performance.stream", "-", "performance.settings", "performance.folder" } },
         { tr ("&Repair"),    { "view.diagnostics", "-", "repair.autoHeal", "repair.spectralGain", "repair.findSimilar", "repair.correctPitch", "-", "repair.learnNoise", "repair.noiseReduction", "-",
                                "repair.declick", "repair.declip", "repair.dehum", "repair.deess", "-",
                                "repair.toolBox", "repair.toolLasso", "repair.toolBrush", "repair.toolSpotHeal",
