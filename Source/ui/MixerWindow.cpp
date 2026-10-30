@@ -6884,6 +6884,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     devicePanel->setAutoFillBackground (false);
     // Fixed along the bottom (owner, 2026-10-25), see-through like the rest of the mixer.
     devicePanel->setFixedHeight (190);
+    devicesHidden = ! appSettings().value (QStringLiteral ("mixer/devices"), true).toBool();
 
     auto* layout = new QVBoxLayout (this);
     layout->addWidget (transportRow);
@@ -7844,12 +7845,19 @@ void MixerWindow::updateDevicePanel()
     if (devicePanel == nullptr)
         return;
     refreshMidiClipBox();
-    const bool show = true;   // fixed along the bottom; the master's shows nothing to change
+    const bool show = ! devicesHidden;   // fixed along the bottom; the master's shows nothing to change
     if (devicePanel->isHidden() == show)
     {
         devicePanel->setVisible (show);
         Q_EMIT devicePanelChanged();
     }
+}
+
+void MixerWindow::toggleDevices()
+{
+    devicesHidden = ! devicesHidden;
+    appSettings().setValue (QStringLiteral ("mixer/devices"), ! devicesHidden);
+    updateDevicePanel();
 }
 
 void MixerWindow::showDevices()

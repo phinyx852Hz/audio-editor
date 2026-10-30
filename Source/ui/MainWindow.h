@@ -522,8 +522,9 @@ public:
 private:
     void showEditorPage();            // the editor back in front; a docked mixer steps aside
     // A docked mixer in front shows the selected track's own Device Chain, so the editor's
-    // (the master's) steps aside until the Master strip is picked or the editor comes back.
+    // (the master's) steps aside until the editor comes back; Ctrl+Shift+C then works the mixer's.
     void updateChainDock();
+    bool mixerChainKey() const;   // the docked mixer in front: Ctrl+Shift+C is its Device Chain
     bool chainHiddenForMixer = false;
     // The Find panel is the mixer's Finder in the editor's place: it and the Inspector take
     // turns (owner, 2026-10-25). Hidden for the Inspector, it comes back with the editor.

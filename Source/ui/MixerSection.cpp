@@ -259,11 +259,17 @@ void MainWindow::returnMixerEdits()
     }
 }
 
+bool MainWindow::mixerChainKey() const
+{
+    return mixerDocked() && centralStack->currentWidget() == mixerWin && ! chainPanel->isPoppedOut();
+}
+
 void MainWindow::updateChainDock()
 {
-    // The mixer has its own along its bottom; the editor's would show twice.
+    // The mixer has its own along its bottom; the editor's would show twice. It steps aside
+    // even while the mixer's is hidden (Ctrl+Shift+C), or that key would bring it back instead.
     auto* dock = chainPanel->dock();
-    const bool mixerOwns = mixerDocked() && centralStack->currentWidget() == mixerWin && mixerWin->devicePanelShown();
+    const bool mixerOwns = mixerChainKey();
     if (mixerOwns && ! chainPanel->isPoppedOut() && dock->isVisible())
     {
         chainHiddenForMixer = true;
