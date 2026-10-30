@@ -6,8 +6,13 @@ And: "a 'regular' Western, tempered tuning scale and piano roll. then, when a mu
 midi editor based on the tradition we're using. One great feature of MIDIRestyle: drop a 'regular'
 MIDI file into a specific non-Western MIDI editor and get a melody made to fit it."
 
-**Edit Notes...** in the Inspector's MIDI Clip section opens it on the clip picked (on the tracks or
-in the launcher). **Apply to the Clip** writes the notes as a new MIDI file beside the mix, as the
+Pick a MIDI clip (on the tracks or in the launcher), then open it any of these ways:
+
+- **Mixer › Edit MIDI Notes...** (Alt+Shift+N)
+- a double-click on the clip's preview, under the mixer or in the editor's track
+- **Edit Notes...** in the Inspector's MIDI Clip section, or in the clip panel's MIDI tools
+
+**Apply to the Clip** writes the notes as a new MIDI file beside the mix, as the
 fast edits do, and Ctrl+Z on the tracks puts the clip back.
 
 ## The rows are the system the music is in

@@ -910,7 +910,7 @@ void MainWindow::buildMenus()
         { tr ("Architecto&nics"), { "architectonics.compose", "architectonics.score", "architectonics.design", "-", "architectonics.play", "architectonics.deal", "architectonics.endless" } },
         { tr ("&Master"),    { "#album", "-", "view.master", "view.chain", "master.addPlugin", "master.bypass", "analyze.plugin", "-", "master.assistant", "-", "master.render", "master.renderNew", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
         { tr ("Mi&xer"),     { "mixer.window", "mixer.dock", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
-                               "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "mixer.sendToTimeline", "-", "mixer.editorTrack", "mixer.trackToEditor", "-", "mixer.assistant" } },
+                               "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "mixer.sendToTimeline", "-", "mixer.editNotes", "-", "mixer.editorTrack", "mixer.trackToEditor", "-", "mixer.assistant" } },
         { tr ("Mo&de"),      { "@mode" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "-", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("Performan&ce"), { "performance.launcher", "-", "control.surfaces", "control.learn", "-", "performance.record", "performance.stream", "-", "performance.settings", "performance.folder" } },
