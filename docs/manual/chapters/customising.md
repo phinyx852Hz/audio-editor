@@ -78,6 +78,8 @@ A theme you choose is remembered, so if you picked PHI Dark before PHI Gold arri
 
 []{.ix t="Window opacity"}The **Opacity** slider at the bottom right of the window (or View > Window Opacity) makes the whole PHI window see-through; `Ctrl+Alt+-` and `Ctrl+Alt+=` change it from the keyboard. Your compositor's own opacity, such as a Hyprland window rule, applies on top.
 
+The Analysis Meters window has an Opacity slider of its own; see [The Analysis Meters window](#analysis-meters).
+
 With the Visualizer behind PHI (`Ctrl+F11`), the same slider sets how much of it glows through. See [The Visualizer and Sonify](#visualizer).
 
 ## Focus follows the mouse {#focus-follows-mouse}

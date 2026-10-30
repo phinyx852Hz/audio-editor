@@ -1,6 +1,6 @@
 # Keyboard Shortcuts {#shortcuts}
 
-[]{.ix t="Keyboard shortcuts!list"}Every command in PHI, 308 of them, with the keys it has when PHI is first installed. Commands without keys can still be found in the command palette (`Ctrl+Shift+P`), and any of them can be given keys in Options > Keyboard Shortcuts (`Ctrl+Shift+K`); see [Changing shortcuts](#change-shortcuts).
+[]{.ix t="Keyboard shortcuts!list"}Every command in PHI, 364 of them, with the keys it has when PHI is first installed. Commands without keys can still be found in the command palette (`Ctrl+Shift+P`), and any of them can be given keys in Options > Keyboard Shortcuts (`Ctrl+Shift+K`); see [Changing shortcuts](#change-shortcuts).
 
 Commands are grouped as the command palette groups them, which is mostly by menu. Where a command has more than one set of keys, they are separated by a slash.
 
@@ -153,6 +153,8 @@ The few `Super` keys are the desktop's standard keys for closing and full screen
 | Double Grid Tempo |  |
 | Edit Warp Markers | `Shift+W` |
 | Export Loop | `Ctrl+Alt+L` |
+| Extreme Stretch (Paulstretch) | `Ctrl+Shift+X` |
+| Extreme Stretch Again | `X` |
 | Halve Grid Tempo |  |
 | Next Hit | `.` |
 | Nudge Warp Marker 1 ms Earlier | `Ctrl+Alt+Shift+Left` |
@@ -216,6 +218,7 @@ The few `Super` keys are the desktop's standard keys for closing and full screen
 | Mark Onsets | `Ctrl+Alt+Shift+O` |
 | Measure RMS |  |
 | Next Imaging View | `Ctrl+Alt+V` |
+| Plugin Analyzer | `Ctrl+Alt+U` |
 | Reset Meters | `Ctrl+Alt+R` |
 | Vamp Plugins | `Ctrl+Alt+Shift+V` |
 
@@ -279,6 +282,7 @@ The few `Super` keys are the desktop's standard keys for closing and full screen
 
 | Command | Keys |
 |---|---|
+| Audio Editor | `Shift+F2` |
 | Blend Towards Spectrogram | `Alt+Shift+Up` |
 | Blend Towards Waveform | `Alt+Shift+Down` |
 | Choose MilkDrop Preset | `Ctrl+Shift+F12` |
@@ -297,6 +301,7 @@ The few `Super` keys are the desktop's standard keys for closing and full screen
 | History Panel | `Ctrl+H` |
 | Level Meters | `Ctrl+Shift+L` |
 | Markers Panel | `Ctrl+Shift+M` |
+| MIDI Editor | `Shift+F4` |
 | More Opaque | `Ctrl+Alt+=` / `Ctrl+Alt++` |
 | More Transparent | `Ctrl+Alt+-` |
 | Next MilkDrop Preset | `Alt+F12` |
@@ -312,8 +317,10 @@ The few `Super` keys are the desktop's standard keys for closing and full screen
 | Sonify a Camera |  |
 | Sonify a Picture or Video |  |
 | Sonify the Visualizer |  |
+| Sonify the Web Page |  |
 | Spectral Display | `Shift+D` |
 | Spectrogram Settings | `Alt+Shift+D` |
+| Use the Web Page |  |
 | Visualizer | `Shift+F11` |
 | Visualizer Behind PHI | `Ctrl+F11` |
 | Visualizer Full Screen | `F11` |
@@ -332,6 +339,9 @@ The few `Super` keys are the desktop's standard keys for closing and full screen
 | Visualizer: Starfield |  |
 | Visualizer: Third-Octave Bands |  |
 | Visualizer: Waterfall |  |
+| Web Page Address |  |
+| Web Page Behind PHI |  |
+| Web Page Sound |  |
 | Whole-File Overview | `Ctrl+Alt+O` |
 | Zoom In | `Ctrl+=` / `+` / `=` |
 | Zoom Out | `Ctrl+-` / `-` |
@@ -345,6 +355,8 @@ The few `Super` keys are the desktop's standard keys for closing and full screen
 | Command | Keys |
 |---|---|
 | Add Track |  |
+| Delete Selected Track |  |
+| Edit MIDI Notes | `Alt+Shift+N` |
 | Mix Assistant | `Alt+Shift+X` |
 | Mix Down to Editor | `Ctrl+F3` |
 | Mixer | `F3` |
@@ -353,10 +365,74 @@ The few `Super` keys are the desktop's standard keys for closing and full screen
 | Open Project |  |
 | Patchbay | `F4` |
 | Play or Stop the Mix | `Shift+F3` |
-| Remove Last Track |  |
+| Render the Editor's Track to a Tab |  |
 | Save Project |  |
 | Save Project As |  |
+| Send to Clip Launcher | `Alt+F3` |
+| Send to Timeline | `Alt+Shift+F3` |
 | Undock / Dock Mixer | `Ctrl+Shift+F3` |
+
+## Compose
+
+| Command | Keys |
+|---|---|
+| 12-Tone Row |  |
+| Chance and Aleatory |  |
+| Compose |  |
+| Cubify |  |
+| Fugue |  |
+| Gamelan Colotomic Form |  |
+| Hocket and Interlocking |  |
+| Isorhythm |  |
+| Jo-ha-kyū |  |
+| Layered Ostinato |  |
+| Maqām: Taqsīm and Waṣla |  |
+| Minimalize a Scene |  |
+| New Microtonal Score |  |
+| Organum |  |
+| Process Music |  |
+| Radif and Dastgāh |  |
+| Rhythm Generator |  |
+| Rāga Development |  |
+| Sanjo |  |
+| Species Counterpoint |  |
+| Spectral |  |
+| Stochastic Matrix |  |
+| Stochasticize the Clip |  |
+| Sǎn-màn-zhōng-kuài-sǎn |  |
+| Tintinnabuli |  |
+
+## Architectonics
+
+| Command | Keys |
+|---|---|
+| Compose a Score |  |
+| Compose a Song |  |
+| Deal a New Set |  |
+| Design a Set |  |
+| Endless: a New Set at the End |  |
+| Play the Set |  |
+
+## Mode
+
+| Command | Keys |
+|---|---|
+| 12 tone row |  |
+| counterpoint |  |
+| cubify |  |
+| fugue |  |
+| harmonize in the mode |  |
+| notes into the mode |  |
+| stochasticize |  |
+| tune the track |  |
+
+## Research
+
+| Command | Keys |
+|---|---|
+| All References |  |
+| Edit References |  |
+| Search Research |  |
 
 ## Sample
 

@@ -151,6 +151,8 @@ warp.nudgeEarlierFine	Warp	Nudge Warp Marker 1 ms Earlier	Ctrl+Alt+Shift+Left
 warp.nudgeLaterFine	Warp	Nudge Warp Marker 1 ms Later	Ctrl+Alt+Shift+Right
 warp.quantize	Warp	Quantize	Q
 warp.stretch	Warp	Stretch to Tempo	Ctrl+Alt+Shift+J
+warp.extremeStretch	Warp	Extreme Stretch (Paulstretch)	Ctrl+Shift+X
+warp.extremeAgain	Warp	Extreme Stretch Again	X
 warp.halfSpeed	Warp	Stretch ×2 (Twice as Long)	* / Ctrl+Alt+Down
 warp.doubleSpeed	Warp	Shrink ÷2 (Half as Long)	/ / Ctrl+Alt+Up
 warp.exportLoop	Warp	Export Loop	Ctrl+Alt+L
@@ -188,6 +190,11 @@ visualizer.milkdrop	View	Visualizer: MilkDrop
 visualizer.sonify	View	Sonify the Visualizer	
 visualizer.sonifyFile	View	Sonify a Picture or Video	
 visualizer.sonifyCamera	View	Sonify a Camera	
+visualizer.sonifyWeb	View	Sonify the Web Page	
+view.webBehind	View	Web Page Behind PHI	
+view.webAddress	View	Web Page Address	
+view.webInteract	View	Use the Web Page	
+view.webSound	View	Web Page Sound	
 tracker.window	Tracker	Tracker1 (MilkyTracker)	Ctrl+Alt+Shift+K
 tracker.furnace	Tracker	Tracker2 (Furnace)	
 tracker.new	Tracker	New Song	
@@ -234,9 +241,13 @@ mixer.open	Mixer	Open Project
 mixer.save	Mixer	Save Project	
 mixer.saveAs	Mixer	Save Project As	
 mixer.addTrack	Mixer	Add Track	
-mixer.removeTrack	Mixer	Remove Last Track	
+mixer.removeTrack	Mixer	Delete Selected Track	
 mixer.playStop	Mixer	Play or Stop the Mix	Shift+F3
 mixer.mixdown	Mixer	Mix Down to Editor	Ctrl+F3
+mixer.sendToLauncher	Mixer	Send to Clip Launcher	Alt+F3
+mixer.sendToTimeline	Mixer	Send to Timeline	Alt+Shift+F3
+mixer.editNotes	Mixer	Edit MIDI Notes	Alt+Shift+N
+mixer.trackToEditor	Mixer	Render the Editor's Track to a Tab	
 mixer.assistant	Mixer	Mix Assistant	Alt+Shift+X
 mixer.patchbay	Mixer	Patchbay	F4
 reference.toggle	References	Switch Between Your Audio and Reference	A
@@ -288,6 +299,8 @@ view.spectrogramSettings	View	Spectrogram Settings	Alt+Shift+D
 view.verticalZoomIn	View	Zoom Vertically In	Alt+= / Alt++
 view.verticalZoomOut	View	Zoom Vertically Out	Alt+-
 view.verticalZoomReset	View	Reset Vertical Zoom	Alt+0
+view.audioEditor	View	Audio Editor	Shift+F2
+view.midiEditor	View	MIDI Editor	Shift+F4
 view.opacityUp	View	More Opaque	Ctrl+Alt+= / Ctrl+Alt++ / Ctrl+Alt+Num++
 view.opacityDown	View	More Transparent	Ctrl+Alt+- / Ctrl+Alt+_ / Ctrl+Alt+Num+-
 view.opacityFull	View	Fully Opaque	
@@ -306,3 +319,46 @@ options.theme	Options	Theme	Ctrl+Shift+T
 help.palette	Help	Command Palette	Ctrl+Shift+P / F1
 help.menuBar	Help	Open Menu Bar	F10
 help.about	Help	About PHI	
+analyze.plugin	Analyze	Plugin Analyzer	Ctrl+Alt+U
+compose.newScore	Compose	New Microtonal Score	
+compose.dialog	Compose	Compose	
+compose.counterpoint	Compose	Species Counterpoint	
+compose.fugue	Compose	Fugue	
+compose.serial	Compose	12-Tone Row	
+compose.stochasticize	Compose	Stochasticize the Clip	
+compose.cubify	Compose	Cubify	
+compose.minimalize	Compose	Minimalize a Scene	
+compose.rhythm	Compose	Rhythm Generator	
+compose.organum	Compose	Organum	
+compose.isorhythm	Compose	Isorhythm	
+compose.stochastic	Compose	Stochastic Matrix	
+compose.aleatory	Compose	Chance and Aleatory	
+compose.process	Compose	Process Music	
+compose.tintinnabuli	Compose	Tintinnabuli	
+compose.spectral	Compose	Spectral	
+compose.raga	Compose	Rāga Development	
+compose.maqam	Compose	Maqām: Taqsīm and Waṣla	
+compose.radif	Compose	Radif and Dastgāh	
+compose.gamelan	Compose	Gamelan Colotomic Form	
+compose.johakyu	Compose	Jo-ha-kyū	
+compose.sanjo	Compose	Sanjo	
+compose.chinese	Compose	Sǎn-màn-zhōng-kuài-sǎn	
+compose.ewe	Compose	Layered Ostinato	
+compose.hocket	Compose	Hocket and Interlocking	
+architectonics.compose	Architectonics	Compose a Song	
+architectonics.score	Architectonics	Compose a Score	
+architectonics.design	Architectonics	Design a Set	
+architectonics.play	Architectonics	Play the Set	
+architectonics.deal	Architectonics	Deal a New Set	
+architectonics.endless	Architectonics	Endless: a New Set at the End	
+mode.toClip	Mode	notes into the mode	
+mode.counterpoint	Mode	counterpoint	
+mode.fugue	Mode	fugue	
+mode.stochasticize	Mode	stochasticize	
+mode.harmonize	Mode	harmonize in the mode	
+mode.serial	Mode	12 tone row	
+mode.cubify	Mode	cubify	
+mode.tuneTrack	Mode	tune the track	
+research.search	Research	Search Research	
+research.all	Research	All References	
+research.edit	Research	Edit References	

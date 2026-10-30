@@ -1,6 +1,6 @@
 # Surround, Binaural and Ambisonics
 
-The Spatial menu (`Alt+I`) places sound around the listener: in surround, on headphones, or in a full sphere. This chapter covers channel layouts and surround files, binaural placement, ambisonics, your own speaker arrays and the Ambisonic Studio.
+The Spatial menu (`Alt+I`) places sound around the listener: in surround, on headphones, or in a full sphere. This chapter covers channel layouts and surround files, binaural placement, ambisonics, your own speaker arrays and the Ambisonic Studio. To place a whole mix of tracks in 3D, and to put surround and ambisonic files on the mixer's tracks, see [Spatial mixing](#spatial-mixing) in the mixer.
 
 ## Surround files
 
