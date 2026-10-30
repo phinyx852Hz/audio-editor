@@ -467,17 +467,20 @@ void PadGrid::paintEvent (QPaintEvent*)
             g.setFont (small);
             g.drawText (box, Qt::AlignCenter, label);
         }
+        // The note beside M and S, or under them when the pad is too narrow for both.
+        g.setFont (small);
+        auto noteArea = inner.adjusted (soloRect (i).right() + 3 - inner.left(), 0, 0, 0);
+        if (g.fontMetrics().horizontalAdvance (note) > noteArea.width())
+            noteArea = inner.adjusted (0, muteRect (i).bottom() + 2 - inner.top(), 0, 0);
         if (! used && p.name.empty())
         {
             // An empty pad shows only its note, as in Drum Rack.
             g.setPen (on ? QColor (20, 20, 20) : QColor (110, 110, 115));
-            g.setFont (small);
-            g.drawText (inner, Qt::AlignRight | Qt::AlignTop, note);
+            g.drawText (noteArea, Qt::AlignRight | Qt::AlignTop, note);
             continue;
         }
         g.setPen (on ? QColor (20, 20, 20) : (used ? QColor (235, 235, 238) : QColor (150, 150, 155)));
-        g.setFont (small);
-        g.drawText (inner, Qt::AlignRight | Qt::AlignTop, note);
+        g.drawText (noteArea, Qt::AlignRight | Qt::AlignTop, note);
         g.drawText (inner.adjusted (0, 0, 0, 0), Qt::AlignLeft | Qt::AlignBottom, padName (pad));
         g.setFont (font());
         g.drawText (inner.adjusted (0, inner.height() * 0.3, 0, -inner.height() * 0.3), Qt::AlignCenter,
@@ -610,6 +613,7 @@ SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
     title->setMaximumWidth (220);
     view = new SliceView (engine, this);
     pads = new PadGrid (engine, this);
+    pads->setMinimumWidth (240);   // room for each pad's M, S and note
     status = new QLabel (this);
     status->setMinimumWidth (100);
     status->setSizePolicy (QSizePolicy::Ignored, QSizePolicy::Preferred);

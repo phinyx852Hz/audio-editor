@@ -138,8 +138,17 @@ public:
     bool saveMix (bool saveAs);
     bool loadMix (const QString& path, QString& error);
     bool writeMix (const QString& path, QString& error);
-    void autosave();      // the mix as it is, kept in the config folder and opened again next time
+    // Unsaved changes offered a save first: Save, Discard or Cancel. False when the user
+    // cancels, or cancels the save, and keeps the project.
+    bool askToSave (const QString& title, const QString& question);
+    // Crash recovery (owner, 2026-10-30): last.phi is written while PHI runs and removed on a
+    // clean quit, so PHI starts on a blank project and offers last.phi only after a crash.
+    void autosave();      // the mix as it is, kept in the config folder
     void restoreAutosave();
+    void dropAutosave();   // quitting: last.phi removed, and not written again
+    static void removeAutosave();      // last.phi and what it was saved as, gone
+    static QString autosaveName();     // the project last.phi holds: its file's name, or empty when untitled
+    bool hasUnsavedChanges() const { return modified; }
     static QString autosavePath();   // last.phi in the config folder
     void projectChanged() { changed(); }   // the patchbay, say: the project differs from its file
     QString mixName() const;
@@ -174,8 +183,9 @@ public:
     int emptyScenes (int count) const;
     // Its Compose a Score: the score opened in the MIDI editor (the staff view there, once it
     // has one), played on the selected track; kept, it goes on a new track (else the selected
-    // one) from the start, the track tuned to `tuning`.
-    void openScore (const midifile::Song& score, mixer::TuningChoice tuning, const QString& title);
+    // one) from the start, the track tuned to `tuning`. `notation`: the notation the editor opens
+    // on (mixer/Notation.h's ids, "phi" PHI's microtonal staff), empty the piano roll.
+    void openScore (const midifile::Song& score, mixer::TuningChoice tuning, const QString& title, const QString& notation = {});
     void composeScene (int scene, const std::vector<int>& tracks, const QStringList& files,
                        const std::vector<midifile::SongPtr>& midi, mixer::TuningChoice tuning, const QString& name);
     // A file chosen in the Find panel's Selector: into the first empty slot of the track with
@@ -199,8 +209,8 @@ public:
     bool replaceClipAudio (int track, uint32_t clip, const AudioData& edited, const QString& name, QString& error);
 
     // The Device Chain along the mixer's bottom (owner, 2026-10-25): the selected track's
-    // instrument and inserts, or the clip picked in the launcher or the tracks. Hidden while
-    // the Master strip is selected, so the editor's own chain can show.
+    // instrument and inserts, or the clip picked in the launcher or the tracks. Ctrl+Shift+C
+    // (the editor's Device Chain key) hides or shows it, remembered (mixer/devices).
     bool devicePanelShown() const;
     // Where Simplest (0) and the Slicer (1) sit while the mixer is in front: in the Device
     // Chain's place under the strips, taking turns with it (owner, 2026-10-29: "toggle between
@@ -213,6 +223,7 @@ public:
     bool instrumentInFront() const { return lowerFront >= 0; }
     void showDeviceChainInFront();
     bool toggleLowerZone();   // the Device Chain or the instrument in front last; false: none open
+    void toggleDevices();
     // What the browser's Instruments and Audio Effects lists drag: "effect\n<id>",
     // "instrument\n<id>", or "synth", "sampler", "slicer".
     static QString pluginMime() { return QStringLiteral ("application/x-phi-plugin"); }
@@ -266,6 +277,8 @@ public:
     // cubify (CubifySection.cpp, owner 2026-10-26): the MIDI clip shown, else the cursor's scene,
     // arranged by Xenakis's cubes (mixer/Cubify.h) onto the tracks' timelines.
     void cubify();
+    // Minimalize on the launcher's scene at the cursor (the Compose menu's Minimalize a Scene).
+    void minimalizeCursorScene() { minimalizeScene (cursorScene); }
     // Twelve-tone serial music (SerialSection.cpp, owner 2026-10-27; mixer/Serial.h): a piece's
     // voices saved as MIDI files beside the mix, on the selected track and the ones after it,
     // then on new tracks. In the launcher they fill one scene and loop together, so cubify and
@@ -621,6 +634,7 @@ private:
     TrackDevices* devices = nullptr;
     ClipView* clipView = nullptr;
     bool showingClip = false;
+    bool devicesHidden = false;   // by Ctrl+Shift+C
     void refreshInspector();   // soon, once for any number of changes
     QScrollArea* gridScroll = nullptr;
     QComboBox* quantiseBox = nullptr;
@@ -672,6 +686,7 @@ private:
     bool modified = false;
     bool restoring = false;
     bool opening = false;            // inside loadMix: its newMix() keeps the patchbay
+    bool quitting = false;           // after dropAutosave: nothing more written to last.phi
     std::vector<Snapshot> undoStack, redoStack;
     uint32_t nextClipId = 1;
     std::map<QString, std::weak_ptr<const mixer::AudioClip>> audioCache;

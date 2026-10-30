@@ -726,6 +726,9 @@ public:
         insertList->setHorizontalScrollBarPolicy (Qt::ScrollBarAlwaysOff);
         insertList->setVerticalScrollBarPolicy (Qt::ScrollBarAlwaysOff);
         insertList->setDragDropMode (QAbstractItemView::InternalMove);
+        // On the strip itself, see-through like the rest of it (owner, 2026-10-30).
+        insertList->setStyleSheet (QStringLiteral ("QListWidget { background: transparent; border: none; }"));
+        insertList->viewport()->setAutoFillBackground (false);
         insertList->setToolTip (MixerWindow::tr ("The track's insert slots, top first. Click an empty one to add an effect; double-click one to open it; "
                                                  "right-click to bypass, move or remove it; drag to reorder"));
         sectionLayout->addWidget (insertList);
@@ -6884,6 +6887,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     devicePanel->setAutoFillBackground (false);
     // Fixed along the bottom (owner, 2026-10-25), see-through like the rest of the mixer.
     devicePanel->setFixedHeight (190);
+    devicesHidden = ! appSettings().value (QStringLiteral ("mixer/devices"), true).toBool();
 
     auto* layout = new QVBoxLayout (this);
     layout->addWidget (transportRow);
@@ -7879,14 +7883,19 @@ void MixerWindow::setInstrumentOpen (int which, bool open)
 void MixerWindow::showDeviceChainInFront()
 {
     lowerFront = -1;
+    if (devicesHidden)
+        toggleDevices();   // its turn: shown even if Ctrl+Shift+C had hidden it
     updateLowerZone();
 }
 
 bool MixerWindow::toggleLowerZone()
 {
     if (lowerFront >= 0)
-        lowerFront = -1;
-    else if (instrumentOpens[(size_t) lastFront])
+    {
+        showDeviceChainInFront();
+        return true;
+    }
+    if (instrumentOpens[(size_t) lastFront])
         lowerFront = lastFront;
     else
     {
@@ -7962,12 +7971,19 @@ void MixerWindow::updateDevicePanel()
     if (devicePanel == nullptr)
         return;
     refreshMidiClipBox();
-    const bool show = lowerFront < 0;   // fixed along the bottom, unless an instrument has the place
+    const bool show = lowerFront < 0 && ! devicesHidden;   // fixed along the bottom, unless an instrument has the place
     if (devicePanel->isHidden() == show)
     {
         devicePanel->setVisible (show);
         Q_EMIT devicePanelChanged();
     }
+}
+
+void MixerWindow::toggleDevices()
+{
+    devicesHidden = ! devicesHidden;
+    appSettings().setValue (QStringLiteral ("mixer/devices"), ! devicesHidden);
+    updateDevicePanel();
 }
 
 void MixerWindow::showDevices()
@@ -9696,10 +9712,18 @@ bool MixerWindow::isProjectFile (const QString& file)
     return suffix.compare (projectSuffix, Qt::CaseInsensitive) == 0 || suffix.compare (QLatin1String ("phinyxmix"), Qt::CaseInsensitive) == 0;
 }
 
+bool MixerWindow::askToSave (const QString& title, const QString& question)
+{
+    if (! modified)
+        return true;
+    const auto answer = QMessageBox::question (this, title, question, QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+                                               QMessageBox::Save);
+    return answer == QMessageBox::Discard || (answer == QMessageBox::Save && saveMix (false));
+}
+
 bool MixerWindow::newMix()
 {
-    if (modified && ! path.isEmpty()
-        && QMessageBox::question (this, tr ("New Project"), tr ("Start a new project? Changes to %1 that were not saved are lost.").arg (mixName())) != QMessageBox::Yes)
+    if (! askToSave (tr ("New Project"), tr ("Save the changes to %1 before starting a new project?").arg (mixName())))
         return false;
     engine.stop();
     engine.setPosition (0);
@@ -10274,6 +10298,8 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
 
 void MixerWindow::autosave()
 {
+    if (quitting)
+        return;
     const auto file = autosavePath();
     QDir().mkpath (QFileInfo (file).absolutePath());
     QString error;
@@ -10299,6 +10325,26 @@ void MixerWindow::restoreAutosave()
         modified = appSettings().value (QStringLiteral ("mixer/lastModified"), false).toBool();
         updateTitle();
     }
+}
+
+void MixerWindow::dropAutosave()
+{
+    quitting = true;
+    removeAutosave();
+}
+
+QString MixerWindow::autosaveName()
+{
+    const auto lastPath = appSettings().value (QStringLiteral ("mixer/lastPath")).toString();
+    return lastPath.isEmpty() ? QString() : QFileInfo (lastPath).completeBaseName();
+}
+
+void MixerWindow::removeAutosave()
+{
+    QFile::remove (autosavePath());
+    QFile::remove (configFile ("last.phinyxmix"));
+    appSettings().remove (QStringLiteral ("mixer/lastPath"));
+    appSettings().remove (QStringLiteral ("mixer/lastModified"));
 }
 
 //==============================================================================
@@ -11487,9 +11533,10 @@ std::vector<int> MixerWindow::colourTracks (const QStringList& names, const QLis
     return out;
 }
 
-void MixerWindow::openScore (const midifile::Song& score, mixer::TuningChoice tuning, const QString& title)
+void MixerWindow::openScore (const midifile::Song& score, mixer::TuningChoice tuning, const QString& title, const QString& notation)
 {
     MidiEditor::Host host;
+    host.notation = notation;
     host.play = [this] (uint8_t s, uint8_t a, uint8_t b) { engine.liveMidi (s, a, b, false); };
     host.system = tuning.system;
     host.root = tuning.root;
