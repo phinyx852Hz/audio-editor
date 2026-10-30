@@ -219,6 +219,8 @@ public:
     // instrument and inserts, or the clip picked in the launcher or the tracks. Ctrl+Shift+C
     // (the editor's Device Chain key) hides or shows it, remembered (mixer/devices).
     bool devicePanelShown() const;
+    // Options > Mixer Preferences: Arm on Select and Focus Follows Mouse.
+    void showPreferences();
     // Where Simplest (0) and the Slicer (1) sit while the mixer is in front: in the Device
     // Chain's place under the strips, taking turns with it (owner, 2026-10-29: "toggle between
     // the device chain and the slicer in that space"). Tabs over it pick which shows while one
@@ -480,8 +482,9 @@ private:
     bool focusFollowsMouse = false;
     void hoverSelect (int track);
     // Selecting a track that plays an instrument arms it for the MIDI keyboard and recording
-    // (Strips > Arm the Selected Track, on at first); a hover never arms.
+    // (Mixer Preferences, on at first, as Ableton's); a hover never arms.
     bool autoArm = true;
+    bool autoArmed = false;          // the arm is where selecting put it, so the next selection moves it
     bool keepArm = false;            // select() leaves the arm be: a hover, a project opening
     void routeToBus (int track, bool on);   // the track (and the Q-Linked ones) to the Pre-Master, or back to the master
     void loadInserts (int track, const QJsonArray&, QStringList& problems);

@@ -711,6 +711,13 @@ is the patchbay's Mix Bus. Mix Down still renders the mixer's own sum.
   sideways together. The strip under the mouse (or, from the keys, the selected one) stays where
   it is. Ctrl+= and Ctrl+- zoom the tracks across time instead, apart from the strips.
 - Strips > Focus Follows Mouse (off at first): pointing at a strip selects its track, so the keys
-  and the Device Chain act on it without a click. Strips > Arm the Selected Track (on at first):
-  selecting a track that plays an instrument arms it, as Ableton's auto-arm; an audio-only track
-  leaves the arm where it is, a hover never arms, nor does anything while a take records.
+  and the Device Chain act on it without a click. Options > Mixer Preferences (and the Mixer menu) has
+  Arm on Select, on at first, as Ableton's auto-arm: selecting a track the MIDI keyboard plays arms
+  it, and selecting another moves the arm. A track that would record the audio input (an audio
+  track, or a hybrid with no instrument yet) is never armed this way, since arming it opens its
+  input (the first version did, and the input's noise showed on its meter); selecting one takes
+  the arm off the track selecting armed. A hover never arms, nor does anything while a take
+  records, and an arm set by hand stays until it is changed by hand.
+- The audio input, with none chosen in Record Options, is the system's default input; it was the
+  first input by name, which could be a webcam's or the board's microphone instead of the
+  interface.

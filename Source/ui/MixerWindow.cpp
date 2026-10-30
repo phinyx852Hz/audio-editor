@@ -8454,12 +8454,25 @@ void MixerWindow::select (int index)
     }
     if (! picked.count (index))
         picked = { index };
-    // Arm the Selected Track (owner, 2026-10-30, as Ableton's auto-arm): one that plays an
-    // instrument takes the arm, not while a take goes on and not from a hover; an audio track
-    // leaves it where it is, as arming it would open its input.
-    if (autoArm && ! keepArm && index < engine.numTracks() && engine.liveTrack() != index && ! engine.isRecording()
-        && engine.strip (index).mode.load() != (int) mixer::TrackMode::audio)
-        arm (index);
+    // Arm the Selected Track (owner, 2026-10-30, as Ableton's auto-arm): one that the MIDI
+    // keyboard plays takes the arm, not while a take goes on and not from a hover. One that would
+    // record the audio input (an audio track, or a hybrid with no instrument yet) leaves the arm
+    // where it is, as arming it would open its input and its meter would show the room's noise.
+    // Like Ableton's, the arm follows the selection: a track that takes no arm (as above) takes it
+    // off the track selecting armed, but never off one armed by hand.
+    if (autoArm && ! keepArm && index < engine.numTracks() && engine.liveTrack() != index && ! engine.isRecording())
+    {
+        if (const auto q = recordRequest (index, -1); ! (q.audio && ! q.fromInstrument))
+        {
+            arm (index);
+            autoArmed = true;
+        }
+        else if (autoArmed && engine.liveTrack() >= 0)
+        {
+            arm (engine.liveTrack());   // off
+            autoArmed = false;
+        }
+    }
     // The clip shown belongs to the track that was selected; this one shows its devices.
     if (showingClip && clipView->shownTrack() != index)
     {
@@ -9411,6 +9424,7 @@ void MixerWindow::editInstrument (int track)
 
 void MixerWindow::arm (int track)
 {
+    autoArmed = false;   // by hand, unless select() says otherwise straight after
     engine.setLiveTrack (engine.liveTrack() == track ? -1 : track);
     updateInput();   // an audio track armed hears its input
     for (int i = 0; i < mixer::maxTracks; ++i)
@@ -9772,17 +9786,37 @@ void MixerWindow::stripsMenu (QPoint at)
         focusFollowsMouse = on;
         appSettings().setValue (QStringLiteral ("mixer/focusFollowsMouse"), on);
     });
-    auto* arming = menu.addAction (tr ("&Arm the Selected Track"));
-    arming->setCheckable (true);
-    arming->setChecked (autoArm);
-    arming->setToolTip (tr ("Selecting a track that plays an instrument arms it for the MIDI keyboard and recording; pointing at one never does"));
-    connect (arming, &QAction::toggled, this, [this] (bool on)
-    {
-        autoArm = on;
-        appSettings().setValue (QStringLiteral ("mixer/autoArm"), on);
-    });
     menu.setToolTipsVisible (true);
     menu.exec (at);
+}
+
+void MixerWindow::showPreferences()
+{
+    QDialog dialog (this);
+    dialog.setWindowTitle (tr ("Mixer Preferences"));
+    auto* layout = new QVBoxLayout (&dialog);
+    auto* arming = new QCheckBox (tr ("&Arm on Select: selecting a track arms it, as in Ableton Live"), &dialog);
+    arming->setChecked (autoArm);
+    arming->setToolTip (tr ("A track the MIDI keyboard plays takes the arm when you select it, and gives it up when you select another. "
+                            "A track that would record the audio input (an audio track, or a hybrid with no instrument yet) is never armed "
+                            "this way, nor is a track you only point at, and an arm you set by hand stays"));
+    auto* follow = new QCheckBox (tr ("&Focus Follows Mouse: pointing at a strip selects its track"), &dialog);
+    follow->setChecked (focusFollowsMouse);
+    layout->addWidget (arming);
+    layout->addWidget (follow);
+    auto* buttons = new QDialogButtonBox (QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect (buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect (buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget (buttons);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    autoArm = arming->isChecked();
+    focusFollowsMouse = follow->isChecked();
+    appSettings().setValue (QStringLiteral ("mixer/autoArm"), autoArm);
+    appSettings().setValue (QStringLiteral ("mixer/focusFollowsMouse"), focusFollowsMouse);
+    if (! autoArm && autoArmed && engine.liveTrack() >= 0)
+        arm (engine.liveTrack());   // the arm selecting set goes with it
+    autoArmed = false;
 }
 
 void MixerWindow::setSixteenTracks (bool on)

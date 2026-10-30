@@ -119,6 +119,8 @@ void MainWindow::registerMixerCommands()
         mixerWindow();
         mixDownToEditor (mixerWin->editorTrack());
     })->setStatusTip (tr ("The editor's track as it sounds, its MIDI through its instrument and its audio, as one sound in a new tab"));
+    add ("mixer.preferences", tr ("Mixer &Preferences..."), {}, [this] { mixerWindow()->showPreferences(); })
+        ->setStatusTip (tr ("Arm on Select (as Ableton Live's) and Focus Follows Mouse"));
     add ("mixer.assistant", tr ("Mix &Assistant..."), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_X) }, [this] { mixAssistant(); })
         ->setStatusTip (tr ("Sets the faders and pans of the mix by what each track is, with headroom for mastering"));
 }
