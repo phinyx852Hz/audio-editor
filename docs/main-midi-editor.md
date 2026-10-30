@@ -57,5 +57,9 @@ the editor's sound onto the mixer's selected track.
   - Chords (several notes at once) are not heard yet: a chord comes out as its loudest line.
   The choice is kept for the next start (`midiEditor/dropAs`).
 
+In the MIDI editor, **Home** goes to the start and **End** to the end of the last note: the step
+cursor and the playhead move there and the roll scrolls to it (playing, it plays on from there).
+Alt+arrows and F6 move the keyboard into and out of the MIDI editor as they do between panels.
+
 Below the bar is the MIDI editor itself ([midi-editor.md](midi-editor.md)): the piano roll, the
 pitch systems, step input, quantise, restyle and the rest, without its Apply and Cancel buttons.

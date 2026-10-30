@@ -136,6 +136,14 @@ public:
 
     void refresh() { updateBars(); viewport()->update(); }
 
+    // Scrolled so the tick is in view: at the left edge for the start, else in the middle.
+    void reveal (int64_t tick)
+    {
+        updateBars();
+        horizontalScrollBar()->setValue (tick <= 0 ? 0 : (int) std::max (0.0, tick * pixelsPerTick - viewport()->width() / 2.0));
+        viewport()->update();
+    }
+
     void keyPressEvent (QKeyEvent* e) override { ed.keyPressEvent (e); }
 
 protected:
@@ -2744,9 +2752,42 @@ void MidiEditor::midiIn (uint8_t status, uint8_t data1, uint8_t data2)
         heldKeys = std::max (0, heldKeys - 1);
 }
 
+bool MidiEditor::event (QEvent* e)
+{
+    if (e->type() == QEvent::ShortcutOverride)
+    {
+        const auto* k = static_cast<QKeyEvent*> (e);
+        if ((k->key() == Qt::Key_Home || k->key() == Qt::Key_End) && (k->modifiers() & ~Qt::KeypadModifier) == Qt::NoModifier)
+        {
+            e->accept();
+            return true;
+        }
+    }
+    return QDialog::event (e);
+}
+
+void MidiEditor::goTo (int64_t tick)
+{
+    const bool playing = playTimer->isActive();
+    if (playing)
+        stopPlay();
+    step.position = std::max<int64_t> (0, tick);
+    playheadTick = step.position;
+    showSystemAt (step.position);
+    roll->reveal (step.position);
+    if (playing)
+        startPlay (playingOriginal);   // on from there
+    viewsUpdate();
+}
+
 void MidiEditor::keyPressEvent (QKeyEvent* e)
 {
     const auto mods = e->modifiers();
+    if ((mods & ~Qt::KeypadModifier) == Qt::NoModifier && (e->key() == Qt::Key_Home || e->key() == Qt::Key_End))
+    {
+        goTo (e->key() == Qt::Key_Home ? 0 : seq.end());
+        return;
+    }
     const auto ctrl = (mods & Qt::ControlModifier) != 0, shift = (mods & Qt::ShiftModifier) != 0, alt = (mods & Qt::AltModifier) != 0;
     if (ctrl && e->key() == Qt::Key_Z)
     {
