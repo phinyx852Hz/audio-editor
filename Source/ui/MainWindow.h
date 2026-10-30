@@ -548,9 +548,14 @@ private:
     bool hidingFindForMixer = false;
     void sendToLauncher();   // the editor's sound (or its selection) into the mixer's launcher
     void sendToTimeline();   // the same onto the editor's track at the playhead
-    // The editor's track (owner, 2026-10-26, MixerWindow::editorTrackView): under the waveform,
-    // in a split the user sizes (F4 shows or hides it). Made with the mixer, the first time shown.
-    void showEditorTrack (bool on);
+    // The main editor's halves (owner, 2026-10-30): the audio editor (waveform) above and the
+    // MIDI editor (MidiPanel.h) below, in a split the user sizes. Each is shown or hidden on its
+    // own (Shift+F2, Shift+F4) and kept so for the next start; hiding one when the other is
+    // hidden shows the other. The MIDI editor is made the first time it is shown.
+    void showMidiEditor (bool on);
+    void showAudioEditor (bool on);
+    class MidiPanel* midiPanel = nullptr;
+    std::atomic<int> midiPanelSynth { -1 };   // the patchbay synth it plays: the keyboard's notes step in
     class QSplitter* editorSplit = nullptr;
     QWidget* trackHolder = nullptr;
     class QStackedWidget* centralStack = nullptr;

@@ -5,6 +5,7 @@
 
 #include "../core/Scala.h"
 #include "../engine/AudioCapture.h"
+#include "../mixer/DrumsToMidi.h"
 #include "../mixer/Rhythms.h"
 #include "../mixer/Tunings.h"
 
@@ -1284,9 +1285,14 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     : QDialog (parent), host (std::move (h)), original (song)
 {
     setWindowTitle (host.title.isEmpty() ? tr ("MIDI Editor") : tr ("MIDI Editor: %1").arg (host.title));
-    setWindowFlag (Qt::WindowMaximizeButtonHint);
-    setSizeGripEnabled (true);
-    resize (1180, 760);
+    if (host.embedded)
+        setWindowFlags (Qt::Widget);
+    else
+    {
+        setWindowFlag (Qt::WindowMaximizeButtonHint);
+        setSizeGripEnabled (true);
+        resize (1180, 760);
+    }
     seq = decode (song);
     step.length = step.step = seq.ticksPerQuarter / 2;
     playTimer = new QTimer (this);
@@ -1603,6 +1609,7 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
         if (auto* p = qobject_cast<QPushButton*> (b))
             p->setAutoDefault (false);
     save->addWidget (buttons);
+    buttons->setVisible (! host.embedded);
     layout->addLayout (save);
     connect (buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect (buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -2343,6 +2350,51 @@ void MidiEditor::putInHeard (const std::vector<Heard>& heard, const HumOptions& 
     changed();
 }
 
+bool MidiEditor::putInAudio (const AudioData& audio, bool drums)
+{
+    if (! drums)
+    {
+        const auto before = seq.notes.size();
+        putInHeard (listen (audio), HumOptions {});
+        return seq.notes.size() > before;
+    }
+    mixer::Clip clip;
+    clip.audio = mixer::makeAudioClip (audio, {});
+    clip.length = clip.audio->length();
+    const auto rate = audio.sampleRate();
+    const auto hits = mixer::findDrums (clip, rate);
+    if (hits.empty() || rate <= 0.0)
+        return false;
+    // At the editor's tempo from the step cursor, each hit a 16th long.
+    const auto at = step.position;
+    const auto perFrame = tempo() / 60.0 * seq.ticksPerQuarter / rate;
+    std::vector<Note> notes;
+    int64_t end = at;
+    for (const auto& h : hits)
+    {
+        Note n;
+        n.start = at + (int64_t) std::llround ((double) h.at * perFrame);
+        n.length = std::max (1, seq.ticksPerQuarter / 4);
+        n.pitch = h.note * 100.0;
+        n.velocity = std::clamp (h.velocity, 1, 127);
+        n.channel = 9;
+        n.selected = true;
+        end = std::max (end, n.end());
+        notes.push_back (std::move (n));
+    }
+    edit ([&] (Sequence& s)
+    {
+        selectAll (s, false);
+        for (auto& n : notes)
+            s.notes.push_back (n);
+        s.sort();
+        s.lastTick = std::max (s.lastTick, s.end());
+    });
+    step.position = grid() > 0 ? (end + grid() - 1) / grid() * grid() : end;
+    changed();
+    return true;
+}
+
 void MidiEditor::humDialog()
 {
     QDialog d (this);
@@ -2914,6 +2966,8 @@ void MidiEditor::playTick()
 void MidiEditor::done (int r)
 {
     stopPlay();
+    if (host.embedded)
+        return;   // a panel stays where it is
     QDialog::done (r);
 }
 
