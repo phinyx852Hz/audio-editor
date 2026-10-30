@@ -1128,6 +1128,12 @@ void AudioEngine::moveMasterSlot (int from, int to)                  { impl->mas
 void AudioEngine::setMasterSlotBypassed (int slot, bool b)           { impl->master.setBypassed (slot, b); }
 int AudioEngine::masterChannels() const                              { return impl->master.channels(); }
 MasterSlotInfo AudioEngine::masterSlot (int slot) const              { return impl->master.info (slot); }
+std::vector<modrack::Modulator> AudioEngine::modulators() const      { return impl->master.modulators(); }
+void AudioEngine::setModulators (const std::vector<modrack::Modulator>& m) { impl->master.setModulators (m); }
+std::vector<modrack::Route> AudioEngine::modulatorRoutes() const      { return impl->master.modulatorRoutes(); }
+void AudioEngine::setModulatorRoutes (const std::vector<modrack::Route>& r) { impl->master.setModulatorRoutes (r); }
+float AudioEngine::modulatorValue (int m) const                      { return impl->master.modulatorValue (m); }
+bool AudioEngine::modulatorRouteLive (int r) const                   { return impl->master.routeLive (r); }
 void AudioEngine::setMasterGainDb (double db)                        { impl->master.setGainDb (db); }
 double AudioEngine::masterGainDb() const                             { return impl->master.gainDb(); }
 void AudioEngine::setMasterBypassed (bool b)                         { impl->master.setAllBypassed (b); }

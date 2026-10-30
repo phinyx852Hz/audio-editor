@@ -206,6 +206,7 @@ The quality features are safe to leave on: the Φ switches in Stereoize and Mid/
 | Φ Stack | Copies (4), Decay, Tone (8 kHz), Mix, Width | Copies pitched up by φ, φ², φ³, φ⁴ |
 | Φ Tame | Depth, Fundamental (55 Hz), Width (Q 1.618), Find Fundamental | A cut at the fundamental × φ ÷ 2 × 10 |
 | Φ De-resonator | Depth, Sharpness, Speed, Mix, Low, High, Delta | Turns resonances down while they ring |
+| Φ Modulation | Four pages: Flow, Space, Grain, Matrix (see below) | A sequence engine and three effects that follow it |
 
 ### The Φ window {#phi-window}
 
@@ -224,6 +225,18 @@ The quality features are safe to leave on: the Φ switches in Stereoize and Mid/
 | Φ Stack | The copies, by pitch |
 | Φ Tame | Its cut, at the fundamental it found |
 | Φ De-resonator | Live: the level it hears and the cut it makes |
+| Φ Modulation | The page chosen: Flow's next events, Space's spectrum before and after, the grains playing, Matrix's nodes and route |
+
+### Φ Modulation {#phi-modulation}
+
+[]{.ix t="Φ Modulation"}[]{.ix t="PhiFlow"}[]{.ix t="PhiSpace"}[]{.ix t="PhiGrain"}[]{.ix t="PhiMatrix"}Φ Modulation puts four tools in one effect, around one idea: motion that is worked out rather than rolled, so it never settles into a short loop, yet plays the same every time. Its window has a pill for each page above the knobs; the card shows Flow Rate, Ratio, Mode and the three mixes. The sound goes through Space, then Grain, then Matrix, each with its own mix.
+
+- **Flow** is the sequence engine the others follow. A phase steps 1/Ratio of a turn on every event (1/φ, 0.618, to start) and is read as four control signals, the second Ratio times faster than the first, the third Ratio² and the fourth Ratio³: at 0.1 Hz, 0.1, 0.162, 0.262 and 0.424 events a second. **Mode** chooses how: *Periodic* rounds the ratio to a quarter and the step to an eighth, so the pattern comes round every 8 events (the plain LFO, for comparison); *Irrational* never repeats; *Fibonacci* holds each value for one event or two, on the hits of the Fibonacci word; *Hybrid* adds noise of at most **Jitter** that is still the same every play. **Shape** draws the signal as a smooth curve, steps, or a wave; **Seed** moves where every stream starts; **Smooth** is a slew. Ratio is any number from 1.05 to 4, φ by default, so you can compare φ with √2 (1.414) or 3/2 by ear.
+- **Space** moves the sound's partials so that each octave above the **Anchor** becomes **Space Ratio** instead: with the anchor at 220 Hz and φ, 440 and 880 Hz become 356 and 576 Hz, a harmonic sound turned bell-like. **Blend** goes from untouched to fully moved; **Space Flow** lets Flow's second output move Blend; **Partials** keeps only the strongest share; **Tilt** brightens or darkens the new spectrum. A Space Ratio of 2 leaves the sound as it is. Space delays the sound by 2048 samples (43 ms at 48 kHz) whether or not it is mixed in; PHI compensates.
+- **Grain** plays short grains of the last few seconds it heard. When each grain comes, where it starts (up to **Spread** back), how long it lasts (**Size** ÷ φ to × φ) and its pitch (up to **Pitch** semitones either way) each follow a stream of their own, and grains fan across the stereo field by the golden angle. **Density** is grains a second; **Grain Flow** lets Flow's first and fourth outputs move where grains start and how long they are; **Freeze** stops listening, so the grains keep exploring what was there.
+- **Matrix** is a network of four effects, an echo, a band-pass, a drive and a pitch shifter (up by the ratio: 8.33 semitones with φ), each behind its own delay, **Time** × Ratioⁿ. On every event (**Events** a second) Flow picks three of the four and chains them in a loop; **Glide** is how long a change takes, and a node left out rings on and fades. **Feedback** sets the gain round the loop, at most 95 %, and every node's input is soft-clipped, so it cannot run away. **Matrix Flow** lets Flow's third output sweep the band-pass around **Tone**.
+
+Nothing in Φ Modulation is random. When playback starts or jumps, Flow and Matrix's routing move to where they would be that far into the timeline, so playing from the same place moves the same way every time (Grain and Matrix still follow what they heard).
 
 ### Shaping Φ EQ {#phi-eq-nodes}
 
