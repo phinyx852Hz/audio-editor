@@ -615,10 +615,14 @@ public:
         nameEdit = new QLineEdit (nameBox);
         nameEdit->setFrame (false);
         nameEdit->setToolTip (MixerWindow::tr ("The track's name"));
+        // A track with a surround or ambisonic file says so: 5.1, 7.1.4, AmbiX 3rd...
+        formatLabel = new QLabel (nameBox);
+        formatLabel->setVisible (false);
         auto* head = new QHBoxLayout (nameBox);
         head->setContentsMargins (4, 1, 4, 1);
         head->addWidget (number);
         head->addWidget (nameEdit, 1);
+        head->addWidget (formatLabel);
 
         auto smallButton = [this] (const QString& text, const QString& tip, bool checkable)
         {
@@ -812,10 +816,14 @@ public:
         spreadDial = spaceDial (0, 360, 0, MixerWindow::tr ("Spread: how far apart its left and right are, 0° (a point) to 360° (all around; double-click: 60°)"));
         distDial = spaceDial (0, 100, 10, MixerWindow::tr ("Distance: 1 is the speakers' ring; nearer fills the room around you, farther is quieter, out to 10 "
                                                            "(double-click: 1)"));
+        lfeDial = spaceDial (0, faderPosition (0.0), 0, MixerWindow::tr ("LFE: a send after the fader to the subwoofers (the speakers marked LFE), "
+                                                                         "below 120 Hz, -∞ to 0 dB (double-click: -∞). A surround file's own LFE "
+                                                                         "channel goes there anyway"));
         azLabel = new QLabel (this);
         elLabel = new QLabel (this);
         spreadLabel = new QLabel (this);
         distLabel = new QLabel (this);
+        lfeLabel = new QLabel (this);
         azPart = knobColumn (azDial, azLabel, MixerWindow::tr ("Az"));
         distPart = knobColumn (distDial, distLabel, MixerWindow::tr ("Dist"));
         spaceExtra = new QWidget (this);
@@ -825,7 +833,17 @@ public:
             row->setSpacing (2);
             row->addWidget (knobColumn (elDial, elLabel, MixerWindow::tr ("Elev")));
             row->addWidget (knobColumn (spreadDial, spreadLabel, MixerWindow::tr ("Spread")));
+            row->addWidget (knobColumn (lfeDial, lfeLabel, MixerWindow::tr ("LFE")));
         }
+        QObject::connect (lfeDial, &QDial::valueChanged, this, [this] (int v)
+        {
+            if (updating)
+                return;
+            const auto db = v <= 0 ? -100.0f : faderDb (v);
+            window.forLinked (index, [db] (mixer::Strip& x, bool) { x.lfeDb = db; });
+            lfeLabel->setText (db <= -96.0f ? QStringLiteral ("-∞") : dbText (db));
+            window.changed();
+        });
         const auto placeBy = [this] (QDial* dial, std::function<void (mixer::Panner3d&, int)> set)
         {
             QObject::connect (dial, &QDial::valueChanged, this, [this, set] (int v)
@@ -1446,6 +1464,22 @@ public:
                                     .arg (info.colour.name()));
         if (nameEdit->text() != info.name)
             nameEdit->setText (info.name);
+        {
+            // The widest file on it: the most channels.
+            const mixer::AudioClip* widest = nullptr;
+            for (const auto& c : window.engine.clips (index))
+                if (c.audio != nullptr && c.audio->fileChannels > 2 && (widest == nullptr || c.audio->fileChannels > widest->fileChannels))
+                    widest = c.audio.get();
+            const auto format = widest != nullptr ? QString::fromStdString (mixer::clipFormat (*widest)) : QString();
+            formatLabel->setText (format);
+            formatLabel->setVisible (! format.isEmpty());
+            formatLabel->setToolTip (widest == nullptr ? QString()
+                                     : widest->surround() ? MixerWindow::tr ("A %1 file: in Spatial mode its speakers go into the scene where they belong "
+                                                                             "(its front L and R through the strip), turned by the azimuth; "
+                                                                             "otherwise it is heard folded down to stereo").arg (format)
+                                                          : MixerWindow::tr ("A file of %1 channels, heard folded down to stereo: Split Channels to Tracks "
+                                                                             "puts each on a track of its own").arg (widest->fileChannels));
+        }
 
         const auto inst = fillInstruments (instrumentBox, window, index);
         editButton->setEnabled (inst != nullptr && (inst->kind() != mixer::Instrument::Kind::plugin || inst->hasWindow()));
@@ -1493,6 +1527,9 @@ public:
         elLabel->setText (degreeText (p.elevation.load()));
         spreadLabel->setText (degreeText (p.spread.load()));
         distLabel->setText (QString::number (p.distance.load(), 'f', 1));
+        const auto lfe = strip().lfeDb.load();
+        lfeDial->setValue (lfe <= -96.0f ? 0 : faderPosition (lfe));
+        lfeLabel->setText (lfe <= -96.0f ? QStringLiteral ("-∞") : dbText (lfe));
         const bool own = ! strip().toBus.load();
         for (QWidget* x : std::initializer_list<QWidget*> { azDial, elDial, spreadDial, distDial, azLabel, elLabel, spreadLabel, distLabel })
             x->setEnabled (own);
@@ -1598,7 +1635,7 @@ protected:
                 panDial->setValue (0);
             else if (o == widthDial)
                 widthDial->setValue (100);
-            else if (o == sendDials[0] || o == sendDials[1] || o == duckDial)
+            else if (o == sendDials[0] || o == sendDials[1] || o == duckDial || o == lfeDial)
                 static_cast<QDial*> (o)->setValue (0);
             else if (o == audioLayerDial || o == instLayerDial)
                 static_cast<QDial*> (o)->setValue (faderPosition (0.0));
@@ -1754,11 +1791,14 @@ public:
     QLabel* elLabel;
     QLabel* spreadLabel;
     QLabel* distLabel;
+    QDial* lfeDial;
+    QLabel* lfeLabel;
     QWidget* azPart;
     QWidget* distPart;
-    QWidget* spaceExtra;   // the elevation and spread, in the Inspector
+    QWidget* spaceExtra;   // the elevation, spread and LFE send, in the Inspector
     QFrame* colourBar;
     QFrame* nameBox;
+    QLabel* formatLabel;
     QWidget* modePart;
     QLabel* insertTitle;
     QLabel* number;
@@ -5669,6 +5709,8 @@ protected:
                       : clip.isMidi()                              ? MixerWindow::tr ("MIDI")
                                                                    : MixerWindow::tr ("Audio")) + QStringLiteral ("  ·  ")
                      + QStringLiteral ("%1:%2").arg ((int) seconds / 60).arg (std::fmod (seconds, 60.0), 5, 'f', 2, QLatin1Char ('0'));
+        if (clip.audio != nullptr && clip.audio->fileChannels > 2)
+            about += QStringLiteral ("  ·  ") + QString::fromStdString (mixer::clipFormat (*clip.audio));
         if (clip.reversed)
             about += QStringLiteral ("  ·  ") + MixerWindow::tr ("reversed");
         if (clip.muted)
@@ -6317,6 +6359,11 @@ private:
         editAudio = tool (MixerWindow::tr ("Edit in Editor"), MixerWindow::tr ("The clip in a tab of the editor; Ctrl+S or F3 puts the edit back on its clip"),
                           [this] { Q_EMIT window.editClipRequested (window.clipView->shownTrack(), window.clipView->shownId()); });
         a->addWidget (editAudio, 1, 1);
+        splitAudio = tool (MixerWindow::tr ("Split Channels to Tracks"),
+                           MixerWindow::tr ("Each of the file's channels on a track of its own (a field recorder's or a Dante/MADI multitrack), "
+                                            "written beside the mix as mono files; the clip stays, muted"),
+                           [this] { window.splitShownClip(); });
+        a->addWidget (splitAudio, 2, 0, 1, 2);
         g->addWidget (audioTools, 2, 0, 1, 4);
 
         // Between the launcher and the timeline (owner, 2026-10-26).
@@ -6358,6 +6405,13 @@ private:
         midiTools->setVisible (midi);
         audioTools->setVisible (ours && ! midi);
         editAudio->setVisible (ours && window.clipView->shownId() != 0);
+        {
+            bool wide = false;
+            if (ours && ! midi && window.clipView->shownId() != 0)
+                for (const auto& c : window.engine.clips (window.clipView->shownTrack()))
+                    wide = wide || (c.id == window.clipView->shownId() && c.audio != nullptr && c.audio->fileChannels > 2);
+            splitAudio->setVisible (wide);
+        }
         if (ours)
         {
             title->setText ((midi ? MixerWindow::tr ("MIDI Clip: %1") : MixerWindow::tr ("Audio Clip: %1")).arg (window.clipView->shownName()));
@@ -6420,6 +6474,7 @@ private:
     QWidget* midiTools = nullptr;
     QWidget* audioTools = nullptr;
     QPushButton* editAudio = nullptr;
+    QPushButton* splitAudio = nullptr;
     QPushButton* sendButton = nullptr;
     QComboBox* rootBox = nullptr;
     QComboBox* scaleBox = nullptr;
@@ -7903,6 +7958,132 @@ QString MixerWindow::editsFolder() const
                           : QFileInfo (path).absoluteDir().filePath (QFileInfo (path).completeBaseName() + tr (" Edits"));
 }
 
+void MixerWindow::splitShownClip()
+{
+    if (! showingClip || clipView->shownId() == 0)
+        return;
+    const auto track = clipView->shownTrack();
+    for (const auto& c : engine.clips (track))
+        if (c.id == clipView->shownId() && c.audio != nullptr)
+        {
+            const auto like = c;
+            if (splitToTracks (QString::fromStdString (c.audio->path), like))
+            {
+                // The clip stays, muted, so unmuting it (or Ctrl+Z) undoes it.
+                auto list = engine.clips (track);
+                for (auto& x : list)
+                    if (x.id == like.id)
+                        x.muted = true;
+                engine.setClips (track, std::move (list));
+                rebuildStrips();
+                changed();
+            }
+            return;
+        }
+}
+
+bool MixerWindow::splitToTracks (const QString& file, mixer::Clip like)
+{
+    const auto r = rate();
+    struct Result { AudioDataPtr data; std::string layout, error; };
+    QFutureWatcher<Result> watcher;
+    QEventLoop loop;
+    connect (&watcher, &QFutureWatcher<Result>::finished, &loop, &QEventLoop::quit);
+    QApplication::setOverrideCursor (Qt::WaitCursor);
+    status->setText (tr ("Reading the channels of %1...").arg (QFileInfo (file).fileName()));
+    watcher.setFuture (QtConcurrent::run ([file, r]
+    {
+        Result result;
+        std::vector<Marker> markers;
+        Tags tags;
+        result.data = AudioEngine::loadFile (file.toStdString(), markers, tags, result.error, nullptr, &result.layout);
+        if (result.data != nullptr && std::abs (result.data->sampleRate() - r) > 0.5)
+            result.data = dsp::resample (*result.data, r);
+        return result;
+    }));
+    loop.exec();
+    QApplication::restoreOverrideCursor();
+    const auto result = watcher.result();
+    if (result.data == nullptr)
+    {
+        QMessageBox::warning (this, tr ("Split Channels to Tracks"), tr ("%1 could not be read: %2").arg (QFileInfo (file).fileName(), QString::fromStdString (result.error)));
+        return false;
+    }
+    const auto channels = result.data->numChannels();
+    // At 8 tracks, a file with more channels than there is room for offers to go to 16.
+    if (const auto wanted = std::min (channels, mixer::maxTracks - engine.numTracks()); wanted > 0)
+        roomForTracks (wanted, tr ("Split Channels to Tracks"));
+    const auto room = engine.trackLimit() - engine.numTracks();
+    if (room <= 0)
+    {
+        QMessageBox::information (this, tr ("Split Channels to Tracks"), tr ("All %1 tracks are in use: remove some first.").arg (engine.trackLimit()));
+        return false;
+    }
+    if (room < channels
+        && QMessageBox::question (this, tr ("Split Channels to Tracks"),
+                                  tr ("%1 has %2 channels, and there is room for %3 more tracks. Put the first %3 on tracks?")
+                                      .arg (QFileInfo (file).fileName()).arg (channels).arg (room))
+               != QMessageBox::Yes)
+        return false;
+
+    // Each channel as a mono file beside the mix (or in the Music folder until it is saved), so the mix opens again as it was.
+    const auto base = path.isEmpty() ? QDir (QStandardPaths::writableLocation (QStandardPaths::MusicLocation)).filePath (tr ("PHI Splits"))
+                                     : QFileInfo (path).absoluteDir().filePath (QFileInfo (path).completeBaseName() + tr (" Splits"));
+    QDir().mkpath (base);
+    auto stem = QFileInfo (file).completeBaseName();
+    stem.replace (QRegularExpression (QStringLiteral ("[/\\\\:*?\"<>|]")), QStringLiteral ("_"));
+    const auto clips = mixer::splitChannels (*result.data, file.toStdString());
+    remember();
+    const auto first = engine.numTracks();
+    const auto count = std::min (channels, room);
+    for (int ch = 0; ch < count; ++ch)
+    {
+        const auto label = channels > 2 ? QString::fromStdString (dsp::channelName (ch, channels, result.layout)) : QString();
+        const auto named = label.isEmpty() || label.startsWith (QStringLiteral ("Ch ")) ? tr ("Ch %1").arg (ch + 1) : label;
+        auto out = QDir (base).filePath (QStringLiteral ("%1 %2.wav").arg (stem, named));
+        for (int n = 2; QFileInfo::exists (out); ++n)
+            out = QDir (base).filePath (QStringLiteral ("%1 %2 %3.wav").arg (stem, named).arg (n));
+        AudioData::Builder mono (1, r);
+        const float* one[1] = { clips[(size_t) ch]->left.data() };
+        mono.append (one, (int) clips[(size_t) ch]->left.size());
+        SaveOptions options;
+        options.bitDepth = 24;
+        options.dither = false;   // a 24-bit recording comes out as it went in
+        std::string why;
+        if (! AudioEngine::saveFile (out.toStdString(), *mono.finish(), {}, {}, options, why))
+        {
+            QMessageBox::warning (this, tr ("Split Channels to Tracks"), tr ("%1 could not be written: %2").arg (out, QString::fromStdString (why)));
+            break;
+        }
+        auto clip = std::make_shared<mixer::AudioClip> (*clips[(size_t) ch]);
+        clip->path = out.toStdString();
+        audioCache[out] = clip;
+
+        const auto target = engine.numTracks();
+        engine.setNumTracks (target + 1);
+        clearTrack (target);
+        givenDefaults[(size_t) target] = defaultTrack (target);
+        std::tie (info[(size_t) target].name, info[(size_t) target].colour) = givenDefaults[(size_t) target];
+        info[(size_t) target].name = named;
+        auto placed = like;
+        placed.id = 0;
+        placed.muted = false;
+        placed.audio = clip;
+        placed.midi = nullptr;
+        if (placed.length <= 0)
+            placed.length = clip->length();
+        mixer::Clips list { placed };
+        stamp (list);
+        engine.setClips (target, std::move (list));
+    }
+    rebuildStrips();
+    select (first);
+    changed();
+    status->setText (tr ("%1's %2 channels are on tracks %3 to %4 (mono files in %5)")
+                         .arg (QFileInfo (file).fileName()).arg (count).arg (first + 1).arg (engine.numTracks()).arg (base));
+    return true;
+}
+
 void MixerWindow::reverseShownClip()
 {
     if (! showingClip)
@@ -8412,6 +8593,7 @@ static void copyStrip (const mixer::Strip& a, mixer::Strip& b)
     b.inputChannels = a.inputChannels.load();
     b.toBus = a.toBus.load();
     b.placed.set (a.placed.place());
+    b.lfeDb = a.lfeDb.load();
 }
 
 // Everything the mixer keeps about track `from`, given to track `to` (the engine's settings,
@@ -8474,6 +8656,7 @@ void MixerWindow::clearTrack (int k)
     s.delayMs = 0.0f;
     s.width = 1.0f;
     s.placed.set ({});
+    s.lfeDb = -100.0f;
     for (int r = 0; r < mixer::numReturns; ++r)
     {
         s.sendDb[(size_t) r] = -100.0f;
@@ -8866,14 +9049,16 @@ void MixerWindow::decodeAudio (int track, const QString& file, std::function<voi
     {
         std::vector<Marker> markers;
         Tags tags;
-        std::string error;
-        auto loaded = AudioEngine::loadFile (file.toStdString(), markers, tags, error);
+        std::string error, layout;
+        auto loaded = AudioEngine::loadFile (file.toStdString(), markers, tags, error, nullptr, &layout);
         mixer::AudioClipPtr clip;
         if (loaded != nullptr)
         {
             if (std::abs (loaded->sampleRate() - r) > 0.5)
                 loaded = dsp::resample (*loaded, r);
-            clip = mixer::makeAudioClip (*loaded, file.toStdString());
+            if (const auto ambix = dsp::ambisonicLayoutForName (QFileInfo (file).fileName().toStdString(), loaded->numChannels()); ! ambix.empty())
+                layout = ambix;
+            clip = mixer::makeAudioClip (*loaded, file.toStdString(), layout);
         }
         QMetaObject::invokeMethod (qApp, [self, track, generation, file, clip, error, done]() mutable
         {
@@ -8901,6 +9086,19 @@ void MixerWindow::loadAudio (int track, const QString& file, mixer::Clip place, 
     {
         if (clip == nullptr)
             return;
+        // A multitrack file (more channels than any surround layout it could be) asks whether each goes on a track of its own.
+        if (! fromFile && ! restoring && clip->fileChannels > 2 && ! clip->surround()
+            && QMessageBox::question (this, tr ("Multitrack File"),
+                                      tr ("%1 has %2 channels, not a surround layout: a multitrack recording? Put each channel on a track of its own?")
+                                          .arg (QFileInfo (file).fileName()).arg (clip->fileChannels))
+                   == QMessageBox::Yes)
+        {
+            auto like = place;
+            like.length = clip->length();
+            if (splitToTracks (file, like) && then)
+                then (like.end());
+            return;
+        }
         place.audio = clip;
         if (place.length <= 0)
             place.length = clip->length();
@@ -10296,6 +10494,7 @@ bool MixerWindow::newMix()
         s.duckBelowHz = 0.0f;
         s.toBus = false;
         s.placed.set ({});
+        s.lfeDb = -100.0f;
         for (int r = 0; r < mixer::numReturns; ++r)
         {
             s.sendDb[(size_t) r] = -100.0f;
@@ -10457,6 +10656,7 @@ bool MixerWindow::writeMix (const QString& file, QString& error)
             { "sends", QJsonArray { QJsonObject { { "db", s.sendDb[0].load() }, { "pre", s.sendPre[0].load() } },
                                     QJsonObject { { "db", s.sendDb[1].load() }, { "pre", s.sendPre[1].load() } } } },
             { "tuning", tuningJson (t.tuning) }, { "toPreMaster", s.toBus.load() }, { "spatial", placeJson (s.placed) },
+            { "lfe", s.lfeDb.load() },
         };
         // The clips, in seconds so a mix opens the same at any rate.
         QJsonArray clips;
@@ -10646,6 +10846,7 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
         s.solo = o.value ("solo").toBool();
         s.toBus = o.value ("toPreMaster").toBool();
         loadPlace (s.placed, o.value ("spatial"), mixer::Panner3d::defaultSpread);
+        s.lfeDb = (float) std::clamp (o.value ("lfe").toDouble (-100.0), -100.0, 0.0);
         const auto lowCut = o.value ("lowCut").toObject(), highCut = o.value ("highCut").toObject();
         s.lowCut = lowCut.value ("on").toBool();
         s.lowCutHz = (float) lowCut.value ("hz").toDouble (80.0);

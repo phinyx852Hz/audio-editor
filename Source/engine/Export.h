@@ -46,6 +46,7 @@ namespace exporter
         std::string sourcePath;            // for {filename} and the default folder
         std::string part;                  // {part}: region or marker name, empty for the whole
         int index = 0;                     // {index}: 1 based when exporting parts
+        std::string layout;                // the channel layout when not the usual one (a WAV's channel mask)
     };
 
     struct Result

@@ -1309,7 +1309,7 @@ bool AudioEngine::keepsTag (const std::string& extension, const std::string& key
 std::vector<meta::Schema> AudioEngine::schemasOf (const std::string& extension) { return schemasFor (extension); }
 
 AudioDataPtr AudioEngine::loadFile (const std::string& path, std::vector<Marker>& markersOut, Tags& tagsOut,
-                                    std::string& error, std::atomic<float>* progress)
+                                    std::string& error, std::atomic<float>* progress, std::string* layoutOut)
 {
     const auto ext = extensionOf (path);
     std::unique_ptr<juce::AudioFormatReader> reader;
@@ -1321,13 +1321,16 @@ AudioDataPtr AudioEngine::loadFile (const std::string& path, std::vector<Marker>
     // Everything JUCE does not read goes through FFmpeg, with TagLib for the tags.
     if (reader == nullptr)
     {
-        auto data = codec::decode (path, error, progress, nullptr, &markersOut);
+        uint64_t mask = 0;
+        auto data = codec::decode (path, error, progress, nullptr, &markersOut, &mask);
         if (data == nullptr)
         {
             if (error.empty())
                 error = "Unsupported or unreadable file: " + path;
             return nullptr;
         }
+        if (layoutOut != nullptr)
+            *layoutOut = dsp::layoutForWavMask (mask, data->numChannels());
         tagio::read (path, tagsOut);
         return data;
     }
@@ -1348,6 +1351,8 @@ AudioDataPtr AudioEngine::loadFile (const std::string& path, std::vector<Marker>
 
     // WAV cue points and labels (and regions from ltxt chunks) become markers.
     const auto& meta = reader->metadataValues;
+    if (layoutOut != nullptr)
+        *layoutOut = dsp::layoutForWavMask ((uint64_t) (uint32_t) meta.getValue ("ChannelMask", "0").getIntValue(), numChannels);
     std::map<int, std::string> labels;
     std::map<int, Frame> regionLengths;
 
@@ -1496,7 +1501,7 @@ bool AudioEngine::saveFile (const std::string& path, const AudioData& data, cons
 
     // Surround files carry their speaker layout (the WAV channel mask).
     if (data.numChannels() > 2)
-        writerOptions = writerOptions.withChannelLayout (MasterChain::channelSetFor (data.numChannels()));
+        writerOptions = writerOptions.withChannelLayout (MasterChain::channelSetFor (data.numChannels(), options.layout));
 
     if (isLossy)
         writerOptions = writerOptions.withQualityOptionIndex (std::clamp (options.oggQuality, 0, format->getQualityOptions().size() - 1));

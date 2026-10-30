@@ -4,6 +4,7 @@
 #include "AudioData.h"
 
 #include <array>
+#include <cstdint>
 #include <cmath>
 #include <functional>
 #include <random>
@@ -199,6 +200,17 @@ namespace dsp
     // The named layout when it fits the channel count, else the usual one.
     SpeakerLayout speakerLayout (int numChannels, const std::string& name);
     std::string channelName (int channel, int numChannels, const std::string& layoutName);
+    // The WAV (WAVEFORMATEXTENSIBLE) channel mask of a layout: dwChannelMask's bits, which
+    // FFmpeg's native channel masks share. 0 when the layout has a speaker WAV has no bit for
+    // (LFE2, the wides and top middles of 9.1.6), or is Ambisonics.
+    uint64_t wavChannelMask (int numChannels, const std::string& layoutName);
+    // The layout a WAV's channel mask says (dsp::layoutChoices), empty when it is the usual one
+    // for the count or the mask names none of them. Back and side pairs count alike, so a 5.1
+    // or 5.1.4 written with Lb/Rb for its surrounds still reads as one.
+    std::string layoutForWavMask (uint64_t mask, int numChannels);
+    // A file named as ambisonic (AmbiX, FOA, HOA, B-format) with 4, 9 or 16 channels: that
+    // order's layout ("Ambisonics (1st order)"...); else empty. `fileName` without its folder.
+    std::string ambisonicLayoutForName (const std::string& fileName, int numChannels);
     int ambisonicOrder (const std::string& layoutName);   // 0 when it is not Ambisonics
 
     // Stereo fold-down for monitoring: gains from each channel into left and right

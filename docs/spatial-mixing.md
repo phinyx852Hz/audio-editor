@@ -46,6 +46,43 @@ over a source raises or lowers it, and `Shift`+wheel widens or narrows it. Doubl
 back ahead at distance 1. The squares are the speakers, numbered by their output (hollow ones are
 raised). A track sent to the Pre-Master moves with the Pre-Master, so its own panner is greyed.
 
+## Surround and ambisonic files on the tracks
+
+Status: built 2026-10-30 (owner: "now that we have 16 tracks/channel strips, perhaps those could be
+edited there").
+
+A file of more than two channels whose layout PHI knows keeps all of them on its track: 5.0 to
+9.1.6 (5.1.2 and 5.1.4 too), Quad, and 1st to 3rd-order Ambisonics (AmbiX). The layout comes from
+the WAV's speaker mask, or from the file's name for Ambisonics (AmbiX, FOA, HOA, B-format), as in
+the editor. The strip's name bar says which (`5.1`, `7.1.4`, `AmbiX 3rd`), and so does the clip.
+
+- **In Spatial mode** a surround file's front L and R go through the strip like any stereo track
+  (cuts, inserts, width, sends, and the panner with its spread), and its other speakers go
+  straight into the scene where they belong (5.x surrounds at ±110°, 7.x sides at ±90° and backs at
+  ±150°, the heights 45° up), turned by the track's azimuth and moved by its distance. Trim, fader,
+  mute and solo act on every channel. Its LFE channel goes to the subwoofers. An ambisonic file
+  goes into the scene whole, turned by the azimuth and tilted by the elevation.
+- **Otherwise** (and in bounces) the file is heard folded down to stereo, as the editor plays it.
+- **LFE** (in the Inspector, beside Elevation and Spread): a send after the fader to the speakers
+  marked LFE in the array, below 120 Hz. The subwoofers get nothing on headphones, as in the
+  editor's fold-down.
+- **The master's meter**: the Spatial dialog has a bar for each speaker of the array, the
+  subwoofers included, after the master fader.
+- **Mix Down renders** (Spatial dialog): the headphone mix (stereo), the speakers (one channel per
+  speaker in the array's order, so a 5.1.4 or 7.1.4 file with its LFE), or the scene itself as
+  3rd-order AmbiX (16 channels). The editor's tab is labelled with that layout, and saving it as a
+  WAV writes the speaker mask (10 channels as 5.1.4 rather than 7.1.2).
+
+### Multitrack files
+
+A file of more channels than any surround layout it could be (a 16-channel poly WAV from a field
+recorder, a Dante or MADI capture) is heard folded down, and dropping it on a track asks whether
+to put each channel on a track of its own. **Split Channels to Tracks** in the clip's tools does
+the same for any file of more than two channels (a 5.1 file as six stems). Each channel is written
+as a 24-bit mono WAV beside the mix (in `<mix> Splits`, or `~/Music/PHI Splits` until the mix is
+saved), named by its speaker when the layout is known (`L`, `C`, `LFE`...), on as many new tracks as
+there is room for.
+
 ## How it works
 
 - Every track is still stereo up to its fader: trim, cuts, inserts, the sends and the fader all
@@ -69,7 +106,5 @@ setSpeakerFeed` (the speakers' feeds added to the device's outputs, which it ope
 ## Next steps (from the plan)
 
 - A diffuse setting for the returns, and the scene's pitch and roll.
-- Mix downs of the speaker feed (one channel per speaker) or of the raw AmbiX scene, and an LFE
-  send per track.
 - Orbit and drift on the panner, then azimuth, elevation and distance as automation lanes once
   the mixer has automation.

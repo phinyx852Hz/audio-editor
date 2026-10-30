@@ -80,6 +80,7 @@ private:
         std::vector<Marker> markers;
         Tags tags;
         std::string error;
+        std::string layout;   // from the file's channel mask, when it is not the usual one
     };
 
     void registerCommands();
