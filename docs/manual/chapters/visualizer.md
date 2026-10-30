@@ -18,6 +18,20 @@ The Visualizer menu (`Alt+Z`) has the views in **Artistic**, **Science**, **Milk
 
 ![The Visualizer behind PHI, glowing through the panels.](images/visualizer-behind.png)
 
+### What a moving background costs {#background-cpu}
+
+[]{.ix t="CPU use!backgrounds"}[]{.ix t="Visualizer!CPU use"}A background that moves costs processor time for as long as it is shown, because it is drawn again many times a second. The see-through PHI window over it has to be redrawn with it. A still picture would cost almost nothing once it had been drawn, because nothing in it changes.
+
+| Behind PHI | What it costs |
+|---|---|
+| Nothing (the plain theme) | Nothing extra |
+| The Visualizer (`Ctrl+F11`), MilkDrop most of all | Drawing every frame, as long as it shows; on some computers a whole processor core |
+| A web page playing video, or an animated site | Decoding and drawing the video, as a browser tab does |
+
+::: important
+If PHI feels slow, the CPU meter (View > CPU Meter) climbs, or you hear clicks and dropouts while recording or mixing a large project, turn the moving background off first: `Ctrl+F11` again for the Visualizer, or untick Visualizer > Web Page > Web Page Behind PHI for a web page. On a laptop, a moving background also runs the battery down faster. A still background, or none, leaves the most power for the audio.
+:::
+
 ## The views
 
 | Artistic | | Science | |
