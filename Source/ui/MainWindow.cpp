@@ -700,7 +700,13 @@ void MainWindow::registerCommands()
     add ("view.zoomSelection", Category::view, tr ("Zoom to &Selection"), { KS (Qt::Key_Z) },
          [this] { if (requireSelection()) waveform->zoomToSelection(); });
     add ("view.chain", Category::master, tr ("Device &Chain"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_C) },
-         [this] { chainPanel->toggle(); });
+         [this]
+    {
+        if (mixerChainKey())
+            mixerWin->toggleDevices();
+        else
+            chainPanel->toggle();
+    });
     add ("view.find", Category::view, tr ("&Find..."), { KS (Qt::CTRL | Qt::Key_F) }, [this]
     {
         // The mixer in the editor's place: the Finder and the Inspector take turns.
@@ -1453,6 +1459,9 @@ void MainWindow::restoreLayout()
         // squeezes the docks to match; put each one back to the size it had when the app closed.
         restoreDockSizes();
         QTimer::singleShot (500, this, &MainWindow::restoreDockSizes);
+        // The restored layout shows the editor's Device Chain; a mixer already in front has its own.
+        if (mixerWin != nullptr)
+            updateChainDock();
 
         const auto problems = QString::fromStdString (engine.restoreMasterSection());
         masterWidget->refresh();

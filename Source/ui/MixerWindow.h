@@ -208,9 +208,10 @@ public:
     bool replaceClipAudio (int track, uint32_t clip, const AudioData& edited, const QString& name, QString& error);
 
     // The Device Chain along the mixer's bottom (owner, 2026-10-25): the selected track's
-    // instrument and inserts, or the clip picked in the launcher or the tracks. Hidden while
-    // the Master strip is selected, so the editor's own chain can show.
+    // instrument and inserts, or the clip picked in the launcher or the tracks. Ctrl+Shift+C
+    // (the editor's Device Chain key) hides or shows it, remembered (mixer/devices).
     bool devicePanelShown() const;
+    void toggleDevices();
     // What the browser's Instruments and Audio Effects lists drag: "effect\n<id>",
     // "instrument\n<id>", or "synth", "sampler", "slicer".
     static QString pluginMime() { return QStringLiteral ("application/x-phi-plugin"); }
@@ -612,6 +613,7 @@ private:
     TrackDevices* devices = nullptr;
     ClipView* clipView = nullptr;
     bool showingClip = false;
+    bool devicesHidden = false;   // by Ctrl+Shift+C
     void refreshInspector();   // soon, once for any number of changes
     QScrollArea* gridScroll = nullptr;
     QComboBox* quantiseBox = nullptr;

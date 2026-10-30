@@ -726,6 +726,9 @@ public:
         insertList->setHorizontalScrollBarPolicy (Qt::ScrollBarAlwaysOff);
         insertList->setVerticalScrollBarPolicy (Qt::ScrollBarAlwaysOff);
         insertList->setDragDropMode (QAbstractItemView::InternalMove);
+        // On the strip itself, see-through like the rest of it (owner, 2026-10-30).
+        insertList->setStyleSheet (QStringLiteral ("QListWidget { background: transparent; border: none; }"));
+        insertList->viewport()->setAutoFillBackground (false);
         insertList->setToolTip (MixerWindow::tr ("The track's insert slots, top first. Click an empty one to add an effect; double-click one to open it; "
                                                  "right-click to bypass, move or remove it; drag to reorder"));
         sectionLayout->addWidget (insertList);
@@ -6884,6 +6887,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     devicePanel->setAutoFillBackground (false);
     // Fixed along the bottom (owner, 2026-10-25), see-through like the rest of the mixer.
     devicePanel->setFixedHeight (190);
+    devicesHidden = ! appSettings().value (QStringLiteral ("mixer/devices"), true).toBool();
 
     auto* layout = new QVBoxLayout (this);
     layout->addWidget (transportRow);
@@ -7844,12 +7848,19 @@ void MixerWindow::updateDevicePanel()
     if (devicePanel == nullptr)
         return;
     refreshMidiClipBox();
-    const bool show = true;   // fixed along the bottom; the master's shows nothing to change
+    const bool show = ! devicesHidden;   // fixed along the bottom; the master's shows nothing to change
     if (devicePanel->isHidden() == show)
     {
         devicePanel->setVisible (show);
         Q_EMIT devicePanelChanged();
     }
+}
+
+void MixerWindow::toggleDevices()
+{
+    devicesHidden = ! devicesHidden;
+    appSettings().setValue (QStringLiteral ("mixer/devices"), ! devicesHidden);
+    updateDevicePanel();
 }
 
 void MixerWindow::showDevices()
