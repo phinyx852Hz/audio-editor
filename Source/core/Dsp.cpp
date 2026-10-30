@@ -6,6 +6,7 @@
 #include <cmath>
 #include <limits>
 #include <numeric>
+#include <regex>
 
 namespace dsp
 {
@@ -441,7 +442,9 @@ namespace dsp
         std::vector<std::string> names { speakerLayout (n).name };
         const auto add = [&] (const char* name, int count) { if (n == count) names.push_back (name); };
         add ("5.2", 7);
+        add ("5.1.2", 8);
         add ("7.2", 9);
+        add ("5.1.4", 10);
         add ("7.2.4", 13);
         add ("9.1.6", 16);
         add ("Quad", 4);
@@ -477,6 +480,12 @@ namespace dsp
             layout.speakers.assign ((size_t) n, S::ambisonic);
         else if (name == "5.2")
             layout.speakers = { S::left, S::right, S::centre, S::lfe, S::lfe2, S::sideLeft, S::sideRight };
+        else if (name == "5.1.2" || name == "5.1.4")
+        {
+            layout.speakers = { S::left, S::right, S::centre, S::lfe, S::sideLeft, S::sideRight, S::topFrontLeft, S::topFrontRight };
+            if (name == "5.1.4")
+                layout.speakers.insert (layout.speakers.end(), { S::topRearLeft, S::topRearRight });
+        }
         else if (name == "7.2" || name == "7.2.4")
         {
             layout.speakers = { S::left, S::right, S::centre, S::lfe, S::lfe2, S::rearLeft, S::rearRight, S::sideLeft, S::sideRight };
@@ -528,6 +537,78 @@ namespace dsp
             case Speaker::other:         break;
         }
         return "Ch " + std::to_string (channel + 1);
+    }
+
+    namespace
+    {
+        uint64_t wavBit (Speaker s)
+        {
+            switch (s)
+            {
+                case Speaker::mono:
+                case Speaker::centre:        return 0x4;
+                case Speaker::left:          return 0x1;
+                case Speaker::right:         return 0x2;
+                case Speaker::lfe:           return 0x8;
+                case Speaker::rearLeft:      return 0x10;
+                case Speaker::rearRight:     return 0x20;
+                case Speaker::rearCentre:    return 0x100;
+                case Speaker::sideLeft:      return 0x200;
+                case Speaker::sideRight:     return 0x400;
+                case Speaker::topFrontLeft:  return 0x1000;
+                case Speaker::topFrontRight: return 0x4000;
+                case Speaker::topRearLeft:   return 0x8000;
+                case Speaker::topRearRight:  return 0x20000;
+                default:                     return 0;
+            }
+        }
+
+        // Lb/Rb alone stand for Ls/Rs: 5.1 and 5.1.4 are written both ways.
+        uint64_t sidesForBacks (uint64_t mask)
+        {
+            return (mask & 0x30) == 0x30 && (mask & 0x600) == 0 ? (mask & ~uint64_t (0x30)) | 0x600 : mask;
+        }
+    }
+
+    uint64_t wavChannelMask (int numChannels, const std::string& layoutName)
+    {
+        const auto layout = speakerLayout (numChannels, layoutName);
+        if (numChannels == 1)
+            return 0x4;
+        uint64_t mask = 0;
+        for (const auto s : layout.speakers)
+        {
+            const auto bit = wavBit (s);
+            if (bit == 0 || bit <= mask)   // no bit, or out of WAV's order
+                return 0;
+            mask |= bit;
+        }
+        return mask;
+    }
+
+    std::string layoutForWavMask (uint64_t mask, int numChannels)
+    {
+        if (mask == 0 || numChannels <= 2)
+            return {};
+        const auto wanted = sidesForBacks (mask);
+        for (const auto& name : layoutChoices (numChannels))
+            if (const auto m = wavChannelMask (numChannels, name); m != 0 && sidesForBacks (m) == wanted)
+                return name == speakerLayout (numChannels).name ? std::string() : name;
+        return {};
+    }
+
+    std::string ambisonicLayoutForName (const std::string& fileName, int numChannels)
+    {
+        const int order = ambi::orderFor (numChannels);
+        if (order < 1 || order > 3)
+            return {};
+        auto name = fileName.substr (0, fileName.rfind ('.'));
+        std::transform (name.begin(), name.end(), name.begin(), [] (unsigned char c) { return (char) std::tolower (c); });
+        static const std::regex ambisonicName ("ambix|ambisonic|b-?format|(^|[^a-z])(foa|hoa|[123]oa)([^a-z]|$)");
+        if (! std::regex_search (name, ambisonicName))
+            return {};
+        static const char* names[] { "", "Ambisonics (1st order)", "Ambisonics (2nd order)", "Ambisonics (3rd order)" };
+        return names[order];
     }
 
     std::array<std::vector<float>, 2> stereoDownmix (int numChannels)

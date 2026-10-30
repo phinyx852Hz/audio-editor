@@ -471,8 +471,12 @@ void MainWindow::mixDownToEditor (int track)
     Tags tags;
     tags[tag::title] = (track < 0 ? w->mixName() : w->mixName() + QStringLiteral (" - ") + w->trackName (track)).toStdString();
     const auto options = saveOptions;
+    // A spatial mix down to the speakers or to AmbiX is a surround or ambisonic file.
+    const auto layout = track < 0 ? w->mixdownLayout() : std::string();
     newTab();
     doc.reset (std::move (result.data), {}, {}, std::move (tags));
+    if (! layout.empty())
+        doc.setLayout (layout);
     doc.markUnsaved();
     saveOptions = options;
     refreshFromDocument (false);

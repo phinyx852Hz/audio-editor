@@ -50,6 +50,9 @@ struct SaveOptions
     // acid chunk marked as a loop of `loopBeats` beats in `beatsPerBar` time, to stretch to the song's tempo.
     Frame loopStart = -1, loopEnd = -1;
     int loopBeats = 0, beatsPerBar = 4;
+    // The channel layout when it is not the usual one for the count (dsp::layoutChoices): a
+    // surround WAV's channel mask follows it, so a 5.1.4 file is not written as 7.1.2.
+    std::string layout;
 };
 
 struct PluginInfo
@@ -374,8 +377,10 @@ public:
 
     // File I/O, safe to call from worker threads. Markers and tags are read and
     // written where the format holds them (see Tags).
+    // `layoutOut`: the layout the file's channel mask says when it is not the usual one for
+    // the count (dsp::layoutForWavMask), else left empty.
     static AudioDataPtr loadFile (const std::string& path, std::vector<Marker>& markersOut, Tags& tagsOut, std::string& error,
-                                  std::atomic<float>* progress = nullptr);
+                                  std::atomic<float>* progress = nullptr, std::string* layoutOut = nullptr);
     static bool saveFile (const std::string& path, const AudioData&, const std::vector<Marker>&, const Tags&,
                           const SaveOptions&, std::string& error);
     // Which tags a file type keeps ("wav", "flac"...): the rest are not saved there.

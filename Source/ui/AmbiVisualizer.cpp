@@ -203,7 +203,7 @@ void AmbiVisualizer::saveSettings() const
 
 QStringList AmbiVisualizer::speakerLayouts()
 {
-    return { QStringLiteral ("Stereo"), QStringLiteral ("Quad"), QStringLiteral ("5.1"), QStringLiteral ("7.1"), QStringLiteral ("7.1.2"),
+    return { QStringLiteral ("Stereo"), QStringLiteral ("Quad"), QStringLiteral ("5.1"), QStringLiteral ("5.1.4"), QStringLiteral ("7.1"), QStringLiteral ("7.1.2"),
              QStringLiteral ("7.1.4"), QStringLiteral ("7.1.8"), QStringLiteral ("9.1.6") };
 }
 

@@ -373,12 +373,18 @@ private:
     // settings: they are the studio's, not the project's), and the room view of where it all is.
     friend class RoomView;
     friend class SpatialDialog;
+    friend class SpeakerMeter;
     bool spatialMode() const;
     void setSpatialMode (bool on);
     void applySpatial();      // the decoder made again from the settings, for the engine and the device
     void spatialMoved();      // a panner changed: the strips, the Inspector and the room views follow
     void showSpatialDialog();
     QJsonObject spatialJson() const;
+public:
+    // The channel layout a Mix Down in Spatial mode has ("Ambisonics (3rd order)", "5.1.4"...;
+    // empty: the usual one for its channel count).
+    std::string mixdownLayout() const;
+private:
     void loadSpatial (const QJsonObject&);
     class QPushButton* spatialButton = nullptr;
     class RoomView* roomView = nullptr;            // in the Inspector, in Spatial mode
@@ -406,6 +412,9 @@ private:
     // The MIDI clip shown (owner, 2026-10-25: "really fast MIDI editing", from the Inspector):
     // R reverses it; Φ, Duplicate, ½, ×2 and a mode or raga make a new MIDI file beside the mix.
     void reverseShownClip();
+    void splitShownClip();   // the clip's file, a track for each channel
+    // Each channel of `file` on a new track, as a mono file beside the mix, placed as `like` is. False: nothing done.
+    bool splitToTracks (const QString& file, mixer::Clip like);
     void editShownMidi (const std::function<midifile::SongPtr (const midifile::Song&)>& edit, const QString& what);
     void refreshMidiClipBox();
     void phiShownMidi();   // Φ: the notes dealt out again, another order each time
