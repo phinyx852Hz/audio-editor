@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**113 pull requests:** 103 merged, 10 open.
+**115 pull requests:** 104 merged, 11 open.
 
 ## Contents
 
@@ -45,11 +45,11 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#87](https://github.com/phinyx852Hz/audio-editor/pull/87) | MIDI editor: sargam, Carnatic swaras, jianpu, not angka, jeongganbo and maqam/makam/dastgah key signatures | merged |  | `Source/mixer/NotationGrid.cpp`<br>`Source/ui/MidiStaff.cpp`<br>`Source/mixer/KeySignatures.inc` |
 | [#88](https://github.com/phinyx852Hz/audio-editor/pull/88) | Slicer: Cubase Drum Machine layout; Simplest and the Slicer dock under the editor or the mixer | merged |  | `Source/ui/SlicerWindow.cpp`<br>`Source/ui/MixerWindow.cpp`<br>`Source/ui/SamplerSection.cpp` |
 | [#97](https://github.com/phinyx852Hz/audio-editor/pull/97) | MIDI editor: a menu item, a shortcut and a double-click to open it | merged | Mixer › Edit MIDI Notes... | `Source/ui/MixerWindow.cpp`<br>`docs/midi-editor.md`<br>`Source/ui/MixerSection.cpp` |
-| [#102](https://github.com/phinyx852Hz/audio-editor/pull/102) | Pop out every instrument and effect editor, with Super+F and Ctrl+W | open |  | `Source/ui/PrismEditor.cpp`<br>`Source/engine/X11Windows.cpp`<br>`Source/engine/PluginWindow.h` |
+| [#102](https://github.com/phinyx852Hz/audio-editor/pull/102) | Pop out and float every instrument and effect editor, with Ctrl+F/Super+F and Ctrl+W | merged |  | `Source/ui/PrismEditor.cpp`<br>`Source/engine/X11Windows.cpp`<br>`Source/engine/PluginWindow.h` |
 | [#103](https://github.com/phinyx852Hz/audio-editor/pull/103) | Main editor: a standalone MIDI editor under the waveform, closable halves, Bounce to Audio | merged | View > Audio Editor | `Source/ui/MidiPanel.cpp`<br>`Source/ui/MixerSection.cpp`<br>`Source/ui/MidiPanel.h` |
 | [#104](https://github.com/phinyx852Hz/audio-editor/pull/104) | Mixer: surround and AmbiX files on the tracks, LFE, speaker meter and surround mix downs; 5.1.4 in the editor | merged |  | `Source/mixer/MixerEngine.cpp`<br>`Source/ui/MixerWindow.cpp`<br>`Source/ui/MixerSpatial.cpp` |
 | [#106](https://github.com/phinyx852Hz/audio-editor/pull/106) | Simplest phase 2: envelopes, LFOs and compact Edit tabs | open |  | `Source/sampler/SamplerEngine.cpp`<br>`Source/ui/SamplerWindow.cpp`<br>`tests/CoreTests.cpp` |
-| [#110](https://github.com/phinyx852Hz/audio-editor/pull/110) | MIDI editor in the main window: Alt+arrows/F6 reach it, Home and End work | open |  | `Source/ui/MidiEditor.cpp`<br>`Source/ui/PanelNavigation.cpp`<br>`docs/main-midi-editor.md` |
+| [#110](https://github.com/phinyx852Hz/audio-editor/pull/110) | MIDI editor in the main window: Alt+arrows/F6 reach it, Home/End, Ctrl+W closes it | open |  | `Source/ui/MidiEditor.cpp`<br>`Source/ui/PanelNavigation.cpp`<br>`docs/main-midi-editor.md` |
 | [#111](https://github.com/phinyx852Hz/audio-editor/pull/111) | MIDI editor and score: a transport bar of their own | open |  | `Source/ui/MidiEditor.cpp`<br>`Source/ui/MidiEditor.h`<br>`docs/midi-editor.md` |
 
 ### Analysis and meters
@@ -140,6 +140,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#42](https://github.com/phinyx852Hz/audio-editor/pull/42) | Add the Φ Phaser, and the Φ DSP as a library the PHI synth can link | merged | Add plugin, Built-in, Φ Phaser | `Source/core/PhiPhaser.cpp`<br>`Source/engine/PhiEffects.cpp`<br>`Source/core/CMakeLists.txt` |
 | [#43](https://github.com/phinyx852Hz/audio-editor/pull/43) | Φ Compressor, Φ Multiband, Φ Limiter and Φ Chorus | merged | Add plugin, Built-in | `Source/core/PhiDynamics.cpp`<br>`Source/core/PhiChorus.cpp`<br>`Source/engine/PhiEffects.cpp` |
 | [#89](https://github.com/phinyx852Hz/audio-editor/pull/89) | Φ Modulation (PhiFlow, PhiSpace, PhiGrain, PhiMatrix) and a Cubase-style Modulators panel | merged |  | `Source/core/PhiModulation.cpp`<br>`Source/ui/ModulatorsPanel.cpp`<br>`Source/core/Modulators.cpp` |
+| [#115](https://github.com/phinyx852Hz/audio-editor/pull/115) | Manual: Analysing a Plugin; Forensic Φ finds wider golden ratios | open |  | `docs/manual/chapters/plugin-analyzer.md`<br>`Source/core/PhiForensics.cpp`<br>`docs/manual/chapters/phi.md` |
 
 ### Instruments and plugins
 
@@ -177,7 +178,6 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#15](https://github.com/phinyx852Hz/audio-editor/pull/15) | Visualizer: a web page behind PHINYX (optional, Qt WebEngine) | merged | Visualizer menu, Web Page | `Source/ui/WebBackdrop.cpp`<br>`Source/ui/VisualizerSection.cpp` |
 | [#30](https://github.com/phinyx852Hz/audio-editor/pull/30) | Sonify the Visualizer: pictures, videos, cameras and the web page played as notes | merged | Visualizer menu, Sonify | `Source/core/Sonify.cpp`<br>`Source/ui/SonifySection.cpp`<br>`Source/ui/SonifyPanel.cpp` |
 | [#52](https://github.com/phinyx852Hz/audio-editor/pull/52) | Control surfaces: Launchpad, Launchkey and Push 2/3, and MIDI Learn | merged | Performance menu, Control Surfaces | `Source/control/Devices.cpp`<br>`Source/control/ControlSurface.cpp`<br>`Source/ui/ControlSection.cpp`<br>`docs/control-surfaces.md` |
-| [#112](https://github.com/phinyx852Hz/audio-editor/pull/112) | Cut idle CPU: slow the Visualizer and mixer repaints in silence | open |  | `Source/ui/MixerWindow.cpp`<br>`Source/ui/Visualizer.cpp`<br>`Source/ui/Visualizer.h` |
 
 ### Interface and branding
 
@@ -212,6 +212,8 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#78](https://github.com/phinyx852Hz/audio-editor/pull/78) | Simplest phase 1: sound shaping and a Simpler-style layout | merged |  | `Source/ui/SamplerWindow.cpp`<br>`Source/sampler/SamplerEngine.cpp`<br>`tests/CoreTests.cpp` |
 | [#93](https://github.com/phinyx852Hz/audio-editor/pull/93) | Minimalize: fix a use-after-free when phase or canon adds new voices | merged |  | `tests/CoreTests.cpp`<br>`Source/mixer/Minimalize.cpp` |
 | [#99](https://github.com/phinyx852Hz/audio-editor/pull/99) | File > New Project (Ctrl+N); start on a blank project and ask to save on quit | merged | File > New Project | `Source/ui/MixerWindow.cpp`<br>`Source/ui/MainWindow.cpp`<br>`Source/ui/ProjectSection.cpp` |
+| [#112](https://github.com/phinyx852Hz/audio-editor/pull/112) | Cut idle CPU, and add Options > Wallpaper | open |  | `Source/ui/VisualizerSection.cpp`<br>`Source/ui/Wallpaper.cpp`<br>`Source/ui/MixerWindow.cpp` |
+| [#114](https://github.com/phinyx852Hz/audio-editor/pull/114) | Build an installable Arch package in CI | open |  | `.github/workflows/build.yml`<br>`packaging/arch/ci.PKGBUILD`<br>`packaging/arch/PKGBUILD` |
 
 ## By number
 
@@ -318,7 +320,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#99](https://github.com/phinyx852Hz/audio-editor/pull/99) | File > New Project (Ctrl+N); start on a blank project and ask to save on quit | File > New Project is now the first entry in the File menu. *(auto)* | merged | 2026-10-30 | Not yet sorted |
 | [#100](https://github.com/phinyx852Hz/audio-editor/pull/100) | Instrument Prisms: rays of instruments with their own effects in series | Another role for the Prism: Instrument Rays, like Ableton's Instrument Rack, as a mixer track's instrument. *(auto)* | merged | 2026-10-30 | Routing and racks |
 | [#101](https://github.com/phinyx852Hz/audio-editor/pull/101) | Mixer: room for 16 tracks, and strips that zoom from wide to just the fader | mixer::maxTracks is now 16, which is how much room the engine has. *(auto)* | merged | 2026-10-30 | Mixer and clip launcher |
-| [#102](https://github.com/phinyx852Hz/audio-editor/pull/102) | Pop out every instrument and effect editor, with Super+F and Ctrl+W | Owner's ask: third-party synths and samplers open as pop-out windows over PHI, any instrument can go full screen with Super+F, Ctrl+W closes the interface bu... *(auto)* | open | 2026-10-30 | Editing and warping |
+| [#102](https://github.com/phinyx852Hz/audio-editor/pull/102) | Pop out and float every instrument and effect editor, with Ctrl+F/Super+F and Ctrl+W | Owner's ask: *(auto)* | merged | 2026-10-30 | Editing and warping |
 | [#103](https://github.com/phinyx852Hz/audio-editor/pull/103) | Main editor: a standalone MIDI editor under the waveform, closable halves, Bounce to Audio | The bottom panel of the main editor couldn't be closed, and the owner asked for it to be "just the MIDI editor" with an instrument of its own, not tied to an... *(auto)* | merged | 2026-10-30 | Editing and warping |
 | [#104](https://github.com/phinyx852Hz/audio-editor/pull/104) | Mixer: surround and AmbiX files on the tracks, LFE, speaker meter and surround mix downs; 5.1.4 in the editor | ΦNYX chose to build surround on top of the mixer's Spatial scene, not as channel-based buses. *(auto)* | merged | 2026-10-30 | Editing and warping |
 | [#105](https://github.com/phinyx852Hz/audio-editor/pull/105) | PHI rāga: teacher's bahādur kauns corrections; āndolan in tune in equal temperament | These come from the owner's teacher. *(auto)* | open | 2026-10-30 | Modes, tunings and composition |
@@ -326,7 +328,9 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#107](https://github.com/phinyx852Hz/audio-editor/pull/107) | Manual: bring it up to date with what is on main | Updates the operation manual (docs/manual) for the features merged recently, written for a user: where each feature is, its menus and keys, and how to use it. *(auto)* | open | 2026-10-30 | Documentation |
 | [#108](https://github.com/phinyx852Hz/audio-editor/pull/108) | Mixer: Arm on Select prefs, system input, close the Inspector, black names, drag tracks to reorder | #101's auto-arm armed every Hybrid track when it was selected, including Hybrid tracks with no instrument yet. *(auto)* | open | 2026-10-30 | Mixer and clip launcher |
 | [#109](https://github.com/phinyx852Hz/audio-editor/pull/109) | Window opacity keys work from every window and any focus | Ctrl+Alt+- and Ctrl+Alt+= often did nothing, so opacity could only be changed with the mouse. *(auto)* | open | 2026-10-30 | Interface and branding |
-| [#110](https://github.com/phinyx852Hz/audio-editor/pull/110) | MIDI editor in the main window: Alt+arrows/F6 reach it, Home and End work | Alt+arrows and F6 reach it. *(auto)* | open | 2026-10-30 | Editing and warping |
+| [#110](https://github.com/phinyx852Hz/audio-editor/pull/110) | MIDI editor in the main window: Alt+arrows/F6 reach it, Home/End, Ctrl+W closes it | Alt+arrows and F6 reach it. *(auto)* | open | 2026-10-30 | Editing and warping |
 | [#111](https://github.com/phinyx852Hz/audio-editor/pull/111) | MIDI editor and score: a transport bar of their own | A transport bar across the top of MidiEditor, above the tool row. *(auto)* | open | 2026-10-30 | Editing and warping |
-| [#112](https://github.com/phinyx852Hz/audio-editor/pull/112) | Cut idle CPU: slow the Visualizer and mixer repaints in silence | The Visualizer behind PHI is a child widget lowered under everything else. *(auto)* | open | 2026-10-30 | Performance and visuals |
+| [#112](https://github.com/phinyx852Hz/audio-editor/pull/112) | Cut idle CPU, and add Options > Wallpaper | The Visualizer behind PHI is a child widget lowered under everything else. *(auto)* | open | 2026-10-30 | Not yet sorted |
 | [#113](https://github.com/phinyx852Hz/audio-editor/pull/113) | Fix the crash on quit with the mixer open | The SIGSEGV on quit (2026-10-30 crash report) happened like this. ~MainWindow deleted the docked mixer. *(auto)* | open | 2026-10-30 | Mixer and clip launcher |
+| [#114](https://github.com/phinyx852Hz/audio-editor/pull/114) | Build an installable Arch package in CI | Stage 1 of the installers: a ready-made Arch package that puts PHI in the app launcher with the Φ icon (the .desktop file, icon and MIME type were already in... *(auto)* | open | 2026-10-30 | Not yet sorted |
+| [#115](https://github.com/phinyx852Hz/audio-editor/pull/115) | Manual: Analysing a Plugin; Forensic Φ finds wider golden ratios | New chapter, "Analysing a Plugin" (docs/manual/chapters/plugin-analyzer.md), in the Mastering part after Effects. *(auto)* | open | 2026-10-30 | Φ effects and sounds |
