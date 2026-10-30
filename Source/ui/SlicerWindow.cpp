@@ -401,9 +401,6 @@ PadGrid::PadGrid (slicer::Engine& e, QWidget* parent) : QWidget (parent), engine
 {
     setFocusPolicy (Qt::StrongFocus);
     setAcceptDrops (true);
-    QSizePolicy policy (QSizePolicy::Preferred, QSizePolicy::Preferred);
-    policy.setHeightForWidth (true);
-    setSizePolicy (policy);
     setToolTip (tr ("Click a pad to play it (higher is louder). Drag a pad onto another to swap them, drop audio files on a pad "
                     "to load them (several fill upward), right-click for its menu"));
 }
@@ -610,7 +607,7 @@ SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
     auto bold = title->font();
     bold.setBold (true);
     title->setFont (bold);
-    title->setMaximumWidth (260);
+    title->setMaximumWidth (220);
     view = new SliceView (engine, this);
     pads = new PadGrid (engine, this);
     status = new QLabel (this);
@@ -629,12 +626,22 @@ SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
         b->setFocusPolicy (Qt::NoFocus);
         return b;
     };
-    auto* refresh = tool (tr ("&Refresh"), tr ("Take the sound from the editor again"));
     auto* midi = tool (tr ("&MIDI..."), tr ("Choose the MIDI keyboards and pads (Push) that play the Slicer"));
-    auto* kitButton = tool (tr ("&Kit"), tr ("Save the kit (pads, settings, sounds and patterns) as a .phikit file, or open one"));
+    auto* kitButton = tool (tr ("&Kit"), tr ("Save the kit (pads, settings, sounds and patterns) as a .phikit file or open one, "
+                                             "take the sound from the editor again, or follow its edits"));
     auto* kitMenu = new QMenu (kitButton);
     kitMenu->addAction (tr ("Save Kit..."), this, &SlicerWindow::saveKit);
     kitMenu->addAction (tr ("Load Kit..."), this, &SlicerWindow::loadKit);
+    kitMenu->addSeparator();
+    // Follow editor and Refresh live in the Kit menu, so the top bar stays narrow.
+    kitMenu->addAction (tr ("Refresh from Editor"), this, &SlicerWindow::refreshRequested);
+    auto* followAction = kitMenu->addAction (followBox->text());
+    followAction->setCheckable (true);
+    followAction->setChecked (followBox->isChecked());
+    followAction->setToolTip (followBox->toolTip());
+    connect (followAction, &QAction::toggled, followBox, &QCheckBox::setChecked);
+    connect (followBox, &QCheckBox::toggled, followAction, &QAction::setChecked);
+    followBox->hide();
     kitButton->setMenu (kitMenu);
 
     // How the sound is cut.
@@ -693,8 +700,8 @@ SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
         auto* button = new QPushButton (this);
         button->setCheckable (true);
         button->setFocusPolicy (Qt::NoFocus);
-        button->setFixedSize (27, 27);
-        button->setIconSize (QSize (20, 20));
+        button->setFixedSize (24, 24);
+        button->setIconSize (QSize (18, 18));
         button->setToolTip (tr ("Bank %1: pads %2 to %3 (key %4)").arg (QChar ('A' + b)).arg (b * 16 + 1).arg (b * 16 + 16)
                                 .arg (QString::fromLatin1 (bankKeyNames[b])));
         banks->addButton (button, b);
@@ -730,17 +737,11 @@ SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
     topBar->addSpacing (12);
     topBar->addLayout (method);
     topBar->addStretch (1);
-    topBar->addWidget (followBox);
-    topBar->addWidget (refresh);
     topBar->addWidget (kitButton);
     topBar->addWidget (midi);
     // Under the pads: how notes reach them.
-    auto* noteRow = new QHBoxLayout;
     auto* layoutLabel = new QLabel (tr ("&Layout"), this);
     layoutLabel->setBuddy (layoutBox);
-    noteRow->addWidget (layoutLabel);
-    noteRow->addWidget (layoutBox, 1);
-    noteRow->addWidget (pageBox, 1);
 
     // The chosen pad's settings, and the kit's.
     auto real = [this] (double lo, double hi, double step, int decimals, const QString& suffix)
@@ -787,7 +788,7 @@ SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
     // The Pad section on the right: Level, Pan and Pitch as knobs, the rest beneath.
     padTitle = new QLabel (this);
     padTitle->setFont (bold);
-    padTitle->setWordWrap (true);
+    padTitle->setSizePolicy (QSizePolicy::Ignored, QSizePolicy::Preferred);
     auto* knobs = new QHBoxLayout;
     auto knob = [this, knobs] (const QString& label, QAbstractSpinBox* box, int lo, int hi, int origin,
                                std::function<int()> get, std::function<void (int)> set)
@@ -795,7 +796,7 @@ SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
         auto* dial = new Potentiometer (this);
         dial->setRange (lo, hi);
         dial->setOrigin (origin);
-        dial->setFixedSize (44, 44);
+        dial->setFixedSize (32, 32);
         dial->setToolTip (box->toolTip());
         auto* column = new QVBoxLayout;
         column->setSpacing (1);
@@ -803,8 +804,8 @@ SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
         text->setAlignment (Qt::AlignCenter);
         text->setBuddy (box);
         box->setMaximumWidth (78);
-        column->addWidget (dial, 0, Qt::AlignHCenter);
         column->addWidget (text);
+        column->addWidget (dial, 0, Qt::AlignHCenter);
         column->addWidget (box);
         knobs->addLayout (column);
         // The knob and its box follow each other.
@@ -824,57 +825,63 @@ SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
           [this] (int v) { gainBox->setValue (v / 10.0); });
     knob (tr ("&Pan"), panBox, -100, 100, 0, [this] { return panBox->value(); }, [this] (int v) { panBox->setValue (v); });
     knob (tr ("Pi&tch"), pitchBox, -24, 24, 0, [this] { return pitchBox->value(); }, [this] (int v) { pitchBox->setValue (v); });
-    auto* padForm = new QFormLayout;
+    // Two columns of settings under the knobs, so the section stays as low as the pads.
+    auto* padForm = new QGridLayout;
+    padForm->setHorizontalSpacing (6);
     padForm->setVerticalSpacing (2);
-    padForm->addRow (tr ("Pla&y"), playBox);
-    padForm->addRow (tr ("Atta&ck"), attackBox);
-    padForm->addRow (tr ("Rele&ase"), releaseBox);
-    padForm->addRow (tr ("C&hoke"), chokeBox);
-    padForm->addRow (tr ("Recei&ve"), receiveBox);
-    auto* muteSolo = new QHBoxLayout;
-    muteSolo->addWidget (muteBox);
-    muteSolo->addWidget (soloBox);
-    muteSolo->addStretch (1);
-    padForm->addRow (QString(), muteSolo);
-    auto* kitForm = new QHBoxLayout;
-    auto* velocityLabel = new QLabel (tr ("Kit veloc&ity"), this);
-    velocityLabel->setBuddy (velocityBox);
-    auto* voicesLabel = new QLabel (tr ("Voi&ces"), this);
-    voicesLabel->setBuddy (voicesBox);
-    kitForm->addWidget (velocityLabel);
-    kitForm->addWidget (velocityBox);
-    kitForm->addWidget (voicesLabel);
-    kitForm->addWidget (voicesBox);
+    int row = 0;
+    for (const auto& [text, w] : { std::pair<QString, QWidget*> { tr ("Pla&y"), playBox }, { tr ("C&hoke"), chokeBox },
+                                   { tr ("Atta&ck"), attackBox }, { tr ("Rele&ase"), releaseBox },
+                                   { tr ("Recei&ve"), receiveBox }, { QString(), nullptr },
+                                   { tr ("Kit veloc&ity"), velocityBox }, { tr ("Voi&ces"), voicesBox } })
+    {
+        const int r = row / 2, c = (row % 2) * 2;
+        ++row;
+        if (w == nullptr)
+        {
+            auto* muteSolo = new QHBoxLayout;
+            muteSolo->addWidget (muteBox);
+            muteSolo->addWidget (soloBox);
+            muteSolo->addStretch (1);
+            padForm->addLayout (muteSolo, r, c, 1, 2);
+            continue;
+        }
+        auto* label = new QLabel (text, this);
+        label->setBuddy (w);
+        padForm->addWidget (label, r, c);
+        padForm->addWidget (w, r, c + 1);
+    }
     padArea = new QWidget (this);
     auto* padColumn = new QVBoxLayout (padArea);
     padColumn->setContentsMargins (0, 0, 0, 0);
+    padColumn->setSpacing (2);
     padColumn->addWidget (padTitle);
     padColumn->addLayout (knobs);
     padColumn->addLayout (padForm);
-    padColumn->addLayout (kitForm);
     padColumn->addStretch (1);
-    padArea->setFixedWidth (250);
+    padArea->setFixedWidth (320);
 
     // The layer slots: four a pad, each with its power and level, as the Drum Machine's.
     layers = new QButtonGroup (this);
     auto* slots = new QGridLayout;
-    slots->setSpacing (3);
+    slots->setSpacing (2);
     for (int n = 0; n < slicer::maxLayers; ++n)
     {
         auto* power = new QPushButton (QStringLiteral ("⏻"), this);
         power->setCheckable (true);
         power->setFocusPolicy (Qt::NoFocus);
-        power->setFixedWidth (28);
+        power->setFixedSize (24, 22);
         power->setToolTip (tr ("Layer %1 on or off").arg (n + 1));
         auto* button = new QPushButton (tr ("Layer %1").arg (n + 1), this);
         button->setCheckable (true);
         button->setFocusPolicy (Qt::NoFocus);
         button->setStyleSheet (QStringLiteral ("text-align: left; padding-left: 6px;"));
+        button->setFixedHeight (22);
         button->setToolTip (tr ("Edit layer %1 below").arg (n + 1));
         auto* level = new Potentiometer (this);
         level->setRange (-480, 120);
         level->setOrigin (0);
-        level->setFixedSize (28, 28);
+        level->setFixedSize (22, 22);
         level->setToolTip (tr ("Layer %1's level, on top of the pad's").arg (n + 1));
         layers->addButton (button, n);
         slots->addWidget (power, n, 0);
@@ -899,7 +906,7 @@ SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
             changed();
         });
     }
-    slots->setColumnMinimumWidth (1, 170);
+    slots->setColumnMinimumWidth (1, 120);
     slots->setRowStretch (slicer::maxLayers, 1);
     layers->button (0)->setChecked (true);
     layerOnBox = new QCheckBox (this);   // the chosen layer's power and level, kept with the slots above
@@ -941,18 +948,15 @@ SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
     auto* loadRow = new QHBoxLayout;
     loadRow->addWidget (layerLoad);
     loadRow->addWidget (layerClear);
+    loadRow->addWidget (hotSwapBox);
+    loadRow->addWidget (keepSwap);
+    loadRow->addWidget (undoSwap);
     loadRow->addStretch (1);
-    auto* swapRow = new QHBoxLayout;
-    swapRow->addWidget (hotSwapBox);
-    swapRow->addWidget (keepSwap);
-    swapRow->addWidget (undoSwap);
-    swapRow->addStretch (1);
     auto* layerColumn = new QVBoxLayout;
     layerColumn->setSpacing (3);
     layerColumn->addLayout (slots);
     layerColumn->addLayout (layerGrid);
     layerColumn->addLayout (loadRow);
-    layerColumn->addLayout (swapRow);
     layerColumn->addStretch (1);
     layerSound->setSizePolicy (QSizePolicy::Ignored, QSizePolicy::Preferred);
 
@@ -966,6 +970,7 @@ SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
     soundColumn->addWidget (layerSound);
     soundColumn->addWidget (view, 1);
     middle->addLayout (soundColumn, 1);
+    middle->addWidget (padArea);   // the steps take its room too
 
     // The pads, or the step sequencer playing them.
     PadLooks looks;
@@ -983,23 +988,28 @@ SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
 
     // Banks and pads on the left, the page in the middle, the pad on the right.
     auto* left = new QVBoxLayout;
-    left->setSpacing (4);
+    left->setSpacing (3);
     left->addLayout (bankRow);
     left->addWidget (pads, 1);
-    left->addLayout (noteRow);
     auto* body = new QHBoxLayout;
     body->addLayout (left);
     body->addWidget (pages, 1);
-    body->addWidget (padArea);
 
     midiStatus->setAlignment (Qt::AlignRight | Qt::AlignVCenter);
+    // Along the bottom: how notes reach the pads, then what is going on.
     auto* statusRow = new QHBoxLayout;
+    statusRow->addWidget (layoutLabel);
+    statusRow->addWidget (layoutBox);
+    statusRow->addWidget (pageBox);
+    statusRow->addSpacing (12);
     statusRow->addWidget (status, 1);
+    midiStatus->setSizePolicy (QSizePolicy::Ignored, QSizePolicy::Preferred);
+    midiStatus->setMinimumWidth (120);
     statusRow->addWidget (midiStatus);
 
     auto* layout = new QVBoxLayout (this);
-    layout->setContentsMargins (6, 4, 6, 4);
-    layout->setSpacing (4);
+    layout->setContentsMargins (6, 3, 6, 3);
+    layout->setSpacing (3);
     layout->addLayout (topBar);
     layout->addLayout (body, 1);
     layout->addLayout (statusRow);
@@ -1050,7 +1060,6 @@ SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
     });
     connect (pads, &PadGrid::filesDropped, this, &SlicerWindow::loadPadFiles);
     connect (banks, &QButtonGroup::idClicked, this, [this] (int b) { setBank (b); select (b * slicer::padsPerBank + selected % slicer::padsPerBank); });
-    connect (refresh, &QPushButton::clicked, this, &SlicerWindow::refreshRequested);
     connect (midi, &QPushButton::clicked, this, &SlicerWindow::midiInputsRequested);
     connect (sliceButton, &QPushButton::clicked, this, &SlicerWindow::slice);
     connect (methodBox, &QComboBox::currentIndexChanged, this, &SlicerWindow::methodChanged);
@@ -1347,7 +1356,6 @@ void SlicerWindow::showPage (int page)
 {
     pageButtons->button (page)->setChecked (true);
     pages->setCurrentIndex (page);
-    padArea->setVisible (page == 0);   // the steps want the room
     appSettings().setValue (QStringLiteral ("slicer/page"), page);
 }
 

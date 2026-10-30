@@ -526,6 +526,10 @@ private:
     void updateChainDock();
     void updateInstrumentDocks();
     void placeInstrumentDocks();
+    int compactHeight (DockablePanel*) const;
+    bool toggleChainAndInstrument();
+    DockablePanel* bottomFront = nullptr;       // the Device Chain, Simplest or the Slicer, whichever tab is up
+    DockablePanel* lastInstrumentFront = nullptr;
     bool chainHiddenForMixer = false;
     // The Find panel is the mixer's Finder in the editor's place: it and the Inspector take
     // turns (owner, 2026-10-25). Hidden for the Inspector, it comes back with the editor.

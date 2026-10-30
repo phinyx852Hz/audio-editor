@@ -79,8 +79,8 @@ public:
     void setLane (int l) { lane = l; update(); }
     void setWhich (Which w) { which = w; update(); }
     void setColumns (int n) { shown = n; update(); }
-    QSize sizeHint() const override { return { 720, 56 }; }
-    QSize minimumSizeHint() const override { return { 420, 44 }; }
+    QSize sizeHint() const override { return { 720, 36 }; }
+    QSize minimumSizeHint() const override { return { 420, 30 }; }
 
 Q_SIGNALS:
     void laneEdited (int lane);

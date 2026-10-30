@@ -35,7 +35,7 @@ public:
     void setKit (const slicer::Kit& k);
     void setSelected (int pad);
     QSize sizeHint() const override { return { 620, 120 }; }
-    QSize minimumSizeHint() const override { return { 300, 100 }; }
+    QSize minimumSizeHint() const override { return { 160, 100 }; }
 
     // Moves the line at `from` towards `to`; gives where it landed.
     std::function<Frame (Frame from, Frame to)> moveCut;
@@ -86,10 +86,8 @@ public:
     void setBank (int b) { bank = b; update(); }
     void setSelected (int pad) { selected = pad; update(); }
     void setKit (const slicer::Kit& k) { kit = k; update(); }
-    QSize sizeHint() const override { return { 250, 250 }; }
-    QSize minimumSizeHint() const override { return { 200, 200 }; }
-    bool hasHeightForWidth() const override { return true; }
-    int heightForWidth (int w) const override { return w; }
+    QSize sizeHint() const override { return { 230, 160 }; }
+    QSize minimumSizeHint() const override { return { 230, 140 }; }
 
 Q_SIGNALS:
     void padPressed (int pad, float velocity);

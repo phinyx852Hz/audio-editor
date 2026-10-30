@@ -84,7 +84,7 @@ A pad hit from MIDI becomes the one you edit. Follow editor, `Ctrl+F8` (refresh)
 ## Both together
 
 - MIDI notes play whichever of the two windows you used last. Closing one silences it; with both closed, MIDI plays nothing.
-- Both dock compactly along the bottom, as Cubase's Drum Machine in its lower zone, and take turns with the Device Chain in the same space: tabs along the top (Device Chain, Simplest, Slicer) switch between them, opening one brings it to the front, and `Ctrl+Shift+C` brings the Device Chain back. With the mixer in front they sit inside it, under the strips, with the same tabs in place of its Device Chain. `Ctrl+Alt+P` pops one out into its own window and docks it back.
+- Both dock compactly along the bottom, as Cubase's Drum Machine in its lower zone, and take turns with the Device Chain in the same space: tabs along the top (Device Chain, Simplest, Slicer) switch between them, opening one brings it to the front, and `Shift+Tab` (outside a field you type in) or `Ctrl+Shift+C` brings the Device Chain back. With the mixer in front they sit inside it, under the strips, with the same tabs in place of its Device Chain; Edit on a track's Sampler or Slicer opens it there as well, as another tab. They take only the height their layout needs, about the Device Chain's. `Ctrl+Alt+P` pops one out into its own window and docks it back.
 - Drag an audio file from the Find panel or a file manager onto either to load it.
 - In the Find panel, `F7` and `F8` send the highlighted file and leave the keyboard in Find, so you can arrow to the next file and try it.
 - A mixer track can have a Simplest or Slicer of its own; see [Instruments](#mixer-instruments).

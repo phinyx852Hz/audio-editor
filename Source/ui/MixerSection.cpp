@@ -291,9 +291,9 @@ void MainWindow::updateInstrumentDocks()
         auto* host = mixerWin->instrumentHost (which++);
         if (p == nullptr)
             continue;
-        // Under the mixer's strips there is less room: it takes what the strips leave, down to
-        // a strip that still shows its top rows, and scrolls past that.
-        host->setMinimumHeight (160);
+        // As low as the Device Chain it takes turns with, as Cubase's lower zone: the strips
+        // keep the rest of the height (it scrolls past what does not fit).
+        host->setFixedHeight (compactHeight (p));
         const int index = which - 1;
         if (mixerInFront && ! p->isPoppedOut() && ! p->dock()->isFloating())
             p->lendTo (host, [this, index] (bool open) { mixerWin->setInstrumentOpen (index, open); },
