@@ -132,6 +132,9 @@ namespace phi
         // `raga` must outlive the player (or be set again); null plays keys as they are, in 12-TET.
         void setRaga (const Raga* raga, int saKey = 60, double saHz = 261.6255653005986);
         void setOrnaments (double amount) { ornaments = amount; }   // 0 none to 1 as the sheet says
+        // Āndolan swings below its svara; centred, it swings either side of it, so a held svara
+        // averages its own pitch (the raga in equal temperament, against fixed-pitch instruments).
+        void setCentredSwing (bool centred) { centredSwing = centred; }
         Voice noteOn (int key);
         // Mīṇḍ: the string already sounding `from` is pulled to `key` over `seconds`, touching the
         // raga's svaras between (those it uses in that direction).
@@ -155,6 +158,7 @@ namespace phi
         int saKey = 60;
         double saHz = 261.6255653005986;
         double ornaments = 1.0;
+        bool centredSwing = false;
         std::array<bool, 12> up {}, down {};
         int lastKey = -1;
         bool rising = true;

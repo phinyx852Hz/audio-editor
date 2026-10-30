@@ -50,6 +50,8 @@ and again equal tempered.
 - **Keys outside the raga:** they go to the nearest svara, with ties going the way the melody moves.
 - **Tuning and āndolan:** each svara is tuned as its sheet says. A svara with āndolan swings below
   its pitch and back while held. Ornaments go from 0 (plain svaras) to 1 (as the sheet says).
+  In a raga's equal-tempered tuning the svaras sit on the piano's keys and the āndolan swings
+  either side of the key instead, so a held svara stays in tune with fixed-pitch instruments.
 - **Mīṇḍ:** `glide` pulls a sounding string to a new svara, touching each of the raga's svaras on
   the way (those it uses in that direction). On a track, a key pressed while another is held plays
   mīṇḍ (legato), over the window's mīṇḍ time.
