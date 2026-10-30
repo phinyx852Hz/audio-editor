@@ -198,6 +198,7 @@ More templates can be added in the same way; each is a small file.
 | T | Step the thumbnail display |
 | V | Show or hide the tracks across time above the strips |
 | Ctrl+B, Ctrl+F | The Finder or the Inspector in the left column |
+| Ctrl+I | Show or close the Inspector (View > Mixer Inspector, or the top bar's Inspector button) |
 | F6 | Next section: browser, tracks, strips (Shift: back) |
 | Tab | Switch between the clip launcher and the tracks across time (Ableton) |
 | Ctrl+Z, Ctrl+Shift+Z | Undo, redo clip edits |
@@ -366,6 +367,10 @@ snapshots and mixer history, then In/Out routing (Ableton's Audio From and Audio
 and recording, thumbnails, templates and the spatial panner. The Inspector (owner, 2026-10-25) is a column at the mixer's
 left in both views with the selected track's mode, instrument, Pre, inserts, sends and width; the
 strips stay lean (four insert slots, sends, trim and pan, fader, name) in both views.
+The Inspector button (or `Ctrl+I`, View > Mixer Inspector) closes the column and opens it again
+(owner, 2026-10-30): closed, picking a track leaves it closed and the strips have the room, and it
+stays closed the next time PHI starts. `Ctrl+F` still brings the Finder. The track names on the
+strips, the Inspector and the launcher's headers are black on every colour (owner, 2026-10-30).
 
 Device Chain and drag and drop (owner, 2026-10-25, "very close to Ableton's workflow"):
 - The mixer has its own Device Chain along its bottom, the whole width, in both views. It shows

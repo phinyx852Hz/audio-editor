@@ -246,6 +246,10 @@ public:
     void engageTrack();   // a track clicked or picked: the Inspector takes the Finder's place
     // The column hidden while the editor's research panel takes its place, then given back as it was.
     void hideSideColumn (bool hidden);
+    // Off, the left column is closed: no Inspector, and picking a track does not bring it back.
+    void showInspector (bool shown);
+    bool inspectorShown() const { return ! inspectorClosed && ! finderShown; }
+    void setInspectorAction (QAction*);   // the View menu's item, kept in step
     // The parts of the mixer that take the keyboard when pointed at (Focus Follows Mouse).
     QList<QWidget*> focusAreas() const;
     // A sound from the editor into the launcher (owner, 2026-10-25): saved as a WAV beside the
@@ -694,6 +698,8 @@ private:
     bool inspectorPending = false;
     QStackedWidget* sideStack = nullptr;     // the Finder (mixer's browser) or the Inspector
     bool finderShown = true;
+    bool inspectorClosed = false;
+    QPointer<QAction> inspectorAction;
     void toggleDevicePanel();   // Shift+Tab over the bottom panel: the Device Chain or the clip
     QStackedWidget* devicePanel = nullptr;
     std::array<QWidget*, 3> instrumentHosts {};

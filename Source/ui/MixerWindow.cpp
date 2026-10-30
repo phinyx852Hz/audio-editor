@@ -607,7 +607,7 @@ public:
         colourBar = new QFrame (this);
         colourBar->setFixedHeight (5);
         layout->addWidget (colourBar);
-        // The name sits at the bottom, under the fader's value, in white on the track's colour
+        // The name sits at the bottom, under the fader's value, in black on the track's colour
         // (owner, 2026-10-25); built here, placed after the fader below.
         nameBox = new QFrame (this);
         nameBox->setObjectName (QStringLiteral ("nameBox"));
@@ -1460,7 +1460,7 @@ public:
         const auto& info = window.info[(size_t) index];
         colourBar->setStyleSheet (QStringLiteral ("background: %1;").arg (info.colour.name()));
         nameBox->setStyleSheet (QStringLiteral ("QFrame#nameBox { background: %1; border-radius: 3px; } "
-                                                "QFrame#nameBox QLabel, QFrame#nameBox QLineEdit { color: white; background: transparent; }")
+                                                "QFrame#nameBox QLabel, QFrame#nameBox QLineEdit { color: black; background: transparent; }")
                                     .arg (info.colour.name()));
         if (nameEdit->text() != info.name)
             nameEdit->setText (info.name);
@@ -3686,7 +3686,7 @@ protected:
             p.setBrush (info.colour);
             p.drawRoundedRect (head, 3, 3);
             p.setFont (bold);
-            p.setPen (inkOn (info.colour));
+            p.setPen (Qt::black);   // names in black on every colour (owner, 2026-10-30)
             // Zoomed narrow, the number alone.
             const bool narrow = head.width() < 70;
             const auto label = narrow ? QString::number (t + 1) : QStringLiteral ("%1 %2").arg (t + 1).arg (info.name);
@@ -5696,12 +5696,12 @@ protected:
         if (! found)
             return;
 
-        // Its name in white on the track's colour, then what it is.
+        // Its name in black on the track's colour, then what it is.
         const QRectF nameBox (r.left() + 8, r.top() + 6, std::min (260.0, r.width() - 16), 20);
         g.setPen (Qt::NoPen);
         g.setBrush (colour);
         g.drawRoundedRect (nameBox, 3, 3);
-        g.setPen (Qt::white);
+        g.setPen (Qt::black);
         g.drawText (nameBox.adjusted (6, 0, -6, 0), Qt::AlignVCenter | Qt::AlignLeft,
                     g.fontMetrics().elidedText (name, Qt::ElideRight, (int) nameBox.width() - 12));
         const auto seconds = (double) clip.length / std::max (1.0, window.rate());
@@ -6689,7 +6689,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     inspectorButton = button (tr ("Inspector"), tr ("The Inspector, left of the strips: the selected track's mode, instrument, Pre, inserts, sends and width, and in the launcher its clip"));
     inspectorButton->setCheckable (true);
     inspectorButton->setToolTip (tr ("The Inspector in the Finder's place, left of the tracks: the selected track's mode, instrument, Pre, "
-                                     "inserts, sends and width, and the clip picked. Picking a track shows it too; Ctrl+F brings the Finder back"));
+                                     "inserts, sends and width, and the clip picked. Off, the column closes (Ctrl+I); Ctrl+F brings the Finder"));
     quantiseBox = new QComboBox (this);
     quantiseBox->setFocusPolicy (Qt::NoFocus);
     for (int q = 0; q < numQuantise; ++q)
@@ -7062,6 +7062,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     sideSplitter->setStretchFactor (1, 1);
     sideSplitter->setSizes ({ 260, 1100 });
     sideSplitter->restoreState (appSettings().value (QStringLiteral ("mixer/sideColumn")).toByteArray());
+    inspectorClosed = appSettings().value (QStringLiteral ("mixer/inspectorClosed"), false).toBool();
 
     // F6 and Tab go round the browser, the tracks and the strips.
     auto* nextSection = new QShortcut (QKeySequence (Qt::Key_F6), this);
@@ -7155,12 +7156,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     connect (followTempoBox, &QCheckBox::toggled, this, [this] { placeAllMidi(); changed(); });
     connect (tempoBox, &QDoubleSpinBox::valueChanged, this, [this] (double bpm) { engine.tempo = bpm; });
     connect (launcherButton, &QPushButton::toggled, this, [this] (bool on) { showLauncher (on); });
-    connect (inspectorButton, &QPushButton::toggled, this, [this] (bool on)
-    {
-        showSideFinder (! on);
-        if (on)
-            setFocus();
-    });
+    connect (inspectorButton, &QPushButton::toggled, this, [this] (bool on) { showInspector (on); });
     connect (quantiseBox, &QComboBox::activated, this, [this] (int q)
     {
         engine.launchQuantise = quantiseBeats[q];
@@ -10350,6 +10346,13 @@ void MixerWindow::keyPressEvent (QKeyEvent* e)
                     return;
                 }
                 break;
+            case Qt::Key_I:
+                if (! withShift)
+                {
+                    showInspector (! inspectorShown());
+                    return;
+                }
+                break;
             case Qt::Key_Y: redo(); return;
             case Qt::Key_R: withShift ? captureMidi() : recordPressed(); return;
             case Qt::Key_Return:
@@ -11292,27 +11295,47 @@ void MixerWindow::toggleBrowser()
 void MixerWindow::showSideFinder (bool finder)
 {
     finderShown = finder;
+    const bool inspector = ! finder && ! inspectorClosed;
     if (inspectorButton != nullptr)
     {
         const QSignalBlocker quiet (inspectorButton);
-        inspectorButton->setChecked (! finder);
+        inspectorButton->setChecked (inspector);
+    }
+    if (auto* action = inspectorAction.data())
+    {
+        const QSignalBlocker quiet (action);
+        action->setChecked (inspector);
     }
     if (! isWindow())
     {
         // In the editor's place: the editor's Find panel is the Finder, beside the mixer.
         sideStack->setCurrentWidget (inspectorScroll);
-        sideStack->setVisible (! finder);
+        sideStack->setVisible (inspector);
         Q_EMIT finderWanted (finder);
     }
     else
     {
-        sideStack->show();
+        sideStack->setVisible (finder || inspector);
         sideStack->setCurrentWidget (finder ? static_cast<QWidget*> (browser) : inspectorScroll);
         if (finder && isVisible())
             browser->view()->setFocus();
     }
-    if (! finder)
+    if (inspector)
         refreshInspector();
+}
+
+void MixerWindow::showInspector (bool shown)
+{
+    inspectorClosed = ! shown;
+    appSettings().setValue (QStringLiteral ("mixer/inspectorClosed"), inspectorClosed);
+    showSideFinder (false);   // closed, the Finder goes too: the strips have the room
+    setFocus();
+}
+
+void MixerWindow::setInspectorAction (QAction* action)
+{
+    inspectorAction = action;
+    showSideFinder (finderShown);
 }
 
 void MixerWindow::hideSideColumn (bool hidden)
@@ -11325,7 +11348,7 @@ void MixerWindow::hideSideColumn (bool hidden)
 
 void MixerWindow::engageTrack()
 {
-    if (finderShown)
+    if (finderShown && ! inspectorClosed)
         showSideFinder (false);
 }
 
