@@ -220,7 +220,7 @@ Patches, synths and effects are part of the project and come back with it.
 
 | Command | Keys (in the mixer) |
 |---|---|
-| Mixer > New Project | |
+| File > New Project, or Mixer > New Project | `Ctrl+N` |
 | Mixer > New Project from Selector Set | (see [From the Selector to a mix](#selector)) |
 | Mixer > Open Project | `Ctrl+O` |
 | Mixer > Save Project | `Ctrl+S` |

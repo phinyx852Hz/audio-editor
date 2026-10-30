@@ -9572,9 +9572,14 @@ bool MixerWindow::isProjectFile (const QString& file)
 
 bool MixerWindow::newMix()
 {
-    if (modified && ! path.isEmpty()
-        && QMessageBox::question (this, tr ("New Project"), tr ("Start a new project? Changes to %1 that were not saved are lost.").arg (mixName())) != QMessageBox::Yes)
-        return false;
+    // Unsaved changes, named or not, are offered a save first (Cancel keeps the project).
+    if (modified)
+    {
+        const auto answer = QMessageBox::question (this, tr ("New Project"), tr ("Save the changes to %1 before starting a new project?").arg (mixName()),
+                                                   QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel, QMessageBox::Save);
+        if (answer == QMessageBox::Cancel || (answer == QMessageBox::Save && ! saveMix (false)))
+            return false;
+    }
     engine.stop();
     engine.setPosition (0);
     restoring = true;

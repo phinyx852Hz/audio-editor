@@ -225,7 +225,7 @@ instrument.subtractive2	Synth	Subtractive2 poly (Helm)
 instrument.fm	Synth	FM (OctaSine)	
 mixer.window	Mixer	Mixer	F3
 mixer.dock	Mixer	Undock / Dock Mixer	Ctrl+Shift+F3
-mixer.new	Mixer	New Project	
+mixer.new	Mixer	New Project	Ctrl+N
 mixer.newFromSet	Mixer	New Project from Selector Set	
 mixer.open	Mixer	Open Project	
 mixer.save	Mixer	Save Project	
