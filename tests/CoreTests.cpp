@@ -1481,6 +1481,76 @@ namespace
             check (steps && peakOf (vin, 0, 4800) > 0.4, "sampler: Vintage plays at 12 bits");
         }
         e.panic();
+
+        // Phase 2 modulation. A pitch envelope starts an octave up and falls back to the note.
+        s = fresh();
+        s.pitchEnvelope.on = true;
+        s.pitchEnvelope.amount = 12.0;
+        s.pitchEnvelope.attack = 0.0;
+        s.pitchEnvelope.decay = 0.1;
+        s.pitchEnvelope.sustain = 0.0;
+        e.setSettings (s);
+        e.noteOn (60, 1.0f);
+        {
+            auto [pe, peR] = play (24000);
+            check (crossings (pe, 0, 960) > crossings (pe, 12000, 12960) + 1 && near (crossings (pe, 12000, 24000), 50, 2),
+                   "sampler: a pitch envelope sweeps down to the note");
+        }
+        e.panic();
+
+        // A filter envelope opens a closed low pass and lets it close again.
+        s = fresh();
+        s.filter = true;
+        s.steep = true;
+        s.cutoff = 20.0;
+        s.resonance = 0.0;
+        s.filterEnvelope.on = true;
+        s.filterEnvelope.amount = 7.0;
+        s.filterEnvelope.attack = 0.0;
+        s.filterEnvelope.decay = 0.1;
+        s.filterEnvelope.sustain = 0.0;
+        e.setSettings (s);
+        e.noteOn (60, 1.0f);
+        {
+            auto [fe, feR] = play (24000);
+            check (peakOf (fe, 480, 1440) > 0.3 && peakOf (fe, 14400, 24000) < 0.01, "sampler: a filter envelope opens the filter and closes it");
+        }
+        e.panic();
+
+        // An LFO synced to 120 BPM, a beat a cycle, as a pulse on the volume: on for a quarter second, off for one.
+        s = fresh();
+        s.tempo = 120.0;
+        s.lfo[0].wave = sampler::Wave::pulse;
+        s.lfo[0].shape = 0.5;
+        s.lfo[0].sync = true;
+        s.lfo[0].beats = 1.0;
+        s.lfo[0].retrigger = sampler::Retrigger::eachNote;
+        s.lfo[0].toVolume = 1.0;
+        e.setSettings (s);
+        e.noteOn (60, 1.0f);
+        {
+            auto [tr, trR] = play (24000);
+            check (peakOf (tr, 1000, 11000) > 0.4 && peakOf (tr, 13000, 23000) < 1.0e-6, "sampler: a synced LFO pulses the volume in time");
+        }
+        e.panic();
+
+        // The mod wheel: with Mod wheel at 100% the LFO waits for it.
+        s.lfo[0].modWheel = 1.0;
+        e.setSettings (s);
+        e.modWheel (0.0);
+        e.noteOn (60, 1.0f);
+        {
+            auto [mw, mwR] = play (24000);
+            check (peakOf (mw, 13000, 23000) > 0.4, "sampler: the mod wheel down leaves the LFO out");
+        }
+        e.panic();
+        e.modWheel (1.0);
+        e.noteOn (60, 1.0f);
+        {
+            auto [mw, mwR] = play (24000);
+            check (peakOf (mw, 13000, 23000) < 1.0e-6, "sampler: the mod wheel up brings the LFO in");
+        }
+        e.panic();
     }
 
 

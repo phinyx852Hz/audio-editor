@@ -29,6 +29,41 @@ namespace sampler
     // two Turntable settings go further, as a record sampled at 45 or 78 rpm and tuned down.
     enum class Quality { standard, vintage, turntable45, turntable78 };
 
+    // A pitch or filter envelope: attack, decay, sustain and release, each segment bowed by
+    // Curve, moving the pitch (semitones) or the cutoff (octaves) by Amount at its top.
+    struct Envelope
+    {
+        bool on = false;
+        double attack = 0.0, decay = 0.3, sustain = 0.0, release = 0.2;   // seconds; sustain 0..1
+        double curve = 0.0;                 // -1 (slow, then fast) .. 1 (fast, then slow)
+        double amount = 0.0;                // pitch: semitones; filter: octaves; either sign
+        double velocity = 0.0;              // 0..1: how much less soft notes move it
+    };
+
+    // The LFOs are shared by every voice, as Cubase's: one value at a time, started again by
+    // a note when Retrigger says so. Shape changes each wave: harmonics on the sine, a
+    // trapezoid from the triangle, ramp down to triangle to ramp up on the saw, the pulse's
+    // width, a pause before the ramp, the log's bend, and glides between the random steps.
+    enum class Wave { sine, triangle, saw, pulse, ramp, log, sampleHold, sampleHold2 };
+    enum class Retrigger { off, firstNote, eachNote };
+
+    struct Lfo
+    {
+        Wave wave = Wave::sine;
+        double shape = 0.5;                 // 0..1
+        double rate = 4.0;                  // Hz, when not synced
+        bool sync = false;                  // to Settings::tempo
+        double beats = 1.0;                 // synced: beats a cycle (0.25 a sixteenth note)
+        Retrigger retrigger = Retrigger::off;
+        double phase = 0.0;                 // 0..1: where a cycle starts again
+        bool randomPhase = false;
+        double modWheel = 0.0;              // 0..1: 1 leaves it silent until the mod wheel goes up
+        double toPitch = 0.0;               // semitones
+        double toFilter = 0.0;              // octaves
+        double toVolume = 0.0;              // 0..1
+        double toPan = 0.0;                 // 0..1
+    };
+
     struct Settings
     {
         Mode mode = Mode::classic;
@@ -61,6 +96,9 @@ namespace sampler
         double keyFollow = 0.0;             // 0..1: 1 moves the cutoff an octave for each octave above the root
         double filterVelocity = 0.0;        // 0..1: soft notes close the cutoff by up to four octaves
         Quality quality = Quality::standard;
+        Envelope pitchEnvelope, filterEnvelope;
+        std::array<Lfo, 2> lfo {};
+        double tempo = 120.0;               // what synced LFOs count beats at
         int voices = 8;                     // 1..32; 1 is monophonic
         double bendRange = 2.0;             // semitones for a full pitch bend
     };
@@ -92,6 +130,7 @@ namespace sampler
         void panic();                        // silences everything at once
         void pitchBend (double amount);      // -1..1
         void sustainPedal (bool down);
+        void modWheel (double amount);       // 0..1
 
         void render (float* left, float* right, int frames);   // adds to what is there
 
@@ -100,6 +139,11 @@ namespace sampler
         bool isSounding (int note) const;
 
     private:
+        struct Stage   // where a pitch or filter envelope is
+        {
+            int stage = 0;               // 0 attack, 1 decay, 2 sustain, 3 release, 4 done
+            double time = 0.0, from = 0.0, level = 0.0;
+        };
         struct Voice
         {
             bool active = false, held = false, sustained = false;
@@ -116,6 +160,7 @@ namespace sampler
             double filter[2][2][2] {};   // [stage][channel][state]: two state-variable filters
             float kept[2] {};            // Vintage: the value kept between its samples
             double holdPhase = 1.0;
+            Stage envelope[2] {};        // pitch, filter
             unsigned age = 0;
         };
         void start (Voice&, int note, float velocity, double fromPitch);
@@ -124,6 +169,9 @@ namespace sampler
         void push (int note);
         void pop (int note);
         float sampleAt (const std::vector<float>&, double position) const;
+        void renderBlock (float* left, float* right, int frames);
+        void startRelease (Voice&);
+        void retrigger (bool firstNote);
 
         mutable std::mutex lock;
         double rate = 48000.0;
@@ -136,6 +184,10 @@ namespace sampler
         double lastPitch = -1.0;                 // where the last note was, for glide; -1: none yet
         std::array<int, 128> stack {};           // held keys, oldest first (for one voice)
         int stacked = 0;
+        double wheel = 0.0;
+        struct LfoState { double phase = 0.0, value = 0.0, held = 0.0, previous = 0.0; bool high = false; };
+        std::array<LfoState, 2> lfos {};
+        uint32_t noise = 0x9E3779B9u;            // the random steps' generator
         std::array<std::atomic<double>, maxVoices> heads {};
         std::array<std::atomic<bool>, 128> sounding {};
     };
