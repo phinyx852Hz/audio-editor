@@ -56,7 +56,7 @@ protected:
     void mouseReleaseEvent (class QMouseEvent*) override;
 
 private:
-    static constexpr int rowHeight = 22;
+    static constexpr int rowHeight = 16;
     QRectF cell (int row, int column) const;
     int columnAt (double x) const;   // -1: in the header
     void paintStep (QPointF at);
@@ -79,8 +79,8 @@ public:
     void setLane (int l) { lane = l; update(); }
     void setWhich (Which w) { which = w; update(); }
     void setColumns (int n) { shown = n; update(); }
-    QSize sizeHint() const override { return { 720, 90 }; }
-    QSize minimumSizeHint() const override { return { 420, 60 }; }
+    QSize sizeHint() const override { return { 720, 36 }; }
+    QSize minimumSizeHint() const override { return { 420, 30 }; }
 
 Q_SIGNALS:
     void laneEdited (int lane);

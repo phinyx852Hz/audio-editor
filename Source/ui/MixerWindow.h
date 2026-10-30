@@ -12,6 +12,7 @@
 #include <QTimer>
 #include <QWidget>
 
+#include <algorithm>
 #include <array>
 #include <map>
 #include <set>
@@ -22,6 +23,7 @@
 
 class AudioEngine;
 class QSpinBox;
+class QMenu;
 class QAbstractButton;
 namespace counterpoint { struct Settings; }
 namespace minimalize { struct Part; }
@@ -42,6 +44,7 @@ class ClipGrid;
 class LauncherRack;
 class ReturnStripWidget;
 class TrackDevices;
+class PrismDialog;
 class ClipView;
 class EditorTrack;
 class QStackedWidget;
@@ -53,6 +56,9 @@ class QSpinBox;
 // The built-in Synth's settings (also used by the patchbay's synths), applied as they change.
 // `changed` runs after each change. Deletes itself when closed.
 QDialog* synthDialog (mixer::InstrumentPtr synth, const QString& title, QWidget* parent, std::function<void()> changed);
+// PHI rāga's settings, and an effect's knobs (for effects without a window of their own), the same way.
+QDialog* ragaDialog (mixer::InstrumentPtr raga, const QString& title, QWidget* parent, std::function<void()> changed);
+QDialog* effectDialog (mixer::EffectPtr effect, const QString& title, QWidget* parent, std::function<void()> changed);
 
 class LevelMeter final : public QWidget
 {
@@ -213,6 +219,17 @@ public:
     // instrument and inserts, or the clip picked in the launcher or the tracks. Ctrl+Shift+C
     // (the editor's Device Chain key) hides or shows it, remembered (mixer/devices).
     bool devicePanelShown() const;
+    // Where Simplest (0) and the Slicer (1) sit while the mixer is in front: in the Device
+    // Chain's place under the strips, taking turns with it (owner, 2026-10-29: "toggle between
+    // the device chain and the slicer in that space"). Tabs over it pick which shows while one
+    // is open; opening one puts it in front. A track's own Sampler or Slicer (Edit on its strip)
+    // takes the third place there (2), one track at a time.
+    QWidget* instrumentHost (int which) const { return instrumentHosts[(size_t) std::clamp (which, 0, 1)]; }
+    void setInstrumentOpen (int which, bool open);
+    bool instrumentOpen (int which) const { return instrumentOpens[(size_t) std::clamp (which, 0, 1)]; }
+    bool instrumentInFront() const { return lowerFront >= 0; }
+    void showDeviceChainInFront();
+    bool toggleLowerZone();   // the Device Chain or the instrument in front last; false: none open
     void toggleDevices();
     // What the browser's Instruments and Audio Effects lists drag: "effect\n<id>",
     // "instrument\n<id>", or "synth", "sampler", "slicer".
@@ -324,6 +341,7 @@ private:
     friend class LauncherRack;
     friend class ReturnStripWidget;
     friend class TrackDevices;
+    friend class PrismDialog;
     friend class ClipView;
     friend class EditorTrack;
     friend class BusStripWidget;
@@ -384,6 +402,20 @@ private:
     void moveInsert (int track, int insert, int to);
     void reorderInserts (int track, const std::vector<int>& order);   // the engine's indices in their new order
     QJsonArray insertsJson (int track) const;
+    // The effects menu (Built-in first, then by format); `pick` gets the chosen plugin's id.
+    void effectsMenu (QMenu&, std::function<void (const std::string& id)> pick);
+    static QJsonArray effectsJson (const mixer::Inserts&);
+    mixer::Inserts effectsFromJson (const QJsonArray&, const QString& owner, QStringList& problems);
+    // Instrument Prisms (MixerPrism.cpp, docs/prism.md): a track's instrument made of rays, each an
+    // instrument and then its effects, played together. Choosing one wraps the track's instrument.
+    mixer::InstrumentPtr makePrism (int track);
+    // A ray's instrument: "synth", "raga" or "instrument\n<plugin id>"; null with `error`.
+    mixer::InstrumentPtr makeRayInstrument (const QByteArray& what, QString& error);
+    static bool canBeRay (const mixer::Instrument&);   // not a Sampler, Slicer or Prism (yet)
+    void openPrism (int track);   // its rays, in a window of their own
+    void prismChanged (int track);   // its rays were edited: the strip and the Device Chain follow
+    QJsonObject prismJson (const mixer::Instrument& prism) const;
+    mixer::InstrumentPtr prismFromJson (const QJsonObject&, int track, QStringList& problems);
     QString insertOwner (int track) const;   // "track 2, “Bass”", or "the Pre-Master" (mixer::busTrack)
     int insertLimit (int track) const;
     void refreshInsertsOf (int track);
@@ -623,6 +655,15 @@ private:
     bool finderShown = true;
     void toggleDevicePanel();   // Shift+Tab over the bottom panel: the Device Chain or the clip
     QStackedWidget* devicePanel = nullptr;
+    std::array<QWidget*, 3> instrumentHosts {};
+    std::array<bool, 3> instrumentOpens {};
+    QPointer<QWidget> trackEditor;       // in instrumentHosts[2]
+    QString trackEditorName;
+    void dockTrackEditor (QWidget* editor, const QString& name);
+    int lowerFront = -1;                 // the instrument in front; -1: the Device Chain
+    int lastFront = 1;                   // the instrument in front last
+    class QTabBar* lowerTabs = nullptr;  // the Device Chain and the open instruments
+    void updateLowerZone();
     TrackDevices* devices = nullptr;
     ClipView* clipView = nullptr;
     bool showingClip = false;
