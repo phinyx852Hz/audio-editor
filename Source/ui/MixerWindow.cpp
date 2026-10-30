@@ -8027,12 +8027,9 @@ void MixerWindow::removeTrack()
     deleteTrack (selected < engine.numTracks() ? selected : engine.numTracks() - 1);
 }
 
-// Everything the mixer keeps about track `from`, given to track `to` (the engine's settings,
-// clips, instrument, inserts and slots, and the window's name, colour, tuning and undo steps).
-void MixerWindow::copyTrack (int from, int to)
+// A track's settings and sends, given to another (or kept aside, for undo).
+static void copyStrip (const mixer::Strip& a, mixer::Strip& b)
 {
-    const auto& a = engine.strip (from);
-    auto& b = engine.strip (to);
     b.mode = a.mode.load();
     b.audioLayerDb = a.audioLayerDb.load();
     b.instrumentLayerDb = a.instrumentLayerDb.load();
@@ -8069,6 +8066,13 @@ void MixerWindow::copyTrack (int from, int to)
     b.inputChannels = a.inputChannels.load();
     b.toBus = a.toBus.load();
     b.placed.set (a.placed.place());
+}
+
+// Everything the mixer keeps about track `from`, given to track `to` (the engine's settings,
+// clips, instrument, inserts and slots, and the window's name, colour, tuning and undo steps).
+void MixerWindow::copyTrack (int from, int to)
+{
+    copyStrip (engine.strip (from), engine.strip (to));
     engine.setClips (to, engine.clips (from));
     engine.setInstrument (to, engine.instrument (from));
     engine.setInserts (to, engine.inserts (from));
@@ -8088,8 +8092,8 @@ void MixerWindow::copyTrack (int from, int to)
     timelinePasses[(size_t) to] = timelinePasses[(size_t) from];
     layerTakes[(size_t) to] = layerTakes[(size_t) from];
     for (auto* stack : { &undoStack, &redoStack })
-        for (auto& snap : *stack)
-            snap[(size_t) to] = snap[(size_t) from];
+        for (auto& step : *stack)
+            step.clips[(size_t) to] = step.clips[(size_t) from];
 }
 
 // Track `k` as a new one: nothing on it, its strip as it starts.
@@ -8144,8 +8148,8 @@ void MixerWindow::clearTrack (int k)
     timelinePasses[(size_t) k].clear();
     layerTakes[(size_t) k] = {};
     for (auto* stack : { &undoStack, &redoStack })
-        for (auto& snap : *stack)
-            snap[(size_t) k].clear();
+        for (auto& step : *stack)
+            step.clips[(size_t) k].clear();
 }
 
 // Before tracks move: loads still running and windows open for them would land on the
@@ -8180,17 +8184,17 @@ void MixerWindow::moveDuckKeys (const std::function<int (int)>& moved)
             key = moved (key.load());
 }
 
-void MixerWindow::insertTrack (int at)
+bool MixerWindow::openTrack (int at)
 {
     const auto count = engine.numTracks();
     if (count >= mixer::maxTracks)
     {
         status->setText (tr ("The mixer has 8 tracks at most."));
-        return;
+        return false;
     }
     at = std::clamp (at, 0, count);
     if (at < count && ! readyToMoveTracks (at))
-        return;
+        return false;
     const auto live = engine.liveTrack();
     engine.setNumTracks (count + 1);
     for (int k = count; k > at; --k)
@@ -8202,31 +8206,75 @@ void MixerWindow::insertTrack (int at)
     moveDuckKeys ([at] (int key) { return key >= at ? key + 1 : key; });
     if (live >= at)
         engine.setLiveTrack (live + 1);
+    return true;
+}
+
+// Undone by taking it away again (Ctrl+Z).
+void MixerWindow::insertTrack (int at)
+{
+    at = std::clamp (at, 0, engine.numTracks());
+    if (! openTrack (at))
+        return;
+    Step step;
+    step.removes = at;
+    pushUndo (std::move (step));
     rebuildStrips();
     select (at);
     changed();
 }
 
+// No question asked: Ctrl+Z brings the track back, with its clips, instrument, inserts, slots,
+// sends and settings.
 void MixerWindow::deleteTrack (int index)
+{
+    if (index < 0 || index >= engine.numTracks())
+        return;
+    auto copy = takeTrack (index, undoStack);
+    if (copy == nullptr)
+        return;
+    Step step;
+    step.restores = std::move (copy);
+    pushUndo (std::move (step));
+    status->setText (tr ("Track %1 deleted (Ctrl+Z brings it back).").arg (index + 1));
+}
+
+std::shared_ptr<const MixerWindow::TrackCopy> MixerWindow::takeTrack (int index, const std::vector<Step>& stack)
 {
     const auto count = engine.numTracks();
     if (index < 0 || index >= count)
-        return;
+        return nullptr;
     if (count < 2)
     {
         status->setText (tr ("A mix keeps at least one track."));
-        return;
+        return nullptr;
     }
-    bool hasSlots = false;
-    for (const auto& slot : slots[(size_t) index])
-        hasSlots = hasSlots || slot != nullptr;
-    if ((! engine.clips (index).empty() || engine.instrument (index) != nullptr || hasSlots)
-        && QMessageBox::question (this, tr ("Delete Track"), tr ("Delete track %1, “%2”, and what is on it?").arg (index + 1).arg (info[(size_t) index].name))
-               != QMessageBox::Yes)
-        return;
     if (! readyToMoveTracks (index))
-        return;
+        return nullptr;
+    auto copy = std::make_shared<TrackCopy>();
+    copy->index = index;
+    copy->strip = std::make_unique<mixer::Strip>();
+    copyStrip (engine.strip (index), *copy->strip);
+    copy->clips = engine.clips (index);
+    copy->instrument = engine.instrument (index);
+    copy->inserts = engine.inserts (index);
+    copy->slots = slots[(size_t) index];
+    const auto& t = info[(size_t) index];
+    copy->name = t.name;
+    copy->colour = t.colour;
+    copy->sound = t.sound;
+    copy->tuning = t.tuning;
+    copy->givenDefault = givenDefaults[(size_t) index];
+    copy->heardTuning = heardTunings[(size_t) index];
+    copy->timelinePasses = timelinePasses[(size_t) index];
+    copy->layerTake = layerTakes[(size_t) index];
+    for (int k = 0; k < count; ++k)
+        if (k != index && engine.strip (k).duckKey.load() == index)
+            copy->duckedBy.push_back (k);
     const auto live = engine.liveTrack();
+    copy->live = live == index;
+    for (auto it = stack.rbegin(); it != stack.rend(); ++it)
+        copy->history.push_back (it->clips[(size_t) index]);
+
     for (int k = index; k < count - 1; ++k)
         copyTrack (k + 1, k);
     clearTrack (count - 1);
@@ -8238,8 +8286,51 @@ void MixerWindow::deleteTrack (int index)
         engine.setLiveTrack (live - 1);
     rebuildStrips();
     select (std::min (index, count - 2));
-    status->setText (tr ("Track %1 deleted.").arg (index + 1));
     changed();
+    return copy;
+}
+
+bool MixerWindow::putTrack (const TrackCopy& copy, std::vector<Step>& stack)
+{
+    const auto at = copy.index;
+    if (engine.numTracks() >= mixer::maxTracks)
+    {
+        status->setText (tr ("Track %1, “%2”, can only come back when the mixer has fewer than 8 tracks.").arg (at + 1).arg (copy.name));
+        return false;
+    }
+    if (at > engine.numTracks() || ! openTrack (at))
+        return false;
+    copyStrip (*copy.strip, engine.strip (at));
+    engine.setClips (at, copy.clips);
+    engine.setInstrument (at, copy.instrument);
+    engine.setInserts (at, copy.inserts);
+    for (int sc = 0; sc < mixer::maxScenes; ++sc)
+    {
+        slots[(size_t) at][(size_t) sc] = copy.slots[(size_t) sc];
+        engine.setSlot (at, sc, copy.slots[(size_t) sc]);
+    }
+    auto& t = info[(size_t) at];
+    t.name = copy.name;
+    t.colour = copy.colour;
+    t.sound = copy.sound;
+    t.tuning = copy.tuning;
+    givenDefaults[(size_t) at] = copy.givenDefault;
+    heardTunings[(size_t) at] = copy.heardTuning;
+    timelinePasses[(size_t) at] = copy.timelinePasses;
+    layerTakes[(size_t) at] = copy.layerTake;
+    for (const auto k : copy.duckedBy)
+        if (k < engine.numTracks())
+            engine.strip (k).duckKey = at;
+    if (copy.live)
+        engine.setLiveTrack (at);
+    for (size_t i = 0; i < copy.history.size() && i < stack.size(); ++i)
+        stack[stack.size() - 1 - i].clips[(size_t) at] = copy.history[i];
+    if (loopButton->isChecked())
+        engine.setLoop (0, engine.length());
+    rebuildStrips();
+    select (at);
+    changed();
+    return true;
 }
 
 //==============================================================================
@@ -8287,10 +8378,36 @@ void MixerWindow::remember()
 {
     if (restoring)
         return;
-    undoStack.push_back (snapshot());
+    Step step;
+    step.clips = snapshot();
+    pushUndo (std::move (step));
+}
+
+void MixerWindow::pushUndo (Step step)
+{
+    undoStack.push_back (std::move (step));
     if (undoStack.size() > 100)
         undoStack.erase (undoStack.begin());
     redoStack.clear();
+}
+
+bool MixerWindow::apply (const Step& step, std::vector<Step>& from, const std::vector<Step>& to, Step& inverse)
+{
+    if (step.restores != nullptr)
+    {
+        if (! putTrack (*step.restores, from))
+            return false;
+        inverse.removes = step.restores->index;
+        return true;
+    }
+    if (step.removes >= 0)
+    {
+        inverse.restores = takeTrack (step.removes, to);
+        return inverse.restores != nullptr;
+    }
+    inverse.clips = snapshot();
+    restore (step.clips);
+    return true;
 }
 
 void MixerWindow::undo()
@@ -8300,10 +8417,17 @@ void MixerWindow::undo()
         status->setText (tr ("Nothing to undo."));
         return;
     }
-    redoStack.push_back (snapshot());
-    restore (undoStack.back());
+    auto step = std::move (undoStack.back());
     undoStack.pop_back();
-    status->setText (tr ("Undone (Ctrl+Shift+Z redoes it)."));
+    Step inverse;
+    if (! apply (step, undoStack, redoStack, inverse))
+    {
+        undoStack.push_back (std::move (step));   // the reason is on the status line
+        return;
+    }
+    redoStack.push_back (std::move (inverse));
+    status->setText (step.restores != nullptr ? tr ("Track %1, “%2”, is back (Ctrl+Shift+Z deletes it again).").arg (step.restores->index + 1).arg (step.restores->name)
+                                              : tr ("Undone (Ctrl+Shift+Z redoes it)."));
 }
 
 void MixerWindow::redo()
@@ -8313,9 +8437,15 @@ void MixerWindow::redo()
         status->setText (tr ("Nothing to redo."));
         return;
     }
-    undoStack.push_back (snapshot());
-    restore (redoStack.back());
+    auto step = std::move (redoStack.back());
     redoStack.pop_back();
+    Step inverse;
+    if (! apply (step, redoStack, undoStack, inverse))
+    {
+        redoStack.push_back (std::move (step));
+        return;
+    }
+    undoStack.push_back (std::move (inverse));
     status->setText (tr ("Redone."));
 }
 
