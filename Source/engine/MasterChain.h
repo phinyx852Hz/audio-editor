@@ -3,6 +3,7 @@
 
 #include "AudioEngine.h"
 #include "StockPlugins.h"
+#include "../core/Modulators.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -117,6 +118,16 @@ public:
     bool controller (int channel, int number, int value);
     void learnController (const ChainPath& prism, int macro);   // macro -1 stops waiting
     bool learning (const ChainPath& prism, int macro) const;
+
+    // The modulator rack (core/Modulators.h): sources that move parameters of the plugins in
+    // the slots, for playback and renders alike. A route whose slot no longer holds the plugin
+    // it was made for does nothing. Saved with the chain.
+    std::vector<modrack::Modulator> modulators() const;
+    void setModulators (const std::vector<modrack::Modulator>&);
+    std::vector<modrack::Route> modulatorRoutes() const;
+    void setModulatorRoutes (const std::vector<modrack::Route>&);
+    float modulatorValue (int modulator) const;   // what it gives now, 0..1, for the panel
+    bool routeLive (int route) const;             // false when its plugin has gone from its slot
 
     void save() const;
     std::string restore();
@@ -240,6 +251,16 @@ private:
 
     std::array<Slot, AudioEngine::numMasterSlots> slots;
     std::array<std::unique_ptr<PluginWindow>, AudioEngine::numMasterSlots> windows;
+
+    // The rack, and each route's plugin as it was resolved (nullptr: not live).
+    void resolveRoutes();   // after the slots change; takes the lock
+    void runRack (int numChannels, int numSamples);   // lock must be held
+    modrack::Rack rack;
+    std::vector<modrack::Modulator> rackModulators;
+    std::vector<modrack::Route> rackRoutes;
+    std::array<juce::AudioPluginInstance*, modrack::maxRoutes> routePlugins {};
+    std::array<float, modrack::maxRoutes> routeApplied {};
+    std::array<std::atomic<float>, modrack::maxModulators> rackShown {};
 
     juce::CriticalSection lock;  // held by the audio thread while processing, and by edits and renders
     double rate = 48000.0;

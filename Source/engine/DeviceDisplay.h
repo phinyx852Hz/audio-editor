@@ -42,4 +42,11 @@ struct DeviceDisplay
     std::vector<float> grid;          // the frequencies the nodes snap to, drawn as ticks
     std::vector<std::string> types;   // the names of typeParameter's choices
     std::vector<int> knobs;           // with handles: the knobs always shown, after the chosen node's
+
+    // Pages (Φ Modulation's Flow, Space, Grain and Matrix): tabs above the knobs, each
+    // naming the knobs shown while it is chosen. Choosing one sets `pageParameter` to it
+    // (a choice of as many pages), and the picture is the effect's for that page.
+    std::vector<std::string> pages;
+    std::vector<std::vector<int>> pageKnobs;
+    int pageParameter = -1, page = 0;
 };

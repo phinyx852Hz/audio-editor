@@ -32,6 +32,7 @@ This is an engineering review, not legal advice.
 | GPL-3.0 / GPL-3.0-or-later | MilkyTracker's adapted code, Wolf Shaper, Airwindows Consolidated build, GRNLR, Ami Sampler, Vaporizer2, Cardinal, CA-72, Helm | Yes, by section 13 of the GPL v3 and the AGPL v3 |
 | AGPL-3.0 | JUCE (as PHI uses it), ZL Audio plugins, Overtonium, OctaSine | Yes, the same licence |
 | GPL-2.0-only | Paulstretch, some Audacity plug-ins | **No**: none is used (ideas only) |
+| Ideas only, no code | Cubase's Modulators panel (the set of modulators); Mutable Instruments' Marbles (MIT; its déjà vu loop, reimplemented in `Source/core/Modulators.cpp`); Surge XT and Vital (GPL-3.0; how modulation is routed) | Nothing to ship: no code was copied |
 | CC-BY-4.0 | Helm's factory presets | Yes for data: credit and the licence notice must go with them |
 | OFL-1.1 | fonts inside Wolf Shaper (Chivo), Airwindows, ZL Audio (Inter) and OctaSine (Open Sans) | Yes: ship the OFL text |
 | Non-commercial or proprietary | VCV's component artwork (replaced), Ami's sample packs (left out), Furnace's demo songs (left out), Vaporizer2's SF UI Display, Trade Gothic LT and Alte Haas Grotesk (replaced), **the AmiDOS font inside Ami Sampler (still in)** | **No**: must not ship |

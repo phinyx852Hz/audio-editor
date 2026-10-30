@@ -3,7 +3,7 @@
 #   FetchContent_Declare(phi_dsp GIT_REPOSITORY <this repository> SOURCE_SUBDIR Source/core)
 #   FetchContent_MakeAvailable(phi_dsp)
 #   target_link_libraries(<synth> PRIVATE phi_dsp)
-# and include "Phi.h", "PhiChorus.h", "PhiDynamics.h", "PhiPhaser.h", "PhiTuning.h" or "PhiVoice.h".
+# and include "Phi.h", "PhiChorus.h", "PhiDynamics.h", "PhiModulation.h", "PhiPhaser.h", "PhiTuning.h" or "PhiVoice.h".
 cmake_minimum_required(VERSION 3.22)
 project(phi_dsp LANGUAGES CXX)
 
@@ -11,6 +11,7 @@ add_library(phi_dsp STATIC
     Phi.cpp
     PhiChorus.cpp
     PhiDynamics.cpp
+    PhiModulation.cpp
     PhiPhaser.cpp
     PhiTuning.cpp
     Scala.cpp
