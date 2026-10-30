@@ -13,6 +13,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QRegularExpression>
 #include <QSpinBox>
 #include <QVBoxLayout>
@@ -359,7 +360,7 @@ StepSequencerView::StepSequencerView (slicer::Engine& e, PadLooks l, QWidget* pa
         auto* b = new QPushButton (QString::number (i + 1), this);
         b->setCheckable (true);
         b->setFocusPolicy (Qt::NoFocus);
-        b->setFixedWidth (30);
+        b->setFixedWidth (24);
         b->setToolTip (tr ("Edit pattern %1 and play it next (from the next bar while playing)").arg (i + 1));
         patterns->addButton (b, i);
         patternRow->addWidget (b);
@@ -486,9 +487,18 @@ StepSequencerView::StepSequencerView (slicer::Engine& e, PadLooks l, QWidget* pa
 
     auto* layout = new QVBoxLayout (this);
     layout->setContentsMargins (0, 0, 0, 0);
+    layout->setSpacing (3);
     layout->addLayout (transport);
     layout->addLayout (patternRow);
-    layout->addWidget (grid);
+    // The grid scrolls when the place it docks in is lower than its sixteen rows.
+    auto* gridScroll = new QScrollArea (this);
+    gridScroll->setWidget (grid);
+    gridScroll->setWidgetResizable (true);
+    gridScroll->setFrameShape (QFrame::NoFrame);
+    gridScroll->setHorizontalScrollBarPolicy (Qt::ScrollBarAlwaysOff);
+    gridScroll->setMinimumHeight (64);
+    gridScroll->viewport()->setAutoFillBackground (false);
+    layout->addWidget (gridScroll, 1);
     layout->addLayout (laneRow);
     layout->addWidget (values);
 
@@ -601,6 +611,11 @@ void StepSequencerView::setSelected (int pad)
 {
     selected = std::clamp (pad, 0, slicer::numLanes - 1);
     grid->setSelected (selected);
+    if (auto* area = qobject_cast<QScrollArea*> (grid->parentWidget()->parentWidget()))
+    {
+        const int rowHeight = grid->height() / slicer::padsPerBank;
+        area->ensureVisible (0, (selected % slicer::padsPerBank) * rowHeight + rowHeight / 2, 0, rowHeight);
+    }
     values->setLane (selected);
     laneToControls();
 }

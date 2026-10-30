@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #pragma once
 
+#include <functional>
+
 #include "../core/AudioDocument.h"
 #include "../core/Repair.h"
 #include "../engine/AudioEngine.h"
@@ -105,6 +107,13 @@ public:
     void setPoppedOut (bool);    // also where it opens from now on
     bool opensInWindow() const    { return ownWindow; }
     void setOpensInWindow (bool w) { ownWindow = w; }
+    // Lent to a host inside another view (Simplest and the Slicer in the mixer, in its Device
+    // Chain's place): the content goes into `host`'s layout and the dock hides; showing and
+    // hiding the panel open and close it there (`setOpen`, `open`: the host's owner decides
+    // what is in front). takeBack() puts it back in its dock as it was.
+    void lendTo (QWidget* host, std::function<void (bool)> setOpen, std::function<bool()> open);
+    void takeBack();
+    bool isLent() const { return lentTo != nullptr; }
 
 protected:
     bool eventFilter (QObject*, QEvent*) override;
@@ -118,6 +127,9 @@ private:
     QDockWidget* dockWidget;
     bool sized = false;   // widened to its content once this session
     QWidget* window = nullptr;
+    QWidget* lentTo = nullptr;
+    std::function<void (bool)> lentSetOpen;
+    std::function<bool()> lentOpen;
     bool ownWindow = false;   // shown in its own window rather than in its dock
     QSize windowSize;         // the size its window had when last closed
     QWidget* focusFrame = nullptr;

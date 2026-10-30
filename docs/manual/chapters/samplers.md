@@ -42,7 +42,9 @@ Both open in windows of their own, so they get the room they need whatever panel
 
 **Slicing.** Slice by **transients** (with a sensitivity), **equal parts** (2 to 128), the file's **beat grid** (bars, beats, eighths or sixteenths) or the editor's **markers**. Drag a slice line to move it, double-click to add one, right-click a line to remove it. Slicing again leaves pads with sounds of their own alone.
 
-**Pads.** The pads come in eight banks of 16, A to H, in a row across the top as in Cubase. They are laid out for Push's 8 × 8 grid in User mode: bank A bottom left, B bottom right, C top left, D top right. **Push plays** puts banks E to H on the grid instead; the four banks off the grid answer the notes left over (100 to 127, then 0 to 35). Or choose **Chromatic**: pad n is MIDI note n, 16 notes a bank, as in Cubase, so C1 is pad C5. Kits from before 128 pads open on the same notes.
+**The window** is laid out as Cubase's Drum Machine. On the left are the banks and the pads, in the middle the chosen pad's layers beside its sound, and on the right the pad's **Level**, **Pan** and **Pitch** knobs and its settings. **Instrument** and **Steps** along the top switch the middle between the layers and the step sequencer, and the slicing settings sit beside them.
+
+**Pads.** The pads come in eight banks of 16, A to H, shown as small 4 × 4 grids above the pads (lit while a pad in them sounds). Each pad has its own **M** and **S** to mute and solo it, and its note. They are laid out for Push's 8 × 8 grid in User mode: bank A bottom left, B bottom right, C top left, D top right. **Push plays** puts banks E to H on the grid instead; the four banks off the grid answer the notes left over (100 to 127, then 0 to 35). Or choose **Chromatic**: pad n is MIDI note n, 16 notes a bank, as in Cubase, so C1 is pad C5. Kits from before 128 pads open on the same notes.
 
 An empty pad shows only its note, a pad with one sound its name, and a layered pad **Multi**.
 
@@ -50,15 +52,15 @@ An empty pad shows only its note, a pad with one sound its name, and a layered p
 
 **Each pad** has its own gain, pan, pitch, **One shot** or **Gate** play, attack, release, **choke group** (1 to 16, so a closed hi-hat cuts off an open one), **Mute**, **Solo** and **Receive**, the MIDI note it answers. Auto is its note in the layout; pads given the same note play together. The kit has velocity and voices (1 to 64; each layer of a hit takes one).
 
-**Layers.** **Edit** shows the chosen pad's four layers, one at a time. Each is a slice or a sound, with on/off, level, tune, start, end, fade in, fade out and reverse, and all of a pad's layers play at once.
+**Layers.** The chosen pad's four layer slots each show what they hold, with a power button and a level knob. Click a slot to edit its tune, start, end, fade in, fade out and reverse below. Each is a slice or a sound, and all of a pad's layers play at once.
 
 **The pad menu.** Right-click a pad to rename it, give it one of 16 colours, mute or solo it, load a sound, cut, copy, paste or reset it, or reset every mute, solo or pad. Drag a pad onto another to swap them; each keeps the note it answers.
 
-**Hot swap.** Under Edit, turn on **Hot swap** and send sounds from the Find panel with `F8` (or drop them on the window). Each goes onto the chosen pad's layer to try, keeping that layer's level, tune and fades. **Keep** keeps it; **Undo Swap** puts back what was there.
+**Hot swap.** Under the layer slots, turn on **Hot swap** and send sounds from the Find panel with `F8` (or drop them on the window). Each goes onto the chosen pad's layer to try, keeping that layer's level, tune and fades. **Keep** keeps it; **Undo Swap** puts back what was there.
 
 **Kits.** **Save Kit** writes the whole kit as a `.phikit` file, with the sample in a `Sounds` folder beside it. Pads' own sounds stay where their files are. **Load Kit** opens one. A mixer track's Slicer keeps its kit in the `.phi` project the same way.
 
-**Steps.** []{.ix t="Step sequencer"}**Steps**, at the end of the bank row, swaps the pads for the step sequencer, after Cubase's Pattern Editor and FL Studio's Channel Rack. Each pad of the bank showing is a row of steps: click a step to turn it on or off and drag along to paint, click a pad's name to choose it, and **M** and **S** mute and solo its lane. A brighter step is louder; a number is how many times it hits, and **?** means it does not hit every time.
+**Steps.** []{.ix t="Step sequencer"}**Steps**, along the top, swaps the layers for the step sequencer, after Cubase's Pattern Editor and FL Studio's Channel Rack. Each pad of the bank showing is a row of steps: click a step to turn it on or off and drag along to paint, click a pad's name to choose it, and **M** and **S** mute and solo its lane. A brighter step is louder; a number is how many times it hits, and **?** means it does not hit every time.
 
 - **Lanes.** The chosen pad's lane has its own length (1 to 64 steps), step length (1/4 to 1/64, dotted and triplet), direction (forward, backward, back and forth, or random, which draws the same steps each time round), the step it starts **from**, and its own **swing**. Lanes of different lengths run against each other. The **Lane** menu fills every 1, 2, 4 or 8 steps, shifts the steps left or right, or clears the lane.
 - **Drawing.** Under the grid, **Draw** picks one setting of the chosen pad's steps to draw as bars: velocity, gate (how long a Gate pad is held), pitch (±24 semitones), chance, repeats (up to 8 hits within the step), ramp (the repeats getting louder or softer) and shift (early or late, up to half a step).
@@ -82,7 +84,7 @@ A pad hit from MIDI becomes the one you edit. Follow editor, `Ctrl+F8` (refresh)
 ## Both together
 
 - MIDI notes play whichever of the two windows you used last. Closing one silences it; with both closed, MIDI plays nothing.
-- `Ctrl+Alt+P` docks one instead of a window: Simplest along the bottom beside the Device Chain, the Slicer on the left under Find. It stays docked until you pop it out again.
+- Both dock compactly along the bottom, as Cubase's Drum Machine in its lower zone, and take turns with the Device Chain in the same space: tabs along the top (Device Chain, Simplest, Slicer) switch between them, opening one brings it to the front, and `Shift+Tab` (outside a field you type in) or `Ctrl+Shift+C` brings the Device Chain back. With the mixer in front they sit inside it, under the strips, with the same tabs in place of its Device Chain; Edit on a track's Sampler or Slicer opens it there as well, as another tab. They take only the height their layout needs, about the Device Chain's. `Ctrl+Alt+P` pops one out into its own window and docks it back.
 - Drag an audio file from the Find panel or a file manager onto either to load it.
 - In the Find panel, `F7` and `F8` send the highlighted file and leave the keyboard in Find, so you can arrow to the next file and try it.
 - A mixer track can have a Simplest or Slicer of its own; see [Instruments](#mixer-instruments).

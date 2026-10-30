@@ -539,6 +539,12 @@ private:
     // A docked mixer in front shows the selected track's own Device Chain, so the editor's
     // (the master's) steps aside until the editor comes back; Ctrl+Shift+C then works the mixer's.
     void updateChainDock();
+    void updateInstrumentDocks();
+    void placeInstrumentDocks();
+    int compactHeight (DockablePanel*) const;
+    bool toggleChainAndInstrument();
+    DockablePanel* bottomFront = nullptr;       // the Device Chain, Simplest or the Slicer, whichever tab is up
+    DockablePanel* lastInstrumentFront = nullptr;
     bool mixerChainKey() const;   // the docked mixer in front: Ctrl+Shift+C is its Device Chain
     bool chainHiddenForMixer = false;
     // The Find panel is the mixer's Finder in the editor's place: it and the Inspector take
