@@ -6,7 +6,7 @@
 // the frequencies of peaks, notches and phase turns, echo times and how much
 // quieter each echo is, the tones a pitch shifter adds, a compressor's ratio and
 // its attack against its release, LFO rates, a gate's rhythm, the latency. Then it
-// looks for golden ratios between them (φ^(n/2): √φ, φ, φ^1.5, φ², ... φ⁶) and for
+// looks for golden ratios between them (φ^(n/2): √φ, φ, φ^1.5, φ², ... φ¹⁴, ratios up to 1000) and for
 // golden numerals (1.618, 2.618, 6.18 and Fibonacci numbers such as 13, 233 or 610).
 //
 // Measure enough numbers and some fall near φ by chance, so every match is
