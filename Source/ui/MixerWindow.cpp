@@ -9572,10 +9572,18 @@ bool MixerWindow::isProjectFile (const QString& file)
     return suffix.compare (projectSuffix, Qt::CaseInsensitive) == 0 || suffix.compare (QLatin1String ("phinyxmix"), Qt::CaseInsensitive) == 0;
 }
 
+bool MixerWindow::askToSave (const QString& title, const QString& question)
+{
+    if (! modified)
+        return true;
+    const auto answer = QMessageBox::question (this, title, question, QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+                                               QMessageBox::Save);
+    return answer == QMessageBox::Discard || (answer == QMessageBox::Save && saveMix (false));
+}
+
 bool MixerWindow::newMix()
 {
-    if (modified && ! path.isEmpty()
-        && QMessageBox::question (this, tr ("New Project"), tr ("Start a new project? Changes to %1 that were not saved are lost.").arg (mixName())) != QMessageBox::Yes)
+    if (! askToSave (tr ("New Project"), tr ("Save the changes to %1 before starting a new project?").arg (mixName())))
         return false;
     engine.stop();
     engine.setPosition (0);
@@ -10150,6 +10158,8 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
 
 void MixerWindow::autosave()
 {
+    if (quitting)
+        return;
     const auto file = autosavePath();
     QDir().mkpath (QFileInfo (file).absolutePath());
     QString error;
@@ -10175,6 +10185,26 @@ void MixerWindow::restoreAutosave()
         modified = appSettings().value (QStringLiteral ("mixer/lastModified"), false).toBool();
         updateTitle();
     }
+}
+
+void MixerWindow::dropAutosave()
+{
+    quitting = true;
+    removeAutosave();
+}
+
+QString MixerWindow::autosaveName()
+{
+    const auto lastPath = appSettings().value (QStringLiteral ("mixer/lastPath")).toString();
+    return lastPath.isEmpty() ? QString() : QFileInfo (lastPath).completeBaseName();
+}
+
+void MixerWindow::removeAutosave()
+{
+    QFile::remove (autosavePath());
+    QFile::remove (configFile ("last.phinyxmix"));
+    appSettings().remove (QStringLiteral ("mixer/lastPath"));
+    appSettings().remove (QStringLiteral ("mixer/lastModified"));
 }
 
 //==============================================================================
@@ -11363,9 +11393,10 @@ std::vector<int> MixerWindow::colourTracks (const QStringList& names, const QLis
     return out;
 }
 
-void MixerWindow::openScore (const midifile::Song& score, mixer::TuningChoice tuning, const QString& title)
+void MixerWindow::openScore (const midifile::Song& score, mixer::TuningChoice tuning, const QString& title, const QString& notation)
 {
     MidiEditor::Host host;
+    host.notation = notation;
     host.play = [this] (uint8_t s, uint8_t a, uint8_t b) { engine.liveMidi (s, a, b, false); };
     host.system = tuning.system;
     host.root = tuning.root;
