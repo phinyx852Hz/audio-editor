@@ -1309,6 +1309,13 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     playTimer->setTimerType (Qt::PreciseTimer);
     playTimer->setInterval (4);
     connect (playTimer, &QTimer::timeout, this, &MidiEditor::playTick);
+    if (host.transport.playing)
+    {
+        followTimer = new QTimer (this);
+        followTimer->setInterval (30);
+        connect (followTimer, &QTimer::timeout, this, &MidiEditor::follow);
+        followTimer->start();
+    }
 
     auto* layout = new QVBoxLayout (this);
     layout->setContentsMargins (8, 8, 8, 8);
@@ -1990,7 +1997,7 @@ void MidiEditor::fillNotationMenu (QMenu* menu)
 MidiEditor::~MidiEditor()
 {
     recording = false;
-    stopPlay();
+    stopPlay (false);   // a panel's editor is replaced as a song loads: the main transport plays on
 }
 
 void MidiEditor::buildSystems()
@@ -2834,11 +2841,13 @@ void MidiEditor::goTo (int64_t tick)
 {
     const bool playing = playTimer->isActive();
     if (playing)
-        stopPlay();
+        stopPlay (false);
     step.position = std::max<int64_t> (0, tick);
     playheadTick = step.position;
     showSystemAt (step.position);
     roll->reveal (step.position);
+    if (tied())
+        host.transport.locate (secondsAt (playheadTick));   // and the tied transport there
     if (playing)
         startPlay (playingOriginal);   // on from there
     viewsUpdate();
@@ -3019,16 +3028,21 @@ void MidiEditor::startPlay (bool originalVersion)
             playheadTick = loopFrom;
         pressedAt = std::max<int64_t> (0, playheadTick);
     }
-    // Going on from where it is (the A/B switch), else from the playhead.
+    // Going on from where it is (the A/B switch), else from the playhead (where the tied
+    // transport is, when it started this; else it starts from here).
     double from = 0.0;
+    const bool linked = tied();
     if (going)
-        from = playFrom + (QDateTime::currentMSecsSinceEpoch() - playStarted) / 1000.0;
+        from = clockNow();
     else if (playheadTick > 0)
         from = (originalVersion ? original : *encode (seq, encodeOptions()).song).seconds (playheadTick, host.bpm);
     const bool keepRecording = recording;
     recording = false;   // not closed by the restart
-    stopPlay();
+    stopPlay (false);
     recording = keepRecording;
+    if (linked && ! host.transport.playing())
+        host.transport.play (from);
+    lastClock = from;
     playingOriginal = originalVersion;
     playSong = originalVersion ? std::make_shared<midifile::Song> (original) : encode (seq, encodeOptions()).song;
     playing.clear();
@@ -3048,11 +3062,13 @@ void MidiEditor::startPlay (bool originalVersion)
     updateTransport();
 }
 
-void MidiEditor::stopPlay()
+void MidiEditor::stopPlay (bool stopTied)
 {
     if (playTimer == nullptr || ! playTimer->isActive())
         return;
     playTimer->stop();
+    if (stopTied && tied() && host.transport.playing())
+        host.transport.stop();
     if (recording)
         closeHeld();
     if (host.play)
@@ -3076,6 +3092,8 @@ void MidiEditor::stopToStart()
     recordButton->setChecked (false);
     stopPlay();
     playheadTick = wasPlaying ? pressedAt : 0;
+    if (tied())
+        host.transport.locate (secondsAt (playheadTick));
     roll->refresh();
     viewsUpdate();
     updateTransport();
@@ -3083,7 +3101,16 @@ void MidiEditor::stopToStart()
 
 void MidiEditor::playTick()
 {
-    const auto now = playFrom + (QDateTime::currentMSecsSinceEpoch() - playStarted) / 1000.0;
+    const auto now = clockNow();
+    // The tied transport jumped (moved by its own cursor, or looping): on from where it is now.
+    if (tied() && (now < lastClock - 0.05 || now > lastClock + 0.5))
+    {
+        lastClock = now;
+        startPlay (playingOriginal);
+        playheadTick = tickAt (now);
+        return;
+    }
+    lastClock = now;
     while (playAt < playing.size() && playing[playAt].seconds <= now)
     {
         const auto& t = playing[playAt++];
@@ -3093,8 +3120,9 @@ void MidiEditor::playTick()
     if (playSong != nullptr)
     {
         int64_t lo = 0, hi = std::max<int64_t> (1, playSong->lastTick);
-        while (recording && hi < (int64_t (1) << 40) && playSong->seconds (hi, host.bpm) < now)
-            hi *= 2;   // a take goes on past the clip's end
+        const bool linked = tied();
+        while ((recording || linked) && hi < (int64_t (1) << 40) && playSong->seconds (hi, host.bpm) < now)
+            hi *= 2;   // a take, or the tied transport, goes on past the clip's end
         while (lo < hi)
         {
             const auto mid = (lo + hi) / 2;
@@ -3114,8 +3142,10 @@ void MidiEditor::playTick()
                 playheadTick = loopTo;
                 closeHeld();
             }
-            stopPlay();
+            stopPlay (false);
             playheadTick = loopFrom;
+            if (linked)
+                host.transport.locate (secondsAt (loopFrom));
             startPlay (playingOriginal);
             pressedAt = loopFrom;
             if (recording)
@@ -3123,7 +3153,7 @@ void MidiEditor::playTick()
                     held[key] = { loopFrom, h.velocity, h.pitch };
             return;
         }
-        if (playAt >= playing.size() && now > playSong->lengthSeconds (host.bpm) + 0.3 && ! recording)
+        if (playAt >= playing.size() && now > playSong->lengthSeconds (host.bpm) + 0.3 && ! recording && ! linked)
         {
             playheadTick = 0;
             stopPlay();
@@ -3131,6 +3161,67 @@ void MidiEditor::playTick()
         }
     }
     roll->viewport()->update();
+}
+
+bool MidiEditor::tied() const
+{
+    const auto& t = host.transport;
+    return t.playing && t.seconds && t.play && t.stop && t.locate && (! t.available || t.available());
+}
+
+double MidiEditor::clockNow() const
+{
+    if (tied() && host.transport.playing())
+        return host.transport.seconds();
+    return playFrom + (QDateTime::currentMSecsSinceEpoch() - playStarted) / 1000.0;
+}
+
+void MidiEditor::follow()
+{
+    if (! tied())
+        return;
+    if (! isVisible())
+    {
+        stopPlay (false);   // a closed panel is not heard
+        return;
+    }
+    const bool mainPlaying = host.transport.playing();
+    if (mainPlaying && ! playTimer->isActive())
+    {
+        // Started from the main window or the mixer: the notes from where it is.
+        playheadTick = tickAt (std::max (0.0, host.transport.seconds()));
+        startPlay (abButton->isChecked());
+    }
+    else if (! mainPlaying && playTimer->isActive())
+        stopPlay (false);
+}
+
+double MidiEditor::secondsAt (int64_t tick) const
+{
+    // On the clip's tempo map, as the song it plays is timed.
+    midifile::Song timing;
+    timing.ticksPerQuarter = seq.ticksPerQuarter;
+    timing.tempos = seq.tempos;
+    return timing.seconds (std::max<int64_t> (0, tick), host.bpm);
+}
+
+int64_t MidiEditor::tickAt (double seconds) const
+{
+    midifile::Song timing;
+    timing.ticksPerQuarter = seq.ticksPerQuarter;
+    timing.tempos = seq.tempos;
+    int64_t lo = 0, hi = std::max<int64_t> (1, seq.end());
+    while (hi < (int64_t (1) << 40) && timing.seconds (hi, host.bpm) < seconds)
+        hi *= 2;
+    while (lo < hi)
+    {
+        const auto mid = (lo + hi) / 2;
+        if (timing.seconds (mid, host.bpm) < seconds)
+            lo = mid + 1;
+        else
+            hi = mid;
+    }
+    return lo;
 }
 
 void MidiEditor::updateTransport()
@@ -3142,15 +3233,9 @@ void MidiEditor::updateTransport()
     const auto tick = std::max<int64_t> (0, playheadTick);
     double seconds = 0.0;
     if (going)
-        seconds = playFrom + (QDateTime::currentMSecsSinceEpoch() - playStarted) / 1000.0;
+        seconds = clockNow();
     else
-    {
-        // On the clip's tempo map, as the song it plays is timed.
-        midifile::Song timing;
-        timing.ticksPerQuarter = seq.ticksPerQuarter;
-        timing.tempos = seq.tempos;
-        seconds = timing.seconds (tick, host.bpm);
-    }
+        seconds = secondsAt (tick);
     const auto ms = (int64_t) std::llround (std::max (0.0, seconds) * 1000.0);
     const auto clock = QStringLiteral ("%1:%2.%3").arg (ms / 60000, 2, 10, QLatin1Char ('0'))
                                                    .arg (ms / 1000 % 60, 2, 10, QLatin1Char ('0'))
@@ -3214,7 +3299,7 @@ void MidiEditor::closeHeld()
 
 void MidiEditor::done (int r)
 {
-    stopPlay();
+    stopPlay (! host.embedded);
     if (host.embedded)
         return;   // a panel stays where it is
     QDialog::done (r);
