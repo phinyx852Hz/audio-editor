@@ -229,6 +229,7 @@ void MainWindow::savePatchBay()
     for (const auto& k : patchBay->links())
         links << QStringLiteral ("%1>%2>%3").arg (nodeKey (k.from), nodeKey (k.to)).arg (k.gainDb, 0, 'f', 2);
     settings.setValue (QStringLiteral ("links"), links);
+    settings.setValue (QStringLiteral ("tracks"), mixer::maxTracks);
     for (int i = 0; i < maxSynths; ++i)
     {
         const auto key = QStringLiteral ("synth%1").arg (i + 1);
@@ -309,6 +310,8 @@ void MainWindow::restorePatchBay()
         if (from >= 0 && to >= 0)
             links.push_back ({ from, to, parts[2].toFloat() });
     }
+    // Saved before the mixer had 16 tracks: the tracks after the 8 go to the Mix Bus.
+    PatchBay::addNewTrackLinks (links, settings.value (QStringLiteral ("tracks"), 8).toInt());
     patchBay->setLinks (links);
     if (! problems.isEmpty())
         statusBar()->showMessage (tr ("Patchbay: %1").arg (problems.join (QStringLiteral ("; "))), 10000);
@@ -334,7 +337,7 @@ QJsonObject MainWindow::patchBayJson() const
         effects.append (fx == nullptr ? QJsonValue() : QJsonValue (QJsonObject {
             { "id", QString::fromStdString (fx->pluginId()) }, { "name", QString::fromStdString (fx->name()) }, { "state", QString::fromStdString (fx->state()) } }));
     }
-    return { { "links", links }, { "synths", synths }, { "effects", effects } };
+    return { { "links", links }, { "tracks", mixer::maxTracks }, { "synths", synths }, { "effects", effects } };
 }
 
 void MainWindow::setPatchBayJson (const QJsonObject& o)
@@ -395,6 +398,7 @@ void MainWindow::setPatchBayJson (const QJsonObject& o)
         if (from >= 0 && to >= 0)
             links.push_back ({ from, to, (float) k.value ("gain").toDouble() });
     }
+    PatchBay::addNewTrackLinks (links, o.value ("tracks").toInt (8));
     patchBay->setLinks (links);
     if (patchBayWin != nullptr)
         patchBayWin->refill();

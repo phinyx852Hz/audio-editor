@@ -31,7 +31,7 @@
 namespace minimalize
 {
     constexpr int ticksPerQuarter = 480;   // in and out
-    constexpr int maxTracks = 8;
+    constexpr int maxTracks = 16;   // as the mixer (MixerEngine.h); freeTracks says how many are free
 
     struct Note
     {

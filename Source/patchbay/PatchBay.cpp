@@ -239,6 +239,12 @@ namespace patchbay
         return out;
     }
 
+    void PatchBay::addNewTrackLinks (std::vector<Link>& links, int saved)
+    {
+        for (int i = std::max (0, saved); i < mixer::maxTracks; ++i)
+            links.push_back ({ node::track + i, node::mixBus });
+    }
+
     bool PatchBay::isDefault() const
     {
         const auto mine = links();

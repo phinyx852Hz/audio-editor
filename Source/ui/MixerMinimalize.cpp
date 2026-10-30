@@ -177,7 +177,7 @@ void MixerWindow::minimalizeTimeline (Frame from)
 void MixerWindow::arrangeMinimal (const std::vector<int>& tracks, std::vector<minimalize::Part> parts, double bpm, bool timeline, const QString& what)
 {
     const auto title = tr ("minimalize");
-    const int free = mixer::maxTracks - engine.numTracks();
+    const int free = engine.trackLimit() - engine.numTracks();
 
     QDialog dialog (this);
     dialog.setWindowTitle (title);
@@ -321,7 +321,7 @@ void MixerWindow::arrangeMinimal (const std::vector<int>& tracks, std::vector<mi
         int target = -1;
         if (! track.added)
             target = tracks[(size_t) track.source];
-        else if (engine.numTracks() < mixer::maxTracks)
+        else if (engine.roomForTracks())
         {
             const auto from = tracks[(size_t) track.source];
             target = engine.numTracks();

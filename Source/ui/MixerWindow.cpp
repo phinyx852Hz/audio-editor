@@ -144,12 +144,27 @@ namespace
             setSizePolicy (QSizePolicy::Fixed, QSizePolicy::Expanding);
         }
 
-        QSize sizeHint() const override { return { 60, 240 }; }
+        QSize sizeHint() const override { return { slim ? 24 : 60, 240 }; }
+
+        // Zoomed narrow: no scale and a narrower cap, as wide as the cap.
+        void setSlim (bool on)
+        {
+            if (on == slim)
+                return;
+            slim = on;
+            labels = on ? 0.0 : 24.0;
+            capWidth = on ? 20.0 : 28.0;
+            setMinimumSize (on ? 24 : 60, 150);
+            updateGeometry();
+            update();
+        }
 
     protected:
-        static constexpr double capWidth = 28.0, capHeight = 16.0, labels = 24.0;
+        static constexpr double capHeight = 16.0;
+        double capWidth = 28.0, labels = 24.0;
+        bool slim = false;
 
-        double grooveX() const { return labels + 6.0 + capWidth / 2.0; }
+        double grooveX() const { return slim ? width() / 2.0 : labels + 6.0 + capWidth / 2.0; }
         double top() const { return capHeight / 2.0 + 3.0; }
         double bottom() const { return height() - capHeight / 2.0 - 3.0; }
         double yOf (int v) const { return top() + (1.0 - (double) v / faderSteps) * (bottom() - top()); }
@@ -170,6 +185,8 @@ namespace
             double lastY = -100.0;
             for (const auto db : { 6.0, 3.0, 0.0, -3.0, -6.0, -10.0, -15.0, -20.0, -30.0, -40.0, -60.0, -100.0 })
             {
+                if (slim)
+                    break;
                 const auto y = yOf (faderPosition (db));
                 if (std::abs (y - lastY) < 10.0 && db > -100.0)
                     continue;
@@ -297,6 +314,9 @@ namespace
     const QColor trackColours[mixer::maxTracks] {
         QColor (0x4f, 0xc3, 0xf7), QColor (0xef, 0x53, 0x50), QColor (0xab, 0x47, 0xbc), QColor (0x26, 0xa6, 0x9a),
         QColor (0xff, 0xb7, 0x4d), QColor (0x8d, 0x6e, 0x63), QColor (0x78, 0x90, 0x9c), QColor (0xec, 0x40, 0x7a),
+        // Tracks 9 to 16: the same hues, a shade apart, so the second eight still read as their own.
+        QColor (0x81, 0xd4, 0xfa), QColor (0xe5, 0x73, 0x73), QColor (0xce, 0x93, 0xd8), QColor (0x80, 0xcb, 0xc4),
+        QColor (0xff, 0xcc, 0x80), QColor (0xa1, 0x88, 0x7f), QColor (0xb0, 0xbe, 0xc5), QColor (0xf4, 0x8f, 0xb1),
     };
 
     bool isMidiFile (const QString& path)
@@ -1214,29 +1234,40 @@ public:
             setMaximumWidth (QWIDGETSIZE_MAX);
             return;
         }
-        instrumentPart->setVisible (! compact && (shown & instrumentSection) != 0 && mode != mixer::TrackMode::audio);
+        // Zoomed narrow (MixerWindow::zoomStrips): a slim strip keeps the pan, the fader and the
+        // name; a minimal one only the fader, the meter, mute, solo and the track's number.
+        const bool slim = window.slimLanes(), minimal = window.minimalLanes();
+        const bool full = ! slim;
+        instrumentPart->setVisible (full && ! compact && (shown & instrumentSection) != 0 && mode != mixer::TrackMode::audio);
         // The duck in every mode (another track can key it); the layer levels only in a hybrid.
-        layerPart->setVisible (! compact && (shown & instrumentSection) != 0);
+        layerPart->setVisible (full && ! compact && (shown & instrumentSection) != 0);
         audioLayerPart->setVisible (mode == mixer::TrackMode::hybrid);
         instLayerPart->setVisible (mode == mixer::TrackMode::hybrid);
-        prePart->setVisible (! compact && (shown & preSection) != 0);
-        modePart->setVisible (! compact);
-        insertPart->setVisible (compact || (shown & insertSection) != 0);
+        prePart->setVisible (full && ! compact && (shown & preSection) != 0);
+        modePart->setVisible (full && ! compact);
+        insertPart->setVisible (full && (compact || (shown & insertSection) != 0));
         insertTitle->setVisible (! compact);
         addInsertButton->setVisible (! compact);
-        sendPart->setVisible (compact || (shown & sendSection) != 0);
-        panPart->setVisible ((shown & panSection) != 0 || compact);
+        sendPart->setVisible (full && (compact || (shown & sendSection) != 0));
+        panPart->setVisible (! minimal && ((shown & panSection) != 0 || compact || slim));
         panColumnPart->setVisible (! spatial);
-        widthPart->setVisible (! compact && ! spatial);
+        widthPart->setVisible (full && ! compact && ! spatial);
         azPart->setVisible (spatial);
-        distPart->setVisible (spatial && ! compact);
+        distPart->setVisible (full && spatial && ! compact);
         spaceExtra->setVisible (false);
-        trimPart->setVisible (true);
+        trimPart->setVisible (full);
+        busButton->setVisible (! minimal);
+        nameEdit->setVisible (! minimal);
+        peakValue->setVisible (full);
+        faderValue->setVisible (! minimal);
+        static_cast<Fader*> (fader)->setSlim (slim);
+        meter->setScale (! minimal);
+        meter->setMaximumWidth (minimal ? 10 : QWIDGETSIZE_MAX);
+        layout()->setContentsMargins (slim ? QMargins (2, 3, 2, 3) : QMargins (5, 5, 5, 5));
         fader->setMinimumHeight (compact ? compactFader : 0);
         refreshInserts();
-        const bool wide = window.wideStrips && ! compact;
-        setMinimumWidth (compact ? 96 : wide ? 180 : 128);
-        setMaximumWidth (compact ? 150 : wide ? 240 : 170);
+        // As wide as its column in the launcher (MixerWindow::laneWidth), whatever it shows.
+        setFixedWidth (window.laneWidth() - MixerWindow::stripGap);
     }
 
     // The inserts as the engine has them; each row keeps its place in the engine's list.
@@ -1513,7 +1544,7 @@ public:
         widthLabel->setText (window.engine.monoTrack (index) ? MixerWindow::tr ("mono") : QStringLiteral ("%1%").arg ((int) std::lround (s.width.load() * 100.0f)));
         const auto slope = [] (int db) { return db >= 24 ? QStringLiteral ("²") : QString(); };
         // Narrow strips name the cuts; wide ones give their frequency too (it is in the tooltip anyway).
-        const bool wide = window.wideStrips;
+        const bool wide = window.wideLanes();
         lowCutButton->setText (wide ? MixerWindow::tr ("LC %1").arg (hzText (s.lowCutHz.load())) + slope (s.lowCutSlope.load()) : MixerWindow::tr ("LC"));
         highCutButton->setText (wide ? MixerWindow::tr ("HC %1").arg (hzText (s.highCutHz.load())) + slope (s.highCutSlope.load()) : MixerWindow::tr ("HC"));
         lowCutButton->setToolTip (MixerWindow::tr ("Low cut at %1 Hz, %2 dB an octave: click turns it on or off; right-click for its frequency and slope")
@@ -1623,6 +1654,13 @@ protected:
             return true;
         }
         return QFrame::eventFilter (o, e);
+    }
+
+    void enterEvent (QEnterEvent* e) override
+    {
+        if (! inspecting)
+            window.hoverSelect (index);   // Focus Follows Mouse
+        QFrame::enterEvent (e);
     }
 
     void mousePressEvent (QMouseEvent* e) override
@@ -2330,19 +2368,39 @@ protected:
         if (std::abs (steps) < 1.0e-9)
             return;
         updateScale();
+        e->accept();
         if (e->modifiers() & Qt::ControlModifier)
         {
-            const auto x = std::max ((double) headerWidth, e->position().x());
-            const auto at = start + (x - headerWidth) * framesPerPixel;
-            framesPerPixel = std::clamp (framesPerPixel * std::pow (0.8, steps), 4.0, std::max (4.0, fitFramesPerPixel() * 4.0));
-            start = std::max (0.0, at - (x - headerWidth) * framesPerPixel);
+            zoomAround (steps, e->position().x());
+            return;
         }
-        else
-            start = std::max (0.0, start - steps * 80.0 * framesPerPixel);
+        start = std::max (0.0, start - steps * 80.0 * framesPerPixel);
         fit = false;
-        e->accept();
         update();
     }
+
+public:
+    // In (steps above 0) or out, about the playhead when it is in view, else the middle
+    // (Ctrl+= and Ctrl+- from the window).
+    void zoomBy (int steps)
+    {
+        updateScale();
+        const auto playhead = headerWidth + ((double) window.engine.position() - start) / framesPerPixel;
+        zoomAround (steps, playhead >= headerWidth && playhead <= width() ? playhead : (headerWidth + width()) / 2.0);
+    }
+
+private:
+    void zoomAround (double steps, double x)
+    {
+        x = std::max ((double) headerWidth, x);
+        const auto at = start + (x - headerWidth) * framesPerPixel;
+        framesPerPixel = std::clamp (framesPerPixel * std::pow (0.8, steps), 4.0, std::max (4.0, fitFramesPerPixel() * 4.0));
+        start = std::max (0.0, at - (x - headerWidth) * framesPerPixel);
+        fit = false;
+        update();
+    }
+
+protected:
 
     void keyPressEvent (QKeyEvent* e) override
     {
@@ -3629,9 +3687,11 @@ protected:
             p.drawRoundedRect (head, 3, 3);
             p.setFont (bold);
             p.setPen (inkOn (info.colour));
-            const auto label = QStringLiteral ("%1 %2").arg (t + 1).arg (info.name);
-            p.drawText (head.adjusted (6, 0, -24, 0), Qt::AlignVCenter | Qt::AlignLeft,
-                        p.fontMetrics().elidedText (label, Qt::ElideRight, head.width() - 30));
+            // Zoomed narrow, the number alone.
+            const bool narrow = head.width() < 70;
+            const auto label = narrow ? QString::number (t + 1) : QStringLiteral ("%1 %2").arg (t + 1).arg (info.name);
+            p.drawText (head.adjusted (narrow ? 3 : 6, 0, -24, 0), Qt::AlignVCenter | Qt::AlignLeft,
+                        p.fontMetrics().elidedText (label, Qt::ElideRight, std::max (12, head.width() - 30)));
             if (! launch.timeline)
                 p.drawText (backRect (t), Qt::AlignCenter, QStringLiteral ("⟲"));   // click: back to the timeline
             if (t == window.selected)
@@ -6642,7 +6702,11 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     scenesBox->setPrefix (tr ("Scenes "));
     scenesBox->setToolTip (tr ("How many scenes (rows) the launcher has"));
     stripSections = appSettings().value (QStringLiteral ("mixer/stripSections"), allSections).toInt() & allSections;
-    wideStrips = appSettings().value (QStringLiteral ("mixer/wideStrips"), false).toBool();
+    // The zoom as it was left; Wide Strips, from before the zoom, as its widest but one.
+    stripZoom = appSettings().value (QStringLiteral ("mixer/stripZoom"),
+                                     appSettings().value (QStringLiteral ("mixer/wideStrips"), false).toBool() ? 180 : 0).toInt();
+    focusFollowsMouse = appSettings().value (QStringLiteral ("mixer/focusFollowsMouse"), false).toBool();
+    autoArm = appSettings().value (QStringLiteral ("mixer/autoArm"), true).toBool();
     auto* stripsButton = button (tr ("Strips"), tr ("Which sections the strips and the Inspector show (instrument, Pre, inserts, sends, trim and pan), and wide or narrow strips"));
     qLinkButton = button (tr ("Q-Link"), tr ("Q-Link: a change to one of the picked strips (Ctrl+click picks them) goes to all of them; "
                                              "Alt+Shift while changing one sends it to every track"));
@@ -6655,7 +6719,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     spatialButton = button (tr ("Spatial..."), tr ("Spatial mixing: each track placed around you by a 3D panner, heard binaurally on headphones "
                                                   "and on your speaker array at once. Opens its settings and the room view"));
     spatialButton->setCheckable (true);
-    auto* addButton = button (tr ("+ Track"), tr ("Add a track after the selected one, up to 8 (Ctrl+T)"));
+    auto* addButton = button (tr ("+ Track"), tr ("Add a track after the selected one, up to 8, or 16 with Strips > 16 Tracks (Ctrl+T)"));
     auto* removeButton = button (tr ("− Track"), tr ("Delete the selected track (Delete, Ctrl+Shift+T)"));
     auto* openButton = button (tr ("Open..."), tr ("Open a project (Ctrl+O): the mix, the patchbay and the view"));
     auto* saveButton = button (tr ("Save"), tr ("Save the project (Ctrl+S); Ctrl+Shift+S saves it under a new name"));
@@ -6700,7 +6764,6 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     stripRow->addStretch (1);
     auto* scroll = new QScrollArea (this);
     stripScroll = scroll;
-    scroll->viewport()->installEventFilter (this);
     scroll->setWidget (stripArea);
     scroll->setWidgetResizable (true);
     scroll->setFrameShape (QFrame::NoFrame);
@@ -6777,6 +6840,18 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     gridScroll->setMinimumHeight (120);
     launcherRow->addWidget (gridScroll, 1);
     launcherArea->hide();
+    // The launcher's columns stay over their strips: either scrolled sideways, both are.
+    connect (stripScroll->horizontalScrollBar(), &QScrollBar::valueChanged, this, [this] { syncLauncherScroll(); });
+    connect (gridScroll->horizontalScrollBar(), &QScrollBar::valueChanged, this, [this] (int v)
+    {
+        if (syncingScroll)
+            return;
+        syncingScroll = true;
+        stripScroll->horizontalScrollBar()->setValue (v);
+        syncingScroll = false;
+    });
+    connect (gridScroll->horizontalScrollBar(), &QScrollBar::rangeChanged, this, [this] { syncLauncherScroll(); });
+    qApp->installEventFilter (this);   // Ctrl+wheel over the strips and the launcher (eventFilter)
     upperArea = new QWidget (this);
     auto* upperLayout = new QVBoxLayout (upperArea);
     upperLayout->setContentsMargins (0, 0, 0, 0);
@@ -7147,6 +7222,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
 
 MixerWindow::~MixerWindow()
 {
+    qApp->removeEventFilter (this);   // nothing of the window's is looked at as it goes
     mtsEsp.reset();   // the master let go of
     engine.setInput (nullptr);   // the audio thread lets go of the audio input before it goes
     if (capture != nullptr)
@@ -7264,6 +7340,8 @@ void MixerWindow::routeToBus (int track, bool on)
 
 int MixerWindow::laneWidth() const
 {
+    if (stripZoom > 0)
+        return stripZoom;
     // As the launcher works out its columns, from the room the strips have.
     const auto room = stripScroll != nullptr ? stripScroll->viewport()->width() : 0;
     return std::clamp ((room - 2 * laneMargin - sceneColumn) / std::max (1, engine.numTracks()), minLane, maxLane);
@@ -7279,6 +7357,11 @@ void MixerWindow::applyStripWidths()
         strips[(size_t) i]->setFixedWidth (lane - stripGap);
     if (grid != nullptr)
     {
+        // The launcher's columns as wide as the strips, and it scrolls as far as they do: the
+        // strips' viewport is narrower by the returns and the master beside it.
+        const auto strips = stripMargin + sceneColumn + engine.numTracks() * lane;
+        const auto extra = gridScroll != nullptr ? std::max (0, gridScroll->viewport()->width() - stripScroll->viewport()->width()) : 0;
+        grid->setMinimumWidth (strips + extra);
         grid->updateGeometry();
         grid->update();
     }
@@ -7286,8 +7369,30 @@ void MixerWindow::applyStripWidths()
 
 bool MixerWindow::eventFilter (QObject* o, QEvent* e)
 {
-    if (stripScroll != nullptr && o == stripScroll->viewport() && e->type() == QEvent::Resize)
+    if (e->type() == QEvent::Resize && ((stripScroll != nullptr && o == stripScroll->viewport()) || (gridScroll != nullptr && o == gridScroll->viewport())))
         QTimer::singleShot (0, this, [this] { applyStripWidths(); });
+    // Ctrl+wheel over the strips or the launcher's clips: the strips' zoom, the strip under the
+    // mouse kept under it. Seen before the fader or pot under the mouse, which would take it.
+    if (e->type() == QEvent::Wheel && o->isWidgetType())
+    {
+        auto* wheel = static_cast<QWheelEvent*> (e);
+        auto* w = static_cast<QWidget*> (o);
+        const bool overStrips = stripScroll != nullptr && (w == stripScroll->viewport() || stripScroll->viewport()->isAncestorOf (w));
+        const bool overGrid = gridScroll != nullptr && grid != nullptr && (w == gridScroll->viewport() || gridScroll->viewport()->isAncestorOf (w));
+        if ((overStrips || overGrid) && (wheel->modifiers() & Qt::ControlModifier) != 0 && (wheel->modifiers() & Qt::AltModifier) == 0)
+        {
+            wheelSteps += wheel->angleDelta().y() + wheel->angleDelta().x();
+            const auto steps = wheelSteps / 120;
+            wheelSteps -= steps * 120;
+            if (steps != 0)
+            {
+                auto* view = overStrips ? stripScroll->viewport() : gridScroll->viewport();
+                const auto x = view->mapFromGlobal (wheel->globalPosition().toPoint()).x();
+                zoomStrips (steps, x);
+            }
+            return true;
+        }
+    }
     return QWidget::eventFilter (o, e);
 }
 
@@ -7432,10 +7537,11 @@ void MixerWindow::counterpointShownMidi()
         status->setText (tr ("This MIDI file counts in SMPTE time, so it cannot be edited here."));
         return;
     }
-    const auto free = mixer::maxTracks - engine.numTracks();
+    roomForTracks (1, title);
+    const auto free = engine.trackLimit() - engine.numTracks();
     if (free <= 0)
     {
-        QMessageBox::information (this, title, tr ("The new voices go on new tracks, and the mixer has 8 tracks already."));
+        QMessageBox::information (this, title, tr ("The new voices go on new tracks, and the mixer has %1 tracks already.").arg (engine.numTracks()));
         return;
     }
     if (clip.reversed)
@@ -7664,7 +7770,7 @@ void MixerWindow::writeCounterpoint (int track, const mixer::Clip& clip, mixer::
             for (int t = 0; t < engine.numTracks(); ++t)
                 if (t != track && info[(size_t) t].name == trackName)
                     target = t;
-        if (target < 0 && engine.numTracks() >= mixer::maxTracks)
+        if (target < 0 && ! engine.roomForTracks())
             continue;
         const auto written = counterpoint::toSong (*song, result.voices[v], channel);
         QString file;
@@ -7904,10 +8010,13 @@ bool MixerWindow::splitToTracks (const QString& file, mixer::Clip like)
         return false;
     }
     const auto channels = result.data->numChannels();
-    const auto room = mixer::maxTracks - engine.numTracks();
+    // At 8 tracks, a file with more channels than there is room for offers to go to 16.
+    if (const auto wanted = std::min (channels, mixer::maxTracks - engine.numTracks()); wanted > 0)
+        roomForTracks (wanted, tr ("Split Channels to Tracks"));
+    const auto room = engine.trackLimit() - engine.numTracks();
     if (room <= 0)
     {
-        QMessageBox::information (this, tr ("Split Channels to Tracks"), tr ("All %1 tracks are in use: remove some first.").arg (mixer::maxTracks));
+        QMessageBox::information (this, tr ("Split Channels to Tracks"), tr ("All %1 tracks are in use: remove some first.").arg (engine.trackLimit()));
         return false;
     }
     if (room < channels
@@ -8345,6 +8454,12 @@ void MixerWindow::select (int index)
     }
     if (! picked.count (index))
         picked = { index };
+    // Arm the Selected Track (owner, 2026-10-30, as Ableton's auto-arm): one that plays an
+    // instrument takes the arm, not while a take goes on and not from a hover; an audio track
+    // leaves it where it is, as arming it would open its input.
+    if (autoArm && ! keepArm && index < engine.numTracks() && engine.liveTrack() != index && ! engine.isRecording()
+        && engine.strip (index).mode.load() != (int) mixer::TrackMode::audio)
+        arm (index);
     // The clip shown belongs to the track that was selected; this one shows its devices.
     if (showingClip && clipView->shownTrack() != index)
     {
@@ -8601,9 +8716,10 @@ void MixerWindow::moveDuckKeys (const std::function<int (int)>& moved)
 bool MixerWindow::openTrack (int at)
 {
     const auto count = engine.numTracks();
-    if (count >= mixer::maxTracks)
+    if (! roomForTracks (1, tr ("Add Track")))
     {
-        status->setText (tr ("The mixer has 8 tracks at most."));
+        status->setText (engine.trackLimit() < mixer::maxTracks ? tr ("The mixer has 8 tracks at most; Strips > 16 Tracks makes room for more.")
+                                                                 : tr ("The mixer has 16 tracks at most."));
         return false;
     }
     at = std::clamp (at, 0, count);
@@ -8707,9 +8823,9 @@ std::shared_ptr<const MixerWindow::TrackCopy> MixerWindow::takeTrack (int index,
 bool MixerWindow::putTrack (const TrackCopy& copy, std::vector<Step>& stack)
 {
     const auto at = copy.index;
-    if (engine.numTracks() >= mixer::maxTracks)
+    if (! engine.roomForTracks())
     {
-        status->setText (tr ("Track %1, “%2”, can only come back when the mixer has fewer than 8 tracks.").arg (at + 1).arg (copy.name));
+        status->setText (tr ("Track %1, “%2”, can only come back when the mixer has fewer than %3 tracks.").arg (at + 1).arg (copy.name).arg (engine.trackLimit()));
         return false;
     }
     if (at > engine.numTracks() || ! openTrack (at))
@@ -9616,7 +9732,6 @@ void MixerWindow::stripsMenu (QPoint at)
     auto apply = [this]
     {
         appSettings().setValue (QStringLiteral ("mixer/stripSections"), stripSections);
-        appSettings().setValue (QStringLiteral ("mixer/wideStrips"), wideStrips);
         for (auto* strip : strips)
             strip->applyLayout();
         applyStripWidths();
@@ -9636,11 +9751,136 @@ void MixerWindow::stripsMenu (QPoint at)
     menu.addAction (tr ("&Show All"), this, [this, apply] { stripSections = allSections; apply(); });
     menu.addAction (tr ("Only &Faders"), this, [this, apply] { stripSections = 0; apply(); });
     menu.addSeparator();
-    auto* wide = menu.addAction (tr ("&Wide Strips"));
-    wide->setCheckable (true);
-    wide->setChecked (wideStrips);
-    connect (wide, &QAction::toggled, this, [this, apply] (bool on) { wideStrips = on; apply(); });
+    menu.addAction (tr ("&Wider Strips\t="), this, [this] { zoomStrips (1); })->setEnabled (stripZoom != zoomLanes.back());
+    menu.addAction (tr ("&Narrower Strips\t-"), this, [this] { zoomStrips (-1); })->setEnabled (stripZoom != zoomLanes.front());
+    auto* fit = menu.addAction (tr ("Strips to &Fit the Window"));
+    fit->setCheckable (true);
+    fit->setChecked (stripZoom == 0);
+    connect (fit, &QAction::triggered, this, [this] { setStripZoom (0); });
+    menu.addSeparator();
+    auto* sixteen = menu.addAction (tr ("1&6 Tracks"));
+    sixteen->setCheckable (true);
+    sixteen->setChecked (engine.trackLimit() > mixer::defaultTrackLimit);
+    sixteen->setToolTip (tr ("Room for 16 tracks in this project instead of 8; back to 8 once tracks 9 to 16 are gone"));
+    sixteen->setEnabled (engine.numTracks() <= mixer::defaultTrackLimit || engine.trackLimit() == mixer::defaultTrackLimit);
+    connect (sixteen, &QAction::toggled, this, [this] (bool on) { setSixteenTracks (on); });
+    auto* follow = menu.addAction (tr ("Focus Follows &Mouse"));
+    follow->setCheckable (true);
+    follow->setChecked (focusFollowsMouse);
+    connect (follow, &QAction::toggled, this, [this] (bool on)
+    {
+        focusFollowsMouse = on;
+        appSettings().setValue (QStringLiteral ("mixer/focusFollowsMouse"), on);
+    });
+    auto* arming = menu.addAction (tr ("&Arm the Selected Track"));
+    arming->setCheckable (true);
+    arming->setChecked (autoArm);
+    arming->setToolTip (tr ("Selecting a track that plays an instrument arms it for the MIDI keyboard and recording; pointing at one never does"));
+    connect (arming, &QAction::toggled, this, [this] (bool on)
+    {
+        autoArm = on;
+        appSettings().setValue (QStringLiteral ("mixer/autoArm"), on);
+    });
+    menu.setToolTipsVisible (true);
     menu.exec (at);
+}
+
+void MixerWindow::setSixteenTracks (bool on)
+{
+    if (! on && engine.numTracks() > mixer::defaultTrackLimit)
+    {
+        status->setText (tr ("Tracks 9 to %1 are in use: delete them first to go back to 8.").arg (engine.numTracks()));
+        return;
+    }
+    engine.setTrackLimit (on ? mixer::maxTracks : mixer::defaultTrackLimit);
+    status->setText (on ? tr ("Room for 16 tracks: Ctrl+T adds them.") : tr ("Back to 8 tracks."));
+    changed();
+}
+
+bool MixerWindow::roomForTracks (int needed, const QString& title)
+{
+    if (engine.roomForTracks (needed))
+        return true;
+    if (engine.trackLimit() >= mixer::maxTracks || engine.numTracks() + needed > mixer::maxTracks)
+        return false;
+    if (QMessageBox::question (this, title, tr ("The project has room for 8 tracks, and this needs %n more. Make room for 16?", "", needed))
+        != QMessageBox::Yes)
+        return false;
+    setSixteenTracks (true);
+    return true;
+}
+
+void MixerWindow::zoomStrips (int steps, int anchorX)
+{
+    if (steps == 0)
+        return;
+    const auto last = (int) zoomLanes.size() - 1;
+    const auto now = laneWidth();
+    int at = 0;
+    if (stripZoom > 0)
+    {
+        for (int k = 0; k <= last; ++k)
+            if (std::abs (zoomLanes[(size_t) k] - now) < std::abs (zoomLanes[(size_t) at] - now))
+                at = k;
+    }
+    else
+    {
+        // From fitting the window: the first step past the width it fits them at, that way.
+        at = steps > 0 ? last : 0;
+        for (int k = 0; k <= last; ++k)
+            if (steps > 0 ? zoomLanes[(size_t) k] > now : zoomLanes[(size_t) k] < now)
+                at = steps > 0 ? std::min (at, k) : k;
+        steps -= steps > 0 ? 1 : -1;
+    }
+    setStripZoom (zoomLanes[(size_t) std::clamp (at + steps, 0, last)], anchorX);
+}
+
+void MixerWindow::setStripZoom (int width, int anchorX)
+{
+    auto* bar = stripScroll->horizontalScrollBar();
+    const auto before = laneWidth();
+    const auto left = stripMargin + sceneColumn;   // where the first track's strip starts
+    // The strip under the mouse stays under it; from the keys, the selected one stays put.
+    if (anchorX < 0)
+        anchorX = selected < engine.numTracks() ? left + selected * before + before / 2 - bar->value() : 0;
+    const auto track = (double) (bar->value() + anchorX - left) / std::max (1, before);
+    stripZoom = width;
+    appSettings().setValue (QStringLiteral ("mixer/stripZoom"), stripZoom);
+    for (auto* strip : strips)
+        strip->applyLayout();
+    for (auto* strip : strips)
+        strip->refresh();
+    applyStripWidths();
+    const auto after = laneWidth();
+    status->setText (width == 0 ? tr ("Strips fit the window (= wider, - narrower).")
+                                : tr ("Strips %1 px wide (= wider, - narrower; Ctrl+wheel over the strips too).").arg (after));
+    // Once the strips are laid out at their new width, so the scroll bar has its new range.
+    QTimer::singleShot (0, this, [this, track, anchorX, left]
+    {
+        stripScroll->horizontalScrollBar()->setValue ((int) std::lround (left + track * laneWidth() - anchorX));
+        syncLauncherScroll();
+    });
+}
+
+void MixerWindow::syncLauncherScroll()
+{
+    if (syncingScroll || gridScroll == nullptr || stripScroll == nullptr)
+        return;
+    syncingScroll = true;
+    gridScroll->horizontalScrollBar()->setValue (stripScroll->horizontalScrollBar()->value());
+    syncingScroll = false;
+}
+
+void MixerWindow::hoverSelect (int track)
+{
+    if (! focusFollowsMouse || track == selected || track >= engine.numTracks() || QApplication::mouseButtons() != Qt::NoButton)
+        return;
+    // Not while something else has the keyboard: typing a name, or a dialog of the mixer's.
+    if (auto* f = QApplication::focusWidget(); f != nullptr && (qobject_cast<QLineEdit*> (f) != nullptr || qobject_cast<QAbstractSpinBox*> (f) != nullptr))
+        return;
+    keepArm = true;
+    select (track);
+    keepArm = false;
 }
 
 QString MixerWindow::applyEqCuts (int track, const std::vector<std::pair<double, double>>& cuts)
@@ -9983,8 +10223,49 @@ void MixerWindow::updateTitle()
 }
 
 //==============================================================================
+int MixerWindow::zoomKey (const QKeyEvent* e)
+{
+    const auto mods = e->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier);
+    if (mods != Qt::NoModifier && mods != Qt::ControlModifier)
+        return 0;   // Alt is the editor's vertical zoom, Ctrl+Alt the window's opacity
+    switch (e->key())
+    {
+        case Qt::Key_Equal: case Qt::Key_Plus:       return 1;
+        case Qt::Key_Minus: case Qt::Key_Underscore: return -1;
+        default:                                     return 0;
+    }
+}
+
+bool MixerWindow::event (QEvent* e)
+{
+    // Docked in the editor's place, its Zoom In and Out (=, -, Ctrl+= and Ctrl+-) would take
+    // these keys first; while the mixer has the keyboard they are the mixer's.
+    if (e->type() == QEvent::ShortcutOverride && zoomKey (static_cast<QKeyEvent*> (e)) != 0)
+    {
+        e->accept();
+        return true;
+    }
+    return QWidget::event (e);
+}
+
+void MixerWindow::zoomTimeline (int steps)
+{
+    if (lanes != nullptr && lanes->isVisible())
+        lanes->zoomBy (steps);
+}
+
 void MixerWindow::keyPressEvent (QKeyEvent* e)
 {
+    // = and - the strips' width (and the launcher's columns with them), Ctrl+= and Ctrl+-
+    // the timeline's zoom: one apart from the other (owner, 2026-10-30).
+    if (const auto zoom = zoomKey (e); zoom != 0)
+    {
+        if ((e->modifiers() & Qt::ControlModifier) != 0)
+            zoomTimeline (zoom);
+        else
+            zoomStrips (zoom);
+        return;
+    }
     if (launcherShown() && launcherKey (e))
         return;
     const auto key = e->key();
@@ -10247,7 +10528,8 @@ bool MixerWindow::newMix()
     undoStack.clear();
     redoStack.clear();
     lanes->clearSelection();
-    engine.setNumTracks (hooks.selectorSet ? mixer::maxTracks : 2);   // a track for each category of the set
+    engine.setTrackLimit (mixer::defaultTrackLimit);   // 16 only when asked for (Strips > 16 Tracks)
+    engine.setNumTracks (hooks.selectorSet ? mixer::defaultTrackLimit : 2);   // a track for each category of the set
     engine.setLiveTrack (0);
     masterFader->setValue (faderPosition (0.0));
     defaultReturns();
@@ -10485,7 +10767,8 @@ bool MixerWindow::writeMix (const QString& file, QString& error)
     // The phinyx keys are from before the rename to PHI; kept so every version reads every project.
     QJsonObject root {
         { "phinyxProject", 1 }, { "phinyxMix", 3 }, { "tempo", tempoBox->value() }, { "beatsPerBar", beatsBox->value() }, { "midiFollowsTempo", followTempoBox->isChecked() },
-        { "master", engine.masterDb.load() }, { "armed", engine.liveTrack() }, { "tracks", tracks }, { "launcher", launcher },
+        { "master", engine.masterDb.load() }, { "armed", engine.liveTrack() }, { "tracks", tracks }, { "trackLimit", engine.trackLimit() },
+        { "launcher", launcher },
         { "returns", returnsJson() }, { "preMaster", busJson() }, { "spatial", spatialJson() },
     };
     if (hooks.projectState)
@@ -10541,6 +10824,7 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
         followTempoBox->setChecked (root.value ("midiFollowsTempo").toBool());
     }
     const auto tracks = root.value ("tracks").toArray();
+    engine.setTrackLimit (std::max (root.value ("trackLimit").toInt (mixer::defaultTrackLimit), (int) tracks.size()));
     engine.setNumTracks (std::clamp ((int) tracks.size(), 1, mixer::maxTracks));
     for (int i = 0; i < std::min ((int) tracks.size(), mixer::maxTracks); ++i)
     {
@@ -10746,8 +11030,10 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
     path = file;
     modified = false;
     (void) keepPath;
+    keepArm = true;   // the track armed when it was saved stays so
     rebuildStrips();
     select (0);
+    keepArm = false;
     if (launcher.contains (QStringLiteral ("shown")))
         showLauncher (launcher.value ("shown").toBool());
     updateTitle();
@@ -10821,10 +11107,10 @@ void MixerWindow::bounce (int track, bool inPlace)
         status->setText (tr ("Track %1 has nothing on it to bounce.").arg (track + 1));
         return;
     }
-    if (! inPlace && engine.numTracks() >= mixer::maxTracks)
+    if (! inPlace && ! roomForTracks (1, tr ("Bounce to New Track")))
     {
         QMessageBox::information (this, tr ("Bounce to New Track"),
-                                  tr ("All 8 tracks are in use. Use Bounce in Place (B), or remove a track first."));
+                                  tr ("All %1 tracks are in use. Use Bounce in Place (B), or remove a track first.").arg (engine.numTracks()));
         return;
     }
     if (info[(size_t) track].busy > 0)
@@ -12074,7 +12360,7 @@ void MixerWindow::openScore (const midifile::Song& score, mixer::TuningChoice tu
 
     // On a track of its own when there is room, named for the score.
     auto track = selected < engine.numTracks() ? selected : 0;
-    if (engine.numTracks() < mixer::maxTracks)
+    if (engine.roomForTracks())
     {
         insertTrack (engine.numTracks());
         track = engine.numTracks() - 1;

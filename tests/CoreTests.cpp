@@ -6142,8 +6142,9 @@ namespace
 
         Settings reich;
         reich.style = Style::reich;
+        reich.freeTracks = 8 - 3;   // a mix of 8 tracks, three in use
         auto r = arrange ({ melody, pad, drums }, reich);
-        check (r.tracks.size() <= (size_t) maxTracks && r.tracks.size() >= 5, "minimalize: the parts and new voices within eight tracks");
+        check (r.tracks.size() <= 8 && r.tracks.size() >= 5, "minimalize: the parts and new voices within eight tracks");
         check (r.tracks[0].process == Process::hold && r.tracks[3].process == Process::phase && r.tracks[3].added,
                "minimalize: Reich's phasing, the pattern held and a copy that moves");
         // The phase copy goes round all twelve steps back to unison: thirteen stages of four.

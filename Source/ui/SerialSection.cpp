@@ -97,9 +97,9 @@ bool MixerWindow::addSerial (const std::vector<midifile::SongPtr>& voices, const
     const auto first = selected;
     const auto existing = std::min ((int) voices.size(), engine.numTracks() - first);
     const auto needed = (int) voices.size() - existing;
-    if (engine.numTracks() + needed > mixer::maxTracks)
+    if (! roomForTracks (needed, tr ("Serial")))
     {
-        error = tr ("The voices after track %1 go on new tracks, and the mixer has room for %n more.", "", mixer::maxTracks - engine.numTracks())
+        error = tr ("The voices after track %1 go on new tracks, and the mixer has room for %n more.", "", engine.trackLimit() - engine.numTracks())
                     .arg (engine.numTracks());
         return false;
     }
