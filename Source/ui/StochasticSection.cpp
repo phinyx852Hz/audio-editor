@@ -212,7 +212,7 @@ void MixerWindow::stochasticizeShownMidi()
     auto* whereBox = new QComboBox (&dialog);
     whereBox->addItem (tr ("a new track, beside this clip"));
     whereBox->addItem (tr ("in place of this clip (ctrl+z puts it back)"));
-    if (engine.numTracks() >= mixer::maxTracks)
+    if (! engine.roomForTracks() && engine.trackLimit() >= mixer::maxTracks)
     {
         whereBox->setCurrentIndex (1);
         whereBox->setItemData (0, 0, Qt::UserRole - 1);   // disabled: the mixer is full
@@ -417,9 +417,9 @@ void MixerWindow::stochasticizeShownMidi()
                        tr ("stochasticized: %1").arg (what));
         return;
     }
-    if (engine.numTracks() >= mixer::maxTracks)
+    if (! roomForTracks (1, title))
     {
-        QMessageBox::information (this, title, tr ("The new line goes on a new track, and the mixer has 8 tracks already."));
+        QMessageBox::information (this, title, tr ("The new line goes on a new track, and the mixer has %1 tracks already.").arg (engine.numTracks()));
         return;
     }
     const auto written = stochastic::toSong (*song, result.notes, channel);

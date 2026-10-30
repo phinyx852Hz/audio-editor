@@ -28,14 +28,17 @@
 
 namespace mixer
 {
-    constexpr int maxTracks = 8;
-    constexpr int masterIndex = maxTracks;   // meters: 0..7 the tracks, 8 the master
+    // Room for 16 tracks (owner, 2026-10-30); a mix has 8 at most unless it is set to 16
+    // (Engine::setTrackLimit), as the Selector sets and Φ's scenes are built around 8 parts.
+    constexpr int maxTracks = 16;
+    constexpr int defaultTrackLimit = 8;
+    constexpr int masterIndex = maxTracks;   // meters: 0..15 the tracks, 16 the master
     constexpr int numReturns = 2;            // A (a reverb) and B (a delay), fed by each track's sends
-    constexpr int returnIndex = masterIndex + 1;   // meters: 9 return A, 10 return B
+    constexpr int returnIndex = masterIndex + 1;   // meters: 17 return A, 18 return B
     // The Pre-Master (owner, 2026-10-28): a bus the tracks can go to instead of the master,
     // with its own inserts, sends, width, pan, fader and mute, then into the master.
-    constexpr int busIndex = returnIndex + numReturns;   // meters: 11 the Pre-Master
-    constexpr int busTrack = maxTracks;                  // inserts() and setInserts(): 8 the Pre-Master's
+    constexpr int busIndex = returnIndex + numReturns;   // meters: 19 the Pre-Master
+    constexpr int busTrack = maxTracks;                  // inserts() and setInserts(): 16 the Pre-Master's
     constexpr int maxBusInserts = 4;
 
     // A source's 3D panner, in Spatial mode (Spatial.h): its place in the scene.
@@ -303,7 +306,11 @@ namespace mixer
         double sampleRate() const { return rate.load(); }
 
         int numTracks() const { return tracks.load(); }
-        void setNumTracks (int);   // 1..8
+        void setNumTracks (int);   // 1..maxTracks
+        // How many tracks the mix may have: 8 (the default) or 16. Adding tracks stops there.
+        int trackLimit() const { return allowedTracks.load(); }
+        void setTrackLimit (int n) { allowedTracks = n > defaultTrackLimit ? maxTracks : defaultTrackLimit; }
+        bool roomForTracks (int n = 1) const { return numTracks() + n <= trackLimit(); }
 
         // A track's clips (kept in order of their starts) and its instrument; null
         // clears it. Safe while playing: notes the old clips held are let go.
@@ -611,6 +618,7 @@ namespace mixer
         mutable std::mutex lock;   // tracks: held by render and by changes
         std::atomic<double> rate { 48000.0 };
         std::atomic<int> tracks { 2 };
+        std::atomic<int> allowedTracks { defaultTrackLimit };
         std::array<Track, maxTracks> lanes;
         std::array<Strip, maxTracks> strips;
         std::array<MeterState, maxTracks + 1 + numReturns + 1> meters {};

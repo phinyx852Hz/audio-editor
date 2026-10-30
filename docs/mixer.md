@@ -27,8 +27,8 @@ clip, an instrument is the instrument, and a live input will record into new cli
 
 ## What it is
 
-A small mixer in its own window: **up to 8 tracks and a master out (track 9)**. A new mix
-starts with 2 tracks; Ctrl+T adds one (up to 8) and Ctrl+Shift+T removes the selected one. It mixes bus stems
+A small mixer in its own window: **up to 8 tracks (16 with Strips > 16 Tracks) and a master out**. A new mix
+starts with 2 tracks; Ctrl+T adds one (up to 8, or 16) and Ctrl+Shift+T removes the selected one. It mixes bus stems
 from another DAW, or works as an instrument for composing, producing and performing. The
 mix goes straight into the PHI editor, where the Master Section does the mastering.
 
@@ -202,7 +202,9 @@ More templates can be added in the same way; each is a small file.
 | Tab | Switch between the clip launcher and the tracks across time (Ableton) |
 | Ctrl+Z, Ctrl+Shift+Z | Undo, redo clip edits |
 | B | Bounce in place: the track's sound (MIDI through its instrument, and its audio) becomes its audio |
-| Shift+B | Bounce to a new track and mute this one (not when all 8 tracks are in use) |
+| Shift+B | Bounce to a new track and mute this one (not when all the tracks are in use) |
+| = and - | Zoom the strips and the launcher's columns wider or narrower (Ctrl+wheel over them too) |
+| Ctrl+= and Ctrl+- | Zoom the tracks across time |
 
 Every control has a screen-reader name and announces its value.
 
@@ -690,3 +692,25 @@ Patchbay (2026-10-22, docs/patchbay.md): while the patchbay plays (it always doe
 engine hands each track's sound to it instead of summing it, takes what is patched into each
 track before trim, pan and fader, and plays the tracks in the patchbay's order. The master fader
 is the patchbay's Mix Bus. Mix Down still renders the mixer's own sum.
+
+## 16 tracks and strip zoom (2026-10-30)
+
+- Owner: "offer the possibility to expand to 16 tracks", keeping 8 as the default because the
+  Selector sets, the Φ button's scenes and the Compose generators are built around 8 parts.
+  `mixer::maxTracks` is 16 (the engine's room); `Engine::trackLimit()` is 8 or 16, saved in the
+  project as `trackLimit`. Strips > 16 Tracks switches it; back to 8 only once tracks 9 to 16 are
+  gone. Add Track, Bounce to New Track and the Compose functions (Counterpoint, Fugue, Serial,
+  Stochastic, Minimalize) ask to go to 16 when 8 leave too little room
+  (`MixerWindow::roomForTracks`). The patchbay has 16 track nodes; links saved before then get
+  tracks 9 to 16 to the Mix Bus, as by default (`PatchBay::addNewTrackLinks`).
+- Strip zoom, as Cubase's MixConsole: `=` and `-`, or Ctrl+wheel over the strips or the launcher,
+  step the strips' width through 44, 60, 84, 104, 128, 150, 180 and 240 px (`zoomLanes`); 0, the
+  default, fits them to the window as before. Below 116 px a strip keeps only the pan, mute, solo,
+  PM, the fader (without its scale) and the name; below 80 px the fader, a thin meter, mute, solo
+  and the number. The launcher's columns are the same width (`laneWidth`) and the two scroll
+  sideways together. The strip under the mouse (or, from the keys, the selected one) stays where
+  it is. Ctrl+= and Ctrl+- zoom the tracks across time instead, apart from the strips.
+- Strips > Focus Follows Mouse (off at first): pointing at a strip selects its track, so the keys
+  and the Device Chain act on it without a click. Strips > Arm the Selected Track (on at first):
+  selecting a track that plays an instrument arms it, as Ableton's auto-arm; an audio-only track
+  leaves the arm where it is, a hover never arms, nor does anything while a take records.

@@ -37,7 +37,7 @@ namespace patchbay
     {
         constexpr int editor = 0, sampler = 1, slicer = 2;
         constexpr int synth = 3;                                // synth 1 .. maxSynths
-        constexpr int track = synth + maxSynths;                // mixer track 1 .. 8
+        constexpr int track = synth + maxSynths;                // mixer track 1 .. 16
         constexpr int mixBus = track + mixer::maxTracks;
         constexpr int fxBus = mixBus + 1;                       // FX bus 1 .. maxBuses
         constexpr int mainOut = fxBus + maxBuses;
@@ -81,6 +81,9 @@ namespace patchbay
         void setLinks (const std::vector<Link>&);      // the ones that make a loop are left out
         static std::vector<Link> defaultLinks();       // every source to where it is heard without a patchbay
         void resetLinks() { setLinks (defaultLinks()); }
+        // Links saved when there were only `saved` tracks: the tracks after those go to the
+        // Mix Bus, as they would by default.
+        static void addNewTrackLinks (std::vector<Link>&, int saved);
         bool isDefault() const;
         std::vector<int> destinationsOf (int from) const;
         std::vector<int> sourcesOf (int to) const;
