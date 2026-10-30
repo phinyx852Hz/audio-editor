@@ -3806,9 +3806,23 @@ void MainWindow::closeEvent (QCloseEvent* e)
         return;
     }
 
+    // The mixer's project is saved or let go now: PHI starts on a blank project next time,
+    // and last.phi is left only by a run that did not quit cleanly (crash recovery).
+    if (mixerWin != nullptr && mixerWin->hasUnsavedChanges())
+    {
+        showMixer();
+        if (! mixerWin->askToSave (tr ("Quit"), tr ("Save the changes to %1 before quitting?").arg (mixerWin->mixName())))
+        {
+            e->ignore();
+            return;
+        }
+    }
+
     engine.stop();
     if (mixerWin != nullptr)
-        mixerWin->autosave();
+        mixerWin->dropAutosave();
+    else
+        MixerWindow::removeAutosave();
     savePatchBay();
     commands.save();
     saveLayout();

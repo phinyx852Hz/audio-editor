@@ -9570,16 +9570,19 @@ bool MixerWindow::isProjectFile (const QString& file)
     return suffix.compare (projectSuffix, Qt::CaseInsensitive) == 0 || suffix.compare (QLatin1String ("phinyxmix"), Qt::CaseInsensitive) == 0;
 }
 
+bool MixerWindow::askToSave (const QString& title, const QString& question)
+{
+    if (! modified)
+        return true;
+    const auto answer = QMessageBox::question (this, title, question, QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+                                               QMessageBox::Save);
+    return answer == QMessageBox::Discard || (answer == QMessageBox::Save && saveMix (false));
+}
+
 bool MixerWindow::newMix()
 {
-    // Unsaved changes, named or not, are offered a save first (Cancel keeps the project).
-    if (modified)
-    {
-        const auto answer = QMessageBox::question (this, tr ("New Project"), tr ("Save the changes to %1 before starting a new project?").arg (mixName()),
-                                                   QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel, QMessageBox::Save);
-        if (answer == QMessageBox::Cancel || (answer == QMessageBox::Save && ! saveMix (false)))
-            return false;
-    }
+    if (! askToSave (tr ("New Project"), tr ("Save the changes to %1 before starting a new project?").arg (mixName())))
+        return false;
     engine.stop();
     engine.setPosition (0);
     restoring = true;
@@ -10153,6 +10156,8 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
 
 void MixerWindow::autosave()
 {
+    if (quitting)
+        return;
     const auto file = autosavePath();
     QDir().mkpath (QFileInfo (file).absolutePath());
     QString error;
@@ -10178,6 +10183,26 @@ void MixerWindow::restoreAutosave()
         modified = appSettings().value (QStringLiteral ("mixer/lastModified"), false).toBool();
         updateTitle();
     }
+}
+
+void MixerWindow::dropAutosave()
+{
+    quitting = true;
+    removeAutosave();
+}
+
+QString MixerWindow::autosaveName()
+{
+    const auto lastPath = appSettings().value (QStringLiteral ("mixer/lastPath")).toString();
+    return lastPath.isEmpty() ? QString() : QFileInfo (lastPath).completeBaseName();
+}
+
+void MixerWindow::removeAutosave()
+{
+    QFile::remove (autosavePath());
+    QFile::remove (configFile ("last.phinyxmix"));
+    appSettings().remove (QStringLiteral ("mixer/lastPath"));
+    appSettings().remove (QStringLiteral ("mixer/lastModified"));
 }
 
 //==============================================================================
