@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**115 pull requests:** 109 merged, 6 open.
+**116 pull requests:** 109 merged, 7 open.
 
 ## Contents
 
@@ -51,6 +51,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#106](https://github.com/phinyx852Hz/audio-editor/pull/106) | Simplest phase 2: envelopes, LFOs and compact Edit tabs | open |  | `Source/sampler/SamplerEngine.cpp`<br>`Source/ui/SamplerWindow.cpp`<br>`tests/CoreTests.cpp` |
 | [#110](https://github.com/phinyx852Hz/audio-editor/pull/110) | MIDI editor in the main window: Alt+arrows/F6 reach it, Home/End, Ctrl+W closes it | merged |  | `Source/ui/MidiEditor.cpp`<br>`Source/ui/PanelNavigation.cpp`<br>`docs/main-midi-editor.md` |
 | [#111](https://github.com/phinyx852Hz/audio-editor/pull/111) | MIDI editor and score: a transport bar of their own | merged |  | `Source/ui/MidiEditor.cpp`<br>`Source/ui/MidiEditor.h`<br>`docs/midi-editor.md` |
+| [#116](https://github.com/phinyx852Hz/audio-editor/pull/116) | MIDI editor and score: transport tied to the main one | open |  | `Source/ui/MidiEditor.cpp`<br>`Source/ui/MixerWindow.cpp`<br>`Source/ui/MidiEditor.h` |
 
 ### Analysis and meters
 
@@ -334,3 +335,4 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#113](https://github.com/phinyx852Hz/audio-editor/pull/113) | Fix the crash on quit with the mixer open | The SIGSEGV on quit (2026-10-30 crash report) happened like this. ~MainWindow deleted the docked mixer. *(auto)* | merged | 2026-10-30 | Mixer and clip launcher |
 | [#114](https://github.com/phinyx852Hz/audio-editor/pull/114) | Build an Arch package and an AppImage in CI | Stage 1 of the installers: ready-made Linux downloads that put PHI in the app launcher with the Φ icon (the .desktop file, icon and MIME type were already in... *(auto)* | open | 2026-10-30 | Not yet sorted |
 | [#115](https://github.com/phinyx852Hz/audio-editor/pull/115) | Manual: Analysing a Plugin; Forensic Φ finds wider golden ratios | New chapter, "Analysing a Plugin" (docs/manual/chapters/plugin-analyzer.md), in the Mastering part after Effects. *(auto)* | open | 2026-10-30 | Φ effects and sounds |
+| [#116](https://github.com/phinyx852Hz/audio-editor/pull/116) | MIDI editor and score: transport tied to the main one | How it behaves *(auto)* | open | 2026-10-30 | Editing and warping |
