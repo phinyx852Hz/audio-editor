@@ -112,7 +112,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#83](https://github.com/phinyx852Hz/audio-editor/pull/83) | Mode: add a harmony submenu | merged |  | `Source/mixer/Harmonies.cpp`<br>`docs/harmony.md`<br>`Source/ui/HarmonySection.cpp` |
 | [#90](https://github.com/phinyx852Hz/audio-editor/pull/90) | PHI rāga: bahādur kauns, drafted from a recording | merged |  | `Source/core/PhiRagas.cpp`<br>`docs/mixer.md`<br>`docs/raga.md` |
 | [#91](https://github.com/phinyx852Hz/audio-editor/pull/91) | Research: the theory of mode behind melody, rhythm and harmony | merged | Modes › Mode in PHI: melody, rhythm and harmony | `share/research/modes-0-modality.md`<br>`Source/ui/ResearchSection.cpp`<br>`CMakeLists.txt` |
-| [#92](https://github.com/phinyx852Hz/audio-editor/pull/92) | Mode ▸ harmony: add modal harmony | open |  | `share/research/modes-9-harmony.md`<br>`Source/mixer/Harmonies.cpp`<br>`docs/mixer.md` |
+| [#92](https://github.com/phinyx852Hz/audio-editor/pull/92) | Mode: modal harmony, and harmonize in the mode | open |  | `Source/mixer/ModalHarmony.cpp`<br>`Source/ui/HarmonySection.cpp`<br>`Source/mixer/ModalHarmony.h` |
 
 ### Φ effects and sounds
 
@@ -287,4 +287,4 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#89](https://github.com/phinyx852Hz/audio-editor/pull/89) | Φ Modulation (PhiFlow, PhiSpace, PhiGrain, PhiMatrix) and a Cubase-style Modulators panel | This PR has three parts: *(auto)* | open | 2026-10-29 | Φ effects and sounds |
 | [#90](https://github.com/phinyx852Hz/audio-editor/pull/90) | PHI rāga: bahādur kauns, drafted from a recording | Adds a draft sheet for bahādur kauns, the last raga from the owner's teacher's list. *(auto)* | merged | 2026-10-29 | Modes, tunings and composition |
 | [#91](https://github.com/phinyx852Hz/audio-editor/pull/91) | Research: the theory of mode behind melody, rhythm and harmony | Adds the owner's generalized theory of musical modality to the Research menu. *(auto)* | merged | 2026-10-29 | Modes, tunings and composition |
-| [#92](https://github.com/phinyx852Hz/audio-editor/pull/92) | Mode ▸ harmony: add modal harmony | Adds modal harmony to Mode ▸ harmony, under Western art music ▸ twentieth century. *(auto)* | open | 2026-10-29 | Modes, tunings and composition |
+| [#92](https://github.com/phinyx852Hz/audio-editor/pull/92) | Mode: modal harmony, and harmonize in the mode | This PR makes two changes. *(auto)* | open | 2026-10-29 | Modes, tunings and composition |
