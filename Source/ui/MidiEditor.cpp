@@ -2,6 +2,7 @@
 #include "MidiEditor.h"
 #include "MidiStaff.h"
 #include "ModeAtlas.h"
+#include "TransportBar.h"
 
 #include "../core/Scala.h"
 #include "../engine/AudioCapture.h"
@@ -42,6 +43,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <map>
 
 using namespace noteedit;
@@ -1312,6 +1314,50 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     layout->setContentsMargins (8, 8, 8, 8);
     layout->setSpacing (6);
 
+    // The transport, over the roll and the staff alike: its own clock, not the main window's.
+    using S = TransportButton::Symbol;
+    auto* transport = new QHBoxLayout;
+    transport->setSpacing (2);
+    auto* startButton = new TransportButton (S::start, tr ("To the start (Home)"), this);
+    playButton = new TransportButton (S::play, tr ("Play the notes as they will be saved from the playhead, or pause where it is (Space). "
+                                                   "Click the ruler to move the playhead"), this);
+    auto* stopButton = new TransportButton (S::stop, tr ("Stop, back to where Play was pressed; pressed again, to the start"), this);
+    auto* endButton = new TransportButton (S::end, tr ("To the end (End)"), this);
+    recordButton = new TransportButton (S::record, tr ("Record: plays from the playhead and puts in what the MIDI keyboard plays, "
+                                                       "a take one undo; again to stop recording"), this);
+    recordButton->setCheckable (true);
+    loopButton = new TransportButton (S::loop, tr ("Loop the picked notes' span, or the whole clip when none is picked"), this);
+    loopButton->setCheckable (true);
+    for (auto* b : { startButton, playButton, stopButton, endButton, recordButton, loopButton })
+        transport->addWidget (b);
+    transport->addSpacing (10);
+    timeLabel = new QLabel (this);
+    timeLabel->setToolTip (tr ("The playhead: minutes and seconds, and bar.beat"));
+    timeLabel->setMinimumWidth (timeLabel->fontMetrics().horizontalAdvance (QStringLiteral ("00:00.000   bar 000.0")));
+    {
+        auto f = timeLabel->font();
+        f.setStyleHint (QFont::Monospace);
+        f.setFamily (QStringLiteral ("monospace"));
+        timeLabel->setFont (f);
+    }
+    transport->addWidget (timeLabel);
+    abButton = new QToolButton (this);
+    abButton->setText (tr ("Original"));
+    abButton->setCheckable (true);
+    abButton->setToolTip (tr ("Hear the clip as it was, to compare (switches while it plays)"));
+    transport->addWidget (abButton);
+    transport->addStretch (1);
+    layout->addLayout (transport);
+    connect (startButton, &QToolButton::clicked, this, [this] { goTo (0); });
+    connect (endButton, &QToolButton::clicked, this, [this] { goTo (seq.end()); });
+    connect (stopButton, &QToolButton::clicked, this, &MidiEditor::stopToStart);
+    connect (recordButton, &QToolButton::toggled, this, &MidiEditor::setRecording);
+    connect (loopButton, &QToolButton::toggled, this, [this] (bool on)
+    {
+        if (on && playTimer->isActive())
+            loopRange (loopFrom, loopTo);
+    });
+
     // The tools, the grid and the functions.
     auto* tools = new QHBoxLayout;
     auto* group = new QButtonGroup (this);
@@ -1383,15 +1429,6 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     redoButton->setToolTip (tr ("Ctrl+Shift+Z"));
     tools->addWidget (undoButton);
     tools->addWidget (redoButton);
-    playButton = new QToolButton (this);
-    playButton->setText (tr ("Play"));
-    playButton->setToolTip (tr ("The notes as they will be saved, from the playhead (click the ruler to move it). Space"));
-    abButton = new QToolButton (this);
-    abButton->setText (tr ("Original"));
-    abButton->setCheckable (true);
-    abButton->setToolTip (tr ("Hear the clip as it was, to compare (switches while it plays)"));
-    tools->addWidget (playButton);
-    tools->addWidget (abButton);
     layout->addLayout (tools);
 
     // The pitch system.
@@ -1755,6 +1792,7 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
         else if (host.staff)
             showView (2);
     });
+    updateTransport();
 }
 
 void MidiEditor::showView (int i)
@@ -1949,7 +1987,11 @@ void MidiEditor::fillNotationMenu (QMenu* menu)
     });
 }
 
-MidiEditor::~MidiEditor() { stopPlay(); }
+MidiEditor::~MidiEditor()
+{
+    recording = false;
+    stopPlay();
+}
 
 void MidiEditor::buildSystems()
 {
@@ -2253,6 +2295,7 @@ void MidiEditor::viewsUpdate()
         staff->update();
     if (wheel->isVisible())
         wheel->update();
+    updateTransport();
 }
 
 int64_t MidiEditor::nowTick() const
@@ -2739,6 +2782,27 @@ void MidiEditor::stepPitch (double pitch, bool chord)
 void MidiEditor::midiIn (uint8_t status, uint8_t data1, uint8_t data2)
 {
     const auto kind = status & 0xF0;
+    if (recording && playTimer->isActive())
+    {
+        // A take: each key from where it went down to where it came up, at the playhead.
+        const auto at = std::max<int64_t> (0, playheadTick);
+        if (kind == 0x90 && data2 > 0)
+            held[data1] = { at, data2, pitchForKey (data1) };
+        else if ((kind == 0x80 || kind == 0x90) && held.count (data1) != 0)
+        {
+            const auto h = held[data1];
+            held.erase (data1);
+            Note n;
+            n.start = h.start;
+            n.length = std::max<int64_t> (1, at - h.start);
+            n.pitch = h.pitch;
+            n.velocity = h.velocity;
+            seq.notes.push_back (n);
+            seq.sort();
+            changed();
+        }
+        return;
+    }
     if (kind == 0x90 && data2 > 0)
     {
         if (stepBox->isChecked())
@@ -2919,22 +2983,52 @@ void MidiEditor::audition (double pitch, int velocity)
 void MidiEditor::togglePlay()
 {
     if (playTimer->isActive())
-        stopPlay();
+        stopPlay();   // paused: the playhead stays where it is
     else
         startPlay (abButton->isChecked());
+}
+
+bool MidiEditor::loopRange (int64_t& from, int64_t& to) const
+{
+    from = 0;
+    to = seq.end();
+    if (seq.anySelected())
+    {
+        from = std::numeric_limits<int64_t>::max();
+        to = 0;
+        for (const auto& n : seq.notes)
+            if (n.selected)
+            {
+                from = std::min (from, n.start);
+                to = std::max (to, n.end());
+            }
+    }
+    return to > from;
 }
 
 void MidiEditor::startPlay (bool originalVersion)
 {
     if (! host.play)
         return;
+    const bool going = playTimer->isActive() && playSong != nullptr;
+    if (! going)
+    {
+        // A loop starts inside its span: from the playhead when it is there, else the span's start.
+        if (loopButton->isChecked() && loopRange (loopFrom, loopTo)
+            && (playheadTick < loopFrom || playheadTick >= loopTo))
+            playheadTick = loopFrom;
+        pressedAt = std::max<int64_t> (0, playheadTick);
+    }
     // Going on from where it is (the A/B switch), else from the playhead.
     double from = 0.0;
-    if (playTimer->isActive() && playSong != nullptr)
+    if (going)
         from = playFrom + (QDateTime::currentMSecsSinceEpoch() - playStarted) / 1000.0;
     else if (playheadTick > 0)
         from = (originalVersion ? original : *encode (seq, encodeOptions()).song).seconds (playheadTick, host.bpm);
+    const bool keepRecording = recording;
+    recording = false;   // not closed by the restart
     stopPlay();
+    recording = keepRecording;
     playingOriginal = originalVersion;
     playSong = originalVersion ? std::make_shared<midifile::Song> (original) : encode (seq, encodeOptions()).song;
     playing.clear();
@@ -2950,8 +3044,8 @@ void MidiEditor::startPlay (bool originalVersion)
     playAt = 0;
     playFrom = from;
     playStarted = QDateTime::currentMSecsSinceEpoch();
-    playButton->setText (tr ("Stop"));
     playTimer->start();
+    updateTransport();
 }
 
 void MidiEditor::stopPlay()
@@ -2959,6 +3053,8 @@ void MidiEditor::stopPlay()
     if (playTimer == nullptr || ! playTimer->isActive())
         return;
     playTimer->stop();
+    if (recording)
+        closeHeld();
     if (host.play)
         for (uint8_t c = 0; c < 16; ++c)
         {
@@ -2969,9 +3065,20 @@ void MidiEditor::stopPlay()
     if (host.play)
         for (auto [cc, v] : { std::pair { 101, 0 }, { 100, 6 }, { 6, 0 }, { 101, 127 }, { 100, 127 } })
             host.play (0xB0, (uint8_t) cc, (uint8_t) v);
-    playButton->setText (tr ("Play"));
     roll->refresh();
     viewsUpdate();
+    updateTransport();
+}
+
+void MidiEditor::stopToStart()
+{
+    const bool wasPlaying = playTimer->isActive();
+    recordButton->setChecked (false);
+    stopPlay();
+    playheadTick = wasPlaying ? pressedAt : 0;
+    roll->refresh();
+    viewsUpdate();
+    updateTransport();
 }
 
 void MidiEditor::playTick()
@@ -2986,6 +3093,8 @@ void MidiEditor::playTick()
     if (playSong != nullptr)
     {
         int64_t lo = 0, hi = std::max<int64_t> (1, playSong->lastTick);
+        while (recording && hi < (int64_t (1) << 40) && playSong->seconds (hi, host.bpm) < now)
+            hi *= 2;   // a take goes on past the clip's end
         while (lo < hi)
         {
             const auto mid = (lo + hi) / 2;
@@ -2996,7 +3105,25 @@ void MidiEditor::playTick()
         }
         playheadTick = lo;
         viewsUpdate();
-        if (playAt >= playing.size() && now > playSong->lengthSeconds (host.bpm) + 0.3)
+        if (loopButton->isChecked() && loopTo > loopFrom && playheadTick >= loopTo)
+        {
+            // Round again: the notes held in a take end at the loop's end and go on as new ones.
+            auto still = held;
+            if (recording)
+            {
+                playheadTick = loopTo;
+                closeHeld();
+            }
+            stopPlay();
+            playheadTick = loopFrom;
+            startPlay (playingOriginal);
+            pressedAt = loopFrom;
+            if (recording)
+                for (auto& [key, h] : still)
+                    held[key] = { loopFrom, h.velocity, h.pitch };
+            return;
+        }
+        if (playAt >= playing.size() && now > playSong->lengthSeconds (host.bpm) + 0.3 && ! recording)
         {
             playheadTick = 0;
             stopPlay();
@@ -3004,6 +3131,85 @@ void MidiEditor::playTick()
         }
     }
     roll->viewport()->update();
+}
+
+void MidiEditor::updateTransport()
+{
+    if (timeLabel == nullptr || encodingBox == nullptr)
+        return;
+    const bool going = playTimer->isActive();
+    playButton->setSymbol (going ? TransportButton::Symbol::pause : TransportButton::Symbol::play);
+    const auto tick = std::max<int64_t> (0, playheadTick);
+    double seconds = 0.0;
+    if (going)
+        seconds = playFrom + (QDateTime::currentMSecsSinceEpoch() - playStarted) / 1000.0;
+    else
+    {
+        // On the clip's tempo map, as the song it plays is timed.
+        midifile::Song timing;
+        timing.ticksPerQuarter = seq.ticksPerQuarter;
+        timing.tempos = seq.tempos;
+        seconds = timing.seconds (tick, host.bpm);
+    }
+    const auto ms = (int64_t) std::llround (std::max (0.0, seconds) * 1000.0);
+    const auto clock = QStringLiteral ("%1:%2.%3").arg (ms / 60000, 2, 10, QLatin1Char ('0'))
+                                                   .arg (ms / 1000 % 60, 2, 10, QLatin1Char ('0'))
+                                                   .arg (ms % 1000, 3, 10, QLatin1Char ('0'));
+    const auto quarters = tick / std::max (1, seq.ticksPerQuarter);
+    // Bars of 4/4, unless the clip counts in cycles of its own: then its beats.
+    const auto where = seq.cycles.empty() ? tr ("bar %1.%2").arg (quarters / 4 + 1).arg (quarters % 4 + 1)
+                                          : tr ("beat %1").arg (quarters + 1);
+    timeLabel->setText (clock + QStringLiteral ("   ") + where);
+}
+
+void MidiEditor::setRecording (bool on)
+{
+    if (on == recording)
+        return;
+    if (on)
+    {
+        // The take is one undo: the notes as they were before it.
+        undoList.push_back (seq);
+        redoList.clear();
+        if (undoList.size() > 200)
+            undoList.erase (undoList.begin());
+        held.clear();
+        recording = true;
+        if (! playTimer->isActive())
+            startPlay (false);
+        if (! playTimer->isActive())   // nothing to play it on
+        {
+            recording = false;
+            undoList.pop_back();
+            const QSignalBlocker block (recordButton);
+            recordButton->setChecked (false);
+        }
+        return;
+    }
+    closeHeld();
+    recording = false;
+    // Nothing played: no empty step on the undo list.
+    if (! undoList.empty() && undoList.back().notes.size() == seq.notes.size())
+        undoList.pop_back();
+}
+
+void MidiEditor::closeHeld()
+{
+    if (held.empty())
+        return;
+    const auto at = std::max<int64_t> (0, playheadTick);
+    for (const auto& [key, h] : held)
+    {
+        Note n;
+        n.start = h.start;
+        n.length = std::max<int64_t> (1, at - h.start);
+        n.pitch = h.pitch;
+        n.velocity = h.velocity;
+        seq.notes.push_back (n);
+    }
+    held.clear();
+    seq.sort();
+    changed();
 }
 
 void MidiEditor::done (int r)

@@ -142,6 +142,24 @@ system is found from its notes (the Krumhansl-Kessler key profiles) or picked by
 nearest pitch** moves each note to the closest degree instead. The notes it had stay behind as
 ghosts (dashed), and **Original** plays the clip as it was, switching while it plays, to compare.
 
+## The transport
+
+A transport bar runs across the top of the editor, over the piano roll and the staff notation
+alike, so the clip or score plays on its own (owner, 2026-10-30: "another transport control for
+the MIDI Editor and Staff Notation Score"). It has its own clock and plays through the editor's
+instrument (the clip's track in the mixer, the panel's synth in the main window); the main window's
+and the mixer's transports are left where they are.
+
+- **To the start** and **To the end** (Home, End) move the playhead there and scroll to it.
+- **Play** from the playhead, or **Pause** where it is (Space). Click the ruler to move the playhead.
+- **Stop** goes back to where Play was pressed; pressed again, to the start.
+- **Record** plays from the playhead and puts in what the MIDI keyboard plays, each key from where
+  it went down to where it came up, in the system shown. A take is one undo; it goes on past the
+  clip's end, and with Loop on each round adds to the same take.
+- **Loop** repeats the picked notes' span, or the whole clip when none is picked.
+- The time, in minutes and seconds and in bar.beat (bars of 4/4; a clip with cycles of its own
+  counts its beats), then **Original** to hear the clip as it was.
+
 ## Editing, as in Cubase's Key Editor
 
 - Tools (1 to 6): **Pick** (click, Shift-click, drag a box; drag a note to move it, its right
@@ -154,7 +172,7 @@ ghosts (dashed), and **Original** plays the clip as it was, switching while it p
   up or down a degree or a period; snap; restyle; select all or none; delete.
 - Keys: Up and Down move the picked notes a degree of the system (Shift a period, Alt a cent), Left
   and Right a grid line (Alt a tick), Delete deletes, Ctrl+A picks all, Ctrl+Z and Ctrl+Shift+Z
-  undo and redo, Space plays from the playhead (click the ruler to move it).
+  undo and redo, Space plays or pauses (see the transport above).
 - The info line shows the picked notes' place (bar.beat.tick), name, degree, cents off it and
   frequency; their length, cents off the degree and velocity can be typed.
 - The lane under the notes: velocity (draw a line over the notes), or modulation, volume, pan,
