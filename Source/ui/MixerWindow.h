@@ -190,6 +190,8 @@ public:
     // A file chosen in the Find panel's Selector: into the first empty slot of the track with
     // that name (else that colour, else the selected track), and the mixer follows it there.
     void sendToLauncher (const QString& path, const QString& trackName, const QColor& colour);
+    // The MIDI editor on the MIDI clip picked (Mixer › Edit MIDI Notes); false when no MIDI clip is picked.
+    bool editNotes();
     // The Φ random selector's deal: a file and an instrument (a plugin id, loaded on the
     // track first) for each Selector colour (empty: that colour has none), with the
     // colour's name and colour, top colour first. Each goes to the track

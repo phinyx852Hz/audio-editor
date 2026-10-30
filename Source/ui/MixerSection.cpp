@@ -84,6 +84,12 @@ void MainWindow::registerMixerCommands()
         ->setStatusTip (tr ("The sound in the editor (or its selection) into the mixer's clip launcher, under its cursor or in the selected track's first empty slot"));
     add ("mixer.sendToTimeline", tr ("Send to &Timeline"), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_F3) }, [this] { sendToTimeline(); })
         ->setStatusTip (tr ("The sound in the editor (or its selection) onto the editor's track at the playhead"));
+    add ("mixer.editNotes", tr ("&Edit MIDI Notes..."), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_N) }, [this]
+    {
+        showMixer();
+        if (! mixerWin->editNotes())
+            statusBar()->showMessage (tr ("Pick a MIDI clip first, on the tracks or in the launcher, then Edit MIDI Notes opens it in the MIDI editor"), 6000);
+    })->setStatusTip (tr ("The MIDI editor on the MIDI clip picked: a piano roll in 12-TET or in the clip's mode, raga, maqam, laras or Scala scale"));
     add ("mixer.editorTrack", tr ("Editor &Track"), { KS (Qt::SHIFT | Qt::Key_F4) }, [this]
     {
         showEditorTrack (commands.action (QStringLiteral ("mixer.editorTrack"))->isChecked());
