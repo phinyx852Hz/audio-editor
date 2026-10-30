@@ -162,6 +162,7 @@ private:
     std::vector<Star> stars;
 
     qint64 modeShownAt = -100000;   // when the view's name was last shown
+    static constexpr qint64 titleMs = 3000;   // how long it shows, the last 800 ms fading
 };
 
 // The Visualizer window (Shift+F11), which can go full screen (F11). Floating by default.

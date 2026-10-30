@@ -312,6 +312,10 @@ void VisualizerView::tick()
     else
         milkFrame = QImage();
 #endif
+    // A picture repaints when a new one comes (a video, a camera) or the sonifier marks it;
+    // a still one needs no frames once its title has faded.
+    if (isPicture() && clock.elapsed() - modeShownAt > titleMs + 100)
+        return;
     update();
 }
 
@@ -764,9 +768,9 @@ void VisualizerView::drawSonifyMarks (QPainter& g)
 void VisualizerView::drawTitle (QPainter& g)
 {
     const auto age = clock.elapsed() - modeShownAt;
-    if (age > 3000)
+    if (age > titleMs)
         return;
-    const double fade = age < 2200 ? 1.0 : 1.0 - (age - 2200) / 800.0;
+    const double fade = age < titleMs - 800 ? 1.0 : 1.0 - (age - (titleMs - 800)) / 800.0;
     const auto& m = modes()[(size_t) current];
     auto font = g.font();
     font.setPointSizeF (font.pointSizeF() * 1.3);
