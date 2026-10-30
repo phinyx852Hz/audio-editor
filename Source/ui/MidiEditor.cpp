@@ -5,6 +5,7 @@
 
 #include "../core/Scala.h"
 #include "../engine/AudioCapture.h"
+#include "../mixer/DrumsToMidi.h"
 #include "../mixer/Rhythms.h"
 #include "../mixer/Tunings.h"
 
@@ -2347,6 +2348,51 @@ void MidiEditor::putInHeard (const std::vector<Heard>& heard, const HumOptions& 
     // The next take goes on after this one.
     step.position = grid() > 0 ? (end + grid() - 1) / grid() * grid() : end;
     changed();
+}
+
+bool MidiEditor::putInAudio (const AudioData& audio, bool drums)
+{
+    if (! drums)
+    {
+        const auto before = seq.notes.size();
+        putInHeard (listen (audio), HumOptions {});
+        return seq.notes.size() > before;
+    }
+    mixer::Clip clip;
+    clip.audio = mixer::makeAudioClip (audio, {});
+    clip.length = clip.audio->length();
+    const auto rate = audio.sampleRate();
+    const auto hits = mixer::findDrums (clip, rate);
+    if (hits.empty() || rate <= 0.0)
+        return false;
+    // At the editor's tempo from the step cursor, each hit a 16th long.
+    const auto at = step.position;
+    const auto perFrame = tempo() / 60.0 * seq.ticksPerQuarter / rate;
+    std::vector<Note> notes;
+    int64_t end = at;
+    for (const auto& h : hits)
+    {
+        Note n;
+        n.start = at + (int64_t) std::llround ((double) h.at * perFrame);
+        n.length = std::max (1, seq.ticksPerQuarter / 4);
+        n.pitch = h.note * 100.0;
+        n.velocity = std::clamp (h.velocity, 1, 127);
+        n.channel = 9;
+        n.selected = true;
+        end = std::max (end, n.end());
+        notes.push_back (std::move (n));
+    }
+    edit ([&] (Sequence& s)
+    {
+        selectAll (s, false);
+        for (auto& n : notes)
+            s.notes.push_back (n);
+        s.sort();
+        s.lastTick = std::max (s.lastTick, s.end());
+    });
+    step.position = grid() > 0 ? (end + grid() - 1) / grid() * grid() : end;
+    changed();
+    return true;
 }
 
 void MidiEditor::humDialog()

@@ -12,6 +12,9 @@ project view)."
 "The MIDI editor in this instance is not associated with a specific track at all. Just the MIDI
 editor."
 
+"Also drag and drop an audio file from the finder into the MIDI editor will immediately convert it
+to MIDI."
+
 "How about the ability to bounce the MIDI track to audio in the Main editor window? The idea here is
 to focus on sound design of a single sound."
 
@@ -42,6 +45,17 @@ the editor's sound onto the mixer's selected track.
   now, from the start to the end of the last note and on until its tail falls below -80 dB (at most
   10 seconds more), at the patchbay's rate. The sound opens in a new tab of the audio editor
   (opening the audio editor if it was closed), unsaved, so nothing already open is changed.
+
+- **Drop audio as: Melody / Drums**: an audio file dropped on the MIDI editor, from Find or the
+  file manager, becomes notes at once, from the step cursor (so a second drop goes on after the
+  first), selected, and Ctrl+Z takes it out again.
+  - **Melody**: one voice at a time (a voice, a flute, a bass line, a lead), its pitch tracked by
+    YIN (core/Pitch.h) as Hum or Sing hears it, each note on the nearest degree of the tuning in
+    force, the slides and shakes kept as pitch curves.
+  - **Drums**: each hit of a drum loop as a kick (36), snare (38) or closed hat (42) on channel 10,
+    by where its energy lies, at the loudness it was played (mixer/DrumsToMidi.h).
+  - Chords (several notes at once) are not heard yet: a chord comes out as its loudest line.
+  The choice is kept for the next start (`midiEditor/dropAs`).
 
 Below the bar is the MIDI editor itself ([midi-editor.md](midi-editor.md)): the piano roll, the
 pitch systems, step input, quantise, restyle and the rest, without its Apply and Cancel buttons.

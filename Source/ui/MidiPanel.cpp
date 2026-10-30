@@ -8,6 +8,11 @@
 #include "../patchbay/PatchBay.h"
 
 #include <QApplication>
+#include <QComboBox>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
+#include <QUrl>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QHBoxLayout>
@@ -74,6 +79,18 @@ MidiPanel::MidiPanel (Host h, QWidget* parent) : QFrame (parent), host (std::mov
             instrument->openWindow();
     });
     bar->addWidget (editButton);
+    bar->addSpacing (8);
+    auto* dropLabel = new QLabel (tr ("Drop audio as"), this);
+    bar->addWidget (dropLabel);
+    dropBox = new QComboBox (this);
+    dropBox->setFocusPolicy (Qt::NoFocus);
+    dropBox->addItem (tr ("Melody"));
+    dropBox->addItem (tr ("Drums"));
+    dropBox->setToolTip (tr ("What an audio file dropped here becomes: its melody (one voice, pitch tracked, on the tuning's degrees) "
+                             "or its drum hits (kick, snare and hat on channel 10)"));
+    dropBox->setCurrentIndex (appSettings().value (QStringLiteral ("midiEditor/dropAs"), 0).toInt() == 1 ? 1 : 0);
+    connect (dropBox, &QComboBox::activated, this, [] (int index) { appSettings().setValue (QStringLiteral ("midiEditor/dropAs"), index); });
+    bar->addWidget (dropBox);
     bar->addStretch (1);
     const auto button = [this, bar] (const QString& text, const QString& tip, auto fn)
     {
@@ -99,6 +116,7 @@ MidiPanel::MidiPanel (Host h, QWidget* parent) : QFrame (parent), host (std::mov
     bar->addWidget (close);
     layout->addLayout (bar);
 
+    setAcceptDrops (true);
     instrumentId = appSettings().value (QStringLiteral ("midiEditor/instrument")).toString();
     load (emptySong(), {});
     refreshBar();
@@ -115,6 +133,48 @@ void MidiPanel::showEvent (QShowEvent* e)
 {
     QFrame::showEvent (e);
     ensureInstrument();
+}
+
+namespace
+{
+    QString droppedFile (const QMimeData* mime)
+    {
+        if (mime == nullptr || ! mime->hasUrls())
+            return {};
+        for (const auto& url : mime->urls())
+            if (url.isLocalFile() && QFileInfo (url.toLocalFile()).isFile())
+                return url.toLocalFile();
+        return {};
+    }
+}
+
+void MidiPanel::dragEnterEvent (QDragEnterEvent* e)
+{
+    if (editor != nullptr && ! droppedFile (e->mimeData()).isEmpty())
+        e->acceptProposedAction();
+}
+
+void MidiPanel::dropEvent (QDropEvent* e)
+{
+    const auto file = droppedFile (e->mimeData());
+    if (editor == nullptr || file.isEmpty())
+        return;
+    e->acceptProposedAction();
+    const bool drums = dropBox->currentIndex() == 1;
+    std::vector<Marker> markers;
+    Tags tags;
+    std::string error;
+    QApplication::setOverrideCursor (Qt::WaitCursor);
+    const auto audio = AudioEngine::loadFile (file.toStdString(), markers, tags, error);
+    const bool found = audio != nullptr && audio->length() > 0 && editor->putInAudio (*audio, drums);
+    QApplication::restoreOverrideCursor();
+    const auto shown = QFileInfo (file).fileName();
+    if (audio == nullptr)
+        QMessageBox::warning (this, tr ("Audio to MIDI"), tr ("%1 could not be read: %2").arg (shown, QString::fromStdString (error)));
+    else if (! found && host.say)
+        host.say (drums ? tr ("No drum hits were found in %1").arg (shown) : tr ("No melody was heard in %1").arg (shown));
+    else if (host.say)
+        host.say (drums ? tr ("%1's drums as MIDI").arg (shown) : tr ("%1's melody as MIDI").arg (shown));
 }
 
 void MidiPanel::midiIn (uint8_t status, uint8_t data1, uint8_t data2)

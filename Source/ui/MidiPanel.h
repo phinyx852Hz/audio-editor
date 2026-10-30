@@ -8,7 +8,8 @@
 // through one of the patchbay's synths, so the MIDI keyboard plays it and steps notes in. New,
 // Open and Save work on a .mid file; Bounce to Audio renders the notes through a copy of the
 // instrument, its tail included, into a new tab of the editor. The audio editor above and this
-// panel each close on their own (View > Audio Editor, View > MIDI Editor).
+// panel each close on their own (View > Audio Editor, View > MIDI Editor). An audio file dropped on
+// it becomes notes right away (owner, 2026-10-30): its melody, or its drums.
 #include "../core/AudioData.h"
 
 #include <QCoreApplication>
@@ -22,6 +23,7 @@
 
 class AudioEngine;
 class MidiEditor;
+class QComboBox;
 class QLabel;
 class QPushButton;
 class QToolButton;
@@ -57,6 +59,10 @@ public:
 
 protected:
     void showEvent (QShowEvent*) override;
+    // An audio file dropped from Find or the file manager becomes notes at once: its melody or its
+    // drums, as the bar's Drop box says.
+    void dragEnterEvent (QDragEnterEvent*) override;
+    void dropEvent (QDropEvent*) override;
 
 private:
     void newSong();
@@ -77,6 +83,7 @@ private:
     QPushButton* instrumentButton = nullptr;
     QPushButton* editButton = nullptr;
     QLabel* nameLabel = nullptr;
+    QComboBox* dropBox = nullptr;   // what a dropped audio file becomes: 0 its melody, 1 its drums
     std::shared_ptr<mixer::Instrument> instrument;
     QString instrumentId;      // the plugin's id; empty for the built-in Synth
     int slot = -1;             // the patchbay synth it plays as

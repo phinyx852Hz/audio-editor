@@ -66,6 +66,10 @@ public:
     // The notes as edited, encoded as chosen (after accept()).
     midifile::SongPtr result() const;
     QString summary() const;   // how it was saved, for the status line
+    // A recording dropped on the editor (MidiPanel.h): its melody, pitch tracked as Hum or Sing
+    // hears it, or its drum hits as kick, snare and hat on channel 10 (mixer/DrumsToMidi.h), put
+    // in from the step cursor. False when nothing was heard.
+    bool putInAudio (const AudioData&, bool drums);
     // A message from the MIDI keyboard, on the UI thread: step input when it is on.
     void midiIn (uint8_t status, uint8_t data1, uint8_t data2);
 
