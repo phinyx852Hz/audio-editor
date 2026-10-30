@@ -234,6 +234,15 @@ void MainWindow::closeFocused()
         mixerWin->close();
         return;
     }
+    // The MIDI editor under the waveform closes as a panel does (View > MIDI Editor brings it back).
+    if (midiPanel != nullptr && midiPanel->isVisible() && holds (midiPanel, QApplication::focusWidget()))
+    {
+        commands.action (QStringLiteral ("view.midiEditor"))->setChecked (false);
+        activateWindow();
+        waveform->setFocus();
+        statusBar()->showMessage (tr ("Closed the MIDI Editor (Shift+F4 opens it again)"), 3000);
+        return;
+    }
     for (auto* p : panels)
         if (p->isShown() && p->containsFocus())
         {
