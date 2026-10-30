@@ -21,6 +21,8 @@
 #include <QDragEnterEvent>
 #include <QFutureWatcher>
 #include <QMimeData>
+#include <QSignalBlocker>
+#include <QSlider>
 #include <QtConcurrent>
 #include <QDateTime>
 #include <QDir>
@@ -885,10 +887,10 @@ namespace analysis
             return f;
         }
 
-        static void plotBackground (QPainter& g, const QRectF& r)
+        void plotBackground (QPainter& g, const QRectF& r) const
         {
             g.setPen (Qt::NoPen);
-            g.setBrush (Theme::withOpacity (color ("meterBackground")));
+            g.setBrush (Theme::withOpacity (color ("meterBackground"), this));
             g.drawRoundedRect (r, 4.0, 4.0);
         }
 
@@ -1851,7 +1853,7 @@ namespace analysis
             // Balance: left or right louder, in dB.
             const QRectF track (balance.left() + 14, balance.center().y() - 3, balance.width() - 14 - 60, 6);
             g.setPen (Qt::NoPen);
-            g.setBrush (Theme::withOpacity (color ("meterBackground")));
+            g.setBrush (Theme::withOpacity (color ("meterBackground"), this));
             g.drawRoundedRect (track, 3, 3);
             g.setFont (smallFont (0.75));
             g.setPen (labelColor());
@@ -1992,7 +1994,7 @@ namespace analysis
             QPainter g (this);
             g.setRenderHint (QPainter::Antialiasing);
             g.setPen (QPen (faded (color ("mid"), 0.7), 1.0));
-            g.setBrush (Theme::withOpacity (color ("alternateBase")));
+            g.setBrush (Theme::withOpacity (color ("alternateBase"), this));
             g.drawRoundedRect (QRectF (rect()).adjusted (0.5, 0.5, -0.5, -0.5), 7, 7);
             // A thin accent along the top, like a lit panel edge.
             QLinearGradient edge (0, 0, width(), 0);
@@ -2028,8 +2030,9 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
     setWindowTitle (tr ("Analysis Meters"));
     setObjectName (QStringLiteral ("AnalysisWindow"));
     setFocusPolicy (Qt::StrongFocus);
-    Theme::makeTranslucent (this);   // the same theme and window opacity as the rest of PHI
+    Theme::makeTranslucent (this);   // the same theme as the rest of PHI, with an opacity of its own (the slider in the bar)
     auto settings = appSettings();
+    Theme::setWindowOpacity (this, settings.value (QStringLiteral ("analysis/opacity"), Theme::opacity()).toDouble());
 
     // The bar along the top: target, reset, freeze, which meters, and what is measured.
     auto* title = new QLabel (tr ("ANALYSIS"), this);
@@ -2075,6 +2078,16 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
     status = new QLabel (this);
     status->setForegroundRole (QPalette::PlaceholderText);
 
+    // As the slider in the main window's status bar, for this window alone.
+    opacitySlider = new QSlider (Qt::Horizontal, this);
+    opacitySlider->setRange ((int) std::lround (Theme::minOpacity * 100.0), 100);
+    opacitySlider->setValue ((int) std::lround (Theme::opacity (this) * 100.0));
+    opacitySlider->setFixedWidth (120);
+    opacitySlider->setFocusPolicy (Qt::NoFocus);  // keys stay with the meters; Ctrl+Alt+- and Ctrl+Alt+= change it
+    opacitySlider->setAccessibleName (tr ("Analysis window opacity"));
+    opacitySlider->setToolTip (tr ("Opacity of this window (Ctrl+Alt+- and Ctrl+Alt+=)"));
+    connect (opacitySlider, &QSlider::valueChanged, this, [this] (int v) { changeOpacity (v / 100.0, false); });
+
     auto* bar = new QHBoxLayout;
     bar->setContentsMargins (4, 0, 4, 0);
     bar->setSpacing (8);
@@ -2090,6 +2103,9 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
     bar->addWidget (resetButton);
     bar->addWidget (freezeButton);
     bar->addWidget (metersButton);
+    bar->addSpacing (8);
+    bar->addWidget (new QLabel (tr ("Opacity"), this));
+    bar->addWidget (opacitySlider);
 
     // The meters.
     auto* loudness = new LoudnessMeter (*state, this);
@@ -2600,6 +2616,10 @@ void AnalysisWindow::keyPressEvent (QKeyEvent* e)
         close();   // the key that opened it closes it again, as do Ctrl+W and Super+W
         return;
     }
+    if (mods == (Qt::ControlModifier | Qt::AltModifier) && (key == Qt::Key_Minus || key == Qt::Key_Underscore))
+        return changeOpacity (Theme::opacity (this) - 0.05, true);
+    if (mods == (Qt::ControlModifier | Qt::AltModifier) && (key == Qt::Key_Equal || key == Qt::Key_Plus))
+        return changeOpacity (Theme::opacity (this) + 0.05, true);
     if (ambisonics->isVisible() && ambisonics->handleKey (e))
         return;   // arrows, Ctrl+Up/Down and Home turn and move the ambisonics view
     if (e->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))
@@ -2620,6 +2640,22 @@ void AnalysisWindow::keyPressEvent (QKeyEvent* e)
         isFullScreen() ? showNormal() : (void) close();
     else
         return QWidget::keyPressEvent (e);
+}
+
+void AnalysisWindow::changeOpacity (double value, bool announce)
+{
+    Theme::setWindowOpacity (this, value);
+    const auto opacity = Theme::opacity (this);
+    appSettings().setValue (QStringLiteral ("analysis/opacity"), opacity);
+    const auto percent = (int) std::lround (opacity * 100.0);
+    {
+        const QSignalBlocker block (opacitySlider);
+        opacitySlider->setValue (percent);
+    }
+    for (auto* c : cards)
+        c->content->update();
+    if (announce)
+        showMessage (tr ("Opacity %1%").arg (percent));
 }
 
 void AnalysisWindow::closeEvent (QCloseEvent* e)

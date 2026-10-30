@@ -207,6 +207,9 @@ performance.record	Performance	Record Video	Ctrl+F12
 performance.stream	Performance	Go Live	Shift+F12
 performance.settings	Performance	Video and Stream Settings	
 performance.folder	Performance	Show Recordings Folder	
+control.surfaces	Performance	Control Surfaces	
+control.learn	Performance	MIDI Learn	
+control.mapMode	Performance	MIDI Map Mode	Ctrl+M
 sample.send	Sample	Send to Simplest	F7
 sample.window	Sample	Simplest	Shift+F7
 sample.refresh	Sample	Refresh from Editor	Ctrl+F7
@@ -225,7 +228,7 @@ instrument.subtractive2	Synth	Subtractive2 poly (Helm)
 instrument.fm	Synth	FM (OctaSine)	
 mixer.window	Mixer	Mixer	F3
 mixer.dock	Mixer	Undock / Dock Mixer	Ctrl+Shift+F3
-mixer.new	Mixer	New Project	
+mixer.new	Mixer	New Project	Ctrl+N
 mixer.newFromSet	Mixer	New Project from Selector Set	
 mixer.open	Mixer	Open Project	
 mixer.save	Mixer	Save Project	

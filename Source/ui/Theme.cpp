@@ -267,23 +267,22 @@ namespace
 
     // The application palette with see-through backgrounds, for everything inside
     // a translucent window (the window's own background is drawn by BackgroundPainter).
-    QPalette translucentPalette()
+    QPalette translucentPalette (const QWidget* window)
     {
         auto p = QApplication::palette();
         for (auto group : { QPalette::Active, QPalette::Inactive, QPalette::Disabled })
             for (auto role : { QPalette::Window, QPalette::Base, QPalette::AlternateBase, QPalette::Button })
-                p.setColor (group, role, Theme::withOpacity (QApplication::palette().color (group, role)));
+                p.setColor (group, role, Theme::withOpacity (QApplication::palette().color (group, role), window));
         return p;
     }
 
     void updateTranslucentWindows()
     {
-        const auto p = translucentPalette();
         for (auto* w : QApplication::topLevelWidgets())
         {
             if (w->testAttribute (Qt::WA_TranslucentBackground))
             {
-                w->setPalette (p);
+                w->setPalette (translucentPalette (w));
                 w->update();
             }
         }
@@ -344,16 +343,42 @@ void Theme::saveName (const QString& name)
 
 double Theme::opacity() { return opacityValue(); }
 
-double Theme::surfaceOpacity()
+namespace
 {
-    const auto a = opacityValue();
-    return a * a * a;
+    // A window's own opacity (Theme::setWindowOpacity) is kept as a property on it.
+    constexpr auto ownOpacity = "phiOpacity";
+
+    double surfaceFor (double a) { return a * a * a; }
 }
+
+double Theme::opacity (const QWidget* w)
+{
+    if (w != nullptr)
+        if (const auto own = w->window()->property (ownOpacity); own.isValid())
+            return own.toDouble();
+    return opacityValue();
+}
+
+double Theme::surfaceOpacity() { return surfaceFor (opacityValue()); }
 
 QColor Theme::withOpacity (QColor c)
 {
     c.setAlphaF (c.alphaF() * (float) surfaceOpacity());
     return c;
+}
+
+QColor Theme::withOpacity (QColor c, const QWidget* w)
+{
+    c.setAlphaF (c.alphaF() * (float) surfaceFor (opacity (w)));
+    return c;
+}
+
+void Theme::setWindowOpacity (QWidget* window, double value)
+{
+    window->setProperty (ownOpacity, std::round (std::clamp (value, minOpacity, 1.0) * 100.0) / 100.0);
+    if (window->testAttribute (Qt::WA_TranslucentBackground))
+        window->setPalette (translucentPalette (window));
+    window->update();
 }
 
 void Theme::setOpacity (double value)
@@ -379,7 +404,7 @@ namespace
                 QPainter g (w);
                 g.setCompositionMode (QPainter::CompositionMode_Source);
                 auto back = QApplication::palette().color (w->isActiveWindow() ? QPalette::Active : QPalette::Inactive, QPalette::Window);
-                back.setAlphaF (back.alphaF() * (float) Theme::opacity());
+                back.setAlphaF (back.alphaF() * (float) Theme::opacity (w));
                 g.fillRect (static_cast<QPaintEvent*> (e)->rect(), back);
             }
             return false;
@@ -390,7 +415,7 @@ namespace
 void Theme::makeTranslucent (QWidget* window)
 {
     window->setAttribute (Qt::WA_TranslucentBackground);
-    window->setPalette (translucentPalette());
+    window->setPalette (translucentPalette (window));
     window->installEventFilter (new BackgroundPainter (window));
 }
 

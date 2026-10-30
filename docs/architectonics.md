@@ -22,7 +22,7 @@ and dynamic part at the macro and meso levels: proportion by φ, and an energy a
 
 ## Where it is
 
-**Architectonics** in the menu bar, between Analyze and Master:
+**Compose > Architectonics** (its own menu in the menu bar at first, between Analyze and Master; a submenu of Compose since the same day, docs/compose.md):
 
 - **Compose a Song...** writes a song into the clip launcher's first empty scenes, a scene a
   section (below).

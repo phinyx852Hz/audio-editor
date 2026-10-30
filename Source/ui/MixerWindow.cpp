@@ -727,6 +727,9 @@ public:
         insertList->setHorizontalScrollBarPolicy (Qt::ScrollBarAlwaysOff);
         insertList->setVerticalScrollBarPolicy (Qt::ScrollBarAlwaysOff);
         insertList->setDragDropMode (QAbstractItemView::InternalMove);
+        // On the strip itself, see-through like the rest of it (owner, 2026-10-30).
+        insertList->setStyleSheet (QStringLiteral ("QListWidget { background: transparent; border: none; }"));
+        insertList->viewport()->setAutoFillBackground (false);
         insertList->setToolTip (MixerWindow::tr ("The track's insert slots, top first. Click an empty one to add an effect; double-click one to open it; "
                                                  "right-click to bypass, move or remove it; drag to reorder"));
         sectionLayout->addWidget (insertList);
@@ -3499,6 +3502,35 @@ public:
     }
     QRect sceneArea (int scene) const { return sceneRect (std::clamp (scene, 0, std::max (0, window.numScenes - 1))); }
     QRect slotArea (int scene) const { return slotRect (firstTrack(), std::clamp (scene, 0, std::max (0, window.numScenes - 1))); }
+    // For MIDI Map mode: each slot, each track's stop, each scene and Stop All.
+    void mappable (std::vector<MixerWindow::Mappable>& out) const
+    {
+        using A = control::Action;
+        auto add = [&] (QRect r, A action, int track, int scene)
+        {
+            if (r.isEmpty())
+                return;
+            MixerWindow::Mappable m;
+            m.widget = const_cast<ClipGrid*> (this);
+            m.area = r;
+            m.target.action = action;
+            m.target.track = track;
+            m.target.scene = scene;
+            out.push_back (m);
+        };
+        for (int i = 0; i < trackCount(); ++i)
+        {
+            const int t = firstTrack() + i;
+            if (t < 0 || t >= control::maxTracks)
+                continue;
+            for (int s = 0; s < window.numScenes && s < control::maxScenes; ++s)
+                add (slotRect (t, s), A::launch, t, s);
+            add (stopRect (t), A::stopTrack, t, -1);
+        }
+        for (int s = 0; s < window.numScenes && s < control::maxScenes; ++s)
+            add (sceneRect (s), A::launchScene, -1, s);
+        add (stopAllRect(), A::stopAll, -1, -1);
+    }
 
 protected:
     void paintEvent (QPaintEvent*) override
@@ -5640,9 +5672,12 @@ protected:
 
     void resizeEvent (QResizeEvent*) override { placePhi(); }
 
+    // Double-click: a MIDI clip into the MIDI editor, an audio clip on the timeline into a tab.
     void mouseDoubleClickEvent (QMouseEvent*) override
     {
-        if (found && id != 0 && ! clip.isMidi())
+        if (found && clip.isMidi())
+            window.noteEditorShownMidi();
+        else if (found && id != 0)
             Q_EMIT window.editClipRequested (track, id);
     }
 
@@ -6125,7 +6160,7 @@ private:
         title->setFont (bold);
         g->addWidget (title, 0, 0, 1, 4);
 
-        // MIDI: new MIDI from the clip's, never its notes edited one by one.
+        // MIDI: new MIDI from the clip's, and Edit Notes for the notes one by one.
         midiTools = new QWidget (tools);
         auto* m = new QGridLayout (midiTools);
         m->setContentsMargins (0, 0, 0, 0);
@@ -6202,6 +6237,9 @@ private:
                             }),
                       3, 2, 1, 2);
         loadParts();
+        m->addWidget (tool (MixerWindow::tr ("Edit Notes..."), MixerWindow::tr ("The MIDI editor on this clip (also a double-click on it, or Mixer › Edit MIDI Notes, Alt+Shift+N)"),
+                            [this] { window.noteEditorShownMidi(); }),
+                      4, 0, 1, 4);
         g->addWidget (midiTools, 1, 0, 1, 4);
 
         // Audio: the stretch, the drums as MIDI, the editor.
@@ -6799,7 +6837,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
         grid->addWidget (cube, 4, 2, 1, 2);
         connect (cube, &QPushButton::clicked, this, [this] { cubifyShownMidi(); });
         auto* notesButton = new QPushButton (tr ("Edit Notes..."), midiClipBox);
-        notesButton->setToolTip (tr ("The MIDI editor: the notes on a piano roll in 12-TET, or in a mode, raga, maqam, laras or Scala "
+        notesButton->setToolTip (tr ("The MIDI editor (also a double-click on the clip, or Mixer › Edit MIDI Notes, Alt+Shift+N): the notes on a piano roll in 12-TET, or in a mode, raga, maqam, laras or Scala "
                                      "scale, with step input, quantise, restyle and MPE"));
         grid->addWidget (notesButton, 5, 0, 1, 4);
         auto* hint = new QLabel (tr ("R reverses it"), midiClipBox);
@@ -6940,6 +6978,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     devicePanel->setAutoFillBackground (false);
     // Fixed along the bottom (owner, 2026-10-25), see-through like the rest of the mixer.
     devicePanel->setFixedHeight (190);
+    devicesHidden = ! appSettings().value (QStringLiteral ("mixer/devices"), true).toBool();
 
     auto* layout = new QVBoxLayout (this);
     layout->addWidget (transportRow);
@@ -7215,6 +7254,14 @@ void MixerWindow::phiShownMidi()
 {
     const auto turn = phiTurn++;
     editShownMidi ([turn] (const midifile::Song& s) { return midifile::phiShuffle (s, turn); }, tr ("Φ: the notes dealt out again"));
+}
+
+bool MixerWindow::editNotes()
+{
+    if (! showingClip || ! clipView->showsMidi())
+        return false;
+    noteEditorShownMidi();
+    return true;
 }
 
 void MixerWindow::noteEditorShownMidi()
@@ -7900,12 +7947,19 @@ void MixerWindow::updateDevicePanel()
     if (devicePanel == nullptr)
         return;
     refreshMidiClipBox();
-    const bool show = true;   // fixed along the bottom; the master's shows nothing to change
+    const bool show = ! devicesHidden;   // fixed along the bottom; the master's shows nothing to change
     if (devicePanel->isHidden() == show)
     {
         devicePanel->setVisible (show);
         Q_EMIT devicePanelChanged();
     }
+}
+
+void MixerWindow::toggleDevices()
+{
+    devicesHidden = ! devicesHidden;
+    appSettings().setValue (QStringLiteral ("mixer/devices"), ! devicesHidden);
+    updateDevicePanel();
 }
 
 void MixerWindow::showDevices()
@@ -9656,10 +9710,18 @@ bool MixerWindow::isProjectFile (const QString& file)
     return suffix.compare (projectSuffix, Qt::CaseInsensitive) == 0 || suffix.compare (QLatin1String ("phinyxmix"), Qt::CaseInsensitive) == 0;
 }
 
+bool MixerWindow::askToSave (const QString& title, const QString& question)
+{
+    if (! modified)
+        return true;
+    const auto answer = QMessageBox::question (this, title, question, QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+                                               QMessageBox::Save);
+    return answer == QMessageBox::Discard || (answer == QMessageBox::Save && saveMix (false));
+}
+
 bool MixerWindow::newMix()
 {
-    if (modified && ! path.isEmpty()
-        && QMessageBox::question (this, tr ("New Project"), tr ("Start a new project? Changes to %1 that were not saved are lost.").arg (mixName())) != QMessageBox::Yes)
+    if (! askToSave (tr ("New Project"), tr ("Save the changes to %1 before starting a new project?").arg (mixName())))
         return false;
     engine.stop();
     engine.setPosition (0);
@@ -10239,6 +10301,8 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
 
 void MixerWindow::autosave()
 {
+    if (quitting)
+        return;
     const auto file = autosavePath();
     QDir().mkpath (QFileInfo (file).absolutePath());
     QString error;
@@ -10264,6 +10328,26 @@ void MixerWindow::restoreAutosave()
         modified = appSettings().value (QStringLiteral ("mixer/lastModified"), false).toBool();
         updateTitle();
     }
+}
+
+void MixerWindow::dropAutosave()
+{
+    quitting = true;
+    removeAutosave();
+}
+
+QString MixerWindow::autosaveName()
+{
+    const auto lastPath = appSettings().value (QStringLiteral ("mixer/lastPath")).toString();
+    return lastPath.isEmpty() ? QString() : QFileInfo (lastPath).completeBaseName();
+}
+
+void MixerWindow::removeAutosave()
+{
+    QFile::remove (autosavePath());
+    QFile::remove (configFile ("last.phinyxmix"));
+    appSettings().remove (QStringLiteral ("mixer/lastPath"));
+    appSettings().remove (QStringLiteral ("mixer/lastModified"));
 }
 
 //==============================================================================
@@ -10848,6 +10932,44 @@ void MixerWindow::showLauncher (bool on)
     }
     rack->refresh();
     grid->update();
+}
+
+std::vector<MixerWindow::Mappable> MixerWindow::mappable() const
+{
+    using A = control::Action;
+    std::vector<Mappable> out;
+    auto add = [&out] (QWidget* w, A action, int track, bool continuous, int index = 0)
+    {
+        if (w == nullptr)
+            return;
+        Mappable m;
+        m.widget = w;
+        m.target.action = action;
+        m.target.track = track;
+        m.target.index = index;
+        m.continuous = continuous;
+        out.push_back (m);
+    };
+    for (int t = 0; t < engine.numTracks() && t < control::maxTracks; ++t)
+        if (auto* strip = strips[(size_t) t])
+        {
+            add (strip->fader, A::volume, t, true);
+            add (strip->panDial, A::pan, t, true);
+            for (int r = 0; r < (int) strip->sendDials.size() && r < 2; ++r)
+                add (strip->sendDials[(size_t) r], A::send, t, true, r);
+            add (strip->muteButton, A::mute, t, false);
+            add (strip->soloButton, A::solo, t, false);
+            add (strip->armButton, A::arm, t, false);
+        }
+    add (masterFader, A::master, -1, true);
+    add (tempoBox, A::tempo, -1, true);
+    add (playButton, A::togglePlay, -1, false);
+    add (loopButton, A::loop, -1, false);
+    add (recordButton, A::record, -1, false);
+    add (clickButton, A::metronome, -1, false);
+    if (grid != nullptr && launcherShown())
+        grid->mappable (out);
+    return out;
 }
 
 bool MixerWindow::launcherShown() const { return launcherArea != nullptr && ! launcherArea->isHidden(); }
@@ -11452,9 +11574,10 @@ std::vector<int> MixerWindow::colourTracks (const QStringList& names, const QLis
     return out;
 }
 
-void MixerWindow::openScore (const midifile::Song& score, mixer::TuningChoice tuning, const QString& title)
+void MixerWindow::openScore (const midifile::Song& score, mixer::TuningChoice tuning, const QString& title, const QString& notation)
 {
     MidiEditor::Host host;
+    host.notation = notation;
     host.play = [this] (uint8_t s, uint8_t a, uint8_t b) { engine.liveMidi (s, a, b, false); };
     host.system = tuning.system;
     host.root = tuning.root;

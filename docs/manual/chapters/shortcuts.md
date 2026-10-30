@@ -1,6 +1,6 @@
 # Keyboard Shortcuts {#shortcuts}
 
-[]{.ix t="Keyboard shortcuts!list"}Every command in PHI, 304 of them, with the keys it has when PHI is first installed. Commands without keys can still be found in the command palette (`Ctrl+Shift+P`), and any of them can be given keys in Options > Keyboard Shortcuts (`Ctrl+Shift+K`); see [Changing shortcuts](#change-shortcuts).
+[]{.ix t="Keyboard shortcuts!list"}Every command in PHI, 307 of them, with the keys it has when PHI is first installed. Commands without keys can still be found in the command palette (`Ctrl+Shift+P`), and any of them can be given keys in Options > Keyboard Shortcuts (`Ctrl+Shift+K`); see [Changing shortcuts](#change-shortcuts).
 
 Commands are grouped as the command palette groups them, which is mostly by menu. Where a command has more than one set of keys, they are separated by a slash.
 
@@ -347,7 +347,7 @@ The few `Super` keys are the desktop's standard keys for closing and full screen
 | Mix Assistant | `Alt+Shift+X` |
 | Mix Down to Editor | `Ctrl+F3` |
 | Mixer | `F3` |
-| New Project |  |
+| New Project | `Ctrl+N` |
 | New Project from Selector Set |  |
 | Open Project |  |
 | Patchbay | `F4` |
@@ -407,7 +407,10 @@ The few `Super` keys are the desktop's standard keys for closing and full screen
 | Command | Keys |
 |---|---|
 | Clip Launcher | `F5` |
+| Control Surfaces |  |
 | Go Live | `Shift+F12` |
+| MIDI Learn |  |
+| MIDI Map Mode | `Ctrl+M` |
 | Record Video | `Ctrl+F12` |
 | Show Recordings Folder |  |
 | Video and Stream Settings |  |

@@ -67,8 +67,10 @@ target_sources(${APP_ID} PRIVATE
     Source/mixer/Rhythms.cpp
     Source/mixer/Architectonics.cpp
     Source/mixer/Harmonies.cpp
+    Source/mixer/ModalHarmony.cpp
     Source/mixer/RhythmGenerator.cpp
     Source/mixer/Minimalize.cpp
+    Source/mixer/Compose.cpp
     Source/mixer/Instruments.cpp
     Source/mixer/InstrumentPrism.cpp
     Source/mixer/MixerEngine.cpp
@@ -193,12 +195,14 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/MixerMinimalize.cpp
     Source/ui/MixerControl.cpp
     Source/ui/ControlSection.cpp
+    Source/ui/MidiMapOverlay.cpp
     Source/ui/MixerSection.cpp
     Source/ui/MixerPrism.cpp
     Source/ui/ModeSection.cpp
     Source/ui/ModeAtlas.cpp
     Source/ui/RhythmSection.cpp
     Source/ui/ArchitectonicsSection.cpp
+    Source/ui/ComposeSection.cpp
     Source/ui/HarmonySection.cpp
     Source/ui/RhythmGeneratorDialog.cpp
     Source/ui/StochasticSection.cpp
@@ -468,8 +472,10 @@ if(PHI_BUILD_TESTS)
         Source/mixer/Rhythms.cpp
         Source/mixer/Architectonics.cpp
     Source/mixer/Harmonies.cpp
+    Source/mixer/ModalHarmony.cpp
         Source/mixer/RhythmGenerator.cpp
         Source/mixer/Minimalize.cpp
+        Source/mixer/Compose.cpp
         Source/mixer/Instruments.cpp
         Source/mixer/InstrumentPrism.cpp
         Source/mixer/MixerEngine.cpp

@@ -57,4 +57,11 @@ struct Theme
     static void makeTranslucent (QWidget* window);  // call before the window is first shown
     static double surfaceOpacity();
     static QColor withOpacity (QColor);   // a background inside a translucent window
+
+    // A window can have an opacity of its own instead (the Analysis Meters window has
+    // its own slider). These go by the top-level window of the widget given; a window
+    // without one of its own follows opacity(). The caller remembers the value.
+    static double opacity (const QWidget*);
+    static void setWindowOpacity (QWidget* window, double);
+    static QColor withOpacity (QColor, const QWidget*);
 };

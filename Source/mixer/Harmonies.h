@@ -24,6 +24,7 @@ namespace harmony
         int pitch = 0;
         double beats = 1.0;
         bool rest = false;
+        int velocity = 80;
     };
 
     struct Voice

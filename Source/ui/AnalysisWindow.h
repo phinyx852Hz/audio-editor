@@ -10,6 +10,7 @@ class QComboBox;
 class QLabel;
 class QMenu;
 class QPushButton;
+class QSlider;
 class QSplitter;
 
 class AudioData;
@@ -46,7 +47,8 @@ namespace analysis
 // (Ambisonics apart: that reads the file itself).
 // Each meter is a card that can be hidden (Meters menu) and the splitters
 // between them moved; both are remembered. Keys: Space plays or stops, R
-// resets, F freezes, 1-8 take or clear a spectrum hold, F11 full screen, Esc closes;
+// resets, F freezes, 1-8 take or clear a spectrum hold, F11 full screen, Esc closes,
+// Ctrl+Alt+- and Ctrl+Alt+= make it more transparent or more opaque (the Opacity slider in its bar);
 // with the Ambisonics card showing, V moves to its next view and the arrows, Ctrl+Up/Down
 // and Home turn it, bring it closer and put it back.
 // Drop audio files on it for a full report of each (AnalysisReport), measured from
@@ -81,6 +83,7 @@ protected:
 
 private:
     void setFrozen (bool);
+    void changeOpacity (double value, bool announce);   // remembered in settings.ini
     void toggleHold (int slot);
     void saveLayout() const;
     void restoreLayout();
@@ -95,6 +98,7 @@ private:
     QComboBox* targetBox = nullptr;
     QPushButton* freezeButton = nullptr;
     QLabel* status = nullptr;
+    QSlider* opacitySlider = nullptr;
     QMenu* metersMenu = nullptr;
     class Goniometer* imaging = nullptr;
     AmbiVisualizer* ambisonics = nullptr;
