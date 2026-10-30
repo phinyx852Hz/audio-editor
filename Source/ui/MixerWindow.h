@@ -137,8 +137,17 @@ public:
     bool saveMix (bool saveAs);
     bool loadMix (const QString& path, QString& error);
     bool writeMix (const QString& path, QString& error);
-    void autosave();      // the mix as it is, kept in the config folder and opened again next time
+    // Unsaved changes offered a save first: Save, Discard or Cancel. False when the user
+    // cancels, or cancels the save, and keeps the project.
+    bool askToSave (const QString& title, const QString& question);
+    // Crash recovery (owner, 2026-10-30): last.phi is written while PHI runs and removed on a
+    // clean quit, so PHI starts on a blank project and offers last.phi only after a crash.
+    void autosave();      // the mix as it is, kept in the config folder
     void restoreAutosave();
+    void dropAutosave();   // quitting: last.phi removed, and not written again
+    static void removeAutosave();      // last.phi and what it was saved as, gone
+    static QString autosaveName();     // the project last.phi holds: its file's name, or empty when untitled
+    bool hasUnsavedChanges() const { return modified; }
     static QString autosavePath();   // last.phi in the config folder
     void projectChanged() { changed(); }   // the patchbay, say: the project differs from its file
     QString mixName() const;
@@ -181,6 +190,8 @@ public:
     // A file chosen in the Find panel's Selector: into the first empty slot of the track with
     // that name (else that colour, else the selected track), and the mixer follows it there.
     void sendToLauncher (const QString& path, const QString& trackName, const QColor& colour);
+    // The MIDI editor on the MIDI clip picked (Mixer › Edit MIDI Notes); false when no MIDI clip is picked.
+    bool editNotes();
     // The Φ random selector's deal: a file and an instrument (a plugin id, loaded on the
     // track first) for each Selector colour (empty: that colour has none), with the
     // colour's name and colour, top colour first. Each goes to the track
@@ -199,9 +210,10 @@ public:
     bool replaceClipAudio (int track, uint32_t clip, const AudioData& edited, const QString& name, QString& error);
 
     // The Device Chain along the mixer's bottom (owner, 2026-10-25): the selected track's
-    // instrument and inserts, or the clip picked in the launcher or the tracks. Hidden while
-    // the Master strip is selected, so the editor's own chain can show.
+    // instrument and inserts, or the clip picked in the launcher or the tracks. Ctrl+Shift+C
+    // (the editor's Device Chain key) hides or shows it, remembered (mixer/devices).
     bool devicePanelShown() const;
+    void toggleDevices();
     // What the browser's Instruments and Audio Effects lists drag: "effect\n<id>",
     // "instrument\n<id>", or "synth", "sampler", "slicer".
     static QString pluginMime() { return QStringLiteral ("application/x-phi-plugin"); }
@@ -612,6 +624,7 @@ private:
     TrackDevices* devices = nullptr;
     ClipView* clipView = nullptr;
     bool showingClip = false;
+    bool devicesHidden = false;   // by Ctrl+Shift+C
     void refreshInspector();   // soon, once for any number of changes
     QScrollArea* gridScroll = nullptr;
     QComboBox* quantiseBox = nullptr;
@@ -663,6 +676,7 @@ private:
     bool modified = false;
     bool restoring = false;
     bool opening = false;            // inside loadMix: its newMix() keeps the patchbay
+    bool quitting = false;           // after dropAutosave: nothing more written to last.phi
     std::vector<Snapshot> undoStack, redoStack;
     uint32_t nextClipId = 1;
     std::map<QString, std::weak_ptr<const mixer::AudioClip>> audioCache;

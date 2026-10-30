@@ -6,11 +6,13 @@ saved with Mixer > Save Project (`Ctrl+S` in the mixer, `Ctrl+Shift+S` for Save 
 Mixer > Open Project (`Ctrl+O` in the mixer), with File > Open, by passing it to `phi` on the
 command line, or by double-clicking it in a file manager.
 
-When PHI quits, the project as it is (saved or not) goes to `last.phi` in
-`~/.config/phi/mixer/`, and once a minute while it runs (with the recovery autosave). At the
-next start that project opens again, under its own name and still marked unsaved if it was, its
-patchbay comes back with it, and if the Mixer was in front when PHI closed, it is in front
-again.
+PHI starts on a blank project. When it quits and the project has unsaved changes, it asks to
+Save, Discard or Cancel (Cancel keeps PHI open). File > New Project (`Ctrl+N`) asks the same.
+
+For crash recovery, the project as it is goes to `last.phi` in `~/.config/phi/mixer/` once a
+minute while PHI runs (with the recovery autosave), and a clean quit removes it. If PHI did not
+close properly, the next start offers it back: Recover opens it under its own name, still marked
+unsaved if it was, with its patchbay, and with the Mixer in front if it was; No removes it.
 
 ## The file
 
@@ -71,8 +73,8 @@ and `Ctrl+S` on one saves a `.phi` beside it, leaving the old file alone.
   hand the rest to `Hooks::projectState` and `Hooks::setProjectState`; `Hooks::resetProject` runs
   for a new project.
 - `Source/ui/ProjectSection.cpp`: those hooks on the main window, `openProject`,
-  `restoreProject` (at start, from `last.phi`; the patchbay from `settings.ini` when the project
-  has none) and `mixerInView()`, the view hook.
+  `restoreProject` (at start, only after a crash: `last.phi` offered back; the patchbay from
+  `settings.ini` when the project has none) and `mixerInView()`, the view hook.
 - `MainWindow::patchBayJson`, `setPatchBayJson` and `resetPatchBay` in `PatchBaySection.cpp`.
 
 ## Not yet

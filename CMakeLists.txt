@@ -67,6 +67,7 @@ target_sources(${APP_ID} PRIVATE
     Source/mixer/Rhythms.cpp
     Source/mixer/Architectonics.cpp
     Source/mixer/Harmonies.cpp
+    Source/mixer/ModalHarmony.cpp
     Source/mixer/RhythmGenerator.cpp
     Source/mixer/Minimalize.cpp
     Source/mixer/Compose.cpp
@@ -468,6 +469,7 @@ if(PHI_BUILD_TESTS)
         Source/mixer/Rhythms.cpp
         Source/mixer/Architectonics.cpp
     Source/mixer/Harmonies.cpp
+    Source/mixer/ModalHarmony.cpp
         Source/mixer/RhythmGenerator.cpp
         Source/mixer/Minimalize.cpp
         Source/mixer/Compose.cpp

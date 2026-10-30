@@ -700,7 +700,13 @@ void MainWindow::registerCommands()
     add ("view.zoomSelection", Category::view, tr ("Zoom to &Selection"), { KS (Qt::Key_Z) },
          [this] { if (requireSelection()) waveform->zoomToSelection(); });
     add ("view.chain", Category::master, tr ("Device &Chain"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_C) },
-         [this] { chainPanel->toggle(); });
+         [this]
+    {
+        if (mixerChainKey())
+            mixerWin->toggleDevices();
+        else
+            chainPanel->toggle();
+    });
     add ("view.find", Category::view, tr ("&Find..."), { KS (Qt::CTRL | Qt::Key_F) }, [this]
     {
         // The mixer in the editor's place: the Finder and the Inspector take turns.
@@ -899,7 +905,7 @@ void MainWindow::buildMenus()
     };
 
     const QList<QPair<QString, QStringList>> layout {
-        { tr ("&File"),      { "file.open", "album.new", "file.record", "-", "file.save", "file.saveAs", "file.export", "-", "file.metadata", "-", "file.close", "file.nextTab", "file.previousTab", "-", "file.quit" } },
+        { tr ("&File"),      { "mixer.new", "file.open", "album.new", "file.record", "-", "file.save", "file.saveAs", "file.export", "-", "file.metadata", "-", "file.close", "file.nextTab", "file.previousTab", "-", "file.quit" } },
         { tr ("&Edit"),      { "edit.undo", "edit.redo", "-", "view.find", "-", "edit.cut", "edit.copy", "edit.copyToNew", "edit.paste", "edit.delete", "-",
                                "edit.trim", "edit.insertSilence", "edit.split", "edit.duplicate", "-", "edit.snapZero", "edit.snapGrid", "edit.narrowGrid", "edit.widenGrid", "-", "select.all", "select.none", "-",
                                "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
@@ -911,7 +917,7 @@ void MainWindow::buildMenus()
         { tr ("&Compose"),   { "@compose" } },
         { tr ("&Master"),    { "#album", "-", "view.master", "view.chain", "master.addPlugin", "master.bypass", "analyze.plugin", "-", "master.assistant", "-", "master.render", "master.renderNew", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
         { tr ("Mi&xer"),     { "mixer.window", "mixer.dock", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
-                               "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "mixer.sendToTimeline", "-", "mixer.editorTrack", "mixer.trackToEditor", "-", "mixer.assistant" } },
+                               "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "mixer.sendToTimeline", "-", "mixer.editNotes", "-", "mixer.editorTrack", "mixer.trackToEditor", "-", "mixer.assistant" } },
         { tr ("Mo&de"),      { "@mode" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "-", "options.keymap", "options.theme", "options.waveformColors" } },
         { tr ("Performan&ce"), { "performance.launcher", "-", "control.surfaces", "control.learn", "-", "performance.record", "performance.stream", "-", "performance.settings", "performance.folder" } },
@@ -1453,6 +1459,9 @@ void MainWindow::restoreLayout()
         // squeezes the docks to match; put each one back to the size it had when the app closed.
         restoreDockSizes();
         QTimer::singleShot (500, this, &MainWindow::restoreDockSizes);
+        // The restored layout shows the editor's Device Chain; a mixer already in front has its own.
+        if (mixerWin != nullptr)
+            updateChainDock();
 
         const auto problems = QString::fromStdString (engine.restoreMasterSection());
         masterWidget->refresh();
@@ -3807,9 +3816,23 @@ void MainWindow::closeEvent (QCloseEvent* e)
         return;
     }
 
+    // The mixer's project is saved or let go now: PHI starts on a blank project next time,
+    // and last.phi is left only by a run that did not quit cleanly (crash recovery).
+    if (mixerWin != nullptr && mixerWin->hasUnsavedChanges())
+    {
+        showMixer();
+        if (! mixerWin->askToSave (tr ("Quit"), tr ("Save the changes to %1 before quitting?").arg (mixerWin->mixName())))
+        {
+            e->ignore();
+            return;
+        }
+    }
+
     engine.stop();
     if (mixerWin != nullptr)
-        mixerWin->autosave();
+        mixerWin->dropAutosave();
+    else
+        MixerWindow::removeAutosave();
     savePatchBay();
     commands.save();
     saveLayout();

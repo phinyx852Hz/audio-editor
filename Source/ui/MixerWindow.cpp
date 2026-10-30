@@ -730,6 +730,9 @@ public:
         insertList->setHorizontalScrollBarPolicy (Qt::ScrollBarAlwaysOff);
         insertList->setVerticalScrollBarPolicy (Qt::ScrollBarAlwaysOff);
         insertList->setDragDropMode (QAbstractItemView::InternalMove);
+        // On the strip itself, see-through like the rest of it (owner, 2026-10-30).
+        insertList->setStyleSheet (QStringLiteral ("QListWidget { background: transparent; border: none; }"));
+        insertList->viewport()->setAutoFillBackground (false);
         insertList->setToolTip (MixerWindow::tr ("The track's insert slots, top first. Click an empty one to add an effect; double-click one to open it; "
                                                  "right-click to bypass, move or remove it; drag to reorder"));
         sectionLayout->addWidget (insertList);
@@ -5627,9 +5630,12 @@ protected:
 
     void resizeEvent (QResizeEvent*) override { placePhi(); }
 
+    // Double-click: a MIDI clip into the MIDI editor, an audio clip on the timeline into a tab.
     void mouseDoubleClickEvent (QMouseEvent*) override
     {
-        if (found && id != 0 && ! clip.isMidi())
+        if (found && clip.isMidi())
+            window.noteEditorShownMidi();
+        else if (found && id != 0)
             Q_EMIT window.editClipRequested (track, id);
     }
 
@@ -6111,7 +6117,7 @@ private:
         title->setFont (bold);
         g->addWidget (title, 0, 0, 1, 4);
 
-        // MIDI: new MIDI from the clip's, never its notes edited one by one.
+        // MIDI: new MIDI from the clip's, and Edit Notes for the notes one by one.
         midiTools = new QWidget (tools);
         auto* m = new QGridLayout (midiTools);
         m->setContentsMargins (0, 0, 0, 0);
@@ -6188,6 +6194,9 @@ private:
                             }),
                       3, 2, 1, 2);
         loadParts();
+        m->addWidget (tool (MixerWindow::tr ("Edit Notes..."), MixerWindow::tr ("The MIDI editor on this clip (also a double-click on it, or Mixer › Edit MIDI Notes, Alt+Shift+N)"),
+                            [this] { window.noteEditorShownMidi(); }),
+                      4, 0, 1, 4);
         g->addWidget (midiTools, 1, 0, 1, 4);
 
         // Audio: the stretch, the drums as MIDI, the editor.
@@ -6798,7 +6807,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
         grid->addWidget (cube, 4, 2, 1, 2);
         connect (cube, &QPushButton::clicked, this, [this] { cubifyShownMidi(); });
         auto* notesButton = new QPushButton (tr ("Edit Notes..."), midiClipBox);
-        notesButton->setToolTip (tr ("The MIDI editor: the notes on a piano roll in 12-TET, or in a mode, raga, maqam, laras or Scala "
+        notesButton->setToolTip (tr ("The MIDI editor (also a double-click on the clip, or Mixer › Edit MIDI Notes, Alt+Shift+N): the notes on a piano roll in 12-TET, or in a mode, raga, maqam, laras or Scala "
                                      "scale, with step input, quantise, restyle and MPE"));
         grid->addWidget (notesButton, 5, 0, 1, 4);
         auto* hint = new QLabel (tr ("R reverses it"), midiClipBox);
@@ -6939,6 +6948,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     devicePanel->setAutoFillBackground (false);
     // Fixed along the bottom (owner, 2026-10-25), see-through like the rest of the mixer.
     devicePanel->setFixedHeight (190);
+    devicesHidden = ! appSettings().value (QStringLiteral ("mixer/devices"), true).toBool();
 
     auto* layout = new QVBoxLayout (this);
     layout->addWidget (transportRow);
@@ -7214,6 +7224,14 @@ void MixerWindow::phiShownMidi()
 {
     const auto turn = phiTurn++;
     editShownMidi ([turn] (const midifile::Song& s) { return midifile::phiShuffle (s, turn); }, tr ("Φ: the notes dealt out again"));
+}
+
+bool MixerWindow::editNotes()
+{
+    if (! showingClip || ! clipView->showsMidi())
+        return false;
+    noteEditorShownMidi();
+    return true;
 }
 
 void MixerWindow::noteEditorShownMidi()
@@ -8022,12 +8040,19 @@ void MixerWindow::updateDevicePanel()
     if (devicePanel == nullptr)
         return;
     refreshMidiClipBox();
-    const bool show = true;   // fixed along the bottom; the master's shows nothing to change
+    const bool show = ! devicesHidden;   // fixed along the bottom; the master's shows nothing to change
     if (devicePanel->isHidden() == show)
     {
         devicePanel->setVisible (show);
         Q_EMIT devicePanelChanged();
     }
+}
+
+void MixerWindow::toggleDevices()
+{
+    devicesHidden = ! devicesHidden;
+    appSettings().setValue (QStringLiteral ("mixer/devices"), ! devicesHidden);
+    updateDevicePanel();
 }
 
 void MixerWindow::showDevices()
@@ -9765,10 +9790,18 @@ bool MixerWindow::isProjectFile (const QString& file)
     return suffix.compare (projectSuffix, Qt::CaseInsensitive) == 0 || suffix.compare (QLatin1String ("phinyxmix"), Qt::CaseInsensitive) == 0;
 }
 
+bool MixerWindow::askToSave (const QString& title, const QString& question)
+{
+    if (! modified)
+        return true;
+    const auto answer = QMessageBox::question (this, title, question, QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+                                               QMessageBox::Save);
+    return answer == QMessageBox::Discard || (answer == QMessageBox::Save && saveMix (false));
+}
+
 bool MixerWindow::newMix()
 {
-    if (modified && ! path.isEmpty()
-        && QMessageBox::question (this, tr ("New Project"), tr ("Start a new project? Changes to %1 that were not saved are lost.").arg (mixName())) != QMessageBox::Yes)
+    if (! askToSave (tr ("New Project"), tr ("Save the changes to %1 before starting a new project?").arg (mixName())))
         return false;
     engine.stop();
     engine.setPosition (0);
@@ -10346,6 +10379,8 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
 
 void MixerWindow::autosave()
 {
+    if (quitting)
+        return;
     const auto file = autosavePath();
     QDir().mkpath (QFileInfo (file).absolutePath());
     QString error;
@@ -10371,6 +10406,26 @@ void MixerWindow::restoreAutosave()
         modified = appSettings().value (QStringLiteral ("mixer/lastModified"), false).toBool();
         updateTitle();
     }
+}
+
+void MixerWindow::dropAutosave()
+{
+    quitting = true;
+    removeAutosave();
+}
+
+QString MixerWindow::autosaveName()
+{
+    const auto lastPath = appSettings().value (QStringLiteral ("mixer/lastPath")).toString();
+    return lastPath.isEmpty() ? QString() : QFileInfo (lastPath).completeBaseName();
+}
+
+void MixerWindow::removeAutosave()
+{
+    QFile::remove (autosavePath());
+    QFile::remove (configFile ("last.phinyxmix"));
+    appSettings().remove (QStringLiteral ("mixer/lastPath"));
+    appSettings().remove (QStringLiteral ("mixer/lastModified"));
 }
 
 //==============================================================================

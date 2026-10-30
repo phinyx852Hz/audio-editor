@@ -618,7 +618,7 @@ void AmbiVisualizer::paintEvent (QPaintEvent*)
     QPainter g (this);
     g.setRenderHint (QPainter::Antialiasing);
     g.setPen (Qt::NoPen);
-    g.setBrush (Theme::withOpacity (color ("meterBackground")));
+    g.setBrush (Theme::withOpacity (color ("meterBackground"), this));
     g.drawRoundedRect (QRectF (rect()), 4.0, 4.0);
 
     switch (current)
@@ -1279,7 +1279,7 @@ void AmbiVisualizer::paintScope (QPainter& g)
         const auto reach = s.elevation > 0 && showHeight ? horizonRing * (1.0 - s.elevation / 90.0) : horizonRing;
         const QPointF p (centre.x() + std::sin (a) * reach * radius, centre.y() - std::cos (a) * reach * radius);
         g.setPen (QPen (faded (color ("windowText"), s.elevation > 0 ? 0.45 : 0.7), 1.0));
-        g.setBrush (Theme::withOpacity (color ("meterBackground")));
+        g.setBrush (Theme::withOpacity (color ("meterBackground"), this));
         const auto half = s.elevation > 0 ? 3.0 : 3.8;
         g.drawRect (QRectF (p.x() - half, p.y() - half, 2 * half, 2 * half));
     }
