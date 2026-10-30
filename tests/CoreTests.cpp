@@ -1992,6 +1992,65 @@ namespace
             std::fill (r.begin(), r.end(), 0.0f);
             turner.process (sceneAt.data(), 100, l.data(), r.data(), nullptr);
             check (r[50] > 3.0f * std::abs (l[50]), "spatial: the scene turned to the right");
+
+            // A 5.1 file on a track: folded down outside Spatial mode; in it, its surround goes to the
+            // speaker behind on the left, and its LFE to the subwoofer.
+            AudioData::Builder sb (6, rate);
+            std::vector<std::vector<float>> six (6, std::vector<float> (4800, 0.0f));
+            std::fill (six[4].begin(), six[4].end(), 0.5f);   // Ls
+            std::fill (six[3].begin(), six[3].end(), 0.5f);   // LFE: DC passes the low-pass
+            std::vector<const float*> sp6;
+            for (auto& c : six)
+                sp6.push_back (c.data());
+            sb.append (sp6.data(), 4800);
+            const auto surroundClip = mixer::makeAudioClip (*sb.finish(), "five.wav");
+            check (surroundClip->surround() && mixer::clipFormat (*surroundClip) == "5.1" && surroundClip->speakers[4].azimuth < -100.0f,
+                   "mixer: a 5.1 file keeps its channels, Ls at -110°");
+            check (surroundClip->left[100] > 0.3f && std::abs (surroundClip->right[100]) < 1.0e-6f, "mixer: and is heard folded down");
+            const auto ten = mixer::makeAudioClip (*AudioData::Builder (10, rate).finish(), "x.wav", "5.1.4");
+            check (mixer::clipFormat (*ten) == "5.1.4" && ten->speakers[8].elevation > 40.0f, "mixer: 5.1.4 heights");
+            AudioData::Builder pb (16, rate);
+            const auto poly = mixer::makeAudioClip (*pb.finish(), "poly.wav");
+            check (! poly->surround() && mixer::clipFormat (*poly) == "16 ch", "mixer: 16 unmarked channels are a multitrack file");
+            check (mixer::splitChannels (*AudioData::Builder (12, rate).finish(), "p.wav").size() == 12, "mixer: a file split into a clip per channel");
+
+            mixer::Engine u;
+            u.prepare (rate);
+            u.setNumTracks (1);
+            u.setClips (0, { mixer::makeClip (surroundClip, 0) });
+            u.spatialOn = true;
+            sp::Decoder::Setup fiveOne;
+            const auto speakers51 = ambi::layout ("5.1");
+            fiveOne.speakers = ambi::decoder (sp::order, speakers51);
+            fiveOne.lfe = { 3 };
+            fiveOne.headphones = false;
+            u.setDecoder (std::make_shared<sp::Decoder> (fiveOne));
+            std::vector<std::vector<float>> feed (6, std::vector<float> (480, 0.0f));
+            std::vector<float*> feedAt;
+            for (auto& o : feed)
+                feedAt.push_back (o.data());
+            for (int pass = 0; pass < 6; ++pass)
+            {
+                u.setPosition (0);
+                u.play();
+                u.render (a.data(), b.data(), 480);
+                for (auto& o : feed)
+                    std::fill (o.begin(), o.end(), 0.0f);
+                u.takeSpeakers (feedAt.data(), 6, 480);
+            }
+            const auto lsFeed = std::abs (feed[4][300]);
+            check (lsFeed > 0.1f && lsFeed > 2.0f * std::max ({ std::abs (feed[0][300]), std::abs (feed[1][300]), std::abs (feed[5][300]) }),
+                   "spatial: a 5.1 file's Ls is loudest on the Ls speaker");
+            check (feed[3][300] > 0.1f, "spatial: its LFE reaches the subwoofer");
+            const auto peaks = u.takeSpeakerPeaks();
+            check (peaks.size() == 6 && peaks[4] > 0.1f, "spatial: the master meters each speaker");
+            std::string mixError;
+            u.spatialRender = mixer::Engine::SpatialRender::speakers;
+            const auto feeds = u.mixdown (0.0, mixError);
+            check (feeds != nullptr && feeds->numChannels() == 6, "spatial: Mix Down to the speakers, a channel each");
+            u.spatialRender = mixer::Engine::SpatialRender::ambix;
+            const auto ambix = u.mixdown (0.0, mixError);
+            check (ambix != nullptr && ambix->numChannels() == 16, "spatial: Mix Down to the AmbiX scene");
         }
 
         // Reversed: an audio clip plays from its end; a MIDI file's notes run backwards.
@@ -3369,6 +3428,18 @@ namespace
         for (size_t c = 0; c < 4; ++c) { l += fold[0][c] * leftSound[c]; r += fold[1][c] * leftSound[c]; }
         check (l > r * 3.0, "an ambisonic file folds down to stereo by decoding");
         check (dsp::speakerLayout (4, "nonsense").name == "Quad", "an unknown layout name falls back to the usual one");
+
+        // 5.1.4 and 5.1.2 share their channel counts with 7.1.2 and 7.1; the WAV channel mask tells them apart.
+        check (dsp::channelName (8, 10, "5.1.4") == "Ltb" && dsp::channelName (4, 10, "5.1.4") == "Ls" && dsp::channelName (6, 8, "5.1.2") == "Ltf",
+               "10 channels can be 5.1.4, 8 can be 5.1.2");
+        check (dsp::wavChannelMask (6, {}) == 0x60F && dsp::wavChannelMask (12, {}) == 0x2D63F, "5.1 and 7.1.4 channel masks");
+        check (dsp::wavChannelMask (10, "5.1.4") == 0x2D60F && dsp::wavChannelMask (16, "9.1.6") == 0
+                   && dsp::wavChannelMask (16, "Ambisonics (3rd order)") == 0, "5.1.4 has a mask; 9.1.6 and Ambisonics have none");
+        check (dsp::layoutForWavMask (0x2D60F, 10) == "5.1.4" && dsp::layoutForWavMask (0x2D03F, 10) == "5.1.4",
+               "a 5.1.4 mask (side or back surrounds) opens as 5.1.4");
+        check (dsp::layoutForWavMask (0x563F, 10).empty() && dsp::layoutForWavMask (0x560F, 8) == "5.1.2" && dsp::layoutForWavMask (0, 10).empty(),
+               "7.1.2 is the usual 10 channels; no mask says nothing");
+        check (ambi::layout ("5.1.4").size() == 10 && ambi::layout ("5.1.4")[3].lfe, "5.1.4 speakers for decoding");
     }
 }
 

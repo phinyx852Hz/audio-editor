@@ -77,7 +77,8 @@ namespace codec
     // Reads any file FFmpeg can (MP3, AAC, Opus, WMA, AC-3...).
     // Chapters become markers.
     AudioDataPtr decode (const std::string& path, std::string& error, std::atomic<float>* progress = nullptr,
-                         const std::atomic<bool>* cancel = nullptr, std::vector<Marker>* chapters = nullptr);
+                         const std::atomic<bool>* cancel = nullptr, std::vector<Marker>* chapters = nullptr,
+                         uint64_t* channelMask = nullptr);   // the stream's speakers (WAV bits), 0 when it names none
     // Extensions FFmpeg reads (in addition to what JUCE reads).
     std::vector<std::string> readableExtensions();
 }

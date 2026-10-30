@@ -48,6 +48,25 @@ namespace mixer::spatial
         }
     }
 
+    PointGains pointGains (float azimuth, float elevation, float distance)
+    {
+        return gains ({ azimuth, elevation, 0.0f, distance })[0];
+    }
+
+    void encodeOne (const float* in, int frames, const PointGains& from, const PointGains& to, float* const* scene)
+    {
+        const auto step = 1.0f / (float) std::max (1, frames);
+        for (int c = 0; c < channels; ++c)
+        {
+            const auto g0 = from[(size_t) c], dg = to[(size_t) c] - g0;
+            if (g0 == 0.0f && dg == 0.0f)
+                continue;
+            auto* out = scene[c];
+            for (int k = 0; k < frames; ++k)
+                out[k] += in[k] * (g0 + dg * step * (float) (k + 1));
+        }
+    }
+
     Decoder::Decoder (Setup setup) : s (std::move (setup))
     {
         if (std::abs (s.yaw) > 1.0e-6)

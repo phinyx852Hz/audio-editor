@@ -469,6 +469,20 @@ juce::AudioChannelSet MasterChain::channelSetFor (int n)
     }
 }
 
+juce::AudioChannelSet MasterChain::channelSetFor (int n, const std::string& layoutName)
+{
+    if (layoutName.empty() || layoutName == dsp::speakerLayout (n).name)
+        return channelSetFor (n);
+    const auto mask = dsp::wavChannelMask (n, layoutName);
+    if (mask == 0)
+        return juce::AudioChannelSet::discreteChannels (n);
+    juce::AudioChannelSet set;   // AudioChannelSet's speakers are WAV's bits, one up
+    for (int bit = 0; bit < 64; ++bit)
+        if ((mask >> bit) & 1)
+            set.addChannel (static_cast<juce::AudioChannelSet::ChannelType> (bit + 1));
+    return set;
+}
+
 namespace
 {
     bool trySetLayout (juce::AudioPluginInstance& p, const juce::AudioChannelSet& set)

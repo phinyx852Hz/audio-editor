@@ -218,7 +218,7 @@ namespace
         {
             Format f;
             f.id = "wav"; f.name = "WAV (Broadcast Wave)"; f.group = "Uncompressed"; f.extension = "wav"; f.native = true;
-            f.lossless = true; f.chapters = true; f.bitDepths = { 16, 24, float32 }; f.maxChannels = 8;
+            f.lossless = true; f.chapters = true; f.bitDepths = { 16, 24, float32 }; f.maxChannels = 64;
             f.note = "Markers as cue points and regions. Tags: RIFF INFO, BWF, cart, iXML, XMP and ID3. Over 4 GB becomes RF64.";
             list.push_back (f);
             f.id = "aiff"; f.name = "AIFF"; f.extension = "aiff";
@@ -477,7 +477,7 @@ namespace
         }
         {
             Format f;
-            f.group = "Uncompressed"; f.lossless = true; f.maxChannels = 8;
+            f.group = "Uncompressed"; f.lossless = true; f.maxChannels = 64;
             f.id = "w64"; f.name = "Sony Wave64 (W64)"; f.extension = "w64"; f.muxer = "w64"; f.encoder = "pcm-le";
             f.bitDepths = { 8, 16, 24, int32, float32, float64 };
             add (f);
@@ -900,7 +900,7 @@ bool encode (const AudioData& data, Frame start, Frame end, const std::string& p
 }
 
 AudioDataPtr decode (const std::string& path, std::string& error, std::atomic<float>* progress, const std::atomic<bool>* cancel,
-                     std::vector<Marker>* chapters)
+                     std::vector<Marker>* chapters, uint64_t* channelMask)
 {
     AVFormatContext* fmtRaw = nullptr;
     if (const auto r = avformat_open_input (&fmtRaw, path.c_str(), nullptr, nullptr); r < 0)
@@ -923,6 +923,8 @@ AudioDataPtr decode (const std::string& path, std::string& error, std::atomic<fl
 
     const auto channels = std::max (1, ctx->ch_layout.nb_channels);
     const auto rate = ctx->sample_rate;
+    if (channelMask != nullptr)
+        *channelMask = ctx->ch_layout.order == AV_CHANNEL_ORDER_NATIVE ? ctx->ch_layout.u.mask : 0;
     if (rate <= 0)
         return error = "No sample rate in " + path, nullptr;
 
