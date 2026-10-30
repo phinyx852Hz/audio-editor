@@ -50,7 +50,9 @@ void MainWindow::registerMixerCommands()
     })->setStatusTip (tr ("The 8-track mixer: each track plays an audio file, a MIDI file through an instrument, or both"));
     add ("mixer.dock", tr ("&Undock / Dock Mixer"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_F3) }, [this] { placeMixer (! mixerDocked()); })
         ->setStatusTip (tr ("The mixer in the editor's place, or in a window of its own (also Ctrl+Alt+P from the mixer)"));
-    add ("mixer.new", tr ("&New Project"), {}, [this] { showMixer(); mixerWin->newMix(); });
+    // Also File > New Project (Ctrl+N): an empty 8-track mix, launcher and timeline, asking to save first.
+    add ("mixer.new", tr ("&New Project"), { KS (Qt::CTRL | Qt::Key_N) }, [this] { showMixer(); mixerWin->newMix(); })
+        ->setStatusTip (tr ("Start an empty project: 8 tracks, default strips, an empty clip launcher and timeline, and a default patchbay"));
     add ("mixer.newFromSet", tr ("New Project from &Selector Set"), {}, [this]
     {
         showMixer();

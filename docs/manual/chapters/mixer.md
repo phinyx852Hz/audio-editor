@@ -220,7 +220,7 @@ Patches, synths and effects are part of the project and come back with it.
 
 | Command | Keys (in the mixer) |
 |---|---|
-| Mixer > New Project | |
+| File > New Project, or Mixer > New Project | `Ctrl+N` |
 | Mixer > New Project from Selector Set | (see [From the Selector to a mix](#selector)) |
 | Mixer > Open Project | `Ctrl+O` |
 | Mixer > Save Project | `Ctrl+S` |
@@ -228,4 +228,4 @@ Patches, synths and effects are part of the project and come back with it.
 
 A `.phi` also opens with File > Open, from the command line, or from the file manager. Paths inside are relative to the project, so a folder holding the project and its files can be moved. Sounds taken from the Sample menu are saved as WAVs beside the project.
 
-**The project you had open comes back** when PHI starts again, unsaved changes and all, with the mixer in front if you left it there.
+**PHI starts on a blank project.** Quitting with unsaved changes asks to Save, Discard or Cancel. If PHI did not close properly, the next start offers to recover the project as it was, unsaved changes and all, with the mixer in front if you left it there.

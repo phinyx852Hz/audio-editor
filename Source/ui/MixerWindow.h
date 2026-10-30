@@ -137,8 +137,17 @@ public:
     bool saveMix (bool saveAs);
     bool loadMix (const QString& path, QString& error);
     bool writeMix (const QString& path, QString& error);
-    void autosave();      // the mix as it is, kept in the config folder and opened again next time
+    // Unsaved changes offered a save first: Save, Discard or Cancel. False when the user
+    // cancels, or cancels the save, and keeps the project.
+    bool askToSave (const QString& title, const QString& question);
+    // Crash recovery (owner, 2026-10-30): last.phi is written while PHI runs and removed on a
+    // clean quit, so PHI starts on a blank project and offers last.phi only after a crash.
+    void autosave();      // the mix as it is, kept in the config folder
     void restoreAutosave();
+    void dropAutosave();   // quitting: last.phi removed, and not written again
+    static void removeAutosave();      // last.phi and what it was saved as, gone
+    static QString autosaveName();     // the project last.phi holds: its file's name, or empty when untitled
+    bool hasUnsavedChanges() const { return modified; }
     static QString autosavePath();   // last.phi in the config folder
     void projectChanged() { changed(); }   // the patchbay, say: the project differs from its file
     QString mixName() const;
@@ -654,6 +663,7 @@ private:
     bool modified = false;
     bool restoring = false;
     bool opening = false;            // inside loadMix: its newMix() keeps the patchbay
+    bool quitting = false;           // after dropAutosave: nothing more written to last.phi
     std::vector<Snapshot> undoStack, redoStack;
     uint32_t nextClipId = 1;
     std::map<QString, std::weak_ptr<const mixer::AudioClip>> audioCache;

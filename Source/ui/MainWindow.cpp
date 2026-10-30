@@ -899,7 +899,7 @@ void MainWindow::buildMenus()
     };
 
     const QList<QPair<QString, QStringList>> layout {
-        { tr ("&File"),      { "file.open", "album.new", "file.record", "-", "file.save", "file.saveAs", "file.export", "-", "file.metadata", "-", "file.close", "file.nextTab", "file.previousTab", "-", "file.quit" } },
+        { tr ("&File"),      { "mixer.new", "file.open", "album.new", "file.record", "-", "file.save", "file.saveAs", "file.export", "-", "file.metadata", "-", "file.close", "file.nextTab", "file.previousTab", "-", "file.quit" } },
         { tr ("&Edit"),      { "edit.undo", "edit.redo", "-", "view.find", "-", "edit.cut", "edit.copy", "edit.copyToNew", "edit.paste", "edit.delete", "-",
                                "edit.trim", "edit.insertSilence", "edit.split", "edit.duplicate", "-", "edit.snapZero", "edit.snapGrid", "edit.narrowGrid", "edit.widenGrid", "-", "select.all", "select.none", "-",
                                "select.back", "select.forward", "select.backLarge", "select.forwardLarge",
@@ -3810,9 +3810,23 @@ void MainWindow::closeEvent (QCloseEvent* e)
         return;
     }
 
+    // The mixer's project is saved or let go now: PHI starts on a blank project next time,
+    // and last.phi is left only by a run that did not quit cleanly (crash recovery).
+    if (mixerWin != nullptr && mixerWin->hasUnsavedChanges())
+    {
+        showMixer();
+        if (! mixerWin->askToSave (tr ("Quit"), tr ("Save the changes to %1 before quitting?").arg (mixerWin->mixName())))
+        {
+            e->ignore();
+            return;
+        }
+    }
+
     engine.stop();
     if (mixerWin != nullptr)
-        mixerWin->autosave();
+        mixerWin->dropAutosave();
+    else
+        MixerWindow::removeAutosave();
     savePatchBay();
     commands.save();
     saveLayout();
