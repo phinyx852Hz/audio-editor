@@ -608,7 +608,7 @@ public:
         colourBar = new QFrame (this);
         colourBar->setFixedHeight (5);
         layout->addWidget (colourBar);
-        // The name sits at the bottom, under the fader's value, in white on the track's colour
+        // The name sits at the bottom, under the fader's value, in black on the track's colour
         // (owner, 2026-10-25); built here, placed after the fader below.
         nameBox = new QFrame (this);
         nameBox->setObjectName (QStringLiteral ("nameBox"));
@@ -1012,6 +1012,9 @@ public:
             window.changed();
         });
         QObject::connect (nameEdit, &QLineEdit::editingFinished, &window, [this] { window.setFocus(); });
+        for (auto* w : std::initializer_list<QWidget*> { nameBox, number, nameEdit })
+            w->installEventFilter (this);
+        nameBox->setToolTip (MixerWindow::tr ("Drag the name sideways to move the track"));
         QObject::connect (instrumentBox, &QComboBox::activated, this, [this] (int choice)
         {
             window.select (index);
@@ -1461,7 +1464,7 @@ public:
         const auto& info = window.info[(size_t) index];
         colourBar->setStyleSheet (QStringLiteral ("background: %1;").arg (info.colour.name()));
         nameBox->setStyleSheet (QStringLiteral ("QFrame#nameBox { background: %1; border-radius: 3px; } "
-                                                "QFrame#nameBox QLabel, QFrame#nameBox QLineEdit { color: white; background: transparent; }")
+                                                "QFrame#nameBox QLabel, QFrame#nameBox QLineEdit { color: black; background: transparent; }")
                                     .arg (info.colour.name()));
         if (nameEdit->text() != info.name)
             nameEdit->setText (info.name);
@@ -1620,8 +1623,61 @@ public:
     }
 
 protected:
+    // The name bar dragged sideways moves the track there, its launcher column with it.
+    bool dragByName (QObject* o, QEvent* e)
+    {
+        auto* w = static_cast<QWidget*> (o);
+        switch (e->type())
+        {
+            case QEvent::MouseButtonPress:
+            {
+                const auto* m = static_cast<QMouseEvent*> (e);
+                nameHeld = m->button() == Qt::LeftButton;
+                namePress = m->globalPosition().toPoint();
+                return false;
+            }
+            case QEvent::MouseMove:
+            {
+                const auto* m = static_cast<QMouseEvent*> (e);
+                if (! nameHeld || ! (m->buttons() & Qt::LeftButton))
+                    return false;
+                const auto at = m->globalPosition().toPoint();
+                if (! draggingName)
+                {
+                    if (std::abs (at.x() - namePress.x()) < QApplication::startDragDistance())
+                        return false;
+                    draggingName = true;
+                    nameEdit->deselect();
+                    w->setCursor (Qt::ClosedHandCursor);
+                }
+                window.showTrackDrag (index, window.stripTrackAt (at));
+                return true;
+            }
+            case QEvent::MouseButtonRelease:
+            {
+                nameHeld = false;
+                if (! draggingName)
+                    return false;
+                draggingName = false;
+                w->unsetCursor();
+                if (w == nameEdit)
+                    w->setCursor (Qt::IBeamCursor);
+                nameEdit->clearFocus();
+                const auto to = window.dragTarget;
+                window.showTrackDrag (-1, -1);
+                if (to >= 0 && to != index)
+                    window.dragTrack (index, to);
+                return true;
+            }
+            default:
+                return false;
+        }
+    }
+
     bool eventFilter (QObject* o, QEvent* e) override
     {
+        if (! inspecting && (o == nameBox || o == number || o == nameEdit))
+            return dragByName (o, e) || QFrame::eventFilter (o, e);
         if (e->type() == QEvent::MouseButtonDblClick)
         {
             if (o == azDial || o == elDial)
@@ -1756,6 +1812,8 @@ public:
     bool updating = false;
     bool compact = false;
     const bool inspecting;
+    QPoint namePress;           // dragByName
+    bool nameHeld = false, draggingName = false;
     QWidget* panColumnPart = nullptr;
     static constexpr int compactFader = 110, compactSlot = 18;
     QWidget* instrumentPart;
@@ -3689,7 +3747,7 @@ protected:
             p.setBrush (info.colour);
             p.drawRoundedRect (head, 3, 3);
             p.setFont (bold);
-            p.setPen (inkOn (info.colour));
+            p.setPen (Qt::black);   // names in black on every colour (owner, 2026-10-30)
             // Zoomed narrow, the number alone.
             const bool narrow = head.width() < 70;
             const auto label = narrow ? QString::number (t + 1) : QStringLiteral ("%1 %2").arg (t + 1).arg (info.name);
@@ -3697,6 +3755,14 @@ protected:
                         p.fontMetrics().elidedText (label, Qt::ElideRight, std::max (12, head.width() - 30)));
             if (! launch.timeline)
                 p.drawText (backRect (t), Qt::AlignCenter, QStringLiteral ("⟲"));   // click: back to the timeline
+            if (t == window.dragTarget && ! single)
+            {
+                p.save();
+                p.setPen (QPen (highlight, 2));
+                p.setBrush (Qt::NoBrush);
+                p.drawRoundedRect (QRectF (head).adjusted (-1, -1, 1, 1), 4, 4);
+                p.restore();
+            }
             if (t == window.selected)
             {
                 p.setBrush (highlight);
@@ -3893,7 +3959,14 @@ protected:
             return;   // the context menu
         switch (hit.kind)
         {
-            case Hit::header: window.select (hit.track); window.engageTrack(); window.moveCursor (hit.track, window.cursorScene); window.showDevices(); break;
+            case Hit::header:
+                window.select (hit.track);
+                window.engageTrack();
+                window.moveCursor (hit.track, window.cursorScene);
+                window.showDevices();
+                if (! single && e->button() == Qt::LeftButton)
+                    headerPress = { hit.track, e->position().toPoint() };   // dragged sideways, the track moves
+                break;
             case Hit::back: window.engine.backToTimeline (hit.track); break;
             case Hit::slotCell:
             case Hit::play:
@@ -4013,6 +4086,38 @@ protected:
         menu.addAction (MixerWindow::tr ("Choose &File..."), this, [this, t, s] { chooseFile (t, s); });
         menu.addAction (MixerWindow::tr ("&Empty the Slot (Delete)"), this, [this, t, s] { window.clearSlot (t, s); })->setEnabled (slot != nullptr);
         menu.exec (e->globalPos());
+    }
+
+    // A track's header dragged sideways moves the track there, its strip with it.
+    void mouseMoveEvent (QMouseEvent* e) override
+    {
+        if (headerPress.first < 0 || ! (e->buttons() & Qt::LeftButton))
+            return QWidget::mouseMoveEvent (e);
+        const auto at = e->position().toPoint();
+        if (! draggingTrack && std::abs (at.x() - headerPress.second.x()) < QApplication::startDragDistance())
+            return;
+        draggingTrack = true;
+        setCursor (Qt::ClosedHandCursor);
+        const auto to = std::clamp ((at.x() - trackLeft()) / std::max (1, columnWidth()), 0, window.engine.numTracks() - 1);
+        window.showTrackDrag (headerPress.first, to);
+    }
+
+    void mouseReleaseEvent (QMouseEvent* e) override
+    {
+        const auto from = headerPress.first;
+        const bool moved = draggingTrack;
+        headerPress.first = -1;
+        draggingTrack = false;
+        if (moved)
+        {
+            unsetCursor();
+            const auto to = window.dragTarget;
+            window.showTrackDrag (-1, -1);
+            if (to >= 0 && to != from)
+                window.dragTrack (from, to);
+            return;
+        }
+        QWidget::mouseReleaseEvent (e);
     }
 
     void dragEnterEvent (QDragEnterEvent* e) override
@@ -4259,6 +4364,8 @@ private:
     }
 
     MixerWindow& window;
+    std::pair<int, QPoint> headerPress { -1, {} };   // the header pressed, for moving its track
+    bool draggingTrack = false;
     bool single = false;
 };
 
@@ -5699,12 +5806,12 @@ protected:
         if (! found)
             return;
 
-        // Its name in white on the track's colour, then what it is.
+        // Its name in black on the track's colour, then what it is.
         const QRectF nameBox (r.left() + 8, r.top() + 6, std::min (260.0, r.width() - 16), 20);
         g.setPen (Qt::NoPen);
         g.setBrush (colour);
         g.drawRoundedRect (nameBox, 3, 3);
-        g.setPen (Qt::white);
+        g.setPen (Qt::black);
         g.drawText (nameBox.adjusted (6, 0, -6, 0), Qt::AlignVCenter | Qt::AlignLeft,
                     g.fontMetrics().elidedText (name, Qt::ElideRight, (int) nameBox.width() - 12));
         const auto seconds = (double) clip.length / std::max (1.0, window.rate());
@@ -6692,7 +6799,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     inspectorButton = button (tr ("Inspector"), tr ("The Inspector, left of the strips: the selected track's mode, instrument, Pre, inserts, sends and width, and in the launcher its clip"));
     inspectorButton->setCheckable (true);
     inspectorButton->setToolTip (tr ("The Inspector in the Finder's place, left of the tracks: the selected track's mode, instrument, Pre, "
-                                     "inserts, sends and width, and the clip picked. Picking a track shows it too; Ctrl+F brings the Finder back"));
+                                     "inserts, sends and width, and the clip picked. Off, the column closes (Ctrl+I); Ctrl+F brings the Finder"));
     quantiseBox = new QComboBox (this);
     quantiseBox->setFocusPolicy (Qt::NoFocus);
     for (int q = 0; q < numQuantise; ++q)
@@ -7065,6 +7172,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     sideSplitter->setStretchFactor (1, 1);
     sideSplitter->setSizes ({ 260, 1100 });
     sideSplitter->restoreState (appSettings().value (QStringLiteral ("mixer/sideColumn")).toByteArray());
+    inspectorClosed = appSettings().value (QStringLiteral ("mixer/inspectorClosed"), false).toBool();
 
     // F6 and Tab go round the browser, the tracks and the strips.
     auto* nextSection = new QShortcut (QKeySequence (Qt::Key_F6), this);
@@ -7158,12 +7266,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     connect (followTempoBox, &QCheckBox::toggled, this, [this] { placeAllMidi(); changed(); });
     connect (tempoBox, &QDoubleSpinBox::valueChanged, this, [this] (double bpm) { engine.tempo = bpm; });
     connect (launcherButton, &QPushButton::toggled, this, [this] (bool on) { showLauncher (on); });
-    connect (inspectorButton, &QPushButton::toggled, this, [this] (bool on)
-    {
-        showSideFinder (! on);
-        if (on)
-            setFocus();
-    });
+    connect (inspectorButton, &QPushButton::toggled, this, [this] (bool on) { showInspector (on); });
     connect (quantiseBox, &QComboBox::activated, this, [this] (int q)
     {
         engine.launchQuantise = quantiseBeats[q];
@@ -8457,12 +8560,25 @@ void MixerWindow::select (int index)
     }
     if (! picked.count (index))
         picked = { index };
-    // Arm the Selected Track (owner, 2026-10-30, as Ableton's auto-arm): one that plays an
-    // instrument takes the arm, not while a take goes on and not from a hover; an audio track
-    // leaves it where it is, as arming it would open its input.
-    if (autoArm && ! keepArm && index < engine.numTracks() && engine.liveTrack() != index && ! engine.isRecording()
-        && engine.strip (index).mode.load() != (int) mixer::TrackMode::audio)
-        arm (index);
+    // Arm the Selected Track (owner, 2026-10-30, as Ableton's auto-arm): one that the MIDI
+    // keyboard plays takes the arm, not while a take goes on and not from a hover. One that would
+    // record the audio input (an audio track, or a hybrid with no instrument yet) leaves the arm
+    // where it is, as arming it would open its input and its meter would show the room's noise.
+    // Like Ableton's, the arm follows the selection: a track that takes no arm (as above) takes it
+    // off the track selecting armed, but never off one armed by hand.
+    if (autoArm && ! keepArm && index < engine.numTracks() && engine.liveTrack() != index && ! engine.isRecording())
+    {
+        if (const auto q = recordRequest (index, -1); ! (q.audio && ! q.fromInstrument))
+        {
+            arm (index);
+            autoArmed = true;
+        }
+        else if (autoArmed && engine.liveTrack() >= 0)
+        {
+            arm (engine.liveTrack());   // off
+            autoArmed = false;
+        }
+    }
     // The clip shown belongs to the track that was selected; this one shows its devices.
     if (showingClip && clipView->shownTrack() != index)
     {
@@ -8784,22 +8900,7 @@ std::shared_ptr<const MixerWindow::TrackCopy> MixerWindow::takeTrack (int index,
     if (! readyToMoveTracks (index))
         return nullptr;
     auto copy = std::make_shared<TrackCopy>();
-    copy->index = index;
-    copy->strip = std::make_unique<mixer::Strip>();
-    copyStrip (engine.strip (index), *copy->strip);
-    copy->clips = engine.clips (index);
-    copy->instrument = engine.instrument (index);
-    copy->inserts = engine.inserts (index);
-    copy->slots = slots[(size_t) index];
-    const auto& t = info[(size_t) index];
-    copy->name = t.name;
-    copy->colour = t.colour;
-    copy->sound = t.sound;
-    copy->tuning = t.tuning;
-    copy->givenDefault = givenDefaults[(size_t) index];
-    copy->heardTuning = heardTunings[(size_t) index];
-    copy->timelinePasses = timelinePasses[(size_t) index];
-    copy->layerTake = layerTakes[(size_t) index];
+    copyOut (index, *copy);
     for (int k = 0; k < count; ++k)
         if (k != index && engine.strip (k).duckKey.load() == index)
             copy->duckedBy.push_back (k);
@@ -8823,16 +8924,28 @@ std::shared_ptr<const MixerWindow::TrackCopy> MixerWindow::takeTrack (int index,
     return copy;
 }
 
-bool MixerWindow::putTrack (const TrackCopy& copy, std::vector<Step>& stack)
+void MixerWindow::copyOut (int index, TrackCopy& copy)
 {
-    const auto at = copy.index;
-    if (! engine.roomForTracks())
-    {
-        status->setText (tr ("Track %1, “%2”, can only come back when the mixer has fewer than %3 tracks.").arg (at + 1).arg (copy.name).arg (engine.trackLimit()));
-        return false;
-    }
-    if (at > engine.numTracks() || ! openTrack (at))
-        return false;
+    copy.index = index;
+    copy.strip = std::make_unique<mixer::Strip>();
+    copyStrip (engine.strip (index), *copy.strip);
+    copy.clips = engine.clips (index);
+    copy.instrument = engine.instrument (index);
+    copy.inserts = engine.inserts (index);
+    copy.slots = slots[(size_t) index];
+    const auto& t = info[(size_t) index];
+    copy.name = t.name;
+    copy.colour = t.colour;
+    copy.sound = t.sound;
+    copy.tuning = t.tuning;
+    copy.givenDefault = givenDefaults[(size_t) index];
+    copy.heardTuning = heardTunings[(size_t) index];
+    copy.timelinePasses = timelinePasses[(size_t) index];
+    copy.layerTake = layerTakes[(size_t) index];
+}
+
+void MixerWindow::copyIn (const TrackCopy& copy, int at)
+{
     copyStrip (*copy.strip, engine.strip (at));
     engine.setClips (at, copy.clips);
     engine.setInstrument (at, copy.instrument);
@@ -8851,6 +8964,114 @@ bool MixerWindow::putTrack (const TrackCopy& copy, std::vector<Step>& stack)
     heardTunings[(size_t) at] = copy.heardTuning;
     timelinePasses[(size_t) at] = copy.timelinePasses;
     layerTakes[(size_t) at] = copy.layerTake;
+}
+
+bool MixerWindow::moveTrack (int from, int to)
+{
+    const auto count = engine.numTracks();
+    if (from == to || from < 0 || to < 0 || from >= count || to >= count)
+        return false;
+    if (! readyToMoveTracks (std::min (from, to)))
+        return false;
+    TrackCopy copy;
+    copyOut (from, copy);
+    // Its clips in every undo and redo step go with it, as copyTrack takes the others'.
+    std::vector<mixer::Clips> undone, redone;
+    for (const auto& step : undoStack)
+        undone.push_back (step.clips[(size_t) from]);
+    for (const auto& step : redoStack)
+        redone.push_back (step.clips[(size_t) from]);
+    const auto live = engine.liveTrack();
+
+    const int way = to > from ? 1 : -1;
+    for (int k = from; k != to; k += way)
+        copyTrack (k + way, k);
+    copyIn (copy, to);
+    for (size_t i = 0; i < undoStack.size(); ++i)
+        undoStack[i].clips[(size_t) to] = undone[i];
+    for (size_t i = 0; i < redoStack.size(); ++i)
+        redoStack[i].clips[(size_t) to] = redone[i];
+
+    const auto moved = [from, to] (int k)
+    {
+        if (k == from)
+            return to;
+        if (from < to && k > from && k <= to)
+            return k - 1;
+        if (from > to && k >= to && k < from)
+            return k + 1;
+        return k;
+    };
+    moveDuckKeys (moved);
+    if (live >= 0)
+        engine.setLiveTrack (moved (live));
+    rebuildStrips();
+    select (to);
+    changed();
+    return true;
+}
+
+void MixerWindow::dragTrack (int from, int to)
+{
+    if (! moveTrack (from, to))
+        return;
+    Step step;
+    step.moveFrom = to;
+    step.moveTo = from;
+    pushUndo (std::move (step));
+    status->setText (tr ("Track moved from %1 to %2 (Ctrl+Z moves it back).").arg (from + 1).arg (to + 1));
+}
+
+void MixerWindow::showTrackDrag (int from, int to)
+{
+    dragFrom = from;
+    dragTarget = to;
+    if (to < 0 || to >= engine.numTracks())
+    {
+        dragFrom = dragTarget = -1;
+        if (dropMarker != nullptr)
+            dropMarker->hide();
+    }
+    else
+    {
+        if (dropMarker == nullptr)
+        {
+            dropMarker = new QFrame (stripArea);
+            dropMarker->setAttribute (Qt::WA_TransparentForMouseEvents);
+            dropMarker->setStyleSheet (QStringLiteral ("border: 2px solid %1; border-radius: 4px; background: transparent;")
+                                           .arg (palette().color (QPalette::Highlight).name()));
+        }
+        dropMarker->setGeometry (strips[(size_t) to]->geometry().adjusted (-2, 0, 2, 0));
+        dropMarker->show();
+        dropMarker->raise();
+        status->setText (from == to ? tr ("Drag track %1 to another place.").arg (from + 1)
+                                    : tr ("Move track %1, “%2”, to %3.").arg (from + 1).arg (info[(size_t) from].name).arg (to + 1));
+    }
+    if (grid != nullptr)
+        grid->update();
+}
+
+int MixerWindow::stripTrackAt (QPoint global) const
+{
+    const auto x = stripArea->mapFromGlobal (global).x();
+    const auto count = engine.numTracks();
+    for (int t = 0; t < count; ++t)
+        if (x < strips[(size_t) t]->geometry().right() + stripGap / 2)
+            return t;
+    return count - 1;
+}
+
+bool MixerWindow::putTrack (const TrackCopy& copy, std::vector<Step>& stack)
+{
+    const auto at = copy.index;
+    if (! engine.roomForTracks())
+    {
+        status->setText (tr ("Track %1, “%2”, can only come back when the mixer has fewer than %3 tracks.").arg (at + 1).arg (copy.name).arg (engine.trackLimit()));
+        return false;
+    }
+    if (at > engine.numTracks() || ! openTrack (at))
+        return false;
+    copyIn (copy, at);
     for (const auto k : copy.duckedBy)
         if (k < engine.numTracks())
             engine.strip (k).duckKey = at;
@@ -8937,6 +9158,14 @@ bool MixerWindow::apply (const Step& step, std::vector<Step>& from, const std::v
     {
         inverse.restores = takeTrack (step.removes, to);
         return inverse.restores != nullptr;
+    }
+    if (step.moveFrom >= 0)
+    {
+        if (! moveTrack (step.moveFrom, step.moveTo))
+            return false;
+        inverse.moveFrom = step.moveTo;
+        inverse.moveTo = step.moveFrom;
+        return true;
     }
     inverse.clips = snapshot();
     restore (step.clips);
@@ -9416,6 +9645,7 @@ void MixerWindow::editInstrument (int track)
 
 void MixerWindow::arm (int track)
 {
+    autoArmed = false;   // by hand, unless select() says otherwise straight after
     engine.setLiveTrack (engine.liveTrack() == track ? -1 : track);
     updateInput();   // an audio track armed hears its input
     for (int i = 0; i < mixer::maxTracks; ++i)
@@ -9778,17 +10008,37 @@ void MixerWindow::stripsMenu (QPoint at)
         focusFollowsMouse = on;
         appSettings().setValue (QStringLiteral ("mixer/focusFollowsMouse"), on);
     });
-    auto* arming = menu.addAction (tr ("&Arm the Selected Track"));
-    arming->setCheckable (true);
-    arming->setChecked (autoArm);
-    arming->setToolTip (tr ("Selecting a track that plays an instrument arms it for the MIDI keyboard and recording; pointing at one never does"));
-    connect (arming, &QAction::toggled, this, [this] (bool on)
-    {
-        autoArm = on;
-        appSettings().setValue (QStringLiteral ("mixer/autoArm"), on);
-    });
     menu.setToolTipsVisible (true);
     menu.exec (at);
+}
+
+void MixerWindow::showPreferences()
+{
+    QDialog dialog (this);
+    dialog.setWindowTitle (tr ("Mixer Preferences"));
+    auto* layout = new QVBoxLayout (&dialog);
+    auto* arming = new QCheckBox (tr ("&Arm on Select: selecting a track arms it, as in Ableton Live"), &dialog);
+    arming->setChecked (autoArm);
+    arming->setToolTip (tr ("A track the MIDI keyboard plays takes the arm when you select it, and gives it up when you select another. "
+                            "A track that would record the audio input (an audio track, or a hybrid with no instrument yet) is never armed "
+                            "this way, nor is a track you only point at, and an arm you set by hand stays"));
+    auto* follow = new QCheckBox (tr ("&Focus Follows Mouse: pointing at a strip selects its track"), &dialog);
+    follow->setChecked (focusFollowsMouse);
+    layout->addWidget (arming);
+    layout->addWidget (follow);
+    auto* buttons = new QDialogButtonBox (QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect (buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect (buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget (buttons);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    autoArm = arming->isChecked();
+    focusFollowsMouse = follow->isChecked();
+    appSettings().setValue (QStringLiteral ("mixer/autoArm"), autoArm);
+    appSettings().setValue (QStringLiteral ("mixer/focusFollowsMouse"), focusFollowsMouse);
+    if (! autoArm && autoArmed && engine.liveTrack() >= 0)
+        arm (engine.liveTrack());   // the arm selecting set goes with it
+    autoArmed = false;
 }
 
 void MixerWindow::setSixteenTracks (bool on)
@@ -10319,6 +10569,13 @@ void MixerWindow::keyPressEvent (QKeyEvent* e)
                 if (! withShift)
                 {
                     toggleBrowser();
+                    return;
+                }
+                break;
+            case Qt::Key_I:
+                if (! withShift)
+                {
+                    showInspector (! inspectorShown());
                     return;
                 }
                 break;
@@ -11264,27 +11521,47 @@ void MixerWindow::toggleBrowser()
 void MixerWindow::showSideFinder (bool finder)
 {
     finderShown = finder;
+    const bool inspector = ! finder && ! inspectorClosed;
     if (inspectorButton != nullptr)
     {
         const QSignalBlocker quiet (inspectorButton);
-        inspectorButton->setChecked (! finder);
+        inspectorButton->setChecked (inspector);
+    }
+    if (auto* action = inspectorAction.data())
+    {
+        const QSignalBlocker quiet (action);
+        action->setChecked (inspector);
     }
     if (! isWindow())
     {
         // In the editor's place: the editor's Find panel is the Finder, beside the mixer.
         sideStack->setCurrentWidget (inspectorScroll);
-        sideStack->setVisible (! finder);
+        sideStack->setVisible (inspector);
         Q_EMIT finderWanted (finder);
     }
     else
     {
-        sideStack->show();
+        sideStack->setVisible (finder || inspector);
         sideStack->setCurrentWidget (finder ? static_cast<QWidget*> (browser) : inspectorScroll);
         if (finder && isVisible())
             browser->view()->setFocus();
     }
-    if (! finder)
+    if (inspector)
         refreshInspector();
+}
+
+void MixerWindow::showInspector (bool shown)
+{
+    inspectorClosed = ! shown;
+    appSettings().setValue (QStringLiteral ("mixer/inspectorClosed"), inspectorClosed);
+    showSideFinder (false);   // closed, the Finder goes too: the strips have the room
+    setFocus();
+}
+
+void MixerWindow::setInspectorAction (QAction* action)
+{
+    inspectorAction = action;
+    showSideFinder (finderShown);
 }
 
 void MixerWindow::hideSideColumn (bool hidden)
@@ -11297,7 +11574,7 @@ void MixerWindow::hideSideColumn (bool hidden)
 
 void MixerWindow::engageTrack()
 {
-    if (finderShown)
+    if (finderShown && ! inspectorClosed)
         showSideFinder (false);
 }
 
