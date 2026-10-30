@@ -371,6 +371,11 @@ The Inspector button (or `Ctrl+I`, View > Mixer Inspector) closes the column and
 (owner, 2026-10-30): closed, picking a track leaves it closed and the strips have the room, and it
 stays closed the next time PHI starts. `Ctrl+F` still brings the Finder. The track names on the
 strips, the Inspector and the launcher's headers are black on every colour (owner, 2026-10-30).
+A track moves by its name (owner, 2026-10-30): drag the name bar at the bottom of its strip, or its
+header at the top of the launcher, sideways onto another track's place. Both show where it will
+land, the tracks between move over by one, and the strip and its launcher column go together with
+everything on them (clips, slots, instrument, inserts, sends, the arm, ducks keyed to it).
+`Ctrl+Z` moves it back.
 
 Device Chain and drag and drop (owner, 2026-10-25, "very close to Ableton's workflow"):
 - The mixer has its own Device Chain along its bottom, the whole width, in both views. It shows

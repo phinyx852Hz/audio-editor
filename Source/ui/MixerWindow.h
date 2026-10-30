@@ -169,6 +169,11 @@ public:
     // A new track at `at` (0-based), the ones from there on moving along; and track `index`
     // deleted (asked first when something is on it), the ones after it moving up.
     void insertTrack (int at);
+    void dragTrack (int from, int to);   // moveTrack, undone by Ctrl+Z
+    // A track dragged by its name (strip) or header (launcher): where it would land, shown on
+    // both; -1 hides it.
+    void showTrackDrag (int from, int to);
+    int stripTrackAt (QPoint global) const;   // the track whose strip is nearest that x
     void deleteTrack (int index);
 
     // The clip launcher in the upper area, or the tracks across time.
@@ -685,6 +690,8 @@ private:
     TrackLanes* lanes = nullptr;
     FileBrowser* browser = nullptr;
     ClipGrid* grid = nullptr;
+    int dragFrom = -1, dragTarget = -1;   // showTrackDrag
+    class QFrame* dropMarker = nullptr;
     LauncherRack* rack = nullptr;
     QWidget* launcherArea = nullptr;
     QWidget* upperArea = nullptr;      // the tracks across time or the launcher, above the strips
@@ -793,7 +800,12 @@ private:
         Snapshot clips;
         int removes = -1;                      // this track goes (undoing its adding)
         std::shared_ptr<const TrackCopy> restores;   // this track comes back (undoing its deleting)
+        int moveFrom = -1, moveTo = -1;        // this track moves back (undoing its dragging)
     };
+    void copyOut (int index, TrackCopy&);          // all of track `index` that copyTrack moves
+    void copyIn (const TrackCopy&, int at);
+    // Track `from` dragged to `to`, the tracks between moving over by one; false when it cannot.
+    bool moveTrack (int from, int to);
     // Track `index` taken out, the tracks after it moved down; null when it cannot be. Its
     // clips in the steps of `stack` (where the step bringing it back goes) are kept with it.
     std::shared_ptr<const TrackCopy> takeTrack (int index, const std::vector<Step>& stack);
