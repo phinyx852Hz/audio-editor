@@ -30,7 +30,7 @@ namespace mixer
     class Instrument
     {
     public:
-        enum class Kind { synth, sampler, slicer, plugin, raga };
+        enum class Kind { synth, sampler, slicer, plugin, raga, prism };   // prism: InstrumentPrism.h
 
         virtual ~Instrument() = default;
         virtual Kind kind() const = 0;

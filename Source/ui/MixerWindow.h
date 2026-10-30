@@ -21,6 +21,7 @@
 
 class AudioEngine;
 class QSpinBox;
+class QMenu;
 class QAbstractButton;
 namespace counterpoint { struct Settings; }
 namespace minimalize { struct Part; }
@@ -42,6 +43,7 @@ class ClipGrid;
 class LauncherRack;
 class ReturnStripWidget;
 class TrackDevices;
+class PrismDialog;
 class ClipView;
 class EditorTrack;
 class QStackedWidget;
@@ -53,6 +55,9 @@ class QSpinBox;
 // The built-in Synth's settings (also used by the patchbay's synths), applied as they change.
 // `changed` runs after each change. Deletes itself when closed.
 QDialog* synthDialog (mixer::InstrumentPtr synth, const QString& title, QWidget* parent, std::function<void()> changed);
+// PHI rāga's settings, and an effect's knobs (for effects without a window of their own), the same way.
+QDialog* ragaDialog (mixer::InstrumentPtr raga, const QString& title, QWidget* parent, std::function<void()> changed);
+QDialog* effectDialog (mixer::EffectPtr effect, const QString& title, QWidget* parent, std::function<void()> changed);
 
 class LevelMeter final : public QWidget
 {
@@ -299,6 +304,7 @@ private:
     friend class LauncherRack;
     friend class ReturnStripWidget;
     friend class TrackDevices;
+    friend class PrismDialog;
     friend class ClipView;
     friend class EditorTrack;
     friend class BusStripWidget;
@@ -358,6 +364,20 @@ private:
     void moveInsert (int track, int insert, int to);
     void reorderInserts (int track, const std::vector<int>& order);   // the engine's indices in their new order
     QJsonArray insertsJson (int track) const;
+    // The effects menu (Built-in first, then by format); `pick` gets the chosen plugin's id.
+    void effectsMenu (QMenu&, std::function<void (const std::string& id)> pick);
+    static QJsonArray effectsJson (const mixer::Inserts&);
+    mixer::Inserts effectsFromJson (const QJsonArray&, const QString& owner, QStringList& problems);
+    // Instrument Prisms (MixerPrism.cpp, docs/prism.md): a track's instrument made of rays, each an
+    // instrument and then its effects, played together. Choosing one wraps the track's instrument.
+    mixer::InstrumentPtr makePrism (int track);
+    // A ray's instrument: "synth", "raga" or "instrument\n<plugin id>"; null with `error`.
+    mixer::InstrumentPtr makeRayInstrument (const QByteArray& what, QString& error);
+    static bool canBeRay (const mixer::Instrument&);   // not a Sampler, Slicer or Prism (yet)
+    void openPrism (int track);   // its rays, in a window of their own
+    void prismChanged (int track);   // its rays were edited: the strip and the Device Chain follow
+    QJsonObject prismJson (const mixer::Instrument& prism) const;
+    mixer::InstrumentPtr prismFromJson (const QJsonObject&, int track, QStringList& problems);
     QString insertOwner (int track) const;   // "track 2, “Bass”", or "the Pre-Master" (mixer::busTrack)
     int insertLimit (int track) const;
     void refreshInsertsOf (int track);
