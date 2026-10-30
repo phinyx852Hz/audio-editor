@@ -393,6 +393,7 @@ namespace minimalize
         // Phasing and canon want the pattern held still on its own track and the moving copies
         // on new ones; without room the part itself moves, against the others.
         int room = settings.newVoices ? std::clamp (std::min (maxTracks - count, settings.freeTracks), 0, maxTracks) : 0;
+        voices.reserve (voices.size() + (size_t) room);   // `v` below must outlive the new voices pushed after it
         for (int i = 0; i < count; ++i)
         {
             auto& v = voices[(size_t) i];

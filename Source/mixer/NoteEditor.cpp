@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdio>
 #include <limits>
 #include <map>
 #include <memory>
@@ -383,6 +384,13 @@ namespace noteedit
         return out;
     }
 
+    namespace
+    {
+        const std::string markerPrefix = "PHI system: ";
+        const std::string cyclePrefix = "PHI cycle: ";
+        const std::string markPrefix = "PHI mark: ";
+    }
+
     //==========================================================================
     Sequence decode (const midifile::Song& song)
     {
@@ -390,11 +398,20 @@ namespace noteedit
         s.ticksPerQuarter = song.ticksPerQuarter > 0 ? song.ticksPerQuarter : 480;
         s.tempos = song.tempos.empty() ? std::vector<midifile::Tempo> { midifile::Tempo {} } : song.tempos;
         s.trackNames = song.trackNames;
+        std::vector<std::pair<int64_t, std::string>> marks;   // "PHI mark: " markers, for the notes below
         for (const auto& m : song.markers)
         {
             PitchSystem ps;
+            Cycle cycle;
             if (parseSystemMarker (m.text, ps))
                 s.systems.push_back ({ m.tick, std::move (ps) });
+            else if (parseCycleMarker (m.text, cycle))
+            {
+                cycle.tick = m.tick;
+                s.cycles.push_back (std::move (cycle));
+            }
+            else if (m.text.rfind (markPrefix, 0) == 0)
+                marks.push_back ({ m.tick, m.text.substr (markPrefix.size()) });
             else
                 s.markers.push_back (m);
         }
@@ -519,7 +536,72 @@ namespace noteedit
                 s.other.push_back (song.events[i]);
         }
         s.sort();
+        // The lyrics and marks onto the notes they start with: a chord's highest first.
+        const auto noteAt = [&s] (int64_t tick, const std::function<bool (const Note&)>& fits) -> Note*
+        {
+            Note* best = nullptr;
+            for (auto& n : s.notes)
+                if (n.start == tick && fits (n) && (best == nullptr || n.pitch > best->pitch))
+                    best = &n;
+            return best;
+        };
+        for (const auto& l : song.lyrics)
+            if (auto* n = noteAt (l.tick, [] (const Note& x) { return x.lyric.empty(); }))
+                n->lyric = l.text;
+        for (const auto& [tick, text] : marks)
+        {
+            // "<key>: <mark>": the key it was sent on (its channel is MPE's, not the note's).
+            int key = -1;
+            const auto colon = text.find (": ");
+            if (colon == std::string::npos || std::sscanf (text.c_str(), "%d", &key) != 1)
+                continue;
+            if (auto* n = noteAt (tick, [&] (const Note& x) { return x.mark.empty() && x.key() == key; }))
+                n->mark = text.substr (colon + 2);
+        }
         return s;
+    }
+
+    //==========================================================================
+    const Cycle* cycleAt (const Sequence& s, int64_t tick)
+    {
+        const Cycle* in = nullptr;
+        for (const auto& c : s.cycles)
+            if (c.tick <= tick)
+                in = &c;
+        return in;
+    }
+
+    void setCycle (Sequence& s, const Cycle& cycle)
+    {
+        const auto tick = std::max<int64_t> (0, cycle.tick);
+        std::erase_if (s.cycles, [tick] (const Cycle& c) { return c.tick == tick; });
+        if (cycle.rhythm.empty())
+            return;
+        auto c = cycle;
+        c.tick = tick;
+        s.cycles.push_back (std::move (c));
+        std::stable_sort (s.cycles.begin(), s.cycles.end(), [] (const auto& a, const auto& b) { return a.tick < b.tick; });
+    }
+
+    std::string cycleMarker (const Cycle& c)
+    {
+        return cyclePrefix + c.rhythm + " | beat " + std::to_string (c.beat);
+    }
+
+    bool parseCycleMarker (const std::string& text, Cycle& c)
+    {
+        if (text.rfind (cyclePrefix, 0) != 0)
+            return false;
+        const auto body = text.substr (cyclePrefix.size());
+        const auto bar = body.rfind (" | beat ");
+        Cycle r;
+        r.rhythm = body.substr (0, bar);
+        if (bar != std::string::npos)
+            r.beat = std::max<int64_t> (0, std::atoll (body.c_str() + bar + 8));
+        if (r.rhythm.empty())
+            return false;
+        c = std::move (r);
+        return true;
     }
 
     //==========================================================================
@@ -593,10 +675,7 @@ namespace noteedit
             s.notes[i].selected = picked && target[i];
     }
 
-    namespace
-    {
-        const std::string markerPrefix = "PHI system: ";
-    }
+
 
     std::string systemMarker (const PitchSystem& p)
     {
@@ -839,6 +918,16 @@ namespace noteedit
         song->markers = s.markers;
         for (const auto& c : s.systems)
             song->markers.push_back ({ c.tick, systemMarker (c.system) });
+        for (const auto& c : s.cycles)
+            song->markers.push_back ({ c.tick, cycleMarker (c) });
+        for (const auto& n : s.notes)
+        {
+            if (! n.lyric.empty())
+                song->lyrics.push_back ({ n.start, n.lyric });
+            if (! n.mark.empty())
+                song->markers.push_back ({ n.start, markPrefix + std::to_string (n.key()) + ": " + n.mark });
+        }
+        std::stable_sort (song->lyrics.begin(), song->lyrics.end(), [] (const auto& a, const auto& b) { return a.tick < b.tick; });
         std::stable_sort (song->markers.begin(), song->markers.end(), [] (const auto& a, const auto& b) { return a.tick < b.tick; });
         for (const auto& x : out)
         {

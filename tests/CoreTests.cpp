@@ -10,6 +10,9 @@
 #include "../Source/mixer/Tunings.h"
 #include "../Source/mixer/NoteEditor.h"
 #include "../Source/core/Scala.h"
+#include "../Source/core/XenTuner.h"
+#include "../Source/mixer/Notation.h"
+#include "../Source/mixer/NotationGrid.h"
 #include "../Source/mixer/RagaInstrument.h"
 #include "../Source/mixer/Counterpoint.h"
 #include "../Source/mixer/Fugue.h"
@@ -18,6 +21,9 @@
 #include "../Source/mixer/MixerEngine.h"
 #include "../Source/mixer/DrumsToMidi.h"
 #include "../Source/mixer/Rhythms.h"
+#include "../Source/mixer/Architectonics.h"
+#include "../Source/mixer/Compose.h"
+#include "../Source/mixer/Harmonies.h"
 #include "../Source/mixer/RhythmGenerator.h"
 #include "../Source/mixer/Stochastic.h"
 #include "../Source/mixer/Serial.h"
@@ -69,6 +75,7 @@
 #include <fstream>
 #include <functional>
 #include <iterator>
+#include <filesystem>
 #include <map>
 #include <numeric>
 #include <random>
@@ -5139,7 +5146,7 @@ namespace
     {
         std::vector<std::string> errors;
         const auto all = phi::parseRagas (phi::builtInRagaSheets(), errors);
-        check (errors.empty() && all.size() == 175 && phi::builtInRagas().size() == 175, "raga sheets: the 175 built-in sheets read without a mistake");
+        check (errors.empty() && all.size() == 176 && phi::builtInRagas().size() == 176, "raga sheets: the 176 built-in sheets read without a mistake");
         for (const auto& e : errors)
             std::printf ("  %s\n", e.c_str());
         // Darpaṇ, made for PHI, is a mirror: each svara's reflection about Sa (and Ma) is one of its
@@ -5410,6 +5417,45 @@ namespace
             check (seconds < 1.0, "sitar: 4 strings and 13 tarab render 5 s in under 1 s");
             std::printf ("  sitar: 5 s of 4 strings and 13 tarab in %.3f s\n", seconds);
         }
+    }
+
+    // The Mode menu's harmony (owner, 2026-10-29): every example playable, its tuning known, each
+    // part's groups in order, jazz its own part, and the example written as a MIDI file.
+    void testHarmonies()
+    {
+        const auto& all = harmony::harmonies();
+        bool ok = all.size() >= 60, tunings = true, lower = true;
+        std::set<std::string> plains;
+        for (const auto& h : all)
+        {
+            if (! harmony::valid (h))
+                std::printf ("  invalid harmony example: %s\n", h.name.c_str());
+            ok = ok && harmony::valid (h) && plains.insert (h.plain).second && ! h.about.empty() && ! h.source.empty() && ! h.tradition.empty();
+            tunings = tunings && (h.tuning.empty() || mixer::findTuning (h.tuning) >= 0);
+            lower = lower && std::none_of (h.name.begin(), h.name.end(), [] (char c) { return c >= 'A' && c <= 'Z'; });
+        }
+        check (ok && tunings && lower, "harmony: every example valid and named once in lower case, its tuning known");
+
+        size_t listed = 0;
+        for (auto p : { harmony::Part::western, harmony::Part::jazz, harmony::Part::world, harmony::Part::meeting })
+            for (const auto& g : harmony::groups (p))
+                listed += harmony::inGroup (p, g).size();
+        const auto western = harmony::groups (harmony::Part::western);
+        check (listed == all.size() && harmony::groups (harmony::Part::jazz).size() == 1 && ! western.empty() && western.front() == "middle ages"
+               && harmony::groupTitle (harmony::Part::world, "west asia") == "West Asia" && harmony::findHarmony ("georgian polyphony") >= 0
+               && harmony::findHarmony ("sacred harp") >= 0,
+               "harmony: every one in a group, jazz its own part, the eras in order");
+
+        const auto& organum = all[(size_t) harmony::findHarmony ("parallel organum")];
+        const auto song = harmony::toSong (organum, 50, 2, 60.0);
+        int ons = 0;
+        for (const auto& e : song->events)
+            ons += e.kind() == 0x90 ? 1 : 0;
+        std::string why;
+        const auto bytes = midifile::bytes (*song);
+        auto back = midifile::parse (bytes.data(), bytes.size(), why);
+        check (ons == 2 * 14 && song->lastTick == 2 * 9 * 480 && back != nullptr && back->noteCount() == ons,
+               "harmony: the example as a MIDI file, a channel a voice, repeated");
     }
 
     // The atlas (owner, 2026-10-27): the research's systems, each placed under its region
@@ -8074,6 +8120,249 @@ namespace
                "the naḍai in the name, unless caturaśra");
     }
 
+    // Architectonics (owner, 2026-10-29): a set by the golden ratio. Every section a Fibonacci
+    // number of bars, back to back over the whole set; the climax at the golden section on the
+    // fullest scene; never the same scene twice running; and a new seed a new set.
+    void testArchitectonics()
+    {
+        namespace ar = architectonics;
+        check (ar::fibonacci (144) == std::vector<int> { 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144 } && ar::isFibonacci (89) && ! ar::isFibonacci (90),
+               "architectonics: the Fibonacci numbers");
+        ar::Settings s;
+        s.clips = { 2, 4, 0, 6, 8, 3, 5, 7, 1 };
+        s.seed = 0.3;
+        for (auto order : { ar::Order::arch, ar::Order::fibonacci, ar::Order::phiWalk })
+        {
+            s.order = order;
+            const auto p = ar::plan (s);
+            bool fib = ! p.sections.empty(), contiguous = true, apart = true, scenes = true;
+            int at = 0, climaxes = 0;
+            for (size_t i = 0; i < p.sections.size(); ++i)
+            {
+                const auto& x = p.sections[i];
+                fib = fib && ar::isFibonacci (x.bars) && x.bars <= s.longest;
+                contiguous = contiguous && x.start == at;
+                at += x.bars;
+                apart = apart && (i == 0 || x.scene != p.sections[i - 1].scene);
+                scenes = scenes && x.scene >= 0 && x.scene < (int) s.clips.size() && s.clips[(size_t) x.scene] > 0;
+                if (x.climax)
+                {
+                    ++climaxes;
+                    check (x.start == 89 && x.scene == 4 && x.energy == 1.0 && x.function == ar::Function::climax,
+                           "architectonics: the climax at the golden section of 144, on the fullest scene");
+                }
+            }
+            check (fib && contiguous && at == 144 && apart && scenes && climaxes == 1 && p.climaxBar == 89
+                       && p.sections.front().function == ar::Function::emergence && p.sections.back().function == ar::Function::dissolution,
+                   "architectonics: Fibonacci sections over the whole set, in five parts, no scene twice running");
+        }
+        s.earlyClimax = true;
+        check (ar::plan (s).climaxBar == 55, "architectonics: an early climax at 1/φ² of the way");
+        s.earlyClimax = false;
+        const auto one = ar::plan (s);
+        s.seed = ar::nextSeed (s.seed);
+        const auto two = ar::plan (s);
+        bool differ = one.sections.size() != two.sections.size();
+        for (size_t i = 0; ! differ && i < one.sections.size(); ++i)
+            differ = one.sections[i].bars != two.sections[i].bars || one.sections[i].scene != two.sections[i].scene;
+        check (differ && ar::sectionAt (one, 0.0) == 0 && ar::sectionAt (one, 144.0) == -1 && ar::sectionAt (one, 89.5) >= 0
+                   && one.sections[(size_t) ar::sectionAt (one, 89.5)].climax,
+               "architectonics: a new seed deals a new set; the section at a bar");
+        s.clips = { 0, 0 };
+        check (ar::plan (s).sections.empty(), "architectonics: no clips, no set");
+
+        // Compose a Song: a scene a section; everyone at the climax; the rhythm a part's own;
+        // onto the dominant before the climax and home at the end; the MIDI loops whole bars.
+        ar::SongSettings ss;
+        ss.present.fill (true);
+        ss.form.seed = 0.42;
+        ss.keys = 0x6AD;   // dorian: 0 2 3 5 7 9 10
+        for (const auto& r : rhythm::rhythms())
+            if (r.group == rhythm::rhythms().front().group)
+                ss.rhythms.push_back (&r);
+        const auto song = ar::compose (ss);
+        bool aScene = ! song.scenes.empty() && song.scenes.size() == song.plan.sections.size(), climaxAll = false, loops = true, inMode = true;
+        std::map<ar::Function, std::string> grooves;
+        bool oneGroove = true;
+        for (size_t i = 0; i < song.scenes.size(); ++i)
+        {
+            const auto& sc = song.scenes[i];
+            aScene = aScene && song.plan.sections[i].scene == (int) i && sc.section == (int) i && (int) sc.chords.size() == ss.loopBars;
+            if (song.plan.sections[i].climax)
+                climaxAll = std::all_of (sc.plays.begin(), sc.plays.end(), [] (bool b) { return b; });
+            if (! sc.rhythm.empty())
+            {
+                oneGroove = oneGroove && (grooves.count (sc.function) == 0 || grooves[sc.function] == sc.rhythm);
+                grooves[sc.function] = sc.rhythm;
+            }
+            for (int c = 0; c < ar::colours; ++c)
+                if (const auto& m = sc.midi[(size_t) c])
+                {
+                    loops = loops && m->noteCount() > 0 && sc.plays[(size_t) c]
+                            && (ss.roles[(size_t) c] == ar::Role::rhythm ? m->lastTick % (480 * 4) == 0 : m->lastTick == 480 * 4 * ss.loopBars);
+                    if (ss.roles[(size_t) c] != ar::Role::rhythm)
+                        for (const auto& e : m->events)
+                            inMode = inMode && (e.kind() != 0x90 || (ss.keys & (1u << (e.data1 % 12))) != 0);
+                }
+        }
+        const auto before = std::find_if (song.plan.sections.begin(), song.plan.sections.end(), [] (const ar::Section& x) { return x.climax; })
+                            - song.plan.sections.begin() - 1;
+        check (aScene && climaxAll && loops && inMode && oneGroove && song.scenes.back().chords.back() == 0
+                   && before >= 0 && song.scenes[(size_t) before].chords.back() == 4,
+               "architectonics: a song, a scene a section, in the mode, everyone at the climax, a part's rhythm its own");
+        const auto& quiet = song.scenes.back();
+        check (std::count (quiet.plays.begin(), quiet.plays.end(), true) < ar::colours && quiet.plays[1],
+               "architectonics: the dissolution thins out to the pad");
+
+        // The score: every part from the first bar to the last, a channel a colour, the sections marked.
+        const auto full = ar::score (song, ss, "score");
+        std::set<int> used;
+        bool inside = true;
+        for (const auto& e : full->events)
+        {
+            used.insert (e.channel());
+            inside = inside && e.tick <= full->lastTick;
+        }
+        std::string why;
+        const auto bytes = midifile::bytes (*full);
+        const auto back = midifile::parse (bytes.data(), bytes.size(), why);
+        check (full->lastTick == 144 * 4 * 480 && full->markers.size() == song.scenes.size() && full->markers.front().text == "1 emergence"
+                   && used.count (9) == 1 && used.size() == 5 && inside && back != nullptr && back->noteCount() == full->noteCount()
+                   && ar::parts (song, ss)[1] != nullptr && ar::parts (song, ss)[0] == nullptr,
+               "architectonics: the score, a part a colour, the sections marked, as a MIDI file");
+    }
+
+    // Compose (owner, 2026-10-29): every method writes a score from nothing in at most eight
+    // parts, in its mode; and each keeps the structure its tradition gives it.
+    void testCompose()
+    {
+        namespace co = composition;
+        bool every = true, inMode = true, capped = true, files = true;
+        for (const auto& m : co::methods())
+        {
+            co::Settings s;
+            s.method = m.method;
+            s.bars = 32;
+            s.seed = 5;
+            if (*m.home != 0)
+                s.mode = counterpoint::Mode::fromTuning (mixer::tuningSystems()[(size_t) mixer::findTuning (m.home)], 0);
+            const counterpoint::Mode mode = s.mode.valid() ? s.mode : [] { auto x = counterpoint::Mode::chromatic (0); x.scale.assign (12, false);
+                                                                         for (int k : { 0, 2, 4, 5, 7, 9, 11 }) x.scale[(size_t) k] = true; return x; }();
+            capped = capped && m.mostParts <= co::maxParts;
+            for (int parts = 1; parts <= m.mostParts; ++parts)
+            {
+                s.parts = parts;
+                const auto r = co::generate (s);
+                const auto wanted = std::max (parts, m.method == co::Method::fugue || m.method == co::Method::hocket ? 2 : 1);
+                size_t notes = 0;
+                for (const auto& p : r.parts)
+                {
+                    notes += p.notes.size();
+                    if (! p.drums && m.method != co::Method::spectral)
+                        for (const auto& n : p.notes)
+                        {
+                            const auto k = ((n.key - 60 - mode.root) % mode.period + mode.period) % mode.period;
+                            inMode = inMode && mode.scale[(size_t) k];
+                        }
+                }
+                every = every && (int) r.parts.size() == wanted && notes > 0 && r.end > 0 && ! r.sections.empty() && r.sections.front().start == 0;
+                if (parts == m.mostParts)
+                {
+                    std::string why;
+                    const auto song = co::toSong (r, m.name);
+                    const auto bytes = midifile::bytes (*song);
+                    const auto back = midifile::parse (bytes.data(), bytes.size(), why);
+                    files = files && back != nullptr && back->noteCount() == (int) notes && song->markers.size() == r.sections.size();
+                }
+            }
+        }
+        check (capped && every, "compose: every method, one to its most parts (never more than eight), writes a score");
+        check (inMode, "compose: every pitched note in the method's mode");
+        check (files, "compose: each score a MIDI file, a part a channel, the sections marked");
+
+        auto run = [] (co::Method m, int parts, const char* home = "")
+        {
+            co::Settings s;
+            s.method = m;
+            s.parts = parts;
+            s.bars = 32;
+            s.seed = 11;
+            if (*home != 0)
+                s.mode = counterpoint::Mode::fromTuning (mixer::tuningSystems()[(size_t) mixer::findTuning (home)], 0);
+            return co::generate (s);
+        };
+        // Isorhythm: the tenor's rhythm the same in each of the first taleae.
+        {
+            const auto r = run (co::Method::isorhythm, 1);
+            std::vector<int64_t> starts;
+            for (const auto& x : r.sections)
+                starts.push_back (x.start);
+            std::vector<std::vector<int64_t>> rhythms;
+            for (size_t k = 0; k + 1 < starts.size() && k < 3; ++k)
+            {
+                rhythms.emplace_back();
+                for (const auto& n : r.parts[0].notes)
+                    if (n.start >= starts[k] && n.start < starts[k + 1])
+                        rhythms.back().push_back (n.end - n.start);
+            }
+            check (rhythms.size() == 3 && ! rhythms[0].empty() && rhythms[0] == rhythms[1] && rhythms[1] == rhythms[2],
+                   "compose: isorhythm, the tenor's talea the same in every statement");
+        }
+        // Tintinnabuli: the T-voice only on the tonic triad's notes.
+        {
+            const auto r = run (co::Method::tintinnabuli, 2);
+            bool triad = ! r.parts[1].notes.empty();
+            for (const auto& n : r.parts[1].notes)
+                triad = triad && (((n.key - 60) % 12 + 12) % 12 == 0 || ((n.key - 60) % 12 + 12) % 12 == 4 || ((n.key - 60) % 12 + 12) % 12 == 7);
+            check (triad, "compose: tintinnabuli, the T-voice on the tonic triad");
+        }
+        // Spectral: the third partial a twelfth (1902 cents) above the fundamental, in its own cents.
+        {
+            const auto r = run (co::Method::spectral, 2);
+            const auto& f = r.parts[0].notes.front();
+            const auto& p3 = r.parts[1].notes.front();
+            const auto cents = (p3.key * 100.0 + p3.cents) - (f.key * 100.0 + f.cents);
+            check (r.microtonal && std::abs (cents - 1901.955) < 0.5, "compose: spectral, partial 3 a just twelfth above the fundamental");
+        }
+        // Gamelan: four kenong strokes and one gong ageng in every gongan of a ladrang (32 beats).
+        {
+            const auto r = run (co::Method::gamelan, 8, "slendro pathet manyura");
+            const auto& kenong = r.parts[3].notes;
+            size_t gongs = 0;
+            for (const auto& n : r.parts[4].notes)
+                gongs += n.velocity >= 110;
+            check (! kenong.empty() && kenong.size() == 4 * (gongs - 1), "compose: gamelan, the kenong four times and the gong once a gongan (after the buka's gong)");
+        }
+        // Ewe: the bell's standard pattern, seven strokes in each cycle of twelve pulses.
+        {
+            const auto r = run (co::Method::ostinato, 1);
+            const auto cycle = 12 * co::ticksPerQuarter / 2;
+            size_t first = 0;
+            for (const auto& n : r.parts[0].notes)
+                first += n.start < cycle;
+            check (first == 7 && r.parts[0].drums, "compose: Ewe, the bell's timeline seven strokes in twelve pulses");
+        }
+        // Hocket: never two players on the same pulse while the melody is hocketed.
+        {
+            const auto r = run (co::Method::hocket, 5);
+            std::map<int64_t, int> at;
+            const auto untilVariations = r.sections.size() > 1 ? r.sections[1].start : r.end;
+            for (const auto& p : r.parts)
+                for (const auto& n : p.notes)
+                    if (n.start < untilVariations)
+                        ++at[n.start];
+            bool alone = ! at.empty();
+            for (const auto& [t, count] : at)
+                alone = alone && count == 1;
+            check (alone, "compose: hocket, one player a pulse");
+        }
+        // Rāga: the gat ends on sam with a tihāī.
+        {
+            const auto r = run (co::Method::raga, 3, "yaman (kalyan)");
+            check (r.sections.back().name == "tihāī" && r.parts[2].drums, "compose: rāga, the gat ends in a tihāī");
+        }
+    }
+
     void testRhythmGenerator()
     {
         // Toussaint (2005): the tresillo E(3,8), the cinquillo E(5,8), the bembé bell E(7,12) turned.
@@ -8314,6 +8603,229 @@ namespace
             learn.handle ("Pad", 0xB0, 1, 20, 127, out);
             check (out.size() == 1, "learn: a CC button acts once a press");
         }
+    }
+
+    void testXenTuner()
+    {
+        using namespace phi::xen;
+        std::string error;
+
+        // The config format: the reference, the nominals and equave, a chain; arithmetic in the numbers.
+        Config twelve;
+        check (parse ("A4: 440\n0c 200c 300c 500c 700c 800c 1000c 1200c\nbb b (100c) # x // a comment\naux(0)\n", twelve, error),
+               "xen: a 12-TET config is read");
+        check (twelve.nominals.size() == 7 && twelve.chains.size() == 1 && twelve.chains[0].central == 2 && near (twelve.equave, 1200.0, 1e-9),
+               "xen: its nominals, equave and chain");
+        check (near (twelve.referencePitch(), 6900.0, 1e-9) && twelve.referenceStaff() == 33, "xen: A4 at 440 Hz is pitch 6900, staff A4");
+        Speller sp (twelve);
+        auto cSharp = sp.best (6100.0);
+        check (cSharp.staff == 28 && cSharp.symbols.size() == 1 && cSharp.symbols[0].code == symbolCode ("#") && near (cSharp.off, 0.0, 1e-6),
+               "xen: C#4 spelled on C with a sharp");
+        auto dFlat = sp.best (6100.0, true);
+        check (dFlat.staff == 29 && dFlat.symbols.size() == 1 && dFlat.symbols[0].code == symbolCode ("b"), "xen: or D-flat, flats first");
+        check (sp.spell (6100.0).size() >= 2, "xen: its enharmonic spellings come with it");
+        auto between = sp.best (6114.0);
+        check (between.staff == 28 && near (between.off, 14.0, 1e-6), "xen: a pitch between is spelled with the cents it is off");
+        check (sp.stepsPerEquave() == 12 && near (sp.next (6000.0, 1), 6100.0, 1e-6) && near (sp.next (6000.0, -1), 5900.0, 1e-6),
+               "xen: up and down by the notated pitches");
+        check (codePoint (symbolCode ("#")) == 0xE262 && smuflName (symbolCode ("b")) == "accidentalFlat", "xen: symbols are SMuFL glyphs");
+
+        Config sums;
+        check (parse ("C4: 440*16/27\n0 9/8 81/64 4/3 3/2 27/16 243/128 2/1\nb(Math.pow(2048/2187,1)) (0) #(2187/2048)\n'-' (1200*1/53c) '+'\n", sums, error),
+               "xen: ratios, Math and text accidentals");
+        check (near (sums.referencePitch(), 6900.0 - 1200.0 * std::log2 (27.0 / 16.0), 1e-6) && near (*sums.nominals[4], 701.955, 0.001)
+                   && near (sums.chains[0].cents[2], 113.685, 0.001) && near (sums.chains[1].cents[2], 1200.0 / 53.0, 1e-9)
+                   && sums.chains[1].symbols[0][0].text == "-",
+               "xen: their values");
+        Config bad;
+        check (! parse ("A4: 440\n0c 200c 1200c\nbb b # x\n", bad, error) && ! error.empty(), "xen: a chain without its step is refused");
+        check (! parse ("hello\nworld\n", bad, error), "xen: text that is not a config is refused");
+
+        // Xen Tuner's own library: HEJI spells 5/4 above a tonic as its letter with one arrow.
+        const std::string tunings = std::string (PHI_SHARE_SOURCE_DIR) + "/xen-tuner/tunings";
+        Config heji;
+        check (read (tunings + "/heji/5 limit.txt", heji, error) && heji.ligatures.size() >= 2 && ! heji.secondary.empty(), "xen: HEJI is read");
+        const auto onC = Speller (heji).anchoredAt (6000.0);
+        const auto third = onC.best (6000.0 + 1200.0 * std::log2 (5.0 / 4.0));
+        check (third.staff == 30 && third.symbols.size() == 1 && near (third.off, 0.0, 0.01), "xen: 5/4 is E with an arrow down, in HEJI");
+        const auto fifth = onC.best (6000.0 + 1200.0 * std::log2 (3.0 / 2.0));
+        check (fifth.staff == 32 && fifth.symbols.empty() && near (fifth.off, 0.0, 0.01), "xen: 3/2 is a plain G");
+        const auto minor = onC.best (6000.0 + 1200.0 * std::log2 (6.0 / 5.0));
+        check (minor.staff == 30 && minor.symbols.size() == 1 && near (minor.off, 0.0, 0.01), "xen: 6/5 is E-flat with an arrow up, as one ligature");
+
+        // Ups and downs in 31-EDO: up and down step by step.
+        Config upDown;
+        check (read (tunings + "/updown/31edo.txt", upDown, error), "xen: ups and downs is read");
+        const auto ud = Speller (upDown).anchoredAt (6000.0);
+        check (ud.stepsPerEquave() == 31 && near (ud.next (6000.0, 1), 6000.0 + 1200.0 / 31.0, 1e-6), "xen: 31 steps, a step at a time");
+
+        // Every config shipped is read.
+        int read = 0, failed = 0;
+        for (const auto& f : std::filesystem::recursive_directory_iterator (tunings))
+            if (f.path().extension() == ".txt")
+            {
+                Config c;
+                if (phi::xen::read (f.path().string(), c, error) && Speller (c).valid())
+                    ++read;
+                else
+                {
+                    ++failed;
+                    std::printf ("  %s: %s\n", f.path().string().c_str(), error.c_str());
+                }
+            }
+        check (read > 200 && failed == 0, "xen: every tuning config shipped is read");
+
+        // PHI's notations for the traditions.
+        Config arabic;
+        check (notation::load ({ notation::Kind::staff, "phi:arabic quarter tones", {} }, tunings, arabic, error), "notation: the maqam config is read");
+        const Speller ar (arabic);
+        const auto halfFlat = ar.best (6350.0);
+        check (halfFlat.staff == 30 && halfFlat.symbols.size() == 1 && halfFlat.symbols[0].code == symbolCode ("b/"), "notation: E half-flat");
+        const auto quarters = ar.spell (6250.0);
+        check (! quarters.empty() && quarters[0].staff == 29 && quarters[0].symbols[0].code == symbolCode ("+")
+                   && std::any_of (quarters.begin(), quarters.end(), [] (const Spelling& q)
+                                   { return q.staff == 30 && q.symbols.size() == 1 && q.symbols[0].code == symbolCode ("|b"); }),
+               "notation: D half-sharp, or E three-quarter flat in one sign");
+        Config persian;
+        check (notation::load ({ notation::Kind::staff, "phi:persian koron and sori", {} }, tunings, persian, error), "notation: the dastgah config is read");
+        const auto koron = Speller (persian).best (6350.0);
+        check (koron.staff == 30 && koron.symbols.size() == 1 && codePoint (koron.symbols[0].code) == 0xE460, "notation: E koron");
+        for (const auto n : { 5, 7, 17, 19, 22, 41, 72 })
+        {
+            Config edo;
+            check (parse (notation::upsAndDowns (n), edo, error) && Speller (edo).stepsPerEquave() == n,
+                   "notation: ups and downs in " + std::to_string (n) + "-EDO writes every step");
+        }
+
+        // PHI's staff for every system by default, each tradition's own beside it.
+        const auto& all = mixer::tuningSystems();
+        const auto first = [&] (const std::string& family) -> const mixer::TuningSystem&
+        { return *std::find_if (all.begin(), all.end(), [&] (const mixer::TuningSystem& t) { return t.family == family; }); };
+        for (const auto* family : { "raga", "javanese gamelan" })
+            check (notation::suggested (noteedit::fromTuning (first (family), 0), tunings).kind == notation::Kind::staff,
+                   std::string ("notation: PHI's staff by default for ") + family);
+        check (notation::traditional (noteedit::fromTuning (first ("raga"), 0), tunings).kind == notation::Kind::bhatkhande, "notation: a raga's own is Bhatkhande's sargam");
+        check (notation::traditional (noteedit::fromTuning (first ("javanese gamelan"), 0), tunings).kind == notation::Kind::angka, "notation: gamelan's own is not angka");
+        check (notation::traditional (noteedit::fromTuning (first ("maqam"), 0), tunings).config == "phi:arabic quarter tones", "notation: a maqam's own is its half-flats");
+        check (notation::suggested (noteedit::fromTuning (first ("maqam"), 0), tunings).config == "phi:arabic quarter tones", "notation: a maqam with half-flats");
+        check (notation::suggested (noteedit::fromTuning (first ("dastgah"), 0), tunings).config == "phi:persian koron and sori", "notation: a dastgah with koron");
+        check (notation::suggested (noteedit::fromTuning (first ("church mode"), 0), tunings).config == "heji/5 limit.txt", "notation: a Pythagorean mode in HEJI");
+        check (notation::suggested (noteedit::twelveTet (0), tunings).config == "phi:12-TET", "notation: 12-TET with sharps and flats");
+        noteedit::PitchSystem edo31;
+        edo31.family = "equal";
+        for (int i = 0; i < 31; ++i)
+            edo31.degrees.push_back (i * 1200.0 / 31.0);
+        check (notation::equalDivisions (edo31) == 31 && notation::suggested (edo31, tunings).config == "sagittal/31edo revo.txt", "notation: 31-EDO in Sagittal");
+
+        // Cipher: sargam's names with the octave in dots, jianpu's numbers.
+        const auto raga = noteedit::fromTuning (first ("raga"), 0);
+        const auto sa = notation::cipher (raga, raga.tonic + 1200.0, notation::CipherStyle::tradition);
+        check (sa.name == "S" && sa.period == 1 && sa.off.empty(), "notation: Sa an octave up, a dot above");
+        noteedit::PitchSystem gong;
+        gong.family = "chinese mode";
+        gong.degrees = { 0, 200, 400, 700, 900 };
+        check (notation::cipher (gong, 6400.0, notation::CipherStyle::jianpu).name == "3" && notation::cipher (gong, 5700.0, notation::CipherStyle::jianpu).period == -1,
+               "notation: jianpu numbers, a dot below an octave down");
+    }
+
+    // The notations written beat by beat (NotationGrid), LilyPond's key signatures, and the lyrics,
+    // marks and cycles they read from the clip.
+    void testNotationViews()
+    {
+        using namespace noteedit;
+        std::string error;
+        const std::string tunings = std::string (PHI_SHARE_SOURCE_DIR) + "/xen-tuner/tunings";
+
+        // The Turkish makam staff: Arel-Ezgi-Uzdilek's commas.
+        phi::xen::Config aeu;
+        notation::Choice makam;
+        makam.config = "phi:turkish aeu";
+        check (notation::load (makam, tunings, aeu, error), "notation: the makam config is read");
+        const phi::xen::Speller turkish (aeu);
+        const double comma = 1200.0 / 53.0;
+        const auto koma = turkish.best (6000.0 + 8 * comma);
+        check (koma.staff == 29 && phi::xen::asText (koma.symbols) == "aeu-1" && near (koma.off, 0.0, 0.01), "notation: D with a koma flat");
+        const auto bakiye = turkish.best (6000.0 + 4 * comma);
+        check (bakiye.staff == 28 && phi::xen::asText (bakiye.symbols) == "aeu+4", "notation: C with a bakiye sharp");
+
+        // LilyPond's key signatures, transposed to the tonic.
+        check (notation::keySignatures().size() > 200, "notation: LilyPond's maqam, makam and dastgah keys");
+        const auto* rast = notation::findKeySignature ("turkish", "rast");
+        check (rast != nullptr, "notation: makam rast's key");
+        if (rast != nullptr)
+        {
+            const auto g = notation::transpose (*rast, 4, 0, notation::naturals ("turkish"));
+            check (near (g[3], 90.566, 0.01) && near (g[6], -22.642, 0.01), "notation: rast on G, F with a bakiye sharp and B a koma flat");
+        }
+        const auto* bayati = notation::findKeySignature ("arabic", "bayati");
+        check (bayati != nullptr, "notation: maqam bayati's key");
+        if (bayati != nullptr)
+        {
+            const auto d = notation::transpose (*bayati, 1, 0, notation::naturals ("arabic"));
+            check (near (d[2], -50.0, 1e-6) && near (d[6], -100.0, 1e-6), "notation: bayati on D, E half-flat and B flat");
+        }
+
+        // A phrase of rāg yaman in tīntāl: four svaras two to a mātrā, then four a mātrā each.
+        const auto& all = mixer::tuningSystems();
+        const auto yaman = fromTuning (all[(size_t) mixer::findTuning ("yaman (kalyan)")], 0);
+        Sequence s;
+        s.ticksPerQuarter = 480;
+        const double degrees[] = { 0, 200, 400, 600, 700, 900, 1100, 1200 };
+        int64_t at = 0;
+        for (int i = 0; i < 8; ++i)
+        {
+            Note n;
+            n.start = at;
+            n.length = i < 4 ? 240 : 480;
+            n.pitch = 6000.0 + degrees[i];
+            s.notes.push_back (n);
+            at += n.length;
+        }
+        s.notes[0].lyric = "ga";
+        s.cycles.push_back ({ 0, "tintal", 480 });
+        s.sort();
+
+        const auto bh = notation::bhatkhande (s, yaman, notation::Script::devanagari, 0, 16 * 480);
+        check (bh.beats.size() == 16 && bh.beats[0].sign == "×" && bh.beats[4].sign == "२" && bh.beats[8].sign == "०" && bh.beats[12].sign == "३",
+               "notation: tīntāl's sam, tālīs and khālī");
+        check (bh.beats[0].grouped && bh.beats[0].signs.size() == 2 && bh.beats[0].signs[0].text == "सा" && bh.beats[0].signs[0].lyric == "ga",
+               "notation: two svaras in a mātrā, the bol under Sa");
+        check (bh.beats[1].signs[1].raised && bh.beats[5].signs[0].octave == 1 && bh.beats[6].signs[0].kind == notation::Sign::Kind::rest,
+               "notation: tīvra Ma, tār Sa, then a rest");
+
+        const auto ca = notation::carnatic (s, yaman, notation::Script::roman, 0, 8 * 480);
+        check (ca.doubleBarAtCycle && ca.beats[0].signs.size() == 2 && ca.beats[0].signs[0].lines == 1 && ca.beats[2].signs[0].lines == 0,
+               "notation: Karnatak speed lines over two svaras an akṣara");
+
+        Sequence plain = s;
+        plain.cycles.clear();
+        const auto ji = notation::jianpu (plain, yaman, false, 0, 8 * 480);
+        check (ji.beats.size() == 8 && ji.beats[0].signs[0].text == "1" && ji.beats[0].signs[0].lines == 1
+                   && ji.beats[1].signs[1].before == "♯" && ji.beats[1].signs[1].text == "4" && ji.beats[6].signs[0].text == "0",
+               "notation: jianpu's numbers, quaver lines, ♯4 and a rest");
+
+        const auto jg = notation::jeongganbo (plain, yaman, 0, 8 * 480);
+        check (jg.layout == notation::Writing::columns && jg.beats[0].rows == 2 && jg.beats[2].signs[0].text == "姑" && jg.beats[6].signs[0].text == "△",
+               "notation: jeongganbo's boxes, gojeong for G, a rest");
+        int octave = 0;
+        check (notation::yulmyeong (6300.0, octave) == "黃" && octave == 0, "notation: hwangjong at E♭4");
+        check (! notation::sigimsae().empty(), "notation: the sigimsae table");
+
+        // Lyrics, marks and the cycle are saved in the clip's file and read back.
+        s.notes[2].mark = "dā";
+        const auto encoded = encode (s, {});
+        const auto decoded = decode (*encoded.song);
+        check (decoded.cycles.size() == 1 && decoded.cycles[0].rhythm == "tintal" && decoded.cycles[0].beat == 480, "notation: the cycle is saved");
+        check (decoded.notes.size() == 8 && decoded.notes[0].lyric == "ga" && decoded.notes[2].mark == "dā", "notation: a lyric and a mark are saved");
+
+        // Every notation offered by id.
+        for (const auto& system : notation::systems())
+        {
+            notation::Choice c;
+            check (notation::fromId (system.id, yaman, tunings, c), "notation: " + system.id + " is offered");
+        }
+        notation::Choice tradition;
+        check (notation::fromId ("tradition", yaman, tunings, tradition) && tradition.kind == notation::Kind::bhatkhande, "notation: a rāga's tradition writes sargam");
     }
 
     void testScala()
@@ -8687,7 +9199,10 @@ int main()
     testSitar();
     testTunings();
     testModeAtlas();
+    testHarmonies();
     testScala();
+    testXenTuner();
+    testNotationViews();
     testNoteEditor();
     testCounterpoint();
     testFugue();
@@ -8697,6 +9212,8 @@ int main()
     testDrumsToMidi();
     testRhythms();
     testRhythmGenerator();
+    testArchitectonics();
+    testCompose();
     testStochastic();
     testCubify();
     testSerial();
