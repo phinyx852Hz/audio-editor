@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MainWindow.h"
+#include "MidiPanel.h"
 #include "MixerWindow.h"
 #include "PatchBayWindow.h"
 #include "../patchbay/PatchBay.h"
@@ -334,8 +335,21 @@ MainWindow::~MainWindow()
     delete midiPanel;            // lets go of its patchbay synth
     midiPanel = nullptr;
     patchBay = nullptr;          // its synths and effects, and it lets go of the mixer
-    delete mixerWin;             // before the mixer's engine and its instruments
-    mixerWin = nullptr;
+    // Nothing reacts to the pages coming down (crash on quit, 2026-10-30): taking the mixer out
+    // of the stack switches the page, and that laid the instruments out in its half-gone hosts.
+    if (centralStack != nullptr)
+        disconnect (centralStack, &QStackedWidget::currentChanged, this, nullptr);
+    if (mixerWin != nullptr)
+    {
+        disconnect (mixerWin, nullptr, this, nullptr);
+        for (QObject* sender : { (QObject*) qApp, (QObject*) findWidget, (QObject*) findPanel->dock() })
+            disconnect (sender, nullptr, mixerWin, nullptr);
+        for (auto* p : { samplerPanel, slicerPanel })
+            if (p != nullptr)
+                p->takeBack();   // lent into the mixer, they would go with it
+    }
+    // Null while it goes, so whatever still looks finds no mixer rather than half of one.
+    delete std::exchange (mixerWin, nullptr);   // before the mixer's engine and its instruments
     controlTimer.stop();
     pushDisplay = nullptr;
     surfaces = nullptr;          // dark, and back to their own modes
