@@ -24,6 +24,7 @@
 #include "../Source/mixer/Architectonics.h"
 #include "../Source/mixer/Compose.h"
 #include "../Source/mixer/Harmonies.h"
+#include "../Source/mixer/ModalHarmony.h"
 #include "../Source/mixer/RhythmGenerator.h"
 #include "../Source/mixer/Stochastic.h"
 #include "../Source/mixer/Serial.h"
@@ -5124,6 +5125,71 @@ namespace
         }
     }
 
+    // Harmonize in the mode (owner, 2026-10-29): each mode's characteristic note, chords judged
+    // in the cents the synth plays, each tradition's own texture, and the chords changing with
+    // a rhythm's cycle; every melodic mode in every texture a valid example.
+    void testModalHarmony()
+    {
+        using namespace modalharmony;
+        const auto& all = mixer::tuningSystems();
+        auto get = [&] (const char* plain) -> const mixer::TuningSystem& { return all[(size_t) std::max (0, mixer::findTuning (plain))]; };
+        auto marked = [&] (const char* plain) { return characteristic (degrees (get (plain))); };
+        check (marked ("dorian") == std::vector<int> { 9 } && marked ("mixolydian") == std::vector<int> { 10 }
+               && marked ("lydian") == std::vector<int> { 6 } && marked ("phrygian") == std::vector<int> { 1 },
+               "modal harmony: dorian's sixth, mixolydian's seventh, lydian's fourth, phrygian's second");
+
+        // Dorian: the final's chord first, then chords with the major sixth, none a tritone,
+        // the dominant a fifth above not the first choice.
+        const auto d = degrees (get ("dorian"));
+        const auto chords = progression (d, Texture::chords, 4);
+        bool modal = chords.size() == 4 && chords[0].steps.front() == 0 && chords[1].characteristic;
+        for (const auto& c : chords)
+            modal = modal && c.roughness <= 45.0;
+        modal = modal && chords[1].steps.front() != 4;
+        check (modal, "modal harmony: dorian's progression from the final, by its characteristic note, not by V");
+
+        // Rāst's neutral third is judged by its cents: rough, but a chord.
+        const auto rast = degrees (get ("rast"));
+        const bool neutral = std::any_of (rast.begin(), rast.end(), [] (const Degree& x) { return std::abs (x.cents - 350.0) < 10.0; });
+        check (neutral && roughness (350.0) > 25.0 && roughness (350.0) < 45.0 && roughness (386.31) < 1.0e-6 && roughness (200.0) > 100.0
+               && ! progression (rast, Texture::chords, 2).empty(),
+               "modal harmony: a neutral third measured in its cents, near enough a just third to be a chord");
+
+        check (traditional (get ("dorian")) == Texture::chords && traditional (get ("rast")) == Texture::heterophony
+               && traditional (get ("pelog")) == Texture::layered && traditional (get ("echos protos")) == Texture::drone
+               && traditional (all[(size_t) std::max (0, mixer::findTuning ("darbari kanada"))]) == Texture::drone,
+               "modal harmony: each tradition's own texture");
+
+        const auto tintal = rhythm::rhythms()[(size_t) std::max (0, rhythm::findRhythm ("tintal"))];
+        const auto held = fromRhythm (tintal, false), struck = fromRhythm (tintal, true);
+        check (held.beats == 16.0 && held.changes == std::vector<double> { 0.0, 4.0, 8.0, 12.0 } && held.strikes.size() == 4
+               && struck.strikes.size() > 4 && steady (2.0, 4).beats == 8.0,
+               "modal harmony: the chords change at tīntāl's vibhāgs, and are struck on its ṭhekā");
+
+        bool valid = true;
+        int tried = 0;
+        for (const auto& t : all)
+        {
+            if ((t.kinds & mixer::melodic) == 0)
+                continue;
+            for (auto x : textures())
+            {
+                Settings s;
+                s.texture = x;
+                s.cycles = 2;
+                const auto h = generate (t, ++tried % 2 == 0 ? held : steady (4.0, 4), s);
+                if (! harmony::valid (h))
+                    std::printf ("  invalid: %s in %s\n", t.plain.c_str(), textureName (x).c_str());
+                valid = valid && harmony::valid (h);
+            }
+        }
+        Settings s;
+        s.cycles = 3;
+        const auto song = harmony::toSong (generate (get ("dorian"), struck, s), 50, 1, 80.0);
+        check (valid && tried > 1000 && song->lastTick == 3 * 16 * 480 && song->noteCount() > 0,
+               "modal harmony: every melodic mode in every texture, and the cycles written out");
+    }
+
     // The Mode menu's harmony (owner, 2026-10-29): every example playable, its tuning known, each
     // part's groups in order, jazz its own part, and the example written as a MIDI file.
     void testHarmonies()
@@ -8903,6 +8969,7 @@ int main()
     testTunings();
     testModeAtlas();
     testHarmonies();
+    testModalHarmony();
     testScala();
     testXenTuner();
     testNotationViews();

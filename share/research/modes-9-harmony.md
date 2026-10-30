@@ -209,6 +209,22 @@ Two keys at once: the Petrushka chord sets C major against F♯ major, a tritone
 - Milhaud, 'Polytonalité et atonalité' (1923).
 - van den Toorn, The Music of Igor Stravinsky.
 
+## modal harmony
+
+Chords built from a mode rather than a major or minor key, so the mode's own colour stays: the ear is held on its root by staying on the tonic chord or a pedal, the V–I cadence that would turn it back into major or minor is avoided, chords move by step rather than by fifth, and the chords chosen carry the mode's characteristic note (dorian's raised sixth, mixolydian's flat seventh, lydian's raised fourth, phrygian's flat second) without a tritone that would make them sound dominant. Quartal voicings keep it open. From Debussy, Fauré and Vaughan Williams's modal revival to Kind of Blue, My Favorite Things, Impressions and Footprints, and the ♭VII–I of rock and the dorian vamps of film scores. (Mode ▸ jazz has its quartal side; Renaissance modal counterpoint is the older, separate sense.) The example plays each mode on the same final over a pedal.
+
+**From:** the modal revival, modal jazz and after, c. 1890–. **Texture:** chordal.
+
+**Sonorities:** dorian i–IV, mixolydian I–♭VII, lydian I–II, phrygian i–♭II; pedals; stacked fourths.
+
+- [Search Wikipedia for “modal harmony”](https://en.wikipedia.org/w/index.php?search=modal%20harmony)
+- Pease, Jazz Composition: Theory and Practice (Berklee Press, 2003).
+- Persichetti, Twentieth-Century Harmony (1961).
+- Miller, Modal Jazz Composition and Harmony (1996).
+- Berklee Online, 'Modal Harmony in Jazz Composition'.
+- My New Microphone, Hub Guitar, Chromatone and Audiofanzine guides to modal harmony.
+- Davis, So What (1959).
+
 ## quartal harmony
 
 Chords stacked in fourths instead of thirds, with no root by default: in Schoenberg's Chamber Symphony, Bartók, Hindemith's theory of chord values, and from there jazz.
