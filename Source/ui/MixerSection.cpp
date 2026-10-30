@@ -444,6 +444,7 @@ void MainWindow::showMidiEditor (bool on)
         host.say = [this] (const QString& text) { statusBar()->showMessage (text, 6000); };
         midiPanel = new MidiPanel (std::move (host), trackHolder);
         trackHolder->layout()->addWidget (midiPanel);
+        focusFollowsMouse->addAreas ({ midiPanel });
     }
     trackHolder->setVisible (on);
     if (! on && ! waveform->isVisible())

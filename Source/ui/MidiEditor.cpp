@@ -1497,6 +1497,8 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     layout->addLayout (systems);
 
     roll = new Roll (*this);
+    if (host.embedded)
+        setFocusProxy (roll);   // a panel given the keyboard (Alt+arrows, F6) gives it to the roll
     spectrum = new Spectrum (*this);
     spectrum->hide();
     staff = new Staff (*this);

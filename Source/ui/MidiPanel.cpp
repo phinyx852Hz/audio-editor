@@ -231,6 +231,7 @@ void MidiPanel::load (const midifile::Song& song, const QString& songName)
         delete editor.data();
     editor = new MidiEditor (song, h, this);
     layout->addWidget (editor, 1);
+    setFocusProxy (editor);
     editor->show();
     name = songName;
     saved = bytesNow();
