@@ -57,7 +57,7 @@ inside the window; else it rises from its card.
 Ctrl+Alt+P, or Window along its top, pops it out of the main window into a window of its own,
 the way REAPER's FX windows float (owner, 2026-10-30: "I like having the edit of any effect,
 process or instrument pop out as well... just like reaper"), and back over the chain again. In its
-own window the desktop places and moves it (its header drags it), Super+F takes it full screen,
+own window the desktop places and moves it (its header drags it), Ctrl+F or Super+F takes it full screen and back,
 and it opens that way, at that size, until it is popped back in. Ctrl+W closes it either way and
 docks the Prism; it never closes the file behind it. The Prism keeps playing whether its editor
 is open or not.
