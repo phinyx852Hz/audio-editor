@@ -3,6 +3,7 @@
 
 #include "../core/AudioData.h"
 #include "../mixer/MixerEngine.h"
+#include "../control/ControlSurface.h"
 
 #include <QColor>
 #include <QJsonArray>
@@ -21,10 +22,10 @@
 
 class AudioEngine;
 class QSpinBox;
+class QMenu;
 class QAbstractButton;
 namespace counterpoint { struct Settings; }
 namespace minimalize { struct Part; }
-namespace control { struct State; struct Command; }
 class StatusLine;
 class QScrollArea;
 class QDialog;
@@ -42,6 +43,7 @@ class ClipGrid;
 class LauncherRack;
 class ReturnStripWidget;
 class TrackDevices;
+class PrismDialog;
 class ClipView;
 class EditorTrack;
 class QStackedWidget;
@@ -53,6 +55,9 @@ class QSpinBox;
 // The built-in Synth's settings (also used by the patchbay's synths), applied as they change.
 // `changed` runs after each change. Deletes itself when closed.
 QDialog* synthDialog (mixer::InstrumentPtr synth, const QString& title, QWidget* parent, std::function<void()> changed);
+// PHI rāga's settings, and an effect's knobs (for effects without a window of their own), the same way.
+QDialog* ragaDialog (mixer::InstrumentPtr raga, const QString& title, QWidget* parent, std::function<void()> changed);
+QDialog* effectDialog (mixer::EffectPtr effect, const QString& title, QWidget* parent, std::function<void()> changed);
 
 class LevelMeter final : public QWidget
 {
@@ -236,6 +241,16 @@ public:
     // their lights show it, and what their pads, knobs and buttons ask for.
     control::State surfaceState() const;
     void surfaceCommand (const control::Command&);
+    // MIDI Map mode (Ctrl+M, ControlSection.cpp): every control a MIDI control can be mapped to,
+    // where it is (an area of a widget; empty: all of it) and what a mapped control does there.
+    struct Mappable
+    {
+        QWidget* widget = nullptr;
+        QRect area;
+        control::Command target;
+        bool continuous = false;   // a fader or knob; else a button
+    };
+    std::vector<Mappable> mappable() const;
 
     // The Mode menu (ModeSection.cpp, owner 2026-10-26): the selected track tuned to a mode
     // (its clips' and scenes' own tunings left as they are), and the MIDI clip shown in the
@@ -314,6 +329,7 @@ private:
     friend class LauncherRack;
     friend class ReturnStripWidget;
     friend class TrackDevices;
+    friend class PrismDialog;
     friend class ClipView;
     friend class EditorTrack;
     friend class BusStripWidget;
@@ -333,6 +349,7 @@ private:
     void copyTrack (int from, int to);
     void clearTrack (int track);
     bool readyToMoveTracks (int from);
+    bool openTrack (int at);         // a new track there, the ones after it moved up; no undo step
     void moveDuckKeys (const std::function<int (int)>& moved);
     void rebuildStrips();
     void select (int index);         // 0..7 a track, 8 the master
@@ -373,6 +390,20 @@ private:
     void moveInsert (int track, int insert, int to);
     void reorderInserts (int track, const std::vector<int>& order);   // the engine's indices in their new order
     QJsonArray insertsJson (int track) const;
+    // The effects menu (Built-in first, then by format); `pick` gets the chosen plugin's id.
+    void effectsMenu (QMenu&, std::function<void (const std::string& id)> pick);
+    static QJsonArray effectsJson (const mixer::Inserts&);
+    mixer::Inserts effectsFromJson (const QJsonArray&, const QString& owner, QStringList& problems);
+    // Instrument Prisms (MixerPrism.cpp, docs/prism.md): a track's instrument made of rays, each an
+    // instrument and then its effects, played together. Choosing one wraps the track's instrument.
+    mixer::InstrumentPtr makePrism (int track);
+    // A ray's instrument: "synth", "raga" or "instrument\n<plugin id>"; null with `error`.
+    mixer::InstrumentPtr makeRayInstrument (const QByteArray& what, QString& error);
+    static bool canBeRay (const mixer::Instrument&);   // not a Sampler, Slicer or Prism (yet)
+    void openPrism (int track);   // its rays, in a window of their own
+    void prismChanged (int track);   // its rays were edited: the strip and the Device Chain follow
+    QJsonObject prismJson (const mixer::Instrument& prism) const;
+    mixer::InstrumentPtr prismFromJson (const QJsonObject&, int track, QStringList& problems);
     QString insertOwner (int track) const;   // "track 2, “Bass”", or "the Pre-Master" (mixer::busTrack)
     int insertLimit (int track) const;
     void refreshInsertsOf (int track);
@@ -677,7 +708,42 @@ private:
     bool restoring = false;
     bool opening = false;            // inside loadMix: its newMix() keeps the patchbay
     bool quitting = false;           // after dropAutosave: nothing more written to last.phi
-    std::vector<Snapshot> undoStack, redoStack;
+    // A deleted track, all that copyTrack moves of it, kept for undo to bring it back where it was.
+    struct TrackCopy
+    {
+        int index = 0;
+        std::unique_ptr<mixer::Strip> strip;   // its settings and sends
+        mixer::Clips clips;
+        mixer::InstrumentPtr instrument;
+        mixer::Inserts inserts;
+        std::array<mixer::SlotPtr, mixer::maxScenes> slots {};
+        QString name;
+        QColor colour;
+        AudioDataPtr sound;
+        mixer::TuningChoice tuning;
+        std::pair<QString, QColor> givenDefault;
+        HeardTuning heardTuning;
+        std::vector<uint32_t> timelinePasses;
+        LayerTake layerTake;
+        std::vector<int> duckedBy;           // the tracks its sound ducked
+        bool live = false;
+        std::vector<mixer::Clips> history;   // its clips in the steps below this one's, the nearest first
+    };
+    // An undo (or redo) step: the clips before an edit, or a track to take away or bring back.
+    struct Step
+    {
+        Snapshot clips;
+        int removes = -1;                      // this track goes (undoing its adding)
+        std::shared_ptr<const TrackCopy> restores;   // this track comes back (undoing its deleting)
+    };
+    // Track `index` taken out, the tracks after it moved down; null when it cannot be. Its
+    // clips in the steps of `stack` (where the step bringing it back goes) are kept with it.
+    std::shared_ptr<const TrackCopy> takeTrack (int index, const std::vector<Step>& stack);
+    bool putTrack (const TrackCopy&, std::vector<Step>& stack);   // stack: the one its step came from
+    // A step done, and the one undoing it made; false (nothing done) when it cannot be.
+    bool apply (const Step&, std::vector<Step>& from, const std::vector<Step>& to, Step& inverse);
+    void pushUndo (Step);            // a new edit's: there is nothing to redo after it
+    std::vector<Step> undoStack, redoStack;
     uint32_t nextClipId = 1;
     std::map<QString, std::weak_ptr<const mixer::AudioClip>> audioCache;
 };

@@ -330,6 +330,8 @@ MainWindow::~MainWindow()
         tracker->setLinkSink (nullptr);   // its linked notes go to the patchbay
     delete patchBayWin;
     patchBayWin = nullptr;
+    delete midiPanel;            // lets go of its patchbay synth
+    midiPanel = nullptr;
     patchBay = nullptr;          // its synths and effects, and it lets go of the mixer
     delete mixerWin;             // before the mixer's engine and its instruments
     mixerWin = nullptr;
@@ -628,7 +630,7 @@ void MainWindow::registerCommands()
     add ("view.overview", Category::view, tr ("Whole-File &Overview"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_O) }, [this]
     {
         const bool on = commands.action (QStringLiteral ("view.overview"))->isChecked();
-        overview->setVisible (on);
+        overview->setVisible (on && ! waveform->isHidden());   // not while the audio editor is closed
         appSettings().setValue (QStringLiteral ("view/overview"), on);
     });
     commands.action (QStringLiteral ("view.overview"))->setCheckable (true);
@@ -917,10 +919,10 @@ void MainWindow::buildMenus()
         { tr ("&Compose"),   { "@compose" } },
         { tr ("&Master"),    { "#album", "-", "view.master", "view.chain", "master.addPlugin", "master.bypass", "analyze.plugin", "-", "master.assistant", "-", "master.render", "master.renderNew", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
         { tr ("Mi&xer"),     { "mixer.window", "mixer.dock", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
-                               "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "mixer.sendToTimeline", "-", "mixer.editNotes", "-", "mixer.editorTrack", "mixer.trackToEditor", "-", "mixer.assistant" } },
+                               "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "mixer.sendToTimeline", "-", "mixer.editNotes", "mixer.trackToEditor", "-", "mixer.assistant" } },
         { tr ("Mo&de"),      { "@mode" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "-", "options.keymap", "options.theme", "options.waveformColors" } },
-        { tr ("Performan&ce"), { "performance.launcher", "-", "control.surfaces", "control.learn", "-", "performance.record", "performance.stream", "-", "performance.settings", "performance.folder" } },
+        { tr ("Performan&ce"), { "performance.launcher", "-", "control.surfaces", "control.learn", "control.mapMode", "-", "performance.record", "performance.stream", "-", "performance.settings", "performance.folder" } },
         { tr ("&Repair"),    { "view.diagnostics", "-", "repair.autoHeal", "repair.spectralGain", "repair.findSimilar", "repair.correctPitch", "-", "repair.learnNoise", "repair.noiseReduction", "-",
                                "repair.declick", "repair.declip", "repair.dehum", "repair.deess", "-",
                                "repair.toolBox", "repair.toolLasso", "repair.toolBrush", "repair.toolSpotHeal",
@@ -938,7 +940,7 @@ void MainWindow::buildMenus()
                                "tracker.recordStereo", "tracker.recordMulti", "-", "tracker.resetTracks", "tracker.about" } },
         { tr ("&Tools"),     { "#markers", "-", "tools.macroRecord", "tools.macroApply", "tools.macros", "-", "tools.batch", "-", "tools.managePlugins", "-", "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan", "-", "tools.resetConfig" } },
         { tr ("&View"),      { "#transport", "-", "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
-                               "view.overview", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "view.cpuMeter", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "analyze.window", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "view.fullScreen", "-",
+                               "view.audioEditor", "view.midiEditor", "-", "view.overview", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "view.cpuMeter", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "analyze.window", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "view.fullScreen", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
         { tr ("Visuali&zer"), { "view.visualizer", "view.visualizerFullScreen", "view.visualizerBehind", "-",
                                "view.visualizerNext", "view.visualizerPrevious", "view.visualizerChoose", "-",

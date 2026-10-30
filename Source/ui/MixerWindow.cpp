@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MixerWindow.h"
 #include "ModeAtlas.h"
+#include "../mixer/InstrumentPrism.h"
 #include "../mixer/RagaInstrument.h"
 #include "../core/PhiRaga.h"
 #include "../mixer/DrumsToMidi.h"
@@ -422,7 +423,7 @@ namespace
         return MixerWindow::tr ("PHI projects (*.phi *.phinyxmix);;All files (*)");
     }
 
-    enum Choice { noInstrument, synthChoice, samplerChoice, slicerChoice, ragaChoice, firstPlugin };
+    enum Choice { noInstrument, synthChoice, samplerChoice, slicerChoice, ragaChoice, prismChoice, firstPlugin };
 }
 
 //==============================================================================
@@ -1143,7 +1144,7 @@ public:
         {
             box->clear();
             box->addItems ({ MixerWindow::tr ("No instrument"), MixerWindow::tr ("Synth"), MixerWindow::tr ("Sampler"), MixerWindow::tr ("Slicer"),
-                             QString::fromUtf8 ("PHI rāga") });
+                             QString::fromUtf8 ("PHI rāga"), MixerWindow::tr ("Instrument Prism") });
             for (const auto& p : plugins)
                 box->addItem (QString::fromStdString (p.name) + QStringLiteral (" (") + QString::fromStdString (p.format) + QStringLiteral (")"),
                               QString::fromStdString (p.id));
@@ -1157,6 +1158,7 @@ public:
                 case mixer::Instrument::Kind::sampler: choice = samplerChoice; break;
                 case mixer::Instrument::Kind::slicer:  choice = slicerChoice; break;
                 case mixer::Instrument::Kind::raga:    choice = ragaChoice; break;
+                case mixer::Instrument::Kind::prism:   choice = prismChoice; break;
                 case mixer::Instrument::Kind::plugin:
                 {
                     choice = box->findData (QString::fromStdString (AudioEngine::instrumentPluginId (*inst)));
@@ -3372,6 +3374,7 @@ private:
             add (MixerWindow::tr ("Built-in"), MixerWindow::tr ("Sampler"), "sampler");
             add (MixerWindow::tr ("Built-in"), MixerWindow::tr ("Slicer"), "slicer");
             add (MixerWindow::tr ("Built-in"), QString::fromUtf8 ("PHI rāga"), "raga");
+            add (MixerWindow::tr ("Built-in"), MixerWindow::tr ("Instrument Prism"), "prism");
             for (const auto& p : window.audio.knownInstruments())
                 add (QString::fromStdString (p.format), QString::fromStdString (p.name), "instrument\n" + QByteArray::fromStdString (p.id));
         }
@@ -3539,6 +3542,35 @@ public:
     }
     QRect sceneArea (int scene) const { return sceneRect (std::clamp (scene, 0, std::max (0, window.numScenes - 1))); }
     QRect slotArea (int scene) const { return slotRect (firstTrack(), std::clamp (scene, 0, std::max (0, window.numScenes - 1))); }
+    // For MIDI Map mode: each slot, each track's stop, each scene and Stop All.
+    void mappable (std::vector<MixerWindow::Mappable>& out) const
+    {
+        using A = control::Action;
+        auto add = [&] (QRect r, A action, int track, int scene)
+        {
+            if (r.isEmpty())
+                return;
+            MixerWindow::Mappable m;
+            m.widget = const_cast<ClipGrid*> (this);
+            m.area = r;
+            m.target.action = action;
+            m.target.track = track;
+            m.target.scene = scene;
+            out.push_back (m);
+        };
+        for (int i = 0; i < trackCount(); ++i)
+        {
+            const int t = firstTrack() + i;
+            if (t < 0 || t >= control::maxTracks)
+                continue;
+            for (int s = 0; s < window.numScenes && s < control::maxScenes; ++s)
+                add (slotRect (t, s), A::launch, t, s);
+            add (stopRect (t), A::stopTrack, t, -1);
+        }
+        for (int s = 0; s < window.numScenes && s < control::maxScenes; ++s)
+            add (sceneRect (s), A::launchScene, -1, s);
+        add (stopAllRect(), A::stopAll, -1, -1);
+    }
 
 protected:
     void paintEvent (QPaintEvent*) override
@@ -5165,7 +5197,10 @@ public:
         QString sig = QString::number (track);
         if (track >= 0)
         {
-            sig += QLatin1Char (':') + QString::number ((quintptr) window.engine.instrument (track).get());
+            const auto inst = window.engine.instrument (track);
+            sig += QLatin1Char (':') + QString::number ((quintptr) inst.get());
+            if (inst != nullptr && inst->kind() == mixer::Instrument::Kind::prism)
+                sig += QLatin1Char ('[') + prismSummary (static_cast<mixer::InstrumentPrism&> (*inst)).join (QLatin1Char ('|')) + QLatin1Char (']');
             for (const auto& x : window.engine.inserts (track))
                 sig += QLatin1Char (',') + QString::number ((quintptr) x.effect.get());
             sig += QLatin1Char (':') + QString::number (window.engine.strip (track).mode.load()) + window.info[(size_t) track].colour.name();
@@ -5202,6 +5237,30 @@ private:
     };
 
     static constexpr int knobsPerRow = 5, maxKnobs = 8, knobSize = 30, labelWidth = 50, resolution = 1000;
+
+    // "1 Synth + PHI rāga (split at C4) → Φ Echo · C2–B3", a line a ray.
+    static QStringList prismSummary (const mixer::InstrumentPrism& prism)
+    {
+        QStringList lines;
+        int n = 0;
+        for (const auto& r : prism.rays())
+        {
+            auto text = QString::number (++n) + QLatin1Char (' ')
+                      + (r.instrument != nullptr ? QString::fromStdString (r.instrument->name()) : MixerWindow::tr ("(silent)"));
+            if (r.second != nullptr)
+                text += QStringLiteral (" + ") + QString::fromStdString (r.second->name())
+                      + (r.split ? MixerWindow::tr (" (split at %1)").arg (QString::fromStdString (mixer::prismNoteName (r.splitKey))) : QString());
+            for (const auto& x : r.effects)
+                text += QString::fromUtf8 (" → ") + QString::fromStdString (x.effect->name());
+            if (r.lowKey > 0 || r.highKey < 127)
+                text += QString::fromUtf8 (" · ") + QString::fromStdString (mixer::prismNoteName (r.lowKey)) + QString::fromUtf8 ("–")
+                      + QString::fromStdString (mixer::prismNoteName (r.highKey));
+            if (r.muted)
+                text += MixerWindow::tr (" (muted)");
+            lines << text;
+        }
+        return lines;
+    }
 
     void clear()
     {
@@ -5316,14 +5375,38 @@ private:
             choose->setToolTip (MixerWindow::tr ("Choose the instrument"));
             QObject::connect (choose, &QToolButton::clicked, this, [this, choose] { instrumentMenu (choose->mapToGlobal (QPoint (0, choose->height()))); });
             tile->head->addWidget (choose);
-            auto* note = new QLabel (inst == nullptr ? MixerWindow::tr ("Drop an instrument here, or on the track's strip, to play its MIDI clips")
-                                     : audioOnly ? MixerWindow::tr ("The track plays only its audio: Inst or Hybrid in the Inspector lets this play")
-                                     : MixerWindow::tr ("Plays the MIDI clips and the keyboard. Drop another instrument here to replace it"), tile);
-            note->setWordWrap (true);
-            note->setForegroundRole (QPalette::PlaceholderText);
-            note->setFixedWidth (190);
-            tile->body->addWidget (note, 0, 0);
-            tile->setFixedWidth (220);
+            const bool isPrism = inst != nullptr && inst->kind() == mixer::Instrument::Kind::prism;
+            if (isPrism)
+            {
+                // An Instrument Prism: a line a ray, what it plays and the effects after it.
+                edit->setText (MixerWindow::tr ("Open"));
+                edit->setToolTip (MixerWindow::tr ("Open the Prism to edit its rays"));
+                const auto lines = prismSummary (static_cast<mixer::InstrumentPrism&> (*inst));
+                int line = 0;
+                for (const auto& text : lines)
+                {
+                    auto* label = new QLabel (QFontMetrics (font()).elidedText (text, Qt::ElideRight, 236), tile);
+                    label->setToolTip (text);
+                    tile->body->addWidget (label, line++, 0);
+                }
+                auto* note = new QLabel (lines.isEmpty() ? MixerWindow::tr ("No rays yet: Open adds them")
+                                         : MixerWindow::tr ("The effects after it play all of its rays"), tile);
+                note->setWordWrap (true);
+                note->setForegroundRole (QPalette::PlaceholderText);
+                tile->body->addWidget (note, line, 0);
+                tile->setFixedWidth (260);
+            }
+            else
+            {
+                auto* note = new QLabel (inst == nullptr ? MixerWindow::tr ("Drop an instrument here, or on the track's strip, to play its MIDI clips")
+                                         : audioOnly ? MixerWindow::tr ("The track plays only its audio: Inst or Hybrid in the Inspector lets this play")
+                                         : MixerWindow::tr ("Plays the MIDI clips and the keyboard. Drop another instrument here to replace it"), tile);
+                note->setWordWrap (true);
+                note->setForegroundRole (QPalette::PlaceholderText);
+                note->setFixedWidth (190);
+                tile->body->addWidget (note, 0, 0);
+                tile->setFixedWidth (220);
+            }
             rowLayout->addWidget (tile);
         }
 
@@ -5427,6 +5510,7 @@ private:
         menu.addAction (MixerWindow::tr ("S&ampler"), this, choose ("sampler"));
         menu.addAction (MixerWindow::tr ("S&licer"), this, choose ("slicer"));
         menu.addAction (QString::fromUtf8 ("PHI &rāga"), this, choose ("raga"));
+        menu.addAction (MixerWindow::tr ("Instrument &Prism (rays of instruments)"), this, choose ("prism"));
         const auto plugins = window.audio.knownInstruments();
         if (! plugins.empty())
             menu.addSeparator();
@@ -6075,6 +6159,7 @@ private:
         menu.addAction (MixerWindow::tr ("S&ampler"), this, choose ("sampler"));
         menu.addAction (MixerWindow::tr ("S&licer"), this, choose ("slicer"));
         menu.addAction (QString::fromUtf8 ("PHI &rāga"), this, choose ("raga"));
+        menu.addAction (MixerWindow::tr ("Instrument &Prism (rays of instruments)"), this, choose ("prism"));
         const auto plugins = window.audio.knownInstruments();
         if (! plugins.empty())
             menu.addSeparator();
@@ -8104,6 +8189,7 @@ bool MixerWindow::dropPlugin (int track, const QByteArray& what)
     }
     const int choice = kind == QLatin1String ("synth") ? synthChoice : kind == QLatin1String ("sampler") ? samplerChoice
                      : kind == QLatin1String ("slicer") ? slicerChoice : kind == QLatin1String ("raga") ? ragaChoice
+                     : kind == QLatin1String ("prism") ? prismChoice
                      : kind == QLatin1String ("instrument") ? firstPlugin : -1;
     if (choice < 0)
         return false;
@@ -8230,12 +8316,9 @@ void MixerWindow::removeTrack()
     deleteTrack (selected < engine.numTracks() ? selected : engine.numTracks() - 1);
 }
 
-// Everything the mixer keeps about track `from`, given to track `to` (the engine's settings,
-// clips, instrument, inserts and slots, and the window's name, colour, tuning and undo steps).
-void MixerWindow::copyTrack (int from, int to)
+// A track's settings and sends, given to another (or kept aside, for undo).
+static void copyStrip (const mixer::Strip& a, mixer::Strip& b)
 {
-    const auto& a = engine.strip (from);
-    auto& b = engine.strip (to);
     b.mode = a.mode.load();
     b.audioLayerDb = a.audioLayerDb.load();
     b.instrumentLayerDb = a.instrumentLayerDb.load();
@@ -8273,6 +8356,13 @@ void MixerWindow::copyTrack (int from, int to)
     b.toBus = a.toBus.load();
     b.placed.set (a.placed.place());
     b.lfeDb = a.lfeDb.load();
+}
+
+// Everything the mixer keeps about track `from`, given to track `to` (the engine's settings,
+// clips, instrument, inserts and slots, and the window's name, colour, tuning and undo steps).
+void MixerWindow::copyTrack (int from, int to)
+{
+    copyStrip (engine.strip (from), engine.strip (to));
     engine.setClips (to, engine.clips (from));
     engine.setInstrument (to, engine.instrument (from));
     engine.setInserts (to, engine.inserts (from));
@@ -8292,8 +8382,8 @@ void MixerWindow::copyTrack (int from, int to)
     timelinePasses[(size_t) to] = timelinePasses[(size_t) from];
     layerTakes[(size_t) to] = layerTakes[(size_t) from];
     for (auto* stack : { &undoStack, &redoStack })
-        for (auto& snap : *stack)
-            snap[(size_t) to] = snap[(size_t) from];
+        for (auto& step : *stack)
+            step.clips[(size_t) to] = step.clips[(size_t) from];
 }
 
 // Track `k` as a new one: nothing on it, its strip as it starts.
@@ -8349,8 +8439,8 @@ void MixerWindow::clearTrack (int k)
     timelinePasses[(size_t) k].clear();
     layerTakes[(size_t) k] = {};
     for (auto* stack : { &undoStack, &redoStack })
-        for (auto& snap : *stack)
-            snap[(size_t) k].clear();
+        for (auto& step : *stack)
+            step.clips[(size_t) k].clear();
 }
 
 // Before tracks move: loads still running and windows open for them would land on the
@@ -8385,17 +8475,17 @@ void MixerWindow::moveDuckKeys (const std::function<int (int)>& moved)
             key = moved (key.load());
 }
 
-void MixerWindow::insertTrack (int at)
+bool MixerWindow::openTrack (int at)
 {
     const auto count = engine.numTracks();
     if (count >= mixer::maxTracks)
     {
         status->setText (tr ("The mixer has 8 tracks at most."));
-        return;
+        return false;
     }
     at = std::clamp (at, 0, count);
     if (at < count && ! readyToMoveTracks (at))
-        return;
+        return false;
     const auto live = engine.liveTrack();
     engine.setNumTracks (count + 1);
     for (int k = count; k > at; --k)
@@ -8407,31 +8497,75 @@ void MixerWindow::insertTrack (int at)
     moveDuckKeys ([at] (int key) { return key >= at ? key + 1 : key; });
     if (live >= at)
         engine.setLiveTrack (live + 1);
+    return true;
+}
+
+// Undone by taking it away again (Ctrl+Z).
+void MixerWindow::insertTrack (int at)
+{
+    at = std::clamp (at, 0, engine.numTracks());
+    if (! openTrack (at))
+        return;
+    Step step;
+    step.removes = at;
+    pushUndo (std::move (step));
     rebuildStrips();
     select (at);
     changed();
 }
 
+// No question asked: Ctrl+Z brings the track back, with its clips, instrument, inserts, slots,
+// sends and settings.
 void MixerWindow::deleteTrack (int index)
+{
+    if (index < 0 || index >= engine.numTracks())
+        return;
+    auto copy = takeTrack (index, undoStack);
+    if (copy == nullptr)
+        return;
+    Step step;
+    step.restores = std::move (copy);
+    pushUndo (std::move (step));
+    status->setText (tr ("Track %1 deleted (Ctrl+Z brings it back).").arg (index + 1));
+}
+
+std::shared_ptr<const MixerWindow::TrackCopy> MixerWindow::takeTrack (int index, const std::vector<Step>& stack)
 {
     const auto count = engine.numTracks();
     if (index < 0 || index >= count)
-        return;
+        return nullptr;
     if (count < 2)
     {
         status->setText (tr ("A mix keeps at least one track."));
-        return;
+        return nullptr;
     }
-    bool hasSlots = false;
-    for (const auto& slot : slots[(size_t) index])
-        hasSlots = hasSlots || slot != nullptr;
-    if ((! engine.clips (index).empty() || engine.instrument (index) != nullptr || hasSlots)
-        && QMessageBox::question (this, tr ("Delete Track"), tr ("Delete track %1, “%2”, and what is on it?").arg (index + 1).arg (info[(size_t) index].name))
-               != QMessageBox::Yes)
-        return;
     if (! readyToMoveTracks (index))
-        return;
+        return nullptr;
+    auto copy = std::make_shared<TrackCopy>();
+    copy->index = index;
+    copy->strip = std::make_unique<mixer::Strip>();
+    copyStrip (engine.strip (index), *copy->strip);
+    copy->clips = engine.clips (index);
+    copy->instrument = engine.instrument (index);
+    copy->inserts = engine.inserts (index);
+    copy->slots = slots[(size_t) index];
+    const auto& t = info[(size_t) index];
+    copy->name = t.name;
+    copy->colour = t.colour;
+    copy->sound = t.sound;
+    copy->tuning = t.tuning;
+    copy->givenDefault = givenDefaults[(size_t) index];
+    copy->heardTuning = heardTunings[(size_t) index];
+    copy->timelinePasses = timelinePasses[(size_t) index];
+    copy->layerTake = layerTakes[(size_t) index];
+    for (int k = 0; k < count; ++k)
+        if (k != index && engine.strip (k).duckKey.load() == index)
+            copy->duckedBy.push_back (k);
     const auto live = engine.liveTrack();
+    copy->live = live == index;
+    for (auto it = stack.rbegin(); it != stack.rend(); ++it)
+        copy->history.push_back (it->clips[(size_t) index]);
+
     for (int k = index; k < count - 1; ++k)
         copyTrack (k + 1, k);
     clearTrack (count - 1);
@@ -8443,8 +8577,51 @@ void MixerWindow::deleteTrack (int index)
         engine.setLiveTrack (live - 1);
     rebuildStrips();
     select (std::min (index, count - 2));
-    status->setText (tr ("Track %1 deleted.").arg (index + 1));
     changed();
+    return copy;
+}
+
+bool MixerWindow::putTrack (const TrackCopy& copy, std::vector<Step>& stack)
+{
+    const auto at = copy.index;
+    if (engine.numTracks() >= mixer::maxTracks)
+    {
+        status->setText (tr ("Track %1, “%2”, can only come back when the mixer has fewer than 8 tracks.").arg (at + 1).arg (copy.name));
+        return false;
+    }
+    if (at > engine.numTracks() || ! openTrack (at))
+        return false;
+    copyStrip (*copy.strip, engine.strip (at));
+    engine.setClips (at, copy.clips);
+    engine.setInstrument (at, copy.instrument);
+    engine.setInserts (at, copy.inserts);
+    for (int sc = 0; sc < mixer::maxScenes; ++sc)
+    {
+        slots[(size_t) at][(size_t) sc] = copy.slots[(size_t) sc];
+        engine.setSlot (at, sc, copy.slots[(size_t) sc]);
+    }
+    auto& t = info[(size_t) at];
+    t.name = copy.name;
+    t.colour = copy.colour;
+    t.sound = copy.sound;
+    t.tuning = copy.tuning;
+    givenDefaults[(size_t) at] = copy.givenDefault;
+    heardTunings[(size_t) at] = copy.heardTuning;
+    timelinePasses[(size_t) at] = copy.timelinePasses;
+    layerTakes[(size_t) at] = copy.layerTake;
+    for (const auto k : copy.duckedBy)
+        if (k < engine.numTracks())
+            engine.strip (k).duckKey = at;
+    if (copy.live)
+        engine.setLiveTrack (at);
+    for (size_t i = 0; i < copy.history.size() && i < stack.size(); ++i)
+        stack[stack.size() - 1 - i].clips[(size_t) at] = copy.history[i];
+    if (loopButton->isChecked())
+        engine.setLoop (0, engine.length());
+    rebuildStrips();
+    select (at);
+    changed();
+    return true;
 }
 
 //==============================================================================
@@ -8492,10 +8669,36 @@ void MixerWindow::remember()
 {
     if (restoring)
         return;
-    undoStack.push_back (snapshot());
+    Step step;
+    step.clips = snapshot();
+    pushUndo (std::move (step));
+}
+
+void MixerWindow::pushUndo (Step step)
+{
+    undoStack.push_back (std::move (step));
     if (undoStack.size() > 100)
         undoStack.erase (undoStack.begin());
     redoStack.clear();
+}
+
+bool MixerWindow::apply (const Step& step, std::vector<Step>& from, const std::vector<Step>& to, Step& inverse)
+{
+    if (step.restores != nullptr)
+    {
+        if (! putTrack (*step.restores, from))
+            return false;
+        inverse.removes = step.restores->index;
+        return true;
+    }
+    if (step.removes >= 0)
+    {
+        inverse.restores = takeTrack (step.removes, to);
+        return inverse.restores != nullptr;
+    }
+    inverse.clips = snapshot();
+    restore (step.clips);
+    return true;
 }
 
 void MixerWindow::undo()
@@ -8505,10 +8708,17 @@ void MixerWindow::undo()
         status->setText (tr ("Nothing to undo."));
         return;
     }
-    redoStack.push_back (snapshot());
-    restore (undoStack.back());
+    auto step = std::move (undoStack.back());
     undoStack.pop_back();
-    status->setText (tr ("Undone (Ctrl+Shift+Z redoes it)."));
+    Step inverse;
+    if (! apply (step, undoStack, redoStack, inverse))
+    {
+        undoStack.push_back (std::move (step));   // the reason is on the status line
+        return;
+    }
+    redoStack.push_back (std::move (inverse));
+    status->setText (step.restores != nullptr ? tr ("Track %1, “%2”, is back (Ctrl+Shift+Z deletes it again).").arg (step.restores->index + 1).arg (step.restores->name)
+                                              : tr ("Undone (Ctrl+Shift+Z redoes it)."));
 }
 
 void MixerWindow::redo()
@@ -8518,9 +8728,15 @@ void MixerWindow::redo()
         status->setText (tr ("Nothing to redo."));
         return;
     }
-    undoStack.push_back (snapshot());
-    restore (redoStack.back());
+    auto step = std::move (redoStack.back());
     redoStack.pop_back();
+    Step inverse;
+    if (! apply (step, redoStack, undoStack, inverse))
+    {
+        redoStack.push_back (std::move (step));
+        return;
+    }
+    undoStack.push_back (std::move (inverse));
     status->setText (tr ("Redone."));
 }
 
@@ -8752,6 +8968,7 @@ void MixerWindow::setInstrumentKind (int track, int choice, const QString& plugi
     {
         case synthChoice: made = std::make_shared<mixer::Synth>(); break;
         case ragaChoice: made = std::make_shared<mixer::RagaInstrument>(); break;
+        case prismChoice: made = makePrism (track); break;
         case samplerChoice:
         case slicerChoice:
             if (choice == samplerChoice)
@@ -8795,6 +9012,8 @@ void MixerWindow::setInstrumentKind (int track, int choice, const QString& plugi
     }
     if (choice == firstPlugin && made != nullptr && made->hasWindow() && ! restoring)
         made->showWindow();
+    if (choice == prismChoice && ! restoring)
+        openPrism (track);
 }
 
 void MixerWindow::loadInstrumentSound (int track, const QString& file)
@@ -8897,6 +9116,9 @@ void MixerWindow::editInstrument (int track)
         case mixer::Instrument::Kind::plugin:
             inst->showWindow();
             return;
+        case mixer::Instrument::Kind::prism:
+            openPrism (track);
+            return;
         case mixer::Instrument::Kind::sampler:
         {
             auto& s = static_cast<mixer::SamplerInstrument&> (*inst);
@@ -8955,7 +9177,7 @@ void MixerWindow::arm (int track)
 //==============================================================================
 // The knobs of an effect without a window of its own (the built-in and Φ effects): a slider
 // for each, its value beside it. Deletes itself when closed; keeps the effect alive meanwhile.
-static QDialog* effectDialog (mixer::EffectPtr effect, const QString& title, QWidget* parent, std::function<void()> changed)
+QDialog* effectDialog (mixer::EffectPtr effect, const QString& title, QWidget* parent, std::function<void()> changed)
 {
     auto* d = new QDialog (parent);
     d->setAttribute (Qt::WA_DeleteOnClose);
@@ -9015,6 +9237,12 @@ void MixerWindow::chooseInsert (int track, int replace, QPoint at)
         return;
     }
     QMenu menu (this);
+    effectsMenu (menu, [this, track, replace] (const std::string& id) { addInsert (track, id, replace); });
+    menu.exec (at.isNull() ? QCursor::pos() : at);
+}
+
+void MixerWindow::effectsMenu (QMenu& menu, std::function<void (const std::string& id)> pick)
+{
     auto plugins = audio.knownPlugins();
     std::sort (plugins.begin(), plugins.end(), [] (const PluginInfo& x, const PluginInfo& y)
     {
@@ -9032,7 +9260,7 @@ void MixerWindow::chooseInsert (int track, int replace, QPoint at)
     for (const auto& p : plugins)
     {
         const auto id = p.id;
-        formatMenu (QString::fromStdString (p.format))->addAction (QString::fromStdString (p.name), this, [this, track, id, replace] { addInsert (track, id, replace); });
+        formatMenu (QString::fromStdString (p.format))->addAction (QString::fromStdString (p.name), this, [pick, id] { pick (id); });
     }
     if (auto it = byFormat.find (QStringLiteral ("Built-in")); it != byFormat.end())
         menu.addMenu (it->second);
@@ -9041,7 +9269,6 @@ void MixerWindow::chooseInsert (int track, int replace, QPoint at)
             menu.addMenu (sub);
     if (plugins.empty())
         menu.addAction (tr ("No effects found (Master Section > Manage Plug-ins scans for them)"))->setEnabled (false);
-    menu.exec (at.isNull() ? QCursor::pos() : at);
 }
 
 void MixerWindow::addInsert (int track, const std::string& pluginId, int replace)
@@ -9192,6 +9419,14 @@ QString MixerWindow::insertOwner (int track) const
 
 int MixerWindow::insertLimit (int track) const { return track == mixer::busTrack ? mixer::maxBusInserts : mixer::maxInserts; }
 
+void MixerWindow::prismChanged (int track)
+{
+    strips[(size_t) track]->refresh();
+    if (devices != nullptr)
+        devices->refresh();
+    changed();
+}
+
 void MixerWindow::refreshInsertsOf (int track)
 {
     if (track == mixer::busTrack)
@@ -9202,8 +9437,13 @@ void MixerWindow::refreshInsertsOf (int track)
 
 QJsonArray MixerWindow::insertsJson (int track) const
 {
+    return effectsJson (engine.inserts (track));
+}
+
+QJsonArray MixerWindow::effectsJson (const mixer::Inserts& effects)
+{
     QJsonArray list;
-    for (const auto& x : engine.inserts (track))
+    for (const auto& x : effects)
         list.append (QJsonObject {
             { "id", QString::fromStdString (x.effect->pluginId()) }, { "name", QString::fromStdString (x.effect->name()) },
             { "state", QString::fromStdString (x.effect->state()) }, { "bypassed", x.bypassed }, { "mix", x.mix },
@@ -9213,6 +9453,11 @@ QJsonArray MixerWindow::insertsJson (int track) const
 
 void MixerWindow::loadInserts (int track, const QJsonArray& list, QStringList& problems)
 {
+    engine.setInserts (track, effectsFromJson (list, insertOwner (track), problems));
+}
+
+mixer::Inserts MixerWindow::effectsFromJson (const QJsonArray& list, const QString& owner, QStringList& problems)
+{
     mixer::Inserts made;
     for (const auto& value : list)
     {
@@ -9221,13 +9466,13 @@ void MixerWindow::loadInserts (int track, const QJsonArray& list, QStringList& p
         auto effect = audio.loadEffectPlugin (o.value ("id").toString().toStdString(), rate(), error);
         if (effect == nullptr)
         {
-            problems << tr ("%1: the insert %2 could not be started (%3)").arg (insertOwner (track), o.value ("name").toString(), QString::fromStdString (error));
+            problems << tr ("%1: the insert %2 could not be started (%3)").arg (owner, o.value ("name").toString(), QString::fromStdString (error));
             continue;
         }
         effect->setState (o.value ("state").toString().toStdString());
         made.push_back ({ effect, o.value ("bypassed").toBool(), (float) std::clamp (o.value ("mix").toDouble (1.0), 0.0, 1.0) });
     }
-    engine.setInserts (track, std::move (made));
+    return made;
 }
 
 void MixerWindow::stripsMenu (QPoint at)
@@ -10072,6 +10317,9 @@ bool MixerWindow::writeMix (const QString& file, QString& error)
                     io = { { "kind", "plugin" }, { "id", QString::fromStdString (AudioEngine::instrumentPluginId (*inst)) },
                            { "name", QString::fromStdString (inst->name()) }, { "state", QString::fromStdString (inst->state()) } };
                     break;
+                case mixer::Instrument::Kind::prism:
+                    io = prismJson (*inst);
+                    break;
             }
             o.insert ("instrument", io);
         }
@@ -10248,6 +10496,8 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
                     problems << tr ("Track %1: %2").arg (i + 1).arg (m);
             }
         }
+        else if (kind == QLatin1String ("prism"))
+            engine.setInstrument (i, prismFromJson (io, i, problems));
         else if (kind == QLatin1String ("plugin"))
         {
             std::string why;
@@ -11010,6 +11260,44 @@ void MixerWindow::showLauncher (bool on)
     }
     rack->refresh();
     grid->update();
+}
+
+std::vector<MixerWindow::Mappable> MixerWindow::mappable() const
+{
+    using A = control::Action;
+    std::vector<Mappable> out;
+    auto add = [&out] (QWidget* w, A action, int track, bool continuous, int index = 0)
+    {
+        if (w == nullptr)
+            return;
+        Mappable m;
+        m.widget = w;
+        m.target.action = action;
+        m.target.track = track;
+        m.target.index = index;
+        m.continuous = continuous;
+        out.push_back (m);
+    };
+    for (int t = 0; t < engine.numTracks() && t < control::maxTracks; ++t)
+        if (auto* strip = strips[(size_t) t])
+        {
+            add (strip->fader, A::volume, t, true);
+            add (strip->panDial, A::pan, t, true);
+            for (int r = 0; r < (int) strip->sendDials.size() && r < 2; ++r)
+                add (strip->sendDials[(size_t) r], A::send, t, true, r);
+            add (strip->muteButton, A::mute, t, false);
+            add (strip->soloButton, A::solo, t, false);
+            add (strip->armButton, A::arm, t, false);
+        }
+    add (masterFader, A::master, -1, true);
+    add (tempoBox, A::tempo, -1, true);
+    add (playButton, A::togglePlay, -1, false);
+    add (loopButton, A::loop, -1, false);
+    add (recordButton, A::record, -1, false);
+    add (clickButton, A::metronome, -1, false);
+    if (grid != nullptr && launcherShown())
+        grid->mappable (out);
+    return out;
 }
 
 bool MixerWindow::launcherShown() const { return launcherArea != nullptr && ! launcherArea->isHidden(); }
