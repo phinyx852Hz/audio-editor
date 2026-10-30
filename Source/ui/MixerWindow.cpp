@@ -6,6 +6,7 @@
 #include "../mixer/DrumsToMidi.h"
 #include "PhiMark.h"
 #include "Potentiometer.h"
+#include "EditorWindow.h"
 #include "SamplerWindow.h"
 #include "ExtremeSettings.h"
 #include "Settings.h"
@@ -1748,6 +1749,7 @@ QDialog* ragaDialog (mixer::InstrumentPtr inst, const QString& title, QWidget* p
     auto* d = new QDialog (parent);
     d->setAttribute (Qt::WA_DeleteOnClose);
     d->setWindowTitle (QString::fromUtf8 ("PHI rāga: %1").arg (title));
+    editorwindow::mark (d);
     auto* form = new QFormLayout (d);
     const auto s = raga.settings();
     auto* ragas = new QComboBox (d);
@@ -1844,6 +1846,7 @@ QDialog* synthDialog (mixer::InstrumentPtr inst, const QString& title, QWidget* 
     auto* d = new QDialog (parent);
     d->setAttribute (Qt::WA_DeleteOnClose);
     d->setWindowTitle (QObject::tr ("Synth: %1").arg (title));
+    editorwindow::mark (d);
     auto* form = new QFormLayout (d);
     const auto s = synth.settings();
     auto* wave = new QComboBox (d);
@@ -8742,6 +8745,7 @@ static QDialog* effectDialog (mixer::EffectPtr effect, const QString& title, QWi
     auto* d = new QDialog (parent);
     d->setAttribute (Qt::WA_DeleteOnClose);
     d->setWindowTitle (title);
+    editorwindow::mark (d);
     auto* form = new QFormLayout (d);
     const auto params = effect->parameters();
     if (params.empty())

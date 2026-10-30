@@ -16,10 +16,12 @@
 // Always resizable, so it can be dragged to any size, made full screen, or tiled by
 // a tiling window manager like any other window. An editor of fixed size is asked to
 // scale itself to fit (most VST3 and CLAP plugins can) and sits centred in what is left.
-// With the window focused (on Hyprland, under the mouse): Esc, Ctrl+W or Super+W closes
-// it (only the window: the plugin or instrument keeps playing), Super+F takes it full
-// screen and back, Ctrl+Tab and Ctrl+Shift+Tab go to the next and previous plugin window.
-// Ctrl+W, Super+W and Super+F work even while the plugin's own view has the keyboard.
+// It floats (a dialog to the window manager, so Hyprland and Omarchy float it rather than
+// tile it) at about three fifths of the screen. With the window focused (on Hyprland,
+// under the mouse): Esc, Ctrl+W or Super+W closes it (only the window: the plugin or
+// instrument keeps playing), Ctrl+F or Super+F takes it full screen and back to its
+// floating size, Ctrl+Tab and Ctrl+Shift+Tab go to the next and previous plugin window.
+// Ctrl+W, Ctrl+F, Super+W and Super+F work even while the plugin's own view has the keyboard.
 class PluginWindow final : public juce::DocumentWindow
 {
 public:
@@ -43,6 +45,7 @@ public:
         if (auto* peer = getPeer())
         {
             x11::setWindowClass (peer->getNativeHandle());
+            x11::setDialogType (peer->getNativeHandle());
             x11::grabWindowKeys (peer->getNativeHandle());
         }
         setVisible (true);
@@ -96,7 +99,7 @@ public:
             closeButtonPressed();
             return true;
         }
-        if (super)
+        if (super || (mods.isCtrlDown() && ! mods.isAltDown() && ! mods.isShiftDown() && (code == 'F' || code == 'f')))
         {
             if (auto* peer = getPeer())
                 x11::toggleFullScreen (peer->getNativeHandle());
@@ -112,8 +115,9 @@ public:
     }
 
 private:
-    // The size a plugin window opens at: its content scaled up (or down) to about two
-    // thirds of the screen, keeping its proportions. Super+F still takes it full screen.
+    // The size a plugin window opens at: its content scaled up (or down) to about three
+    // fifths of the screen, keeping its proportions; smaller than the screen, never small
+    // (owner, 2026-10-30). Ctrl+F or Super+F takes it full screen and back.
     juce::Point<int> standardSize() const
     {
         const auto w = std::max (1, getWidth()), h = std::max (1, getHeight());
@@ -121,7 +125,7 @@ private:
         if (display == nullptr)
             return { w, h };
         const auto area = display->userArea;
-        const auto scale = juce::jlimit (0.5, 4.0, std::min (area.getWidth() * 2.0 / 3.0 / w, area.getHeight() * 2.0 / 3.0 / h));
+        const auto scale = juce::jlimit (0.5, 4.0, std::min (area.getWidth() * 0.6 / w, area.getHeight() * 0.6 / h));
         return { juce::roundToInt (w * scale), juce::roundToInt (h * scale) };
     }
 

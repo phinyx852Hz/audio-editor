@@ -120,6 +120,20 @@ namespace x11
                   + " ; dispatch centerwindow");
     }
 
+    void setDialogType (void* handle)
+    {
+        auto* d = display();
+        if (d == nullptr || handle == nullptr || lost)
+            return;
+        auto* x = juce::X11Symbols::getInstance();
+        // Dialog first; normal for window managers that do not know it.
+        Atom types[] = { x->xInternAtom (d, "_NET_WM_WINDOW_TYPE_DIALOG", False),
+                         x->xInternAtom (d, "_NET_WM_WINDOW_TYPE_NORMAL", False) };
+        x->xChangeProperty (d, (::Window) (juce::pointer_sized_uint) handle, x->xInternAtom (d, "_NET_WM_WINDOW_TYPE", False),
+                            XA_ATOM, 32, PropModeReplace, reinterpret_cast<unsigned char*> (types), 2);
+        x->xFlush (d);
+    }
+
     void grabWindowKeys (void* handle)
     {
         auto* d = display();
@@ -135,7 +149,7 @@ namespace x11
         auto* x = juce::X11Symbols::getInstance();
         const auto window = (::Window) (juce::pointer_sized_uint) handle;
         const struct { KeySym key; unsigned int modifiers; } keys[] =
-            { { XK_w, ControlMask }, { XK_w, Mod4Mask }, { XK_f, Mod4Mask } };
+            { { XK_w, ControlMask }, { XK_w, Mod4Mask }, { XK_f, ControlMask }, { XK_f, Mod4Mask } };
         // With Caps Lock and Num Lock (usually Mod2) on or off.
         const unsigned int locks[] = { 0, LockMask, Mod2Mask, LockMask | Mod2Mask };
         for (const auto& k : keys)

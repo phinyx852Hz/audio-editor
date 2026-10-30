@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "PrismEditor.h"
 #include "PhiWindow.h"
+#include "EditorWindow.h"
 #include "ChainRow.h"
 #include "MasterPanel.h"
 #include "Potentiometer.h"
@@ -1001,6 +1002,7 @@ void PrismEditor::setOwnWindow (bool on)
         show();
         raise();
         activateWindow();
+        editorwindow::mark (this);
     }
     else
     {
@@ -1008,6 +1010,7 @@ void PrismEditor::setOwnWindow (bool on)
             showNormal();
         appSettings().setValue (QStringLiteral ("prism/windowSize"), size());
         ownWindow = false;
+        setProperty ("phiEditor", false);
         setParent (home);   // back over the window
         if (auto* shadow = graphicsEffect())
             shadow->setEnabled (true);

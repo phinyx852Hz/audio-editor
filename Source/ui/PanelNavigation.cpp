@@ -7,6 +7,7 @@
 #include "MainWindow.h"
 #include "AmbiScene.h"
 #include "ChainRow.h"
+#include "EditorWindow.h"
 #include "FindPanel.h"
 #include "MasterPanel.h"
 #include "MixerWindow.h"
@@ -296,7 +297,9 @@ bool MainWindow::navigationKey (QObject* o, QEvent* e)
     if (! ours && type != QEvent::KeyRelease)
     {
         const bool closeKey = key == Qt::Key_W && (mods == Qt::ControlModifier || mods == Qt::MetaModifier);
-        const bool fullKey = key == Qt::Key_F && mods == Qt::MetaModifier;
+        // Ctrl+F too in an instrument's or effect's own window (EditorWindow.h), as REAPER-like
+        // editors float: full screen and back to its floating size (owner, 2026-10-30).
+        const bool fullKey = key == Qt::Key_F && (mods == Qt::MetaModifier || (mods == Qt::ControlModifier && editorwindow::is (window)));
         const auto pressed = QKeySequence (k->keyCombination());
         const bool dockKey = window == mixerWin && mixerWin != nullptr
                           && (commands.action (QStringLiteral ("mixer.dock"))->shortcuts().contains (pressed)
