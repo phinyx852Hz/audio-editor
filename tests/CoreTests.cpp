@@ -19,6 +19,7 @@
 #include "../Source/mixer/Cubify.h"
 #include "../Source/mixer/Minimalize.h"
 #include "../Source/mixer/MixerEngine.h"
+#include "../Source/mixer/InstrumentPrism.h"
 #include "../Source/mixer/DrumsToMidi.h"
 #include "../Source/mixer/Rhythms.h"
 #include "../Source/mixer/Architectonics.h"
@@ -4160,6 +4161,259 @@ namespace
                    && recorder->heard[1] == std::make_pair (start + 300, 61) && recorder->heard[2] == std::make_pair (start + 700, 62),
                "patchbay: timed messages play at their frame, in later chunks and render calls too");
         bay.setSynth (1, nullptr);
+    }
+
+    // An Instrument Prism: notes reach the rays whose key and velocity ranges hold them, each ray
+    // runs its instrument and then its effects in series, and the rays are added together.
+    namespace prismtest
+    {
+        // Holds a level of 0.1 for every note it is playing; remembers what it was sent.
+        struct Tone final : mixer::Instrument
+        {
+            Kind kind() const override { return Kind::synth; }
+            std::string name() const override { return "Tone"; }
+            void prepare (double, int) override {}
+            void process (const mixer::NoteEvent* events, int numEvents, float* left, float* right, int frames) override
+            {
+                int done = 0;
+                for (int i = 0; i <= numEvents; ++i)
+                {
+                    const auto at = i < numEvents ? std::clamp (events[i].offset, done, frames) : frames;
+                    for (int k = done; k < at; ++k)
+                    {
+                        left[k] += 0.1f * (float) playing;
+                        right[k] += 0.1f * (float) playing;
+                    }
+                    done = at;
+                    if (i == numEvents)
+                        break;
+                    const auto& e = events[i];
+                    received.push_back (e);
+                    if ((e.status & 0xF0) == 0x90 && e.data2 > 0)
+                        ++playing;
+                    else if (((e.status & 0xF0) == 0x80 || (e.status & 0xF0) == 0x90) && playing > 0)
+                        --playing;
+                }
+            }
+            void releaseAll() override { playing = 0; }
+            void reset() override { playing = 0; }
+            int playing = 0;
+            std::vector<mixer::NoteEvent> received;
+        };
+
+        // Doubles the sound, after a delay of `samples` it reports as its latency.
+        struct Double final : mixer::Effect
+        {
+            explicit Double (int n = 0) : samples (n) {}
+            std::string name() const override { return "Double"; }
+            void prepare (double, int) override { line.assign ((size_t) samples + 1, { 0.0f, 0.0f }); }
+            void process (float* left, float* right, int frames) override
+            {
+                for (int k = 0; k < frames; ++k)
+                {
+                    line[(size_t) at] = { left[k], right[k] };
+                    at = (at + 1) % (int) line.size();
+                    left[k] = 2.0f * line[(size_t) at].first;
+                    right[k] = 2.0f * line[(size_t) at].second;
+                }
+            }
+            int latency() const override { return samples; }
+            int samples, at = 0;
+            std::vector<std::pair<float, float>> line;
+        };
+    }
+
+    void testInstrumentPrism()
+    {
+        using prismtest::Tone;
+        constexpr int frames = 64;
+        std::vector<float> left (frames), right (frames);
+        auto play = [&] (mixer::InstrumentPrism& p, std::vector<mixer::NoteEvent> events)
+        {
+            std::fill (left.begin(), left.end(), 0.0f);
+            std::fill (right.begin(), right.end(), 0.0f);
+            p.process (events.data(), (int) events.size(), left.data(), right.data(), frames);
+        };
+        auto on = [] (int note, int velocity) { return mixer::NoteEvent { 0, 0x90, (uint8_t) note, (uint8_t) velocity }; };
+        auto off = [] (int note) { return mixer::NoteEvent { 0, 0x80, (uint8_t) note, 0 }; };
+
+        // A split: the low ray below C4, the high ray from C4 up.
+        {
+            mixer::InstrumentPrism p;
+            p.prepare (48000.0, frames);
+            auto low = std::make_shared<Tone>(), high = std::make_shared<Tone>();
+            mixer::InstrumentPrism::Ray a, b;
+            a.instrument = low;
+            a.highKey = 59;
+            b.instrument = high;
+            b.lowKey = 60;
+            p.setRays ({ a, b });
+            check (p.numRays() == 2 && p.kind() == mixer::Instrument::Kind::prism, "instrument prism holds its rays");
+            play (p, { on (40, 100) });
+            check (low->playing == 1 && high->playing == 0, "instrument prism: a low note plays the low ray only");
+            play (p, { on (72, 100) });
+            check (high->playing == 1 && low->playing == 1, "instrument prism: a high note plays the high ray only");
+            check (near (left[frames - 1], 0.2, 1.0e-6), "instrument prism adds its rays");
+
+            // The ranges change while the notes are held: their ends still reach the rays that play them.
+            auto moved = p.rays();
+            moved[0].highKey = 30;
+            moved[1].lowKey = 100;
+            p.setRays (moved);
+            play (p, { off (40), off (72) });
+            check (low->playing == 0 && high->playing == 0, "instrument prism: a note ends on the ray that got it");
+
+            // Controllers go to every ray.
+            const auto before = low->received.size() + high->received.size();
+            play (p, { { 0, 0xB0, 64, 127 } });
+            check (low->received.size() + high->received.size() == before + 2, "instrument prism: a controller reaches every ray");
+        }
+
+        // Layers by velocity, and the effects of a ray in series after its instrument.
+        {
+            mixer::InstrumentPrism p;
+            p.prepare (48000.0, frames);
+            auto soft = std::make_shared<Tone>(), hard = std::make_shared<Tone>();
+            mixer::InstrumentPrism::Ray a, b;
+            a.instrument = soft;
+            a.highVelocity = 80;
+            b.instrument = hard;
+            b.lowVelocity = 81;
+            b.effects.push_back ({ std::make_shared<prismtest::Double>(), false, 1.0f });
+            p.setRays ({ a, b });
+            play (p, { on (60, 120) });
+            check (soft->playing == 0 && hard->playing == 1, "instrument prism: a hard note plays the hard layer");
+            check (near (left[frames - 1], 0.2, 1.0e-6), "instrument prism: a ray's effect follows its instrument");
+            play (p, { on (62, 40) });
+            check (near (left[frames - 1], 0.3, 1.0e-6), "instrument prism: the soft layer adds to the hard one");
+
+            // Bypassed, the effect is left out; at half Mix, half of it is heard.
+            auto r = p.rays();
+            r[1].effects[0].bypassed = true;
+            p.setRays (r);
+            play (p, {});
+            check (near (left[frames - 1], 0.2, 1.0e-6), "instrument prism: a bypassed ray effect is left out");
+            r[1].effects[0].bypassed = false;
+            r[1].effects[0].mix = 0.5f;
+            p.setRays (r);
+            play (p, {});
+            check (near (left[frames - 1], 0.25, 1.0e-6), "instrument prism: a ray effect's Mix");
+
+            // Mute and solo, ramped over a block.
+            r[1].effects[0].mix = 1.0f;
+            r[1].muted = true;
+            p.setRays (r);
+            play (p, {});
+            play (p, {});
+            check (near (left[frames - 1], 0.1, 1.0e-6), "instrument prism: a muted ray is silent");
+            r[1].muted = false;
+            r[1].soloed = true;
+            p.setRays (r);
+            play (p, {});
+            play (p, {});
+            check (near (left[frames - 1], 0.2, 1.0e-6), "instrument prism: a soloed ray is all that is heard");
+            r[1].soloed = false;
+            r[0].gainDb = -60.0f;
+            p.setRays (r);
+            play (p, {});
+            play (p, {});
+            check (near (left[frames - 1], 0.2, 1.0e-6), "instrument prism: a ray at -60 dB is off");
+
+            // Its own settings come back from its state.
+            r[0].name = "Soft layer";
+            r[0].gainDb = -6.0f;
+            r[0].lowKey = 36;
+            p.setRays (r);
+            p.setName ("Keys");
+            const auto saved = p.state();
+            auto copy = r;
+            copy[0].name.clear();
+            copy[0].gainDb = 0.0f;
+            copy[0].lowKey = 0;
+            p.setRays (copy);
+            p.setState (saved);
+            const auto back = p.rays();
+            check (back[0].name == "Soft layer" && back[0].gainDb == -6.0f && back[1].splitKey == 60 && back[0].lowKey == 36 && back[1].lowVelocity == 81 && p.name() == "Keys",
+                   "instrument prism: its settings come back from its state");
+        }
+
+        // A ray with latency in its effects: the others wait for it, so layers stay together.
+        {
+            constexpr int delay = 10;
+            mixer::InstrumentPrism p;
+            p.prepare (48000.0, frames);
+            mixer::InstrumentPrism::Ray a, b;
+            a.instrument = std::make_shared<Tone>();
+            a.effects.push_back ({ std::make_shared<prismtest::Double> (delay), false, 1.0f });
+            b.instrument = std::make_shared<Tone>();
+            p.setRays ({ a, b });
+            check (p.latency() == delay, "instrument prism: its latency is the slowest ray's");
+            play (p, { on (60, 100) });
+            check (left[delay - 1] == 0.0f && near (left[delay + 1], 0.3, 1.0e-6), "instrument prism: rays line up with the slowest");
+        }
+
+        // Longer blocks than it was prepared for are played in pieces, the events in their place.
+        {
+            mixer::InstrumentPrism p;
+            p.prepare (48000.0, 16);
+            auto tone = std::make_shared<Tone>();
+            mixer::InstrumentPrism::Ray a;
+            a.instrument = tone;
+            p.setRays ({ a });
+            std::fill (left.begin(), left.end(), 0.0f);
+            std::fill (right.begin(), right.end(), 0.0f);
+            const mixer::NoteEvent late { 40, 0x90, 60, 100 };
+            p.process (&late, 1, left.data(), right.data(), frames);
+            check (left[39] == 0.0f && near (left[40], 0.1, 1.0e-6) && near (left[frames - 1], 0.1, 1.0e-6),
+                   "instrument prism: a long block is played in pieces");
+        }
+        // Two instruments in a ray, A and B: layered with a mix between them, or split at a key.
+        {
+            mixer::InstrumentPrism p;
+            p.prepare (48000.0, frames);
+            auto first = std::make_shared<Tone>(), second = std::make_shared<Tone>();
+            mixer::InstrumentPrism::Ray ray;
+            ray.instrument = first;
+            ray.second = second;
+            p.setRays ({ ray });
+            play (p, { on (60, 100) });
+            check (first->playing == 1 && second->playing == 1, "instrument prism: A and B both play a layered note");
+            check (near (left[frames - 1], 0.2, 1.0e-6), "instrument prism: A and B in full at the middle of the mix");
+            auto r = p.rays();
+            r[0].blend = 0.0f;
+            p.setRays (r);
+            play (p, {});
+            play (p, {});
+            check (near (left[frames - 1], 0.1, 1.0e-6), "instrument prism: the mix at A plays only A");
+            r[0].blend = 0.75f;
+            p.setRays (r);
+            play (p, {});
+            play (p, {});
+            check (near (left[frames - 1], 0.15, 1.0e-6), "instrument prism: the mix towards B fades A");
+            play (p, { off (60) });
+            check (first->playing == 0 && second->playing == 0, "instrument prism: a layered note ends on both");
+
+            // Split at C4: below it A, from it up B; a note's end follows it even when the split moves.
+            r[0].blend = 0.5f;
+            r[0].split = true;
+            r[0].splitKey = 60;
+            p.setRays (r);
+            play (p, { on (48, 100) });
+            check (first->playing == 1 && second->playing == 0, "instrument prism: below the split plays A");
+            play (p, { on (72, 100) });
+            check (first->playing == 1 && second->playing == 1, "instrument prism: above the split plays B");
+            r[0].splitKey = 30;
+            p.setRays (r);
+            play (p, { off (48), off (72) });
+            check (first->playing == 0 && second->playing == 0, "instrument prism: split notes end where they started");
+
+            // B on its own becomes A.
+            r[0].instrument = nullptr;
+            p.setRays (r);
+            const auto lone = p.rays();
+            check (lone[0].instrument == second && lone[0].second == nullptr && near (lone[0].gainA(), 1.0, 1.0e-6), "instrument prism: a lone B becomes A");
+        }
+        check (mixer::prismNoteName (60) == "C4" && mixer::prismNoteName (0) == "C-1" && mixer::prismNoteName (127) == "G9", "instrument prism: note names");
     }
 
     // A Prism with nothing in its rays gives back what went in, in every split.
@@ -8970,6 +9224,7 @@ int main()
     testMixerStrip();
     testSpatialStudio();
     testPrismSplit();
+    testInstrumentPrism();
     testMasterAssist();
     testMixAssist();
     testSonify();

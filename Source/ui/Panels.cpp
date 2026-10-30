@@ -308,7 +308,37 @@ DockablePanel::~DockablePanel()
 
 bool DockablePanel::isShown() const
 {
+    if (lentTo != nullptr)
+        return lentOpen();
     return window != nullptr ? window->isVisible() : dockWidget->isVisible();
+}
+
+void DockablePanel::lendTo (QWidget* host, std::function<void (bool)> setOpen, std::function<bool()> open)
+{
+    if (host == nullptr || host == lentTo || window != nullptr)
+        return;
+    takeBack();
+    const bool shown = dockWidget->isVisible();
+    lentTo = host;
+    lentSetOpen = std::move (setOpen);
+    lentOpen = std::move (open);
+    dockWidget->setWidget (nullptr);
+    host->layout()->addWidget (contentWidget);
+    contentWidget->show();
+    dockWidget->hide();
+    lentSetOpen (shown);
+}
+
+void DockablePanel::takeBack()
+{
+    if (lentTo == nullptr)
+        return;
+    const bool shown = lentOpen();
+    lentTo->layout()->removeWidget (contentWidget);
+    lentSetOpen (false);
+    lentTo = nullptr;
+    dockWidget->setWidget (contentWidget);
+    dockWidget->setVisible (shown);
 }
 
 bool DockablePanel::containsFocus() const
@@ -324,7 +354,9 @@ void DockablePanel::show (bool giveFocus)
         setPoppedOut (true);
         return;
     }
-    if (window != nullptr)
+    if (lentTo != nullptr)
+        lentSetOpen (true);
+    else if (window != nullptr)
     {
         window->show();
         window->raise();
@@ -374,7 +406,9 @@ void DockablePanel::show (bool giveFocus)
 
 void DockablePanel::hide()
 {
-    if (window != nullptr)
+    if (lentTo != nullptr)
+        lentSetOpen (false);
+    else if (window != nullptr)
         dockBack (false);
     else
         dockWidget->hide();
@@ -395,6 +429,14 @@ void DockablePanel::setPoppedOut (bool popOut)
     ownWindow = popOut;
     if (popOut == isPoppedOut())
         return;
+    if (popOut && lentTo != nullptr)
+    {
+        // Out of its host and into a window of its own.
+        lentTo->layout()->removeWidget (contentWidget);
+        lentSetOpen (false);
+        lentTo = nullptr;
+        dockWidget->setWidget (contentWidget);
+    }
 
     if (! popOut)
     {

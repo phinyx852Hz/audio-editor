@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MixerWindow.h"
 #include "ModeAtlas.h"
+#include "../mixer/InstrumentPrism.h"
 #include "../mixer/RagaInstrument.h"
 #include "../core/PhiRaga.h"
 #include "../mixer/DrumsToMidi.h"
@@ -442,7 +443,7 @@ namespace
         return MixerWindow::tr ("PHI projects (*.phi *.phinyxmix);;All files (*)");
     }
 
-    enum Choice { noInstrument, synthChoice, samplerChoice, slicerChoice, ragaChoice, firstPlugin };
+    enum Choice { noInstrument, synthChoice, samplerChoice, slicerChoice, ragaChoice, prismChoice, firstPlugin };
 }
 
 //==============================================================================
@@ -1145,7 +1146,7 @@ public:
         {
             box->clear();
             box->addItems ({ MixerWindow::tr ("No instrument"), MixerWindow::tr ("Synth"), MixerWindow::tr ("Sampler"), MixerWindow::tr ("Slicer"),
-                             QString::fromUtf8 ("PHI rāga") });
+                             QString::fromUtf8 ("PHI rāga"), MixerWindow::tr ("Instrument Prism") });
             for (const auto& p : plugins)
                 box->addItem (QString::fromStdString (p.name) + QStringLiteral (" (") + QString::fromStdString (p.format) + QStringLiteral (")"),
                               QString::fromStdString (p.id));
@@ -1159,6 +1160,7 @@ public:
                 case mixer::Instrument::Kind::sampler: choice = samplerChoice; break;
                 case mixer::Instrument::Kind::slicer:  choice = slicerChoice; break;
                 case mixer::Instrument::Kind::raga:    choice = ragaChoice; break;
+                case mixer::Instrument::Kind::prism:   choice = prismChoice; break;
                 case mixer::Instrument::Kind::plugin:
                 {
                     choice = box->findData (QString::fromStdString (AudioEngine::instrumentPluginId (*inst)));
@@ -3390,6 +3392,7 @@ private:
             add (MixerWindow::tr ("Built-in"), MixerWindow::tr ("Sampler"), "sampler");
             add (MixerWindow::tr ("Built-in"), MixerWindow::tr ("Slicer"), "slicer");
             add (MixerWindow::tr ("Built-in"), QString::fromUtf8 ("PHI rāga"), "raga");
+            add (MixerWindow::tr ("Built-in"), MixerWindow::tr ("Instrument Prism"), "prism");
             for (const auto& p : window.audio.knownInstruments())
                 add (QString::fromStdString (p.format), QString::fromStdString (p.name), "instrument\n" + QByteArray::fromStdString (p.id));
         }
@@ -5214,7 +5217,10 @@ public:
         QString sig = QString::number (track);
         if (track >= 0)
         {
-            sig += QLatin1Char (':') + QString::number ((quintptr) window.engine.instrument (track).get());
+            const auto inst = window.engine.instrument (track);
+            sig += QLatin1Char (':') + QString::number ((quintptr) inst.get());
+            if (inst != nullptr && inst->kind() == mixer::Instrument::Kind::prism)
+                sig += QLatin1Char ('[') + prismSummary (static_cast<mixer::InstrumentPrism&> (*inst)).join (QLatin1Char ('|')) + QLatin1Char (']');
             for (const auto& x : window.engine.inserts (track))
                 sig += QLatin1Char (',') + QString::number ((quintptr) x.effect.get());
             sig += QLatin1Char (':') + QString::number (window.engine.strip (track).mode.load()) + window.info[(size_t) track].colour.name();
@@ -5251,6 +5257,30 @@ private:
     };
 
     static constexpr int knobsPerRow = 5, maxKnobs = 8, knobSize = 30, labelWidth = 50, resolution = 1000;
+
+    // "1 Synth + PHI rāga (split at C4) → Φ Echo · C2–B3", a line a ray.
+    static QStringList prismSummary (const mixer::InstrumentPrism& prism)
+    {
+        QStringList lines;
+        int n = 0;
+        for (const auto& r : prism.rays())
+        {
+            auto text = QString::number (++n) + QLatin1Char (' ')
+                      + (r.instrument != nullptr ? QString::fromStdString (r.instrument->name()) : MixerWindow::tr ("(silent)"));
+            if (r.second != nullptr)
+                text += QStringLiteral (" + ") + QString::fromStdString (r.second->name())
+                      + (r.split ? MixerWindow::tr (" (split at %1)").arg (QString::fromStdString (mixer::prismNoteName (r.splitKey))) : QString());
+            for (const auto& x : r.effects)
+                text += QString::fromUtf8 (" → ") + QString::fromStdString (x.effect->name());
+            if (r.lowKey > 0 || r.highKey < 127)
+                text += QString::fromUtf8 (" · ") + QString::fromStdString (mixer::prismNoteName (r.lowKey)) + QString::fromUtf8 ("–")
+                      + QString::fromStdString (mixer::prismNoteName (r.highKey));
+            if (r.muted)
+                text += MixerWindow::tr (" (muted)");
+            lines << text;
+        }
+        return lines;
+    }
 
     void clear()
     {
@@ -5365,14 +5395,38 @@ private:
             choose->setToolTip (MixerWindow::tr ("Choose the instrument"));
             QObject::connect (choose, &QToolButton::clicked, this, [this, choose] { instrumentMenu (choose->mapToGlobal (QPoint (0, choose->height()))); });
             tile->head->addWidget (choose);
-            auto* note = new QLabel (inst == nullptr ? MixerWindow::tr ("Drop an instrument here, or on the track's strip, to play its MIDI clips")
-                                     : audioOnly ? MixerWindow::tr ("The track plays only its audio: Inst or Hybrid in the Inspector lets this play")
-                                     : MixerWindow::tr ("Plays the MIDI clips and the keyboard. Drop another instrument here to replace it"), tile);
-            note->setWordWrap (true);
-            note->setForegroundRole (QPalette::PlaceholderText);
-            note->setFixedWidth (190);
-            tile->body->addWidget (note, 0, 0);
-            tile->setFixedWidth (220);
+            const bool isPrism = inst != nullptr && inst->kind() == mixer::Instrument::Kind::prism;
+            if (isPrism)
+            {
+                // An Instrument Prism: a line a ray, what it plays and the effects after it.
+                edit->setText (MixerWindow::tr ("Open"));
+                edit->setToolTip (MixerWindow::tr ("Open the Prism to edit its rays"));
+                const auto lines = prismSummary (static_cast<mixer::InstrumentPrism&> (*inst));
+                int line = 0;
+                for (const auto& text : lines)
+                {
+                    auto* label = new QLabel (QFontMetrics (font()).elidedText (text, Qt::ElideRight, 236), tile);
+                    label->setToolTip (text);
+                    tile->body->addWidget (label, line++, 0);
+                }
+                auto* note = new QLabel (lines.isEmpty() ? MixerWindow::tr ("No rays yet: Open adds them")
+                                         : MixerWindow::tr ("The effects after it play all of its rays"), tile);
+                note->setWordWrap (true);
+                note->setForegroundRole (QPalette::PlaceholderText);
+                tile->body->addWidget (note, line, 0);
+                tile->setFixedWidth (260);
+            }
+            else
+            {
+                auto* note = new QLabel (inst == nullptr ? MixerWindow::tr ("Drop an instrument here, or on the track's strip, to play its MIDI clips")
+                                         : audioOnly ? MixerWindow::tr ("The track plays only its audio: Inst or Hybrid in the Inspector lets this play")
+                                         : MixerWindow::tr ("Plays the MIDI clips and the keyboard. Drop another instrument here to replace it"), tile);
+                note->setWordWrap (true);
+                note->setForegroundRole (QPalette::PlaceholderText);
+                note->setFixedWidth (190);
+                tile->body->addWidget (note, 0, 0);
+                tile->setFixedWidth (220);
+            }
             rowLayout->addWidget (tile);
         }
 
@@ -5476,6 +5530,7 @@ private:
         menu.addAction (MixerWindow::tr ("S&ampler"), this, choose ("sampler"));
         menu.addAction (MixerWindow::tr ("S&licer"), this, choose ("slicer"));
         menu.addAction (QString::fromUtf8 ("PHI &rāga"), this, choose ("raga"));
+        menu.addAction (MixerWindow::tr ("Instrument &Prism (rays of instruments)"), this, choose ("prism"));
         const auto plugins = window.audio.knownInstruments();
         if (! plugins.empty())
             menu.addSeparator();
@@ -6122,6 +6177,7 @@ private:
         menu.addAction (MixerWindow::tr ("S&ampler"), this, choose ("sampler"));
         menu.addAction (MixerWindow::tr ("S&licer"), this, choose ("slicer"));
         menu.addAction (QString::fromUtf8 ("PHI &rāga"), this, choose ("raga"));
+        menu.addAction (MixerWindow::tr ("Instrument &Prism (rays of instruments)"), this, choose ("prism"));
         const auto plugins = window.audio.knownInstruments();
         if (! plugins.empty())
             menu.addSeparator();
@@ -7003,6 +7059,27 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     layout->addWidget (transportRow);
     layout->addWidget (topScroll);
     layout->addWidget (sideSplitter, 1);
+    lowerTabs = new QTabBar (this);
+    lowerTabs->setFocusPolicy (Qt::NoFocus);
+    lowerTabs->setDrawBase (false);
+    lowerTabs->setExpanding (false);
+    lowerTabs->hide();
+    connect (lowerTabs, &QTabBar::tabBarClicked, this, [this] (int i)
+    {
+        if (i < 0)
+            return;
+        lowerFront = lowerTabs->tabData (i).toInt();
+        updateLowerZone();
+    });
+    layout->addWidget (lowerTabs);
+    for (auto& host : instrumentHosts)
+    {
+        host = new QWidget (this);
+        auto* l = new QVBoxLayout (host);
+        l->setContentsMargins (0, 0, 0, 0);
+        host->hide();
+        layout->addWidget (host);
+    }
     layout->addWidget (devicePanel);
     layout->addLayout (bottom);
 
@@ -7992,12 +8069,114 @@ void MixerWindow::editShownMidi (const std::function<midifile::SongPtr (const mi
 
 bool MixerWindow::devicePanelShown() const { return devicePanel != nullptr && ! devicePanel->isHidden(); }
 
+void MixerWindow::setInstrumentOpen (int which, bool open)
+{
+    which = std::clamp (which, 0, 1);
+    instrumentOpens[(size_t) which] = open;
+    if (open)
+        lowerFront = which;
+    else if (lowerFront == which)
+    {
+        lowerFront = -1;
+        for (int i = 0; i < (int) instrumentOpens.size(); ++i)
+            if (instrumentOpens[(size_t) i])
+                lowerFront = i;
+    }
+    updateLowerZone();
+}
+
+void MixerWindow::showDeviceChainInFront()
+{
+    lowerFront = -1;
+    if (devicesHidden)
+        toggleDevices();   // its turn: shown even if Ctrl+Shift+C had hidden it
+    updateLowerZone();
+}
+
+bool MixerWindow::toggleLowerZone()
+{
+    if (lowerFront >= 0)
+    {
+        showDeviceChainInFront();
+        return true;
+    }
+    if (instrumentOpens[(size_t) lastFront])
+        lowerFront = lastFront;
+    else
+    {
+        for (int i = 0; i < (int) instrumentOpens.size(); ++i)
+            if (instrumentOpens[(size_t) i])
+                lowerFront = i;
+        if (lowerFront < 0)
+            return false;
+    }
+    updateLowerZone();
+    return true;
+}
+
+// A track's Sampler or Slicer goes in the Device Chain's place, compact, as Simplest and the
+// Slicer do (owner, 2026-10-30: "replacing where the device chain is located"), instead of a
+// window of its own. The one before it, of another track, closes.
+void MixerWindow::dockTrackEditor (QWidget* editor, const QString& name)
+{
+    if (trackEditor != nullptr && trackEditor != editor)
+        trackEditor->close();
+    auto* host = instrumentHosts[2];
+    auto* area = new QScrollArea (host);
+    area->setWidget (editor);
+    area->setWidgetResizable (true);
+    area->setFrameShape (QFrame::NoFrame);
+    area->setFocusProxy (editor);
+    area->viewport()->setAutoFillBackground (false);
+    host->layout()->addWidget (area);
+    host->setFixedHeight (std::clamp (editor->minimumSizeHint().height() + 24, 180, 340));
+    trackEditor = editor;
+    trackEditorName = name;
+    // Closing it (Ctrl+W, or its track losing the instrument) gives the place back.
+    connect (editor, &QObject::destroyed, area, [this, area]
+    {
+        area->deleteLater();
+        setInstrumentOpen (2, false);
+    });
+    editor->show();
+    setInstrumentOpen (2, true);
+    editor->setFocus();
+}
+
+// One of the Device Chain and the open instruments shows in the space under the strips.
+void MixerWindow::updateLowerZone()
+{
+    if (lowerFront >= 0)
+        lastFront = lowerFront;
+    for (size_t i = 0; i < instrumentHosts.size(); ++i)
+        instrumentHosts[i]->setVisible ((int) i == lowerFront && instrumentOpens[i]);
+    {
+        const QSignalBlocker quiet (lowerTabs);
+        while (lowerTabs->count() > 0)
+            lowerTabs->removeTab (0);
+        const bool any = std::find (instrumentOpens.begin(), instrumentOpens.end(), true) != instrumentOpens.end();
+        if (any)
+        {
+            lowerTabs->setTabData (lowerTabs->addTab (tr ("Device Chain")), -1);
+            const QString names[3] { tr ("Simplest"), tr ("Slicer"), trackEditorName };
+            for (int i = 0; i < 3; ++i)
+                if (instrumentOpens[(size_t) i])
+                    lowerTabs->setTabData (lowerTabs->addTab (names[i]), i);
+            for (int t = 0; t < lowerTabs->count(); ++t)
+                if (lowerTabs->tabData (t).toInt() == lowerFront)
+                    lowerTabs->setCurrentIndex (t);
+        }
+        lowerTabs->setVisible (any);
+    }
+    updateDevicePanel();
+}
+
 void MixerWindow::updateDevicePanel()
 {
     if (devicePanel == nullptr)
         return;
     refreshMidiClipBox();
-    const bool show = ! devicesHidden;   // fixed along the bottom; the master's shows nothing to change
+    const bool show = lowerFront < 0 && ! devicesHidden;   // fixed along the bottom, unless an instrument has the place
     if (devicePanel->isHidden() == show)
     {
         devicePanel->setVisible (show);
@@ -8061,6 +8240,7 @@ bool MixerWindow::dropPlugin (int track, const QByteArray& what)
     }
     const int choice = kind == QLatin1String ("synth") ? synthChoice : kind == QLatin1String ("sampler") ? samplerChoice
                      : kind == QLatin1String ("slicer") ? slicerChoice : kind == QLatin1String ("raga") ? ragaChoice
+                     : kind == QLatin1String ("prism") ? prismChoice
                      : kind == QLatin1String ("instrument") ? firstPlugin : -1;
     if (choice < 0)
         return false;
@@ -8829,6 +9009,7 @@ void MixerWindow::setInstrumentKind (int track, int choice, const QString& plugi
     {
         case synthChoice: made = std::make_shared<mixer::Synth>(); break;
         case ragaChoice: made = std::make_shared<mixer::RagaInstrument>(); break;
+        case prismChoice: made = makePrism (track); break;
         case samplerChoice:
         case slicerChoice:
             if (choice == samplerChoice)
@@ -8872,6 +9053,8 @@ void MixerWindow::setInstrumentKind (int track, int choice, const QString& plugi
     }
     if (choice == firstPlugin && made != nullptr && made->hasWindow() && ! restoring)
         made->showWindow();
+    if (choice == prismChoice && ! restoring)
+        openPrism (track);
 }
 
 void MixerWindow::loadInstrumentSound (int track, const QString& file)
@@ -8963,6 +9146,12 @@ void MixerWindow::editInstrument (int track)
     auto& t = info[(size_t) track];
     if (t.editor != nullptr)
     {
+        if (t.editor == trackEditor)
+        {
+            setInstrumentOpen (2, true);   // to the front of the place under the strips
+            t.editor->setFocus();
+            return;
+        }
         t.editor->show();
         t.editor->raise();
         t.editor->activateWindow();
@@ -8974,6 +9163,9 @@ void MixerWindow::editInstrument (int track)
         case mixer::Instrument::Kind::plugin:
             inst->showWindow();
             return;
+        case mixer::Instrument::Kind::prism:
+            openPrism (track);
+            return;
         case mixer::Instrument::Kind::sampler:
         {
             auto& s = static_cast<mixer::SamplerInstrument&> (*inst);
@@ -8983,7 +9175,8 @@ void MixerWindow::editInstrument (int track)
                 w->setSample (sound, rate(), title, true);
             w->setWindowTitle (tr ("Sampler: %1").arg (title));
             t.editor = w;
-            break;
+            dockTrackEditor (w, tr ("Track %1: Sampler").arg (track + 1));
+            return;
         }
         case mixer::Instrument::Kind::slicer:
         {
@@ -8994,7 +9187,8 @@ void MixerWindow::editInstrument (int track)
                 w->setSample (sound, t.sound != nullptr ? t.sound : soundAsAudio (*sound, rate()), rate(), title, true, BeatGrid {}, {});
             w->setWindowTitle (tr ("Slicer: %1").arg (title));
             t.editor = w;
-            break;
+            dockTrackEditor (w, tr ("Track %1: Slicer").arg (track + 1));
+            return;
         }
         case mixer::Instrument::Kind::synth:
         {
@@ -9032,7 +9226,7 @@ void MixerWindow::arm (int track)
 //==============================================================================
 // The knobs of an effect without a window of its own (the built-in and Φ effects): a slider
 // for each, its value beside it. Deletes itself when closed; keeps the effect alive meanwhile.
-static QDialog* effectDialog (mixer::EffectPtr effect, const QString& title, QWidget* parent, std::function<void()> changed)
+QDialog* effectDialog (mixer::EffectPtr effect, const QString& title, QWidget* parent, std::function<void()> changed)
 {
     auto* d = new QDialog (parent);
     d->setAttribute (Qt::WA_DeleteOnClose);
@@ -9092,6 +9286,12 @@ void MixerWindow::chooseInsert (int track, int replace, QPoint at)
         return;
     }
     QMenu menu (this);
+    effectsMenu (menu, [this, track, replace] (const std::string& id) { addInsert (track, id, replace); });
+    menu.exec (at.isNull() ? QCursor::pos() : at);
+}
+
+void MixerWindow::effectsMenu (QMenu& menu, std::function<void (const std::string& id)> pick)
+{
     auto plugins = audio.knownPlugins();
     std::sort (plugins.begin(), plugins.end(), [] (const PluginInfo& x, const PluginInfo& y)
     {
@@ -9109,7 +9309,7 @@ void MixerWindow::chooseInsert (int track, int replace, QPoint at)
     for (const auto& p : plugins)
     {
         const auto id = p.id;
-        formatMenu (QString::fromStdString (p.format))->addAction (QString::fromStdString (p.name), this, [this, track, id, replace] { addInsert (track, id, replace); });
+        formatMenu (QString::fromStdString (p.format))->addAction (QString::fromStdString (p.name), this, [pick, id] { pick (id); });
     }
     if (auto it = byFormat.find (QStringLiteral ("Built-in")); it != byFormat.end())
         menu.addMenu (it->second);
@@ -9118,7 +9318,6 @@ void MixerWindow::chooseInsert (int track, int replace, QPoint at)
             menu.addMenu (sub);
     if (plugins.empty())
         menu.addAction (tr ("No effects found (Master Section > Manage Plug-ins scans for them)"))->setEnabled (false);
-    menu.exec (at.isNull() ? QCursor::pos() : at);
 }
 
 void MixerWindow::addInsert (int track, const std::string& pluginId, int replace)
@@ -9269,6 +9468,14 @@ QString MixerWindow::insertOwner (int track) const
 
 int MixerWindow::insertLimit (int track) const { return track == mixer::busTrack ? mixer::maxBusInserts : mixer::maxInserts; }
 
+void MixerWindow::prismChanged (int track)
+{
+    strips[(size_t) track]->refresh();
+    if (devices != nullptr)
+        devices->refresh();
+    changed();
+}
+
 void MixerWindow::refreshInsertsOf (int track)
 {
     if (track == mixer::busTrack)
@@ -9279,8 +9486,13 @@ void MixerWindow::refreshInsertsOf (int track)
 
 QJsonArray MixerWindow::insertsJson (int track) const
 {
+    return effectsJson (engine.inserts (track));
+}
+
+QJsonArray MixerWindow::effectsJson (const mixer::Inserts& effects)
+{
     QJsonArray list;
-    for (const auto& x : engine.inserts (track))
+    for (const auto& x : effects)
         list.append (QJsonObject {
             { "id", QString::fromStdString (x.effect->pluginId()) }, { "name", QString::fromStdString (x.effect->name()) },
             { "state", QString::fromStdString (x.effect->state()) }, { "bypassed", x.bypassed }, { "mix", x.mix },
@@ -9290,6 +9502,11 @@ QJsonArray MixerWindow::insertsJson (int track) const
 
 void MixerWindow::loadInserts (int track, const QJsonArray& list, QStringList& problems)
 {
+    engine.setInserts (track, effectsFromJson (list, insertOwner (track), problems));
+}
+
+mixer::Inserts MixerWindow::effectsFromJson (const QJsonArray& list, const QString& owner, QStringList& problems)
+{
     mixer::Inserts made;
     for (const auto& value : list)
     {
@@ -9298,13 +9515,13 @@ void MixerWindow::loadInserts (int track, const QJsonArray& list, QStringList& p
         auto effect = audio.loadEffectPlugin (o.value ("id").toString().toStdString(), rate(), error);
         if (effect == nullptr)
         {
-            problems << tr ("%1: the insert %2 could not be started (%3)").arg (insertOwner (track), o.value ("name").toString(), QString::fromStdString (error));
+            problems << tr ("%1: the insert %2 could not be started (%3)").arg (owner, o.value ("name").toString(), QString::fromStdString (error));
             continue;
         }
         effect->setState (o.value ("state").toString().toStdString());
         made.push_back ({ effect, o.value ("bypassed").toBool(), (float) std::clamp (o.value ("mix").toDouble (1.0), 0.0, 1.0) });
     }
-    engine.setInserts (track, std::move (made));
+    return made;
 }
 
 void MixerWindow::stripsMenu (QPoint at)
@@ -10313,6 +10530,9 @@ bool MixerWindow::writeMix (const QString& file, QString& error)
                     io = { { "kind", "plugin" }, { "id", QString::fromStdString (AudioEngine::instrumentPluginId (*inst)) },
                            { "name", QString::fromStdString (inst->name()) }, { "state", QString::fromStdString (inst->state()) } };
                     break;
+                case mixer::Instrument::Kind::prism:
+                    io = prismJson (*inst);
+                    break;
             }
             o.insert ("instrument", io);
         }
@@ -10490,6 +10710,8 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
                     problems << tr ("Track %1: %2").arg (i + 1).arg (m);
             }
         }
+        else if (kind == QLatin1String ("prism"))
+            engine.setInstrument (i, prismFromJson (io, i, problems));
         else if (kind == QLatin1String ("plugin"))
         {
             std::string why;
