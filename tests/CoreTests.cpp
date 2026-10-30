@@ -5579,6 +5579,20 @@ namespace
                "minimalize: a section a cell, each as long as its build-up");
         check (b.tracks.size() == 1 && b.tracks[0].notes.front().pitch == 60 && b.tracks[0].notes.back().pitch >= 64,
                "minimalize: the build-up starts on the downbeat, and the second section is the second cell");
+
+        // One part phasing, or in canon, with new voices: the voice list grows from one while the
+        // part's own entry is changed to hold (owner's crash, 2026-10-29: a reference kept across
+        // the push_back wrote into freed memory; AddressSanitizer builds catch it here).
+        for (const auto process : { Process::phase, Process::canon })
+        {
+            Settings one;
+            one.processes = { process };
+            const auto x = arrange ({ melody }, one);
+            const auto copies = process == Process::phase ? 1u : 2u;
+            check (x.tracks.size() == 1 + copies + 1 && x.tracks[0].process == Process::hold && ! x.tracks[0].added
+                   && x.tracks[1].process == process && x.tracks[1].added && x.tracks.back().process == Process::pulse,
+                   std::string ("minimalize: a single part's ") + name (process) + ", held, with its copies and a pulse on new tracks");
+        }
     }
 
     // Species counterpoint: Fux's rules kept against his own cantus firmus, in every species,
