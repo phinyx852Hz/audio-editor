@@ -57,6 +57,7 @@
 #include "RecordDialog.h"
 #include "ReferencePanel.h"
 #include "Theme.h"
+#include "Wallpaper.h"
 #include "WaveformView.h"
 
 #include <QActionGroup>
@@ -220,6 +221,7 @@ MainWindow::MainWindow (AudioEngine& e)
     });
     restoreLayout();
     buildNavigation();
+    syncWallpaper();
 
     connect (waveform, &WaveformView::cursorRequested, this, [this] (Frame f) { setCursor (waveform->snapToGrid (f)); });
     connect (waveform, &WaveformView::selectionMoved, this, &MainWindow::moveSelection);
@@ -878,6 +880,14 @@ void MainWindow::registerCommands()
          [this] { WaveformColorsDialog (this).exec(); });
     add ("options.theme", Category::options, tr ("&Theme..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_T) },
          [this] { ThemeDialog (this).exec(); });
+    add ("options.wallpaper", Category::options, tr ("Wa&llpaper"), {}, [this] { toggleWallpaper(); });
+    commands.action (QStringLiteral ("options.wallpaper"))->setCheckable (true);
+    commands.action (QStringLiteral ("options.wallpaper"))->setStatusTip (tr ("A picture of your own behind PHI; a still picture costs no CPU while PHI is idle, unlike the Visualizer or a video"));
+    add ("options.chooseWallpaper", Category::options, tr ("Choose Wallpaper &Picture..."), {}, [this]
+    {
+        if (chooseWallpaper() && ! commands.action (QStringLiteral ("options.wallpaper"))->isChecked())
+            toggleWallpaper();
+    });
 
     add ("help.palette", Category::help, tr ("&Command Palette..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_P), KS (Qt::Key_F1) },
          [this] { CommandPalette (commands, this).exec(); });
@@ -927,7 +937,7 @@ void MainWindow::buildMenus()
         { tr ("Mi&xer"),     { "mixer.window", "mixer.dock", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
                                "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "mixer.sendToTimeline", "-", "mixer.editNotes", "mixer.trackToEditor", "-", "mixer.assistant" } },
         { tr ("Mo&de"),      { "@mode" } },
-        { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "-", "options.keymap", "options.theme", "options.waveformColors" } },
+        { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "-", "options.keymap", "options.theme", "options.waveformColors", "-", "options.wallpaper", "options.chooseWallpaper" } },
         { tr ("Performan&ce"), { "performance.launcher", "-", "control.surfaces", "control.learn", "control.mapMode", "-", "performance.record", "performance.stream", "-", "performance.settings", "performance.folder" } },
         { tr ("&Repair"),    { "view.diagnostics", "-", "repair.autoHeal", "repair.spectralGain", "repair.findSimilar", "repair.correctPitch", "-", "repair.learnNoise", "repair.noiseReduction", "-",
                                "repair.declick", "repair.declip", "repair.dehum", "repair.deess", "-",
@@ -1082,6 +1092,8 @@ void MainWindow::changeOpacity (double value, bool announce)
         const QSignalBlocker block (s);
         s->setValue (percent);
     }
+    if (wallpaper != nullptr)
+        wallpaper->update();   // still, it repaints only when asked
 
     if (announce)
         statusBar()->showMessage (tr ("Window opacity %1%").arg (percent), 2000);
