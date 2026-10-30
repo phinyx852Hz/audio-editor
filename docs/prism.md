@@ -111,6 +111,11 @@ and keeps playing with its settings; a track with a Sampler, Slicer or nothing s
 
 - Each ray is a chain in series: an instrument (the Synth, PHI rāga or an instrument plugin), then
   up to eight effects of its own, each with bypass and Mix, heard only on that ray.
+- A ray can hold a second instrument (owner, 2026-10-30: "up to two only at this point, running
+  parallel to each other with a mix between the two ... and to allow for a split keyboard"): A and B
+  play side by side into the ray's effects. Mix sets the balance: in the middle both are in full
+  (layered), and each fades out towards the other end. Split at a key gives A the notes below it and
+  B the notes from it up; without it both play every note the ray hears.
 - The rays play together and are added, each at its gain (−60 dB is off, up to +12 dB), with mute
   and solo. A ray's effects with latency delay the other rays to match, so layers stay together.
 - A ray plays only the notes in its key range (C−1 to G9, C4 is middle C) and velocity range, so
@@ -122,7 +127,8 @@ and keeps playing with its settings; a track with a Sampler, Slicer or nothing s
 
 Docked, the Prism's card in the mixer's Device Chain lists its rays (instrument → effects, and the
 key range when it is not the whole keyboard). Open shows its rays in a window: a row each with its
-name, instrument (▾ to choose another, Edit to open it), its effects (click one to open, bypass,
+name, instrument (▾ to choose another, Edit to open it; + Instrument adds B, with its own ▾ and
+Edit, and a row with the A–B Mix, double-click for the middle, and Split at), its effects (click one to open, bypass,
 set its Mix, move, replace or remove it), + Effect, the key and velocity ranges (type a note name
 like C3 or a number), gain, M, S, a level bar, and ↑ ↓ ✕ to move or remove it. + Add Ray (Ctrl+T)
 adds a ray with a Synth; a Prism holds up to eight. Projects save the rays with their instruments'
@@ -134,7 +140,7 @@ routing by range, the rays' chains, alignment and gains; tested in `tests/CoreTe
 
 ## Next
 
-- Sampler and Slicer in an Instrument Prism's rays, Prisms inside its rays, and its macros.
+- Sampler and Slicer in an Instrument Prism's rays, more than two instruments a ray, Prisms inside its rays, and its macros.
 - Instrument Prisms for the patchbay's synths.
 - Snapshots of the macros to recall and morph between.
 - Dragging a plugin from the chain into a ray, and out again.

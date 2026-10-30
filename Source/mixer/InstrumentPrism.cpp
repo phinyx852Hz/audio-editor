@@ -13,7 +13,7 @@ namespace mixer
 
         bool contains (const std::vector<InstrumentPrism::Ray>& rays, const InstrumentPtr& p)
         {
-            return std::any_of (rays.begin(), rays.end(), [&] (const InstrumentPrism::Ray& r) { return r.instrument == p; });
+            return std::any_of (rays.begin(), rays.end(), [&] (const InstrumentPrism::Ray& r) { return r.instrument == p || r.second == p; });
         }
 
         bool contains (const std::vector<InstrumentPrism::Ray>& rays, const EffectPtr& e)
@@ -51,8 +51,12 @@ namespace mixer
         lane.right.assign ((size_t) block, 0.0f);
         lane.dryL.assign ((size_t) block, 0.0f);
         lane.dryR.assign ((size_t) block, 0.0f);
+        lane.secondL.assign ((size_t) block, 0.0f);
+        lane.secondR.assign ((size_t) block, 0.0f);
         lane.events.clear();
         lane.events.reserve (1024);
+        lane.secondEvents.clear();
+        lane.secondEvents.reserve (1024);
         lane.align.prepare (2, maxDelay);
     }
 
@@ -70,18 +74,23 @@ namespace mixer
             r.lowVelocity = std::clamp (r.lowVelocity, 1, 127);
             r.highVelocity = std::clamp (r.highVelocity, r.lowVelocity, 127);
             r.gainDb = std::clamp (r.gainDb, -60.0f, 12.0f);
+            r.blend = std::clamp (r.blend, 0.0f, 1.0f);
+            r.splitKey = std::clamp (r.splitKey, 0, 127);
+            if (r.instrument == nullptr && r.second != nullptr)
+                std::swap (r.instrument, r.second);   // a lone instrument is A
         }
 
         // What is new to the Prism is prepared before it is heard, and plays the tuning in force.
         const auto old = rays();
         for (auto& r : next)
         {
-            if (r.instrument != nullptr && ! contains (old, r.instrument))
-            {
-                r.instrument->prepare (rate, block);
-                r.instrument->setTuning (tuning);
-                r.instrument->setRaga (raga, ragaRoot, ragaEqual);
-            }
+            for (auto* inst : { &r.instrument, &r.second })
+                if (*inst != nullptr && ! contains (old, *inst))
+                {
+                    (*inst)->prepare (rate, block);
+                    (*inst)->setTuning (tuning);
+                    (*inst)->setRaga (raga, ragaRoot, ragaEqual);
+                }
             for (auto& x : r.effects)
                 if (! contains (old, x.effect))
                     x.effect->prepare (rate, block);
@@ -102,12 +111,19 @@ namespace mixer
             });
             if (it != previous.end())
             {
+                // B changed: what it held went with the old one.
+                if ((*it)->second != r.second)
+                {
+                    (*it)->second = r.second;
+                    (*it)->secondHeld = {};
+                }
                 made.push_back (*it);
                 it->reset();
                 continue;
             }
             auto lane = std::make_shared<Lane>();
             lane->instrument = r.instrument;
+            lane->second = r.second;
             prepareLane (*lane);
             made.push_back (lane);
         }
@@ -160,6 +176,8 @@ namespace mixer
         {
             if (r.instrument != nullptr)
                 r.instrument->prepare (rate, block);
+            if (r.second != nullptr)
+                r.second->prepare (rate, block);
             for (auto& x : r.effects)
                 x.effect->prepare (rate, block);
         }
@@ -167,6 +185,7 @@ namespace mixer
         {
             prepareLane (*lane);
             lane->held = {};
+            lane->secondHeld = {};
         }
     }
 
@@ -193,14 +212,17 @@ namespace mixer
     {
         const auto count = std::min (list.size(), lanes.size());
         for (size_t i = 0; i < count; ++i)
+        {
             lanes[i]->events.clear();
+            lanes[i]->secondEvents.clear();
+        }
 
         // The notes go to the rays whose ranges hold them, and their ends to the rays that got
         // them; everything else (controllers, pitch bend, pressure) to every ray.
-        auto give = [] (Lane& lane, NoteEvent e)
+        auto give = [] (std::vector<NoteEvent>& to, NoteEvent e)
         {
-            if (lane.events.size() < lane.events.capacity())
-                lane.events.push_back (e);
+            if (to.size() < to.capacity())
+                to.push_back (e);
         };
         for (int k = 0; k < numEvents; ++k)
         {
@@ -214,21 +236,34 @@ namespace mixer
                 for (size_t i = 0; i < count; ++i)
                     if (list[i].hears (note, e.data2))
                     {
-                        auto& held = lanes[i]->held[(size_t) channel][(size_t) note];
-                        held = (uint8_t) std::min (255, held + 1);
-                        give (*lanes[i], e);
+                        auto& lane = *lanes[i];
+                        if (list[i].toA (note))
+                        {
+                            auto& held = lane.held[(size_t) channel][(size_t) note];
+                            held = (uint8_t) std::min (255, held + 1);
+                            give (lane.events, e);
+                        }
+                        if (list[i].toB (note))
+                        {
+                            auto& held = lane.secondHeld[(size_t) channel][(size_t) note];
+                            held = (uint8_t) std::min (255, held + 1);
+                            give (lane.secondEvents, e);
+                        }
                     }
             }
             else if (type == 0x80 || type == 0x90 || type == 0xA0)
             {
                 for (size_t i = 0; i < count; ++i)
                 {
-                    auto& held = lanes[i]->held[(size_t) channel][(size_t) note];
-                    if (held == 0)
-                        continue;
-                    if (type != 0xA0)
-                        held = 0;
-                    give (*lanes[i], e);
+                    auto& lane = *lanes[i];
+                    for (auto* held : { &lane.held[(size_t) channel][(size_t) note], &lane.secondHeld[(size_t) channel][(size_t) note] })
+                    {
+                        if (*held == 0)
+                            continue;
+                        if (type != 0xA0)
+                            *held = 0;
+                        give (held == &lane.held[(size_t) channel][(size_t) note] ? lane.events : lane.secondEvents, e);
+                    }
                 }
             }
             else
@@ -237,9 +272,15 @@ namespace mixer
                 const bool allOff = type == 0xB0 && (e.data1 == 120 || e.data1 == 123);
                 for (size_t i = 0; i < count; ++i)
                 {
+                    auto& lane = *lanes[i];
                     if (allOff)
-                        lanes[i]->held[(size_t) channel] = {};
-                    give (*lanes[i], e);
+                    {
+                        lane.held[(size_t) channel] = {};
+                        lane.secondHeld[(size_t) channel] = {};
+                    }
+                    give (lane.events, e);
+                    if (list[i].second != nullptr)
+                        give (lane.secondEvents, e);
                 }
             }
         }
@@ -262,6 +303,23 @@ namespace mixer
             std::fill (lane.right.begin(), lane.right.begin() + frames, 0.0f);
             if (ray.instrument != nullptr)
                 ray.instrument->process (lane.events.data(), (int) lane.events.size(), lane.left.data(), lane.right.data(), frames);
+            // B beside A, each at its side of the mix, into the ray's effects together.
+            const auto a = ray.gainA(), b = ray.gainB();
+            if (ray.second != nullptr)
+            {
+                std::fill (lane.secondL.begin(), lane.secondL.begin() + frames, 0.0f);
+                std::fill (lane.secondR.begin(), lane.secondR.begin() + frames, 0.0f);
+                ray.second->process (lane.secondEvents.data(), (int) lane.secondEvents.size(), lane.secondL.data(), lane.secondR.data(), frames);
+                const auto stepA = (a - lane.gainA) / (float) frames, stepB = (b - lane.gainB) / (float) frames;
+                for (int k = 0; k < frames; ++k)
+                {
+                    const auto ga = lane.gainA + stepA * (float) (k + 1), gb = lane.gainB + stepB * (float) (k + 1);
+                    lane.left[(size_t) k] = lane.left[(size_t) k] * ga + lane.secondL[(size_t) k] * gb;
+                    lane.right[(size_t) k] = lane.right[(size_t) k] * ga + lane.secondR[(size_t) k] * gb;
+                }
+            }
+            lane.gainA = a;
+            lane.gainB = b;
             runEffects (ray, lane, frames);
             // Rays with less latency wait for the slowest, so layered rays stay together.
             float* io[] { lane.left.data(), lane.right.data() };
@@ -315,10 +373,14 @@ namespace mixer
     {
         const std::lock_guard<std::mutex> l (lock);
         for (auto& r : list)
-            if (r.instrument != nullptr)
-                r.instrument->releaseAll();
+            for (const auto& inst : { r.instrument, r.second })
+                if (inst != nullptr)
+                    inst->releaseAll();
         for (auto& lane : lanes)
+        {
             lane->held = {};
+            lane->secondHeld = {};
+        }
     }
 
     void InstrumentPrism::reset()
@@ -326,14 +388,16 @@ namespace mixer
         const std::lock_guard<std::mutex> l (lock);
         for (auto& r : list)
         {
-            if (r.instrument != nullptr)
-                r.instrument->reset();
+            for (const auto& inst : { r.instrument, r.second })
+                if (inst != nullptr)
+                    inst->reset();
             for (auto& x : r.effects)
                 x.effect->reset();
         }
         for (auto& lane : lanes)
         {
             lane->held = {};
+            lane->secondHeld = {};
             lane->align.reset();
         }
     }
@@ -342,8 +406,9 @@ namespace mixer
     {
         bool any = false;
         for (auto& r : rays())
-            if (r.instrument != nullptr)
-                any = r.instrument->setParameter (parameter, value) || any;
+            for (const auto& inst : { r.instrument, r.second })
+                if (inst != nullptr)
+                    any = inst->setParameter (parameter, value) || any;
         return any;
     }
 
@@ -351,8 +416,9 @@ namespace mixer
     {
         tuning = t;
         for (auto& r : rays())
-            if (r.instrument != nullptr)
-                r.instrument->setTuning (t);
+            for (const auto& inst : { r.instrument, r.second })
+                if (inst != nullptr)
+                    inst->setTuning (t);
     }
 
     void InstrumentPrism::setRaga (int which, int root, bool equalTempered)
@@ -361,11 +427,12 @@ namespace mixer
         ragaRoot = root;
         ragaEqual = equalTempered;
         for (auto& r : rays())
-            if (r.instrument != nullptr)
-                r.instrument->setRaga (which, root, equalTempered);
+            for (const auto& inst : { r.instrument, r.second })
+                if (inst != nullptr)
+                    inst->setRaga (which, root, equalTempered);
     }
 
-    // "name\t<name>", then a line a ray: "ray\t<gain dB>\t<muted>\t<soloed>\t<keys>\t<velocities>\t<name>".
+    // "name\t<name>", then a line a ray: "ray\t<gain dB>\t<muted>\t<soloed>\t<keys>\t<velocities>\t<A/B mix>\t<split>\t<split key>\t<name>".
     std::string InstrumentPrism::state() const
     {
         const std::lock_guard<std::mutex> l (lock);
@@ -373,7 +440,7 @@ namespace mixer
         s << "name\t" << title << '\n';
         for (const auto& r : list)
             s << "ray\t" << r.gainDb << '\t' << (int) r.muted << '\t' << (int) r.soloed << '\t' << r.lowKey << '\t' << r.highKey << '\t'
-              << r.lowVelocity << '\t' << r.highVelocity << '\t' << r.name << '\n';
+              << r.lowVelocity << '\t' << r.highVelocity << '\t' << r.blend << '\t' << (int) r.split << '\t' << r.splitKey << '\t' << r.name << '\n';
         return s.str();
     }
 
@@ -395,10 +462,11 @@ namespace mixer
             else if (tag == "ray" && ray < next.size())
             {
                 auto& r = next[ray++];
-                int muted = 0, soloed = 0;
-                fields >> r.gainDb >> muted >> soloed >> r.lowKey >> r.highKey >> r.lowVelocity >> r.highVelocity;
+                int muted = 0, soloed = 0, split = 0;
+                fields >> r.gainDb >> muted >> soloed >> r.lowKey >> r.highKey >> r.lowVelocity >> r.highVelocity >> r.blend >> split >> r.splitKey;
                 r.muted = muted != 0;
                 r.soloed = soloed != 0;
+                r.split = split != 0;
                 fields.get();   // the tab before the name
                 std::getline (fields, r.name);
             }

@@ -4331,7 +4331,7 @@ namespace
             p.setRays (copy);
             p.setState (saved);
             const auto back = p.rays();
-            check (back[0].name == "Soft layer" && back[0].gainDb == -6.0f && back[0].lowKey == 36 && back[1].lowVelocity == 81 && p.name() == "Keys",
+            check (back[0].name == "Soft layer" && back[0].gainDb == -6.0f && back[1].splitKey == 60 && back[0].lowKey == 36 && back[1].lowVelocity == 81 && p.name() == "Keys",
                    "instrument prism: its settings come back from its state");
         }
 
@@ -4364,6 +4364,52 @@ namespace
             p.process (&late, 1, left.data(), right.data(), frames);
             check (left[39] == 0.0f && near (left[40], 0.1, 1.0e-6) && near (left[frames - 1], 0.1, 1.0e-6),
                    "instrument prism: a long block is played in pieces");
+        }
+        // Two instruments in a ray, A and B: layered with a mix between them, or split at a key.
+        {
+            mixer::InstrumentPrism p;
+            p.prepare (48000.0, frames);
+            auto first = std::make_shared<Tone>(), second = std::make_shared<Tone>();
+            mixer::InstrumentPrism::Ray ray;
+            ray.instrument = first;
+            ray.second = second;
+            p.setRays ({ ray });
+            play (p, { on (60, 100) });
+            check (first->playing == 1 && second->playing == 1, "instrument prism: A and B both play a layered note");
+            check (near (left[frames - 1], 0.2, 1.0e-6), "instrument prism: A and B in full at the middle of the mix");
+            auto r = p.rays();
+            r[0].blend = 0.0f;
+            p.setRays (r);
+            play (p, {});
+            play (p, {});
+            check (near (left[frames - 1], 0.1, 1.0e-6), "instrument prism: the mix at A plays only A");
+            r[0].blend = 0.75f;
+            p.setRays (r);
+            play (p, {});
+            play (p, {});
+            check (near (left[frames - 1], 0.15, 1.0e-6), "instrument prism: the mix towards B fades A");
+            play (p, { off (60) });
+            check (first->playing == 0 && second->playing == 0, "instrument prism: a layered note ends on both");
+
+            // Split at C4: below it A, from it up B; a note's end follows it even when the split moves.
+            r[0].blend = 0.5f;
+            r[0].split = true;
+            r[0].splitKey = 60;
+            p.setRays (r);
+            play (p, { on (48, 100) });
+            check (first->playing == 1 && second->playing == 0, "instrument prism: below the split plays A");
+            play (p, { on (72, 100) });
+            check (first->playing == 1 && second->playing == 1, "instrument prism: above the split plays B");
+            r[0].splitKey = 30;
+            p.setRays (r);
+            play (p, { off (48), off (72) });
+            check (first->playing == 0 && second->playing == 0, "instrument prism: split notes end where they started");
+
+            // B on its own becomes A.
+            r[0].instrument = nullptr;
+            p.setRays (r);
+            const auto lone = p.rays();
+            check (lone[0].instrument == second && lone[0].second == nullptr && near (lone[0].gainA(), 1.0, 1.0e-6), "instrument prism: a lone B becomes A");
         }
         check (mixer::prismNoteName (60) == "C4" && mixer::prismNoteName (0) == "C-1" && mixer::prismNoteName (127) == "G9", "instrument prism: note names");
     }

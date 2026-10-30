@@ -7,7 +7,9 @@
 #include "../mixer/InstrumentPrism.h"
 #include "../mixer/RagaInstrument.h"
 
+#include <QCheckBox>
 #include <QDialog>
+#include <QEvent>
 #include <QDoubleSpinBox>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -20,6 +22,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSignalBlocker>
+#include <QSlider>
 #include <QSpinBox>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -166,6 +169,18 @@ public:
         resize (900, 420);
     }
 
+protected:
+    bool eventFilter (QObject* o, QEvent* e) override
+    {
+        if (e->type() == QEvent::MouseButtonDblClick)
+            if (auto* slider = qobject_cast<QSlider*> (o))
+            {
+                slider->setValue (50);
+                return true;
+            }
+        return QDialog::eventFilter (o, e);
+    }
+
 private:
     // Edits the rays; `rows` rebuilds the rows after (rays added, removed, moved or replaced).
     void edit (const std::function<void (std::vector<Ray>&)>& change, bool rows)
@@ -230,17 +245,34 @@ private:
         });
         chain->addWidget (name);
 
-        auto* instrument = new QToolButton (frame);
-        instrument->setText ((ray.instrument != nullptr ? QString::fromStdString (ray.instrument->name()) : MixerWindow::tr ("No instrument"))
-                             + QString::fromUtf8 (" ▾"));
-        instrument->setToolTip (MixerWindow::tr ("The ray's instrument: choose another, or open it"));
-        QObject::connect (instrument, &QToolButton::clicked, this, [this, i, instrument] { instrumentMenu (i, instrument->mapToGlobal (QPoint (0, instrument->height()))); });
-        chain->addWidget (instrument);
-        auto* open = new QToolButton (frame);
-        open->setText (MixerWindow::tr ("Edit"));
-        open->setEnabled (ray.instrument != nullptr && (ray.instrument->kind() != mixer::Instrument::Kind::plugin || ray.instrument->hasWindow()));
-        QObject::connect (open, &QToolButton::clicked, this, [this, i] { openInstrument (i); });
-        chain->addWidget (open);
+        // A, and B beside it (or + Instrument to add one): both play into the effects.
+        for (int slot = 0; slot < 2; ++slot)
+        {
+            const auto& inst = slot == 0 ? ray.instrument : ray.second;
+            if (slot == 1 && inst == nullptr)
+            {
+                auto* addSecond = new QToolButton (frame);
+                addSecond->setText (MixerWindow::tr ("+ Instrument"));
+                addSecond->setToolTip (MixerWindow::tr ("A second instrument (B) beside the first, layered with a mix between them or split at a key"));
+                addSecond->setEnabled (ray.instrument != nullptr);
+                QObject::connect (addSecond, &QToolButton::clicked, this, [this, i, addSecond] { instrumentMenu (i, 1, addSecond->mapToGlobal (QPoint (0, addSecond->height()))); });
+                chain->addWidget (addSecond);
+                break;
+            }
+            if (slot == 1)
+                chain->addWidget (new QLabel (QStringLiteral ("+"), frame));
+            auto* instrument = new QToolButton (frame);
+            const auto letter = ray.second != nullptr ? (slot == 0 ? QStringLiteral ("A: ") : QStringLiteral ("B: ")) : QString();
+            instrument->setText (letter + (inst != nullptr ? QString::fromStdString (inst->name()) : MixerWindow::tr ("No instrument")) + QString::fromUtf8 (" ▾"));
+            instrument->setToolTip (MixerWindow::tr ("The ray's instrument: choose another, or open it"));
+            QObject::connect (instrument, &QToolButton::clicked, this, [this, i, slot, instrument] { instrumentMenu (i, slot, instrument->mapToGlobal (QPoint (0, instrument->height()))); });
+            chain->addWidget (instrument);
+            auto* open = new QToolButton (frame);
+            open->setText (MixerWindow::tr ("Edit"));
+            open->setEnabled (inst != nullptr && (inst->kind() != mixer::Instrument::Kind::plugin || inst->hasWindow()));
+            QObject::connect (open, &QToolButton::clicked, this, [this, i, slot] { openInstrument (i, slot); });
+            chain->addWidget (open);
+        }
 
         for (int k = 0; k < (int) ray.effects.size(); ++k)
         {
@@ -377,20 +409,65 @@ private:
         remove->setToolTip (MixerWindow::tr ("Remove the ray, its instrument and its effects"));
         QObject::connect (remove, &QToolButton::clicked, this, [this, i]
         {
-            closeEditorsOf (i);
+            closeEditorsOf (i, 0);
+            closeEditorsOf (i, 1);
             edit ([&] (std::vector<Ray>& list) { if (i < (int) list.size()) list.erase (list.begin() + i); }, true);
         });
         controls->addWidget (remove);
         v->addLayout (controls);
+
+        // A and B: the mix between them, and the split.
+        if (ray.second != nullptr)
+        {
+            auto* pair = new QHBoxLayout;
+            pair->addWidget (new QLabel (MixerWindow::tr ("Mix  A"), frame));
+            auto* blend = new QSlider (Qt::Horizontal, frame);
+            blend->setRange (0, 100);
+            blend->setValue ((int) std::lround (ray.blend * 100.0f));
+            blend->setFixedWidth (160);
+            blend->setToolTip (MixerWindow::tr ("Between A and B: both in full in the middle, each fading out towards the other end (double-click: the middle)"));
+            blend->setAccessibleName (MixerWindow::tr ("Ray %1 mix between A and B").arg (i + 1));
+            blend->installEventFilter (this);
+            QObject::connect (blend, &QSlider::valueChanged, this, [this, i] (int value)
+            {
+                edit ([&] (std::vector<Ray>& list) { if (i < (int) list.size()) list[(size_t) i].blend = (float) value / 100.0f; }, false);
+            });
+            pair->addWidget (blend);
+            pair->addWidget (new QLabel (QStringLiteral ("B"), frame));
+            pair->addSpacing (16);
+            auto* split = new QCheckBox (MixerWindow::tr ("Split at"), frame);
+            split->setChecked (ray.split);
+            split->setToolTip (MixerWindow::tr ("A plays the notes below the split key and B the notes from it up; off, both play every note"));
+            auto* key = new NoteBox (frame);
+            key->setValue (ray.splitKey);
+            key->setEnabled (ray.split);
+            key->setToolTip (MixerWindow::tr ("The lowest note B plays (type a name like C4, or a number)"));
+            QObject::connect (split, &QCheckBox::toggled, this, [this, i, key] (bool on)
+            {
+                key->setEnabled (on);
+                edit ([&] (std::vector<Ray>& list) { if (i < (int) list.size()) list[(size_t) i].split = on; }, false);
+            });
+            QObject::connect (key, &QSpinBox::valueChanged, this, [this, i] (int note)
+            {
+                edit ([&] (std::vector<Ray>& list) { if (i < (int) list.size()) list[(size_t) i].splitKey = note; }, false);
+            });
+            pair->addWidget (split);
+            pair->addWidget (key);
+            pair->addStretch (1);
+            v->addLayout (pair);
+        }
         return frame;
     }
 
-    void instrumentMenu (int i, QPoint at)
+    static mixer::InstrumentPtr& slotOf (Ray& r, int slot) { return slot == 0 ? r.instrument : r.second; }
+
+    // Slot 0 is the ray's instrument (A), 1 the one beside it (B).
+    void instrumentMenu (int i, int slot, QPoint at)
     {
         QMenu menu (this);
-        auto choose = [this, i] (const QByteArray& what)
+        auto choose = [this, i, slot] (const QByteArray& what)
         {
-            return [this, i, what]
+            return [this, i, slot, what]
             {
                 QString error;
                 auto made = window.makeRayInstrument (what, error);
@@ -399,16 +476,16 @@ private:
                     QMessageBox::warning (this, MixerWindow::tr ("Instrument Prism"), MixerWindow::tr ("The instrument could not be started: %1").arg (error));
                     return;
                 }
-                closeEditorsOf (i);
+                closeEditorsOf (i, slot);
                 edit ([&] (std::vector<Ray>& list)
                 {
                     if (i >= (int) list.size())
                         return;
                     auto& r = list[(size_t) i];
                     // A ray named after its instrument takes the new one's name.
-                    if (r.name.empty() || (r.instrument != nullptr && r.name == r.instrument->name()))
+                    if (slot == 0 && (r.name.empty() || (r.instrument != nullptr && r.name == r.instrument->name())))
                         r.name = made->name();
-                    r.instrument = made;
+                    slotOf (r, slot) = made;
                 }, true);
                 if (made->kind() == mixer::Instrument::Kind::plugin && made->hasWindow())
                     made->showWindow();
@@ -422,18 +499,27 @@ private:
         for (const auto& p : plugins)
             menu.addAction (QString::fromStdString (p.name) + QStringLiteral (" (") + QString::fromStdString (p.format) + QLatin1Char (')'),
                             this, choose ("instrument\n" + QByteArray::fromStdString (p.id)));
+        if (slot == 1 && prism->rays().at ((size_t) i).second != nullptr)
+        {
+            menu.addSeparator();
+            menu.addAction (MixerWindow::tr ("&Remove B"), this, [this, i]
+            {
+                closeEditorsOf (i, 1);
+                edit ([&] (std::vector<Ray>& list) { if (i < (int) list.size()) list[(size_t) i].second = nullptr; }, true);
+            });
+        }
         menu.addSeparator();
         auto* later = menu.addAction (MixerWindow::tr ("Sampler and Slicer: on the track itself for now"));
         later->setEnabled (false);
         menu.exec (at);
     }
 
-    void openInstrument (int i)
+    void openInstrument (int i, int slot)
     {
-        const auto list = prism->rays();
-        if (i >= (int) list.size() || list[(size_t) i].instrument == nullptr)
+        auto list = prism->rays();
+        if (i >= (int) list.size() || slotOf (list[(size_t) i], slot) == nullptr)
             return;
-        const auto inst = list[(size_t) i].instrument;
+        const auto inst = slotOf (list[(size_t) i], slot);
         if (auto& open = editors[inst.get()]; open != nullptr)
         {
             open->show();
@@ -441,7 +527,9 @@ private:
             open->activateWindow();
             return;
         }
-        const auto title = MixerWindow::tr ("Track %1, ray %2").arg (track + 1).arg (QString::fromStdString (list[(size_t) i].name));
+        auto title = MixerWindow::tr ("Track %1, ray %2").arg (track + 1).arg (QString::fromStdString (list[(size_t) i].name));
+        if (list[(size_t) i].second != nullptr)
+            title += slot == 0 ? QStringLiteral (" A") : QStringLiteral (" B");
         QDialog* d = nullptr;
         switch (inst->kind())
         {
@@ -460,12 +548,12 @@ private:
         d->show();
     }
 
-    void closeEditorsOf (int i)
+    void closeEditorsOf (int i, int slot)
     {
-        const auto list = prism->rays();
-        if (i >= (int) list.size() || list[(size_t) i].instrument == nullptr)
+        auto list = prism->rays();
+        if (i >= (int) list.size() || slotOf (list[(size_t) i], slot) == nullptr)
             return;
-        if (auto it = editors.find (list[(size_t) i].instrument.get()); it != editors.end())
+        if (auto it = editors.find (slotOf (list[(size_t) i], slot).get()); it != editors.end())
         {
             if (it->second != nullptr)
                 it->second->close();
@@ -638,6 +726,11 @@ QJsonObject MixerWindow::prismJson (const mixer::Instrument& inst) const
         };
         if (r.instrument != nullptr)
             o.insert ("instrument", rayInstrumentJson (*r.instrument));
+        if (r.second != nullptr)
+            o.insert ("second", rayInstrumentJson (*r.second));
+        o.insert ("blend", r.blend);
+        o.insert ("split", r.split);
+        o.insert ("splitKey", r.splitKey);
         rays.append (o);
     }
     return { { "kind", "prism" }, { "name", QString::fromStdString (prism.name()) }, { "rays", rays } };
@@ -654,21 +747,29 @@ mixer::InstrumentPtr MixerWindow::prismFromJson (const QJsonObject& o, int track
         Ray r;
         r.name = ro.value ("name").toString().toStdString();
         const auto owner = tr ("Track %1's ray %2").arg (track + 1).arg (rays.size() + 1);
-        const auto io = ro.value ("instrument").toObject();
-        const auto kind = io.value ("kind").toString();
-        if (kind == QLatin1String ("synth"))
-            r.instrument = std::make_shared<mixer::Synth>();
-        else if (kind == QLatin1String ("raga"))
-            r.instrument = std::make_shared<mixer::RagaInstrument>();
-        else if (kind == QLatin1String ("plugin"))
+        for (const auto* key : { "instrument", "second" })
         {
-            std::string why;
-            r.instrument = audio.loadInstrumentPlugin (io.value ("id").toString().toStdString(), rate(), why);
-            if (r.instrument == nullptr)
-                problems << tr ("%1: %2 could not be started (%3)").arg (owner, io.value ("name").toString(), QString::fromStdString (why));
+            const auto io = ro.value (QLatin1String (key)).toObject();
+            const auto kind = io.value ("kind").toString();
+            mixer::InstrumentPtr inst;
+            if (kind == QLatin1String ("synth"))
+                inst = std::make_shared<mixer::Synth>();
+            else if (kind == QLatin1String ("raga"))
+                inst = std::make_shared<mixer::RagaInstrument>();
+            else if (kind == QLatin1String ("plugin"))
+            {
+                std::string why;
+                inst = audio.loadInstrumentPlugin (io.value ("id").toString().toStdString(), rate(), why);
+                if (inst == nullptr)
+                    problems << tr ("%1: %2 could not be started (%3)").arg (owner, io.value ("name").toString(), QString::fromStdString (why));
+            }
+            if (inst != nullptr)
+                inst->setState (io.value ("state").toString().toStdString());
+            (key[0] == 'i' ? r.instrument : r.second) = inst;
         }
-        if (r.instrument != nullptr)
-            r.instrument->setState (io.value ("state").toString().toStdString());
+        r.blend = (float) ro.value ("blend").toDouble (0.5);
+        r.split = ro.value ("split").toBool();
+        r.splitKey = ro.value ("splitKey").toInt (60);
         r.effects = effectsFromJson (ro.value ("effects").toArray(), owner, problems);
         r.gainDb = (float) ro.value ("gainDb").toDouble (0.0);
         r.muted = ro.value ("muted").toBool();

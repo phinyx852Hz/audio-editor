@@ -13,6 +13,7 @@
 #include "MixerEngine.h"
 #include "../core/PrismSplit.h"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <memory>
@@ -28,12 +29,19 @@ namespace mixer
         static constexpr int maxRays = prism::maxRays;
         static constexpr int maxEffects = maxInserts;   // per ray, like a track's inserts
 
-        // A ray as it is set and shown: what it plays and how it is heard.
+        // A ray as it is set and shown: what it plays and how it is heard. A ray holds up to two
+        // instruments (owner, 2026-10-30: "up to two only at this point, running parallel to each
+        // other with a mix between the two ... and to allow for a split keyboard"), A and B, which
+        // play side by side, layered or split at a key, into the ray's effects.
         struct Ray
         {
             std::string name;
-            InstrumentPtr instrument;     // null: the ray is silent
-            Inserts effects;              // after the instrument, in order (each with bypass and Mix)
+            InstrumentPtr instrument;     // A; null: silent
+            InstrumentPtr second;         // B, beside A; null: none
+            float blend = 0.5f;           // 0 only A .. 0.5 both in full .. 1 only B
+            bool split = false;           // A plays below splitKey and B from it up; else both play every note
+            int splitKey = 60;
+            Inserts effects;              // after the instruments, in order (each with bypass and Mix)
             float gainDb = 0.0f;          // -60 (off) .. +12
             bool muted = false, soloed = false;
             int lowKey = 0, highKey = 127;            // the notes it plays
@@ -42,6 +50,12 @@ namespace mixer
             {
                 return note >= lowKey && note <= highKey && velocity >= lowVelocity && velocity <= highVelocity;
             }
+            // Which of its instruments a note it hears goes to.
+            bool toA (int note) const { return second == nullptr || ! split || note < splitKey; }
+            bool toB (int note) const { return second != nullptr && (! split || note >= splitKey); }
+            // A's and B's levels: each is in full up to the middle and fades out towards the other end.
+            float gainA() const { return second == nullptr ? 1.0f : std::min (1.0f, 2.0f * (1.0f - blend)); }
+            float gainB() const { return std::min (1.0f, 2.0f * blend); }
         };
 
         Kind kind() const override { return Kind::prism; }
@@ -76,12 +90,13 @@ namespace mixer
         // What the audio thread keeps for a ray, which follows its instrument when rays move.
         struct Lane
         {
-            InstrumentPtr instrument;
-            std::vector<float> left, right, dryL, dryR;
-            std::vector<NoteEvent> events;
-            std::array<std::array<uint8_t, 128>, 16> held {};   // notes it was given, per channel
+            InstrumentPtr instrument, second;
+            std::vector<float> left, right, dryL, dryR, secondL, secondR;
+            std::vector<NoteEvent> events, secondEvents;
+            std::array<std::array<uint8_t, 128>, 16> held {}, secondHeld {};   // notes A and B were given, per channel
             prism::Delay align;
             float gain = 1.0f;          // the last block's, ramped from
+            float gainA = 1.0f, gainB = 1.0f;   // A's and B's, the same way
             std::atomic<float> peak { 0.0f };
         };
 

@@ -5166,7 +5166,7 @@ private:
 
     static constexpr int knobsPerRow = 5, maxKnobs = 8, knobSize = 30, labelWidth = 50, resolution = 1000;
 
-    // "1 Synth → Φ Echo · C2–B3", a line a ray.
+    // "1 Synth + PHI rāga (split at C4) → Φ Echo · C2–B3", a line a ray.
     static QStringList prismSummary (const mixer::InstrumentPrism& prism)
     {
         QStringList lines;
@@ -5175,6 +5175,9 @@ private:
         {
             auto text = QString::number (++n) + QLatin1Char (' ')
                       + (r.instrument != nullptr ? QString::fromStdString (r.instrument->name()) : MixerWindow::tr ("(silent)"));
+            if (r.second != nullptr)
+                text += QStringLiteral (" + ") + QString::fromStdString (r.second->name())
+                      + (r.split ? MixerWindow::tr (" (split at %1)").arg (QString::fromStdString (mixer::prismNoteName (r.splitKey))) : QString());
             for (const auto& x : r.effects)
                 text += QString::fromUtf8 (" → ") + QString::fromStdString (x.effect->name());
             if (r.lowKey > 0 || r.highKey < 127)
