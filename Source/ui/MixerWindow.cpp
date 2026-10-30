@@ -7448,6 +7448,32 @@ bool MixerWindow::editNotes()
     return true;
 }
 
+// The MIDI editor's transport tied to the mixer's (owner, 2026-10-30: "Tied to the main
+// transport"): the editor's first tick `offset` seconds into the mix.
+static MidiEditor::Transport mixerTransport (mixer::Engine& engine, double offset, std::function<void()> refresh)
+{
+    MidiEditor::Transport t;
+    t.playing = [&engine] { return engine.isPlaying(); };
+    t.seconds = [&engine, offset] { return (double) engine.position() / engine.sampleRate() - offset; };
+    t.locate = [&engine, offset, refresh] (double seconds)
+    {
+        engine.setPosition (std::max<Frame> (0, (Frame) std::llround ((seconds + offset) * engine.sampleRate())));
+        refresh();
+    };
+    t.play = [&engine, locate = t.locate, refresh] (double seconds)
+    {
+        locate (seconds);
+        engine.play();
+        refresh();
+    };
+    t.stop = [&engine, refresh]
+    {
+        engine.stop();
+        refresh();
+    };
+    return t;
+}
+
 void MixerWindow::noteEditorShownMidi()
 {
     if (! showingClip || ! clipView->showsMidi())
@@ -7496,6 +7522,22 @@ void MixerWindow::noteEditorShownMidi()
         why = QString::fromStdString (error);
         return loaded;
     };
+    // Tied to the mixer's transport: a clip on the timeline from where its file starts there, and
+    // muted meanwhile so the editor's notes are heard in its place; a launcher clip from the start.
+    const auto clipsBefore = engine.clips (track);
+    double offset = 0.0;
+    if (id != 0)
+    {
+        auto muted = clipsBefore;
+        for (auto& c : muted)
+            if (c.id == id)
+            {
+                offset = (double) (c.start - c.offset) / engine.sampleRate();
+                c.muted = true;
+            }
+        engine.setClips (track, std::move (muted));
+    }
+    host.transport = mixerTransport (engine, offset, [this] { refreshTransport(); });
     const auto armed = engine.liveTrack();
     engine.setLiveTrack (track);
     MidiEditor editor (*song, host, this);
@@ -7508,6 +7550,8 @@ void MixerWindow::noteEditorShownMidi()
     const auto accepted = editor.exec() == QDialog::Accepted;
     engine.setLiveListener (nullptr);
     engine.setLiveTrack (armed);
+    if (id != 0)
+        engine.setClips (track, clipsBefore);   // heard again, before the edit replaces it
     if (! accepted)
         return;
     const auto edited = editor.result();
@@ -12337,6 +12381,7 @@ void MixerWindow::openScore (const midifile::Song& score, mixer::TuningChoice tu
     host.title = title;
     host.staff = true;   // a score opens on the staff, PHI's notation
     host.inputSource = inputSource;
+    host.transport = mixerTransport (engine, 0.0, [this] { refreshTransport(); });   // from the mix's start
     host.loadAudio = [] (const QString& file, QString& why) -> AudioDataPtr
     {
         std::vector<Marker> markers;

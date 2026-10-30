@@ -39,6 +39,20 @@ class MidiEditor final : public QDialog
     Q_OBJECT
 
 public:
+    // The transport the editor's is tied to (owner, 2026-10-30: "Tied to the main transport"): the
+    // main window's for its MIDI panel, the mixer's for a clip or a score. Play in either starts
+    // both from one place, Pause or Stop in either stops both, and the editor's notes keep to its
+    // clock. Times are the editor's seconds: 0 is the clip's first tick.
+    struct Transport
+    {
+        std::function<bool()> available;          // it can play now (a file is open); else the editor plays alone
+        std::function<bool()> playing;
+        std::function<double()> seconds;          // where it is
+        std::function<void (double seconds)> play;   // from there
+        std::function<void()> stop;
+        std::function<void (double seconds)> locate;  // moved there, playing on if it plays
+    };
+
     struct Host
     {
         // Plays a message on the clip's track's instrument (auditions, playback, the keyboard's notes).
@@ -60,6 +74,7 @@ public:
         // A panel of the main window rather than a dialog (MidiPanel.h): no Apply or Cancel, and
         // Escape or Enter never closes it.
         bool embedded = false;
+        Transport transport;   // none: the editor plays on its own clock
     };
 
     MidiEditor (const midifile::Song&, Host, QWidget* parent);
@@ -124,7 +139,14 @@ private:
     void goTo (int64_t tick);   // Home and End: the step cursor and the playhead there, in view
     void togglePlay();       // Play and Pause: on from the playhead, or held where it is
     void startPlay (bool original);
-    void stopPlay();
+    void stopPlay (bool stopTied = true);   // and the transport it is tied to, unless false
+    // Tied to the main transport: when it can play now, its clock, and following its starts,
+    // stops and jumps.
+    bool tied() const;
+    double clockNow() const;  // seconds: the tied transport's, else the editor's own
+    void follow();
+    double secondsAt (int64_t tick) const;   // on the clip's tempo map
+    int64_t tickAt (double seconds) const;
     void stopToStart();      // Stop: back to where Play was pressed; pressed again, to the start
     void playTick();
     void updateTransport();  // the Play symbol and the time
@@ -205,6 +227,8 @@ private:
     size_t playAt = 0;
     double playFrom = 0.0;      // seconds: where the play started
     qint64 playStarted = 0;     // ms, the clock when it started
+    QTimer* followTimer = nullptr;   // watching the tied transport
+    double lastClock = 0.0;     // the tied transport's time at the last tick, to see it jump
     bool playingOriginal = false;
     int64_t playheadTick = -1;
     int64_t pressedAt = 0;      // the tick Play was pressed at, where Stop goes back to
