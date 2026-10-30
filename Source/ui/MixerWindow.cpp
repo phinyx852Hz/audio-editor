@@ -3499,6 +3499,35 @@ public:
     }
     QRect sceneArea (int scene) const { return sceneRect (std::clamp (scene, 0, std::max (0, window.numScenes - 1))); }
     QRect slotArea (int scene) const { return slotRect (firstTrack(), std::clamp (scene, 0, std::max (0, window.numScenes - 1))); }
+    // For MIDI Map mode: each slot, each track's stop, each scene and Stop All.
+    void mappable (std::vector<MixerWindow::Mappable>& out) const
+    {
+        using A = control::Action;
+        auto add = [&] (QRect r, A action, int track, int scene)
+        {
+            if (r.isEmpty())
+                return;
+            MixerWindow::Mappable m;
+            m.widget = const_cast<ClipGrid*> (this);
+            m.area = r;
+            m.target.action = action;
+            m.target.track = track;
+            m.target.scene = scene;
+            out.push_back (m);
+        };
+        for (int i = 0; i < trackCount(); ++i)
+        {
+            const int t = firstTrack() + i;
+            if (t < 0 || t >= control::maxTracks)
+                continue;
+            for (int s = 0; s < window.numScenes && s < control::maxScenes; ++s)
+                add (slotRect (t, s), A::launch, t, s);
+            add (stopRect (t), A::stopTrack, t, -1);
+        }
+        for (int s = 0; s < window.numScenes && s < control::maxScenes; ++s)
+            add (sceneRect (s), A::launchScene, -1, s);
+        add (stopAllRect(), A::stopAll, -1, -1);
+    }
 
 protected:
     void paintEvent (QPaintEvent*) override
@@ -10812,6 +10841,44 @@ void MixerWindow::showLauncher (bool on)
     }
     rack->refresh();
     grid->update();
+}
+
+std::vector<MixerWindow::Mappable> MixerWindow::mappable() const
+{
+    using A = control::Action;
+    std::vector<Mappable> out;
+    auto add = [&out] (QWidget* w, A action, int track, bool continuous, int index = 0)
+    {
+        if (w == nullptr)
+            return;
+        Mappable m;
+        m.widget = w;
+        m.target.action = action;
+        m.target.track = track;
+        m.target.index = index;
+        m.continuous = continuous;
+        out.push_back (m);
+    };
+    for (int t = 0; t < engine.numTracks() && t < control::maxTracks; ++t)
+        if (auto* strip = strips[(size_t) t])
+        {
+            add (strip->fader, A::volume, t, true);
+            add (strip->panDial, A::pan, t, true);
+            for (int r = 0; r < (int) strip->sendDials.size() && r < 2; ++r)
+                add (strip->sendDials[(size_t) r], A::send, t, true, r);
+            add (strip->muteButton, A::mute, t, false);
+            add (strip->soloButton, A::solo, t, false);
+            add (strip->armButton, A::arm, t, false);
+        }
+    add (masterFader, A::master, -1, true);
+    add (tempoBox, A::tempo, -1, true);
+    add (playButton, A::togglePlay, -1, false);
+    add (loopButton, A::loop, -1, false);
+    add (recordButton, A::record, -1, false);
+    add (clickButton, A::metronome, -1, false);
+    if (grid != nullptr && launcherShown())
+        grid->mappable (out);
+    return out;
 }
 
 bool MixerWindow::launcherShown() const { return launcherArea != nullptr && ! launcherArea->isHidden(); }

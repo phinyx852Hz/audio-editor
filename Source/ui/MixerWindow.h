@@ -3,6 +3,7 @@
 
 #include "../core/AudioData.h"
 #include "../mixer/MixerEngine.h"
+#include "../control/ControlSurface.h"
 
 #include <QColor>
 #include <QJsonArray>
@@ -24,7 +25,6 @@ class QSpinBox;
 class QAbstractButton;
 namespace counterpoint { struct Settings; }
 namespace minimalize { struct Part; }
-namespace control { struct State; struct Command; }
 class StatusLine;
 class QScrollArea;
 class QDialog;
@@ -236,6 +236,16 @@ public:
     // their lights show it, and what their pads, knobs and buttons ask for.
     control::State surfaceState() const;
     void surfaceCommand (const control::Command&);
+    // MIDI Map mode (Ctrl+M, ControlSection.cpp): every control a MIDI control can be mapped to,
+    // where it is (an area of a widget; empty: all of it) and what a mapped control does there.
+    struct Mappable
+    {
+        QWidget* widget = nullptr;
+        QRect area;
+        control::Command target;
+        bool continuous = false;   // a fader or knob; else a button
+    };
+    std::vector<Mappable> mappable() const;
 
     // The Mode menu (ModeSection.cpp, owner 2026-10-26): the selected track tuned to a mode
     // (its clips' and scenes' own tunings left as they are), and the MIDI clip shown in the

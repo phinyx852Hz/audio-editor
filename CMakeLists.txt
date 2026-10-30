@@ -194,6 +194,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/MixerMinimalize.cpp
     Source/ui/MixerControl.cpp
     Source/ui/ControlSection.cpp
+    Source/ui/MidiMapOverlay.cpp
     Source/ui/MixerSection.cpp
     Source/ui/ModeSection.cpp
     Source/ui/ModeAtlas.cpp
