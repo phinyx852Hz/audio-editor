@@ -584,6 +584,7 @@ void MainWindow::registerCommands()
     registerTrackerCommands();
     registerPerformanceCommands();
     registerArchitectonicsCommands();
+    registerComposeCommands();
     registerSamplerCommands();
     registerInstrumentCommands();
     registerMixerCommands();
@@ -907,7 +908,7 @@ void MainWindow::buildMenus()
                                "process.fadeShape.linear", "process.fadeShape.equalPower", "process.fadeShape.exponential",
                                "process.fadeShape.sCurve", "-", "process.reverse", "process.invert", "process.dcOffset", "-", "process.stereoize", "process.midSide", "process.convert" } },
         { tr ("&Analyze"),   { "analyze.loudness", "-", "analyze.beats", "analyze.onsets", "analyze.tempoKey", "analyze.vamp", "-", "analyze.window", "view.meters", "analyze.imagingView", "analyze.resetMeters", "-", "analyze.plugin", "-", "view.spectral", "-", "@nyquist.analyze" } },
-        { tr ("Architecto&nics"), { "architectonics.compose", "architectonics.score", "architectonics.design", "-", "architectonics.play", "architectonics.deal", "architectonics.endless" } },
+        { tr ("&Compose"),   { "@compose" } },
         { tr ("&Master"),    { "#album", "-", "view.master", "view.chain", "master.addPlugin", "master.bypass", "analyze.plugin", "-", "master.assistant", "-", "master.render", "master.renderNew", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
         { tr ("Mi&xer"),     { "mixer.window", "mixer.dock", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
                                "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "mixer.sendToTimeline", "-", "mixer.editorTrack", "mixer.trackToEditor", "-", "mixer.assistant" } },
@@ -943,7 +944,8 @@ void MainWindow::buildMenus()
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
     };
 
-    // 20 menus (Architectonics added 2026-10-29: the owner found room on a 13" screen; 23 before Album, Effect, Markers and Transport became submenus; owner,
+    // 21 menus (Architectonics added 2026-10-29: the owner found room on a 13" screen; Compose took its
+    // place the same day, Architectonics a submenu of it; 23 before Album, Effect, Markers and Transport became submenus; owner,
     // 2026-10-26: "what happens when we load PHI on a small screen"): Fusion puts 7 px between titles, and at 1280 px wide with a 10 pt font the last ones went behind
     // the » button. 2 px keeps them all in view there (1204 px at 10 pt DejaVu Sans,
     // before Research made it 20; Research adds about 70 px).
@@ -978,6 +980,8 @@ void MainWindow::buildMenus()
                 connect (menu, &QMenu::aboutToShow, this, [this, menu] { fillModeMenu (menu); });
                 fillModeMenu (menu);
             }
+            else if (id == QLatin1String ("@compose"))
+                fillComposeMenu (menu);
             else if (id == QLatin1String ("@research"))
             {
                 // Built as it opens, from the references file the owner curates (ResearchSection.cpp).

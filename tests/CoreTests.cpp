@@ -22,6 +22,7 @@
 #include "../Source/mixer/DrumsToMidi.h"
 #include "../Source/mixer/Rhythms.h"
 #include "../Source/mixer/Architectonics.h"
+#include "../Source/mixer/Compose.h"
 #include "../Source/mixer/Harmonies.h"
 #include "../Source/mixer/RhythmGenerator.h"
 #include "../Source/mixer/Stochastic.h"
@@ -7950,6 +7951,137 @@ namespace
                "architectonics: the score, a part a colour, the sections marked, as a MIDI file");
     }
 
+    // Compose (owner, 2026-10-29): every method writes a score from nothing in at most eight
+    // parts, in its mode; and each keeps the structure its tradition gives it.
+    void testCompose()
+    {
+        namespace co = composition;
+        bool every = true, inMode = true, capped = true, files = true;
+        for (const auto& m : co::methods())
+        {
+            co::Settings s;
+            s.method = m.method;
+            s.bars = 32;
+            s.seed = 5;
+            if (*m.home != 0)
+                s.mode = counterpoint::Mode::fromTuning (mixer::tuningSystems()[(size_t) mixer::findTuning (m.home)], 0);
+            const counterpoint::Mode mode = s.mode.valid() ? s.mode : [] { auto x = counterpoint::Mode::chromatic (0); x.scale.assign (12, false);
+                                                                         for (int k : { 0, 2, 4, 5, 7, 9, 11 }) x.scale[(size_t) k] = true; return x; }();
+            capped = capped && m.mostParts <= co::maxParts;
+            for (int parts = 1; parts <= m.mostParts; ++parts)
+            {
+                s.parts = parts;
+                const auto r = co::generate (s);
+                const auto wanted = std::max (parts, m.method == co::Method::fugue || m.method == co::Method::hocket ? 2 : 1);
+                size_t notes = 0;
+                for (const auto& p : r.parts)
+                {
+                    notes += p.notes.size();
+                    if (! p.drums && m.method != co::Method::spectral)
+                        for (const auto& n : p.notes)
+                        {
+                            const auto k = ((n.key - 60 - mode.root) % mode.period + mode.period) % mode.period;
+                            inMode = inMode && mode.scale[(size_t) k];
+                        }
+                }
+                every = every && (int) r.parts.size() == wanted && notes > 0 && r.end > 0 && ! r.sections.empty() && r.sections.front().start == 0;
+                if (parts == m.mostParts)
+                {
+                    std::string why;
+                    const auto song = co::toSong (r, m.name);
+                    const auto bytes = midifile::bytes (*song);
+                    const auto back = midifile::parse (bytes.data(), bytes.size(), why);
+                    files = files && back != nullptr && back->noteCount() == (int) notes && song->markers.size() == r.sections.size();
+                }
+            }
+        }
+        check (capped && every, "compose: every method, one to its most parts (never more than eight), writes a score");
+        check (inMode, "compose: every pitched note in the method's mode");
+        check (files, "compose: each score a MIDI file, a part a channel, the sections marked");
+
+        auto run = [] (co::Method m, int parts, const char* home = "")
+        {
+            co::Settings s;
+            s.method = m;
+            s.parts = parts;
+            s.bars = 32;
+            s.seed = 11;
+            if (*home != 0)
+                s.mode = counterpoint::Mode::fromTuning (mixer::tuningSystems()[(size_t) mixer::findTuning (home)], 0);
+            return co::generate (s);
+        };
+        // Isorhythm: the tenor's rhythm the same in each of the first taleae.
+        {
+            const auto r = run (co::Method::isorhythm, 1);
+            std::vector<int64_t> starts;
+            for (const auto& x : r.sections)
+                starts.push_back (x.start);
+            std::vector<std::vector<int64_t>> rhythms;
+            for (size_t k = 0; k + 1 < starts.size() && k < 3; ++k)
+            {
+                rhythms.emplace_back();
+                for (const auto& n : r.parts[0].notes)
+                    if (n.start >= starts[k] && n.start < starts[k + 1])
+                        rhythms.back().push_back (n.end - n.start);
+            }
+            check (rhythms.size() == 3 && ! rhythms[0].empty() && rhythms[0] == rhythms[1] && rhythms[1] == rhythms[2],
+                   "compose: isorhythm, the tenor's talea the same in every statement");
+        }
+        // Tintinnabuli: the T-voice only on the tonic triad's notes.
+        {
+            const auto r = run (co::Method::tintinnabuli, 2);
+            bool triad = ! r.parts[1].notes.empty();
+            for (const auto& n : r.parts[1].notes)
+                triad = triad && (((n.key - 60) % 12 + 12) % 12 == 0 || ((n.key - 60) % 12 + 12) % 12 == 4 || ((n.key - 60) % 12 + 12) % 12 == 7);
+            check (triad, "compose: tintinnabuli, the T-voice on the tonic triad");
+        }
+        // Spectral: the third partial a twelfth (1902 cents) above the fundamental, in its own cents.
+        {
+            const auto r = run (co::Method::spectral, 2);
+            const auto& f = r.parts[0].notes.front();
+            const auto& p3 = r.parts[1].notes.front();
+            const auto cents = (p3.key * 100.0 + p3.cents) - (f.key * 100.0 + f.cents);
+            check (r.microtonal && std::abs (cents - 1901.955) < 0.5, "compose: spectral, partial 3 a just twelfth above the fundamental");
+        }
+        // Gamelan: four kenong strokes and one gong ageng in every gongan of a ladrang (32 beats).
+        {
+            const auto r = run (co::Method::gamelan, 8, "slendro pathet manyura");
+            const auto& kenong = r.parts[3].notes;
+            size_t gongs = 0;
+            for (const auto& n : r.parts[4].notes)
+                gongs += n.velocity >= 110;
+            check (! kenong.empty() && kenong.size() == 4 * (gongs - 1), "compose: gamelan, the kenong four times and the gong once a gongan (after the buka's gong)");
+        }
+        // Ewe: the bell's standard pattern, seven strokes in each cycle of twelve pulses.
+        {
+            const auto r = run (co::Method::ostinato, 1);
+            const auto cycle = 12 * co::ticksPerQuarter / 2;
+            size_t first = 0;
+            for (const auto& n : r.parts[0].notes)
+                first += n.start < cycle;
+            check (first == 7 && r.parts[0].drums, "compose: Ewe, the bell's timeline seven strokes in twelve pulses");
+        }
+        // Hocket: never two players on the same pulse while the melody is hocketed.
+        {
+            const auto r = run (co::Method::hocket, 5);
+            std::map<int64_t, int> at;
+            const auto untilVariations = r.sections.size() > 1 ? r.sections[1].start : r.end;
+            for (const auto& p : r.parts)
+                for (const auto& n : p.notes)
+                    if (n.start < untilVariations)
+                        ++at[n.start];
+            bool alone = ! at.empty();
+            for (const auto& [t, count] : at)
+                alone = alone && count == 1;
+            check (alone, "compose: hocket, one player a pulse");
+        }
+        // Rāga: the gat ends on sam with a tihāī.
+        {
+            const auto r = run (co::Method::raga, 3, "yaman (kalyan)");
+            check (r.sections.back().name == "tihāī" && r.parts[2].drums, "compose: rāga, the gat ends in a tihāī");
+        }
+    }
+
     void testRhythmGenerator()
     {
         // Toussaint (2005): the tresillo E(3,8), the cinquillo E(5,8), the bembé bell E(7,12) turned.
@@ -8798,6 +8930,7 @@ int main()
     testRhythms();
     testRhythmGenerator();
     testArchitectonics();
+    testCompose();
     testStochastic();
     testCubify();
     testSerial();
