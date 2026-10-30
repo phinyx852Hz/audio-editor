@@ -177,8 +177,8 @@ bool DockCornerDrag::eventFilter (QObject* watched, QEvent* e)
 //==============================================================================
 QWidget* FocusFollowsMouse::areaOf (QWidget* w) const
 {
-    for (auto* a : areas)
-        if (w != nullptr && (w == a || a->isAncestorOf (w)))
+    for (const auto& a : areas)
+        if (w != nullptr && a != nullptr && (w == a || a->isAncestorOf (w)))
             return a;
     return nullptr;
 }
