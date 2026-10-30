@@ -50,7 +50,7 @@ Mixer > Patchbay (`F4`) pops it out. Sources run down the side, destinations acr
   with no ports (a source into itself).
 - Each name has a level meter. Default Patches puts every source back where it started.
 - Patches, synths and effects (with their settings) are part of the project (`.phi`,
-  docs/project.md) and come back with it, also at the next start; they and the grid's layout
+  docs/project.md) and come back with it (after a crash too); they and the grid's layout
   are kept in `settings.ini` too. If anything is patched, it is heard straight away.
 
 ## How it plays

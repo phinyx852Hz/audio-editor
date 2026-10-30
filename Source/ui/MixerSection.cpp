@@ -50,7 +50,9 @@ void MainWindow::registerMixerCommands()
     })->setStatusTip (tr ("The 8-track mixer: each track plays an audio file, a MIDI file through an instrument, or both"));
     add ("mixer.dock", tr ("&Undock / Dock Mixer"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_F3) }, [this] { placeMixer (! mixerDocked()); })
         ->setStatusTip (tr ("The mixer in the editor's place, or in a window of its own (also Ctrl+Alt+P from the mixer)"));
-    add ("mixer.new", tr ("&New Project"), {}, [this] { showMixer(); mixerWin->newMix(); });
+    // Also File > New Project (Ctrl+N): an empty 8-track mix, launcher and timeline, asking to save first.
+    add ("mixer.new", tr ("&New Project"), { KS (Qt::CTRL | Qt::Key_N) }, [this] { showMixer(); mixerWin->newMix(); })
+        ->setStatusTip (tr ("Start an empty project: 8 tracks, default strips, an empty clip launcher and timeline, and a default patchbay"));
     add ("mixer.newFromSet", tr ("New Project from &Selector Set"), {}, [this]
     {
         showMixer();
@@ -82,6 +84,12 @@ void MainWindow::registerMixerCommands()
         ->setStatusTip (tr ("The sound in the editor (or its selection) into the mixer's clip launcher, under its cursor or in the selected track's first empty slot"));
     add ("mixer.sendToTimeline", tr ("Send to &Timeline"), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_F3) }, [this] { sendToTimeline(); })
         ->setStatusTip (tr ("The sound in the editor (or its selection) onto the editor's track at the playhead"));
+    add ("mixer.editNotes", tr ("&Edit MIDI Notes..."), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_N) }, [this]
+    {
+        showMixer();
+        if (! mixerWin->editNotes())
+            statusBar()->showMessage (tr ("Pick a MIDI clip first, on the tracks or in the launcher, then Edit MIDI Notes opens it in the MIDI editor"), 6000);
+    })->setStatusTip (tr ("The MIDI editor on the MIDI clip picked: a piano roll in 12-TET or in the clip's mode, raga, maqam, laras or Scala scale"));
     add ("mixer.editorTrack", tr ("Editor &Track"), { KS (Qt::SHIFT | Qt::Key_F4) }, [this]
     {
         showEditorTrack (commands.action (QStringLiteral ("mixer.editorTrack"))->isChecked());
@@ -259,11 +267,17 @@ void MainWindow::returnMixerEdits()
     }
 }
 
+bool MainWindow::mixerChainKey() const
+{
+    return mixerDocked() && centralStack->currentWidget() == mixerWin && ! chainPanel->isPoppedOut();
+}
+
 void MainWindow::updateChainDock()
 {
-    // The mixer has its own along its bottom; the editor's would show twice.
+    // The mixer has its own along its bottom; the editor's would show twice. It steps aside
+    // even while the mixer's is hidden (Ctrl+Shift+C), or that key would bring it back instead.
     auto* dock = chainPanel->dock();
-    const bool mixerOwns = mixerDocked() && centralStack->currentWidget() == mixerWin && mixerWin->devicePanelShown();
+    const bool mixerOwns = mixerChainKey();
     if (mixerOwns && ! chainPanel->isPoppedOut() && dock->isVisible())
     {
         chainHiddenForMixer = true;

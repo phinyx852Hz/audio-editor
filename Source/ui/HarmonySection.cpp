@@ -10,6 +10,8 @@
 #include "MixerWindow.h"
 #include "Settings.h"
 #include "../mixer/Harmonies.h"
+#include "../mixer/ModalHarmony.h"
+#include "../mixer/Rhythms.h"
 #include "../mixer/Tunings.h"
 
 #include <QCheckBox>
@@ -21,6 +23,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QMenu>
 #include <QPushButton>
@@ -183,6 +186,179 @@ void MainWindow::useHarmony (int index)
             return statusBar()->showMessage (tr ("Pick a track in the mixer first"), 5000);
         if (tune != nullptr && tune->isChecked())
             mixerWin->tuneSelectedTrack ({ tuning, final->currentData().toInt() });
+        return;
+    }
+    const auto folder = settings.value (QStringLiteral ("harmony/folder"), settings.value (QStringLiteral ("rhythm/folder"))).toString();
+    const auto file = QFileDialog::getSaveFileName (this, tr ("save harmony as midi"), QDir (folder).filePath (text (h.name) + QStringLiteral (".mid")),
+                                                    tr ("MIDI files (*.mid *.midi)"));
+    if (file.isEmpty())
+        return;
+    settings.setValue (QStringLiteral ("harmony/folder"), QFileInfo (file).absolutePath());
+    std::string why;
+    if (! midifile::write (*song, file.toStdString(), why))
+        statusBar()->showMessage (tr ("%1 could not be saved: %2").arg (file, text (why)), 8000);
+    else
+        statusBar()->showMessage (tr ("%1 saved").arg (QFileInfo (file).fileName()), 5000);
+}
+
+// Mode ▸ melody ▸ harmonize in the mode (owner, 2026-10-29): an accompaniment in `system` on
+// `final`, in the texture its tradition uses unless another is chosen, its chords changing
+// steadily or with a rhythm's cycle; added to the selected track, tuned to `played`, or saved.
+void MainWindow::harmonizeDialog (int system, int final, int playedSystem, int playedRoot, const QString& what)
+{
+    const auto& mode = mixer::tuningSystems()[(size_t) system];
+    const auto own = modalharmony::traditional (mode);
+    const auto& rhythms = rhythm::rhythms();
+    auto settings = appSettings();
+    QDialog dialog (this);
+    dialog.setWindowTitle (tr ("harmonize in the mode"));
+    auto* layout = new QVBoxLayout (&dialog);
+    auto* head = new QLabel (QStringLiteral ("<b>%1</b>").arg (what.toHtmlEscaped()), &dialog);
+    head->setWordWrap (true);
+    layout->addWidget (head);
+
+    auto* form = new QFormLayout;
+    auto* texture = new QComboBox (&dialog);
+    for (auto t : modalharmony::textures())
+        texture->addItem (t == own ? tr ("%1 — its tradition's").arg (text (modalharmony::textureName (t))) : text (modalharmony::textureName (t)), (int) t);
+    texture->setCurrentIndex (texture->findData ((int) own));
+    texture->setToolTip (tr ("chords are judged by the cents the PHI synth plays, each interval against the nearest just consonance"));
+    form->addRow (tr ("te&xture"), texture);
+    auto* pedal = new QCheckBox (tr ("a &pedal on the final"), &dialog);
+    pedal->setChecked (true);
+    auto* line = new QCheckBox (tr ("a &line through the mode over it"), &dialog);
+    line->setChecked (true);
+    line->setToolTip (tr ("by step, landing on a chord tone at each change and on the final at the end; "
+                          "parallel, heterophony, layered and dyads always have one"));
+    form->addRow (QString(), pedal);
+    form->addRow (QString(), line);
+
+    // The harmonic rhythm: when the chords change.
+    auto* timing = new QComboBox (&dialog);
+    timing->addItem (tr ("steady"), -1);
+    for (size_t i = 0; i < rhythms.size(); ++i)
+        timing->addItem (tr ("with %1 (%2)").arg (text (rhythms[i].name), text (rhythms[i].group)), (int) i);
+    timing->setToolTip (tr ("a rhythm from Mode ▸ rhythm: the chords change at each of its sections (a tāl's vibhāgs, a clave's halves) "
+                            "and come back to the final at the start of its cycle"));
+    form->addRow (tr ("harmonic &rhythm"), timing);
+    auto* perChord = new QSpinBox (&dialog);
+    perChord->setRange (1, 32);
+    perChord->setValue (4);
+    perChord->setSuffix (tr (" beats a chord"));
+    auto* chordsPerCycle = new QSpinBox (&dialog);
+    chordsPerCycle->setRange (1, 16);
+    chordsPerCycle->setValue (4);
+    chordsPerCycle->setSuffix (tr (" chords a cycle"));
+    auto* steadyRow = new QHBoxLayout;
+    steadyRow->addWidget (perChord);
+    steadyRow->addWidget (chordsPerCycle);
+    form->addRow (QString(), steadyRow);
+    auto* strokes = new QCheckBox (tr ("struck on the rhythm's &strokes"), &dialog);
+    strokes->setToolTip (tr ("the chords sounded on its first sound's strokes, accents louder, instead of held"));
+    form->addRow (QString(), strokes);
+    auto* cycles = new QSpinBox (&dialog);
+    cycles->setRange (1, 64);
+    cycles->setValue (4);
+    form->addRow (tr ("&cycles"), cycles);
+    auto* bpm = new QDoubleSpinBox (&dialog);
+    bpm->setRange (20.0, 400.0);
+    bpm->setDecimals (1);
+    bpm->setValue (90.0);
+    bpm->setSuffix (tr (" bpm"));
+    form->addRow (tr ("&tempo"), bpm);
+    auto* variation = new QSpinBox (&dialog);
+    variation->setRange (1, 9999);
+    variation->setValue (1);
+    variation->setToolTip (tr ("another line through the mode"));
+    form->addRow (tr ("&variation"), variation);
+    layout->addLayout (form);
+    auto* preview = new QLabel (&dialog);
+    preview->setWordWrap (true);
+    preview->setTextInteractionFlags (Qt::TextSelectableByMouse);
+    preview->setMinimumWidth (480);
+    layout->addWidget (preview);
+
+    auto chosenTiming = [&]
+    {
+        const auto r = timing->currentData().toInt();
+        return r < 0 ? modalharmony::steady (perChord->value(), chordsPerCycle->value())
+                     : modalharmony::fromRhythm (rhythms[(size_t) r], strokes->isChecked());
+    };
+    auto chosenSettings = [&]
+    {
+        modalharmony::Settings s;
+        s.texture = (modalharmony::Texture) texture->currentData().toInt();
+        s.pedal = pedal->isChecked();
+        s.line = line->isChecked();
+        s.cycles = cycles->value();
+        s.variation = (unsigned) variation->value();
+        return s;
+    };
+    auto refresh = [&]
+    {
+        const auto r = timing->currentData().toInt();
+        perChord->setEnabled (r < 0);
+        chordsPerCycle->setEnabled (r < 0);
+        strokes->setEnabled (r >= 0);
+        const auto t = (modalharmony::Texture) texture->currentData().toInt();
+        const auto d = modalharmony::degrees (mode);
+        const auto tm = chosenTiming();
+        QStringList lines;
+        if (modalharmony::usesChords (t))
+        {
+            const auto notes = mode.family.rfind ("jazz mode", 0) == 0 ? 4 : 3;
+            const auto chords = modalharmony::progression (d, t, (int) std::max<size_t> (1, tm.changes.size()), notes);
+            lines << (chords.empty() ? tr ("No chord on the final is smooth enough in this tuning, so it is heard over a drone instead.")
+                                     : tr ("chords, by degree and their cents: %1").arg (text (modalharmony::describe (d, chords))));
+        }
+        const auto marked = modalharmony::characteristic (d);
+        if (! marked.empty())
+        {
+            QStringList keys;
+            for (auto k : marked)
+                keys << QString::fromUtf8 (finals[(final + k) % 12]);
+            lines << tr ("its characteristic note: %1").arg (keys.join (QStringLiteral (", ")));
+        }
+        if (t != own)
+            lines << tr ("Outside the tradition: %1 is heard as %2.").arg (text (mode.family), text (modalharmony::textureName (own)));
+        lines << tr ("%n chord change(s) a cycle of %1 beats", nullptr, (int) tm.changes.size()).arg (tm.beats);
+        preview->setText (lines.join (QStringLiteral ("\n")));
+    };
+    connect (timing, &QComboBox::currentIndexChanged, &dialog, [&]
+    {
+        if (const auto r = timing->currentData().toInt(); r >= 0)
+            bpm->setValue (rhythms[(size_t) r].bpm);
+        refresh();
+    });
+    for (auto* box : { texture })
+        connect (box, &QComboBox::currentIndexChanged, &dialog, refresh);
+    for (auto* spin : { perChord, chordsPerCycle })
+        connect (spin, &QSpinBox::valueChanged, &dialog, refresh);
+    connect (strokes, &QCheckBox::toggled, &dialog, refresh);
+    refresh();
+
+    auto* buttons = new QDialogButtonBox (&dialog);
+    auto* toMixer = buttons->addButton (tr ("add to the &mixer"), QDialogButtonBox::AcceptRole);
+    toMixer->setToolTip (tr ("a midi clip on the selected track, at the playhead, the track's PHI synth tuned to the mode"));
+    auto* toFile = buttons->addButton (tr ("&save as midi..."), QDialogButtonBox::AcceptRole);
+    buttons->addButton (QDialogButtonBox::Cancel);
+    layout->addWidget (buttons);
+    int choice = -1;
+    for (auto [b, n] : { std::pair { toMixer, 0 }, { toFile, 1 } })
+        connect (b, &QPushButton::clicked, &dialog, [&choice, &dialog, n] { choice = n; dialog.accept(); });
+    connect (buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    if (dialog.exec() != QDialog::Accepted || choice < 0)
+        return;
+
+    const auto h = modalharmony::generate (mode, chosenTiming(), chosenSettings());
+    const auto song = harmony::toSong (h, 48 + final, 1, bpm->value());
+    if (choice == 0)
+    {
+        showMixer();
+        if (! mixerWin->addRhythm (*song, text (h.name)))
+            return statusBar()->showMessage (tr ("Pick a track in the mixer first"), 5000);
+        if (playedSystem >= 0)
+            mixerWin->tuneSelectedTrack ({ playedSystem, playedRoot });
         return;
     }
     const auto folder = settings.value (QStringLiteral ("harmony/folder"), settings.value (QStringLiteral ("rhythm/folder"))).toString();
