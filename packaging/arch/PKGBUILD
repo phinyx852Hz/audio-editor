@@ -1,6 +1,6 @@
 # Maintainer: phinyx852Hz
 pkgname=phi-git
-pkgver=0.2.0
+pkgver=0.5.0
 pkgrel=1
 pkgdesc="Φ PHI: keyboard-first audio editor and mastering suite for Linux"
 arch=('x86_64')
@@ -29,6 +29,13 @@ conflicts=('phi' 'phinyx-git')
 replaces=('phinyx-git')   # the name before PHI
 source=("git+${url}.git")
 sha256sums=('SKIP')
+
+# The version in CMakeLists.txt, then the commits since the start and the commit, e.g. 0.5.0.r812.gb7a9be7
+pkgver() {
+  cd audio-editor
+  printf "%s.r%s.g%s" "$(sed -n 's/^project(Phi VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)" \
+    "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
 
 build() {
   cmake -S audio-editor -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr

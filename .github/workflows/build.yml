@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+# A tag such as v0.5.0 publishes the Arch package as a GitHub release
+permissions:
+  contents: write
+
 jobs:
   arch:
     runs-on: ubuntu-24.04
@@ -19,7 +23,7 @@ jobs:
       - name: Configure
         # Fails if PipeWire was not found, since then recording would be left out
         run: |
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release | tee configure.log
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr | tee configure.log
           ! grep -q "building without recording" configure.log
       - name: Mirror speexdsp
         # gitlab.xiph.org (Cardinal's Rack submodule speexdsp) answers 502/504 at times; GitHub's mirror instead
@@ -28,6 +32,25 @@ jobs:
         run: cmake --build build
       - name: Test
         run: ctest --test-dir build --output-on-failure
+      - name: Package
+        # makepkg will not run as root. A tag v0.5.0 gives version 0.5.0; other builds 0.5.0.r<run>.g<commit>.
+        run: |
+          version=$(sed -n 's/^project(Phi VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          if [ "$GITHUB_REF_TYPE" = tag ]; then pkgver=${GITHUB_REF_NAME#v}; else pkgver=$version.r$GITHUB_RUN_NUMBER.g${GITHUB_SHA::7}; fi
+          useradd -m builder
+          chown -R builder build packaging/arch
+          cd packaging/arch
+          sudo -u builder PHI_BUILD_DIR="$GITHUB_WORKSPACE/build" PHI_PKGVER="$pkgver" PKGEXT=.pkg.tar.zst makepkg -p ci.PKGBUILD --nodeps
+          pacman -Qlp phi-*.pkg.tar.zst | grep -E 'bin/|applications/|icons/'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phi-arch-package
+          path: packaging/arch/phi-*.pkg.tar.zst
+      - name: Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: packaging/arch/phi-*.pkg.tar.zst
       - uses: actions/upload-artifact@v4
         with:
           name: phi-arch

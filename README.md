@@ -149,6 +149,8 @@ The DSP of the Φ effects, the Φ Phaser and the start-up voice, and the PHI syn
 
 To install system wide instead, use the PKGBUILD: `cd packaging/arch && makepkg -si`.
 
+Or install a ready-made Arch package (Omarchy included): every CI build on GitHub (Actions > build > `phi-arch-package`) and every release has a `phi-<version>-x86_64.pkg.tar.zst`. Install it with `sudo pacman -U phi-*.pkg.tar.zst`; PHI then shows in the app launcher with the Φ icon, and opens audio files and `.phi` projects from the file manager. Remove it with `sudo pacman -R phi`. Pushing a tag such as `v0.5.0` makes a release with that package (see [`docs/licence-compliance.md`](docs/licence-compliance.md) before publishing one).
+
 ## Hyprland
 PHI runs natively on Wayland. Its window class is `phi`, so you can target it in `hyprland.conf`, e.g.
 `windowrulev2 = workspace 3, class:^(phi)$`. Popped-out panels share that class and have titles like
