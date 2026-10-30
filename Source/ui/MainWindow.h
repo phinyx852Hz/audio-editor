@@ -400,6 +400,14 @@ private:
     // from the last settings and a new seed (Ctrl+click on the Selector's Φ).
     void composeSongDialog (bool score = false, bool quick = false);
     void playArchitectonics (bool on);
+    // The Compose menu (ComposeSection.cpp, docs/compose.md): every method of composing PHI has,
+    // Architectonics among them, and the methods of mixer/Compose.h by region; a score of up to
+    // eight parts for the MIDI editor. -1: the method used last.
+    void registerComposeCommands();
+    void fillComposeMenu (QMenu*);
+    void composeDialog (int method = -1);
+    // A blank score in the MIDI editor on `notation` ("phi": PHI's microtonal staff).
+    void newMicrotonalScore (const QString& notation);
     class ArchitectonicsConductor* conductor = nullptr;
     void toggleVideoRecording();
     void toggleStreaming();

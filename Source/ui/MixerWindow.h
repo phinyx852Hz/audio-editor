@@ -173,8 +173,9 @@ public:
     int emptyScenes (int count) const;
     // Its Compose a Score: the score opened in the MIDI editor (the staff view there, once it
     // has one), played on the selected track; kept, it goes on a new track (else the selected
-    // one) from the start, the track tuned to `tuning`.
-    void openScore (const midifile::Song& score, mixer::TuningChoice tuning, const QString& title);
+    // one) from the start, the track tuned to `tuning`. `notation`: the notation the editor opens
+    // on (mixer/Notation.h's ids, "phi" PHI's microtonal staff), empty the piano roll.
+    void openScore (const midifile::Song& score, mixer::TuningChoice tuning, const QString& title, const QString& notation = {});
     void composeScene (int scene, const std::vector<int>& tracks, const QStringList& files,
                        const std::vector<midifile::SongPtr>& midi, mixer::TuningChoice tuning, const QString& name);
     // A file chosen in the Find panel's Selector: into the first empty slot of the track with
@@ -254,6 +255,8 @@ public:
     // cubify (CubifySection.cpp, owner 2026-10-26): the MIDI clip shown, else the cursor's scene,
     // arranged by Xenakis's cubes (mixer/Cubify.h) onto the tracks' timelines.
     void cubify();
+    // Minimalize on the launcher's scene at the cursor (the Compose menu's Minimalize a Scene).
+    void minimalizeCursorScene() { minimalizeScene (cursorScene); }
     // Twelve-tone serial music (SerialSection.cpp, owner 2026-10-27; mixer/Serial.h): a piece's
     // voices saved as MIDI files beside the mix, on the selected track and the ones after it,
     // then on new tracks. In the launcher they fill one scene and loop together, so cubify and

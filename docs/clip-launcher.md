@@ -100,7 +100,7 @@ whole bars long, at the tempo it plays at.
 
 ### Architectonics
 
-The Architectonics menu (owner, 2026-10-29) plays the launcher's scenes as a set designed by the
+The Architectonics submenu of the Compose menu (owner, 2026-10-29) plays the launcher's scenes as a set designed by the
 golden ratio. The set is cut into Fibonacci-length sections, with the climax at 0.618 of the way
 on the fullest scene. Each scene is launched on its bar, and every new deal gives a new set. See
 [architectonics.md](architectonics.md). Ctrl+click on the Selector's Φ button composes a whole song
