@@ -9,7 +9,7 @@
 | `settings.ini` | Every setting and remembered value; see [Settings files](#settings-files) |
 | `keymap.ini` | Your own keys; see [Changing shortcuts](#change-shortcuts) |
 | `macros/` | One `.phmacro` file for each macro |
-| `mixer/` | The mixer's autosaved project, which comes back when PHI starts |
+| `mixer/` | The mixer's crash-recovery copy of the project, offered back after a crash and removed on a clean quit |
 | `stock-plugins.xml` | What PHI found in its stock plugins, so it need not check them again |
 
 ## Your additions: `~/.local/share/phi`

@@ -400,6 +400,14 @@ private:
     // from the last settings and a new seed (Ctrl+click on the Selector's Φ).
     void composeSongDialog (bool score = false, bool quick = false);
     void playArchitectonics (bool on);
+    // The Compose menu (ComposeSection.cpp, docs/compose.md): every method of composing PHI has,
+    // Architectonics among them, and the methods of mixer/Compose.h by region; a score of up to
+    // eight parts for the MIDI editor. -1: the method used last.
+    void registerComposeCommands();
+    void fillComposeMenu (QMenu*);
+    void composeDialog (int method = -1);
+    // A blank score in the MIDI editor on `notation` ("phi": PHI's microtonal staff).
+    void newMicrotonalScore (const QString& notation);
     class ArchitectonicsConductor* conductor = nullptr;
     void toggleVideoRecording();
     void toggleStreaming();
@@ -522,8 +530,9 @@ public:
 private:
     void showEditorPage();            // the editor back in front; a docked mixer steps aside
     // A docked mixer in front shows the selected track's own Device Chain, so the editor's
-    // (the master's) steps aside until the Master strip is picked or the editor comes back.
+    // (the master's) steps aside until the editor comes back; Ctrl+Shift+C then works the mixer's.
     void updateChainDock();
+    bool mixerChainKey() const;   // the docked mixer in front: Ctrl+Shift+C is its Device Chain
     bool chainHiddenForMixer = false;
     // The Find panel is the mixer's Finder in the editor's place: it and the Inspector take
     // turns (owner, 2026-10-25). Hidden for the Inspector, it comes back with the editor.
