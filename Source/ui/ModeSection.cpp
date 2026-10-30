@@ -197,6 +197,21 @@ void MainWindow::registerModeCommands()
             return statusBar()->showMessage (tr ("Pick a MIDI clip in the mixer first"), 5000);
         mixerWin->stochasticizeShown();
     })->setStatusTip (tr ("A new line beside the MIDI clip shown in the mixer, by Xenakis's methods, its pitches sieved from the mode"));
+    add ("mode.harmonize", tr ("&harmonize in the mode..."), [this]
+    {
+        const auto m = loadMode();
+        if (m.system < 0)
+            return statusBar()->showMessage (tr ("Choose a mode first"), 5000);
+        // The mode itself on its final (a hypo range is only where the line lies); its
+        // equal-tempered twin when the menu plays it on the piano's keys.
+        auto system = m.system;
+        if (m.equal)
+            if (const auto twin = mixer::findTuning (systemAt (system).plain + " (equal tempered)"); twin >= 0)
+                system = twin;
+        const auto played = playedOf (m);
+        harmonizeDialog (system, m.final, played.system, played.root, describe (m));
+    })->setStatusTip (tr ("Chords, a drone, heterophony or layers in the mode and its own tuning, in its tradition's texture, "
+                          "changing steadily or with a rhythm's cycle, on the selected mixer track or as a MIDI file"));
     add ("mode.serial", tr ("&12 tone row..."), [this] { serialDialog(); })
         ->setStatusTip (tr ("Schoenberg's method: a row, its matrix and a looping piece on it in one to four voices, for the launcher, "
                             "counterpoint and the fugue"));
@@ -300,6 +315,9 @@ void MainWindow::fillModeMenu (QMenu* menu)
     };
     for (const auto* id : { "mode.toClip", "mode.counterpoint", "mode.fugue", "mode.stochasticize" })
         use (melodyMenu, id);
+    auto* harmonize = commands.action (QStringLiteral ("mode.harmonize"));
+    harmonize->setEnabled (m.system >= 0);   // needs no clip: it writes one
+    melodyMenu->addAction (harmonize);
     melodyMenu->addAction (commands.action (QStringLiteral ("mode.serial")));   // needs no clip: the row is its own
     auto* cube = commands.action (QStringLiteral ("mode.cubify"));
     cube->setEnabled (mixerWin != nullptr);

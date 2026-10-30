@@ -439,7 +439,7 @@ bool MainWindow::navigationKey (QObject* o, QEvent* e)
     {
         const auto pressed = QKeySequence (k->keyCombination());
         static const char* const passing[] = { "file.close", "view.popOut", "mixer.window", "mixer.dock", "view.fullScreen", "view.focusWaveform",
-                                               "help.palette", "help.menuBar", "mixer.mixdown" };
+                                               "help.palette", "help.menuBar", "mixer.mixdown", "view.chain" };
         for (const auto* id : passing)
             if (auto* a = commands.action (QString::fromLatin1 (id)); a != nullptr && a->shortcuts().contains (pressed))
                 return false;

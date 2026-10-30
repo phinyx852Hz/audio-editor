@@ -330,6 +330,8 @@ MainWindow::~MainWindow()
         tracker->setLinkSink (nullptr);   // its linked notes go to the patchbay
     delete patchBayWin;
     patchBayWin = nullptr;
+    delete midiPanel;            // lets go of its patchbay synth
+    midiPanel = nullptr;
     patchBay = nullptr;          // its synths and effects, and it lets go of the mixer
     delete mixerWin;             // before the mixer's engine and its instruments
     mixerWin = nullptr;
@@ -628,7 +630,7 @@ void MainWindow::registerCommands()
     add ("view.overview", Category::view, tr ("Whole-File &Overview"), { KS (Qt::CTRL | Qt::ALT | Qt::Key_O) }, [this]
     {
         const bool on = commands.action (QStringLiteral ("view.overview"))->isChecked();
-        overview->setVisible (on);
+        overview->setVisible (on && ! waveform->isHidden());   // not while the audio editor is closed
         appSettings().setValue (QStringLiteral ("view/overview"), on);
     });
     commands.action (QStringLiteral ("view.overview"))->setCheckable (true);
@@ -700,7 +702,16 @@ void MainWindow::registerCommands()
     add ("view.zoomSelection", Category::view, tr ("Zoom to &Selection"), { KS (Qt::Key_Z) },
          [this] { if (requireSelection()) waveform->zoomToSelection(); });
     add ("view.chain", Category::master, tr ("Device &Chain"), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_C) },
-         [this] { chainPanel->toggle(); });
+         [this]
+    {
+        // With Simplest or the Slicer in its place under the mixer, the chain takes its turn.
+        if (mixerChainKey() && mixerWin->instrumentInFront())
+            mixerWin->showDeviceChainInFront();
+        else if (mixerChainKey())
+            mixerWin->toggleDevices();
+        else
+            chainPanel->toggle();
+    });
     add ("view.find", Category::view, tr ("&Find..."), { KS (Qt::CTRL | Qt::Key_F) }, [this]
     {
         // The mixer in the editor's place: the Finder and the Inspector take turns.
@@ -911,10 +922,10 @@ void MainWindow::buildMenus()
         { tr ("&Compose"),   { "@compose" } },
         { tr ("&Master"),    { "#album", "-", "view.master", "view.chain", "master.addPlugin", "master.bypass", "analyze.plugin", "-", "master.assistant", "-", "master.render", "master.renderNew", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
         { tr ("Mi&xer"),     { "mixer.window", "mixer.dock", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
-                               "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "mixer.sendToTimeline", "-", "mixer.editorTrack", "mixer.trackToEditor", "-", "mixer.assistant" } },
+                               "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "mixer.sendToTimeline", "-", "mixer.editNotes", "mixer.trackToEditor", "-", "mixer.assistant" } },
         { tr ("Mo&de"),      { "@mode" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "-", "options.keymap", "options.theme", "options.waveformColors" } },
-        { tr ("Performan&ce"), { "performance.launcher", "-", "control.surfaces", "control.learn", "-", "performance.record", "performance.stream", "-", "performance.settings", "performance.folder" } },
+        { tr ("Performan&ce"), { "performance.launcher", "-", "control.surfaces", "control.learn", "control.mapMode", "-", "performance.record", "performance.stream", "-", "performance.settings", "performance.folder" } },
         { tr ("&Repair"),    { "view.diagnostics", "-", "repair.autoHeal", "repair.spectralGain", "repair.findSimilar", "repair.correctPitch", "-", "repair.learnNoise", "repair.noiseReduction", "-",
                                "repair.declick", "repair.declip", "repair.dehum", "repair.deess", "-",
                                "repair.toolBox", "repair.toolLasso", "repair.toolBrush", "repair.toolSpotHeal",
@@ -932,7 +943,7 @@ void MainWindow::buildMenus()
                                "tracker.recordStereo", "tracker.recordMulti", "-", "tracker.resetTracks", "tracker.about" } },
         { tr ("&Tools"),     { "#markers", "-", "tools.macroRecord", "tools.macroApply", "tools.macros", "-", "tools.batch", "-", "tools.managePlugins", "-", "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan", "-", "tools.resetConfig" } },
         { tr ("&View"),      { "#transport", "-", "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
-                               "view.overview", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "view.cpuMeter", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "analyze.window", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "view.fullScreen", "-",
+                               "view.audioEditor", "view.midiEditor", "-", "view.overview", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "view.cpuMeter", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.master", "view.chain", "view.history", "view.markers", "view.meters", "analyze.window", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "view.fullScreen", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
         { tr ("Visuali&zer"), { "view.visualizer", "view.visualizerFullScreen", "view.visualizerBehind", "-",
                                "view.visualizerNext", "view.visualizerPrevious", "view.visualizerChoose", "-",
@@ -1453,6 +1464,9 @@ void MainWindow::restoreLayout()
         // squeezes the docks to match; put each one back to the size it had when the app closed.
         restoreDockSizes();
         QTimer::singleShot (500, this, &MainWindow::restoreDockSizes);
+        // The restored layout shows the editor's Device Chain; a mixer already in front has its own.
+        if (mixerWin != nullptr)
+            updateChainDock();
 
         const auto problems = QString::fromStdString (engine.restoreMasterSection());
         masterWidget->refresh();
@@ -1461,11 +1475,23 @@ void MainWindow::restoreLayout()
             QMessageBox::warning (this, tr ("Master Section"), tr ("Some plugins could not be loaded:\n%1").arg (problems));
 
         auto s = appSettings();
+        // Simplest and the Slicer dock along the bottom, above the Device Chain (or in its place
+        // when it is closed), as Cubase's Drum Machine (owner, 2026-10-29); once, for layouts
+        // saved when they opened in windows or the Slicer sat on the left.
+        if (! s.value (QStringLiteral ("panels/instrumentsBelow"), false).toBool())
+        {
+            s.setValue (QStringLiteral ("panels/instrumentsBelow"), true);
+            for (auto* p : { samplerPanel, slicerPanel })
+            {
+                s.setValue (QStringLiteral ("panels/%1/window").arg (p->id()), false);
+                s.setValue (QStringLiteral ("panels/%1/poppedOut").arg (p->id()), false);
+                s.remove (QStringLiteral ("panels/%1/size").arg (p->id()));
+            }
+            placeInstrumentDocks();
+        }
         for (auto* p : panels)
         {
-            // Simplest and the Slicer want more room than a dock leaves them: their own window to start with.
-            const bool window = p == samplerPanel || p == slicerPanel;
-            p->setOpensInWindow (s.value (QStringLiteral ("panels/%1/window").arg (p->id()), window).toBool());
+            p->setOpensInWindow (s.value (QStringLiteral ("panels/%1/window").arg (p->id()), false).toBool());
             // (one left showing in its dock by an older layout moves to its window too)
             if (s.value (QStringLiteral ("panels/%1/poppedOut").arg (p->id()), false).toBool()
                 || (p->opensInWindow() && p->dock()->isVisible()))
@@ -1523,6 +1549,8 @@ void MainWindow::saveLayout()
     if (chainHiddenForMixer)
         chainPanel->dock()->show();   // saved as the user left it, not as the mixer hid it
 
+    for (auto* p : panels)
+        p->takeBack();   // one under the mixer is saved in its dock
     for (auto* p : panels)
     {
         const bool popped = p->isPoppedOut() && p->isShown();
