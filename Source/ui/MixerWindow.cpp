@@ -726,6 +726,9 @@ public:
         insertList->setHorizontalScrollBarPolicy (Qt::ScrollBarAlwaysOff);
         insertList->setVerticalScrollBarPolicy (Qt::ScrollBarAlwaysOff);
         insertList->setDragDropMode (QAbstractItemView::InternalMove);
+        // On the strip itself, see-through like the rest of it (owner, 2026-10-30).
+        insertList->setStyleSheet (QStringLiteral ("QListWidget { background: transparent; border: none; }"));
+        insertList->viewport()->setAutoFillBackground (false);
         insertList->setToolTip (MixerWindow::tr ("The track's insert slots, top first. Click an empty one to add an effect; double-click one to open it; "
                                                  "right-click to bypass, move or remove it; drag to reorder"));
         sectionLayout->addWidget (insertList);
