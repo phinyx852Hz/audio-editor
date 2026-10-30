@@ -446,12 +446,18 @@ void DockablePanel::setPoppedOut (bool popOut)
     }
 
     // The first time, closed: a standard size, roomy enough for Simplest and the Slicer.
+    // Never more than three quarters of the screen, so it floats over PHI rather than
+    // covering it (a size it was given while tiled could be the whole screen); Super+F or,
+    // for Simplest and the Slicer, Ctrl+F takes it full screen.
     auto size = windowSize.isValid() ? windowSize : dockWidget->isVisible() ? dockWidget->size() : contentWidget->sizeHint().expandedTo (QSize (960, 620));
     if (const auto* screen = mainWindow.screen())
-        size = size.boundedTo (screen->availableSize() * 0.9);
+        size = size.boundedTo (screen->availableSize() * 0.75);
 
-    // A parentless window, so tiling window managers treat it as a normal window.
-    window = new QWidget (nullptr, Qt::Window);
+    // A window of its own, with PHI's main window as its parent: tiling window managers
+    // (Hyprland, so Omarchy) float a window with a parent rather than tiling it, as REAPER's
+    // FX windows float (owner, 2026-10-30). The floatWindow request below does the same
+    // on Hyprland versions that tile it anyway.
+    window = new QWidget (&mainWindow, Qt::Window);
     window->setObjectName (panelId + QStringLiteral ("Window"));
     window->setWindowTitle (title + QStringLiteral (" - " APP_DISPLAY_NAME));
     window->setAttribute (Qt::WA_DeleteOnClose, false);
