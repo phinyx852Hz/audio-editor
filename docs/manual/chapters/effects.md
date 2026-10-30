@@ -19,7 +19,7 @@ PHI comes with three families of effects, all under **Built-in** when you add a 
 
 ## The Φ effects
 
-Nine effects whose times, frequencies, levels and patterns come from the golden ratio: Φ EQ, Φ Echo, Φ Space, Φ Drift, Φ Rhythm, Φ Resonator, Φ Stack, Φ Tame and Φ De-resonator. They are described, with the ideas behind them, in [On Φ](#phi); [The Φ effects at a glance](#phi-effects) lists their controls.
+Fifteen effects whose times, frequencies, levels and patterns come from the golden ratio: Φ EQ, Φ Echo, Φ Space, Φ Drift, Φ Rhythm, Φ Resonator, Φ Stack, Φ Tame, Φ De-resonator, Φ Phaser, Φ Chorus, Φ Compressor, Φ Multiband, Φ Limiter and Φ Modulation. To see exactly what one does, measure it with the [Plugin Analyzer](#plugin-analyzer). They are described, with the ideas behind them, in [On Φ](#phi); [The Φ effects at a glance](#phi-effects) lists their controls.
 
 ## Stock plugins {#stock-plugins}
 
