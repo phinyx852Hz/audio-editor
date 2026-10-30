@@ -338,6 +338,21 @@ bool MainWindow::navigationKey (QObject* o, QEvent* e)
     if (! ours)
         return false;
 
+    // Simplest or the Slicer popped out into a window of its own: Ctrl+F, like Super+F, takes
+    // it full screen and back to its floating size, as the instruments' own windows do.
+    if (key == Qt::Key_F && mods == Qt::ControlModifier && type != QEvent::KeyRelease
+        && ((samplerPanel->isPoppedOut() && samplerPanel->content()->window() == window)
+            || (slicerPanel->isPoppedOut() && slicerPanel->content()->window() == window)))
+    {
+        if (type == QEvent::KeyPress && ! k->isAutoRepeat())
+        {
+            QPointer<QWidget> w = window;
+            QTimer::singleShot (0, this, [this, w] { if (w != nullptr) toggleFullScreen (w); });
+        }
+        e->accept();
+        return true;
+    }
+
     // Alt, under the left hand: tapped on its own it goes to the next panel, held with an
     // arrow it goes to the panel that way. Alt with any other key (menus, Ctrl+Alt+arrows)
     // is left alone.
