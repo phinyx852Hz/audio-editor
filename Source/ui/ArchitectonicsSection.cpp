@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The Architectonics menu (owner, 2026-10-29: "for designing a set in the clip launcher based on
+// The Architectonics submenu of Compose (ComposeSection.cpp; owner, 2026-10-29: "for designing a set in the clip launcher based on
 // Phi (the golden ratio) that is generative"; its own menu, "I tested it on the 13" screen").
 // Design a Set plans a set from the launcher's scenes (mixer/Architectonics.h): its length cut
 // by φ again and again into Fibonacci-length sections, in five parts (emergence, expansion,

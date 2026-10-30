@@ -22,7 +22,9 @@
 #include "../Source/mixer/DrumsToMidi.h"
 #include "../Source/mixer/Rhythms.h"
 #include "../Source/mixer/Architectonics.h"
+#include "../Source/mixer/Compose.h"
 #include "../Source/mixer/Harmonies.h"
+#include "../Source/mixer/ModalHarmony.h"
 #include "../Source/mixer/RhythmGenerator.h"
 #include "../Source/mixer/Stochastic.h"
 #include "../Source/mixer/Serial.h"
@@ -5123,6 +5125,71 @@ namespace
         }
     }
 
+    // Harmonize in the mode (owner, 2026-10-29): each mode's characteristic note, chords judged
+    // in the cents the synth plays, each tradition's own texture, and the chords changing with
+    // a rhythm's cycle; every melodic mode in every texture a valid example.
+    void testModalHarmony()
+    {
+        using namespace modalharmony;
+        const auto& all = mixer::tuningSystems();
+        auto get = [&] (const char* plain) -> const mixer::TuningSystem& { return all[(size_t) std::max (0, mixer::findTuning (plain))]; };
+        auto marked = [&] (const char* plain) { return characteristic (degrees (get (plain))); };
+        check (marked ("dorian") == std::vector<int> { 9 } && marked ("mixolydian") == std::vector<int> { 10 }
+               && marked ("lydian") == std::vector<int> { 6 } && marked ("phrygian") == std::vector<int> { 1 },
+               "modal harmony: dorian's sixth, mixolydian's seventh, lydian's fourth, phrygian's second");
+
+        // Dorian: the final's chord first, then chords with the major sixth, none a tritone,
+        // the dominant a fifth above not the first choice.
+        const auto d = degrees (get ("dorian"));
+        const auto chords = progression (d, Texture::chords, 4);
+        bool modal = chords.size() == 4 && chords[0].steps.front() == 0 && chords[1].characteristic;
+        for (const auto& c : chords)
+            modal = modal && c.roughness <= 45.0;
+        modal = modal && chords[1].steps.front() != 4;
+        check (modal, "modal harmony: dorian's progression from the final, by its characteristic note, not by V");
+
+        // Rāst's neutral third is judged by its cents: rough, but a chord.
+        const auto rast = degrees (get ("rast"));
+        const bool neutral = std::any_of (rast.begin(), rast.end(), [] (const Degree& x) { return std::abs (x.cents - 350.0) < 10.0; });
+        check (neutral && roughness (350.0) > 25.0 && roughness (350.0) < 45.0 && roughness (386.31) < 1.0e-6 && roughness (200.0) > 100.0
+               && ! progression (rast, Texture::chords, 2).empty(),
+               "modal harmony: a neutral third measured in its cents, near enough a just third to be a chord");
+
+        check (traditional (get ("dorian")) == Texture::chords && traditional (get ("rast")) == Texture::heterophony
+               && traditional (get ("pelog")) == Texture::layered && traditional (get ("echos protos")) == Texture::drone
+               && traditional (all[(size_t) std::max (0, mixer::findTuning ("darbari kanada"))]) == Texture::drone,
+               "modal harmony: each tradition's own texture");
+
+        const auto tintal = rhythm::rhythms()[(size_t) std::max (0, rhythm::findRhythm ("tintal"))];
+        const auto held = fromRhythm (tintal, false), struck = fromRhythm (tintal, true);
+        check (held.beats == 16.0 && held.changes == std::vector<double> { 0.0, 4.0, 8.0, 12.0 } && held.strikes.size() == 4
+               && struck.strikes.size() > 4 && steady (2.0, 4).beats == 8.0,
+               "modal harmony: the chords change at tīntāl's vibhāgs, and are struck on its ṭhekā");
+
+        bool valid = true;
+        int tried = 0;
+        for (const auto& t : all)
+        {
+            if ((t.kinds & mixer::melodic) == 0)
+                continue;
+            for (auto x : textures())
+            {
+                Settings s;
+                s.texture = x;
+                s.cycles = 2;
+                const auto h = generate (t, ++tried % 2 == 0 ? held : steady (4.0, 4), s);
+                if (! harmony::valid (h))
+                    std::printf ("  invalid: %s in %s\n", t.plain.c_str(), textureName (x).c_str());
+                valid = valid && harmony::valid (h);
+            }
+        }
+        Settings s;
+        s.cycles = 3;
+        const auto song = harmony::toSong (generate (get ("dorian"), struck, s), 50, 1, 80.0);
+        check (valid && tried > 1000 && song->lastTick == 3 * 16 * 480 && song->noteCount() > 0,
+               "modal harmony: every melodic mode in every texture, and the cycles written out");
+    }
+
     // The Mode menu's harmony (owner, 2026-10-29): every example playable, its tuning known, each
     // part's groups in order, jazz its own part, and the example written as a MIDI file.
     void testHarmonies()
@@ -7936,6 +8003,137 @@ namespace
                "architectonics: the score, a part a colour, the sections marked, as a MIDI file");
     }
 
+    // Compose (owner, 2026-10-29): every method writes a score from nothing in at most eight
+    // parts, in its mode; and each keeps the structure its tradition gives it.
+    void testCompose()
+    {
+        namespace co = composition;
+        bool every = true, inMode = true, capped = true, files = true;
+        for (const auto& m : co::methods())
+        {
+            co::Settings s;
+            s.method = m.method;
+            s.bars = 32;
+            s.seed = 5;
+            if (*m.home != 0)
+                s.mode = counterpoint::Mode::fromTuning (mixer::tuningSystems()[(size_t) mixer::findTuning (m.home)], 0);
+            const counterpoint::Mode mode = s.mode.valid() ? s.mode : [] { auto x = counterpoint::Mode::chromatic (0); x.scale.assign (12, false);
+                                                                         for (int k : { 0, 2, 4, 5, 7, 9, 11 }) x.scale[(size_t) k] = true; return x; }();
+            capped = capped && m.mostParts <= co::maxParts;
+            for (int parts = 1; parts <= m.mostParts; ++parts)
+            {
+                s.parts = parts;
+                const auto r = co::generate (s);
+                const auto wanted = std::max (parts, m.method == co::Method::fugue || m.method == co::Method::hocket ? 2 : 1);
+                size_t notes = 0;
+                for (const auto& p : r.parts)
+                {
+                    notes += p.notes.size();
+                    if (! p.drums && m.method != co::Method::spectral)
+                        for (const auto& n : p.notes)
+                        {
+                            const auto k = ((n.key - 60 - mode.root) % mode.period + mode.period) % mode.period;
+                            inMode = inMode && mode.scale[(size_t) k];
+                        }
+                }
+                every = every && (int) r.parts.size() == wanted && notes > 0 && r.end > 0 && ! r.sections.empty() && r.sections.front().start == 0;
+                if (parts == m.mostParts)
+                {
+                    std::string why;
+                    const auto song = co::toSong (r, m.name);
+                    const auto bytes = midifile::bytes (*song);
+                    const auto back = midifile::parse (bytes.data(), bytes.size(), why);
+                    files = files && back != nullptr && back->noteCount() == (int) notes && song->markers.size() == r.sections.size();
+                }
+            }
+        }
+        check (capped && every, "compose: every method, one to its most parts (never more than eight), writes a score");
+        check (inMode, "compose: every pitched note in the method's mode");
+        check (files, "compose: each score a MIDI file, a part a channel, the sections marked");
+
+        auto run = [] (co::Method m, int parts, const char* home = "")
+        {
+            co::Settings s;
+            s.method = m;
+            s.parts = parts;
+            s.bars = 32;
+            s.seed = 11;
+            if (*home != 0)
+                s.mode = counterpoint::Mode::fromTuning (mixer::tuningSystems()[(size_t) mixer::findTuning (home)], 0);
+            return co::generate (s);
+        };
+        // Isorhythm: the tenor's rhythm the same in each of the first taleae.
+        {
+            const auto r = run (co::Method::isorhythm, 1);
+            std::vector<int64_t> starts;
+            for (const auto& x : r.sections)
+                starts.push_back (x.start);
+            std::vector<std::vector<int64_t>> rhythms;
+            for (size_t k = 0; k + 1 < starts.size() && k < 3; ++k)
+            {
+                rhythms.emplace_back();
+                for (const auto& n : r.parts[0].notes)
+                    if (n.start >= starts[k] && n.start < starts[k + 1])
+                        rhythms.back().push_back (n.end - n.start);
+            }
+            check (rhythms.size() == 3 && ! rhythms[0].empty() && rhythms[0] == rhythms[1] && rhythms[1] == rhythms[2],
+                   "compose: isorhythm, the tenor's talea the same in every statement");
+        }
+        // Tintinnabuli: the T-voice only on the tonic triad's notes.
+        {
+            const auto r = run (co::Method::tintinnabuli, 2);
+            bool triad = ! r.parts[1].notes.empty();
+            for (const auto& n : r.parts[1].notes)
+                triad = triad && (((n.key - 60) % 12 + 12) % 12 == 0 || ((n.key - 60) % 12 + 12) % 12 == 4 || ((n.key - 60) % 12 + 12) % 12 == 7);
+            check (triad, "compose: tintinnabuli, the T-voice on the tonic triad");
+        }
+        // Spectral: the third partial a twelfth (1902 cents) above the fundamental, in its own cents.
+        {
+            const auto r = run (co::Method::spectral, 2);
+            const auto& f = r.parts[0].notes.front();
+            const auto& p3 = r.parts[1].notes.front();
+            const auto cents = (p3.key * 100.0 + p3.cents) - (f.key * 100.0 + f.cents);
+            check (r.microtonal && std::abs (cents - 1901.955) < 0.5, "compose: spectral, partial 3 a just twelfth above the fundamental");
+        }
+        // Gamelan: four kenong strokes and one gong ageng in every gongan of a ladrang (32 beats).
+        {
+            const auto r = run (co::Method::gamelan, 8, "slendro pathet manyura");
+            const auto& kenong = r.parts[3].notes;
+            size_t gongs = 0;
+            for (const auto& n : r.parts[4].notes)
+                gongs += n.velocity >= 110;
+            check (! kenong.empty() && kenong.size() == 4 * (gongs - 1), "compose: gamelan, the kenong four times and the gong once a gongan (after the buka's gong)");
+        }
+        // Ewe: the bell's standard pattern, seven strokes in each cycle of twelve pulses.
+        {
+            const auto r = run (co::Method::ostinato, 1);
+            const auto cycle = 12 * co::ticksPerQuarter / 2;
+            size_t first = 0;
+            for (const auto& n : r.parts[0].notes)
+                first += n.start < cycle;
+            check (first == 7 && r.parts[0].drums, "compose: Ewe, the bell's timeline seven strokes in twelve pulses");
+        }
+        // Hocket: never two players on the same pulse while the melody is hocketed.
+        {
+            const auto r = run (co::Method::hocket, 5);
+            std::map<int64_t, int> at;
+            const auto untilVariations = r.sections.size() > 1 ? r.sections[1].start : r.end;
+            for (const auto& p : r.parts)
+                for (const auto& n : p.notes)
+                    if (n.start < untilVariations)
+                        ++at[n.start];
+            bool alone = ! at.empty();
+            for (const auto& [t, count] : at)
+                alone = alone && count == 1;
+            check (alone, "compose: hocket, one player a pulse");
+        }
+        // Rāga: the gat ends on sam with a tihāī.
+        {
+            const auto r = run (co::Method::raga, 3, "yaman (kalyan)");
+            check (r.sections.back().name == "tihāī" && r.parts[2].drums, "compose: rāga, the gat ends in a tihāī");
+        }
+    }
+
     void testRhythmGenerator()
     {
         // Toussaint (2005): the tresillo E(3,8), the cinquillo E(5,8), the bembé bell E(7,12) turned.
@@ -8771,6 +8969,7 @@ int main()
     testTunings();
     testModeAtlas();
     testHarmonies();
+    testModalHarmony();
     testScala();
     testXenTuner();
     testNotationViews();
@@ -8784,6 +8983,7 @@ int main()
     testRhythms();
     testRhythmGenerator();
     testArchitectonics();
+    testCompose();
     testStochastic();
     testCubify();
     testSerial();

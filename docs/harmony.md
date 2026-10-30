@@ -30,6 +30,47 @@ The examples are sketches that show the texture, not transcriptions. Many of the
 sing in tunings that 12-TET only approximates (Georgian, Sardinian and Bulgarian singing among
 them), and some are improvised or orally varied every time.
 
+## Harmonize in the mode
+
+Mode ▸ melody ▸ **harmonize in the mode...** (`Source/mixer/ModalHarmony.cpp`, owner
+2026-10-29) writes an accompaniment in the mode chosen in the Mode menu, on its final and in its
+own tuning, for any of PHI's melodic traditions. It can add a line through the mode on top.
+
+**Chords.** The chords follow modal harmony's rules. The final is held by its own chord or by a
+pedal, and there is no V–I. Chords move by step, and they carry the mode's characteristic note
+without a tritone. The characteristic note is the one that sets the mode apart from major or
+natural minor: dorian's sixth, mixolydian's seventh, lydian's fourth, phrygian's second.
+
+**Judged in cents.** Chords are judged by the cents the PHI synth plays, not by 12-TET names.
+Each interval is measured against the nearest just consonance (6/5, 5/4, 4/3, 3/2, 8/5 or 5/3),
+and a chord is offered only when its worst interval is within 45 cents of one. Rāst's 350-cent
+neutral third passes, about 35 cents rough. A mode with nothing that smooth on its final is heard
+over a drone instead, and the dialog says so.
+
+**Textures.** Each tradition starts from its own texture, by the mode's family:
+
+| Texture | Families |
+|---|---|
+| chords in thirds | church, Gaelic, composer, Messiaen modes; shtayger; Russian chant |
+| chords in fourths | jazz modes |
+| a drone | rāgas, melakartas, mūrchanās, grāmas; Byzantine echoi; Greek genera and species |
+| heterophony over a drone | maqāmāt, makamlar, dastgāhs, āvāz, mugam, ajnās; qenet; Chinese, Japanese, Korean, Thai and Vietnamese modes |
+| layered, as a gamelan | Javanese, Balinese and Sundanese laras and pathet |
+| interlocking dyads | the mbira tunings |
+| clusters, as the shō | the gagaku modes |
+
+Any texture can be chosen for any mode. When it is not the tradition's own, the dialog says how
+that tradition is heard.
+
+**Harmonic rhythm.** The chords change either steadily (so many beats a chord, so many chords a
+cycle) or with a rhythm from Mode ▸ rhythm. With a rhythm, the chords change at each of its
+sections and return to the final at the start of its cycle. On tīntāl they change at the four
+vibhāgs, so they are back on the final at sam. The chords can also be struck on the rhythm's
+first sound's strokes, the ṭhekā's or the clave's, with its accents louder.
+
+The result goes to the selected mixer track as a MIDI clip, with the track's PHI synth tuned to
+the mode, or to a MIDI file.
+
 ## What the literature says
 
 Western theory long treated harmony as a stack of consonances that move by rule. Studies of
@@ -90,6 +131,7 @@ Haid's *European Voices* (2008–) covers Europe's multipart singing.
 - **the mystic chord** (Alexander Scriabin (1872–1915), 1910; chordal). A six-note chord of fourths (augmented, diminished and perfect) that stands as a centre in its own right, from which the melodies of Prometheus are drawn. *Sonorities:* C–F♯–B♭–E–A–D, a subset of the acoustic scale. *Sources:* Scriabin, Prometheus: The Poem of Fire, Op. 60 (1910); Perle, 'Scriabin's Self-Analyses'.
 - **free atonality and twelve-tone harmony** (Arnold Schoenberg (1874–1951), 1908–1923; chordal). Harmony emancipated from tonal resolution: chords chosen by interval content (pitch-class sets), and in the twelve-tone method drawn from the segments of a row. *Sonorities:* set classes such as 3-5 and 4-19; the all-interval tetrachords; row segments as chords. *Sources:* Schoenberg, Harmonielehre (1911); Forte, The Structure of Atonal Music (1973).
 - **polytonality** (Igor Stravinsky (1882–1971), 1911; chordal). Two keys at once: the Petrushka chord sets C major against F♯ major, a tritone apart; Milhaud and Ives took it further. The octatonic scale often holds both. *Sonorities:* two triads a tritone apart (C and F♯); octatonic collections. *Sources:* Stravinsky, Petrushka (1911); Milhaud, 'Polytonalité et atonalité' (1923); van den Toorn, The Music of Igor Stravinsky.
+- **modal harmony** (the modal revival, modal jazz and after, c. 1890–; chordal). Chords built from a mode rather than a major or minor key, so the mode's own colour stays: the ear is held on its root by staying on the tonic chord or a pedal, the V–I cadence that would turn it back into major or minor is avoided, chords move by step rather than by fifth, and the chords chosen carry the mode's characteristic note (dorian's raised sixth, mixolydian's flat seventh, lydian's raised fourth, phrygian's flat second) without a tritone that would make them sound dominant. Quartal voicings keep it open. From Debussy, Fauré and Vaughan Williams's modal revival to Kind of Blue, My Favorite Things, Impressions and Footprints, and the ♭VII–I of rock and the dorian vamps of film scores. (Mode ▸ jazz has its quartal side; Renaissance modal counterpoint is the older, separate sense.) The example plays each mode on the same final over a pedal. *Sonorities:* dorian i–IV, mixolydian I–♭VII, lydian I–II, phrygian i–♭II; pedals; stacked fourths. *Sources:* Pease, Jazz Composition: Theory and Practice (Berklee Press, 2003); Persichetti, Twentieth-Century Harmony (1961); Miller, Modal Jazz Composition and Harmony (1996); Berklee Online, 'Modal Harmony in Jazz Composition'; My New Microphone, Hub Guitar, Chromatone and Audiofanzine guides to modal harmony; Davis, So What (1959).
 - **quartal harmony** (Paul Hindemith (1895–1963), 1937; chordal). Chords stacked in fourths instead of thirds, with no root by default: in Schoenberg's Chamber Symphony, Bartók, Hindemith's theory of chord values, and from there jazz. *Sonorities:* stacked perfect fourths; the fourth chord and its inversions. *Sources:* Schoenberg, Kammersymphonie Op. 9 (1906); Hindemith, Unterweisung im Tonsatz (1937); Persichetti, Twentieth-Century Harmony (1961).
 - **pandiatonicism** (Aaron Copland (1900–1990), 1930s–1940s; chordal). Every note of a diatonic scale free to sound with every other, without functional progression: the open, added-note sound of Copland's Appalachian Spring and Stravinsky's neoclassicism. Slonimsky's term. *Sonorities:* triads with added seconds, fourths and sixths; diatonic clusters. *Sources:* Slonimsky, Music since 1900 (1937); Copland, Appalachian Spring (1944).
 - **minimalist harmony** (Steve Reich (b. 1936), 1960s–; chordal). Slow harmonic rhythm over pulsing patterns: a chord, or a cycle of a few, held while the texture changes inside it, as in Reich's Music for 18 Musicians and Glass's arpeggiated progressions. *Sonorities:* diatonic chords with added notes, changing slowly; static drones. *Sources:* Reich, Music for 18 Musicians (1976); Glass, Einstein on the Beach (1976); Potter, Four Musical Minimalists.

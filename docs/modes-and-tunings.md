@@ -31,7 +31,8 @@ capitalizes the regions, people, nations and empires ("West Asia", "Ṣafī al-D
 
 The Mode menu holds four things (owner, 2026-10-27; harmony added 2026-10-29): *melody*, *harmony*
 ([harmony.md](harmony.md)), *tuning* and *rhythm* ([rhythms.md](rhythms.md)). The final, the range and the actions on the mode are under melody;
-equal tempered and tune the track are under tuning.
+equal tempered and tune the track are under tuning. Melody also has **harmonize in the mode...**
+([harmony.md](harmony.md#harmonize-in-the-mode)).
 
 - **Mode ▸ melody**: region ▸ tradition or person ▸ modes. The mode chosen, and the region and
   origin it sits under, are in bold.
