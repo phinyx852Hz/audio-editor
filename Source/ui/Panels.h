@@ -9,6 +9,7 @@
 
 #include <QElapsedTimer>
 #include <QObject>
+#include <QPointer>
 #include <QTreeWidget>
 #include <QWidget>
 #include <vector>
@@ -32,8 +33,8 @@ class FocusFollowsMouse final : public QObject
 public:
     explicit FocusFollowsMouse (QObject* parent) : QObject (parent) {}
 
-    void setAreas (QList<QWidget*> a) { areas = std::move (a); }
-    void addAreas (const QList<QWidget*>& a) { areas = a + areas; }   // inner ones first
+    void setAreas (const QList<QWidget*>& a) { areas.clear(); for (auto* w : a) areas.push_back (w); }
+    void addAreas (const QList<QWidget*>& a) { for (auto i = a.size(); --i >= 0;) areas.push_front (a[i]); }   // inner ones first
     void setEnabled (bool on)         { enabled = on; }
     bool isEnabled() const            { return enabled; }
 
@@ -43,7 +44,7 @@ protected:
 private:
     QWidget* areaOf (QWidget*) const;
 
-    QList<QWidget*> areas;
+    QList<QPointer<QWidget>> areas;   // the mixer's go with it, before the window does
     bool enabled = true;
 };
 
