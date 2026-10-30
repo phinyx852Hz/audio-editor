@@ -5,9 +5,12 @@
 #include "MainWindow.h"
 #include "MixAssistant.h"
 #include "FindPanel.h"
+#include "MidiPanel.h"
 #include "MixerWindow.h"
+#include "Overview.h"
 #include "Panels.h"
 #include "Settings.h"
+#include "TimeRuler.h"
 #include "../mixer/MixerEngine.h"
 #include "../sampler/SamplerEngine.h"
 #include "../sampler/SlicerEngine.h"
@@ -84,15 +87,33 @@ void MainWindow::registerMixerCommands()
         ->setStatusTip (tr ("The sound in the editor (or its selection) into the mixer's clip launcher, under its cursor or in the selected track's first empty slot"));
     add ("mixer.sendToTimeline", tr ("Send to &Timeline"), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_F3) }, [this] { sendToTimeline(); })
         ->setStatusTip (tr ("The sound in the editor (or its selection) onto the editor's track at the playhead"));
-    add ("mixer.editorTrack", tr ("Editor &Track"), { KS (Qt::SHIFT | Qt::Key_F4) }, [this]
+    add ("mixer.editNotes", tr ("&Edit MIDI Notes..."), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_N) }, [this]
     {
-        showEditorTrack (commands.action (QStringLiteral ("mixer.editorTrack"))->isChecked());
-    })->setStatusTip (tr ("One track of the project under the editor's waveform: Audio only, MIDI only or Audio + MIDI, "
-                          "its clip launcher slots, its clips across time, recording and the MIDI tools"));
-    commands.action (QStringLiteral ("mixer.editorTrack"))->setCheckable (true);
-    commands.action (QStringLiteral ("mixer.editorTrack"))->setChecked (appSettings().value (QStringLiteral ("view/editorTrack"), true).toBool());
-    if (commands.action (QStringLiteral ("mixer.editorTrack"))->isChecked())
-        QTimer::singleShot (0, this, [this] { showEditorTrack (true); });   // once the window is built
+        showMixer();
+        if (! mixerWin->editNotes())
+            statusBar()->showMessage (tr ("Pick a MIDI clip first, on the tracks or in the launcher, then Edit MIDI Notes opens it in the MIDI editor"), 6000);
+    })->setStatusTip (tr ("The MIDI editor on the MIDI clip picked: a piano roll in 12-TET or in the clip's mode, raga, maqam, laras or Scala scale"));
+    // The main editor's two halves (owner, 2026-10-30): the audio editor above and the MIDI
+    // editor below (MidiPanel.h), each shown or hidden on its own, never both hidden.
+    const auto addView = [this] (const char* id, const QString& text, QKeySequence key, std::function<void (bool)> show, const char* setting)
+    {
+        auto* action = commands.add (QString::fromLatin1 (id), tr ("View"), text, { key }, [] {});   // toggled does the work
+        action->setCheckable (true);
+        action->setChecked (appSettings().value (QString::fromLatin1 (setting), true).toBool());
+        connect (action, &QAction::toggled, this, [show] (bool on) { show (on); });
+        addAction (action);
+    };
+    addView ("view.audioEditor", tr ("&Audio Editor"), KS (Qt::SHIFT | Qt::Key_F2), [this] (bool on) { showAudioEditor (on); }, "view/audioEditor");
+    addView ("view.midiEditor", tr ("&MIDI Editor"), KS (Qt::SHIFT | Qt::Key_F4), [this] (bool on) { showMidiEditor (on); }, "view/midiEditor");
+    commands.action (QStringLiteral ("view.audioEditor"))->setStatusTip (tr ("The waveform, its overview and ruler: hidden, the main window is the MIDI editor alone"));
+    commands.action (QStringLiteral ("view.midiEditor"))->setStatusTip (tr ("A MIDI editor under the waveform with an instrument of its own, and Bounce to Audio into a new tab"));
+    QTimer::singleShot (0, this, [this]   // once the window and the patchbay are built
+    {
+        const bool audio = commands.action (QStringLiteral ("view.audioEditor"))->isChecked();
+        const bool midi = commands.action (QStringLiteral ("view.midiEditor"))->isChecked();
+        showAudioEditor (audio || ! midi);
+        showMidiEditor (midi);
+    });
     add ("mixer.trackToEditor", tr ("&Render the Editor's Track to a Tab"), {}, [this]
     {
         mixerWindow();
@@ -353,27 +374,70 @@ void MainWindow::sendToTimeline()
     if (part)
         name += tr (" part");
     auto* w = mixerWindow();
-    if (! commands.action (QStringLiteral ("mixer.editorTrack"))->isChecked())
-        commands.action (QStringLiteral ("mixer.editorTrack"))->trigger();   // where it went, in view
     QString error;
     if (! w->sendAudioToTimeline (part ? *sound : data, name, error))
         QMessageBox::warning (this, tr ("Send to Timeline"), error);
 }
 
-void MainWindow::showEditorTrack (bool on)
+void MainWindow::showMidiEditor (bool on)
 {
-    appSettings().setValue (QStringLiteral ("view/editorTrack"), on);
-    if (on && trackHolder->layout()->count() == 0)
+    appSettings().setValue (QStringLiteral ("view/midiEditor"), on);
+    if (on && midiPanel == nullptr)
     {
-        auto* w = mixerWindow();
-        trackHolder->layout()->addWidget (w->editorTrackView (trackHolder));
-        connect (w, &MixerWindow::trackToEditorRequested, this, [this] (int track) { mixDownToEditor (track); });
-        // Played or recorded on from the editor: the keyboard and the sound go to the mixer.
-        connect (w, &MixerWindow::activated, this, [this] { playInstruments(); });
-        playInstruments();
+        MidiPanel::Host host;
+        host.engine = &engine;
+        host.patchBay = patchBay.get();
+        host.heard = [this] { playInstruments(); };
+        host.keyboard = [this] (int synth)
+        {
+            midiPanelSynth = synth;
+            patchSynth = synth;
+            midiTarget = 3;
+        };
+        host.bounced = [this] (AudioDataPtr data, const QString& name)
+        {
+            if (data == nullptr || data->length() == 0)
+            {
+                statusBar()->showMessage (tr ("The bounce made no sound"), 6000);
+                return;
+            }
+            Tags tags;
+            tags[tag::title] = name.toStdString();
+            const auto options = saveOptions;
+            newTab();
+            doc.reset (std::move (data), {}, {}, std::move (tags));
+            doc.markUnsaved();
+            saveOptions = options;
+            refreshFromDocument (false);
+            if (! commands.action (QStringLiteral ("view.audioEditor"))->isChecked())
+                commands.action (QStringLiteral ("view.audioEditor"))->setChecked (true);   // where it went, in view
+            waveform->setFocus();
+            statusBar()->showMessage (tr ("Bounced %1 into a new tab").arg (name), 8000);
+        };
+        host.closeRequested = [this] { commands.action (QStringLiteral ("view.midiEditor"))->setChecked (false); };
+        host.say = [this] (const QString& text) { statusBar()->showMessage (text, 6000); };
+        midiPanel = new MidiPanel (std::move (host), trackHolder);
+        trackHolder->layout()->addWidget (midiPanel);
     }
     trackHolder->setVisible (on);
-    if (auto* a = commands.action (QStringLiteral ("mixer.editorTrack")); a->isChecked() != on)
+    if (! on && ! waveform->isVisible())
+        commands.action (QStringLiteral ("view.audioEditor"))->setChecked (true);   // never an empty window
+    if (auto* a = commands.action (QStringLiteral ("view.midiEditor")); a->isChecked() != on)
+    {
+        const QSignalBlocker quiet (a);
+        a->setChecked (on);
+    }
+}
+
+void MainWindow::showAudioEditor (bool on)
+{
+    appSettings().setValue (QStringLiteral ("view/audioEditor"), on);
+    waveform->setVisible (on);
+    timeRuler->setVisible (on);
+    overview->setVisible (on && commands.action (QStringLiteral ("view.overview"))->isChecked());
+    if (! on && trackHolder->isHidden())
+        commands.action (QStringLiteral ("view.midiEditor"))->setChecked (true);   // never an empty window
+    if (auto* a = commands.action (QStringLiteral ("view.audioEditor")); a->isChecked() != on)
     {
         const QSignalBlocker quiet (a);
         a->setChecked (on);

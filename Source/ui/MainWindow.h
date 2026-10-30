@@ -487,6 +487,9 @@ private:
     // harmony, each with an example for the mixer or a MIDI file.
     void fillHarmonyMenu (QMenu*);
     void useHarmony (int index);
+    // Mode ▸ melody ▸ harmonize in the mode: `system` on `final` (0..11), the track tuned to
+    // `playedSystem` on `playedRoot` (the Mode menu's tuning in force); `what` names it.
+    void harmonizeDialog (int system, int final, int playedSystem, int playedRoot, const QString& what);
     void useRhythm (const rhythm::Rhythm&);
     void useRhythmAs (const rhythm::Rhythm&, int choice, int cycles, double bpm);   // 0 mixer, 1 tracker, 2 file, 3 generator
     void rhythmToTracker (const rhythm::Rhythm&, int cycles, double bpm);
@@ -503,6 +506,9 @@ private:
     void registerControlCommands();
     void controlSurfacesDialog();
     void midiLearnDialog();
+    void midiMapMode (bool on);                        // Ctrl+M: the mixer's controls mapped by a click (MidiMapOverlay)
+    QPointer<class MidiMapOverlay> mapOverlay;
+    bool mapOpenedLearnDialog = false;                 // closed again when map mode ends
     void controlTick();                                // their commands done, their lights sent
     void controlCommand (const control::Command&);
     void saveMidiMappings();
@@ -542,9 +548,14 @@ private:
     bool hidingFindForMixer = false;
     void sendToLauncher();   // the editor's sound (or its selection) into the mixer's launcher
     void sendToTimeline();   // the same onto the editor's track at the playhead
-    // The editor's track (owner, 2026-10-26, MixerWindow::editorTrackView): under the waveform,
-    // in a split the user sizes (F4 shows or hides it). Made with the mixer, the first time shown.
-    void showEditorTrack (bool on);
+    // The main editor's halves (owner, 2026-10-30): the audio editor (waveform) above and the
+    // MIDI editor (MidiPanel.h) below, in a split the user sizes. Each is shown or hidden on its
+    // own (Shift+F2, Shift+F4) and kept so for the next start; hiding one when the other is
+    // hidden shows the other. The MIDI editor is made the first time it is shown.
+    void showMidiEditor (bool on);
+    void showAudioEditor (bool on);
+    class MidiPanel* midiPanel = nullptr;
+    std::atomic<int> midiPanelSynth { -1 };   // the patchbay synth it plays: the keyboard's notes step in
     class QSplitter* editorSplit = nullptr;
     QWidget* trackHolder = nullptr;
     class QStackedWidget* centralStack = nullptr;

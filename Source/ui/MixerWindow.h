@@ -3,6 +3,7 @@
 
 #include "../core/AudioData.h"
 #include "../mixer/MixerEngine.h"
+#include "../control/ControlSurface.h"
 
 #include <QColor>
 #include <QJsonArray>
@@ -24,7 +25,6 @@ class QSpinBox;
 class QAbstractButton;
 namespace counterpoint { struct Settings; }
 namespace minimalize { struct Part; }
-namespace control { struct State; struct Command; }
 class StatusLine;
 class QScrollArea;
 class QDialog;
@@ -190,6 +190,8 @@ public:
     // A file chosen in the Find panel's Selector: into the first empty slot of the track with
     // that name (else that colour, else the selected track), and the mixer follows it there.
     void sendToLauncher (const QString& path, const QString& trackName, const QColor& colour);
+    // The MIDI editor on the MIDI clip picked (Mixer › Edit MIDI Notes); false when no MIDI clip is picked.
+    bool editNotes();
     // The Φ random selector's deal: a file and an instrument (a plugin id, loaded on the
     // track first) for each Selector colour (empty: that colour has none), with the
     // colour's name and colour, top colour first. Each goes to the track
@@ -234,6 +236,16 @@ public:
     // their lights show it, and what their pads, knobs and buttons ask for.
     control::State surfaceState() const;
     void surfaceCommand (const control::Command&);
+    // MIDI Map mode (Ctrl+M, ControlSection.cpp): every control a MIDI control can be mapped to,
+    // where it is (an area of a widget; empty: all of it) and what a mapped control does there.
+    struct Mappable
+    {
+        QWidget* widget = nullptr;
+        QRect area;
+        control::Command target;
+        bool continuous = false;   // a fader or knob; else a button
+    };
+    std::vector<Mappable> mappable() const;
 
     // The Mode menu (ModeSection.cpp, owner 2026-10-26): the selected track tuned to a mode
     // (its clips' and scenes' own tunings left as they are), and the MIDI clip shown in the
@@ -332,6 +344,7 @@ private:
     void copyTrack (int from, int to);
     void clearTrack (int track);
     bool readyToMoveTracks (int from);
+    bool openTrack (int at);         // a new track there, the ones after it moved up; no undo step
     void moveDuckKeys (const std::function<int (int)>& moved);
     void rebuildStrips();
     void select (int index);         // 0..15 a track, mixer::masterIndex the master
@@ -694,7 +707,42 @@ private:
     bool restoring = false;
     bool opening = false;            // inside loadMix: its newMix() keeps the patchbay
     bool quitting = false;           // after dropAutosave: nothing more written to last.phi
-    std::vector<Snapshot> undoStack, redoStack;
+    // A deleted track, all that copyTrack moves of it, kept for undo to bring it back where it was.
+    struct TrackCopy
+    {
+        int index = 0;
+        std::unique_ptr<mixer::Strip> strip;   // its settings and sends
+        mixer::Clips clips;
+        mixer::InstrumentPtr instrument;
+        mixer::Inserts inserts;
+        std::array<mixer::SlotPtr, mixer::maxScenes> slots {};
+        QString name;
+        QColor colour;
+        AudioDataPtr sound;
+        mixer::TuningChoice tuning;
+        std::pair<QString, QColor> givenDefault;
+        HeardTuning heardTuning;
+        std::vector<uint32_t> timelinePasses;
+        LayerTake layerTake;
+        std::vector<int> duckedBy;           // the tracks its sound ducked
+        bool live = false;
+        std::vector<mixer::Clips> history;   // its clips in the steps below this one's, the nearest first
+    };
+    // An undo (or redo) step: the clips before an edit, or a track to take away or bring back.
+    struct Step
+    {
+        Snapshot clips;
+        int removes = -1;                      // this track goes (undoing its adding)
+        std::shared_ptr<const TrackCopy> restores;   // this track comes back (undoing its deleting)
+    };
+    // Track `index` taken out, the tracks after it moved down; null when it cannot be. Its
+    // clips in the steps of `stack` (where the step bringing it back goes) are kept with it.
+    std::shared_ptr<const TrackCopy> takeTrack (int index, const std::vector<Step>& stack);
+    bool putTrack (const TrackCopy&, std::vector<Step>& stack);   // stack: the one its step came from
+    // A step done, and the one undoing it made; false (nothing done) when it cannot be.
+    bool apply (const Step&, std::vector<Step>& from, const std::vector<Step>& to, Step& inverse);
+    void pushUndo (Step);            // a new edit's: there is nothing to redo after it
+    std::vector<Step> undoStack, redoStack;
     uint32_t nextClipId = 1;
     std::map<QString, std::weak_ptr<const mixer::AudioClip>> audioCache;
 };

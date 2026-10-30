@@ -115,6 +115,19 @@ control. From then on it does that, from that device and channel, and no longer 
 Endless encoders: set the mapping's Mode to the relative kind they send (two's complement,
 offset 64, or sign and magnitude). Mappings are kept in PHI's settings.
 
+**MIDI Map Mode (Ctrl+M, Performance menu)**, as in Live (owner, 2026-10-30: "ctrl + M would make
+every parameter available. I would click on the item and then move the knob on the hardware
+controller to map it"). The mixer opens with every mappable control tinted: each track's fader,
+pan, sends A and B, mute, solo and arm, the master fader, the tempo, Play, Loop, Record and Click,
+and, while the launcher shows, every slot, each track's stop, each scene and Stop All. Mapped ones
+are tinted green and show what they are mapped to (CC 21, N 36, PB). Click one (it is outlined),
+then move a knob or fader or press a key, pad or button on any keyboard or controller: it is
+mapped, and whatever was mapped to that control before gives way. Delete removes the outlined
+control's mappings. The MIDI Mappings window opens beside it with the whole list (Delete removes
+the chosen row there too). Escape or Ctrl+M again leaves the mode. The mouse wheel still scrolls
+under the tint. `Source/ui/MidiMapOverlay.cpp` draws and handles it; `MixerWindow::mappable()`
+lists the controls. Instrument and plug-in parameters are not mappable yet.
+
 - **Alesis Vortex Wireless 2 and Roland AX-Edge**: they play the armed track as keyboards (MIDI
   Inputs), with their pitch bend, modulation and other controllers going to the instrument.
   Their buttons, pads, knobs and strips can be learned to the mixer and the transport.

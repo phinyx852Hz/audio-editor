@@ -393,13 +393,15 @@ namespace minimalize
         // Phasing and canon want the pattern held still on its own track and the moving copies
         // on new ones; without room the part itself moves, against the others.
         int room = settings.newVoices ? std::clamp (std::min (maxTracks - count, settings.freeTracks), 0, maxTracks) : 0;
-        voices.reserve (voices.size() + (size_t) room);   // `v` below must outlive the new voices pushed after it
+        // The new voices are gathered apart and put after the parts once all are made: a
+        // reference into `voices` would not outlive a push_back that grows it.
+        std::vector<Voice> added;
         for (int i = 0; i < count; ++i)
         {
             auto& v = voices[(size_t) i];
             if (v.process == Process::phase && room > 0)
             {
-                voices.push_back ({ i, Process::phase, 0, true });
+                added.push_back ({ i, Process::phase, 0, true });
                 v.process = Process::hold;
                 --room;
             }
@@ -407,7 +409,7 @@ namespace minimalize
             {
                 const int entries = std::min (room, 2);
                 for (int k = 1; k <= entries; ++k)
-                    voices.push_back ({ i, Process::canon, k, true });
+                    added.push_back ({ i, Process::canon, k, true });
                 room -= entries;
                 if (entries > 0)
                     v.process = Process::hold;
@@ -415,6 +417,7 @@ namespace minimalize
                     v.canon = 1;
             }
         }
+        voices.insert (voices.end(), added.begin(), added.end());
         const bool anyMelodic = std::any_of (parts.begin(), parts.begin() + count, [] (const Part& p) { return ! p.drums; });
         if (room > 0 && anyMelodic && std::none_of (voices.begin(), voices.end(), [] (const Voice& v) { return v.process == Process::pulse; }))
         {
