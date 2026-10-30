@@ -1965,7 +1965,7 @@ void MainWindow::openFile (const QString& path)
     {
         LoadResult r;
         r.path = path;
-        r.data = AudioEngine::loadFile (path.toStdString(), r.markers, r.tags, r.error, progress.get());
+        r.data = AudioEngine::loadFile (path.toStdString(), r.markers, r.tags, r.error, progress.get(), &r.layout);
         return r;
     }));
 }
@@ -1989,17 +1989,13 @@ void MainWindow::loadFinished()
 
     doc.reset (r.data, std::move (r.markers), r.path.toStdString(), std::move (r.tags));
     cursor = selStart = selEnd = selAnchor = 0;
-    // A file named as ambisonic (AmbiX, FOA, HOA, B-format) with a fitting channel count opens as one.
-    {
-        const auto name = QFileInfo (r.path).completeBaseName().toLower();
-        const int order = ambi::orderFor (r.data->numChannels());
-        static const QRegularExpression ambisonicName (QStringLiteral ("ambix|ambisonic|b-?format|(^|[^a-z])(foa|hoa|[123]oa)([^a-z]|$)"));
-        if (order >= 1 && order <= 3 && ambisonicName.match (name).hasMatch())
-        {
-            static const char* names[] { "", "Ambisonics (1st order)", "Ambisonics (2nd order)", "Ambisonics (3rd order)" };
-            doc.setLayout (names[order]);
-        }
-    }
+    // A surround WAV whose channel mask says 5.1.4, 5.1.2 and so on opens as that (10 channels
+    // are otherwise 7.1.2). A file named as ambisonic (AmbiX, FOA, HOA, B-format) with a fitting
+    // channel count opens as one.
+    if (! r.layout.empty())
+        doc.setLayout (r.layout);
+    if (const auto ambix = dsp::ambisonicLayoutForName (QFileInfo (r.path).fileName().toStdString(), r.data->numChannels()); ! ambix.empty())
+        doc.setLayout (ambix);
     optionsConfirmedFor.clear();
     if (recoveringFrom.contains (r.path))
     {
@@ -2103,6 +2099,7 @@ bool MainWindow::saveTo (const QString& path, bool askOptions)
 {
     const auto extension = QFileInfo (path).suffix().toLower();
     saveOptions.metadata = MetadataEditor::writeOptionsFor (extension);
+    saveOptions.layout = doc.current().layout;
 
     // A lossy file whose audio is unchanged gets only its tags rewritten, so it
     // is not encoded again (each encoding loses a little more).

@@ -8,6 +8,8 @@
 #include <QDialog>
 #include <QWidget>
 
+#include <vector>
+
 class MixerWindow;
 class QCheckBox;
 class QComboBox;
@@ -55,6 +57,25 @@ private:
     bool dragged = false;
 };
 
+// The master's meter in Spatial mode: a bar for each speaker of the array (the subwoofers too),
+// with its name and a peak hold, from what the engine fed it since the last look.
+class SpeakerMeter final : public QWidget
+{
+public:
+    SpeakerMeter (MixerWindow&, QWidget* parent);
+    QSize sizeHint() const override { return { 260, 90 }; }
+
+protected:
+    void paintEvent (class QPaintEvent*) override;
+
+private:
+    void take();   // the engine's peaks, falling 20 dB a second between them
+
+    MixerWindow& window;
+    std::vector<float> level, hold;   // dB
+    std::vector<int> held;            // frames each hold has stayed
+};
+
 class SpatialDialog final : public QDialog
 {
 public:
@@ -72,7 +93,9 @@ private:
     QComboBox* speakersBox;
     QSpinBox* firstBox;
     QSpinBox* yawBox;
+    QComboBox* renderBox;
     RoomView* room;
+    SpeakerMeter* meter;
     QLabel* status;
     bool updating = false;
 };

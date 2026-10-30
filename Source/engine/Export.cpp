@@ -254,6 +254,7 @@ Result run (const Source& source, const Output& o, std::atomic<float>* progress,
         save.bitDepth = bits > 24 ? 32 : bits;
         save.dither = false;   // done above
         save.metadata = o.schemas;
+        save.layout = source.layout;
         // AIFF keeps no chapters; WAV keeps them as cue points.
         if (! AudioEngine::saveFile (result.path, *audio, f->chapters && o.schemas.chapters ? markers : std::vector<Marker>(), tags, save, error))
             return result.error = error, result;

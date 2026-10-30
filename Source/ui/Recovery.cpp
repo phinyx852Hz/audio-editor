@@ -109,6 +109,7 @@ void Recovery::run (const QString& prefix, const std::vector<Job>& jobs)
         SaveOptions lossless;
         lossless.bitDepth = 32;
         lossless.dither = false;
+        lossless.layout = job.item.state.layout;
         std::string error;
         const auto temp = name + QStringLiteral (".tmp.wav");
         if (job.item.state.data == nullptr

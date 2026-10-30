@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MixerEngine.h"
+#include "../core/Dsp.h"
 
 #include <algorithm>
 #include <cmath>
@@ -104,24 +105,41 @@ namespace mixer
             stages[1].process (l, r, frames);
     }
 
-    AudioClipPtr makeAudioClip (const AudioData& data, const std::string& path)
+    namespace
     {
-        auto clip = std::make_shared<AudioClip>();
-        clip->path = path;
-        const auto n = (size_t) data.length();
-        clip->left.resize (n);
-        clip->right.resize (n);
-        clip->mono = data.numChannels() < 2;
-        float* dest[2] = { clip->left.data(), clip->right.data() };
-        if (clip->mono)
+        // Where a surround file's speaker is (as ambi::layout has them): 5.x's surrounds at
+        // ±110 degrees, 7.x's sides at ±90 with the backs at ±150, the heights at 45 up.
+        AudioClip::BedSpeaker direction (dsp::Speaker s, bool backs, bool quad)
         {
-            float* one[1] = { clip->left.data() };
-            data.read (0, (int) std::min<size_t> (n, (size_t) INT32_MAX), one);
-            std::copy (clip->left.begin(), clip->left.end(), clip->right.begin());
+            using S = dsp::Speaker;
+            switch (s)
+            {
+                case S::left:           return { -30.0f, 0.0f };
+                case S::right:          return { 30.0f, 0.0f };
+                case S::lfe:
+                case S::lfe2:           return { 0.0f, 0.0f, true };
+                case S::sideLeft:       return { backs ? -90.0f : -110.0f, 0.0f };
+                case S::sideRight:      return { backs ? 90.0f : 110.0f, 0.0f };
+                case S::rearLeft:       return { quad ? -135.0f : -150.0f, 0.0f };
+                case S::rearRight:      return { quad ? 135.0f : 150.0f, 0.0f };
+                case S::rearCentre:     return { 180.0f, 0.0f };
+                case S::wideLeft:       return { -60.0f, 0.0f };
+                case S::wideRight:      return { 60.0f, 0.0f };
+                case S::topFrontLeft:   return { -45.0f, 45.0f };
+                case S::topFrontRight:  return { 45.0f, 45.0f };
+                case S::topMiddleLeft:  return { -90.0f, 45.0f };
+                case S::topMiddleRight: return { 90.0f, 45.0f };
+                case S::topRearLeft:    return { -135.0f, 45.0f };
+                case S::topRearRight:   return { 135.0f, 45.0f };
+                default:                return { 0.0f, 0.0f };
+            }
         }
-        else
+
+        // Reads every channel of `data` in parts, handing each part to `use` (channel pointers, offset, count).
+        template <typename Use>
+        void readInParts (const AudioData& data, Use&& use)
         {
-            // The first two channels; read in parts so a long file needs no third buffer.
+            const auto n = (size_t) data.length();
             std::vector<std::vector<float>> scratch ((size_t) data.numChannels(), std::vector<float> (65536));
             std::vector<float*> ptrs;
             for (auto& c : scratch)
@@ -130,11 +148,126 @@ namespace mixer
             {
                 const auto count = (int) std::min<size_t> (65536, n - at);
                 data.read ((Frame) at, count, ptrs.data());
-                for (int ch = 0; ch < 2; ++ch)
-                    std::copy (scratch[(size_t) ch].begin(), scratch[(size_t) ch].begin() + count, dest[ch] + at);
+                use (ptrs, at, count);
             }
         }
+    }
+
+    AudioClipPtr makeAudioClip (const AudioData& data, const std::string& path, const std::string& layoutName)
+    {
+        auto clip = std::make_shared<AudioClip>();
+        clip->path = path;
+        const auto n = (size_t) data.length();
+        const auto numChannels = data.numChannels();
+        clip->fileChannels = numChannels;
+        clip->left.resize (n);
+        clip->right.resize (n);
+        clip->mono = numChannels < 2;
+        if (clip->mono)
+        {
+            float* one[1] = { clip->left.data() };
+            data.read (0, (int) std::min<size_t> (n, (size_t) INT32_MAX), one);
+            std::copy (clip->left.begin(), clip->left.end(), clip->right.begin());
+            return clip;
+        }
+        if (numChannels == 2)
+        {
+            float* dest[2] = { clip->left.data(), clip->right.data() };
+            readInParts (data, [&] (const std::vector<float*>& from, size_t at, int count)
+            {
+                for (int ch = 0; ch < 2; ++ch)
+                    std::copy (from[(size_t) ch], from[(size_t) ch] + count, dest[ch] + at);
+            });
+            return clip;
+        }
+
+        // More than two: the stereo fold-down, and every channel when the layout says where they go.
+        const auto layout = dsp::speakerLayout (numChannels, layoutName);
+        clip->layout = layout.name;
+        const auto order = dsp::ambisonicOrder (layout.name);
+        bool placeable = numChannels <= spatial::channels;
+        if (order > 0)
+            clip->ambisonicOrder = order;
+        else
+        {
+            const bool backs = std::find (layout.speakers.begin(), layout.speakers.end(), dsp::Speaker::rearLeft) != layout.speakers.end()
+                            && std::find (layout.speakers.begin(), layout.speakers.end(), dsp::Speaker::sideLeft) != layout.speakers.end();
+            for (const auto sp : layout.speakers)
+            {
+                placeable = placeable && sp != dsp::Speaker::other && sp != dsp::Speaker::mono;
+                clip->speakers.push_back (direction (sp, backs, numChannels == 4));
+            }
+            placeable = placeable && layout.speakers.size() >= 2 && layout.speakers[0] == dsp::Speaker::left && layout.speakers[1] == dsp::Speaker::right;
+        }
+        if (! placeable)
+        {
+            clip->speakers.clear();
+            clip->ambisonicOrder = 0;
+        }
+        else
+            clip->channels.assign ((size_t) numChannels, std::vector<float> (n));
+        const auto fold = dsp::stereoDownmix (numChannels, layout.name);
+        readInParts (data, [&] (const std::vector<float*>& from, size_t at, int count)
+        {
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                const auto* in = from[(size_t) ch];
+                if (! clip->channels.empty())
+                    std::copy (in, in + count, clip->channels[(size_t) ch].begin() + (std::ptrdiff_t) at);
+                const auto gl = fold[0][(size_t) ch], gr = fold[1][(size_t) ch];
+                if (gl == 0.0f && gr == 0.0f)
+                    continue;
+                for (int k = 0; k < count; ++k)
+                {
+                    clip->left[at + (size_t) k] += in[k] * gl;
+                    clip->right[at + (size_t) k] += in[k] * gr;
+                }
+            }
+        });
         return clip;
+    }
+
+    std::string clipFormat (const AudioClip& a)
+    {
+        if (a.mono)
+            return "Mono";
+        if (a.fileChannels <= 2)
+            return "Stereo";
+        if (a.ambisonicOrder > 0)
+        {
+            static const char* orders[] { "", "AmbiX 1st", "AmbiX 2nd", "AmbiX 3rd" };
+            return orders[std::clamp (a.ambisonicOrder, 1, 3)];
+        }
+        if (a.surround())
+            return a.layout;
+        return std::to_string (a.fileChannels) + " ch";
+    }
+
+    std::vector<AudioClipPtr> splitChannels (const AudioData& data, const std::string& path)
+    {
+        const auto n = (size_t) data.length();
+        std::vector<std::shared_ptr<AudioClip>> clips;
+        for (int ch = 0; ch < data.numChannels(); ++ch)
+        {
+            auto clip = std::make_shared<AudioClip>();
+            clip->path = path;
+            clip->mono = true;
+            clip->fileChannels = 1;
+            clip->left.resize (n);
+            clips.push_back (clip);
+        }
+        readInParts (data, [&] (const std::vector<float*>& from, size_t at, int count)
+        {
+            for (size_t ch = 0; ch < clips.size(); ++ch)
+                std::copy (from[ch], from[ch] + count, clips[ch]->left.begin() + (std::ptrdiff_t) at);
+        });
+        std::vector<AudioClipPtr> out;
+        for (auto& c : clips)
+        {
+            c->right = c->left;
+            out.push_back (c);
+        }
+        return out;
     }
 
     MidiClipPtr placeMidi (midifile::SongPtr song, const std::string& path, double sampleRate, double bpm)
@@ -243,7 +376,7 @@ namespace mixer
     Engine::Engine()
     {
         for (auto* v : { &mixL, &mixR, &trackL, &trackR, &instL, &instR, &monoBuf, &outL, &outR, &sendPreL, &sendPreR, &audL, &audR, &dryL, &dryR, &duckGains,
-                         &inL, &inR, &busL, &busR })
+                         &inL, &inR, &busL, &busR, &lfeBus, &lfeScratch, &bedBuf })
             v->resize (block);
         inputFifo.resize (2 * 16384);
         inScratch.resize (2 * 4096);
@@ -512,6 +645,83 @@ namespace mixer
         last = now;
     }
 
+    void Engine::placeBeds (Track& t, const Clips& clips, Frame base, int frames, const spatial::Place& now, float level, bool jumped)
+    {
+        const auto was = jumped ? now : t.bedPlace;
+        const auto levelWas = jumped ? level : t.bedLevel;
+        t.bedPlace = now;
+        t.bedLevel = level;
+        if (level <= 0.0f && levelWas <= 0.0f)
+            return;
+        const auto step = (level - levelWas) / (float) frames;
+        // One channel of a clip, with its edge fades, into bedBuf.
+        const auto read = [&] (const Clip& c, const std::vector<float>& channel)
+        {
+            std::fill (bedBuf.begin(), bedBuf.begin() + frames, 0.0f);
+            const auto from = std::max (base, c.start), to = std::min (base + frames, c.end());
+            const auto fade = std::max<Frame> (1, std::min<Frame> (96, c.length / 4));
+            const auto last = c.audio->length() - 1;
+            for (auto f = from; f < to; ++f)
+            {
+                const auto forward = f - c.start + c.offset;
+                const auto src = (size_t) (c.reversed ? last - forward : forward);
+                const auto edge = std::min (f - c.start, c.end() - 1 - f);
+                bedBuf[(size_t) (f - base)] = channel[src] * (edge < fade ? (float) (edge + 1) / (float) (fade + 1) : 1.0f);
+            }
+        };
+        for (const auto& c : clips)
+        {
+            if (c.audio == nullptr || c.muted || ! c.audio->surround() || c.start >= base + frames || c.end() <= base)
+                continue;
+            const auto& a = *c.audio;
+            if (a.ambisonicOrder > 0)
+            {
+                // AmbiX as it is, turned by the panner's azimuth and elevation (made again only when they move).
+                if (std::abs (now.azimuth - t.turnAzimuth) > 1.0e-3f || std::abs (now.elevation - t.turnElevation) > 1.0e-3f)
+                {
+                    const auto m = ambi::rotation (spatial::order, now.azimuth, now.elevation, 0.0);
+                    for (int r = 0; r < spatial::channels; ++r)
+                        for (int k = 0; k < spatial::channels; ++k)
+                            t.turn[(size_t) r][(size_t) k] = (float) m[(size_t) r][(size_t) k];
+                    t.turnAzimuth = now.azimuth;
+                    t.turnElevation = now.elevation;
+                }
+                const auto count = std::min ((int) a.channels.size(), spatial::channels);
+                for (int k = 0; k < count; ++k)
+                {
+                    read (c, a.channels[(size_t) k]);
+                    for (int f = 0; f < frames; ++f)
+                        bedBuf[(size_t) f] *= levelWas + step * (float) (f + 1);
+                    spatial::PointGains g {};
+                    for (int r = 0; r < spatial::channels; ++r)
+                        g[(size_t) r] = t.turn[(size_t) r][(size_t) k];
+                    spatial::encodeOne (bedBuf.data(), frames, g, g, sceneAt.data());
+                }
+                continue;
+            }
+            // A surround file's speakers past the front pair, where they are turned by the panner's
+            // azimuth and at its distance; its LFE to the subwoofers.
+            for (size_t k = 2; k < a.channels.size() && k < a.speakers.size(); ++k)
+            {
+                const auto& sp = a.speakers[k];
+                read (c, a.channels[k]);
+                if (sp.lfe)
+                {
+                    addRamped (lfeBus.data(), bedBuf.data(), frames, levelWas, level);
+                    continue;
+                }
+                auto from = spatial::pointGains (sp.azimuth + was.azimuth, sp.elevation, was.distance);
+                auto to = spatial::pointGains (sp.azimuth + now.azimuth, sp.elevation, now.distance);
+                for (int r = 0; r < spatial::channels; ++r)
+                {
+                    from[(size_t) r] *= levelWas;
+                    to[(size_t) r] *= level;
+                }
+                spatial::encodeOne (bedBuf.data(), frames, from, to, sceneAt.data());
+            }
+        }
+    }
+
     void Engine::feedSpeakers (int frames)
     {
         const auto count = spatialDecoder->speakerCount();
@@ -530,6 +740,16 @@ namespace mixer
             auto* frame = speakerQueue.data() + (size_t) ((queued + (uint64_t) k) % queueFrames) * (size_t) count;
             for (int l = 0; l < count; ++l)
                 frame[l] = feeds[(size_t) l][(size_t) k] * g;
+        }
+        // The master's per-speaker meter: the peak since the UI last took it.
+        for (int l = 0; l < count; ++l)
+        {
+            float peak = 0.0f;
+            for (int k = 0; k < frames; ++k)
+                peak = std::max (peak, std::abs (feeds[(size_t) l][(size_t) k]));
+            peak *= master;
+            if (peak > speakerPeaks[(size_t) l].load (std::memory_order_relaxed))
+                speakerPeaks[(size_t) l].store (peak, std::memory_order_relaxed);
         }
         speakerGain = master;
         queued += (uint64_t) frames;
@@ -557,6 +777,16 @@ namespace mixer
                     outs[ch][k] += frame[l];
         }
         taken += (uint64_t) have;
+    }
+
+    std::vector<float> Engine::takeSpeakerPeaks()
+    {
+        std::vector<float> peaks;
+        const auto d = decoder();
+        const auto count = d != nullptr && spatialOn.load() ? d->speakerCount() : 0;
+        for (int l = 0; l < count; ++l)
+            peaks.push_back (speakerPeaks[(size_t) l].exchange (0.0f));
+        return peaks;
     }
 
     bool Engine::anyToBus() const
@@ -1105,8 +1335,11 @@ namespace mixer
         std::fill (busR.begin(), busR.begin() + frames, 0.0f);
         const bool spatialMix = spatialOn.load() && only < 0 && spatialDecoder != nullptr;
         if (spatialMix)
+        {
             for (auto& c : scene)
                 std::fill (c.begin(), c.begin() + frames, 0.0f);
+            std::fill (lfeBus.begin(), lfeBus.begin() + frames, 0.0f);
+        }
         for (int r = 0; r < numReturns; ++r)
         {
             std::fill (returnL[(size_t) r].begin(), returnL[(size_t) r].begin() + frames, 0.0f);
@@ -1240,7 +1473,10 @@ namespace mixer
             std::fill (monoBuf.begin(), monoBuf.begin() + frames, 0.0f);
             std::fill (audL.begin(), audL.begin() + frames, 0.0f);
             std::fill (audR.begin(), audR.begin() + frames, 0.0f);
-            bool hasMono = false;
+            bool hasMono = false, hasBeds = false;
+            // In Spatial mode a surround file's front L and R go through the strip and the rest of
+            // its speakers straight into the scene (placeBeds); an ambisonic file goes in whole.
+            const bool inScene = spatialMix && ! s.toBus.load();
             if (play && mode != TrackMode::instrument)
                 for (const auto& c : clips)
                 {
@@ -1249,6 +1485,12 @@ namespace mixer
                     const auto from = std::max (base, c.start), to = std::min (base + frames, c.end());
                     const auto fade = std::max<Frame> (1, std::min<Frame> (96, c.length / 4));
                     const auto& a = *c.audio;
+                    const bool bed = inScene && a.surround();
+                    hasBeds = hasBeds || bed;
+                    if (bed && a.ambisonicOrder > 0)
+                        continue;
+                    const auto& fromL = bed ? a.channels[0] : a.left;
+                    const auto& fromR = bed ? a.channels[1] : a.right;
                     const auto last = a.length() - 1;
                     for (auto f = from; f < to; ++f)
                     {
@@ -1261,8 +1503,8 @@ namespace mixer
                             monoBuf[k] += a.left[src] * g;
                         else
                         {
-                            audL[k] += a.left[src] * g;
-                            audR[k] += a.right[src] * g;
+                            audL[k] += fromL[src] * g;
+                            audR[k] += fromR[src] * g;
                         }
                     }
                     hasMono = hasMono || a.mono;
@@ -1294,7 +1536,7 @@ namespace mixer
             const auto fader = audible ? (bouncing ? 1.0f : dbToGain (s.faderDb.load())) : 0.0f;
             const auto level = trim * fader;
             // In Spatial mode the 3D panner places it instead of pan and width.
-            const bool placing = spatialMix && ! s.toBus.load();
+            const bool placing = inScene;
             const auto pan = bouncing || placing ? 0.0f : std::clamp (s.pan.load(), -1.0f, 1.0f);
             const auto signL = s.invertLeft.load() ? -1.0f : 1.0f, signR = s.invertRight.load() ? -1.0f : 1.0f;
             const auto balanceL = std::min (1.0f, 1.0f - pan), balanceR = std::min (1.0f, 1.0f + pan);
@@ -1422,6 +1664,19 @@ namespace mixer
             if (spatialMix && ! toBus)
             {
                 place (sumL, sumR, frames, s.placed, trackPlaces[(size_t) i], jumped);
+                // The rest of its surround and ambisonic files, at its trim and fader.
+                if (hasBeds || t.bedLevel > 0.0f)
+                    placeBeds (t, clips, base, frames, s.placed.place(), hasBeds ? level : 0.0f, jumped);
+                // Its LFE send: both sides after the fader, to the subwoofers.
+                const auto lfe = audible ? dbToGain (s.lfeDb.load()) : 0.0f;
+                if (jumped)
+                    t.lfeGain = lfe;
+                if (lfe > 0.0f || t.lfeGain > 0.0f)
+                {
+                    addRamped (lfeBus.data(), sumL, frames, t.lfeGain, lfe);
+                    addRamped (lfeBus.data(), sumR, frames, t.lfeGain, lfe);
+                }
+                t.lfeGain = lfe;
                 continue;
             }
             if (routed != nullptr && ! toBus)
@@ -1475,7 +1730,26 @@ namespace mixer
         // The scene decoded: the headphone mix joins the stereo out, the speakers get their feeds.
         if (spatialMix)
         {
-            spatialDecoder->process (sceneAt.data(), frames, mixL.data(), mixR.data(), feedAt.data());
+            // A copy of the scene for an AmbiX mix down, before the decoder turns it.
+            if (only < 0 && ! withLive && spatialRender.load() == SpatialRender::ambix)
+                for (int c = 0; c < spatial::channels; ++c)
+                    std::copy (scene[(size_t) c].begin(), scene[(size_t) c].begin() + frames, feeds[(size_t) c].begin());
+            else
+            {
+                spatialDecoder->process (sceneAt.data(), frames, mixL.data(), mixR.data(), feedAt.data());
+                // The subwoofers: the LFE sends and the files' LFE channels, below 120 Hz.
+                const auto& subs = spatialDecoder->setup().lfe;
+                if (! subs.empty())
+                {
+                    lfeFilter.update (true, 120.0f, 24, true, rate.load());
+                    std::fill (lfeScratch.begin(), lfeScratch.begin() + frames, 0.0f);
+                    lfeFilter.process (lfeBus.data(), lfeScratch.data(), frames);
+                    for (const auto l : subs)
+                        if (l >= 0 && l < spatialDecoder->speakerCount())
+                            for (int k = 0; k < frames; ++k)
+                                feeds[(size_t) l][(size_t) k] += lfeBus[(size_t) k];
+                }
+            }
             if (withLive)
                 feedSpeakers (frames);
         }
@@ -1632,10 +1906,22 @@ namespace mixer
         for (auto& x : busInserts)
             x.effect->reset();
         // A spatial mix down is the headphone mix, from silence and with the decoder's delay taken out.
+        // Or, as asked, the speakers' feeds or the AmbiX scene, at the master's level.
         const bool spatialMix = spatialOn.load() && only < 0 && spatialDecoder != nullptr;
+        const auto render = spatialMix ? spatialRender.load() : SpatialRender::headphones;
+        const int outChannels = render == SpatialRender::speakers ? spatialDecoder->speakerCount()
+                              : render == SpatialRender::ambix ? spatial::channels : 2;
+        if (outChannels == 0)
+        {
+            error = "There are no speakers to mix down to: pick a speaker array in Spatial.";
+            only = -1;
+            return nullptr;
+        }
         if (spatialMix)
             spatialDecoder->reset();
-        int skip = spatialMix ? spatialDecoder->latency() : 0;
+        lfeFilter = {};
+        int skip = render == SpatialRender::headphones && spatialMix ? spatialDecoder->latency() : 0;
+        const auto masterLevel = dbToGain (masterDb.load());
         for (auto& k : keyLevels)
             std::fill (k.begin(), k.end(), 0.0f);
         stopPending = false;
@@ -1644,8 +1930,9 @@ namespace mixer
         // After the end, it goes on while the instruments still ring (a quarter second of silence ends it).
         const auto maxTail = (Frame) std::llround (std::max (0.0, tailSeconds) * r);
         const auto quietNeeded = (Frame) std::llround (0.25 * r);
-        AudioData::Builder out (2, r);
+        AudioData::Builder out (outChannels, r);
         std::vector<float> left (block), right (block);
+        std::vector<const float*> ptrs ((size_t) outChannels);
         Frame at = 0, quiet = 0;
         while (at < end + maxTail)
         {
@@ -1658,15 +1945,30 @@ namespace mixer
             renderBlock (left.data(), right.data(), n, at, true, false);
             const auto drop = std::min (skip, n);
             skip -= drop;
-            const float* ptrs[2] = { left.data() + drop, right.data() + drop };
+            float peak = 0.0f;
+            if (render == SpatialRender::headphones)
+            {
+                ptrs[0] = left.data() + drop;
+                ptrs[1] = right.data() + drop;
+                for (int k = 0; k < n; ++k)
+                    peak = std::max ({ peak, std::abs (left[(size_t) k]), std::abs (right[(size_t) k]) });
+            }
+            else
+                for (int c = 0; c < outChannels; ++c)
+                {
+                    auto* feed = feeds[(size_t) c].data();
+                    for (int k = 0; k < n; ++k)
+                    {
+                        feed[k] *= masterLevel;
+                        peak = std::max (peak, std::abs (feed[k]));
+                    }
+                    ptrs[(size_t) c] = feed + drop;
+                }
             if (n > drop)
-                out.append (ptrs, n - drop);
+                out.append (ptrs.data(), n - drop);
             at += n;
             if (at > end)
             {
-                float peak = 0.0f;
-                for (int k = 0; k < n; ++k)
-                    peak = std::max ({ peak, std::abs (left[(size_t) k]), std::abs (right[(size_t) k]) });
                 quiet = peak < 1.0e-5f ? quiet + n : 0;
                 if (quiet >= quietNeeded)
                     break;

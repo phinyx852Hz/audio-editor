@@ -28,14 +28,17 @@
 
 namespace mixer
 {
-    constexpr int maxTracks = 8;
-    constexpr int masterIndex = maxTracks;   // meters: 0..7 the tracks, 8 the master
+    // Room for 16 tracks (owner, 2026-10-30); a mix has 8 at most unless it is set to 16
+    // (Engine::setTrackLimit), as the Selector sets and Φ's scenes are built around 8 parts.
+    constexpr int maxTracks = 16;
+    constexpr int defaultTrackLimit = 8;
+    constexpr int masterIndex = maxTracks;   // meters: 0..15 the tracks, 16 the master
     constexpr int numReturns = 2;            // A (a reverb) and B (a delay), fed by each track's sends
-    constexpr int returnIndex = masterIndex + 1;   // meters: 9 return A, 10 return B
+    constexpr int returnIndex = masterIndex + 1;   // meters: 17 return A, 18 return B
     // The Pre-Master (owner, 2026-10-28): a bus the tracks can go to instead of the master,
     // with its own inserts, sends, width, pan, fader and mute, then into the master.
-    constexpr int busIndex = returnIndex + numReturns;   // meters: 11 the Pre-Master
-    constexpr int busTrack = maxTracks;                  // inserts() and setInserts(): 8 the Pre-Master's
+    constexpr int busIndex = returnIndex + numReturns;   // meters: 19 the Pre-Master
+    constexpr int busTrack = maxTracks;                  // inserts() and setInserts(): 16 the Pre-Master's
     constexpr int maxBusInserts = 4;
 
     // A source's 3D panner, in Spatial mode (Spatial.h): its place in the scene.
@@ -50,15 +53,32 @@ namespace mixer
     };
 
     // An audio file on a track, already at the mixer's rate.
+    // A surround or ambisonic file (5.1, 7.1.4, AmbiX...: a layout of dsp::layoutChoices) keeps
+    // every channel for Spatial mode (docs/spatial-mixing.md), where its speakers go into the
+    // scene where they belong; left and right are then its stereo fold-down, which every other
+    // mix hears (as the editor plays it). Other files of more than two channels (a poly WAV from
+    // a field recorder) are only their fold-down here: splitChannels puts them on tracks.
     struct AudioClip
     {
         std::vector<float> left, right;   // equal length; a mono file has both the same
         bool mono = false;
         std::string path;
+        std::string layout;               // the file's channel layout: "5.1", "Ambisonics (3rd order)"...; empty: mono or stereo
+        std::vector<std::vector<float>> channels;   // all of them, for a surround or ambisonic file; else empty
+        struct BedSpeaker { float azimuth = 0.0f, elevation = 0.0f; bool lfe = false; };
+        std::vector<BedSpeaker> speakers; // where each channel's speaker is (not Ambisonics)
+        int ambisonicOrder = 0;
+        int fileChannels = 0;             // how many the file has
         Frame length() const { return (Frame) left.size(); }
+        bool surround() const { return ! channels.empty(); }
     };
     using AudioClipPtr = std::shared_ptr<const AudioClip>;
-    AudioClipPtr makeAudioClip (const AudioData&, const std::string& path);   // the first two channels
+    // `layout`: the file's (from its channel mask or Channel Layout; empty: the usual one for its count).
+    AudioClipPtr makeAudioClip (const AudioData&, const std::string& path, const std::string& layout = {});
+    // What a strip shows for a clip: "Mono", "Stereo", "5.1", "7.1.4", "AmbiX 3rd", "16 ch"...
+    std::string clipFormat (const AudioClip&);
+    // A file's channels each as its own mono clip, for a track each (a 16-track poly WAV).
+    std::vector<AudioClipPtr> splitChannels (const AudioData&, const std::string& path);
 
     // A MIDI file on a track, its events placed at frames for the mixer's rate.
     struct MidiClip
@@ -237,6 +257,8 @@ namespace mixer
         std::atomic<int> inputChannels { 0 };       // 0 the stereo pair, 1 the left alone, 2 the right alone (both sides)
         std::atomic<bool> toBus { false };          // after the fader into the Pre-Master, not the master
         Panner3d placed;                            // in Spatial mode, in place of pan and width
+        // In Spatial mode: a send after the fader to the subwoofers (the speakers marked LFE), low-passed at 120 Hz.
+        std::atomic<float> lfeDb { -100.0f };       // -inf (below -96) .. 0
     };
 
     // The Pre-Master's controls; its inserts are set on the engine (busTrack).
@@ -303,7 +325,11 @@ namespace mixer
         double sampleRate() const { return rate.load(); }
 
         int numTracks() const { return tracks.load(); }
-        void setNumTracks (int);   // 1..8
+        void setNumTracks (int);   // 1..maxTracks
+        // How many tracks the mix may have: 8 (the default) or 16. Adding tracks stops there.
+        int trackLimit() const { return allowedTracks.load(); }
+        void setTrackLimit (int n) { allowedTracks = n > defaultTrackLimit ? maxTracks : defaultTrackLimit; }
+        bool roomForTracks (int n = 1) const { return numTracks() + n <= trackLimit(); }
 
         // A track's clips (kept in order of their starts) and its instrument; null
         // clears it. Safe while playing: notes the old clips held are let go.
@@ -343,6 +369,12 @@ namespace mixer
         // The speakers' feeds the last blocks made, added to the device's outputs from the decoder's
         // first output on (outs: numOuts channels, frames long). On the audio thread, after render().
         void takeSpeakers (float* const* outs, int numOuts, int frames);
+        // Each speaker's peak since the last call (the decoder's order), for the master's meter. UI thread.
+        std::vector<float> takeSpeakerPeaks();
+        // What a spatial Mix Down renders: the headphone mix (stereo), one channel per speaker
+        // (the subwoofers too), or the scene itself as 3rd-order AmbiX (16 channels).
+        enum class SpatialRender { headphones, speakers, ambix };
+        std::atomic<SpatialRender> spatialRender { SpatialRender::headphones };
 
         // Transport.
         void play();
@@ -498,6 +530,11 @@ namespace mixer
             float audioLayer = 1.0f, instrumentLayer = 1.0f;   // last block's layer gains
             float duckEnvelope = 0.0f;
             Cut duckSplit;                    // its low-pass, below which the duck works
+            // Spatial mode: the surround and ambisonic clips' last block (placeBeds), and the LFE send's.
+            spatial::Place bedPlace;
+            float bedLevel = 0.0f, lfeGain = 0.0f;
+            float turnAzimuth = 1000.0f, turnElevation = 1000.0f;   // what `turn` turns by; 1000: not made yet
+            std::array<std::array<float, spatial::channels>, spatial::channels> turn {};   // an ambisonic clip, turned by the panner
             float duckState[5][2] {};         // per ducked side: the instrument's, the audio's, mono
 
             // Recording: the take on this track, made in record() and run on the audio thread.
@@ -595,6 +632,10 @@ namespace mixer
         void runInserts (Inserts&, float* left, float* right, int frames);   // in order, each at its Mix
         void renderBus (int frames, bool jumped, bool withLive, bool spatialMix);   // busL and busR through the Pre-Master, into the mix or the scene
         void place (const float* left, const float* right, int frames, const Panner3d&, spatial::Gains& last, bool jumped);   // into the scene
+        // A track's surround and ambisonic clips into the scene (all but a surround file's front
+        // L and R, which go through the strip), turned and moved by its panner, at `level`; their
+        // LFE into lfeBus.
+        void placeBeds (Track&, const Clips&, Frame base, int frames, const spatial::Place&, float level, bool jumped);
         void feedSpeakers (int frames);   // the decoder's feeds, at the master's level, into the speakers' queue
         void layers (int index, Track&, const Strip&, TrackMode, bool hasMono, int frames, bool jumped);
         // Recording, on the audio thread with the lock held.
@@ -611,6 +652,7 @@ namespace mixer
         mutable std::mutex lock;   // tracks: held by render and by changes
         std::atomic<double> rate { 48000.0 };
         std::atomic<int> tracks { 2 };
+        std::atomic<int> allowedTracks { defaultTrackLimit };
         std::array<Track, maxTracks> lanes;
         std::array<Strip, maxTracks> strips;
         std::array<MeterState, maxTracks + 1 + numReturns + 1> meters {};
@@ -628,6 +670,9 @@ namespace mixer
         std::array<spatial::Gains, numReturns> returnPlaces {};
         std::array<std::vector<float>, spatial::maxSpeakers> feeds;
         std::array<float*, spatial::maxSpeakers> feedAt {};
+        std::vector<float> lfeBus, lfeScratch, bedBuf;   // the subwoofers' sum, and one channel of a clip
+        Track::Cut lfeFilter;
+        std::array<std::atomic<float>, spatial::maxSpeakers> speakerPeaks {};
         static constexpr int queueFrames = 8192;
         std::vector<float> speakerQueue;    // interleaved, queueChannels a frame
         uint64_t queued = 0, taken = 0;     // frames written and read; audio thread only

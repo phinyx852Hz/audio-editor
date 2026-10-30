@@ -248,6 +248,7 @@ void MainWindow::exportAudio()
             m.end -= offset;
         }
         s.tags = doc.current().tags;
+        s.layout = doc.current().layout;
         s.sourcePath = doc.path();
         s.part = parts[i].name;
         s.index = numbered ? (int) i + 1 : 0;

@@ -136,6 +136,9 @@ public:
     // Plugins that cannot take that many are given stereo and process the first two.
     void setChannels (int);
     static juce::AudioChannelSet channelSetFor (int numChannels);  // 6 = 5.1, 8 = 7.1... in WAV order
+    // A named layout (dsp::layoutChoices; empty: the usual one): 10 channels as 5.1.4 and not
+    // 7.1.2. Layouts WAV has no speaker bits for (9.1.6, LFE2, Ambisonics) are discrete channels.
+    static juce::AudioChannelSet channelSetFor (int numChannels, const std::string& layoutName);
     int channels() const { return channelCount; }
 
     // Real-time use (audio thread).

@@ -5,6 +5,7 @@
 #include "Settings.h"
 #include "SpeakerArrays.h"
 #include "Theme.h"
+#include "../core/Dsp.h"
 #include "../engine/AudioEngine.h"
 
 #include <QApplication>
@@ -21,6 +22,7 @@
 #include <QPainter>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QTimer>
 #include <QToolTip>
 #include <QVBoxLayout>
 #include <QWheelEvent>
@@ -320,6 +322,77 @@ void RoomView::moved()
 }
 
 //==============================================================================
+SpeakerMeter::SpeakerMeter (MixerWindow& w, QWidget* parent) : QWidget (parent), window (w)
+{
+    setMinimumHeight (70);
+    setToolTip (MixerWindow::tr ("The level of each speaker's feed, after the master fader: the speakers of the array in their order, "
+                                 "the subwoofers (LFE) with the LFE sends and the surround files' LFE channels"));
+    auto* timer = new QTimer (this);
+    connect (timer, &QTimer::timeout, this, [this] { take(); });
+    timer->start (40);
+}
+
+void SpeakerMeter::take()
+{
+    const auto peaks = window.engine.takeSpeakerPeaks();
+    if (peaks.size() != level.size())
+    {
+        level.assign (peaks.size(), -96.0f);
+        hold.assign (peaks.size(), -96.0f);
+        held.assign (peaks.size(), 0);
+    }
+    for (size_t l = 0; l < peaks.size(); ++l)
+    {
+        const auto db = peaks[l] > 1.0e-5f ? 20.0f * std::log10 (peaks[l]) : -96.0f;
+        level[l] = std::max (db, level[l] - 0.8f);   // 20 dB a second at 25 looks a second
+        if (db >= hold[l])
+        {
+            hold[l] = db;
+            held[l] = 0;
+        }
+        else if (++held[l] > 50)   // two seconds
+        {
+            hold[l] = level[l];
+            held[l] = 0;
+        }
+    }
+    if (isVisible())
+        update();
+}
+
+void SpeakerMeter::paintEvent (QPaintEvent*)
+{
+    QPainter g (this);
+    const auto& speakers = window.spatialSpeakers;
+    const auto count = std::min (speakers.size(), level.size());
+    if (count == 0)
+    {
+        g.setPen (palette().color (QPalette::PlaceholderText));
+        g.drawText (rect(), Qt::AlignCenter, window.spatialMode() ? MixerWindow::tr ("No speakers: pick an array above") : MixerWindow::tr ("Spatial mixing is off"));
+        return;
+    }
+    const auto labelHeight = g.fontMetrics().height();
+    const auto gap = 3.0;
+    const auto barWidth = std::max (4.0, ((double) width() - gap * (double) (count + 1)) / (double) count);
+    const auto top = 2.0, bottom = (double) height() - labelHeight - 2.0;
+    const auto y = [&] (float db) { return bottom - (bottom - top) * (double) std::clamp ((db + 60.0f) / 66.0f, 0.0f, 1.0f); };
+    g.setFont (font());
+    for (size_t l = 0; l < count; ++l)
+    {
+        const QRectF bar (gap + (double) l * (barWidth + gap), top, barWidth, bottom - top);
+        g.fillRect (bar, palette().color (QPalette::Base));
+        const auto db = level[l];
+        const auto colour = db > -0.1f ? QColor (220, 60, 50) : db > -6.0f ? QColor (230, 190, 60) : QColor (80, 190, 110);
+        g.fillRect (QRectF (bar.left(), y (db), bar.width(), bar.bottom() - y (db)), speakers[l].lfe ? colour.darker (130) : colour);
+        g.setPen (palette().color (QPalette::WindowText));
+        g.drawLine (QPointF (bar.left(), y (hold[l])), QPointF (bar.right(), y (hold[l])));
+        g.setPen (palette().color (speakers[l].lfe ? QPalette::PlaceholderText : QPalette::WindowText));
+        g.drawText (QRectF (bar.left() - gap, bottom + 1.0, bar.width() + 2 * gap, labelHeight), Qt::AlignCenter,
+                    QString::fromStdString (speakers[l].name.empty() ? std::to_string (l + 1) : speakers[l].name));
+    }
+}
+
+//==============================================================================
 SpatialDialog::SpatialDialog (MixerWindow& w, QWidget* parent) : QDialog (parent), window (w)
 {
     setWindowTitle (MixerWindow::tr ("Spatial Mixing"));
@@ -366,11 +439,22 @@ SpatialDialog::SpatialDialog (MixerWindow& w, QWidget* parent) : QDialog (parent
     yawBox->setSuffix (QStringLiteral ("°"));
     yawBox->setToolTip (MixerWindow::tr ("The whole scene turned to the right (negative: to the left), before it is decoded"));
     form->addRow (MixerWindow::tr ("Turn the scene:"), yawBox);
+
+    renderBox = new QComboBox (this);
+    renderBox->addItem (MixerWindow::tr ("The headphone mix (stereo)"), (int) mixer::Engine::SpatialRender::headphones);
+    renderBox->addItem (MixerWindow::tr ("The speakers, a channel each (5.1, 7.1.4...)"), (int) mixer::Engine::SpatialRender::speakers);
+    renderBox->addItem (MixerWindow::tr ("The scene as AmbiX (3rd order, 16 channels)"), (int) mixer::Engine::SpatialRender::ambix);
+    renderBox->setToolTip (MixerWindow::tr ("What Mix Down to Editor renders in Spatial mode: the headphone decode, one channel per speaker "
+                                            "in the array's order (a 5.1.4 or 7.1.4 file, with its LFE), or the ambisonic scene itself "
+                                            "before it is decoded, for another decoder or a 360° video"));
+    form->addRow (MixerWindow::tr ("Mix Down renders:"), renderBox);
     layout->addLayout (form);
 
     room = new RoomView (window, this);
     room->setMinimumSize (320, 320);
     layout->addWidget (room, 1);
+    meter = new SpeakerMeter (window, this);
+    layout->addWidget (meter);
     status = new QLabel (this);
     status->setWordWrap (true);
     layout->addWidget (status);
@@ -382,6 +466,13 @@ SpatialDialog::SpatialDialog (MixerWindow& w, QWidget* parent) : QDialog (parent
     for (auto* box : { phonesBox, hrtfBox, speakersBox })
         connect (box, &QComboBox::currentIndexChanged, this, [this] { save(); });
     connect (firstBox, &QSpinBox::valueChanged, this, [this] { save(); });
+    connect (renderBox, &QComboBox::currentIndexChanged, this, [this]
+    {
+        if (updating)
+            return;
+        window.engine.spatialRender = (mixer::Engine::SpatialRender) renderBox->currentData().toInt();
+        window.changed();
+    });
     connect (yawBox, &QSpinBox::valueChanged, this, [this] (int v)
     {
         if (updating)
@@ -431,7 +522,8 @@ void SpatialDialog::fillSpeakers()
 void SpatialDialog::refresh()
 {
     updating = true;
-    const QSignalBlocker a (phonesBox), b (hrtfBox), c (firstBox), d (yawBox);
+    const QSignalBlocker a (phonesBox), b (hrtfBox), c (firstBox), d (yawBox), e (renderBox);
+    renderBox->setCurrentIndex (std::max (0, renderBox->findData ((int) window.engine.spatialRender.load())));
     auto s = appSettings();
     onBox->setChecked (window.spatialMode());
     phonesBox->setCurrentIndex (std::max (0, phonesBox->findData (s.value (key ("headphones"), QStringLiteral ("binaural")).toString())));
@@ -524,6 +616,9 @@ void MixerWindow::applySpatial()
     {
         setup.speakers = ambi::decoder (mixer::spatial::order, spatialSpeakers);
         setup.firstOutput = first;
+        for (size_t l = 0; l < spatialSpeakers.size(); ++l)
+            if (spatialSpeakers[l].lfe)
+                setup.lfe.push_back ((int) l);
     }
     else if (! speakersName.isEmpty())
         said << tr ("The speaker array %1 is empty or gone.").arg (speakersName);
@@ -554,11 +649,35 @@ void MixerWindow::applySpatial()
 
 QJsonObject MixerWindow::spatialJson() const
 {
-    return { { "on", spatialMode() }, { "yaw", sceneYaw } };
+    static const char* renders[] { "headphones", "speakers", "ambix" };
+    return { { "on", spatialMode() }, { "yaw", sceneYaw }, { "mixDown", renders[(int) engine.spatialRender.load()] } };
+}
+
+std::string MixerWindow::mixdownLayout() const
+{
+    if (! spatialMode() || engine.decoder() == nullptr)
+        return {};
+    switch (engine.spatialRender.load())
+    {
+        case mixer::Engine::SpatialRender::ambix: return "Ambisonics (3rd order)";
+        case mixer::Engine::SpatialRender::speakers:
+        {
+            // A standard array by its name, when the editor knows it for that many channels.
+            const auto name = appSettings().value (key ("speakers")).toString().toStdString();
+            const auto choices = dsp::layoutChoices ((int) spatialSpeakers.size());
+            return std::find (choices.begin(), choices.end(), name) != choices.end() && name != dsp::speakerLayout ((int) spatialSpeakers.size()).name
+                       ? name : std::string();
+        }
+        default: return {};
+    }
 }
 
 void MixerWindow::loadSpatial (const QJsonObject& o)
 {
     sceneYaw = std::clamp (o.value ("yaw").toDouble(), -180.0, 180.0);
+    const auto render = o.value ("mixDown").toString();
+    engine.spatialRender = render == QLatin1String ("speakers") ? mixer::Engine::SpatialRender::speakers
+                         : render == QLatin1String ("ambix")    ? mixer::Engine::SpatialRender::ambix
+                                                                : mixer::Engine::SpatialRender::headphones;
     setSpatialMode (o.value ("on").toBool());
 }

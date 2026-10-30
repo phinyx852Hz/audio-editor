@@ -267,7 +267,7 @@ namespace ambi
     }
 
     //==========================================================================
-    std::vector<std::string> layoutNames() { return { "Stereo", "Quad", "5.0", "5.1", "5.2", "7.1", "7.2", "7.1.2", "7.1.4", "7.2.4", "9.1.6" }; }
+    std::vector<std::string> layoutNames() { return { "Stereo", "Quad", "5.0", "5.1", "5.2", "5.1.2", "5.1.4", "7.1", "7.2", "7.1.2", "7.1.4", "7.2.4", "9.1.6" }; }
 
     std::vector<Speaker> layout (const std::string& name)
     {
@@ -277,6 +277,14 @@ namespace ambi
         if (name == "5.1")    return { { "L", -30, 0 }, { "R", 30, 0 }, { "C", 0, 0 }, { "LFE", 0, 0, true }, { "Ls", -110, 0 }, { "Rs", 110, 0 } };
         if (name == "5.2")    return { { "L", -30, 0 }, { "R", 30, 0 }, { "C", 0, 0 }, { "LFE1", 0, 0, true }, { "LFE2", 0, 0, true },
                                        { "Ls", -110, 0 }, { "Rs", 110, 0 } };
+        if (name == "5.1.2" || name == "5.1.4")
+        {
+            std::vector<Speaker> s { { "L", -30, 0 }, { "R", 30, 0 }, { "C", 0, 0 }, { "LFE", 0, 0, true }, { "Ls", -110, 0 }, { "Rs", 110, 0 },
+                                     { "Ltf", -45, 45 }, { "Rtf", 45, 45 } };
+            if (name == "5.1.4")
+                s.insert (s.end(), { { "Ltb", -135, 45 }, { "Rtb", 135, 45 } });
+            return s;
+        }
         const bool twoSubs = name == "7.2" || name == "7.2.4";
         std::vector<Speaker> s { { "L", -30, 0 }, { "R", 30, 0 }, { "C", 0, 0 }, { twoSubs ? "LFE1" : "LFE", 0, 0, true } };
         if (twoSubs)

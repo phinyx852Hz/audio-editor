@@ -35,6 +35,10 @@ namespace mixer::spatial
     Gains gains (const Place&);
     // Adds a stereo source to the scene, its gains moving from `from` to `to` over the block.
     void encode (const float* left, const float* right, int frames, const Gains& from, const Gains& to, float* const* scene);
+    // One point source (a surround file's speaker) into the scene, its gains moving over the block.
+    using PointGains = std::array<float, channels>;
+    PointGains pointGains (float azimuth, float elevation, float distance);
+    void encodeOne (const float* in, int frames, const PointGains& from, const PointGains& to, float* const* scene);
 
     class Decoder
     {
@@ -45,6 +49,7 @@ namespace mixer::spatial
             std::shared_ptr<const ambi::EarFilters> ears;  // binaural; null: a stereo decode
             ambi::Matrix speakers;                         // L x channels (LFE rows zero); empty: none
             int firstOutput = 0;                           // the device output the first speaker is on
+            std::vector<int> lfe;                          // the speakers that are subwoofers: the LFE sends and channels feed them
             double yaw = 0.0;                              // the whole scene turned, degrees to the right
         };
 

@@ -35,7 +35,8 @@ bool MixerWindow::writeFugue (int track, const mixer::Clip& clip, mixer::SlotPtr
         say (tr ("This MIDI file counts in SMPTE time, so it cannot be edited here."));
         return false;
     }
-    const auto free = mixer::maxTracks - engine.numTracks();
+    roomForTracks (2, title);
+    const auto free = engine.trackLimit() - engine.numTracks();
     if (free < 2)
     {
         QMessageBox::information (this, title, tr ("A fugue's voices go on new tracks, two at least, and the mixer has room for %n more.", "", free));
@@ -213,7 +214,7 @@ bool MixerWindow::writeFugue (int track, const mixer::Clip& clip, mixer::SlotPtr
     const auto bpm = followTempoBox->isChecked() ? tempoBox->value() : 0.0;
     remember();
     int made = 0;
-    for (size_t v = 0; v < result.voices.size() && engine.numTracks() < mixer::maxTracks; ++v)
+    for (size_t v = 0; v < result.voices.size() && engine.roomForTracks(); ++v)
     {
         if (result.voices[v].empty())
             continue;

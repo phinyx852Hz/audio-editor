@@ -84,7 +84,7 @@ private:
     static constexpr int scaleWidth = 24;
 };
 
-// The mixer (docs/mixer.md): up to 8 tracks and the master out, in its own window.
+// The mixer (docs/mixer.md): up to 8 tracks (16 when asked for) and the master out, in its own window.
 // Every track is a timeline of clips, each an audio file or a MIDI file, plus an
 // instrument: the MIDI clips (and the MIDI keyboard, on the armed track) play it. No
 // MIDI editing. Three sections, gone round with F6 or Tab: the file browser (Enter puts
@@ -328,6 +328,7 @@ Q_SIGNALS:
 
 protected:
     void keyPressEvent (class QKeyEvent*) override;
+    bool event (QEvent*) override;   // = and - (Ctrl+= and Ctrl+-) are the mixer's while it has the keyboard
     void changeEvent (QEvent*) override;
     void closeEvent (class QCloseEvent*) override;
     bool focusNextPrevChild (bool next) override;
@@ -364,7 +365,7 @@ private:
     bool openTrack (int at);         // a new track there, the ones after it moved up; no undo step
     void moveDuckKeys (const std::function<int (int)>& moved);
     void rebuildStrips();
-    void select (int index);         // 0..7 a track, 8 the master
+    void select (int index);         // 0..15 a track, mixer::masterIndex the master
     void tick();
     void refreshTransport();
     // Files become clips at `place` (start, and the part heard; length 0: the whole file).
@@ -428,12 +429,18 @@ private:
     // settings: they are the studio's, not the project's), and the room view of where it all is.
     friend class RoomView;
     friend class SpatialDialog;
+    friend class SpeakerMeter;
     bool spatialMode() const;
     void setSpatialMode (bool on);
     void applySpatial();      // the decoder made again from the settings, for the engine and the device
     void spatialMoved();      // a panner changed: the strips, the Inspector and the room views follow
     void showSpatialDialog();
     QJsonObject spatialJson() const;
+public:
+    // The channel layout a Mix Down in Spatial mode has ("Ambisonics (3rd order)", "5.1.4"...;
+    // empty: the usual one for its channel count).
+    std::string mixdownLayout() const;
+private:
     void loadSpatial (const QJsonObject&);
     class QPushButton* spatialButton = nullptr;
     class RoomView* roomView = nullptr;            // in the Inspector, in Spatial mode
@@ -448,6 +455,34 @@ private:
     class QScrollArea* stripScroll = nullptr;
     int laneWidth() const;
     void applyStripWidths();
+    // Strip zoom (owner, 2026-10-30, as Cubase's MixConsole): the strips and the launcher's
+    // columns as wide as one of zoomLanes, from a strip of little more than its fader to a wide
+    // one; 0 fits them to the window as before. = and - (or Ctrl+wheel over the strips or the
+    // launcher) step it, the strip under the mouse (or the selected one) kept where it is.
+    static constexpr std::array<int, 8> zoomLanes { 44, 60, 84, 104, 128, 150, 180, 240 };
+    static constexpr int slimLane = 116, minimalLane = 80;   // narrower than these: fewer parts, then the fader alone
+    int stripZoom = 0;
+    void zoomStrips (int steps, int anchorX = -1);   // anchorX: in the strips' viewport, -1 the selected strip
+    void setStripZoom (int width, int anchorX = -1);
+    bool wideLanes() const { return laneWidth() >= 180; }
+    bool slimLanes() const { return laneWidth() < slimLane; }
+    bool minimalLanes() const { return laneWidth() < minimalLane; }
+    void syncLauncherScroll();
+    static int zoomKey (const class QKeyEvent*);   // 1 for = (or +), -1 for -, else 0; Ctrl for the timeline's
+    void zoomTimeline (int steps);
+    bool syncingScroll = false;
+    int wheelSteps = 0;              // Ctrl+wheel's eighths of a degree towards the next zoom step
+    // 8 tracks (the default, as the Selector sets) or 16 (owner, 2026-10-30), saved with the mix.
+    void setSixteenTracks (bool on);
+    // Room for `needed` more tracks; at 8 with room at 16, asks to go to 16 first.
+    bool roomForTracks (int needed, const QString& title);
+    // Pointing at a strip selects its track (Strips > Focus Follows Mouse, off at first).
+    bool focusFollowsMouse = false;
+    void hoverSelect (int track);
+    // Selecting a track that plays an instrument arms it for the MIDI keyboard and recording
+    // (Strips > Arm the Selected Track, on at first); a hover never arms.
+    bool autoArm = true;
+    bool keepArm = false;            // select() leaves the arm be: a hover, a project opening
     void routeToBus (int track, bool on);   // the track (and the Q-Linked ones) to the Pre-Master, or back to the master
     void loadInserts (int track, const QJsonArray&, QStringList& problems);
     void stripsMenu (QPoint at);     // which sections the strips show, and how wide they are
@@ -461,6 +496,9 @@ private:
     // The MIDI clip shown (owner, 2026-10-25: "really fast MIDI editing", from the Inspector):
     // R reverses it; Φ, Duplicate, ½, ×2 and a mode or raga make a new MIDI file beside the mix.
     void reverseShownClip();
+    void splitShownClip();   // the clip's file, a track for each channel
+    // Each channel of `file` on a new track, as a mono file beside the mix, placed as `like` is. False: nothing done.
+    bool splitToTracks (const QString& file, mixer::Clip like);
     void editShownMidi (const std::function<midifile::SongPtr (const midifile::Song&)>& edit, const QString& what);
     void refreshMidiClipBox();
     void phiShownMidi();   // Φ: the notes dealt out again, another order each time
@@ -714,7 +752,6 @@ private:
     QPushButton* bypassInsertsButton = nullptr;
     QPushButton* bypassSendsButton = nullptr;
     std::array<ReturnStripWidget*, mixer::numReturns> returnStrips {};          // StripSection bits (MixerWindow.cpp) shown on every strip
-    bool wideStrips = false;
     QString path;                    // the mix file; empty: not saved yet
     bool modified = false;
     bool restoring = false;
