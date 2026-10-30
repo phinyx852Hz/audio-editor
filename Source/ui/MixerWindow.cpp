@@ -5861,6 +5861,15 @@ public:
                                              "one sound for the mastering chain"));
         QObject::connect (render, &QPushButton::clicked, this, [this] { Q_EMIT window.trackToEditorRequested (track()); });
         bar->addWidget (render);
+        // The panel closes from its own bar too (owner, 2026-10-30): Shift+F4 or View > Editor Track brings it back.
+        auto* close = new QToolButton (this);
+        close->setText (QStringLiteral ("✕"));
+        close->setAutoRaise (true);
+        close->setFocusPolicy (Qt::NoFocus);
+        close->setAccessibleName (MixerWindow::tr ("Close the editor's track"));
+        close->setToolTip (MixerWindow::tr ("Close this panel (Shift+F4, or View > Editor Track, opens it again)"));
+        QObject::connect (close, &QToolButton::clicked, this, [this] { Q_EMIT window.editorTrackCloseRequested(); });
+        bar->addWidget (close);
         layout->addLayout (bar);
 
         // The launcher's row, the timeline and the clip, one above the other.

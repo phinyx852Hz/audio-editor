@@ -86,7 +86,7 @@ void MainWindow::registerMixerCommands()
     {
         showEditorTrack (commands.action (QStringLiteral ("mixer.editorTrack"))->isChecked());
     })->setStatusTip (tr ("One track of the project under the editor's waveform: Audio only, MIDI only or Audio + MIDI, "
-                          "its clip launcher slots, its clips across time, recording and the MIDI tools"));
+                          "its clip launcher slots, its clips across time, recording and the MIDI tools. Shown or hidden, it stays so at the next start"));
     commands.action (QStringLiteral ("mixer.editorTrack"))->setCheckable (true);
     commands.action (QStringLiteral ("mixer.editorTrack"))->setChecked (appSettings().value (QStringLiteral ("view/editorTrack"), true).toBool());
     if (commands.action (QStringLiteral ("mixer.editorTrack"))->isChecked())
@@ -360,6 +360,7 @@ void MainWindow::showEditorTrack (bool on)
         auto* w = mixerWindow();
         trackHolder->layout()->addWidget (w->editorTrackView (trackHolder));
         connect (w, &MixerWindow::trackToEditorRequested, this, [this] (int track) { mixDownToEditor (track); });
+        connect (w, &MixerWindow::editorTrackCloseRequested, this, [this] { showEditorTrack (false); });
         // Played or recorded on from the editor: the keyboard and the sound go to the mixer.
         connect (w, &MixerWindow::activated, this, [this] { playInstruments(); });
         playInstruments();

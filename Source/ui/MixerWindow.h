@@ -282,6 +282,7 @@ Q_SIGNALS:
     void devicePanelChanged();   // shown or hidden
     void finderWanted (bool show);   // in the editor's place: the editor's Find panel shown or hidden
     void trackToEditorRequested (int track);   // the editor's track rendered into a tab of the editor
+    void editorTrackCloseRequested();          // the editor's track closed from its own bar
     void message (const QString&);   // what the status line says, for the editor's track to show too
 
 protected:

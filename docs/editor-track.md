@@ -23,8 +23,10 @@ Then:
 
 ## Where it is
 
-Under the editor's waveform, in a split you can drag (Mixer > Editor Track, `Shift+F4`, shows or hides
-it). The waveform and all of the editor's audio editing stay as they were above it.
+Under the editor's waveform, in a split you can drag. The ✕ at the right end of its bar closes it;
+View > Editor Track or Mixer > Editor Track (`Shift+F4`) shows or hides it, and PHI starts with it
+shown or hidden as you last left it. The waveform and all of the editor's audio editing stay as they
+were above it.
 
 It shows one track of the project: the one last selected, here or in the mixer. It is the mixer's
 own track, so whatever you do here the mixer shows, and the other way round. The track box at the
