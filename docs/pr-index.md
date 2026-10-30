@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**104 pull requests:** 89 merged, 15 open.
+**104 pull requests:** 90 merged, 14 open.
 
 ## Contents
 
@@ -202,7 +202,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#72](https://github.com/phinyx852Hz/audio-editor/pull/72) | MIDI inputs: remember them by name, and open them when plugged in | merged |  | `Source/ui/SamplerSection.cpp`<br>`Source/ui/ControlSection.cpp`<br>`docs/control-surfaces.md` |
 | [#78](https://github.com/phinyx852Hz/audio-editor/pull/78) | Simplest phase 1: sound shaping and a Simpler-style layout | merged |  | `Source/ui/SamplerWindow.cpp`<br>`Source/sampler/SamplerEngine.cpp`<br>`tests/CoreTests.cpp` |
 | [#93](https://github.com/phinyx852Hz/audio-editor/pull/93) | Minimalize: fix a use-after-free when phase or canon adds new voices | open |  | `tests/CoreTests.cpp`<br>`Source/mixer/Minimalize.cpp` |
-| [#99](https://github.com/phinyx852Hz/audio-editor/pull/99) | File > New Project (Ctrl+N); start on a blank project and ask to save on quit | open | File > New Project | `Source/ui/MixerWindow.cpp`<br>`Source/ui/MainWindow.cpp`<br>`Source/ui/ProjectSection.cpp` |
+| [#99](https://github.com/phinyx852Hz/audio-editor/pull/99) | File > New Project (Ctrl+N); start on a blank project and ask to save on quit | merged | File > New Project | `Source/ui/MixerWindow.cpp`<br>`Source/ui/MainWindow.cpp`<br>`Source/ui/ProjectSection.cpp` |
 
 ## By number
 
@@ -306,7 +306,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#96](https://github.com/phinyx852Hz/audio-editor/pull/96) | Analysis Meters: an opacity slider of its own | The Analysis Meters window has an Opacity label and slider at the right of its top bar. *(auto)* | open | 2026-10-30 | Analysis and meters |
 | [#97](https://github.com/phinyx852Hz/audio-editor/pull/97) | MIDI editor: a menu item, a shortcut and a double-click to open it | The owner couldn't find the MIDI editor. *(auto)* | open | 2026-10-30 | Editing and warping |
 | [#98](https://github.com/phinyx852Hz/audio-editor/pull/98) | MIDI Map Mode (Ctrl+M): click a mixer control, then move a MIDI control | This adds Ableton's MIDI Map Mode. *(auto)* | open | 2026-10-30 | Modes, tunings and composition |
-| [#99](https://github.com/phinyx852Hz/audio-editor/pull/99) | File > New Project (Ctrl+N); start on a blank project and ask to save on quit | File > New Project is now the first entry in the File menu. *(auto)* | open | 2026-10-30 | Not yet sorted |
+| [#99](https://github.com/phinyx852Hz/audio-editor/pull/99) | File > New Project (Ctrl+N); start on a blank project and ask to save on quit | File > New Project is now the first entry in the File menu. *(auto)* | merged | 2026-10-30 | Not yet sorted |
 | [#100](https://github.com/phinyx852Hz/audio-editor/pull/100) | Instrument Prisms: rays of instruments with their own effects in series | Another role for the Prism: Instrument Rays, like Ableton's Instrument Rack, as a mixer track's instrument. *(auto)* | open | 2026-10-30 | Routing and racks |
 | [#101](https://github.com/phinyx852Hz/audio-editor/pull/101) | Mixer: room for 16 tracks, and strips that zoom from wide to just the fader | mixer::maxTracks is now 16, which is how much room the engine has. *(auto)* | open | 2026-10-30 | Mixer and clip launcher |
 | [#102](https://github.com/phinyx852Hz/audio-editor/pull/102) | Pop out every instrument and effect editor, with Super+F and Ctrl+W | Owner's ask: third-party synths and samplers open as pop-out windows over PHI, any instrument can go full screen with Super+F, Ctrl+W closes the interface bu... *(auto)* | open | 2026-10-30 | Editing and warping |
