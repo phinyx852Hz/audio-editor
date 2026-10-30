@@ -24,8 +24,8 @@ The main window has two halves in a split you can drag: the audio editor (the wa
 and ruler) above, and the MIDI editor below.
 
 - **View > Audio Editor** (`Shift+F2`) closes or opens the top half.
-- **View > MIDI Editor** (`Shift+F4`), or the ✕ at the right of the MIDI editor's bar, closes or
-  opens the bottom half.
+- **View > MIDI Editor** (`Shift+F4`), the ✕ at the right of the MIDI editor's bar, or `Ctrl+W`
+  while it has the keyboard, closes the bottom half; `Shift+F4` opens it again.
 - Closing one while the other is closed opens the other, so the window is never empty.
 - Both are kept as they were left, for the next start (`view/audioEditor`, `view/midiEditor`).
 

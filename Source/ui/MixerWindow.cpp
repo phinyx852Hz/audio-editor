@@ -7,6 +7,7 @@
 #include "../mixer/DrumsToMidi.h"
 #include "PhiMark.h"
 #include "Potentiometer.h"
+#include "EditorWindow.h"
 #include "SamplerWindow.h"
 #include "ExtremeSettings.h"
 #include "Settings.h"
@@ -1831,6 +1832,7 @@ QDialog* ragaDialog (mixer::InstrumentPtr inst, const QString& title, QWidget* p
     auto* d = new QDialog (parent);
     d->setAttribute (Qt::WA_DeleteOnClose);
     d->setWindowTitle (QString::fromUtf8 ("PHI rāga: %1").arg (title));
+    editorwindow::mark (d);
     auto* form = new QFormLayout (d);
     const auto s = raga.settings();
     auto* ragas = new QComboBox (d);
@@ -1927,6 +1929,7 @@ QDialog* synthDialog (mixer::InstrumentPtr inst, const QString& title, QWidget* 
     auto* d = new QDialog (parent);
     d->setAttribute (Qt::WA_DeleteOnClose);
     d->setWindowTitle (QObject::tr ("Synth: %1").arg (title));
+    editorwindow::mark (d);
     auto* form = new QFormLayout (d);
     const auto s = synth.settings();
     auto* wave = new QComboBox (d);
@@ -9369,6 +9372,7 @@ void MixerWindow::editInstrument (int track)
             auto& s = static_cast<mixer::SamplerInstrument&> (*inst);
             auto* w = new SamplerWindow (s.engine(), this);
             w->setAttribute (Qt::WA_DeleteOnClose);
+            w->keepPlayingWhenClosed (true);
             if (const auto sound = s.engine().sample(); sound != nullptr)
                 w->setSample (sound, rate(), title, true);
             w->setWindowTitle (tr ("Sampler: %1").arg (title));
@@ -9381,6 +9385,7 @@ void MixerWindow::editInstrument (int track)
             auto& s = static_cast<mixer::SlicerInstrument&> (*inst);
             auto* w = new SlicerWindow (s.engine(), this);
             w->setAttribute (Qt::WA_DeleteOnClose);
+            w->keepPlayingWhenClosed (true);
             if (const auto sound = s.engine().sample(); sound != nullptr)
                 w->setSample (sound, t.sound != nullptr ? t.sound : soundAsAudio (*sound, rate()), rate(), title, true, BeatGrid {}, {});
             w->setWindowTitle (tr ("Slicer: %1").arg (title));
@@ -9429,6 +9434,7 @@ QDialog* effectDialog (mixer::EffectPtr effect, const QString& title, QWidget* p
     auto* d = new QDialog (parent);
     d->setAttribute (Qt::WA_DeleteOnClose);
     d->setWindowTitle (title);
+    editorwindow::mark (d);
     auto* form = new QFormLayout (d);
     const auto params = effect->parameters();
     if (params.empty())
