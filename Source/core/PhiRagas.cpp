@@ -529,17 +529,18 @@ time: late night
 # bahādur kauns: drafted from a recording the owner shared (2026-10-29), by pitch tracking, for
 # the owner's teacher to correct. Candrakauns with R, which comes mostly in the descent (m g R S,
 # g m R g) and is held long; G only passing as m is pulled down to g. Tuning as measured on the
-# recording: g 300, d 799, N 1102 cents; held ma shaken about a semitone below at some 5 Hz.
+# recording: g 300, d 799, N 1102 cents. The teacher's corrections (2026-10-30): vādī ga,
+# samvādī dha, pakaḍ "GRns g m d g m g sr s" (letters for svaras, as written by the teacher).
 raga: bahādur kauns
 plain: bahadur kauns
 thaat: none
 svaras: S R g=300c m d=800c N=1100c
 aroha: N, S g m d N S'
 avaroha: S' N d m g R S
-vadi: m
-samvadi: S
-pakad: m g R S | g m R g | d N S'
-andolan: m 80 5
+vadi: g
+samvadi: d
+pakad: g R N, S | g m d | g m g | S R S
+andolan: m 25 2
 kan: m>g
 time: late night
 
