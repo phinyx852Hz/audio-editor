@@ -273,6 +273,7 @@ edit.duplicate	Edit	Duplicate	Ctrl+D
 view.zoomFit	View	Zoom to Fit	Ctrl+0
 view.zoomSelection	View	Zoom to Selection	Z
 view.chain	Master Section	Device Chain	Ctrl+Shift+C
+view.modulators	Master Section	Modulators	
 view.find	View	Find	Ctrl+F
 view.history	View	History Panel	Ctrl+H
 view.markers	View	Markers Panel	Ctrl+Shift+M

@@ -61,6 +61,8 @@
 #include "../Source/core/Phi.h"
 #include "../Source/core/PhiDynamics.h"
 #include "../Source/core/PhiChorus.h"
+#include "../Source/core/PhiModulation.h"
+#include "../Source/core/Modulators.h"
 #include "../Source/core/PluginMeasure.h"
 #include "../Source/core/PhiForensics.h"
 #include "../Source/control/ControlSurface.h"
@@ -5096,6 +5098,299 @@ namespace
         check (delay > 0.0 && delay <= phi::Chorus::maxDelayMs, "phi chorus delays stay inside its line");
     }
 
+    // Φ Modulation: Flow's four modes, Space moving partials, Grain and Matrix staying sane.
+    void testPhiModulation()
+    {
+        const double rate = 48000.0;
+        auto near = [] (double a, double b, double tolerance) { return std::abs (a - b) <= tolerance; };
+
+        // Flow
+        phi::Flow::Settings f;
+        check (near (phi::Flow::stepOf (f, 0), phi::inverse, 1.0e-12) && near (phi::Flow::outputRate (f, 2) / phi::Flow::outputRate (f, 1), phi::ratio, 1.0e-9),
+               "phi flow steps 1/phi a turn, its outputs phi apart");
+        {
+            std::set<long long> seen;
+            bool inside = true, again = true;
+            for (int n = 0; n < 10000; ++n)
+            {
+                const auto v = phi::Flow::event (f, 0, n);
+                inside = inside && v >= 0.0 && v < 1.0;
+                again = again && v == phi::Flow::event (f, 0, n);
+                seen.insert (std::llround (v * 1.0e9));
+            }
+            check (inside && again && seen.size() == 10000, "phi flow irrational: never the same value twice, the same every time");
+        }
+        {
+            auto p = f;
+            p.mode = phi::Flow::Mode::periodic;
+            bool repeats = true;
+            for (int n = 0; n < 100; ++n)
+                repeats = repeats && phi::Flow::event (p, 0, n) == phi::Flow::event (p, 0, n + 8);
+            check (repeats && near (phi::Flow::ratioOf (p), 1.5, 1.0e-12), "phi flow periodic: rounded to simple fractions, repeats every 8 events");
+        }
+        {
+            // Fibonacci holds each value for one event or two, in the Fibonacci word.
+            auto b = f;
+            b.mode = phi::Flow::Mode::fibonacci;
+            bool word = true;
+            for (int n = 1; n < 200; ++n)
+                word = word && ((phi::Flow::event (b, 0, n) != phi::Flow::event (b, 0, n - 1)) == phi::hit (n, phi::inverse));
+            int longest = 1, run = 1;
+            for (int n = 1; n < 200; ++n)
+            {
+                run = phi::Flow::event (b, 0, n) == phi::Flow::event (b, 0, n - 1) ? run + 1 : 1;
+                longest = std::max (longest, run);
+            }
+            check (word && longest == 2, "phi flow fibonacci: values move on the hits of the Fibonacci word");
+        }
+        {
+            auto h = f;
+            h.mode = phi::Flow::Mode::hybrid;
+            h.jitter = 0.1;
+            bool bounded = true, moved = false;
+            for (int n = 0; n < 1000; ++n)
+            {
+                const auto d = std::abs (phi::Flow::event (h, 0, n) - phi::Flow::event (f, 0, n));
+                const auto wrapped = std::min (d, 1.0 - d);
+                bounded = bounded && wrapped <= 0.05 + 1.0e-9;
+                moved = moved || wrapped > 1.0e-6;
+            }
+            check (bounded && moved && phi::Flow::event (h, 0, 5) == phi::Flow::event (h, 0, 5), "phi flow hybrid: bounded noise, the same every time");
+        }
+        {
+            phi::Flow a, b;
+            a.prepare (rate);
+            b.prepare (rate);
+            a.set (f);
+            b.set (f);
+            bool same = true, inside = true;
+            for (int block = 0; block < 2000; ++block)
+            {
+                a.advance (512);
+                b.advance (512);
+                for (int k = 0; k < phi::Flow::numOutputs; ++k)
+                {
+                    same = same && a.output (k) == b.output (k);
+                    inside = inside && a.output (k) >= 0.0f && a.output (k) <= 1.0f;
+                }
+            }
+            check (same && inside, "phi flow plays the same twice, inside 0 to 1");
+        }
+
+        // Space
+        {
+            phi::SpectralSpace::Settings s;
+            check (near (phi::SpectralSpace::mappedHz (s, 440.0), 220.0 * phi::ratio, 1.0e-9) && near (phi::SpectralSpace::mappedHz (s, 880.0), 220.0 * phi::ratio * phi::ratio, 1.0e-9)
+                   && near (phi::SpectralSpace::mappedHz (s, 220.0), 220.0, 1.0e-9), "phi space maps octaves above the anchor to powers of phi");
+            auto plain = s;
+            plain.blend = 0.0;
+            check (near (phi::SpectralSpace::mappedHz (plain, 1234.0), 1234.0, 1.0e-9), "phi space at no blend leaves partials alone");
+
+            const int frames = 512 * 93;
+            std::vector<float> x ((size_t) frames);
+            for (int i = 0; i < frames; ++i)
+                x[(size_t) i] = (float) (0.5 * std::sin (2.0 * M_PI * 440.0 * i / rate) + 0.25 * std::sin (2.0 * M_PI * 880.0 * i / rate));
+            auto run = [&] (const phi::SpectralSpace::Settings& settings)
+            {
+                phi::SpectralSpace space;
+                space.prepare (rate, 1);
+                space.set (settings);
+                auto y = x;
+                for (int i = 0; i + 512 <= frames; i += 512)
+                {
+                    float* io[] { y.data() + i };
+                    space.process (io, 1, 512);
+                }
+                return y;
+            };
+            auto amplitude = [&] (const std::vector<float>& y, double hz)
+            {
+                double re = 0.0, im = 0.0;
+                for (int i = 20000; i < frames; ++i)
+                {
+                    re += y[(size_t) i] * std::cos (2.0 * M_PI * hz * i / rate);
+                    im += y[(size_t) i] * std::sin (2.0 * M_PI * hz * i / rate);
+                }
+                return 2.0 * std::sqrt (re * re + im * im) / (frames - 20000);
+            };
+            const auto same = run (plain);
+            double error = 0.0, energy = 0.0;
+            for (int i = 10000; i < frames; ++i)
+            {
+                error += std::pow (same[(size_t) i] - x[(size_t) i - 2048], 2.0);
+                energy += std::pow (x[(size_t) i], 2.0);
+            }
+            check (error / energy < 1.0e-6, "phi space at no blend gives back the sound, 2048 samples late");
+            const auto moved = run (s);
+            check (amplitude (moved, 220.0 * phi::ratio) > 0.4 && amplitude (moved, 220.0 * phi::ratio * phi::ratio) > 0.2
+                   && amplitude (moved, 440.0) < 0.02 && amplitude (moved, 880.0) < 0.02, "phi space moves 440 and 880 Hz to 356 and 576 Hz");
+        }
+
+        // Grain and Matrix: quiet in, quiet out; loud in, bounded and finite; the same twice.
+        {
+            auto render = [&] (bool matrixToo, std::vector<float>& left, std::vector<float>& right)
+            {
+                phi::Grain grain;
+                phi::Matrix matrix;
+                grain.prepare (rate, 2);
+                matrix.prepare (rate, 2);
+                phi::Grain::Settings g;
+                g.mix = 1.0;
+                g.pitch = 12.0;
+                g.flow = 1.0;
+                phi::Matrix::Settings m;
+                m.mix = 1.0;
+                m.feedback = 0.95;
+                m.eventsHz = 8.0;
+                m.driveDb = 36.0;
+                grain.set (g, f);
+                matrix.set (m, f);
+                matrix.reset();
+                for (size_t i = 0; i < left.size(); i += 512)
+                {
+                    float* io[] { left.data() + i, right.data() + i };
+                    grain.process (io, 2, 512, 0.3f, 0.7f);
+                    if (matrixToo)
+                        matrix.process (io, 2, 512, 0.5f);
+                }
+                return matrix.currentRoute();
+            };
+            std::vector<float> l (512 * 2000), r (512 * 2000);
+            for (size_t i = 0; i < 512 * 200; ++i)
+                l[i] = r[i] = (float) std::sin (2.0 * M_PI * 220.0 * (double) i / rate);
+            auto l2 = l, r2 = r;
+            const auto route = render (true, l, r);
+            render (true, l2, r2);
+            bool finite = true;
+            double peak = 0.0, heard = 0.0;
+            for (size_t i = 0; i < l.size(); ++i)
+            {
+                finite = finite && std::isfinite (l[i]) && std::isfinite (r[i]);
+                peak = std::max (peak, (double) std::max (std::abs (l[i]), std::abs (r[i])));
+                heard += i < 512 * 200 ? 0.0 : std::abs (l[i]);
+            }
+            check (finite && peak < 4.0 && heard > 1.0, "phi grain and matrix: finite and bounded at full feedback, with a tail");
+            check (l == l2 && r == r2, "phi grain and matrix play the same twice");
+            check (route[0] != route[1] && route[1] != route[2] && route[0] != route[2], "phi matrix routes three different nodes");
+            double last = 0.0;
+            for (size_t i = l.size() - 4800; i < l.size(); ++i)
+                last = std::max (last, (double) std::abs (l[i]));
+            check (last < 1.0e-3, "phi matrix dies away once the sound stops");
+        }
+        {
+            std::set<std::array<int, 3>> routes;
+            for (int n = 0; n < 200; ++n)
+                routes.insert (phi::Matrix::route (f, n));
+            check (routes.size() > 12, "phi matrix visits many routes");
+        }
+    }
+
+    // The modulator rack: every kind stays within 0..1, plays the same twice, and does its job.
+    void testModulatorRack()
+    {
+        const double rate = 48000.0;
+        auto near = [] (double a, double b, double tolerance) { return std::abs (a - b) <= tolerance; };
+        using modrack::Kind;
+
+        std::vector<modrack::Modulator> all;
+        for (int k = 0; k < modrack::numKinds; ++k)
+            all.push_back (modrack::make ((Kind) k));
+        all[(size_t) Kind::sampleHold].values[0] = 1.0f;   // Sample & Hold catches the LFO
+        all[(size_t) Kind::shaper].values[0] = 1.0f;
+        all[(size_t) Kind::crossfader].values[0] = 1.0f;
+        all[(size_t) Kind::crossfader].values[1] = 4.0f;
+        all[(size_t) Kind::random].values[2] = 0.3f;
+
+        std::vector<float> noise (modrack::chunk);
+        auto run = [&] (std::vector<std::vector<float>>& out)
+        {
+            modrack::Rack rack;
+            rack.prepare (rate);
+            rack.set (all);
+            out.assign (all.size(), {});
+            for (int block = 0; block < 4000; ++block)
+            {
+                for (int i = 0; i < modrack::chunk; ++i)
+                    noise[(size_t) i] = block % 400 < 40 ? (float) (0.5 * std::sin (0.05 * (block * modrack::chunk + i))) : 0.0f;
+                const float* in[] { noise.data() };
+                rack.process (in, 1, modrack::chunk);
+                for (size_t m = 0; m < all.size(); ++m)
+                    out[m].push_back (rack.value ((int) m));
+            }
+        };
+        std::vector<std::vector<float>> a, b;
+        run (a);
+        run (b);
+        bool inside = true, moves = true;
+        for (size_t m = 0; m < a.size(); ++m)
+        {
+            float low = 1.0f, high = 0.0f;
+            for (const auto v : a[m])
+            {
+                inside = inside && v >= 0.0f && v <= 1.0f;
+                low = std::min (low, v);
+                high = std::max (high, v);
+            }
+            if ((Kind) m != Kind::macro)
+                moves = moves && high - low > 0.1f;
+        }
+        check (inside && a == b, "modulators stay within 0 to 1 and play the same twice");
+        check (moves, "every modulator but the macro moves");
+
+        // The LFO: a sine from 0, at the top half a cycle in.
+        {
+            modrack::Rack rack;
+            rack.prepare (rate);
+            rack.set ({ modrack::make (Kind::lfo) });
+            for (int i = 0; i < (int) (0.5 * rate) / modrack::chunk; ++i)
+                rack.process (nullptr, 0, modrack::chunk);
+            check (rack.value (0) > 0.99f, "modulator lfo: a 1 Hz sine is at its top after half a second");
+        }
+        // Random at full déjà vu... at the middle: the loop of Length values comes round again.
+        {
+            auto r = modrack::make (Kind::random);
+            r.values[2] = 0.5f;   // déjà vu: locked
+            r.values[3] = 4.0f;   // length 5
+            r.values[1] = 0.0f;   // no smoothing
+            r.values[0] = 10.0f;
+            modrack::Rack rack;
+            rack.prepare (rate);
+            rack.set ({ r });
+            std::vector<float> events;
+            float last = -1.0f;
+            for (int i = 0; i < 4000 && events.size() < 20; ++i)
+            {
+                rack.process (nullptr, 0, modrack::chunk);
+                if (rack.value (0) != last)
+                    events.push_back (last = rack.value (0));
+            }
+            bool loops = events.size() >= 15;
+            for (size_t i = 5; i < events.size(); ++i)
+                loops = loops && events[i] == events[i - 5];
+            check (loops, "modulator random: deja vu at the middle replays a loop of its length");
+        }
+        // Φ Flow gives Flow's own sequence.
+        {
+            auto f = modrack::make (Kind::phiFlow);
+            f.values[0] = 2.0f;
+            modrack::Rack rack;
+            rack.prepare (rate);
+            rack.set ({ f });
+            const int blocks = 3000;
+            for (int i = 0; i < blocks; ++i)
+                rack.process (nullptr, 0, modrack::chunk);
+            phi::Flow::Settings s;
+            s.rateHz = 2.0;
+            check (near (rack.value (0), phi::Flow::at (s, 0, 2.0 * blocks * modrack::chunk / rate), 1.0e-4), "modulator phi flow follows phi::Flow");
+        }
+        // Routes set within 0..1 between their ends.
+        modrack::Route route;
+        route.low = 0.8f;
+        route.high = 0.2f;
+        check (near (modrack::routed (route, 0.0f), 0.8, 1.0e-6) && near (modrack::routed (route, 0.5f), 0.5, 1.0e-6)
+               && near (modrack::routed (route, 1.0f), 0.2, 1.0e-6), "modulator routes run from low to high, either way round");
+    }
+
     // The PHI synth's tuning (keys to pitches, sent as MIDI Tuning Standard) and MPE.
     void testPhiTuning()
     {
@@ -9300,6 +9595,8 @@ int main()
     testPhi();
     testPhiDynamics();
     testPhiChorus();
+    testPhiModulation();
+    testModulatorRack();
     testPhiVoice();
     testPhiPhaser();
     testPhiTuning();

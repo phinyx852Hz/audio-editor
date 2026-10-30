@@ -600,7 +600,14 @@ void PhiWindow::buildKnobs()
     const auto shown = engine.chainDisplay (path);
     std::vector<int> main, order;
     bool many = false;
-    if (! shown.handles.empty())
+    shownPage = shown.pages.empty() ? -1 : std::clamp (shown.page, 0, (int) shown.pages.size() - 1);
+    if (shownPage >= 0 && shownPage < (int) shown.pageKnobs.size())
+    {
+        // A page's knobs, its first two large (its mix or rate, and the next).
+        order = shown.pageKnobs[(size_t) shownPage];
+        main.assign (order.begin(), order.begin() + std::min<size_t> (2, order.size()));
+    }
+    else if (! shown.handles.empty())
     {
         const auto chosen = display->chosenHandle();
         if (chosen >= 0 && chosen < (int) shown.handles.size())
@@ -624,9 +631,42 @@ void PhiWindow::buildKnobs()
                 order.push_back (i);
     }
 
-    auto* row = new QHBoxLayout (knobArea);
+    auto* outer = new QVBoxLayout (knobArea);
+    outer->setContentsMargins (0, 0, 0, 0);
+    outer->setSpacing (small);
+    if (shownPage >= 0)
+    {
+        // The pages as pills; choosing one sets the effect's page, which the picture follows.
+        auto* tabs = new QHBoxLayout;
+        tabs->setSpacing (small);
+        tabs->addStretch (1);
+        const auto count = (int) shown.pages.size();
+        for (int p = 0; p < count; ++p)
+        {
+            auto* tab = new QToolButton (knobArea);
+            tab->setText (QString::fromStdString (shown.pages[(size_t) p]));
+            tab->setCheckable (true);
+            tab->setChecked (p == shownPage);
+            tab->setAccessibleName (tab->text());
+            tab->setStyleSheet (QStringLiteral ("QToolButton { color: #8a867e; background: #1a1a1c; border: 1px solid #3a3730; border-radius: 13px; padding: 4px 21px; }"
+                                                "QToolButton:checked { color: #0b0b0c; background: #c8a24a; border-color: #c8a24a; }"));
+            const auto parameter = shown.pageParameter;
+            connect (tab, &QToolButton::clicked, this, [this, p, count, parameter]
+            {
+                if (parameter >= 0)
+                    engine.setChainParameter (path, parameter, count > 1 ? (float) p / (float) (count - 1) : 0.0f);
+                display->set (engine.chainDisplay (path));
+                buildKnobs();
+            });
+            tabs->addWidget (tab);
+        }
+        tabs->addStretch (1);
+        outer->addLayout (tabs);
+    }
+    auto* row = new QHBoxLayout;
     row->setContentsMargins (0, 0, 0, 0);
     row->setSpacing (small);
+    outer->addLayout (row, 1);
     bool smallerStarted = false;
     for (const auto i : order)
     {
@@ -710,7 +750,14 @@ void PhiWindow::sync (bool parameters)
         close();   // removed or replaced
         return;
     }
-    display->set (engine.chainDisplay (path));
+    const auto shown = engine.chainDisplay (path);
+    const auto page = shown.pages.empty() ? -1 : std::clamp (shown.page, 0, (int) shown.pages.size() - 1);
+    display->set (shown);
+    if (page != shownPage)
+    {
+        buildKnobs();   // the page moved by automation, or by the card
+        return;
+    }
     if (! parameters)
         return;
 

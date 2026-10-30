@@ -601,8 +601,11 @@ std::string MasterChain::load (int index, const std::string& pluginId)
         return ("Could not load " + description->name + ": " + error).toStdString();
 
     discard ((size_t) index);
-    const juce::ScopedLock sl (lock);
-    slots[(size_t) index] = { std::move (instance), *description, false, 0, {}, editor };
+    {
+        const juce::ScopedLock sl (lock);
+        slots[(size_t) index] = { std::move (instance), *description, false, 0, {}, editor };
+    }
+    resolveRoutes();
     return {};
 }
 
@@ -610,6 +613,7 @@ void MasterChain::clear (int index)
 {
     if (index >= 0 && index < (int) slots.size())
         discard ((size_t) index);
+    resolveRoutes();
 }
 
 std::string MasterChain::reload (int index)
@@ -636,9 +640,12 @@ std::string MasterChain::reload (int index)
         return ("Could not load " + description.name + " again: " + error).toStdString();
 
     discard ((size_t) index);
-    const juce::ScopedLock sl (lock);
-    slots[(size_t) index] = { std::move (instance), description, bypassed, 0, {}, editor, mix };
-    slots[(size_t) index].health->lastState = state;
+    {
+        const juce::ScopedLock sl (lock);
+        slots[(size_t) index] = { std::move (instance), description, bypassed, 0, {}, editor, mix };
+        slots[(size_t) index].health->lastState = state;
+    }
+    resolveRoutes();
     return {};
 }
 
@@ -661,6 +668,17 @@ void MasterChain::move (int from, int to)
     rotateOne (windows);
     rotateOne (delays);
     rotateOne (delayWrite);
+    // Routes go with their plugins.
+    for (auto& r : rackRoutes)
+    {
+        if (r.slot == from)
+            r.slot = to;
+        else if (from < to && r.slot > from && r.slot <= to)
+            --r.slot;
+        else if (to < from && r.slot >= to && r.slot < from)
+            ++r.slot;
+    }
+    resolveRoutes();
 }
 
 void MasterChain::setBypassed (int index, bool b)
@@ -1096,6 +1114,29 @@ void MasterChain::save() const
         slot->addChildElement (s.description.createXml().release());
     }
 
+    // The modulator rack.
+    auto* rackXml = root.createNewChildElement ("MODULATORS");
+    for (const auto& m : rackModulators)
+    {
+        auto* e = rackXml->createNewChildElement ("MODULATOR");
+        e->setAttribute ("kind", (int) m.kind);
+        e->setAttribute ("name", juce::String::fromUTF8 (m.name.c_str()));
+        juce::StringArray values;
+        for (const auto v : m.values)
+            values.add (juce::String (v, 6));
+        e->setAttribute ("values", values.joinIntoString (","));
+    }
+    for (const auto& r : rackRoutes)
+    {
+        auto* e = rackXml->createNewChildElement ("ROUTE");
+        e->setAttribute ("modulator", r.modulator);
+        e->setAttribute ("slot", r.slot);
+        e->setAttribute ("parameter", r.parameter);
+        e->setAttribute ("plugin", juce::String::fromUTF8 (r.pluginId.c_str()));
+        e->setAttribute ("low", (double) r.low);
+        e->setAttribute ("high", (double) r.high);
+    }
+
     root.writeTo (masterFile());
 }
 
@@ -1162,7 +1203,123 @@ std::string MasterChain::restore()
         slots[(size_t) index].health->lastState = state;
     }
 
+    std::vector<modrack::Modulator> modulators;
+    std::vector<modrack::Route> routes;
+    if (auto* rackXml = xml->getChildByName ("MODULATORS"))
+    {
+        for (auto* e : rackXml->getChildWithTagNameIterator ("MODULATOR"))
+        {
+            auto m = modrack::make ((modrack::Kind) std::clamp (e->getIntAttribute ("kind", 0), 0, modrack::numKinds - 1));
+            m.name = e->getStringAttribute ("name", juce::String::fromUTF8 (m.name.c_str())).toStdString();
+            const auto values = juce::StringArray::fromTokens (e->getStringAttribute ("values"), ",", "");
+            for (int i = 0; i < std::min (values.size(), modrack::maxControls); ++i)
+                m.values[(size_t) i] = values[i].getFloatValue();
+            if ((int) modulators.size() < modrack::maxModulators)
+                modulators.push_back (m);
+        }
+        for (auto* e : rackXml->getChildWithTagNameIterator ("ROUTE"))
+        {
+            modrack::Route r;
+            r.modulator = e->getIntAttribute ("modulator");
+            r.slot = e->getIntAttribute ("slot");
+            r.parameter = e->getIntAttribute ("parameter");
+            r.pluginId = e->getStringAttribute ("plugin").toStdString();
+            r.low = (float) e->getDoubleAttribute ("low", 0.0);
+            r.high = (float) e->getDoubleAttribute ("high", 1.0);
+            if ((int) routes.size() < modrack::maxRoutes)
+                routes.push_back (r);
+        }
+    }
+    setModulators (modulators);
+    setModulatorRoutes (routes);
+
     return problems.joinIntoString ("\n").toStdString();
+}
+
+//==============================================================================
+std::vector<modrack::Modulator> MasterChain::modulators() const
+{
+    const juce::ScopedLock sl (lock);
+    return rackModulators;
+}
+
+void MasterChain::setModulators (const std::vector<modrack::Modulator>& m)
+{
+    const juce::ScopedLock sl (lock);
+    rackModulators.assign (m.begin(), m.begin() + std::min ((int) m.size(), modrack::maxModulators));
+    rack.set (rackModulators);
+}
+
+std::vector<modrack::Route> MasterChain::modulatorRoutes() const
+{
+    const juce::ScopedLock sl (lock);
+    return rackRoutes;
+}
+
+void MasterChain::setModulatorRoutes (const std::vector<modrack::Route>& r)
+{
+    {
+        const juce::ScopedLock sl (lock);
+        rackRoutes.assign (r.begin(), r.begin() + std::min ((int) r.size(), modrack::maxRoutes));
+    }
+    resolveRoutes();
+}
+
+float MasterChain::modulatorValue (int m) const
+{
+    return m >= 0 && m < modrack::maxModulators ? rackShown[(size_t) m].load (std::memory_order_relaxed) : 0.0f;
+}
+
+bool MasterChain::routeLive (int route) const
+{
+    const juce::ScopedLock sl (lock);
+    return route >= 0 && route < (int) rackRoutes.size() && routePlugins[(size_t) route] != nullptr;
+}
+
+void MasterChain::resolveRoutes()
+{
+    const juce::ScopedLock sl (lock);
+    routePlugins.fill (nullptr);
+    routeApplied.fill (-1.0f);
+    for (size_t i = 0; i < rackRoutes.size(); ++i)
+    {
+        const auto& r = rackRoutes[i];
+        if (r.slot < 0 || r.slot >= (int) slots.size())
+            continue;
+        const auto& s = slots[(size_t) r.slot];
+        if (s.usable() && s.description.createIdentifierString().toStdString() == r.pluginId)
+            routePlugins[i] = s.plugin.get();
+    }
+}
+
+void MasterChain::runRack (int numChannels, int numSamples)
+{
+    std::array<const float*, maxChannels> in {};
+    for (int ch = 0; ch < numChannels; ++ch)
+        in[(size_t) ch] = scratch.getReadPointer (ch);
+    rack.process (in.data(), numChannels, numSamples);
+    for (int m = 0; m < rack.size(); ++m)
+        rackShown[(size_t) m].store (rack.value (m), std::memory_order_relaxed);
+
+    // Like a Prism's macros: each route sets its parameter when its value has moved.
+    for (size_t i = 0; i < rackRoutes.size(); ++i)
+    {
+        auto* plugin = routePlugins[i];
+        const auto& r = rackRoutes[i];
+        if (plugin == nullptr || r.slot < 0 || r.slot >= (int) slots.size() || slots[(size_t) r.slot].plugin.get() != plugin
+            || ! slots[(size_t) r.slot].usable())
+            continue;
+        const auto v = modrack::routed (r, rack.value (r.modulator));
+        if (std::abs (v - routeApplied[i]) < 1.0e-5f)
+            continue;
+        routeApplied[i] = v;
+        guard (slots[(size_t) r.slot], [&]
+        {
+            const auto& params = plugin->getParameters();
+            if (r.parameter >= 0 && r.parameter < params.size())
+                params[r.parameter]->setValueNotifyingHost (v);
+        });
+    }
 }
 
 //==============================================================================
@@ -1171,6 +1328,8 @@ void MasterChain::prepare (double sampleRate, int maxBlockSize)
     const juce::ScopedLock sl (lock);
     rate = sampleRate;
     blockSize = std::max (32, maxBlockSize);
+    rack.prepare (rate);
+    routeApplied.fill (-1.0f);
     scratch.setSize (maxChannels, blockSize, false, false, true);
     dry.setSize (maxChannels, blockSize, false, false, true);
     prepareDelays();
@@ -1248,9 +1407,12 @@ void MasterChain::processChain (juce::AudioBuffer<float>& io, int startSample, i
     const auto g = bypassAll ? 1.0f : gain.load();
     int heard = 0;
 
+    // With modulators the chain runs in short stretches, so they move smoothly.
+    const auto stretch = rackModulators.empty() || bypassAll ? blockSize : std::min (blockSize, modrack::chunk);
     for (int done = 0; done < numSamples;)
     {
-        const auto n = std::min (blockSize, numSamples - done);
+        const auto n = std::min (stretch, numSamples - done);
+        heard = 0;   // the latency of one pass through the slots
 
         for (int ch = 0; ch < maxChannels; ++ch)
         {
@@ -1259,6 +1421,8 @@ void MasterChain::processChain (juce::AudioBuffer<float>& io, int startSample, i
             else
                 scratch.clear (ch, 0, n);
         }
+        if (! rackModulators.empty() && ! bypassAll)
+            runRack (ioChannels, n);
 
         for (size_t index = 0; index < slots.size(); ++index)
         {
@@ -1429,6 +1593,9 @@ AudioDataPtr MasterChain::render (const AudioData& data, Frame start, Frame end,
     }
 
     const auto latency = (Frame) totalLatency();
+    // The modulators start from the top, so a render moves the same way every time.
+    rack.reset();
+    routeApplied.fill (-1.0f);
     // A mono file comes out as stereo when the chain makes its sides differ
     // (Stereoize, a stereo reverb...), as it is heard while listening.
     const auto outChannels = fileChannels == 1 && ! allBypassed ? 2 : fileChannels;
@@ -1709,8 +1876,11 @@ std::string MasterChain::group (int first, int last)
             prism->adopt (0, std::move (plugin), description, bypassed, state);
     }
 
-    const juce::ScopedLock sl (lock);
-    slots[(size_t) chosen.front()] = { std::move (made), PrismProcessor::description(), false, 0, {}, editor };
+    {
+        const juce::ScopedLock sl (lock);
+        slots[(size_t) chosen.front()] = { std::move (made), PrismProcessor::description(), false, 0, {}, editor };
+    }
+    resolveRoutes();
     return {};
 }
 
@@ -1777,6 +1947,7 @@ std::string MasterChain::ungroup (int slot)
             previous = previous + 1;
         }
     }
+    resolveRoutes();
     return lost > 0 ? std::to_string (lost) + " plugin(s) that had stopped working were left out." : std::string();
 }
 

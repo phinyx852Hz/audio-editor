@@ -5,6 +5,7 @@
 #include "../core/AudioDocument.h"
 #include "../core/Dsp.h"
 #include "../core/Metadata.h"
+#include "../core/Modulators.h"
 #include "TagIO.h"
 #include "DeviceDisplay.h"
 
@@ -290,6 +291,13 @@ public:
     void setMasterBypassed (bool);
     bool isMasterBypassed() const;
     bool masterIsActive() const;  // any plugin running, gain not 0 dB or the final dither on
+    // The modulator rack (core/Modulators.h): sources moving parameters of the slots' plugins.
+    std::vector<modrack::Modulator> modulators() const;
+    void setModulators (const std::vector<modrack::Modulator>&);
+    std::vector<modrack::Route> modulatorRoutes() const;
+    void setModulatorRoutes (const std::vector<modrack::Route>&);
+    float modulatorValue (int modulator) const;
+    bool modulatorRouteLive (int route) const;
     // The final dither, last in the Master Section after the gain: 16, 20 or 24 bits (0 = off).
     void setMasterDither (int bits, dsp::Dither);
     int masterDitherBits() const;

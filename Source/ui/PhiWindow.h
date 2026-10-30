@@ -15,7 +15,8 @@ class QToolButton;
 // start), the gold Φ and the effect's name across the top, the effect's picture (its
 // DeviceDisplay: the EQ curve, the taps, the cuts it makes...) in the upper 0.618, and
 // gold knobs below, large for the main controls and smaller for the rest, with
-// switches as pills. Black and gold whatever the theme.
+// switches as pills, and above them a row of page pills for an effect with pages (Φ
+// Modulation). Black and gold whatever the theme.
 class PhiWindow final : public QDialog
 {
 public:
@@ -43,6 +44,7 @@ private:
     };
     std::vector<Control> controls;
     int ticks = 0;
+    int shownPage = -1;   // the page whose knobs are shown, -1 for an effect without pages
 };
 
 // The parameter window for any device: a Φ window for the Φ effects, else the list of

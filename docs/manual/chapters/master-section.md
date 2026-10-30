@@ -108,6 +108,27 @@ Bands uses Linkwitz-Riley crossovers (24 dB per octave), so an empty Prism gives
 
 **Macros.** Press **Map**, turn or click a macro, then click any knob on a device in the rays. Right-click a macro to set each mapping's range or remove it, or to **Learn MIDI Controller**: move a knob on your controller and the macro follows it from then on.
 
+## Modulators {#modulators}
+
+[]{.ix t="Modulators"}[]{.ix t="modulator rack"}The Modulators panel (*Master ▸ Modulators*) is a rack of sources that move parameters of the plugins in the Device Chain, after the Modulators panel of Cubase. It sits in the bottom zone with the Device Chain. **Add Modulator** offers:
+
+| Modulator | Controls | What it gives |
+|---|---|---|
+| LFO | Rate, Shape (Sine, Triangle, Saw Up, Saw Down, Square, Φ Drift), Morph, Fold, Phase | A wave; Morph blends towards the next shape (Cubase's Morph LFO), Fold folds it back on itself (Wavefold LFO); Φ Drift is three sines at rate × 1, φ and φ² |
+| Envelope Follower | Attack, Release, Gain, Floor | The level of what goes into the chain |
+| Step Modulator | Rate, Steps (1 to 16), Glide, sixteen steps | A step sequence, starting from the golden sequence |
+| Random | Rate, Smooth, Déjà vu, Length, Seed | New values Rate times a second; Déjà vu (after Mutable Instruments' Marbles) replays the last Length values in order at its middle, and in another order past it |
+| Sample & Hold | Source, Rate, Seed | Another modulator (or noise) caught Rate times a second |
+| Shaper | Source, Bend, Steps, Invert | Another modulator bent, stepped and turned over |
+| Attack-Decay | Attack, Decay, Threshold, Retrigger, Curve | An envelope fired when the input rises past Threshold, or Retrigger times a second |
+| Macro Knob | Value | A knob of your own, to move several destinations at once |
+| Crossfader | Source A, Source B, Position, Curve | A blend of two modulators |
+| Φ Flow | Rate, Ratio, Mode, Shape, Output, Jitter, Seed | Flow from [Φ Modulation](#phi-modulation): a sequence that never repeats, or Periodic, Fibonacci or Hybrid |
+
+Choose a modulator to see its controls and a trace of what it gives. **Add Destination** lists the plugins in the chain's slots and their parameters; each destination moves between its **Low** (the modulator at 0) and **High** (at 1), as a Prism macro does, and High below Low turns it over. To move something inside a Prism, make one of its macros the destination. A destination whose plugin is replaced or removed shows *(gone)* and does nothing.
+
+Modulators move parameters during playback and in renders alike, every 128 samples or less, and start from the top at every render, so a render comes out the same each time. Nothing in the rack is random in the rolled sense: Random, Sample & Hold's noise and Φ Flow's Hybrid are worked out from their Seed. The rack is saved with the chain.
+
 ## Final dither {#final-dither}
 
 []{.ix t="Dither!final"}Dither is built into the Master card, after the master gain, so it never takes a plugin slot: **Off**, **16**, **20** or **24** bits, with plain rounding, TPDF or shaped noise (the Dither and Noise knobs on the Master card, or the Final dither row in the Master Section panel). It applies to playback and to Render in Place. Exports and batch outputs round to their own bit depth as their last step instead.
