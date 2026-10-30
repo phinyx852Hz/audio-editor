@@ -1,6 +1,8 @@
 # The Editor's Track
 
-Status: built 2026-10-26.
+Status: built 2026-10-26. Taken out of the main editor 2026-10-30: the owner asked for a MIDI editor of
+its own there instead ([main-midi-editor.md](main-midi-editor.md)). The track view itself remains in the code
+(MixerWindow::editorTrackView) but nothing shows it now.
 
 ## What the owner asked for (2026-10-26)
 
@@ -23,7 +25,7 @@ Then:
 
 ## Where it is
 
-Under the editor's waveform, in a split you can drag (Mixer > Editor Track, `Shift+F4`, shows or hides
+Under the editor's waveform, in a split you can drag (Mixer > Editor Track, `Shift+F4`, showed or hid
 it). The waveform and all of the editor's audio editing stay as they were above it.
 
 It shows one track of the project: the one last selected, here or in the mixer. It is the mixer's
