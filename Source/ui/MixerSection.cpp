@@ -151,7 +151,7 @@ MixerWindow* MainWindow::mixerWindow()
         connect (mixerWin, &MixerWindow::playStarted, this, [this] { playInstruments(); });
         connect (mixerWin, &MixerWindow::editClipRequested, this, [this] (int track, quint32 clip) { editMixerClip (track, clip); });
         connect (mixerWin, &MixerWindow::devicePanelChanged, this, [this] { updateChainDock(); });
-        connect (centralStack, &QStackedWidget::currentChanged, this, [this] { updateChainDock(); updateFindDock(); });
+        connect (centralStack, &QStackedWidget::currentChanged, this, [this] { updateChainDock(); updateFindDock(); updateInstrumentDocks(); });
         connect (mixerWin, &MixerWindow::finderWanted, this, [this] (bool show) { mixerFinder (show); });
         // The Find panel closed by hand while it was the Finder: the Inspector takes its place.
         connect (findPanel->dock(), &QDockWidget::visibilityChanged, mixerWin, [this] (bool visible)
@@ -302,6 +302,32 @@ void MainWindow::updateChainDock()
     {
         chainHiddenForMixer = false;
         dock->show();
+    }
+}
+
+// Simplest and the Slicer sit under whatever is in front, above its Device Chain: docked
+// along the bottom under the editor, or inside the mixer, between its tracks and its chain
+// (owner, 2026-10-29: "nested beneath the mixer", as Cubase's Drum Machine in the lower zone).
+void MainWindow::updateInstrumentDocks()
+{
+    if (mixerWin == nullptr)
+        return;
+    const bool mixerInFront = mixerDocked() && centralStack->currentWidget() == mixerWin;
+    int which = 0;
+    for (auto* p : { samplerPanel, slicerPanel })
+    {
+        auto* host = mixerWin->instrumentHost (which++);
+        if (p == nullptr)
+            continue;
+        // As low as the Device Chain it takes turns with, as Cubase's lower zone: the strips
+        // keep the rest of the height (it scrolls past what does not fit).
+        host->setFixedHeight (compactHeight (p));
+        const int index = which - 1;
+        if (mixerInFront && ! p->isPoppedOut() && ! p->dock()->isFloating())
+            p->lendTo (host, [this, index] (bool open) { mixerWin->setInstrumentOpen (index, open); },
+                       [this, index] { return mixerWin->instrumentOpen (index); });
+        else
+            p->takeBack();
     }
 }
 

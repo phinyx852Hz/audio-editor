@@ -19,6 +19,8 @@
 #include "../sampler/SlicerEngine.h"
 
 #include <QDialog>
+#include <QDockWidget>
+#include <QTimer>
 #include <QDialogButtonBox>
 #include <QApplication>
 #include <QFileInfo>
@@ -30,6 +32,47 @@
 #include <QStatusBar>
 #include <QVBoxLayout>
 #include <QtConcurrent>
+#include <QKeyEvent>
+#include <QStackedWidget>
+#include <QAbstractSpinBox>
+#include <QComboBox>
+#include <QLineEdit>
+#include <QPlainTextEdit>
+#include <QTextEdit>
+
+namespace
+{
+// Shift+Tab in the main window or the mixer's own, outside a field being typed in.
+class LowerZoneKey final : public QObject
+{
+public:
+    LowerZoneKey (QWidget* w, std::function<bool()> f) : QObject (w), window (w), toggle (std::move (f)) {}
+
+    bool eventFilter (QObject*, QEvent* e) override
+    {
+        if (e->type() != QEvent::KeyPress)
+            return false;
+        auto* k = static_cast<QKeyEvent*> (e);
+        if (k->key() != Qt::Key_Backtab || (k->modifiers() & ~(Qt::ShiftModifier | Qt::KeypadModifier)) != 0)
+            return false;
+        auto* active = QApplication::activeWindow();
+        if (active == nullptr || (active != window && active->objectName() != QLatin1String ("MixerWindow"))
+            || QApplication::activeModalWidget() != nullptr)
+            return false;
+        auto* f = QApplication::focusWidget();
+        const auto* combo = qobject_cast<QComboBox*> (f);
+        if (qobject_cast<QLineEdit*> (f) != nullptr || qobject_cast<QAbstractSpinBox*> (f) != nullptr
+            || qobject_cast<QTextEdit*> (f) != nullptr || qobject_cast<QPlainTextEdit*> (f) != nullptr
+            || (combo != nullptr && combo->isEditable()))
+            return false;
+        return toggle();
+    }
+
+private:
+    QWidget* window;
+    std::function<bool()> toggle;
+};
+}
 
 void MainWindow::registerSamplerCommands()
 {
@@ -120,11 +163,69 @@ void MainWindow::registerSamplerCommands()
             return true;
         });
     });
-    slicerPanel = new DockablePanel (*this, QStringLiteral ("slicerPanel"), tr ("Slicer"), scrolling (slicerWin), Qt::LeftDockWidgetArea);
-    splitDockWidget (samplerPanel->dock(), chainPanel->dock(), Qt::Vertical);   // the chain goes under Simplest
-    splitDockWidget (findPanel->dock(), slicerPanel->dock(), Qt::Vertical);
+    slicerPanel = new DockablePanel (*this, QStringLiteral ("slicerPanel"), tr ("Slicer"), scrolling (slicerWin), Qt::BottomDockWidgetArea);
+    // The place they share with the chain takes the height of whichever is picked: compact,
+    // with no room left over (they scroll past it).
+    for (auto* p : { chainPanel, samplerPanel, slicerPanel })
+        connect (p->dock(), &QDockWidget::visibilityChanged, this, [this, p] (bool visible)
+        {
+            if (! visible)
+                return;
+            bottomFront = p;
+            if (p != chainPanel)
+                lastInstrumentFront = p;
+            QTimer::singleShot (0, this, [this, p]
+            {
+                auto* d = p->dock();
+                if (d->isFloating() || ! d->isVisible() || dockWidgetArea (d) != Qt::BottomDockWidgetArea)
+                    return;
+                const auto wanted = p == chainPanel ? std::min (p->content()->sizeHint().height() + 30, 400) : compactHeight (p);
+                if (std::abs (d->height() - wanted) > 8)
+                    resizeDocks ({ d }, { wanted }, Qt::Vertical);
+            });
+        });
+    placeInstrumentDocks();
     panels << samplerPanel << slicerPanel;
+    qApp->installEventFilter (new LowerZoneKey (this, [this] { return toggleChainAndInstrument(); }));
     updateMidiStatus();
+}
+
+// Shift+Tab switches the Device Chain and the open instrument (Simplest or the Slicer), as in
+// Ableton (owner, 2026-10-30). Only in the main window and outside typing fields: there, and in
+// dialogs and other windows, it still moves the keyboard back a field.
+bool MainWindow::toggleChainAndInstrument()
+{
+    if (mixerWin != nullptr && (mixerWin->isWindow() ? mixerWin->isActiveWindow()
+                                                     : mixerDocked() && centralStack->currentWidget() == mixerWin))
+        return mixerWin->toggleLowerZone();
+    auto open = [this] (DockablePanel* p)
+    {
+        return p != nullptr && ! p->isPoppedOut() && ! p->dock()->isFloating() && p->dock()->toggleViewAction()->isChecked()
+            && dockWidgetArea (p->dock()) == Qt::BottomDockWidgetArea;
+    };
+    if (bottomFront != chainPanel && open (bottomFront))
+    {
+        if (! chainPanel->isShown())
+            chainPanel->show (false);
+        chainPanel->dock()->raise();
+        return true;
+    }
+    for (auto* p : { lastInstrumentFront, slicerPanel, samplerPanel })
+        if (open (p))
+        {
+            p->dock()->raise();
+            return true;
+        }
+    return false;
+}
+
+// The height Simplest and the Slicer take where they dock, under the editor or the mixer:
+// what their layout needs, no more, as Cubase's Drum Machine in the lower zone.
+int MainWindow::compactHeight (DockablePanel* p) const
+{
+    auto* area = qobject_cast<QScrollArea*> (p->content());
+    auto* w = area != nullptr ? area->widget() : p->content();
+    return std::clamp (w->minimumSizeHint().height() + 24, 180, 340);   // the room scroll bars and frames take
 }
 
 // What a MIDI keyboard plays: the instrument used last (Simplest, the Slicer, the Mixer's
@@ -249,6 +350,26 @@ void MainWindow::keepFindFocus (QWidget* had)
     };
     QTimer::singleShot (0, this, giveBack);
     QTimer::singleShot (300, this, giveBack);
+}
+
+// Simplest and the Slicer take turns with the Device Chain in one place along the bottom, as
+// tabs (owner, 2026-10-29: "toggle between the device chain and the slicer in that space");
+// under the mixer they take turns with its own chain instead (updateInstrumentDocks).
+void MainWindow::placeInstrumentDocks()
+{
+    auto* chain = chainPanel->dock();
+    auto* sampler = samplerPanel->dock();
+    auto* slicerDock = slicerPanel->dock();
+    const bool samplerShown = sampler->isVisible(), slicerShown = slicerDock->isVisible();
+    for (auto* d : { sampler, slicerDock })
+    {
+        d->setFloating (false);
+        addDockWidget (Qt::BottomDockWidgetArea, d);
+        tabifyDockWidget (chain, d);
+    }
+    sampler->setVisible (samplerShown);
+    slicerDock->setVisible (slicerShown);
+    chain->raise();
 }
 
 void MainWindow::showSampler()

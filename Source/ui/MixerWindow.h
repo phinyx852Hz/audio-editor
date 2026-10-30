@@ -12,6 +12,7 @@
 #include <QTimer>
 #include <QWidget>
 
+#include <algorithm>
 #include <array>
 #include <map>
 #include <set>
@@ -218,6 +219,17 @@ public:
     // instrument and inserts, or the clip picked in the launcher or the tracks. Ctrl+Shift+C
     // (the editor's Device Chain key) hides or shows it, remembered (mixer/devices).
     bool devicePanelShown() const;
+    // Where Simplest (0) and the Slicer (1) sit while the mixer is in front: in the Device
+    // Chain's place under the strips, taking turns with it (owner, 2026-10-29: "toggle between
+    // the device chain and the slicer in that space"). Tabs over it pick which shows while one
+    // is open; opening one puts it in front. A track's own Sampler or Slicer (Edit on its strip)
+    // takes the third place there (2), one track at a time.
+    QWidget* instrumentHost (int which) const { return instrumentHosts[(size_t) std::clamp (which, 0, 1)]; }
+    void setInstrumentOpen (int which, bool open);
+    bool instrumentOpen (int which) const { return instrumentOpens[(size_t) std::clamp (which, 0, 1)]; }
+    bool instrumentInFront() const { return lowerFront >= 0; }
+    void showDeviceChainInFront();
+    bool toggleLowerZone();   // the Device Chain or the instrument in front last; false: none open
     void toggleDevices();
     // What the browser's Instruments and Audio Effects lists drag: "effect\n<id>",
     // "instrument\n<id>", or "synth", "sampler", "slicer".
@@ -643,6 +655,15 @@ private:
     bool finderShown = true;
     void toggleDevicePanel();   // Shift+Tab over the bottom panel: the Device Chain or the clip
     QStackedWidget* devicePanel = nullptr;
+    std::array<QWidget*, 3> instrumentHosts {};
+    std::array<bool, 3> instrumentOpens {};
+    QPointer<QWidget> trackEditor;       // in instrumentHosts[2]
+    QString trackEditorName;
+    void dockTrackEditor (QWidget* editor, const QString& name);
+    int lowerFront = -1;                 // the instrument in front; -1: the Device Chain
+    int lastFront = 1;                   // the instrument in front last
+    class QTabBar* lowerTabs = nullptr;  // the Device Chain and the open instruments
+    void updateLowerZone();
     TrackDevices* devices = nullptr;
     ClipView* clipView = nullptr;
     bool showingClip = false;

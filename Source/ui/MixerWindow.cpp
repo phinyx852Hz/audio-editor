@@ -6984,6 +6984,27 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     layout->addWidget (transportRow);
     layout->addWidget (topScroll);
     layout->addWidget (sideSplitter, 1);
+    lowerTabs = new QTabBar (this);
+    lowerTabs->setFocusPolicy (Qt::NoFocus);
+    lowerTabs->setDrawBase (false);
+    lowerTabs->setExpanding (false);
+    lowerTabs->hide();
+    connect (lowerTabs, &QTabBar::tabBarClicked, this, [this] (int i)
+    {
+        if (i < 0)
+            return;
+        lowerFront = lowerTabs->tabData (i).toInt();
+        updateLowerZone();
+    });
+    layout->addWidget (lowerTabs);
+    for (auto& host : instrumentHosts)
+    {
+        host = new QWidget (this);
+        auto* l = new QVBoxLayout (host);
+        l->setContentsMargins (0, 0, 0, 0);
+        host->hide();
+        layout->addWidget (host);
+    }
     layout->addWidget (devicePanel);
     layout->addLayout (bottom);
 
@@ -7942,12 +7963,114 @@ void MixerWindow::editShownMidi (const std::function<midifile::SongPtr (const mi
 
 bool MixerWindow::devicePanelShown() const { return devicePanel != nullptr && ! devicePanel->isHidden(); }
 
+void MixerWindow::setInstrumentOpen (int which, bool open)
+{
+    which = std::clamp (which, 0, 1);
+    instrumentOpens[(size_t) which] = open;
+    if (open)
+        lowerFront = which;
+    else if (lowerFront == which)
+    {
+        lowerFront = -1;
+        for (int i = 0; i < (int) instrumentOpens.size(); ++i)
+            if (instrumentOpens[(size_t) i])
+                lowerFront = i;
+    }
+    updateLowerZone();
+}
+
+void MixerWindow::showDeviceChainInFront()
+{
+    lowerFront = -1;
+    if (devicesHidden)
+        toggleDevices();   // its turn: shown even if Ctrl+Shift+C had hidden it
+    updateLowerZone();
+}
+
+bool MixerWindow::toggleLowerZone()
+{
+    if (lowerFront >= 0)
+    {
+        showDeviceChainInFront();
+        return true;
+    }
+    if (instrumentOpens[(size_t) lastFront])
+        lowerFront = lastFront;
+    else
+    {
+        for (int i = 0; i < (int) instrumentOpens.size(); ++i)
+            if (instrumentOpens[(size_t) i])
+                lowerFront = i;
+        if (lowerFront < 0)
+            return false;
+    }
+    updateLowerZone();
+    return true;
+}
+
+// A track's Sampler or Slicer goes in the Device Chain's place, compact, as Simplest and the
+// Slicer do (owner, 2026-10-30: "replacing where the device chain is located"), instead of a
+// window of its own. The one before it, of another track, closes.
+void MixerWindow::dockTrackEditor (QWidget* editor, const QString& name)
+{
+    if (trackEditor != nullptr && trackEditor != editor)
+        trackEditor->close();
+    auto* host = instrumentHosts[2];
+    auto* area = new QScrollArea (host);
+    area->setWidget (editor);
+    area->setWidgetResizable (true);
+    area->setFrameShape (QFrame::NoFrame);
+    area->setFocusProxy (editor);
+    area->viewport()->setAutoFillBackground (false);
+    host->layout()->addWidget (area);
+    host->setFixedHeight (std::clamp (editor->minimumSizeHint().height() + 24, 180, 340));
+    trackEditor = editor;
+    trackEditorName = name;
+    // Closing it (Ctrl+W, or its track losing the instrument) gives the place back.
+    connect (editor, &QObject::destroyed, area, [this, area]
+    {
+        area->deleteLater();
+        setInstrumentOpen (2, false);
+    });
+    editor->show();
+    setInstrumentOpen (2, true);
+    editor->setFocus();
+}
+
+// One of the Device Chain and the open instruments shows in the space under the strips.
+void MixerWindow::updateLowerZone()
+{
+    if (lowerFront >= 0)
+        lastFront = lowerFront;
+    for (size_t i = 0; i < instrumentHosts.size(); ++i)
+        instrumentHosts[i]->setVisible ((int) i == lowerFront && instrumentOpens[i]);
+    {
+        const QSignalBlocker quiet (lowerTabs);
+        while (lowerTabs->count() > 0)
+            lowerTabs->removeTab (0);
+        const bool any = std::find (instrumentOpens.begin(), instrumentOpens.end(), true) != instrumentOpens.end();
+        if (any)
+        {
+            lowerTabs->setTabData (lowerTabs->addTab (tr ("Device Chain")), -1);
+            const QString names[3] { tr ("Simplest"), tr ("Slicer"), trackEditorName };
+            for (int i = 0; i < 3; ++i)
+                if (instrumentOpens[(size_t) i])
+                    lowerTabs->setTabData (lowerTabs->addTab (names[i]), i);
+            for (int t = 0; t < lowerTabs->count(); ++t)
+                if (lowerTabs->tabData (t).toInt() == lowerFront)
+                    lowerTabs->setCurrentIndex (t);
+        }
+        lowerTabs->setVisible (any);
+    }
+    updateDevicePanel();
+}
+
 void MixerWindow::updateDevicePanel()
 {
     if (devicePanel == nullptr)
         return;
     refreshMidiClipBox();
-    const bool show = ! devicesHidden;   // fixed along the bottom; the master's shows nothing to change
+    const bool show = lowerFront < 0 && ! devicesHidden;   // fixed along the bottom, unless an instrument has the place
     if (devicePanel->isHidden() == show)
     {
         devicePanel->setVisible (show);
@@ -8910,6 +9033,12 @@ void MixerWindow::editInstrument (int track)
     auto& t = info[(size_t) track];
     if (t.editor != nullptr)
     {
+        if (t.editor == trackEditor)
+        {
+            setInstrumentOpen (2, true);   // to the front of the place under the strips
+            t.editor->setFocus();
+            return;
+        }
         t.editor->show();
         t.editor->raise();
         t.editor->activateWindow();
@@ -8933,7 +9062,8 @@ void MixerWindow::editInstrument (int track)
                 w->setSample (sound, rate(), title, true);
             w->setWindowTitle (tr ("Sampler: %1").arg (title));
             t.editor = w;
-            break;
+            dockTrackEditor (w, tr ("Track %1: Sampler").arg (track + 1));
+            return;
         }
         case mixer::Instrument::Kind::slicer:
         {
@@ -8944,7 +9074,8 @@ void MixerWindow::editInstrument (int track)
                 w->setSample (sound, t.sound != nullptr ? t.sound : soundAsAudio (*sound, rate()), rate(), title, true, BeatGrid {}, {});
             w->setWindowTitle (tr ("Slicer: %1").arg (title));
             t.editor = w;
-            break;
+            dockTrackEditor (w, tr ("Track %1: Slicer").arg (track + 1));
+            return;
         }
         case mixer::Instrument::Kind::synth:
         {
