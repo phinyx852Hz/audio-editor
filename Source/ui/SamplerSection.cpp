@@ -3,6 +3,7 @@
 // (sampler/SlicerEngine.h) in their own windows, fed from the editor, and MIDI inputs
 // that play them.
 #include "MainWindow.h"
+#include "MidiPanel.h"
 #include "FindPanel.h"
 #include "MixerWindow.h"
 #include "PatchBayWindow.h"
@@ -153,6 +154,13 @@ void MainWindow::playMidi (int status, int channel, int a, int b)
                 p->liveMidi (patchSynth.load(), st, (uint8_t) (a & 0x7F), (uint8_t) ((a >> 7) & 0x7F));
             else
                 p->liveMidi (patchSynth.load(), st, (uint8_t) a, (uint8_t) b);
+            // The MIDI editor's instrument: its notes step in too, when step input is on.
+            if (patchSynth.load() == midiPanelSynth.load() && (status == 0x90 || status == 0x80))
+                QMetaObject::invokeMethod (this, [this, st, a, b]
+                {
+                    if (midiPanel != nullptr)
+                        midiPanel->midiIn (st, (uint8_t) a, (uint8_t) b);
+                }, Qt::QueuedConnection);
         }
         return;
     }

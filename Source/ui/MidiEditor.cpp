@@ -1284,9 +1284,14 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     : QDialog (parent), host (std::move (h)), original (song)
 {
     setWindowTitle (host.title.isEmpty() ? tr ("MIDI Editor") : tr ("MIDI Editor: %1").arg (host.title));
-    setWindowFlag (Qt::WindowMaximizeButtonHint);
-    setSizeGripEnabled (true);
-    resize (1180, 760);
+    if (host.embedded)
+        setWindowFlags (Qt::Widget);
+    else
+    {
+        setWindowFlag (Qt::WindowMaximizeButtonHint);
+        setSizeGripEnabled (true);
+        resize (1180, 760);
+    }
     seq = decode (song);
     step.length = step.step = seq.ticksPerQuarter / 2;
     playTimer = new QTimer (this);
@@ -1603,6 +1608,7 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
         if (auto* p = qobject_cast<QPushButton*> (b))
             p->setAutoDefault (false);
     save->addWidget (buttons);
+    buttons->setVisible (! host.embedded);
     layout->addLayout (save);
     connect (buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect (buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -2914,6 +2920,8 @@ void MidiEditor::playTick()
 void MidiEditor::done (int r)
 {
     stopPlay();
+    if (host.embedded)
+        return;   // a panel stays where it is
     QDialog::done (r);
 }
 

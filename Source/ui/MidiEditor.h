@@ -55,6 +55,9 @@ public:
         // Opens on this notation (notation::systems()' id: "phi" PHI's staff, "bhatkhande",
         // "jeongganbo"...); empty: as `staff` says.
         QString notation;
+        // A panel of the main window rather than a dialog (MidiPanel.h): no Apply or Cancel, and
+        // Escape or Enter never closes it.
+        bool embedded = false;
     };
 
     MidiEditor (const midifile::Song&, Host, QWidget* parent);
