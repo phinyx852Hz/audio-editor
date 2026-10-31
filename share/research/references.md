@@ -371,11 +371,17 @@ removes both, and is the least noise that does; Gaussian noise, like a preamp's,
 frequencies where hearing is least sensitive, mostly the top of the band. It lowers the hiss you
 hear, but it suits only the last step: shaped noise processed again (equalized, say) can come
 out where it is easily heard, so a file that will be worked on further gets plain TPDF.
+Mastering tools go further: TPDF that is high-passed, so its hiss sits higher, and shaping
+filters of fifth to ninth order fitted to the ear's sensitivity, after work by Michael Gerzon,
+Peter Craven, Robert Wannamaker, Lipshitz and Vanderkooy. MAAT's LINpro (2021), for example,
+offers these, with rectangular dither and plain truncation kept only to compare against.
 
 **When.** Dither belongs at every point where the word length shrinks, not only at the final
 master, because each cut makes its own distortion; that is why mastering engineers teach
 dithering on every save to a shorter word and inside fixed-point plugin chains. Audio that is
 already on the grid of the target depth needs none, and dithering it again only adds noise.
+Now that one master is delivered in several forms (16-bit for CD, 24-bit for high-resolution
+stores, and so on), each gets its own dither as its last step, chosen for that format.
 Floating-point processing (32-bit float) keeps far more resolution than any converter, so a
 float chain needs no dither between its stages.
 
@@ -396,3 +402,5 @@ the dither inside the loop.
 - John Vanderkooy and Stanley P. Lipshitz, "Dither in Digital Audio", *JAES* 35/12 (1987).
 - Stanley P. Lipshitz, Robert A. Wannamaker and John Vanderkooy, "Quantization and Dither:
   A Theoretical Survey", *JAES* 40/5 (1992).
+- [MAAT Remasters Dithering Process With New LINpro Plug-In](https://audioxpress.com/news/maat-remasters-dithering-process-with-new-linpro-plug-in),
+  audioXpress (2021), a product announcement.
