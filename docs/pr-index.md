@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**130 pull requests:** 111 merged, 19 open.
+**132 pull requests:** 111 merged, 21 open.
 
 ## Contents
 
@@ -68,7 +68,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#48](https://github.com/phinyx852Hz/audio-editor/pull/48) | Add the Plugin Analyzer, Forensic Φ and the Aliasing scope | merged | Analyze menu, Plugin Analyzer | `Source/core/PluginMeasure.cpp`<br>`Source/core/PhiForensics.cpp`<br>`Source/ui/PluginAnalyzer.cpp` |
 | [#75](https://github.com/phinyx852Hz/audio-editor/pull/75) | Spectrum: 20 FFT windows, Welch averaging, zero padding, multitaper, Selector hold colours | merged | 1. Windows (Options > Window): | `Source/core/Windows.cpp`<br>`Source/ui/AnalysisWindow.cpp`<br>`tests/CoreTests.cpp` |
 | [#96](https://github.com/phinyx852Hz/audio-editor/pull/96) | Analysis Meters: an opacity slider of its own | merged |  | `Source/ui/AnalysisWindow.cpp`<br>`Source/ui/Theme.cpp`<br>`Source/ui/Theme.h` |
-| [#130](https://github.com/phinyx852Hz/audio-editor/pull/130) | Analysis Meters: EBU-tested loudness, classic VU/PPM/K meters, a bitscope, OVERs, Heinzel flat tops | open |  | `Source/ui/AnalysisWindow.cpp`<br>`Source/core/EbuCore.cpp`<br>`docs/testing/ebu-tests.md` |
+| [#130](https://github.com/phinyx852Hz/audio-editor/pull/130) | Analysis Meters: EBU-tested loudness, classic VU/PPM/K meters, a bitscope, OVERs, Heinzel flat tops | open |  | `Source/ui/AnalysisWindow.cpp`<br>`Source/core/EbuCore.cpp`<br>`share/research/composition-1-europe.md` |
 
 ### Mastering
 
@@ -229,6 +229,8 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#126](https://github.com/phinyx852Hz/audio-editor/pull/126) | Research: add a Sampling section | open | Research > Sampling | `share/research/sampling-1-techniques.md`<br>`share/research/sampling-0-history.md`<br>`share/research/sampling-2-instruments.md` |
 | [#128](https://github.com/phinyx852Hz/audio-editor/pull/128) | Research: add Acoustic Ecology (Schafer, composers, Feld and the Kaluli, noise music) | open |  | `share/research/ecology-1-composers.md`<br>`share/research/ecology-3-noise.md`<br>`share/research/ecology-0-schafer.md` |
 | [#129](https://github.com/phinyx852Hz/audio-editor/pull/129) | Compose: John Cage's and Pauline Oliveros's techniques | open |  | `Source/mixer/Compose.cpp`<br>`tests/CoreTests.cpp`<br>`docs/compose.md` |
+| [#131](https://github.com/phinyx852Hz/audio-editor/pull/131) | Compose: Congolese guitar, rumba and sebene | open |  | `Source/mixer/Compose.cpp`<br>`tests/CoreTests.cpp`<br>`docs/compose.md` |
+| [#132](https://github.com/phinyx852Hz/audio-editor/pull/132) | Compose: interlocking polyphony (Mbuti, Aka) and a Bol Processor grammar qāʿida | open |  | `Source/mixer/Compose.cpp`<br>`tests/CoreTests.cpp`<br>`docs/compose.md` |
 
 ## By number
 
@@ -364,3 +366,5 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#128](https://github.com/phinyx852Hz/audio-editor/pull/128) | Research: add Acoustic Ecology (Schafer, composers, Feld and the Kaluli, noise music) | Adds an Acoustic Ecology submenu to Research, as four new files in share/research/. *(auto)* | open | 2026-10-31 | Not yet sorted |
 | [#129](https://github.com/phinyx852Hz/audio-editor/pull/129) | Compose: John Cage's and Pauline Oliveros's techniques | Compose already had Chance and Aleatory, which covers Cage's I Ching chance operations in *Music of Changes*. *(auto)* | open | 2026-10-31 | Not yet sorted |
 | [#130](https://github.com/phinyx852Hz/audio-editor/pull/130) | Analysis Meters: EBU-tested loudness, classic VU/PPM/K meters, a bitscope, OVERs, Heinzel flat tops | PHI's loudness code was run on the EBU Loudness test set v05, which covers Tech 3341, 3342 and 3343. *(auto)* | open | 2026-10-31 | Analysis and meters |
+| [#131](https://github.com/phinyx852Hz/audio-editor/pull/131) | Compose: Congolese guitar, rumba and sebene | Adds a new Compose method, Congolese Guitar: Rumba and Sebene. *(auto)* | open | 2026-10-31 | Not yet sorted |
+| [#132](https://github.com/phinyx852Hz/audio-editor/pull/132) | Compose: interlocking polyphony (Mbuti, Aka) and a Bol Processor grammar qāʿida | Two new methods in the Compose menu, both driven by composition::methods(), so the menu and the Compose dialog pick them up without UI changes. *(auto)* | open | 2026-10-31 | Not yet sorted |
