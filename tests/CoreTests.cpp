@@ -8994,14 +8994,20 @@ namespace
         std::set<int> seen;
         for (const auto& p : pt::pads())
         {
-            unique = unique && p.pad >= 0 && p.pad < 32 && seen.insert (p.pad).second;
-            for (const auto* f : p.files)
-                files = files && std::filesystem::exists (std::string (PHI_SHARE_SOURCE_DIR "/phi-tabla/") + f + ".wav");
+            unique = unique && p.pad >= 0 && p.pad < 48 && seen.insert (p.pad).second;
+            // Every sound there (and any stand-ins).
+            for (const auto& list : { p.sounds, p.fallback })
+                for (const auto& x : list)
+                    files = files && std::filesystem::exists (std::string (PHI_SHARE_SOURCE_DIR "/phi-tabla/") + x.file + ".wav");
         }
-        check (unique && files && pt::pads().size() >= 30, "phi tabla: 32 pads at most, each sound in share/phi-tabla");
-        check (pt::padFor ("dha", 0) == 0 && pt::padFor ("dha", 1) == 1 && pt::padFor ("dha", 2) == 0 && pt::padFor ("ne", 0) == pt::padFor ("ta", 0)
-                   && pt::padFor ("dhee", 0) == pt::padFor ("dhi", 0) && pt::padFor ("C4", 0) < 0 && pt::noteFor ("dha", 0) == 36,
-               "phi tabla: a bol's takes in turn, its spellings as one, the first pad on Push's first note");
+        // The owner's rack: 32 pads on banks A and B, its note 61 the first pad, 92 the last (dhā).
+        bool rack = true;
+        for (int pad = 0; pad < 32; ++pad)
+            rack = rack && seen.count (pad) == 1;
+        check (unique && files && rack && std::string (pt::pads()[31].name) == "dhā", "phi tabla: the owner's 32-pad rack on banks A and B, each sound in share/phi-tabla");
+        check (pt::padFor ("ta", 0) == 82 - 61 && pt::padFor ("ta", 1) == 91 - 61 && pt::padFor ("ta", 2) == 82 - 61 && pt::padFor ("ne", 0) == pt::padFor ("ta", 0)
+                   && pt::padFor ("dhee", 0) == pt::padFor ("dhi", 0) && pt::padFor ("C4", 0) < 0 && pt::noteFor ("ta", 0) == slicer::noteForPad (21, slicer::Layout::push, 0),
+               "phi tabla: a bol's takes in turn, its spellings as one, on Push's notes");
 
         auto sound = std::make_shared<sampler::Sample>();
         uint32_t x = 1;
@@ -9013,8 +9019,10 @@ namespace
             sound->right.push_back (v);
         }
         const auto kit = pt::kit ("folder", [&] (const std::string&) { return sound; });
-        check (kit.pads[0].layerCount() == 2 && kit.pads[8].layerCount() == 1 && kit.pads[0].name == "dha" && kit.layout == slicer::Layout::push,
-               "phi tabla: dha is tā and ge together; a pad a stroke");
+        const auto dha = pt::padFor ("dhin", 0), ta = pt::padFor ("ta", 0);
+        check (kit.pads[(size_t) dha].layerCount() == 2 && kit.pads[(size_t) ta].layerCount() == 1 && kit.pads[(size_t) ta].name == "tā2"
+                   && kit.pads[69 - 61].layers[0].start == 362 && kit.layout == slicer::Layout::push,
+               "phi tabla: dhin is tin and ge together; the rack's names and start points");
 
         // A soft hit: quieter, and with less of its highs (the sample to sample difference) for its level.
         auto brightness = [&] (double tone)
@@ -9024,7 +9032,7 @@ namespace
             auto k = kit;
             k.velocityTone = tone;
             e.setKit (k);
-            e.hit (8, 0.3f);
+            e.hit (pt::padFor ("ta", 0), 0.3f);
             std::vector<float> l (2048, 0.0f), r (2048, 0.0f);
             e.render (l.data(), r.data(), 2048);
             double level = 0.0, high = 0.0;

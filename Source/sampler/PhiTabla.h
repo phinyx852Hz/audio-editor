@@ -4,9 +4,9 @@
 // PHI tabla (owner, 2026-10-31: "a set of tabla sounds that I plan to incorporate into PHI ... as a
 // drum instrument of sorts ... connect the slicer and this particular set of tabla sounds (of my own
 // playing) and the bol processor"; "I also want a playable drum pad ... 32 pads total, playable on
-// the push"). The owner's own recorded strokes (share/phi-tabla) as a Slicer kit of 32 pads, banks A
-// and B, so Push plays it: a pad a stroke and take, compounds layered (dha is tā with ge), the
-// phrases whole, and the two Sa references. Softer hits are darker as well as quieter. The Bol
+// the push"). The owner's own recorded strokes (share/phi-tabla) as a Slicer kit Push plays: banks A
+// and B are the owner's Ableton Drum Rack, its 32 pads (notes 61 to 92) in order with their trims
+// and levels; bank C has the compounds layered (dhin is tin with ge) and the two Sa references. Softer hits are darker as well as quieter. The Bol
 // Processor and Compose play it by bol: noteFor() gives each use of a bol the next take, so a run
 // of the same bol does not repeat one sound. Plain C++; the sounds are loaded by whoever calls kit().
 #include "SlicerEngine.h"
@@ -17,12 +17,19 @@
 
 namespace phitabla
 {
+    struct Sound
+    {
+        const char* file;                     // in share/phi-tabla, without ".wav"
+        Frame start = 0, end = -1;            // the part played (at 48 kHz); -1: to the end
+        double gainDb = 0.0;
+    };
     struct Pad
     {
-        int pad;                              // 0..31: banks A and B
-        const char* name;                     // as the pad shows it: "dha", "tā 2", "phrase: dhātete (bharī)"
+        int pad;                              // 0..31: banks A and B, the owner's rack; 32 on: bank C
+        const char* name;                     // as the pad shows it
         const char* bol;                      // the bol it plays ("dha"), or "" for a phrase or a reference
-        std::vector<const char*> files;       // in share/phi-tabla, without ".wav"; more than one sound together
+        std::vector<Sound> sounds;            // more than one: together
+        std::vector<Sound> fallback = {};     // while a sound is missing
     };
     const std::vector<Pad>& pads();
 

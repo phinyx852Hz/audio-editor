@@ -64,22 +64,20 @@ theme or a variation, bharī and then khālī. The alphabet's `*` homomorphism m
 
 ## PHI tabla
 
-The owner's own recorded strokes (`share/phi-tabla`, 8.6 MB) as an instrument: **PHI tabla** in a
-track's instrument list (Built-in). It is a Slicer kit of 31 pads in banks A and B, so Push plays
-it on its grid and the Slicer window edits it (`Source/sampler/PhiTabla.h`).
+The owner's own recorded strokes (`share/phi-tabla`, 32 files, 11 MB) as an instrument: **PHI
+tabla** in a track's instrument list (Built-in). It is a Slicer kit, so Push plays it on its grid
+and the Slicer window edits it (`Source/sampler/PhiTabla.h`).
 
-| Pads | What |
-|---|---|
-| 1–8 (A) | dha, dha 2, dhin, dhin 2, dhi, dhi 2, dhun, kran: compounds, the dāyāṅ stroke and ge (or ke) layered |
-| 9–16 (A) | tā, tā 2, tin, tin 2 (sur), te, te 2, te 3, tu |
-| 17–24 (B) | tu 2, ge, ge 2, ge (mīṇḍ), ke (kath), ke 2 (kath), tak, trika |
-| 25–29 (B) | phrases: dhātete (bharī), tātete (khālī), tirakiṭe roll, gege ×3, ge modulations |
-| 30–31 (B) | Sa: the dāyāṅ's (C♯) and the bāyāṅ's (F♯) |
+- **Banks A and B** are the owner's Ableton Drum Rack ("TablaDrumRackV.2", 2026-10-31), read from
+  its `.als`. Its 32 pads, notes 61 to 92, are in order on pads 1 to 32, with the rack's names,
+  sample start and end points, and levels. They run from the phrases (ta-titrakitetaka, dhātete,
+  tātete, gege, dhāgenā and others) through kath, te, tin, tā, tak, tu and ge to dhā.
+- **Bank C** holds compounds layered from two strokes (dha, dhin, dhi, dhun and kran, two takes
+  each where there are two), and the Sa of the dāyāṅ (C♯) and the bāyāṅ (F♯).
 
 The dāyāṅ's strokes stop each other, and so do the bāyāṅ's, as on the drum. The recordings have
 one level each, so softer hits are quieter and also darker: the Slicer's new **velocity tone**
 (`Kit::velocityTone`, 0.5 for PHI tabla) closes a low-pass by up to six octaves as velocity falls.
 Where there are two or three takes of a stroke, the Bol Processor plays them in turn.
 
-Still to do: the owner's 32-pad Ableton rack layout, if it differs; and slicing the phrases into
-strokes with the Slicer, as more takes.
+Still to do: slicing the phrases into strokes with the Slicer, as more takes.

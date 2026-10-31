@@ -2,6 +2,7 @@
 #include "PhiTabla.h"
 
 #include <cctype>
+#include <algorithm>
 #include <map>
 
 namespace phitabla
@@ -9,38 +10,52 @@ namespace phitabla
     const std::vector<Pad>& pads()
     {
         // Bank A: the dāyāṅ and the compounds; bank B: the bāyāṅ, the rest, the phrases and Sa.
+        // Banks A and B: the owner's Ableton Drum Rack ("TablaDrumRackV.2"), notes 61 to 92 in order,
+        // with its start and end points and levels; bank C: compounds layered, and Sa.
         static const std::vector<Pad> all {
-            { 0, "dha", "dha", { "ta-1", "ge-1" } },
-            { 1, "dha 2", "dha", { "ta-2", "ge-2" } },
-            { 2, "dhin", "dhin", { "tin-1", "ge-1" } },
-            { 3, "dhin 2", "dhin", { "tin-2", "ge-2" } },
-            { 4, "dhi", "dhi", { "te-1", "ge-1" } },
-            { 5, "dhi 2", "dhi", { "te-3", "ge-2" } },
-            { 6, "dhun", "dhun", { "tu-1", "ge-1" } },
-            { 7, "kran", "kran", { "ke-1", "ta-1" } },
-            { 8, "tā", "ta", { "ta-1" } },
-            { 9, "tā 2", "ta", { "ta-2" } },
-            { 10, "tin", "tin", { "tin-1" } },
-            { 11, "tin 2 (sur)", "tin", { "tin-2" } },
-            { 12, "te", "te", { "te-1" } },
-            { 13, "te 2", "te", { "te-2" } },
-            { 14, "te 3", "te", { "te-3" } },
-            { 15, "tu", "tu", { "tu-1" } },
-            { 16, "tu 2", "tu", { "tu-2" } },
-            { 17, "ge", "ge", { "ge-1" } },
-            { 18, "ge 2", "ge", { "ge-2" } },
-            { 19, "ge (mīṇḍ)", "", { "ge-meend" } },
-            { 20, "ke (kath)", "ke", { "ke-1" } },
-            { 21, "ke 2 (kath)", "ke", { "ke-2" } },
-            { 22, "tak", "tak", { "tak" } },
-            { 23, "trika", "trika", { "trika" } },
-            { 24, "phrase: dhātete (bharī)", "", { "phrase-dhatete-bhari" } },
-            { 25, "phrase: tātete (khālī)", "", { "phrase-tatete-khali" } },
-            { 26, "phrase: tirakiṭe roll", "", { "phrase-tirakite-roll" } },
-            { 27, "phrase: gege ×3", "", { "phrase-gege-x3" } },
-            { 28, "phrase: ge modulations", "", { "phrase-gege-modulations" } },
-            { 29, "Sa: dāyāṅ (C♯)", "", { "sa-dayan-c-sharp" } },
-            { 30, "Sa: bāyāṅ (F♯)", "", { "sa-bayan-f-sharp" } },
+            { 0, "ta-titrakitetakatirakite", "", { { "phrase-ta-titrakitetaka-tirakite", 0, 56282, 8.0 } } },
+            { 1, "ta-titrakitetaka", "", { { "phrase-ta-titrakitetaka", 0, 74585, 8.0 } } },
+            { 2, "dhātetedhātetetāgedhināgenā", "", { { "phrase-dhatete-bhari", 0, 95999, 5.0 } } },
+            { 3, "tātetetātetetāketinākenā", "", { { "phrase-tatete-khali", 0, 121618, 7.0 } } },
+            { 4, "tirakite-roll4", "", { { "phrase-tirakite-roll", 0, 95999, 20.0 } } },
+            { 5, "dhātidhāgetinākenā", "", { { "phrase-dhatidhagetinakena", 0, 130396, 8.0 } } },
+            { 6, "tātitāketinākenā", "", { { "phrase-tatitaketinakena", 0, 97544, 4.0 } } },
+            { 7, "dhāgenā", "", { { "phrase-dhagena", 0, 57145, 8.0 } } },
+            { 8, "trika", "trika", { { "trika", 362, 17804, 6.0 } } },
+            { 9, "tete2", "", { { "phrase-tatete-2", 0, 26753, 9.0 } } },
+            { 10, "tete1", "", { { "phrase-tatete-2", 0, 26753, 9.0 } } },
+            { 11, "tātete", "", { { "phrase-tatete-1", 0, 41699, 8.0 } } },
+            { 12, "gegegegex2", "", { { "phrase-gege-x2", 0, 94353, 0.0 } } },
+            { 13, "gegegegex3", "", { { "phrase-gege-x3", 0, 208433, 4.0 } } },
+            { 14, "gege-modulations", "", { { "phrase-gege-modulations", 0, 237199, 7.0 } } },
+            { 15, "gegegegex4", "", { { "phrase-gege-x2", 0, 95180, 0.0 } } },
+            { 16, "kath-R2", "ke", { { "ke-2", 180, 87514, 0.0 } } },
+            { 17, "kath-R", "ke", { { "ke-1", 475, 106175, 0.0 } } },
+            { 18, "te2", "te", { { "te-1", 579, 90191, 0.0 } } },
+            { 19, "te1", "te", { { "te-2", 0, 22264, 0.0 } } },
+            { 20, "tin2", "tin", { { "tin-2", 0, 210576, 5.0 } } },
+            { 21, "tā2", "ta", { { "ta-1", 0, 157789, 8.0 } } },
+            { 22, "tak", "tak", { { "tak", 0, 97859, 4.0 } } },
+            { 23, "te3", "te", { { "te-3", 159, 38063, 0.0 } } },
+            { 24, "tu2", "tu", { { "tu-1", 0, 250525, 10.0 } } },
+            { 25, "ge-glide1", "", { { "ge-meend", 0, 27323, 7.0 } } },
+            { 26, "ge2", "ge", { { "ge-1", 0, 67193, 9.0 } } },
+            { 27, "gā4", "ge", { { "ge-2", 0, 54090, 13.0 } } },
+            { 28, "tu1", "tu", { { "tu-2", 251, 145295, 7.0 } } },
+            { 29, "tin1", "tin", { { "tin-1", 87, 157437, 9.0 } } },
+            { 30, "tā1", "ta", { { "ta-2", 397, 110767, 3.0 } } },
+            { 31, "dhā", "dha", { { "dha-a", 529, 115199, 7.0 } } },
+            { 32, "dha (tā + ge)", "dha", { { "ta-1", 0, 157789, 4.0 }, { "ge-1", 0, 67193, 6.0 } } },
+            { 33, "dha 2 (tā + gā)", "dha", { { "ta-2", 397, 110767, 3.0 }, { "ge-2", 0, 54090, 9.0 } } },
+            { 34, "dhin (tin + ge)", "dhin", { { "tin-1", 87, 157437, 9.0 }, { "ge-1", 0, 67193, 6.0 } } },
+            { 35, "dhin 2 (tin + gā)", "dhin", { { "tin-2", 0, 210576, 5.0 }, { "ge-2", 0, 54090, 9.0 } } },
+            { 36, "dhi (te + ge)", "dhi", { { "te-1", 579, 90191, 0.0 }, { "ge-1", 0, 67193, 6.0 } } },
+            { 37, "dhi 2 (te + gā)", "dhi", { { "te-3", 159, 38063, 0.0 }, { "ge-2", 0, 54090, 9.0 } } },
+            { 38, "dhun (tu + ge)", "dhun", { { "tu-1", 0, 250525, 10.0 }, { "ge-1", 0, 67193, 6.0 } } },
+            { 39, "kran (ke + tā)", "kran", { { "ke-1", 475, 106175, 0.0 }, { "ta-1", 0, 157789, 4.0 } } },
+            { 40, "Sa: dāyāṅ (C♯)", "", { { "sa-dayan-c-sharp" } } },
+            { 41, "Sa: bāyāṅ (F♯)", "", { { "sa-bayan-f-sharp" } } },
+            { 42, "phrase: ge modulations (whole)", "", { { "phrase-gege-modulations" } } },
         };
         return all;
     }
@@ -94,25 +109,40 @@ namespace phitabla
         k.velocityTone = 0.5;
         k.voices = 32;
         std::map<std::string, sampler::SamplePtr> loaded;
+        auto get = [&] (const char* f)
+        {
+            const auto path = folder + "/" + f + ".wav";
+            auto& s = loaded[f];
+            if (s == nullptr)
+                s = load (path);
+            return std::pair { s, path };
+        };
         for (const auto& p : pads())
         {
-            int layer = 0;
-            for (const auto* f : p.files)
-            {
-                const auto path = folder + "/" + f + ".wav";
-                auto& s = loaded[f];
-                if (s == nullptr)
+            // A pad's own sounds, else its stand-ins (the dhā pad until its recording comes).
+            auto sounds = p.sounds;
+            for (const auto& x : p.sounds)
+                if (get (x.file).first == nullptr)
                 {
-                    s = load (path);
-                    if (s == nullptr && missing != nullptr)
-                        missing->push_back (path);
+                    if (missing != nullptr)
+                        missing->push_back (folder + "/" + x.file + ".wav");
+                    sounds = p.fallback;
                 }
-                if (s != nullptr && layer < slicer::maxLayers)
-                    slicer::placeSound (k, p.pad, layer++, s, path);
+            int layer = 0;
+            for (const auto& x : sounds)
+            {
+                const auto [s, path] = get (x.file);
+                if (s == nullptr || layer >= slicer::maxLayers)
+                    continue;
+                slicer::placeSound (k, p.pad, layer, s, path);
+                auto& l = k.pads[(size_t) p.pad].layers[(size_t) layer++];
+                l.start = std::clamp<Frame> (x.start, 0, s->length());
+                l.end = x.end < 0 ? s->length() : std::clamp<Frame> (x.end, l.start, s->length());
+                l.gainDb = x.gainDb;
             }
             auto& pad = k.pads[(size_t) p.pad];
             pad.name = p.name;
-            pad.colour = *p.bol == 0 ? 9 : p.pad < 16 ? 3 : 6;
+            pad.colour = *p.bol == 0 ? 9 : p.pad >= 32 ? 3 : 6;
             // Strokes ring out; the open ones ring a while, so a stroke stops the last one on its drum.
             pad.release = 0.08;
             const std::string b = p.bol;
