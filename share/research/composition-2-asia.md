@@ -67,6 +67,20 @@ jins (a tetrachord or pentachord), so that the listener learns the maqām; then 
 range freely, climbing through its ajnās to the dominant (ghammāz) and the upper octave
 (jawāb), and modulate to other maqāms, as long as the end, a cadence (qafla), comes home.
 
+The word means "division". A taqsīm is not free fantasy: Scott Marcus stresses the conventions
+it follows, and Mondher Ayari and Stephen McAdams hear phases, an introduction, a presentation
+of the maqām's basic elements, an exposition, a re-exposition and a confirmation, whose order
+and length vary with the player. It is prized as the place where players show their own
+invention rather than someone else's composition, and as a sign of good musicianship (Ali Jihad
+Racy). Jonathan Shannon links it to ṭarab, the heightened, enraptured state that Arab listeners
+and performers prize, and to salṭana, the player's immersion in the maqām, a melodic flow that
+seems to suspend time. Zeina Alkaei and Mats Küssner's interviews with three Syrian oud players
+in Berlin (2021) found them describing it as composing on the spot, built from the tetrachords
+and from phrases borrowed from songs and masters' taqāsīm, with two jobs: to introduce a piece,
+preparing players and listeners for its mood, and to give a solo within it. They argue it fits
+neither end of the old composition-improvisation scale, a scale Bruno Nettl himself later
+doubted.
+
 A waṣla (plural waṣalāt) is a suite of eight or more pieces, usually in one maqām, that joins
 improvisation with composed forms. Instrumental pieces such as the bashraf, the dūlāb and the
 samāʿī open it; the samāʿī has four sections (khānāt) with a recurring refrain (taslīm), in a
@@ -86,6 +100,15 @@ qafla, then a waṣla of a samāʿī with its taslīm and a muwashshaḥ.
   [Arabic maqam](https://en.wikipedia.org/wiki/Arabic_maqam) and
   [Samai](https://en.wikipedia.org/wiki/Samai), Wikipedia.
 - Scott L. Marcus, *Music in Egypt* (Oxford University Press, 2007).
+- Ali Jihad Racy, "The Many Faces of Improvisation: The Arab Taqāsīm as a Musical Symbol",
+  *Ethnomusicology* 44/2 (2000).
+- Mondher Ayari and Stephen McAdams, "Aural Analysis of Arabic Improvised Instrumental Music
+  (Taqsīm)", *Music Perception* 21/2 (2003).
+- Jonathan H. Shannon, "Emotion, Performance, and Temporality in Arab Music: Reflections on
+  Tarab", *Cultural Anthropology* 18/1 (2003).
+- Zeina Alkaei and Mats B. Küssner, ["Taqsīm as a Creative Musical Process in Arabic
+  Music"](https://doi.org/10.3389/fpsyg.2021.640409), *Frontiers in Psychology* 12 (2021),
+  open access.
 - Ali Jihad Racy, "The Waslah: A Compound-Form Principle in Egyptian Music", *Arab Studies
   Quarterly* 5/4 (1983).
 - Virginia Danielson, *The Voice of Egypt: Umm Kulthūm, Arabic Song, and Egyptian Society in
