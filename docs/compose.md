@@ -62,6 +62,22 @@ cycles, its layers and how its parts relate. All of them are in mixer/Compose.h,
   charts of 64 by the I Ching (three coins six times). A moving hexagram replaces its sound in the
   chart. The sections are in Music of Changes' square-root proportions. Then comes Lutosławski's
   ad libitum, where every part loops its own figure out of time until a cue, a battuta.
+- **4′33″ (Silence)** (Cage, 1952). Three movements, all tacet, in the lengths of the premiere
+  (David Tudor, Woodstock, 1952): 33″, 2′40″ and 1′20″ at the tempo, 4′33″ in all, whatever the
+  Length. The performer closes the lid to begin each movement and opens it to end it. What sounds is
+  the place, by chance (Poisson arrivals, each layer at its own rate, all quiet): the room, the
+  audience, the street, rain in the second movement and wind in the first, and the high and low
+  sounds Cage heard in the anechoic chamber (his nervous system and his circulation).
+- **Star Charts** (Cage, Atlas Eclipticalis, 1961–62). Each part has a page of a star atlas laid
+  over its staff a page at a time: across is time, up is pitch (on the mode's degrees, in the part's
+  register), each star a sound. Stars come in constellations on a scattered field, faint ones about
+  2.5 times as many as the magnitude before; the brighter the star, the louder and longer its sound,
+  and a player may leave out a faint one. The sections are the pages, at the conductor's clock.
+- **Musicircus** (Cage, 1967). Many musics at once and none of them coordinated. Each part is one
+  part of another Compose method, at a tempo of its own (0.6 to 1.5 times the score's), coming in
+  and going out by chance one to three times; while it is out its music goes on unheard. Only the
+  methods in the Mode menu's mode take part (none with a tradition's own tuning, and not Spectral).
+  The sections mark each entrance and exit.
 - **Process Music** (Reich and Glass). A figure, Piano Phase's pattern (one copy phasing against
   one held), a pulse, a bass built up, a counter-figure in subtractive process, a shorter cycle and
   an arpeggio are each given to a part through minimalize's processes.
@@ -73,6 +89,29 @@ cycles, its layers and how its parts relate. All of them are in mixer/Compose.h,
   its exact cents (sent as pitch bend, so the score plays in 12-TET with the bends). Each cycle is an
   attack and its resonance. The spectrum stretches from harmonic to most inharmonic at the golden
   section, and back.
+
+- **Tuning Meditation** (Pauline Oliveros, first sung at the Guggenheim in 1981 by 75 singers under
+  William Duckworth). The score is followed as written, a breath at a time, each voice at its own
+  pace: breathe out with air sound, listen with the mind's ear for a tone, sing it on one breath,
+  listen to the whole field, tune as exactly as possible to a distant voice, listen again, sing a
+  new tone no one else is singing (louder, to be heard far off), then go on listening and singing a
+  tone of one's own or tuning to another's, by turns. One tone a breath. Each voice tunes to the
+  most distant voice it has not yet tuned to, so it reaches as many as it can, in its own register.
+  Everyone ends together. The sections mark when the first voice reaches each step.
+- **Time Brackets** (Cage, the Number Pieces, 1987–92). Each part is a row of time brackets: a
+  window to start in and an overlapping window to stop in (0′00″↔0′45″, 0′30″↔1′15″, shorter in a
+  short piece), staggered between the parts. Each holds one quiet held sound, or two or three, cast
+  by the I Ching from a gamut of five to nine of the mode's degrees; about one bracket in five is
+  empty. The percussion plays cymbal, bell, tom and tambourine.
+- **Deep Listening** (Oliveros and the Deep Listening Band, 1989, in the Fort Worden cistern).
+  Oliveros's sonic awareness: attention moves between global (the circle: everyone holding long,
+  overlapping tones that blend in the space) and focal (the dot: one player's phrase standing out
+  over the others holding the tonal centre, very soft). In the circle each tone is one of its
+  quarters: making a sound, imagining one (a silence), listening to the sound present (joining the
+  tonal centre), or remembering a past one. The accordion, trombone, voice and didjeridu play; with
+  more parts the Expanded Instrument System repeats the accordion and the trombone after 1.5, 3.7
+  and 6.1 seconds, each repeat softer, the cistern rings on after every focal note, and a conch
+  sounds at each turn to the circle.
 
 ### South and West Asia
 
