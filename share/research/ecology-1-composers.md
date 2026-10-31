@@ -133,26 +133,46 @@ planners.
 
 ## Pauline Oliveros and Deep Listening
 
-Pauline Oliveros (1932–2016), an American composer and accordionist, co-founder of the San
-Francisco Tape Music Center, whose *A Little Noise in the System* (1967) is among the earliest
-contemporary noise works, developed through her *Sonic Meditations* (1971) a practice of
-attentive listening to everything, inner and outer, which she named Deep Listening. The name
-came from the album *Deep Listening* (1989), recorded in 1988 with Stuart Dempster and Panaiotis
-in the Dan Harpole Cistern at Fort Worden, Washington, a reverberation of some 45 seconds. Her
-Deep Listening Institute (now the Center for Deep Listening at Rensselaer Polytechnic Institute)
-teaches it, and her book *Deep Listening: A Composer's Sound Practice* (2005) sets it out.
+Pauline Oliveros (1932–2016), an American composer and accordionist born in Houston, Texas,
+was a central figure of post-war experimental and electronic music. With Ramón Sender and
+Morton Subotnick she was one of the original members of the San Francisco Tape Music Center in
+the early 1960s, and its first director when it moved to Mills College as the Center for
+Contemporary Music. She taught at Mills, the University of California, San Diego (1967–81),
+Oberlin and Rensselaer Polytechnic Institute. Her electronic *I of IV* (1966) was made in Hugh
+Le Caine's studio in Toronto, and *A Little Noise in the System* (1967) is among the earliest
+contemporary noise works. She often improvised with the Expanded Instrument System, an
+electronic signal-processing system of her own design, and from 1987 played an accordion
+retuned to just intonation.
 
-Her techniques are for performers' listening more than for notes on a page. The *Sonic
-Meditations* and the later *Deep Listening Pieces* are text scores, prose instructions; in the
-best known, *Tuning Meditation*, each singer sings a pitch, listens to the group, then either
-matches a pitch someone else is singing or sings one no one else is singing. At their centre
-is the movement between focal attention, to one sound, and global attention, to the whole field
-at once. Her Expanded Instrument System, grown from her tape-delay work of the 1960s, surrounds
-a player with delayed and spatially transformed echoes of their own sound to improvise with.
+In 1988 she descended fourteen feet into the Dan Harpole Cistern at Port Townsend,
+Washington, to record, and coined "deep listening", a pun that grew into "an aesthetic ...
+designed to inspire both trained and untrained performers to practice the art of listening and
+responding to environmental conditions in solo and ensemble situations". With Stuart Dempster
+and Panaiotis she formed the Deep Listening Band (later with David Gamper), which plays in
+caves, cathedrals and cisterns. Deep Listening became a programme of her foundation (1985),
+renamed the Deep Listening Institute in 2005, with retreats and certification; the Center for
+Deep Listening at Rensselaer has been its steward since 2015.
+
+Its technique is sonic awareness, as the musicologist Heidi Von Gunden named Oliveros's
+theory: "the ability to consciously focus attention upon environmental and musical sound",
+needing "continual alertness and an inclination to be always listening". It works between two
+modes, focal attention and global attention (awareness), which Oliveros drew as a dot and a
+circle in scores such as *Rose Moon* (1977); later she quartered the circle into actively
+making sound, imagining sound, listening to present sound and remembering past sound, the model
+of the *Sonic Meditations*. Those are text scores, prose instructions for anyone ("Teach
+Yourself to Fly" is the first), collected with her later ones in the *Anthology of Text Scores
+1971–2013*. In the best known, *Tuning Meditation*, each singer sings a pitch, listens to the
+group, then either matches a pitch someone else is singing or sings one no one else is
+singing. Practised, sonic awareness makes, in Von Gunden's words, "complex sound masses
+possessing a strong tonal center".
 
 - [Pauline Oliveros](https://en.wikipedia.org/wiki/Pauline_Oliveros) and
-  [Deep Listening](https://en.wikipedia.org/wiki/Deep_Listening), Wikipedia.
-- Pauline Oliveros, *Deep Listening: A Composer's Sound Practice* (iUniverse, 2005).
+  [Deep Listening](https://en.wikipedia.org/wiki/Deep_Listening), Wikipedia (checked from the
+  page the owner pasted, 2026-10-31; *Tuning Meditation* is described from memory).
+- Pauline Oliveros, *Deep Listening: A Composer's Sound Practice* (iUniverse, 2005), and
+  *Anthology of Text Scores 1971–2013* (Deep Listening Publications, 2013).
+- Pauline Oliveros, *Software for People: Collected Writings 1963–80* (Printed Editions, 1984).
+- Heidi Von Gunden, *The Music of Pauline Oliveros* (Scarecrow Press, 1983).
 
 ## Annea Lockwood
 
