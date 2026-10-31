@@ -66,7 +66,7 @@ handled them better. In Courtney's summary:
 The system names no script, so it is written in Devanagari, Roman, Kannada, Urdu and others.
 Ustad Mahfooz Khokhar's *Rag Swaroop* (Pakistan, 1998) writes it in Urdu, right to left, and puts
 an X on every clap, X1 X2 0 X3 for tīntāl. Courtney dates the first volume to 1920, against the
-1913 often given elsewhere.
+1913 start given in the source list below; the dates need checking.
 
 Ornaments have signs of their own. An arc under a group of notes (chhand) means they all fall
 within one beat, as in fast tāns. Meend, a smooth glide from one note to another touching those
