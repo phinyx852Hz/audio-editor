@@ -2673,11 +2673,18 @@ namespace
             check (highestSidelobeDb (windows::make (kind, n)) <= limit, "window " + std::to_string (kind) + " sidelobes");
         check (near (highestSidelobeDb (windows::make (windows::chebyshev, n)), -windows::chebyshevSidelobeDb, 0.5), "Dolph-Chebyshev sidelobes all at its level");
 
-        // The flat top is the Stanford Research one (FTSRS in Heinzel et al. 2002): highest
-        // sidelobe -76.6 dB, and a tone halfway between bins reads within 0.0156 dB.
+        // The flat tops, against Heinzel, Ruediger and Schilling (2002): the Stanford Research one
+        // (FTSRS), HFT95 and HFT90D. Highest sidelobe, and the most a tone's level can be off
+        // between bins (here at every tenth of a bin). Heinzel's sidelobe figures are for long
+        // windows; at 256 points HFT95's comes out 0.5 dB higher.
+        struct FlatTop { int kind; double sidelobeDb, maxErrorDb; };
+        for (const auto& [kind, expectedSidelobe, maxError] : { FlatTop { windows::flatTop, -76.6, 0.0156 },
+                                                                 FlatTop { windows::hft95, -95.0, 0.0044 },
+                                                                 FlatTop { windows::hft90d, -90.2, 0.0039 } })
         {
-            const auto w = windows::make (windows::flatTop, n);
-            // Its main lobe is flat on top, so look for the first null from 4 bins out.
+            const auto w = windows::make (kind, n);
+            const auto label = "flat top " + std::to_string (kind);
+            // The main lobe is flat on top, so look for the first null from 4 bins out.
             std::vector<double> magnitude ((size_t) points);
             for (int f = 0; f < points; ++f)
             {
@@ -2690,15 +2697,17 @@ namespace
             while (f < points - 1 && magnitude[(size_t) f + 1] < magnitude[(size_t) f])
                 ++f;
             const auto sidelobe = 20.0 * std::log10 (*std::max_element (magnitude.begin() + f, magnitude.end()) / magnitude[0]);
-            check (near (sidelobe, -76.6, 0.3), "flat top sidelobes at -76.6 dB: " + std::to_string (sidelobe));
-            double onBin = 0.0;
-            std::complex<double> halfway;
-            for (int i = 0; i < n; ++i)
+            check (near (sidelobe, expectedSidelobe, 0.6), label + " sidelobes " + std::to_string (sidelobe) + " dB");
+            const double onBin = std::accumulate (w.begin(), w.end(), 0.0);
+            double worst = 0.0;
+            for (int tenth = 1; tenth <= 5; ++tenth)
             {
-                onBin += w[(size_t) i];
-                halfway += w[(size_t) i] * std::polar (1.0, M_PI * i / n);
+                std::complex<double> off;
+                for (int i = 0; i < n; ++i)
+                    off += w[(size_t) i] * std::polar (1.0, 2.0 * M_PI * 0.1 * tenth * i / n);
+                worst = std::max (worst, std::abs (20.0 * std::log10 (std::abs (off) / onBin)));
             }
-            check (std::abs (20.0 * std::log10 (std::abs (halfway) / onBin)) < 0.02, "flat top scalloping under 0.02 dB");
+            check (worst <= maxError + 0.0005, label + " level error " + std::to_string (worst) + " dB");
         }
 
         // The largest FFT size stays finite (the Chebyshev's polynomial and Kaiser's Bessel function).
