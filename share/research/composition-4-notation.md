@@ -1,0 +1,115 @@
+<!--
+Research > Composition, Compose > New Score In (owner, 2026-10-31): the notations PHI can write a
+new score in (mixer/Notation.cpp). Drafted from memory before the owner's Wikipedia pastes; to be
+checked against them.
+-->
+
+# Composition / Notation
+
+## Staff notation and PHI's microtonal staff
+
+The five-line staff grew from the neumes written over chant in the 9th century; Guido of Arezzo
+(c. 1025) set them on lines a third apart, with clefs, and mensural notation (13th to 16th
+centuries) gave the notes measured lengths, the ancestor of today's whole, half and quarter
+notes. The staff was made for seven notes to the octave, with sharps and flats between, so
+music in other tunings needs more: quarter-tone accidentals (used since the early 20th century
+by Alois Hába and others), arrows and numbers of cents for just intonation, as in the Extended
+Helmholtz-Ellis accidentals of Marc Sabat and Wolfgang von Schweinitz, and the Sagittal system
+of George Secor and Dave Keenan for any tuning.
+
+*In PHI*: Compose > New Microtonal Score opens a blank score on PHI's own microtonal staff in the
+Mode menu's tuning; New Score In picks any of the notations below, and Each Tradition's Own
+chooses the one that belongs to the mode.
+
+- [Musical notation](https://en.wikipedia.org/wiki/Musical_notation),
+  [Mensural notation](https://en.wikipedia.org/wiki/Mensural_notation) and
+  [Microtonal music](https://en.wikipedia.org/wiki/Microtonal_music), Wikipedia.
+- [Sagittal](https://sagittal.org), the notation's own site.
+
+## Hindustani sargam (Bhatkhande)
+
+Indian music names its seven degrees by syllables, the sargam: Sa Re Ga Ma Pa Dha Ni. Vishnu
+Narayan Bhatkhande (1860–1936) set down a notation for Hindustani music in Devanagari or Roman
+letters: a line under a letter for a flat (komal) note, a vertical stroke above Ma for the
+sharp (tivra) Ma, a dot below for the lower octave and above for the upper, notes grouped by
+beat, and the tāla's divisions marked with sam (×), khālī (0) and numbered tālīs. Vishnu
+Digambar Paluskar devised a rival system. Bhatkhande's is the one used in his anthology
+*Kramik Pustak Malika* and in most printed collections since.
+
+- [Bhatkhande music notation](https://en.wikipedia.org/wiki/Bhatkhande_music_notation) and
+  [Svara](https://en.wikipedia.org/wiki/Svara), Wikipedia.
+- Vishnu Narayan Bhatkhande, *Kramik Pustak Malika* (1913–37).
+
+## Carnatic swaras
+
+South Indian (Carnatic) music uses the same seven syllables, sa ri ga ma pa da ni, but names
+twelve-plus pitch positions with numbered variants: ri1, ri2, ri3, ga1, ga2, ga3 and so on, where
+some share a pitch (ri2 and ga1, for example), as the 72 melakarta rāgas require. Octaves are
+dotted as in Hindustani notation, and the tāla's divisions (laghu, drutam, anudrutam) are marked
+with bars. Written notation is a guide; gamakas, the ornaments that make a rāga, are learned by
+ear.
+
+- [Svara](https://en.wikipedia.org/wiki/Svara) and
+  [Melakarta](https://en.wikipedia.org/wiki/Melakarta), Wikipedia.
+
+## Jianpu (numbered notation)
+
+Jianpu writes the degrees of a scale as numbers, 1 to 7 for do to ti, with 0 for a rest, dots
+above or below for octaves, underlines to halve a note's length and dashes to extend it. It
+descends from the cipher notation Jean-Jacques Rousseau proposed in 1742 and the Galin-Paris-Chevé
+system of 19th-century France, came to Japan and China around 1900, and is now the everyday
+notation for Chinese music, folk song and much popular music in East and Southeast Asia.
+
+- [Numbered musical notation](https://en.wikipedia.org/wiki/Numbered_musical_notation) and
+  [Galin-Paris-Chevé system](https://en.wikipedia.org/wiki/Galin-Paris-Chev%C3%A9_system),
+  Wikipedia.
+
+## Kepatihan (gamelan)
+
+Kepatihan is the cipher notation of Javanese gamelan, devised around 1900 at the Kepatihan, the
+chief minister's palace in Surakarta. The pitches of a gamelan's sléndro (1 2 3 5 6) and pélog
+(1 to 7) tunings are written as numbers, with dots for octaves, and the balungan is written in
+groups of four (gatra) with symbols over them for the gong, kenong, kempul and kethuk strokes.
+It records only the skeleton; the elaborating parts are improvised from it within each
+instrument's idiom.
+
+- [Kepatihan](https://en.wikipedia.org/wiki/Kepatihan) and
+  [Balungan](https://en.wikipedia.org/wiki/Balungan), Wikipedia.
+
+## Jeongganbo (Korean)
+
+Jeongganbo is the Korean mensural notation invented under King Sejong in the 15th century, the
+first East Asian notation to show rhythm exactly. The page is ruled into columns of squares
+(jeonggan), each square one unit of time, read top to bottom and right to left; the pitch names
+written in the squares are taken from the Chinese twelve-pitch system (yullyeo), and subdividing
+a square divides its time. Sejong's annals record pieces in it, and it is still used for court
+and classical music.
+
+*In PHI*: the staff can also show sigimsae, Korean ornament signs, from the MIDI editor's menu.
+
+- [Jeongganbo](https://en.wikipedia.org/wiki/Jeongganbo), Wikipedia.
+
+## Arabic, Turkish and Persian staffs
+
+Arab, Turkish and Persian art music are written on the Western staff with extra accidentals for
+their intervals. Arab notation uses the half-flat and half-sharp, a quarter tone each, which
+were agreed at the Cairo Congress of Arab Music in 1932. Turkish makam music is written in the
+Arel–Ezgi–Uzdilek (AEU) system, which divides the whole tone into nine commas and gives
+accidentals for 1, 4, 5 and 8 commas. Persian music uses the koron (a lowered note, about a
+quarter tone flat) and the sori (raised), both introduced by Ali-Naqi Vaziri in the 1920s.
+Each staff is a convention: players bend the written pitch toward the maqām's intonation.
+
+- [Arabic maqam](https://en.wikipedia.org/wiki/Arabic_maqam),
+  [Turkish makam](https://en.wikipedia.org/wiki/Turkish_makam) and
+  [Ali-Naqi Vaziri](https://en.wikipedia.org/wiki/Ali-Naqi_Vaziri), Wikipedia.
+- Karl Signell, *Makam: Modal Practice in Turkish Art Music* (Asian Music Publications, 1977).
+
+## Degree numbers
+
+Numbering the scale degrees, 1 for the tonic up to the last degree, makes a notation independent
+of key and tuning, closely related to jianpu and to the movable-do solfège of Galin, Paris and
+Chevé and of John Curwen's tonic sol-fa. It suits modes with more or fewer than seven notes, and
+a tuning in which the same number can be any size of step.
+
+- [Scale degree](https://en.wikipedia.org/wiki/Degree_(music)) and
+  [Tonic sol-fa](https://en.wikipedia.org/wiki/Tonic_sol-fa), Wikipedia.
