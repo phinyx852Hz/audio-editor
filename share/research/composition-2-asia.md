@@ -100,13 +100,13 @@ player's mood. Silences divide the sections, each section dwelling on one featur
 so that the whole unfolds the mode, usually rising from the bottom of its scale toward the upper
 octave; listeners relish the modulations, the obligatory return and above all the stock cadences
 (qaflāt) that close the sections, which draw shouts of approval: a good qafla is said to rescue a
-weak taqsīm, and a bad one to spoil a strong one. Audiences call out ("Allāh!", or the player's
-name) and so spur the player on. Young players learn by imitating elders and memorising the
+weak taqsīm, and a bad one to spoil a strong one. Listeners call out praise, or the player's name,
+and so spur the player on. Young players learn by imitating elders and memorising the
 masters' recordings, then must find their own style. In the early 20th century taqāsīm opened
 and punctuated the waṣla; when the waṣla gave way from the 1930s to the long solo song
 (ughniyya), taqāsīm retreated to informal gatherings and dance, until Farīd al-Aṭrash wrote long
-ʿūd taqāsīm into the instrumental introductions (muqaddima) of his own songs and became "king of
-the ʿūd", famous for the right-hand virtuosity with which he ended them. Musicians rate Riyāḍ
+ʿūd taqāsīm into the instrumental introductions (muqaddima) of his own songs and became the most
+celebrated ʿūd player of the Arab world, famous for the right-hand virtuosity with which he ended them. Musicians rate Riyāḍ
 al-Sunbāṭī's slower, deeper taqāsīm higher, with their echoes of single notes an octave below;
 Marcus also recommends the violinist Aḥmad al-Ḥifnāwī, the Iraqi ʿūd player Munīr Bashīr, Simon
 Shaheen and Racy.
