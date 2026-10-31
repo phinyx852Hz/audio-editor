@@ -67,7 +67,8 @@ jins (a tetrachord or pentachord), so that the listener learns the maqām; then 
 range freely, climbing through its ajnās to the dominant (ghammāz) and the upper octave
 (jawāb), and modulate to other maqāms, as long as the end, a cadence (qafla), comes home.
 
-The word means "division". A taqsīm is not free fantasy: Scott Marcus stresses the conventions
+The word means "division". The ʿūd is its chief instrument, with the violin, nāy and qānūn,
+and even Arabised instruments such as the accordion. A taqsīm is not free fantasy: Scott Marcus stresses the conventions
 it follows, and Mondher Ayari and Stephen McAdams hear phases, an introduction, a presentation
 of the maqām's basic elements, an exposition, a re-exposition and a confirmation, whose order
 and length vary with the player. It is prized as the place where players show their own
@@ -114,9 +115,16 @@ Shaheen and Racy.
 A waṣla (plural waṣalāt) is a suite of eight or more pieces, usually in one maqām, that joins
 improvisation with composed forms. Instrumental pieces such as the bashraf, the dūlāb and the
 samāʿī open it; the samāʿī has four sections (khānāt) with a recurring refrain (taslīm), in a
-ten-beat rhythm, and a closing section in another metre. Then come taqsīm, vocal improvisations
-(the layālī on the words *yā layl*, "O night", and the mawwāl on colloquial verse), muwashshaḥāt,
-the qaṣīda, the Egyptian dawr and popular songs. Ali Jihad Racy has described it as a compound
+ten-beat rhythm, and a closing section in another metre. Then come taqsīm and the vocal
+improvisations, each a way of tracing the maqām's sayr, its customary path: the layālī, sung on
+the stock words *yā layl yā ʿayn* ("O night, O eye"), long since a vehicle for ornament rather than
+meaning, usually as the singer's warm-up before the next vocal piece; the mawwāl, improvised on a
+colloquial poem in Egyptian, Levantine or Iraqi dialect, such as the seven-line Baghdadi mawwāl
+(sabʿāwī, rhyming AAABBBA) loved in Aleppo; and the improvised qaṣīda, on a metred poem in
+classical Arabic. Composed songs follow: muwashshaḥāt, the qaṣīda set to music, the Egyptian dawr,
+Aleppo's qudūd and popular songs. Ṣāliḥ ʿAbd al-Ḥayy's recording of *Leh yā banafsag* runs in
+Rast through an ʿūd taqsīm, a samāʿī, a qānūn taqsīm, the samāʿī's taslīm again and a layālī
+before the song itself, a late example of the form. Ali Jihad Racy has described it as a compound
 form, a principle of linking pieces rather than a fixed order, and the word also names a section
 of a Sufi ceremony. It is the Egyptian and Levantine cousin of the Ottoman fasıl and the
 Andalusian nūba. From the 1930s the long solo song (ughniyya) displaced it in Egyptian
@@ -131,6 +139,9 @@ qafla, then a waṣla of a samāʿī with its taslīm and a muwashshaḥ.
   [Arabic maqam](https://en.wikipedia.org/wiki/Arabic_maqam) and
   [Samai](https://en.wikipedia.org/wiki/Samai), Wikipedia.
 - Scott L. Marcus, *Music in Egypt* (Oxford University Press, 2007).
+- Johnny Farraj, [Improvised forms](https://maqamworld.com/en/form/improv.php) and
+  [vocal composed forms](https://maqamworld.com/en/form/vocal_comp.php), *Maqam World*, with
+  recorded examples.
 - Scott L. Marcus, "Solo Instrumental Improvisation (Taqāsīm) in Arab Music", *Middle East
   Studies Association Bulletin* 27/1 (1993), a guide to recordings.
 - Ali Jihad Racy, "The Many Faces of Improvisation: The Arab Taqāsīm as a Musical Symbol",
