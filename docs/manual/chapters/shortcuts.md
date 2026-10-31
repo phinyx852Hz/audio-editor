@@ -1,6 +1,6 @@
 # Keyboard Shortcuts {#shortcuts}
 
-[]{.ix t="Keyboard shortcuts!list"}Every command in PHI, 364 of them, with the keys it has when PHI is first installed. Commands without keys can still be found in the command palette (`Ctrl+Shift+P`), and any of them can be given keys in Options > Keyboard Shortcuts (`Ctrl+Shift+K`); see [Changing shortcuts](#change-shortcuts).
+[]{.ix t="Keyboard shortcuts!list"}Every command in PHI, 367 of them, with the keys it has when PHI is first installed. Commands without keys can still be found in the command palette (`Ctrl+Shift+P`), and any of them can be given keys in Options > Keyboard Shortcuts (`Ctrl+Shift+K`); see [Changing shortcuts](#change-shortcuts).
 
 Commands are grouped as the command palette groups them, which is mostly by menu. Where a command has more than one set of keys, they are separated by a slash.
 
@@ -358,9 +358,9 @@ The few `Super` keys are the desktop's standard keys for closing and full screen
 | Delete Selected Track |  |
 | Edit MIDI Notes | `Alt+Shift+N` |
 | Mix Assistant | `Alt+Shift+X` |
-| Mixer Inspector | `Ctrl+I` |
 | Mix Down to Editor | `Ctrl+F3` |
 | Mixer | `F3` |
+| Mixer Inspector | `Ctrl+I` |
 | New Project | `Ctrl+N` |
 | New Project from Selector Set |  |
 | Open Project |  |
@@ -500,9 +500,11 @@ The few `Super` keys are the desktop's standard keys for closing and full screen
 | Audio Interface Mixer | `Ctrl+Alt+Shift+I` |
 | Audio Interface Mixer Program |  |
 | Audio Settings | `Ctrl+,` |
+| Choose Wallpaper Picture |  |
 | Keyboard Shortcuts | `Ctrl+Shift+K` |
 | Play Surround on Separate Outputs |  |
 | Theme | `Ctrl+Shift+T` |
+| Wallpaper |  |
 | Waveform and Meter Colors | `Ctrl+Shift+W` |
 
 ## Help

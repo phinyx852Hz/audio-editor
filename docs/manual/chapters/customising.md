@@ -84,6 +84,22 @@ The Analysis Meters window has an Opacity slider of its own; see [The Analysis M
 
 With the Visualizer behind PHI (`Ctrl+F11`), the same slider sets how much of it glows through. See [The Visualizer and Sonify](#visualizer).
 
+## A wallpaper of your own {#wallpaper}
+
+[]{.ix t="Wallpaper"}PHI can show any picture of yours behind the whole window, as a desktop shows its wallpaper.
+
+::: steps
+1. Choose Options > Choose Wallpaper Picture... and pick a picture (PNG, JPEG or any other kind PHI can read).
+2. The wallpaper turns on. It fills the window, cropped and centred, whatever the window's size.
+3. Use the **Opacity** slider (or `Ctrl+Alt+-` and `Ctrl+Alt+=`) to show more or less of it through PHI.
+:::
+
+Options > Wallpaper turns it off and on again; PHI remembers the picture and whether it was on. If PHI was fully opaque, turning the wallpaper on drops the opacity to 55 % so the picture shows, and turning it off puts the opacity back.
+
+PHI shows one background at a time: turning the wallpaper on turns off the Visualizer or web page behind PHI, and while either of those is behind PHI the wallpaper steps aside.
+
+A still wallpaper costs almost no processor time, so it is the background to choose for long sessions, recording and laptops. See [What a moving background costs](#background-cpu).
+
 ## Focus follows the mouse {#focus-follows-mouse}
 
 []{.ix t="Focus Follows Mouse"}View > Focus Follows Mouse is on from the start, like Hyprland: point at the waveform, the Device Chain or a panel and your keys go there, without a click. It never pulls focus out of a text field or dialog. Turn it off to have keys stay where you last clicked.
