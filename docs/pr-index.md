@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**116 pull requests:** 109 merged, 7 open.
+**119 pull requests:** 109 merged, 10 open.
 
 ## Contents
 
@@ -52,6 +52,8 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#110](https://github.com/phinyx852Hz/audio-editor/pull/110) | MIDI editor in the main window: Alt+arrows/F6 reach it, Home/End, Ctrl+W closes it | merged |  | `Source/ui/MidiEditor.cpp`<br>`Source/ui/PanelNavigation.cpp`<br>`docs/main-midi-editor.md` |
 | [#111](https://github.com/phinyx852Hz/audio-editor/pull/111) | MIDI editor and score: a transport bar of their own | merged |  | `Source/ui/MidiEditor.cpp`<br>`Source/ui/MidiEditor.h`<br>`docs/midi-editor.md` |
 | [#116](https://github.com/phinyx852Hz/audio-editor/pull/116) | MIDI editor and score: transport tied to the main one | open |  | `Source/ui/MidiEditor.cpp`<br>`Source/ui/MixerWindow.cpp`<br>`Source/ui/MidiEditor.h` |
+| [#118](https://github.com/phinyx852Hz/audio-editor/pull/118) | MIDI editor: Ableton-style note keys and mouse gestures | open |  | `Source/ui/MidiEditor.cpp`<br>`Source/mixer/NoteEditor.cpp`<br>`docs/midi-editor.md` |
+| [#119](https://github.com/phinyx852Hz/audio-editor/pull/119) | Closing the main editor's MIDI editor stops playback and offers to save | open |  | `Source/ui/MidiPanel.cpp`<br>`Source/ui/MixerSection.cpp`<br>`Source/ui/MidiPanel.h` |
 
 ### Analysis and meters
 
@@ -194,6 +196,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#82](https://github.com/phinyx852Hz/audio-editor/pull/82) | Research menu: curated references on the ideas behind PHI | merged |  | `share/research/modes-9-harmony.md`<br>`share/research/modes-1-europe.md`<br>`Source/ui/ResearchSection.cpp` |
 | [#86](https://github.com/phinyx852Hz/audio-editor/pull/86) | Compose menu: every compositional method in PHI, plus 15 more from Western and other traditions | merged |  | `Source/mixer/Compose.cpp`<br>`Source/ui/ComposeSection.cpp`<br>`docs/compose.md` |
 | [#109](https://github.com/phinyx852Hz/audio-editor/pull/109) | Window opacity keys work from every window and any focus | open |  | `Source/ui/PanelNavigation.cpp`<br>`README.md` |
+| [#117](https://github.com/phinyx852Hz/audio-editor/pull/117) | UI fixes: Alt+menu letters, strip hover, Find panel width, Interface Size | open | Options > Interface Size | `Source/ui/ToolsSection.cpp`<br>`Source/ui/InterfaceSize.h`<br>`Source/ui/PanelNavigation.cpp` |
 
 ### Documentation
 
@@ -336,3 +339,6 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#114](https://github.com/phinyx852Hz/audio-editor/pull/114) | Build an Arch package and an AppImage in CI | Stage 1 of the installers: ready-made Linux downloads that put PHI in the app launcher with the Φ icon (the .desktop file, icon and MIME type were already in... *(auto)* | open | 2026-10-30 | Not yet sorted |
 | [#115](https://github.com/phinyx852Hz/audio-editor/pull/115) | Manual: Analysing a Plugin; Forensic Φ finds wider golden ratios | New chapter, "Analysing a Plugin" (docs/manual/chapters/plugin-analyzer.md), in the Mastering part after Effects. *(auto)* | open | 2026-10-30 | Φ effects and sounds |
 | [#116](https://github.com/phinyx852Hz/audio-editor/pull/116) | MIDI editor and score: transport tied to the main one | How it behaves *(auto)* | open | 2026-10-30 | Editing and warping |
+| [#117](https://github.com/phinyx852Hz/audio-editor/pull/117) | UI fixes: Alt+menu letters, strip hover, Find panel width, Interface Size | Alt+O (and every Alt+menu letter) opens the menu right away. *(auto)* | open | 2026-10-31 | Interface and branding |
+| [#118](https://github.com/phinyx852Hz/audio-editor/pull/118) | MIDI editor: Ableton-style note keys and mouse gestures | Ctrl+D and Ctrl+A did nothing in the MIDI editor docked in the main window. *(auto)* | open | 2026-10-31 | Editing and warping |
+| [#119](https://github.com/phinyx852Hz/audio-editor/pull/119) | Closing the main editor's MIDI editor stops playback and offers to save | MidiPanel::closing(): stops the editor's playback and recording (new MidiEditor::stop()). *(auto)* | open | 2026-10-31 | Editing and warping |
