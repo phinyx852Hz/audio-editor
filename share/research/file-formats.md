@@ -73,7 +73,7 @@ other uncompressed formats.
 - [Sampling (signal processing)](https://en.wikipedia.org/wiki/Sampling_(signal_processing)), Wikipedia.
 - [Nyquist–Shannon sampling theorem](https://en.wikipedia.org/wiki/Nyquist%E2%80%93Shannon_sampling_theorem), Wikipedia.
 - [Audio bit depth](https://en.wikipedia.org/wiki/Audio_bit_depth), Wikipedia.
-- [Sampling rate](https://en.wikipedia.org/wiki/Sampling_(signal_processing)#Sampling_rate), Wikipedia.
+- [Audio sampling](https://en.wikipedia.org/wiki/Sampling_(signal_processing)#Audio_sampling), Wikipedia.
 - [Endianness](https://en.wikipedia.org/wiki/Endianness), Wikipedia.
 - [Compact Disc Digital Audio](https://en.wikipedia.org/wiki/Compact_Disc_Digital_Audio), Wikipedia.
 - [Soundstream](https://en.wikipedia.org/wiki/Soundstream), Wikipedia.
@@ -175,6 +175,34 @@ for YouTube). A **CD master** is a DDP image or a WAV with a CUE sheet.
 - [Broadcast Wave Format](https://en.wikipedia.org/wiki/Broadcast_Wave_Format), Wikipedia.
 - [Disc Description Protocol](https://en.wikipedia.org/wiki/Disc_Description_Protocol), Wikipedia.
 
+## Other formats in everyday use
+
+Beyond the formats for music and broadcast, Wikipedia's list of audio file formats names many
+made for one device, service or purpose:
+
+- **Audiobooks and podcasts**: **.m4b**, an M4A with chapters and a remembered listening place,
+  and Audible's **.aa** and **.aax**, the same with Amazon's DRM. PHI reads .m4b and keeps its
+  chapters as markers.
+- **Protected downloads**: Apple's **.m4p** (AAC with FairPlay DRM, from the iTunes Store) and
+  DRM-protected WMA. PHI cannot read DRM-protected files.
+- **Dictation**: Olympus's **DSS** (Digital Speech Standard) and Sony's **.dvf** and **.msv**,
+  compressed voice from hand-held recorders.
+- **Telephony**: **.vox**, headerless 4-bit Dialogic ADPCM, and Asterisk's **.sln**, headerless
+  signed linear PCM at 8 or 16 kHz.
+- **Ringtones**: Yamaha's **SMAF** (.mmf), for the phones of the 2000s.
+- **Early home computers**: Electronic Arts' **8SVX** (1985), 8-bit samples in IFF for the
+  Amiga, the ancestor of AIFF.
+- **Multitrack**: **.mogg**, several Ogg Vorbis tracks in one logical stream.
+
+- [Audio file format § List of formats](https://en.wikipedia.org/wiki/Audio_file_format#List_of_formats), Wikipedia.
+- [Timeline of audio formats](https://en.wikipedia.org/wiki/Timeline_of_audio_formats), Wikipedia.
+- [MPEG-4 Part 14](https://en.wikipedia.org/wiki/MPEG-4_Part_14), Wikipedia, on .m4a, .m4b and .m4p.
+- [Audible (service)](https://en.wikipedia.org/wiki/Audible_(service)), Wikipedia.
+- [Audiobook](https://en.wikipedia.org/wiki/Audiobook), Wikipedia.
+- [Digital Speech Standard](https://en.wikipedia.org/wiki/Digital_Speech_Standard), Wikipedia.
+- [VOX (file format)](https://en.wikipedia.org/wiki/VOX_(file_format)), Wikipedia.
+- [8SVX](https://en.wikipedia.org/wiki/8SVX), Wikipedia.
+
 # Audio file formats / Uncompressed
 
 ## WAV and Broadcast Wave
@@ -212,7 +240,8 @@ every WAV chunk, so a reader that knows it reads a long Broadcast Wave as usual.
 The EBU published it as EBU Tech 3306 in 2007 for long multichannel broadcast recordings. The
 ITU's **BW64** (ITU-R BS.2088, 2015) extends it for next-generation audio, with the **Audio
 Definition Model** (ADM, ITU-R BS.2076) in an axml chunk describing channels, objects and scenes,
-as used by Dolby Atmos masters.
+as used by Dolby Atmos masters. Version 2 of Tech 3306 (2018) recommends BW64 in place of RF64,
+to avoid two standards.
 
 PHI reads RF64 and writes it when a WAV would go over 4 GB.
 
@@ -220,7 +249,8 @@ PHI reads RF64 and writes it when a WAV would go over 4 GB.
 - [EBU Tech 3306](https://tech.ebu.ch/publications/tech3306), MBWF/RF64.
 - [ITU-R BS.2088](https://www.itu.int/rec/R-REC-BS.2088), Long-form file format for the
   international exchange of audio programme materials with metadata.
-- [Audio Definition Model](https://en.wikipedia.org/wiki/Audio_Definition_Model), Wikipedia.
+- [Dolby Atmos](https://en.wikipedia.org/wiki/Dolby_Atmos), Wikipedia.
+- [ITU-R BS.2076](https://www.itu.int/rec/R-REC-BS.2076), Audio Definition Model.
 
 ## Sony Wave64
 
@@ -233,7 +263,7 @@ RF64 and is less widely read; Sound Forge, Vegas, Audacity, Reaper and libsndfil
 
 PHI reads and writes Wave64, PCM up to 64 channels.
 
-- [Wave64](https://en.wikipedia.org/wiki/RF64#Sony_Wave64), Wikipedia.
+- [Sonic Foundry](https://en.wikipedia.org/wiki/Sonic_Foundry), Wikipedia. (Wikipedia has no page on Wave64 itself.)
 - [Sound Forge](https://en.wikipedia.org/wiki/Sound_Forge), Wikipedia.
 - Library of Congress, [Sony Wave64](https://www.loc.gov/preservation/digital/formats/fdd/fdd000315.shtml).
 
@@ -275,8 +305,9 @@ PHI reads CAF and writes it as big-endian PCM (and, through FFmpeg, with other e
 
 **AU** (.au, .snd) is the simplest of the headed formats: a 24-byte big-endian header (the magic
 ".snd", the data offset and size, the encoding, sample rate and channels) and the samples. It
-came from Sun Microsystems and NeXT in the late 1980s, often with 8 kHz µ-law telephone audio,
-and was the first sound format of the early web and of Java.
+was introduced by Sun Microsystems and was common on NeXT computers, at first headerless 8 kHz
+µ-law telephone audio; it was the sound format of the early web and of Java, and can also
+hold linear PCM, A-law or G.729.
 
 **VOC** (.voc) is Creative Labs' format for the Sound Blaster card (1989): a header and typed
 blocks, including silence and repeat blocks, at 8 or 16 bits. It was the sound format of DOS
@@ -365,17 +396,15 @@ PHI reads and writes WavPack.
 - **Shorten** (.shn, Tony Robinson, 1993), the first widely used lossless format, for live
   concert trading.
 - **TAK** (Thomas Becker, 2007) and **OptimFROG** (.ofr, Florin Ghido), compressing more than FLAC.
-- **Meridian Lossless Packing** (MLP, Michael Gerzon and Bob Stuart's team at Meridian), the
-  lossless format of DVD-Audio (1999), and **Dolby TrueHD**, built on it for Blu-ray (2006).
+- **Meridian Lossless Packing** (MLP, Meridian Audio), the lossless format of DVD-Audio (1999),
+  and **Dolby TrueHD** (announced 2005), built on it for Blu-ray.
 - **MPEG-4 ALS** (2006) and **WMA Lossless** (2003), from MPEG and Microsoft.
 
 PHI reads all of these that FFmpeg decodes (Monkey's Audio, TTA, Shorten, TAK, OptimFROG, MLP,
 TrueHD), and writes TTA and TrueHD.
 
 - [Monkey's Audio](https://en.wikipedia.org/wiki/Monkey%27s_Audio), Wikipedia.
-- [TTA (codec)](https://en.wikipedia.org/wiki/TTA_(codec)), Wikipedia.
-- [Shorten (file format)](https://en.wikipedia.org/wiki/Shorten_(file_format)), Wikipedia.
-- [TAK (audio codec)](https://en.wikipedia.org/wiki/TAK_(audio_codec)), Wikipedia.
+- [Shorten (codec)](https://en.wikipedia.org/wiki/Shorten_(codec)), Wikipedia.
 - [OptimFROG](https://en.wikipedia.org/wiki/OptimFROG), Wikipedia.
 - [Meridian Lossless Packing](https://en.wikipedia.org/wiki/Meridian_Lossless_Packing), Wikipedia.
 - [MPEG-4 ALS](https://en.wikipedia.org/wiki/Audio_Lossless_Coding), Wikipedia.
@@ -465,8 +494,8 @@ linear-prediction speech coder from Skype, and **CELT**, an MDCT music coder fro
 Marc Valin), switching or mixing them as the sound demands.
 
 The IETF standardized it as RFC 6716 in 2012, and its Ogg file format as RFC 7845 (2016). It is
-the voice of WebRTC, Discord, WhatsApp and Zoom, and the audio of YouTube; in listening tests it
-outperforms MP3, Vorbis and AAC at the same bit rates.
+the voice of WebRTC, Discord, WhatsApp and Zoom, and the audio of YouTube; listening tests rank
+it above the other standard formats at most bit rates.
 
 PHI reads Opus and writes it in Ogg, Matroska or WebM, at variable, constrained or constant bit
 rate, tuned for music, speech or low delay.
@@ -502,7 +531,7 @@ PHI reads Musepack and RealAudio.
 
 - [Musepack](https://en.wikipedia.org/wiki/Musepack), Wikipedia.
 - [RealAudio](https://en.wikipedia.org/wiki/RealAudio), Wikipedia.
-- [Adaptive Transform Acoustic Coding](https://en.wikipedia.org/wiki/Adaptive_Transform_Acoustic_Coding), Wikipedia.
+- [ATRAC](https://en.wikipedia.org/wiki/ATRAC), Wikipedia.
 - [MPEG-H 3D Audio](https://en.wikipedia.org/wiki/MPEG-H_3D_Audio), Wikipedia.
 - [Unified Speech and Audio Coding](https://en.wikipedia.org/wiki/Unified_Speech_and_Audio_Coding), Wikipedia.
 
@@ -533,12 +562,11 @@ first on CD-ROMs synchronized to the film; it went on to laserdisc, DVD and Blu-
 Master Audio added a lossless extension.
 
 **Dolby TrueHD** (.thd) is lossless, built on Meridian Lossless Packing, up to eight channels at
-up to 192 kHz, and with Atmos objects on Blu-ray (2006 on).
+up to 192 kHz. Dolby announced it in 2005 for Blu-ray, where it also carries Atmos objects.
 
 PHI reads both and writes DTS and TrueHD.
 
-- [DTS (company)](https://en.wikipedia.org/wiki/DTS_(company)), Wikipedia.
-- [DTS Coherent Acoustics](https://en.wikipedia.org/wiki/DTS_(sound_system)), Wikipedia.
+- [DTS, Inc.](https://en.wikipedia.org/wiki/DTS,_Inc.), Wikipedia.
 - [Dolby TrueHD](https://en.wikipedia.org/wiki/Dolby_TrueHD), Wikipedia.
 - ETSI TS 102 114, *DTS Coherent Acoustics; Core and Extensions*.
 
@@ -556,7 +584,7 @@ still the baseline of telephone networks and voice over IP, and the encoding of 
 PHI reads both and writes them in WAV.
 
 - [G.711](https://en.wikipedia.org/wiki/G.711), Wikipedia.
-- [Μ-law algorithm](https://en.wikipedia.org/wiki/%CE%9C-law_algorithm), Wikipedia.
+- [Μ-law algorithm](https://en.wikipedia.org/wiki/Mu-law_algorithm), Wikipedia.
 - [A-law algorithm](https://en.wikipedia.org/wiki/A-law_algorithm), Wikipedia.
 - [ITU-T G.711](https://www.itu.int/rec/T-REC-G.711).
 
@@ -584,7 +612,7 @@ and ADX.
 
 - **GSM 06.10** (full rate, 1990): the first digital mobile phone codec, 13 kbit/s, by
   regular-pulse excitation with long-term prediction. PHI writes it raw (.gsm) and in WAV.
-- **AMR-NB** (3GPP, 1999) and **AMR-WB** (G.722.2, 2001): the adaptive multi-rate codecs of 3G
+- **AMR-NB** (3GPP, 1999) and **AMR-WB** (ITU-T G.722.2, 2002): the adaptive multi-rate codecs of 3G
   phones, AMR-NB from 4.75 to 12.2 kbit/s, AMR-WB from 6.6 to 23.85 kbit/s with 7 kHz wideband
   speech. Voice memos on phones still use them (.amr, .awb, .3gp). PHI writes both when FFmpeg
   has their encoders.
@@ -608,7 +636,7 @@ Wireless headphones carry their own codecs. **SBC** (Subband Codec, Frans de Bon
 the codec every Bluetooth A2DP device must support since 2003, splits the band into 4 or 8
 subbands with ADPCM-like coding. **aptX** came from Stephen Smyth's research at Queen's
 University Belfast in the 1980s, was used in broadcast links before Bluetooth, and passed to CSR
-(2010) and Qualcomm (2015); **aptX HD** (2016) carries 24 bits. Sony's LDAC and the new LC3 of
+(2010) and Qualcomm (2015); **aptX HD** carries 24 bits. Sony's LDAC and the new LC3 of
 Bluetooth LE Audio (2020) follow.
 
 PHI reads and writes SBC, aptX and aptX HD files, so a master can be heard as a Bluetooth
