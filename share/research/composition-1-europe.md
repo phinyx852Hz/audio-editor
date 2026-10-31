@@ -415,8 +415,8 @@ three notes to bells, and says the two voices are really one, the melody and its
 joined by an exact rule. Phrase lengths often follow the syllables of a text or grow by one note
 each time, and the music is usually slow and sparing. *Cantus in Memoriam Benjamin Britten*
 (1977) is a mensuration canon, each voice at half the speed of the one above and lower;
-*Fratres* and *Tabula rasa* (1977), *Spiegel im Spiegel* (1978), *Passio* (1982) and *Te Deum*
-(1985) followed, and the style is often grouped with the "holy minimalism" of Górecki and John
+*Fratres* and *Tabula rasa* (1977) and *Spiegel im Spiegel* (1978) followed, then choral works
+such as *Passio* and *Te Deum*, and the style is often grouped with the "holy minimalism" of Górecki and John
 Tavener.
 
 *In PHI*: an M-voice around a centre, phrases growing by a note, its T-voice, their mirror, a
@@ -426,7 +426,7 @@ bell and a mensuration canon, each voice slower and lower.
   [Arvo Pärt](https://en.wikipedia.org/wiki/Arvo_P%C3%A4rt) and
   [Holy minimalism](https://en.wikipedia.org/wiki/Holy_minimalism), Wikipedia.
 - Paul Hillier, *Arvo Pärt* (Oxford Studies of Composers, Oxford University Press, 1997),
-  pp. 86–100 on the technique.
+  pp. 99–100 on the two voices.
 - [Arvo Pärt Centre](https://www.arvopart.ee/en/), on tintinnabuli in Pärt's own words.
 
 ## Spectral music
