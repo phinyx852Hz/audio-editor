@@ -81,6 +81,19 @@ preparing players and listeners for its mood, and to give a solo within it. They
 neither end of the old composition-improvisation scale, a scale Bruno Nettl himself later
 doubted.
 
+Nettl and Ronald Riddle's close study (1973) of sixteen taqāsīm in maqām Nahawand that Racy
+recorded alone in 1971–72, fourteen on the buzuq and two on the nāy, shows the patterns under
+the freedom. Each ran roughly five to eight minutes in five to twelve sections, each section
+closed by a cadential figure, most often three falling notes. Groups of very short sections
+alternate with long ones, and the long ones, which come mostly in the second half, carry the
+climaxes, the widest range and every modulation, to Rast, Bayātī, Ḥijāz, Ṣabā and others,
+always after Nahawand is firmly set. The central note of each section generally climbs, in a
+zigzag, while the line itself moves by step around neighbour notes; melodic sequences, a figure
+repeated at successive pitches, fill much of the long sections, and on the buzuq the lower
+strings give an interrupted drone on the tonic or fifth, mostly early on. The playing grows less
+metrical and more ornamented as it goes. No two performances were alike, yet they shared one
+range of shapes.
+
 A waṣla (plural waṣalāt) is a suite of eight or more pieces, usually in one maqām, that joins
 improvisation with composed forms. Instrumental pieces such as the bashraf, the dūlāb and the
 samāʿī open it; the samāʿī has four sections (khānāt) with a recurring refrain (taslīm), in a
@@ -102,6 +115,8 @@ qafla, then a waṣla of a samāʿī with its taslīm and a muwashshaḥ.
 - Scott L. Marcus, *Music in Egypt* (Oxford University Press, 2007).
 - Ali Jihad Racy, "The Many Faces of Improvisation: The Arab Taqāsīm as a Musical Symbol",
   *Ethnomusicology* 44/2 (2000).
+- Bruno Nettl and Ronald Riddle, "Taqsim Nahawand: A Study of Sixteen Performances by Jihad
+  Racy", *Yearbook of the International Folk Music Council* 5 (1973).
 - Mondher Ayari and Stephen McAdams, "Aural Analysis of Arabic Improvised Instrumental Music
   (Taqsīm)", *Music Perception* 21/2 (2003).
 - Jonathan H. Shannon, "Emotion, Performance, and Temporality in Arab Music: Reflections on
