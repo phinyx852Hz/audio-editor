@@ -95,15 +95,46 @@ qafla, then a waṣla of a samāʿī with its taslīm and a muwashshaḥ.
 
 ## Radif and dastgāh
 
-Persian classical music is learned as the radif, a body of several hundred short melodic
-models (gushe-hā) handed down from master to pupil and grouped into twelve modal systems, seven
-dastgāh-hā and five āvāz-hā. A performance of a dastgāh opens with its darāmad, which sets the
-mode, then moves through gushe-hā in rising order, each centred on a higher note (shāhed) with
-its own resting note (ist), to the climax (owj), and returns to the opening mode by a forud. The
-voice (āvāz) sings classical poetry in free rhythm, answered phrase by phrase by an instrument
-such as the tār or santur; metric pieces frame it, the pishdarāmad before, the chahārmezrāb and
-the dance-like reng at the end. The radif of Mirzā ʿAbdollāh (d. 1918) is the most widely
-taught, and UNESCO inscribed the radif as intangible heritage in 2009.
+Persian classical music is learned as the radif ("order"): an ordered body of short melodic
+models (gushe-hā) handed down from master to pupil by ear and memorised whole, grouped into
+modal systems standardised in the 19th century as Persian music left the older maqām system.
+Most writers count seven dastgāh-hā, Shur, Segāh, Navā, Homāyun, Chahārgāh, Māhur and
+Rāst-Panjgāh, with Shur and Māhur called the mothers, and treat Abu ʿAtā, Dashti, Afshāri and
+Bayāt-e Tork (under Shur) and Bayāt-e Esfahān (under Homāyun) as āvāz-hā, offshoots; Hormoz
+Farhat and others count these, sometimes with Bayāt-e Kord, as dastgāhs, making twelve. The
+word is said to mean the hand's (dast) position (gāh) on the instrument, and it names both a
+group of modes and the opening mode the group returns to, so it is not quite a "mode". Each
+dastgāh has seven basic notes plus variable ones (moteghayyer) that appear in two forms, and
+assigns its notes roles: a finalis for closing cadences, a starting note (āghāz), a stopping
+note for other phrases (ist) and a prominent note (shāhed). A dastgāh holds perhaps ten to
+thirty gushe-hā and follows a set course (sayr). It opens with its darāmad, usually the lowest
+in range, which sets the mode, then moves through gushe-hā in rising order, each centred on a
+higher shāhed with its own ist, to the climax (owj), and returns to the opening mode by a
+forud. Some gushe-hā recur across dastgāhs, kereshme in all of
+them; others, such as Delkash in Māhur or Hesār in Chahārgāh, alter degrees of the scale and
+let the player modulate to another dastgāh, and a few, Bayāt-e Kord among them, are becoming
+dastgāhs of their own. Most gushe-hā have no fixed metre: rhythm is regular, irregular (lang)
+or free, shaped by the metre of the poetry. The voice (āvāz) sings classical poetry, answered
+phrase by phrase by an instrument such as the tār or santur; metric pieces frame it, the
+pishdarāmad before, the chahārmezrāb and the dance-like reng at the end, the last two
+instrumental only.
+
+The radif as we have it is attributed to ʿAli Akbar Farāhāni, a tār player at the court of
+Nāser al-Din Shāh, and was passed on through his sons Mirzā ʿAbdollāh (d. 1918), whose version
+is the most widely taught, and Āqā Hosseinqoli. When the systematic ordering began is disputed:
+Bruno Nettl traces it to at least the 18th century, Dariush Talāʾi only to the 19th, and the
+word radif appears only in late Qajar sources, after the older maqām system had given way to
+dastgāhs. Dervish Khān took it out of the court into public concerts. Ali-Naqi Vaziri made the
+first transcription in the late 1910s, Musā Maʿrufi's government edition of 1963 lists 470
+gushe-hā, Jean During published Mirzā ʿAbdollāh's radif as Nur-ʿAli Borumand played it, and
+Dariush Pirniākān Āqā Hosseinqoli's in 2001. Each master's radif differs, and there are
+regional ones, of Isfahan, Shiraz, Qazvin and Tehran; Nettl found the music changed little
+between recordings while the names of gushe-hā changed more. Critics have called it an
+incoherent collection (Farhat) or the music of one region, Farāhān, frozen (Kayhan Kalhor), and
+Mohammad-Reza Shajarian compared confining music to the radif to forbidding poetry because Hafez
+had already written the best of it. UNESCO inscribed it as intangible heritage in 2009. The
+Wikipedia article draws largely on Persian sources and several of its footnotes cite unrelated
+papers, so its details are best checked against Nettl, Farhat and During.
 
 *In PHI*: a dastgāh's gushe-hā in radif order (default Shur) to the owj and the forud, the
 voice answered by the tār, a chahārmezrāb and a reng to close.
@@ -114,6 +145,8 @@ voice answered by the tār, a chahārmezrāb and a reng to close.
 - Jean During, Zia Mirabdolbaghi and Dariush Safvat, *The Art of Persian Music* (Mage, 1991).
 - Bruno Nettl, *The Radif of Persian Music* (Elephant & Cat, 1987).
 - Hormoz Farhat, *The Dastgāh Concept in Persian Music* (Cambridge University Press, 1990).
+- Jean During, "Dastgāh", *Encyclopaedia Iranica* (1994), [online](https://www.iranicaonline.org/articles/dastgah).
+- Ella Zonis, *Classical Persian Music: An Introduction* (Harvard University Press, 1973).
 
 # Composition / East and Southeast Asia
 
