@@ -53,6 +53,7 @@ PHI measures in three places. The **Meters panel** sits beside the waveform whil
 | Correlation | Per third octave, with the overall correlation and balance |
 | Amplitude Statistics | Peak, true peak, sample values, possibly clipped samples, OVERs, DC offset, total, maximum, minimum and average RMS, dynamic range, crest factor, with an RMS histogram and Copy |
 | Bits | A bitscope: each bit of the left and right samples, from the sign bit to the 16th, 20th or 24th (chosen on the card), filled by how often it is set and outlined while it moves, with how many bits are in use and how much of the signal is finer than the chosen depth |
+| Classic Meters | The meters of the analogue studio, on what PHI plays: a VU meter (300 ms, after the 1940 specification), the four quasi-peak programme meters as needles, EBU (Type IIb, marked -12 to +12 around TEST), BBC (Type IIa, 1 to 7), DIN (Type I, -40 to +5) and Nordic (Type I, -36 to +12), and Bob Katz's K-20, K-14 and K-12 as bars (average green to 0, amber to +4, red above, with the peak and a 10 s peak hold). The needles read around the line-up tone, -18 dBFS (EBU R 68) or -20 dBFS (SMPTE RP 155), chosen on the card: it reads 0 VU, TEST, 4 on the BBC meter and -9 on the DIN meter. The BBC meter's fall is taken from the EBU meter's (24 dB in 2.8 s) until IEC 60268-10 confirms it |
 | Ambisonics | Where the sound is in an ambisonic file (see below) |
 
 **Loudness targets**: Streaming −14, Apple Music and podcasts −16, Amazon −14 at −2 dBTP, EBU R128 −23, ATSC A/85 −24, CD and club −9.
