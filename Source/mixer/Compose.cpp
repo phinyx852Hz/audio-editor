@@ -1401,7 +1401,7 @@ namespace composition
                     ++v.step;
                 v.next = t + breath;
             }
-            mark (out, std::max (out.sections.back().start + 1, end - seconds (s, 2.0)), "ending when everyone else does");
+            mark (out, std::max (out.sections.empty() ? 0 : out.sections.back().start + 1, end - seconds (s, 2.0)), "ending when everyone else does");
             for (int k = 0; k < parts; ++k)
                 if (out.parts[(size_t) k].notes.empty())
                     add (out.parts[(size_t) k], 0, std::min (seconds (s, 6.0), total), sc.key (centre[(size_t) k]), 50);
