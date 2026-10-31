@@ -133,3 +133,54 @@ their figures interlocking, then each figure varying within the cycle while the 
   (Macmillan, 2001).
 - Robert Gottlieb, notes to *The Gumuz Tribe: Music of the Blue Nile Province*, Anthology of
   African Music D8072 (1980).
+
+## Congolese rumba and the sebene
+
+Congolese rumba (also called African rumba or rumba lingala) grew up in the twin cities of
+Kinshasa and Brazzaville from the late 1930s. Its roots are in maringa, a Bakongo couple dance
+from the old Loango kingdom, played on the likembe (thumb piano), a bottle struck with a rod
+and a small frame drum, the patenge; accordions and acoustic guitars replaced the likembe in
+the 1920s. In the 1940s, Cuban son records from EMI's G.V. series (Sexteto Habanero, Trio
+Matamoros) were heard on the radio, often labelled "rumba", and the name stuck. Musicians moved
+piano, trumpet and drum parts onto guitars and saxophones. Kazadi wa Mukuna argues that the
+music stayed maringa underneath, with Latin forms used mainly as models for learning the new
+instruments. Franco Luambo made the same point: the horns sing vocal lines, the melody follows
+the tones of Lingala, and the guitars are African. UNESCO inscribed the genre in 2021.
+
+A song typically opens slowly with the singers, in 4/4 at a moderate tempo, then breaks into the
+sebene, a faster instrumental section of repeated, interlocking guitar figures over the cavacha
+drum pattern (credited to Zaïko Langa Langa's drummer Meridjo Belobi around 1970). Here the
+singers turn to short chanted phrases, the atalaku shout cues to the dancers, and the guitars
+take over, usually cycling the I–IV–V–IV progression in a major key. The guitars have set roles:
+
+- **Accompagnement** (rhythm) holds the song's basic cyclic pattern, low in the ensemble.
+- **Mi-solo** ("half solo") sits between, often in arpeggios and fingerpicked figures.
+- **Solo** (lead) plays fast, high lines near the top of the neck, answering the singers in the
+  slow part and carrying the melody in the sebene.
+- **Bass** locks to the clave-like beat and outlines the harmony.
+
+Sources differ on where the mi-solo came from. One credits Faugus Izeidi; another links the term
+to the three-guitar line-ups of the late 1960s, such as Docteur Nico, Dechaud and De La France in
+African Fiesta Sukisa. Credit for the sebene itself is also argued: it goes variously to West
+African migrant bands in the 1930s, Antoine Kasongo's orchestra in the late 1940s, Wendo, Henri
+Bowane or Manuaku Waku. Franco's OK Jazz made the sebene the heart of the song rather than a
+break between choruses, and soukous later dropped the sung story altogether for the dance.
+
+Other features: vocal harmony mostly in thirds; call and response between singer and chorus,
+singer and instrument, and between instrument sections; horns that punctuate rather than lead;
+improvisation built on motifs, often in thirds and sixths. Early guitarists of the late 1940s
+and 1950s often used an open tuning (D-G-D-G-B-D) with a capo, prized for its buzz.
+
+*In PHI*: background for a Congolese guitar composer, which is being built separately.
+
+- [Congolese rumba](https://en.wikipedia.org/wiki/Congolese_rumba),
+  [Sébène](https://en.wikipedia.org/wiki/S%C3%A9b%C3%A8ne) and
+  [Cavacha](https://en.wikipedia.org/wiki/Cavacha), Wikipedia.
+- Gary Stewart, *Rumba on the River: A History of the Popular Music of the Two Congos* (Verso,
+  2000; 2020).
+- Gary Stewart, *Breakout: Profiles in African Rhythm* (University of Chicago Press, 1992).
+- Bob W. White, *Rumba Rules: The Politics of Dance Music in Mobutu's Zaire* (Duke University
+  Press, 2008).
+- Banning Eyre, *Africa: Your Passport to a New World of Music* (Alfred, 2002).
+- UNESCO, "Congolese rumba", Representative List of the Intangible Cultural Heritage of
+  Humanity, 2021 (element 01711).
