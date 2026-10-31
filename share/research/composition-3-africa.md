@@ -104,12 +104,32 @@ Gerhard Kubik named the "inherent patterns" that listeners hear from the interlo
 single player plays. The same technique appears in medieval European hocket, in the Shona
 mbira, where two players interlock, and in Balinese kotekan.
 
+Elsewhere in Africa, Wikipedia names hocketing among the Ba-Benzélé (whose hindewhu whistle-and-
+voice figure Herbie Hancock borrowed for the 1973 "Watermelon Man"), the Mbuti, the Basarwa
+(San), the Gumuz of the Blue Nile region of Sudan, and the Gogo of Tanzania, and points to the
+Bigwala gourd trumpets of Busoga in Uganda. Its article carries a request for more citations, so
+those names are a starting point rather than a settled list.
+
+The name is French: *hoquet*, a hiccup or sudden catch, latinised as *hoquetus* or *ochetus*.
+Sanders, writing in *New Grove*, sets aside an older idea that the word came from Arabic. In
+Europe the technique belonged to the Notre Dame school of the 13th and early 14th centuries,
+first in sacred music and later in secular songs, where two upper voices traded notes and rests,
+usually on a vowel, as in the textless *In seculum* pieces. Later examples include Louis
+Andriessen's *Hoketus* (1976), split parts in drum corps, Andean siku panpipe pairs, Ukrainian
+and Russian kuvytsi and Lithuanian skudučiai panpipes, handbell choirs, Haitian rara and
+Dominican gagá bands, Javanese imbal, and guitar pairs that split one line between them.
+
 *In PHI*: a cyclic melody shared out note by note among up to eight horns, each with one pitch,
 their figures interlocking, then each figure varying within the cycle while the melody stays.
 
 - [Hocket](https://en.wikipedia.org/wiki/Hocket),
-  [Banda people](https://en.wikipedia.org/wiki/Banda_people) and
+  [Banda people](https://en.wikipedia.org/wiki/Banda_people),
+  [Bigwala](https://en.wikipedia.org/wiki/Bigwala) and
   [Simha Arom](https://en.wikipedia.org/wiki/Simha_Arom), Wikipedia.
 - Simha Arom, *African Polyphony and Polyrhythm: Musical Structure and Methodology* (Cambridge
   University Press, 1991).
 - Gerhard Kubik, *Theory of African Music* (University of Chicago Press, 1994–2010).
+- Ernest H. Sanders, "Hocket", in *The New Grove Dictionary of Music and Musicians*, 2nd ed.
+  (Macmillan, 2001).
+- Robert Gottlieb, notes to *The Gumuz Tribe: Music of the Blue Nile Province*, Anthology of
+  African Music (Bärenreiter-Musicaphon, 1980).
