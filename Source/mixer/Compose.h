@@ -50,9 +50,18 @@ namespace composition
         chineseSuite,     // Chinese: sǎn-màn-zhōng-kuài-sǎn, phrases in qǐ-chéng-zhuǎn-hé
         // Africa.
         ostinato,         // Ewe (Ghana, Togo): layered ostinati on the bell's timeline, the lead drum's calls
-        hocket            // Central Africa (Banda-Linda horns, Aka): one note a player, interlocked
+        hocket,           // Central Africa (Banda-Linda horns, Aka): one note a player, interlocked
+        // John Cage after Music of Changes (added 2026-10-31; last so the other methods' seeds stay
+        // as they were; methods() lists them by date among Europe and the Americas).
+        silence,          // 4′33″ (1952): three movements tacet, the place sounding by chance
+        starCharts,       // Atlas Eclipticalis (1961–62): star charts laid over the staves
+        musicircus,       // Musicircus (1967): other methods' parts at once, each at its own tempo, in and out by chance
+        timeBrackets,     // the Number Pieces (1987–92): sounds in flexible time brackets
+        // Pauline Oliveros (added 2026-10-31, after Cage's for the same reason).
+        tuningMeditation, // The Tuning Meditation (1981): a breath at a time, one's own tone, a distant voice's, or a new one
+        deepListening     // Deep Listening (1989): global and focal attention, the EIS's delays, the cistern
     };
-    constexpr int numMethods = 18;
+    constexpr int numMethods = 24;
 
     struct MethodInfo
     {
