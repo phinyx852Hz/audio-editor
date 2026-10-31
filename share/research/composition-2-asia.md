@@ -180,7 +180,6 @@ qafla, then a waṣla of a samāʿī with its taslīm and a muwashshaḥ.
 - Güniz Alkaç, ["Taksim practice in Turkish music qanun education: An example of Hicaz Taksim
   by Hasan Ferid Alnar"](https://doi.org/10.12975/rastmd.20251342), *Rast Müzikoloji Dergisi*
   13/4 (2025).
-- Walter Feldman, *Music of the Ottoman Court* (VWB, 1996).
 - Johnny Farraj, [Improvised forms](https://maqamworld.com/en/form/improv.php) and
   [vocal composed forms](https://maqamworld.com/en/form/vocal_comp.php), *Maqam World*, with
   recorded examples.
