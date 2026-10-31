@@ -41,6 +41,7 @@
 #include "TransportBar.h"
 #include "ChainRow.h"
 #include "DesktopShortcuts.h"
+#include "InterfaceSize.h"
 #include "BatchWindow.h"
 #include "SpectrogramDialog.h"
 #include "Dialogs.h"
@@ -890,6 +891,12 @@ void MainWindow::registerCommands()
          [this] { KeymapDialog (commands, this).exec(); });
     add ("options.waveformColors", Category::options, tr ("&Waveform and Meter Colors..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_W) },
          [this] { WaveformColorsDialog (this).exec(); });
+    add ("options.interfaceSize", Category::options, tr ("Interface Si&ze..."), {},
+         [this] { chooseInterfaceSize (interfacesize::saved()); });
+    add ("options.interfaceLarger", Category::options, tr ("&Larger Interface..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_Equal), KS (Qt::CTRL | Qt::SHIFT | Qt::Key_Plus) },
+         [this] { chooseInterfaceSize (interfacesize::step (interfacesize::saved(), 1)); });
+    add ("options.interfaceSmaller", Category::options, tr ("Smaller Interfa&ce..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_Minus), KS (Qt::CTRL | Qt::SHIFT | Qt::Key_Underscore) },
+         [this] { chooseInterfaceSize (interfacesize::step (interfacesize::saved(), -1)); });
     add ("options.theme", Category::options, tr ("&Theme..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_T) },
          [this] { ThemeDialog (this).exec(); });
 
@@ -941,7 +948,7 @@ void MainWindow::buildMenus()
         { tr ("Mi&xer"),     { "mixer.window", "mixer.dock", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
                                "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "mixer.sendToTimeline", "-", "mixer.editNotes", "mixer.trackToEditor", "-", "view.inspector", "-", "mixer.assistant", "mixer.preferences" } },
         { tr ("Mo&de"),      { "@mode" } },
-        { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "mixer.preferences", "-", "options.keymap", "options.theme", "options.waveformColors" } },
+        { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "mixer.preferences", "-", "options.keymap", "options.theme", "options.waveformColors", "-", "options.interfaceSize", "options.interfaceLarger", "options.interfaceSmaller" } },
         { tr ("Performan&ce"), { "performance.launcher", "-", "control.surfaces", "control.learn", "control.mapMode", "-", "performance.record", "performance.stream", "-", "performance.settings", "performance.folder" } },
         { tr ("&Repair"),    { "view.diagnostics", "-", "repair.autoHeal", "repair.spectralGain", "repair.findSimilar", "repair.correctPitch", "-", "repair.learnNoise", "repair.noiseReduction", "-",
                                "repair.declick", "repair.declip", "repair.dehum", "repair.deess", "-",

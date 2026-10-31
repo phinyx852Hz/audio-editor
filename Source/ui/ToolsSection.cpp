@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Tools > Manage Plug-ins and Reset Configuration.
 #include "MainWindow.h"
+#include "InterfaceSize.h"
 #include "Settings.h"
 
 #include <QCheckBox>
+#include <QComboBox>
+#include <QKeyEvent>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
@@ -200,6 +203,79 @@ bool MainWindow::finishReset()
             QFile::remove (config + QLatin1String (f));
     pendingReset = {};
     return true;
+}
+
+bool MainWindow::pendingRestart = false;
+
+void MainWindow::chooseInterfaceSize (int percent)
+{
+    const int now = interfacesize::saved();
+    QDialog dialog (this);
+    dialog.setWindowTitle (tr ("Interface Size"));
+    auto* sizes = new QComboBox (&dialog);
+    for (int p : interfacesize::steps())
+        sizes->addItem (p == 100 ? tr ("%1% (as it was made)").arg (p) : p == interfacesize::steps().first() ? tr ("%1% (about Ableton Live's density)").arg (p)
+                                                                                                       : tr ("%1%").arg (p), p);
+    sizes->setCurrentIndex (std::max (0, (int) interfacesize::steps().indexOf (percent)));
+    auto* label = new QLabel (tr ("&Size:"), &dialog);
+    label->setBuddy (sizes);
+    auto* about = new QLabel (tr ("<p>Everything in " APP_DISPLAY_NAME " larger or smaller: the text, the controls, the meters and every window. "
+                                  "Now %1%.</p><p>A new size takes a restart; " APP_DISPLAY_NAME " asks about unsaved work first. "
+                                  "Ctrl+Shift+= and Ctrl+Shift+- step it, here too.</p>").arg (now), &dialog);
+    about->setWordWrap (true);
+    auto* buttons = new QDialogButtonBox (QDialogButtonBox::Cancel, &dialog);
+    auto* restart = buttons->addButton (tr ("&Restart Now"), QDialogButtonBox::AcceptRole);
+    auto* later = buttons->addButton (tr ("At the &Next Start"), QDialogButtonBox::ApplyRole);
+    restart->setDefault (true);
+    bool restartNow = false;
+    QObject::connect (restart, &QPushButton::clicked, &dialog, [&] { restartNow = true; dialog.accept(); });
+    QObject::connect (later, &QPushButton::clicked, &dialog, &QDialog::accept);
+    QObject::connect (buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    auto* row = new QHBoxLayout;
+    row->addWidget (label);
+    row->addWidget (sizes, 1);
+    auto* layout = new QVBoxLayout (&dialog);
+    layout->addWidget (about);
+    layout->addLayout (row);
+    layout->addWidget (buttons);
+
+    // The same keys that opened it go on stepping in it.
+    struct Stepper final : QObject
+    {
+        QComboBox* box;
+        explicit Stepper (QComboBox* b) : QObject (b), box (b) {}
+        bool eventFilter (QObject*, QEvent* e) override
+        {
+            if (e->type() != QEvent::ShortcutOverride && e->type() != QEvent::KeyPress)
+                return false;
+            auto* k = static_cast<QKeyEvent*> (e);
+            const auto mods = k->modifiers() & ~Qt::KeypadModifier;
+            if (mods != (Qt::ControlModifier | Qt::ShiftModifier))
+                return false;
+            const int by = k->key() == Qt::Key_Equal || k->key() == Qt::Key_Plus ? 1 : k->key() == Qt::Key_Minus || k->key() == Qt::Key_Underscore ? -1 : 0;
+            if (by == 0)
+                return false;
+            e->accept();
+            if (e->type() == QEvent::KeyPress)
+                box->setCurrentIndex (std::clamp (box->currentIndex() + by, 0, box->count() - 1));
+            return true;
+        }
+    };
+    sizes->installEventFilter (new Stepper (sizes));
+    sizes->setFocus();
+
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    const int chosen = sizes->currentData().toInt();
+    interfacesize::save (chosen);
+    if (! restartNow)
+    {
+        statusBar()->showMessage (tr ("The interface will be %1% at the next start").arg (chosen), 6000);
+        return;
+    }
+    pendingRestart = true;
+    if (! close())   // asks about unsaved work; main() starts PHI again once the window is gone
+        pendingRestart = false;
 }
 
 //==============================================================================

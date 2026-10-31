@@ -4,6 +4,7 @@
 #include "engine/AudioEngine.h"
 #include "engine/MasterChain.h"
 #include "ui/Brand.h"
+#include "ui/InterfaceSize.h"
 #include "ui/MainWindow.h"
 #include "ui/PhiMark.h"
 #include "ui/Settings.h"
@@ -72,6 +73,7 @@ namespace
 #if PHI_WEB_BACKDROP
         QCoreApplication::setAttribute (Qt::AA_ShareOpenGLContexts);   // Qt WebEngine asks for it before the application starts
 #endif
+        interfacesize::applyBeforeStart();   // Options > Interface Size, read by Qt as it starts
         Application app (argc, argv);
         QApplication::setApplicationName (QStringLiteral (APP_ID));
         moveOldSettings();
@@ -131,8 +133,9 @@ namespace
         }
         PhiSplash::startupSound() = nullptr;
 
-        // Tools > Reset Configuration: clear the settings now that nothing will write them again, and start afresh.
-        if (MainWindow::finishReset())
+        // Tools > Reset Configuration: clear the settings now that nothing will write them again, and start
+        // afresh; Options > Interface Size starts afresh at the new size.
+        if (MainWindow::finishReset() || MainWindow::restartRequested())
             QProcess::startDetached (QCoreApplication::applicationFilePath(), {});
 
         return result;
