@@ -65,8 +65,12 @@ handled them better. In Courtney's summary:
 
 The system names no script, so it is written in Devanagari, Roman, Kannada, Urdu and others.
 Ustad Mahfooz Khokhar's *Rag Swaroop* (Pakistan, 1998) writes it in Urdu, right to left, and puts
-an X on every clap, X1 X2 0 X3 for tīntāl. Courtney dates the first volume to 1920, against the
-1913 start given in the source list below; the dates need checking.
+an X on every clap, X1 X2 0 X3 for tīntāl.
+
+The dates of *Kramik Pustak Malika* vary by source. Courtney gives 1920 for the first volume;
+bibliographies give 1919 or 1920, then 1921 and 1922 for the next two, with the six volumes
+complete by 1937, the year after Bhatkhande died. It was written in Marathi, and the Hindi
+editions most students use came later.
 
 In his second part Courtney weighs ways of carrying the notation abroad:
 - **Staff notation** reaches the most readers but misleads. It implies a fixed key, where Indian
@@ -109,7 +113,10 @@ Rāg Yaman, with its sharp Ma, takes one sharp, though it is not G major.
 
 - [Bhatkhande music notation](https://en.wikipedia.org/wiki/Bhatkhande_music_notation) and
   [Svara](https://en.wikipedia.org/wiki/Svara), Wikipedia.
-- Vishnu Narayan Bhatkhande, *Kramik Pustak Malika* (1913–37).
+- Vishnu Narayan Bhatkhande, *Hindustani Sangeet Paddhati: Kramik Pustak Malika*, 6 vols
+  (Marathi, c. 1919–37; later Hindi editions).
+- ["Overview and directory of Pandit V. N. Bhatkhande's literature"](https://oceanofragas.com/OverviewandDirectory_PanditVNBhatkhandes_Literature.aspx),
+  *Ocean of Ragas*.
 - ["Bhatkhande Notation"](https://www.indianclassicalmusic.com/bhatkhande-notation-script),
   IndianClassicalMusic.com.
 - David Courtney, ["North Indian Musical Notation: An Overview (Part 1)"](https://chandrakantha.com/music-and-dance/i-class-music/n-indian-notation/),
