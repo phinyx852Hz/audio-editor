@@ -367,9 +367,13 @@ gagaku layers (default mode Hyōjō).
 Sanjo ("scattered melodies") is a Korean solo instrumental form, played with janggu drum
 accompaniment, that runs through a series of rhythmic cycles (jangdan) from slow to fast:
 jinyangjo, jungmori, jungjungmori, jajinmori and hwimori, sometimes ending in danmori. It grew
-out of shamanic music and sinawi improvisation, and Kim Chang-jo (1865–1919) is credited with
-the first gayageum sanjo in the 1890s; sanjo for geomungo, daegeum, haegeum, ajaeng and piri
-followed. Each master's version is a school (ryu). Its phrases build tension and release it,
+out of pansori, shamanic music and sinawi improvisation, and counts as folk music (minsogak).
+Kim Chang-jo is credited with the first gayageum sanjo around 1890 (sources give his death as
+1919 or 1920); sanjo for geomungo, haegeum, ajaeng, piri and others followed, and daegeum sanjo,
+from the 1920s, became one of the most popular. As in pansori, the drummer and the listeners
+call out encouragement (chuimsae), and a loud response marks a good performance and lifts the
+player. Sanjo is not fixed: each master's version is a school (ryu), and players
+keep adding their own variations. Its phrases build tension and release it,
 in a principle of binding and loosening (maeggo, pulgo). When several instruments play
 together each keeps its own version of the line, a sanjo hapju.
 
@@ -388,8 +392,14 @@ Sǎn, màn, zhōng, kuài, sǎn ("free, slow, moderate, fast, free") names the o
 Chinese instrumental music: one tune (qupai) played first in free rhythm, then in a series of
 metrical versions from slow to fast, and free again at the end. The versions are made by banshi
 variation, which expands or contracts the tune's metre and fills or thins its notes, as in the
-Jiangnan sizhu ("silk and bamboo") music of Shanghai, where *Lao liuban* ("Old Six Beats") is
-the source of slower versions such as *Zhonghua liuban*. A tune's phrases often follow the
+Jiangnan sizhu ("silk and bamboo", strings and winds) music of the lower Yangtze. Its ensembles
+date from the Ming and Qing dynasties; by the early 20th century Shanghai's amateur clubs were its
+centre, playing for pleasure in teahouses, and their music became the basis of the modern Chinese
+orchestra. The instruments are not fixed, usually one of each, with erhu, dizi or xiao, pipa and
+yangqin at the core and sheng, sanxian, qinqin and clapper and drum (guban) as available. At the
+heart of the repertoire stand the Eight Great Pieces, many grown from one old tune, *Lao liuban*
+("Old Six Beats"), whose most important offshoot is *Zhonghua liuban* ("Moderately ornamented Six
+Beats"). A tune's phrases often follow the
 four-part rhetoric of qǐ, chéng, zhuǎn, hé (opening, continuing, turning, closing), and in the
 linking technique yú yǎo wěi ("fish biting tail") each phrase begins on the note the last one
 ended on.
@@ -400,5 +410,7 @@ slow, moderate, fast and free again.
 - [Jiangnan sizhu](https://en.wikipedia.org/wiki/Jiangnan_sizhu) and
   [Qupai](https://en.wikipedia.org/wiki/Qupai), Wikipedia.
 - J. Lawrence Witzleben, *"Silk and Bamboo" Music in Shanghai* (Kent State University Press, 1995).
+- Alan R. Thrasher, *Sizhu Instrumental Music of South China: Ethos, Theory and Practice* (Brill,
+  2008).
 - Frederick Lau, *Music in China* (Oxford University Press, 2008).
 - Stephen Jones, *Folk Music of China* (Oxford University Press, 1995).
