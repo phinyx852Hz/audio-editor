@@ -216,9 +216,32 @@ annals record pieces in it. A page can hold a whole ensemble score, part beside 
 words and ornament signs in their own columns. It is still used for court music (jeongak) and
 classical music.
 
+Lee Jin-weon traces where it stands among the notations Korea shared with China:
+- **Yuljabo:** the pitch characters, from the Song court music sent to Goryeo in 1114–16.
+- **Gongcheokbo:** the Chinese syllable notation.
+- **Hapjabo:** string tablature, made by Seong Hyeon and others in the 15th century from Chinese
+  jianzipu.
+- **Yukbo:** mnemonic syllables imitating each instrument's sound.
+
+Jeongganbo first appears in the scores of the *Sejong sillok* (vols. 136–147). Its columns have
+32 squares, and it sets whole ensembles side by side in two to six parts, a full score with no
+earlier equal. In Korea it is usually combined with yuljabo inside the squares. China had grids
+earlier, but they work differently:
+- **Zhu Xi (1130–1200):** a score of the twelve Fengya poems put one syllable and its pitch in
+  each of twelve cells.
+- **Yu Zai (Yuan dynasty):** a grid of twelve cells, one for each pitch.
+- ***Wei Shi Yuepu*:** a Ming repertory published in Kyoto in the 18th century, with eight cells
+  a column.
+
+Lee concludes that jeongganbo did not grow out of these, and that it may instead have influenced
+the *Wei Shi Yuepu*. In King Sejo's time the squares were grouped into larger units (daegang) of
+three and two.
+
 *In PHI*: the staff can also show sigimsae, Korean ornament signs, from the MIDI editor's menu.
 
 - [Jeongganbo](https://en.wikipedia.org/wiki/Jeongganbo), Wikipedia.
+- Lee Jin-weon, ["The Correlation between the Musical Notations of Korea and China"](https://www.silkqin.com/01mywk/themes/images/koreanpu6.pdf),
+  in *Musical Notations of Korea*, pp. 147–165.
 
 ## Arabic, Turkish and Persian staffs
 
