@@ -32,7 +32,17 @@ sophistication. Atsiagbekɔ, a warrior dance and one of the oldest in the Ewe ca
 retells in drumming, dance, song and chant, as Agbeli tells it, a small village's victory over a
 far larger army some five centuries ago. Its supporting drums are kaganu, kidi, kroboto and
 totodzi, and none leaves its ostinato: here the call and response runs almost wholly between
-the atsimevu and the dancers. A cantor and chorus
+the atsimevu and the dancers.
+
+The Ga of the coast around Accra built the same kind of texture into Kpanlogo, a young people's
+recreational style of the late 1950s, the years of independence, which borrowed figures from
+older Ga pieces such as Gome, Kolomashie and Oge and from highlife. The elder Nii Taki recalls
+its first name, Gbajo, "storytelling": a story became a song and the song a dance. Its dancing
+was thought so risqué that a more spaced-out version was made, which Kwame Nkrumah approved.
+Bell (ngongo), rattle (ashakashaka), finger castanet (ododompo) and one or two square frame drums
+(tamalin) keep time under three kpanlogo drums, the lead tuned highest. There is no set order of
+variations; the music starts slow and quickens, and in a traditional setting the lead drummer
+watches the dancers and varies to fit them while the support drums respond. A cantor and chorus
 sing over it in call and response. David Locke's studies and those of A. M. Jones made the
 style the textbook case of African polyrhythm; Kofi Agawu has warned against hearing it only as
 rhythm, apart from dance, language and meaning.
@@ -68,8 +78,10 @@ one, three against two, the lead drum's calls changing their responses, with can
 - Jeremy Cohen, ["Great Grooves #2: Adzrowo"](https://thisworldmusic.com/adzro-african-drumming-dance-from-ghana/),
   *ThisWorldMusic*.
 - Jeremy Cohen, ["Great Grooves #3: Agbekor (slow)"](https://thisworldmusic.com/agbekor-african-drumming-and-dance-from-ghana/),
-  *ThisWorldMusic*. The series also has mixers for fast Agbekor, Tokoe, Kpanlogo and Cuban
-  guaguancó, for listening to each part alone.
+  *ThisWorldMusic*. The series also has mixers for fast Agbekor, Tokoe and Cuban guaguancó,
+  for listening to each part alone.
+- ["Great Grooves #6: Kpanlogo"](https://thisworldmusic.com/kpanlogo-african-drumming-dance-ghana/),
+  *ThisWorldMusic*, played by Francis Kofi Akotuah.
 - C. K. Ladzekpo, *Foundation Course in African Dance-Drumming*, "Six against four cross
   rhythms" (1995), [archived](https://web.archive.org/web/2012/https://home.comcast.net/~dzinyaladzekpo/SixFour.html).
 - Eugene D. Novotney, *The 3:2 Relationship as the Foundation of Timelines in West African
