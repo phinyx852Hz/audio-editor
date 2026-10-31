@@ -137,8 +137,8 @@ planners.
 
 - [Soundwalk](https://en.wikipedia.org/wiki/Soundwalk) and
   [Janet Cardiff](https://en.wikipedia.org/wiki/Janet_Cardiff), Wikipedia.
-- Hildegard Westerkamp, "Soundwalking", *Sound Heritage* 3/4 (1974), and *The Soundscape
-  Speaks: Soundwalking Revisited* (2021).
+- Hildegard Westerkamp, "Soundwalking", *Sound Heritage* 3/4 (1974); her piece *The
+  Soundscape Speaks: Soundwalking Revisited* (2021) returns to it.
 
 ## Pauline Oliveros and Deep Listening
 
