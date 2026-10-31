@@ -64,7 +64,7 @@ meet again only after the least common multiple of their lengths.
 
 When the hits divide the steps exactly, as 4 in 16, they fall every n/k steps. When they do not,
 the gaps must be of two sizes, and the point is to spread those sizes evenly too. A naive
-spacing of 5 in 13, for example, bunches the short gaps at the start: x.x.x..x..x... Toussaint's
+spacing of 5 in 13, for example, bunches the short gaps at the start: x.x.x..x..x.. Toussaint's
 method takes the steps through Euclid's remainders (13 = 2×5 + 3, 5 = 1×3 + 2, 3 = 1×2 + 1):
 
 1. Write the five hits, then the eight rests, in one row.
