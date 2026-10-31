@@ -112,6 +112,18 @@ al-Sunbāṭī's slower, deeper taqāsīm higher, with their echoes of single no
 Marcus also recommends the violinist Aḥmad al-Ḥifnāwī, the Iraqi ʿūd player Munīr Bashīr, Simon
 Shaheen and Racy.
 
+In Ottoman and Turkish art music the taksim is the improvised form of a makam ("place", the word
+for the mode and for its degrees). A makam is a hierarchy of degrees in an untempered scale,
+learned from existing works through its seyir, the characteristic path of its phrases; one scale
+can carry several makams, which is why the music passes by ear and resists transcription. The
+notes to Kudsi Erguner's UNESCO recording *The Turkish Ney* divide the taksim into four stages:
+the makam's most typical phrases first (the notes call this stage zaman; it is usually called
+zemin), then further phrases bringing out the relations of its degrees, then a modulation from
+one of its degrees (meyan), and last a gradual return to the main degree (karar). A taksim
+introduces a composition or links two, such as the measured instrumental prelude (peşrev) and
+the saz semaisi in ten beats, and the ney's taksim, rooted in the Mevlevi (whirling dervish)
+ceremony, is the favourite instrumental form of the tradition.
+
 A waṣla (plural waṣalāt) is a suite of eight or more pieces, usually in one maqām, that joins
 improvisation with composed forms. Instrumental pieces such as the bashraf, the dūlāb and the
 samāʿī open it; the samāʿī has four sections (khānāt) with a recurring refrain (taslīm), in a
@@ -139,6 +151,8 @@ qafla, then a waṣla of a samāʿī with its taslīm and a muwashshaḥ.
   [Arabic maqam](https://en.wikipedia.org/wiki/Arabic_maqam) and
   [Samai](https://en.wikipedia.org/wiki/Samai), Wikipedia.
 - Scott L. Marcus, *Music in Egypt* (Oxford University Press, 2007).
+- Kudsi Erguner, *The Turkish Ney*, UNESCO Collection (Auvidis UNES 08204), notes by Slimane
+  Nadour.
 - Johnny Farraj, [Improvised forms](https://maqamworld.com/en/form/improv.php) and
   [vocal composed forms](https://maqamworld.com/en/form/vocal_comp.php), *Maqam World*, with
   recorded examples.
