@@ -156,15 +156,45 @@ cantus firmus written by Fux's rules, each species in turn, in the Mode menu's m
 
 ## Fugue
 
-A fugue is a contrapuntal piece built on one theme, the subject, which each voice enters with in
-turn. In the exposition the subject alternates with its answer, the subject transposed to the
-dominant (exactly, a real answer, or adjusted to stay in the key, a tonal answer), while the
-voice that has finished goes on in counterpoint, often a regular countersubject. Episodes,
-usually sequences on fragments of the subject, lead to middle entries in related keys; a
-stretto overlaps the entries, and a pedal on the dominant or tonic can close it. J. S. Bach's
-*The Well-Tempered Clavier* (1722 and 1742) and *The Art of Fugue* are the models; the
-textbook "school fugue" of the Paris Conservatoire is set out in André Gédalge's *Traité de la
-fugue* (1901).
+A fugue (from Latin *fuga*, flight, related to *fugere*, to flee, and *fugare*, to chase) is a
+contrapuntal piece built on one theme, the subject, which each voice enters with in turn. In
+the exposition the subject alternates with its answer, the subject transposed to the dominant
+(rarely the subdominant): exactly, a real answer, or with a note or two changed so as not to
+pull away from the key, a tonal answer, needed when the subject starts on or near a prominent
+dominant note. The voice that has finished goes on in counterpoint; material that comes back
+with later entries is a countersubject, written in invertible counterpoint so it works above or
+below the subject (a fifth, inverted, becomes a fourth, a dissonance). Short codettas join the
+entries, and an odd number of voices often brings a redundant extra entry. Episodes, modulating
+sequences on fragments of the subject, lead to middle entries in related keys, in Bach most
+often the relative major or minor first; false entries start the subject without finishing it;
+a stretto overlaps the entries before each is complete (stretto maestrale when all are), and a
+pedal and coda close it in the tonic. Subjects may come back inverted, in retrograde, augmented
+or diminished.
+
+There are kinds: the double and triple fugue, with two or three subjects heard together or each
+given its own exposition first (Bach's "St Anne" Fugue, BWV 552); the counter-fugue, answered by
+its own inversion (*The Art of Fugue*, Contrapunctus V to VII); the permutation fugue, with no
+episodes, every voice running through the same series of themes in invertible counterpoint
+(the last chorus of the cantata BWV 182); the mirror fugue, whose whole texture can be inverted
+(Contrapunctus 12); and the short, freer fughetta, or a fugato passage within another kind of
+piece. Many writers call fugue a texture or procedure rather than a form.
+
+The word meant any canon in the Middle Ages; Jacobus of Liège used it in his *Speculum musicae*
+(c. 1330), and Zarlino first distinguished fugue from canon in the 16th century, when imitative
+writing filled ricercars, fantasias, canzonas and Palestrina's motets. It became central in the
+Baroque, in Sweelinck, Frescobaldi, Froberger, Pachelbel and Buxtehude, whom Bach studied.
+Bach's *The Well-Tempered Clavier* (two books, each 24 preludes and fugues in every major and
+minor key, 1722 and 1742) and *The Art of Fugue* (BWV 1080) are the models, and Friedrich
+Wilhelm Marpurg's *Abhandlung von der Fuge* (1753) based its rules on them. Haydn wrote fugal
+finales to three of his Op. 20 quartets (1772); Mozart, shown Bach and Handel manuscripts by
+Baron van Swieten around 1782, arranged Bach fugues for strings (K. 405) and wrote the C minor
+fugue K. 426 and the fugal finale of the "Jupiter" Symphony; Beethoven's late fugues include
+the *Hammerklavier* finale, the *Große Fuge* Op. 133 and the opening of the C sharp minor
+Quartet Op. 131. In the 20th century Bartók opened *Music for Strings, Percussion and Celesta*
+(1936) with a fugue, Stravinsky wrote a double fugue in the *Symphony of Psalms* (1930),
+Shostakovich wrote *24 Preludes and Fugues* after Bach, and Ligeti dissolved the subject into
+micropolyphony in the Kyrie of his Requiem. The textbook "school fugue" of the Paris
+Conservatoire is set out in André Gédalge's *Traité de la fugue* (1901).
 
 *In PHI*: Compose > Fugue takes the MIDI clip shown in the mixer as its subject, or writes one,
 then an exposition, episodes in sequence, middle entries, a stretto and a tonic pedal.
@@ -175,6 +205,10 @@ then an exposition, episodes in sequence, middle entries, a stretto and a tonic 
 - André Gédalge, *Traité de la fugue* (1901); *Treatise on the Fugue*, trans. Ferdinand Davis
   (University of Oklahoma Press, 1965).
 - Alfred Mann, *The Study of Fugue* (Rutgers University Press, 1958).
+- Paul Mark Walker, *Theories of Fugue from the Age of Josquin to the Age of Bach* (University of
+  Rochester Press, 2000).
+- Joseph Kerman, [*The Art of Fugue: Bach Fugues for Keyboard, 1715–1750*](https://doi.org/10.1525/luminos.1)
+  (University of California Press, 2015), open access.
 
 ## Twelve-tone rows
 
