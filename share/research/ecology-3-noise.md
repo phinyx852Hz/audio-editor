@@ -1,6 +1,7 @@
 <!--
-Research > Acoustic Ecology > Noise music (owner, 2026-10-31): noise as music, the other side
-of acoustic ecology's argument with noise: its forerunners, industrial music and power
+Research > Acoustic Ecology > Noise music (owner, 2026-10-31): here because acoustic ecology
+places all sound, wanted (music) and unwanted (noise), within conscious human experience.
+Noise as music: its forerunners, industrial music and power
 electronics in Britain, Europe and the US, Japanese noise, and the scenes elsewhere.
 
 Written from memory: Wikipedia could not be reached from the session that wrote this, so the
@@ -30,21 +31,30 @@ that it has its own name, Japanoise.
 
 ## Noise and acoustic ecology
 
-Noise is where acoustic ecology and noise music part. For Schafer, noise was the enemy, the
-lo-fi drone of the industrial soundscape that masks the voices of a place, and acoustic design
-its cure. For the noise musicians, it was material and freedom: the sound of the modern world
-taken up and turned into an experience of overload, release or resistance.
+Noise music belongs in acoustic ecology because the field's subject is the whole of what we
+hear: wanted sound, which we call music or signal, and unwanted sound, which we call noise,
+both within conscious human experience. Schafer himself defined noise as unwanted sound, a
+judgement of the listener rather than a property of the sound, and that makes the line
+between music and noise a matter of attention. Noise music moves that line: it takes what a
+culture has decided not to hear and asks that it be listened to as fully as music.
 
-Jacques Attali's *Noise: The Political Economy of Music* (*Bruits*, 1977; English 1985) gave
-the argument its theory: music is the ordering of noise, every order of music a figure of a
-social order, and noise the disorder from which a new one comes. Noise music answers Schafer
-that a lo-fi world cannot be wished away, and acoustic ecology answers it that listening to
-noise closely is already a form of the attention he asked for.
+The two meet and part on this ground. For Schafer, the noise of the industrial soundscape
+was a lo-fi drone that masks the voices of a place, and acoustic design its cure; for the
+noise musicians, the same sound was material and freedom, an experience of overload, release
+or resistance. Jacques Attali's *Noise: The Political Economy of Music* (*Bruits*, 1977;
+English 1985) gave the argument its theory: music is the ordering of noise, every order of
+music a figure of a social order, and noise the disorder from which a new one comes. Cage's
+"wherever we are, what we hear is mostly noise; when we ignore it, it disturbs us; when we
+listen to it, we find it fascinating" (1937) states the common ground: listening closely to
+noise is already the attention acoustic ecology asks for.
 
-- [Jacques Attali](https://en.wikipedia.org/wiki/Jacques_Attali) and
+- [Noise](https://en.wikipedia.org/wiki/Noise),
+  [Jacques Attali](https://en.wikipedia.org/wiki/Jacques_Attali) and
   [Noise pollution](https://en.wikipedia.org/wiki/Noise_pollution), Wikipedia.
 - Jacques Attali, *Noise: The Political Economy of Music*, trans. Brian Massumi (University of
   Minnesota Press, 1985).
+- John Cage, "The Future of Music: Credo" (1937), in *Silence* (Wesleyan University Press, 1961).
+- R. Murray Schafer, *The Tuning of the World* (1977), the glossary entry "noise".
 
 ## Industrial music
 
