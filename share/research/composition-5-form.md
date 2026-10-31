@@ -100,6 +100,34 @@ meet in one shape. Spread 7 notes as evenly as possible through the 12 semitones
 diatonic scale, whose steps (2 2 1 2 2 2 1, in some rotation) follow the same pattern as E(7,12),
 the Ewe bell.
 
+In the extended version of the Banff paper, Toussaint lists dozens of Euclidean rhythms in use:
+- **Greece, Bulgaria and Macedonia:** E(2,5), E(4,7) and others;
+- **Arab rhythms:** E(5,6) York-Samai, E(5,7) Nawakhat and E(5,9) Agsag-Samai;
+- **Turkey:** E(4,9), the aksak;
+- **India:** E(3,11) and E(3,14), the clap patterns of savārī and dhamār tāl;
+- **Ghana and Central Africa:** E(7,12) among the Ashanti, E(5,12) in the Central African
+  Republic, and E(11,24) and E(13,24) among the Aka.
+
+When 2k < n < 3k the result uses only twos and threes, so it is aksak in Brăiloiu's and Arom's
+sense, though not every aksak rhythm is Euclidean. The same structure appears in Bresenham's
+lines, in leap-year calendars and in the Sturmian words of combinatorics.
+
+Demaine and others proved that the Euclidean rhythms and their rotations are exactly the
+maximally even rhythms, in Clough and Douthett's sense (1991), and the complement of one is
+another. Long Indian tālas mostly fall outside: of the 35 sūlādi tālas only 4 are maximally even.
+Toussaint also notes a pattern in which kinds of Euclidean string are favoured where. The kinds
+built from steps of 1 and 2 turn up in Africa, those from steps of 2 and 3 only in Bulgaria, and
+a third kind is preferred in classical music and jazz but rare in African music.
+
+Viggo Brun, in a ten-minute lecture at the International Congress of Mathematicians (Stockholm,
+1962), went back to Euclid's own form of the algorithm. Aristotle called it antanairesis,
+"taking away in turn": subtraction, not division. In 1919 Brun had extended it from two numbers
+to three, and he applied it to the old problem of dividing the octave into equal steps that
+approximate several pure intervals at once. Divisions he discusses:
+- **31 steps:** proposed by Vicentino, Mersenne, Huygens and, in his time, Fokker;
+- **53 steps:** Mercator's, said to go back to Philolaus and to have been used in China;
+- **72 steps:** better than Drobisch's 74, and tried on an instrument by a Russian, J. Mursin.
+
 Erv Wilson's worksheets of 1997 show this with Viggo Brun's version of the algorithm. He starts
 with an octave of N steps and a generator, usually the fifth, of G steps, such as 12 and 7. At
 each stage he takes the smaller number from the larger, re-sorts, and records how many of each
@@ -113,6 +141,12 @@ The fractions climb toward 7/12, each next one a mediant of two before, as in th
 "scale tree". He works the same table for octaves of 19, 31, 50, 53, 69 and 88 steps, and for
 generators that are thirds (minor, neutral, subminor) rather than fifths. He follows it as far as
 1995 steps with a generator of 527, which reproduces the fifth of Larry Hanson's tuning.
+
+In 1995 he applied Brun's three-number form to the octave, fifth and major third together. The
+result is a sequence of "constant structures":
+- the stages have 1, 2, 3, 5, 7, 10, 15, 22, 34 and 53 notes;
+- each splits its steps into smaller just intervals: 3/2 and 4/3, then 9/8, then 5/4 and 16/15,
+  then 10/9, 81/80, 25/24 and 128/125.
 
 Toussaint found the link in 2004, two years into studying rhythm mathematically: the two
 numbers fed to Euclid's procedure (*Elements* VII.1–2) become the counts of sounded and silent
@@ -135,15 +169,19 @@ same groove.
 - [Euclidean rhythm](https://en.wikipedia.org/wiki/Euclidean_rhythm),
   [Tresillo (rhythm)](https://en.wikipedia.org/wiki/Tresillo_(rhythm)) and
   [Polyrhythm](https://en.wikipedia.org/wiki/Polyrhythm), Wikipedia.
+- Viggo Brun, "Euclidean Algorithms and Musical Theory", *L'Enseignement Mathématique* 10 (1964),
+  [doi:10.5169/seals-39413](https://doi.org/10.5169/seals-39413).
 - Erv Wilson, "Viggo Brun's algorithm applied" (worksheets, 1997),
-  [anaphoria.com](https://anaphoria.com/viggo2.pdf); see also Viggo Brun, ["Euclidean Algorithms and
-  Musical Theory"](https://anaphoria.com/brun-euclideanalgo.pdf), and Kraig Grady, ["Applying Viggo
+  [anaphoria.com](https://anaphoria.com/viggo2.pdf), and "A Sequence of Constant Structures as
+  Predicted by Brun's Algorithm" (1995), [anaphoria.com](https://anaphoria.com/viggo3.pdf); see also
+  Kraig Grady, ["Applying Viggo
   Brun's Algorithm to Rhythm"](https://anaphoria.com/ViggoRhythm.pdf).
 - Benjamin Wardhaugh, ["Music and Euclid's algorithm"](https://plus.maths.org/os/issue40/features/wardhaugh/index),
   *Plus Magazine* (University of Cambridge, 2006).
 - Godfried Toussaint, "The Euclidean Algorithm Generates Traditional Musical Rhythms",
   *Proceedings of BRIDGES* (Banff, 2005), pp. 47–56
-  ([PDF](https://cgm.cs.mcgill.ca/~godfried/publications/banff.pdf)); "The rhythm that conquered
+  ([PDF](https://cgm.cs.mcgill.ca/~godfried/publications/banff.pdf); extended version,
+  [PDF](https://cgm.cs.mcgill.ca/~godfried/publications/banff-extended.pdf)); "The rhythm that conquered
   the world: What makes a 'good' rhythm good", *Percussive Notes* (November 2011), pp. 52–59;
   "Classification and phylogenetic analysis of African ternary rhythm timelines", *BRIDGES*
   (Granada, 2003); with J.-M. Díaz-Báñez et al., "El compás flamenco: a phylogenetic analysis",
