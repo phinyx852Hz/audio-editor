@@ -89,7 +89,7 @@ Folkways, 2001, three CDs) gathers the music Feld recorded from 1976 to 2000.
 After Feld, many ethnographers studied how a people's music and sense of place come from the
 sounds around them. Anthony Seeger's *Why Suyá Sing* (1987) followed the songs of the Kĩsêdjê
 (Suyá) of Brazil; Marina Roseman's *Healing Sounds from the Malaysian Rainforest* (1991), the
-Temiar, whose songs are given by spirits of the forest in dreams; Tina K. Ramnarine and Feld's
+Temiar, whose songs are given by spirits of the forest in dreams; Feld's own
 students carried the work on. In history, Emily Thompson's *The Soundscape of Modernity*
 (2002) and Alain Corbin's *Village Bells* (1994) are histories of soundscapes in Schafer's
 sense, and sound studies, with Jonathan Sterne's *The Audible Past* (2003), grew in part from
