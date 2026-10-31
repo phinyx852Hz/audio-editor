@@ -230,7 +230,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#128](https://github.com/phinyx852Hz/audio-editor/pull/128) | Research: add Acoustic Ecology (Schafer, composers, Feld and the Kaluli, noise music) | open |  | `share/research/ecology-1-composers.md`<br>`share/research/ecology-3-noise.md`<br>`share/research/ecology-0-schafer.md` |
 | [#129](https://github.com/phinyx852Hz/audio-editor/pull/129) | Compose: John Cage's and Pauline Oliveros's techniques | open |  | `Source/mixer/Compose.cpp`<br>`tests/CoreTests.cpp`<br>`docs/compose.md` |
 | [#131](https://github.com/phinyx852Hz/audio-editor/pull/131) | Compose: Congolese guitar, rumba and sebene | open |  | `Source/mixer/Compose.cpp`<br>`tests/CoreTests.cpp`<br>`docs/compose.md` |
-| [#132](https://github.com/phinyx852Hz/audio-editor/pull/132) | Compose: interlocking polyphony (Mbuti, Aka) and a Bol Processor grammar qāʿida | open |  | `Source/mixer/Compose.cpp`<br>`Source/mixer/BolProcessor.cpp`<br>`share/bolprocessor/-se.dhin--` |
+| [#132](https://github.com/phinyx852Hz/audio-editor/pull/132) | Compose: Mbuti interlocking, the Bol Processor (BP3) with an Ajrada qāʿida, and PHI tabla | open |  | `Source/mixer/BolProcessor.cpp`<br>`Source/mixer/Compose.cpp`<br>`share/bolprocessor/-se.dhin--` |
 
 ## By number
 
@@ -367,4 +367,4 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#129](https://github.com/phinyx852Hz/audio-editor/pull/129) | Compose: John Cage's and Pauline Oliveros's techniques | Compose already had Chance and Aleatory, which covers Cage's I Ching chance operations in *Music of Changes*. *(auto)* | open | 2026-10-31 | Not yet sorted |
 | [#130](https://github.com/phinyx852Hz/audio-editor/pull/130) | Analysis Meters: EBU-tested loudness, classic VU/PPM/K meters, a bitscope, OVERs, Heinzel flat tops | PHI's loudness code was run on the EBU Loudness test set v05, which covers Tech 3341, 3342 and 3343. *(auto)* | open | 2026-10-31 | Analysis and meters |
 | [#131](https://github.com/phinyx852Hz/audio-editor/pull/131) | Compose: Congolese guitar, rumba and sebene | Adds a new Compose method, Congolese Guitar: Rumba and Sebene. *(auto)* | open | 2026-10-31 | Not yet sorted |
-| [#132](https://github.com/phinyx852Hz/audio-editor/pull/132) | Compose: interlocking polyphony (Mbuti, Aka) and a Bol Processor grammar qāʿida | Two new methods in the Compose menu, both driven by composition::methods(), so the menu and the Compose dialog pick them up without UI changes. *(auto)* | open | 2026-10-31 | Not yet sorted |
+| [#132](https://github.com/phinyx852Hz/audio-editor/pull/132) | Compose: Mbuti interlocking, the Bol Processor (BP3) with an Ajrada qāʿida, and PHI tabla | 1. *(auto)* | open | 2026-10-31 | Not yet sorted |
