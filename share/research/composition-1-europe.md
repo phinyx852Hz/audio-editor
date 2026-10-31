@@ -212,17 +212,32 @@ then an exposition, episodes in sequence, middle entries, a stretto and a tonic 
 
 ## Twelve-tone rows
 
-Twelve-tone technique orders all twelve pitch classes in a row, and builds a piece from that row
-and its transformations: the prime, its inversion (intervals turned upside down), its
-retrograde (backwards) and the retrograde inversion, each on any of the twelve pitches, 48
-forms laid out in a 12 by 12 matrix. Arnold Schoenberg formulated it in the early 1920s (the
-Suite for Piano, Op. 25, 1921–23, is the first wholly twelve-tone work), and his pupils Alban
-Berg and Anton Webern took it in different directions. Josef Matthias Hauer worked out a
-twelve-tone method of his own at the same time. Milton Babbitt extended it in the United
-States: combinatoriality (a row whose halves combine with a transformation's halves to make all
-twelve notes), and time points, which serialise rhythm by the same numbers. After 1945 Pierre
-Boulez, Karlheinz Stockhausen and others serialised duration, dynamics and timbre too
-(integral serialism).
+Twelve-tone technique (dodecaphony; in British usage twelve-note composition) keeps any one
+note from dominating by ordering all twelve pitch classes in a row and deriving a piece from it.
+A row uses each pitch class once, regardless of octave, and may appear as the prime (P), its
+inversion (I, every interval turned upside down), its retrograde (R, backwards) or its
+retrograde inversion (RI), each transposed to any of the twelve pitches: up to 48 row forms,
+laid out in a 12 by 12 matrix. Symmetrical rows have fewer; the chromatic scale has only 24.
+There are 12! = 479,001,600 orderings, 9,985,920 of them distinct once transformations are
+counted as the same row. The rules govern the row, not the surface: notes may repeat, rows may
+sound at once or overlap to make harmony, and rhythm and dynamics are free.
+
+Josef Matthias Hauer published his "law of the twelve tones" in 1919, the year of his *Nomos*,
+Op. 19, and built music from unordered hexachords he called tropes, as well as from ordered
+rows. Arnold Schoenberg recalled first using his own method in 1921 and explaining it to his
+pupils in 1923, as "a method of composing with twelve tones which are related only with one
+another"; the fifth of his Piano Pieces, Op. 23, and the Suite for Piano, Op. 25 (1921–23), are
+among the first twelve-tone works, and the Variations for Orchestra, Op. 31, among the best
+known. For twenty years it was used almost only by him and his pupils Alban Berg, whose rows
+often keep tonal elements, and Anton Webern, and by Elisabeth Lutyens in England. Bartók had
+already built a bagatelle from a twelve-note group in 1908. By the 1950s Babbitt, Berio, Boulez,
+Dallapiccola, Krenek and Maderna had taken it up, and Stravinsky after Schoenberg's death, often
+rotating his rows. Milton Babbitt extended it in the United States: combinatoriality (a row
+whose hexachords combine with a transformation's to make all twelve notes), invariance (segments
+that survive a transformation and pivot between row forms), and time points, which serialise
+rhythm by the same numbers; Dallapiccola favoured cross partitions, the row laid out as a grid
+of chords. After 1945 Boulez, Karlheinz Stockhausen and others serialised duration, dynamics and
+timbre too (integral serialism).
 
 *In PHI*: Compose > Europe and the Americas > 12-Tone Row shows a row and its matrix and writes a
 piece in one to four voices by Schoenberg's and Babbitt's methods.
@@ -232,6 +247,11 @@ piece in one to four voices by Schoenberg's and Babbitt's methods.
   [Combinatoriality](https://en.wikipedia.org/wiki/Combinatoriality), Wikipedia.
 - Arnold Schoenberg, "Composition with Twelve Tones" (1941), in *Style and Idea* (1950).
 - Andrew Mead, *An Introduction to the Music of Milton Babbitt* (Princeton University Press, 1994).
+- George Perle, *Serial Composition and Atonality* (6th ed., University of California Press, 1991).
+- Arnold Whittall, *The Cambridge Introduction to Serialism* (Cambridge University Press, 2008).
+- Ethan Haimo, *Schoenberg's Serial Odyssey* (Oxford University Press, 1990).
+- Milton Babbitt, "Twelve-Tone Invariants as Compositional Determinants", *The Musical
+  Quarterly* 46/2 (1960).
 
 ## Stochastic music and sieves
 
