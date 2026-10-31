@@ -261,8 +261,7 @@ void MainWindow::chooseInterfaceSize (int percent)
             return true;
         }
     };
-    dialog.installEventFilter (new Stepper (sizes));
-    sizes->installEventFilter (dialog.findChild<Stepper*>());
+    sizes->installEventFilter (new Stepper (sizes));
     sizes->setFocus();
 
     if (dialog.exec() != QDialog::Accepted)
