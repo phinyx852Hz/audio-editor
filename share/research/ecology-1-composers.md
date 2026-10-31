@@ -142,6 +142,14 @@ in the Dan Harpole Cistern at Fort Worden, Washington, a reverberation of some 4
 Deep Listening Institute (now the Center for Deep Listening at Rensselaer Polytechnic Institute)
 teaches it, and her book *Deep Listening: A Composer's Sound Practice* (2005) sets it out.
 
+Her techniques are for performers' listening more than for notes on a page. The *Sonic
+Meditations* and the later *Deep Listening Pieces* are text scores, prose instructions; in the
+best known, *Tuning Meditation*, each singer sings a pitch, listens to the group, then either
+matches a pitch someone else is singing or sings one no one else is singing. At their centre
+is the movement between focal attention, to one sound, and global attention, to the whole field
+at once. Her Expanded Instrument System, grown from her tape-delay work of the 1960s, surrounds
+a player with delayed and spatially transformed echoes of their own sound to improvise with.
+
 - [Pauline Oliveros](https://en.wikipedia.org/wiki/Pauline_Oliveros) and
   [Deep Listening](https://en.wikipedia.org/wiki/Deep_Listening), Wikipedia.
 - Pauline Oliveros, *Deep Listening: A Composer's Sound Practice* (iUniverse, 2005).
