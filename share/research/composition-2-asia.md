@@ -65,20 +65,31 @@ Western relative being the cadenza. It is played solo, or over a drone on the to
 percussionist's pulse. It begins on the maqām's tonic (qarār) and stays at first in its lowest
 jins (a tetrachord or pentachord), so that the listener learns the maqām; then the player may
 range freely, climbing through its ajnās to the dominant (ghammāz) and the upper octave
-(jawāb), and modulate to other maqāms, as long as the end, a cadence (qafla), comes home. A waṣla is a suite of pieces in one maqām, joining
-taqsīm with composed forms: an instrumental samāʿī in four sections (khānāt) with a recurring
-refrain (taslīm), in a ten-beat rhythm and a closing section in another metre; vocal
-muwashshaḥāt; and further improvisation. It is the Levantine and Egyptian cousin of the
-Ottoman fasıl and the Andalusian nūba.
+(jawāb), and modulate to other maqāms, as long as the end, a cadence (qafla), comes home.
+
+A waṣla (plural waṣalāt) is a suite of eight or more pieces, usually in one maqām, that joins
+improvisation with composed forms. Instrumental pieces such as the bashraf, the dūlāb and the
+samāʿī open it; the samāʿī has four sections (khānāt) with a recurring refrain (taslīm), in a
+ten-beat rhythm, and a closing section in another metre. Then come taqsīm, vocal improvisations
+(the layālī on the words *yā layl*, "O night", and the mawwāl on colloquial verse), muwashshaḥāt,
+the qaṣīda, the Egyptian dawr and popular songs. Ali Jihad Racy has described it as a compound
+form, a principle of linking pieces rather than a fixed order, and the word also names a section
+of a Sufi ceremony. It is the Egyptian and Levantine cousin of the Ottoman fasıl and the
+Andalusian nūba.
 
 *In PHI*: a taqsīm through the maqām's ajnās (default Rast) to the jawāb, a modulation and a
 qafla, then a waṣla of a samāʿī with its taslīm and a muwashshaḥ.
 
 - [Taqsim](https://en.wikipedia.org/wiki/Taqsim),
   [Waslah](https://en.wikipedia.org/wiki/Waslah),
+  [Fasıl](https://en.wikipedia.org/wiki/Fas%C4%B1l),
   [Arabic maqam](https://en.wikipedia.org/wiki/Arabic_maqam) and
   [Samai](https://en.wikipedia.org/wiki/Samai), Wikipedia.
 - Scott L. Marcus, *Music in Egypt* (Oxford University Press, 2007).
+- Ali Jihad Racy, "The Waslah: A Compound-Form Principle in Egyptian Music", *Arab Studies
+  Quarterly* 5/4 (1983).
+- Virginia Danielson, *The Voice of Egypt: Umm Kulthūm, Arabic Song, and Egyptian Society in
+  the Twentieth Century* (University of Chicago Press, 1997).
 - Ali Jihad Racy, *Making Music in the Arab World* (Cambridge University Press, 2003).
 - Habib Hassan Touma, *The Music of the Arabs* (Amadeus, 1996).
 
