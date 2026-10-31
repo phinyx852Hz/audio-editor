@@ -122,7 +122,13 @@ zemin), then further phrases bringing out the relations of its degrees, then a m
 one of its degrees (meyan), and last a gradual return to the main degree (karar). A taksim
 introduces a composition or links two, such as the measured instrumental prelude (peşrev) and
 the saz semaisi in ten beats, and the ney's taksim, rooted in the Mevlevi (whirling dervish)
-ceremony, is the favourite instrumental form of the tradition.
+ceremony, is the favourite instrumental form of the tradition. Halil Altınköprü (2023) names its kinds by place and
+purpose: the opening (baş or giriş) taksim, those between pieces (ara) and at the end (son), the
+transitional (geçiş) taksim, the fihrist taksim that runs through many makams, the
+question-and-answer taksim between two players (karabatak) and the meyan taksim. What sets a
+taksim apart from free improvisation, he argues, is the makam, which it prepares for the works
+that follow; it has been learned in the meşk tradition by listening, watching and repeating, and
+he proposes written template phrases, shown for Rast and Uşşak, as a guide for students.
 
 A waṣla (plural waṣalāt) is a suite of eight or more pieces, usually in one maqām, that joins
 improvisation with composed forms. Instrumental pieces such as the bashraf, the dūlāb and the
@@ -153,6 +159,9 @@ qafla, then a waṣla of a samāʿī with its taslīm and a muwashshaḥ.
 - Scott L. Marcus, *Music in Egypt* (Oxford University Press, 2007).
 - Kudsi Erguner, *The Turkish Ney*, UNESCO Collection (Auvidis UNES 08204), notes by Slimane
   Nadour.
+- Halil Altınköprü, ["Geleneksel Türk sanat müziğinde taksim icrasını geliştirmeye yönelik
+  öneriler: Rast ve Uşşak makamı örneği"](https://doi.org/10.51576/ymd.1352559), *Yegah Müzikoloji
+  Dergisi* 6/2 (2023), in Turkish.
 - Johnny Farraj, [Improvised forms](https://maqamworld.com/en/form/improv.php) and
   [vocal composed forms](https://maqamworld.com/en/form/vocal_comp.php), *Maqam World*, with
   recorded examples.
