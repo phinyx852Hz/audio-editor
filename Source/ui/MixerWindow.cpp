@@ -360,6 +360,53 @@ namespace
         return b.finish();
     }
 
+    // Simplest's envelopes and LFOs in a mix file.
+    QJsonObject envelopeJson (const sampler::Envelope& e)
+    {
+        return { { "on", e.on }, { "attack", e.attack }, { "decay", e.decay }, { "sustain", e.sustain }, { "release", e.release },
+                 { "curve", e.curve }, { "amount", e.amount }, { "velocity", e.velocity } };
+    }
+
+    sampler::Envelope envelopeFromJson (const QJsonObject& o)
+    {
+        sampler::Envelope e;
+        e.on = o.value ("on").toBool (false);
+        e.attack = o.value ("attack").toDouble (0);
+        e.decay = o.value ("decay").toDouble (0.3);
+        e.sustain = o.value ("sustain").toDouble (0);
+        e.release = o.value ("release").toDouble (0.2);
+        e.curve = o.value ("curve").toDouble (0);
+        e.amount = o.value ("amount").toDouble (0);
+        e.velocity = o.value ("velocity").toDouble (0);
+        return e;
+    }
+
+    QJsonObject lfoJson (const sampler::Lfo& l)
+    {
+        return { { "wave", (int) l.wave }, { "shape", l.shape }, { "rate", l.rate }, { "sync", l.sync }, { "beats", l.beats },
+                 { "retrigger", (int) l.retrigger }, { "phase", l.phase }, { "randomPhase", l.randomPhase }, { "modWheel", l.modWheel },
+                 { "toPitch", l.toPitch }, { "toFilter", l.toFilter }, { "toVolume", l.toVolume }, { "toPan", l.toPan } };
+    }
+
+    sampler::Lfo lfoFromJson (const QJsonObject& o)
+    {
+        sampler::Lfo l;
+        l.wave = (sampler::Wave) std::clamp (o.value ("wave").toInt (0), 0, (int) sampler::Wave::sampleHold2);
+        l.shape = o.value ("shape").toDouble (0.5);
+        l.rate = o.value ("rate").toDouble (4.0);
+        l.sync = o.value ("sync").toBool (false);
+        l.beats = o.value ("beats").toDouble (1.0);
+        l.retrigger = (sampler::Retrigger) std::clamp (o.value ("retrigger").toInt (0), 0, (int) sampler::Retrigger::eachNote);
+        l.phase = o.value ("phase").toDouble (0);
+        l.randomPhase = o.value ("randomPhase").toBool (false);
+        l.modWheel = o.value ("modWheel").toDouble (0);
+        l.toPitch = o.value ("toPitch").toDouble (0);
+        l.toFilter = o.value ("toFilter").toDouble (0);
+        l.toVolume = o.value ("toVolume").toDouble (0);
+        l.toPan = o.value ("toPan").toDouble (0);
+        return l;
+    }
+
     // The two instruments' settings in a mix file.
     QJsonObject samplerJson (const sampler::Settings& s)
     {
@@ -372,7 +419,9 @@ namespace
                  { "fixedPitch", s.fixedPitch }, { "keyLow", s.keyLow }, { "keyHigh", s.keyHigh }, { "glide", s.glide },
                  { "fingered", s.fingered }, { "legato", s.legato }, { "gate", s.gate }, { "filter", s.filter },
                  { "filterType", (int) s.filterType }, { "steep", s.steep }, { "cutoff", s.cutoff }, { "resonance", s.resonance },
-                 { "drive", s.drive }, { "keyFollow", s.keyFollow }, { "filterVelocity", s.filterVelocity }, { "quality", (int) s.quality } };
+                 { "drive", s.drive }, { "keyFollow", s.keyFollow }, { "filterVelocity", s.filterVelocity }, { "quality", (int) s.quality },
+                 { "pitchEnvelope", envelopeJson (s.pitchEnvelope) }, { "filterEnvelope", envelopeJson (s.filterEnvelope) },
+                 { "lfo1", lfoJson (s.lfo[0]) }, { "lfo2", lfoJson (s.lfo[1]) }, { "tempo", s.tempo }, { "bend", s.bendRange } };
     }
 
     sampler::Settings samplerFromJson (const QJsonObject& o)
@@ -416,6 +465,12 @@ namespace
         s.keyFollow = o.value ("keyFollow").toDouble (0);
         s.filterVelocity = o.value ("filterVelocity").toDouble (0);
         s.quality = (sampler::Quality) std::clamp (o.value ("quality").toInt (0), 0, (int) sampler::Quality::turntable78);
+        s.pitchEnvelope = envelopeFromJson (o.value ("pitchEnvelope").toObject());
+        s.filterEnvelope = envelopeFromJson (o.value ("filterEnvelope").toObject());
+        s.lfo[0] = lfoFromJson (o.value ("lfo1").toObject());
+        s.lfo[1] = lfoFromJson (o.value ("lfo2").toObject());
+        s.tempo = o.value ("tempo").toDouble (120.0);
+        s.bendRange = o.value ("bend").toDouble (2.0);
         return s;
     }
 

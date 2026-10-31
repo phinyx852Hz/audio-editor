@@ -162,17 +162,32 @@ and the mixer's transports are left where they are.
 
 ## Editing, as in Cubase's Key Editor
 
-- Tools (1 to 6): **Pick** (click, Shift-click, drag a box; drag a note to move it, its right
-  edge to stretch it; Alt moves by the cent), **Draw** (click and drag to the length; Ctrl-click
-  or a double-click with Pick does the same), **Erase**, **Split**, **Glue**, **Curve** (above). Right-click deletes.
+- A click on empty space (or on the ruler) puts the playhead there; while it plays, it plays on
+  from there.
+- Tools (1 to 6): **Pick** (click, drag a box; drag a note to move it, its right edge to stretch
+  it; Alt moves by the cent; Ctrl-click picks or unpicks a note and Ctrl-drag sets the picked
+  notes' velocity; Shift-click picks the notes between the last one clicked and this one, in time
+  and pitch), **Draw** (B switches it on and off; click and drag to the length, click a note to
+  erase it, Shift-drag paints notes freehand a grid step apart; Ctrl-click or a double-click with
+  Pick draws too), **Erase**, **Split**, **Glue**, **Curve** (above). Right-click deletes.
 - **Snap** and the grid (1/1 to 1/32, triplets), the **Length** of new notes, **Quantise** with a
   strength and swing (Q).
 - **Functions**: quantise starts, ends and lengths; legato; fixed lengths; delete overlaps (same
   pitch, or one voice); glue; split at the cursor; velocity (set, compress or expand, add, ramp);
   up or down a degree or a period; snap; restyle; select all or none; delete.
 - Keys: Up and Down move the picked notes a degree of the system (Shift a period, Alt a cent), Left
-  and Right a grid line (Alt a tick), Delete deletes, Ctrl+A picks all, Ctrl+Z and Ctrl+Shift+Z
-  undo and redo, Space plays or pauses (see the transport above).
+  and Right a grid line (Alt a tick), Shift+Left and Shift+Right make them shorter or longer,
+  Delete deletes, Ctrl+Z and Ctrl+Shift+Z undo and redo, Space plays or pauses (see the transport
+  above).
+- Live's keys: Ctrl+A picks all and Ctrl+Shift+A the others; Ctrl+D duplicates the picked notes
+  just after them (their span rounded up to the grid when Snap is on) and Ctrl+Shift+D does so and
+  moves the notes after them on to make room; Ctrl+Shift+Delete deletes them and closes the gap;
+  Ctrl+C, Ctrl+X and Ctrl+V copy, cut and paste notes at the playhead (between MIDI editors too);
+  Ctrl+U quantises (as Q), Ctrl+J joins (glue), Ctrl+E chops on the grid; Ctrl+Up and Ctrl+Down
+  change the velocity by 5 (Shift by 1); Ctrl+1 and Ctrl+2 make the grid narrower or wider,
+  Ctrl+3 switches triplets and Ctrl+4 Snap; Ctrl+L loops. Ctrl+M (MIDI Map Mode) works from here
+  as everywhere in PHI. In the main window these keys are the MIDI editor's while it has the
+  keyboard, not the audio editor's.
 - The info line shows the picked notes' place (bar.beat.tick), name, degree, cents off it and
   frequency; their length, cents off the degree and velocity can be typed.
 - The lane under the notes: velocity (draw a line over the notes), or modulation, volume, pan,
