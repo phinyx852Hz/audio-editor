@@ -112,8 +112,8 @@ player has a melody: the melody exists only in the ensemble. Every player has a 
 own for each piece, sometimes with room to vary it. Arom treats this strict form as sitting right
 on the line between polyrhythm and polyphony. He finds it in Cameroon, the Congo, Zaire, the
 Central African Republic, Kenya, Uganda, Ethiopia and South Africa. In the Central African
-Republic, only two Banda peoples, the Dakpa and the Linda, seem to use it, each with repertories
-written for its horn ensembles.
+Republic, only two Banda peoples, the Dakpa and the Linda, seem to use it, each keeping
+repertories for its horn ensembles.
 
 Elsewhere in Africa, Wikipedia names hocketing among the Ba-Benzélé (whose hindewhu whistle-and-
 voice figure Herbie Hancock borrowed for the 1973 "Watermelon Man"), the Mbuti, the Basarwa
