@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**129 pull requests:** 111 merged, 18 open.
+**130 pull requests:** 111 merged, 19 open.
 
 ## Contents
 
@@ -228,6 +228,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#126](https://github.com/phinyx852Hz/audio-editor/pull/126) | Research: add a Sampling section | open | Research > Sampling | `share/research/sampling-1-techniques.md`<br>`share/research/sampling-0-history.md`<br>`share/research/sampling-2-instruments.md` |
 | [#128](https://github.com/phinyx852Hz/audio-editor/pull/128) | Research: add Acoustic Ecology (Schafer, composers, Feld and the Kaluli) | open |  | `share/research/ecology-1-composers.md`<br>`share/research/ecology-3-noise.md`<br>`share/research/ecology-0-schafer.md` |
 | [#129](https://github.com/phinyx852Hz/audio-editor/pull/129) | Compose: John Cage's and Pauline Oliveros's techniques | open |  | `Source/mixer/Compose.cpp`<br>`tests/CoreTests.cpp`<br>`docs/compose.md` |
+| [#130](https://github.com/phinyx852Hz/audio-editor/pull/130) | Flat tops from the Heinzel report: SR785, HFT95 and HFT90D | open |  | `tests/CoreTests.cpp`<br>`Source/core/Windows.cpp`<br>`Source/ui/AnalysisWindow.cpp` |
 
 ## By number
 
@@ -362,3 +363,4 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#127](https://github.com/phinyx852Hz/audio-editor/pull/127) | Research: add Synthesis, its types and its history | Adds a Synthesis submenu to the Research menu: the major types of synthesis with example instruments, and the history from the origins to today's virtual syn... *(auto)* | open | 2026-10-31 | Instruments and plugins |
 | [#128](https://github.com/phinyx852Hz/audio-editor/pull/128) | Research: add Acoustic Ecology (Schafer, composers, Feld and the Kaluli) | Adds an Acoustic Ecology submenu to Research, as three new files in share/research/ (no existing files touched, so no conflicts with #120–#124): *(auto)* | open | 2026-10-31 | Not yet sorted |
 | [#129](https://github.com/phinyx852Hz/audio-editor/pull/129) | Compose: John Cage's and Pauline Oliveros's techniques | Compose already had Chance and Aleatory, which covers Cage's I Ching chance operations in *Music of Changes*. *(auto)* | open | 2026-10-31 | Not yet sorted |
+| [#130](https://github.com/phinyx852Hz/audio-editor/pull/130) | Flat tops from the Heinzel report: SR785, HFT95 and HFT90D | The Analysis Meters Spectrum's flat-top windows now all come from one free, documented source: G. *(auto)* | open | 2026-10-31 | Not yet sorted |
