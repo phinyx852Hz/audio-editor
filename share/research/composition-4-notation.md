@@ -68,6 +68,24 @@ Ustad Mahfooz Khokhar's *Rag Swaroop* (Pakistan, 1998) writes it in Urdu, right 
 an X on every clap, X1 X2 0 X3 for tīntāl. Courtney dates the first volume to 1920, against the
 1913 start given in the source list below; the dates need checking.
 
+In his second part Courtney weighs ways of carrying the notation abroad:
+- **Staff notation** reaches the most readers but misleads. It implies a fixed key, where Indian
+  musicians transpose freely; the habit of writing everything in C is seldom explained. It also
+  implies equal temperament.
+- **Bhatkhande in Roman letters** keeps the music intact, as in Ravi Shankar's 1968 sitar
+  examples, which add signs for sitar technique and leave the inner claps implied. It still asks
+  the reader to know the theory.
+- **Sargam alongside staff** gives both at once.
+- **Braille:** there is also an Indian notation for blind readers.
+
+Typewriters and computers brought other versions. The Ali Akbar College of Music, from the late
+1960s, used case to show the note's form: S r R g G m M P d D n N, lower case for komal Re, Ga,
+Dha and Ni and for shuddha Ma, upper case for shuddha notes and tivra Ma. Its students carried
+it onto the early internet, where it is still common, though Courtney thinks Unicode has made
+it unnecessary. Others changed the software instead. Systems that showed Bhatkhande notation on
+screen and played it date from 1987, and Courtney's own from about 1990 ran on a Commodore 64;
+today a few redrawn font characters or SVG do the job.
+
 Ornaments have signs of their own. An arc under a group of notes (chhand) means they all fall
 within one beat, as in fast tāns. Meend, a smooth glide from one note to another touching those
 between, is marked by an arc over the notes, so that a slide from komal Dha down to komal Re
@@ -95,7 +113,8 @@ Rāg Yaman, with its sharp Ma, takes one sharp, though it is not G major.
 - ["Bhatkhande Notation"](https://www.indianclassicalmusic.com/bhatkhande-notation-script),
   IndianClassicalMusic.com.
 - David Courtney, ["North Indian Musical Notation: An Overview (Part 1)"](https://chandrakantha.com/music-and-dance/i-class-music/n-indian-notation/),
-  chandrakantha.com.
+  chandrakantha.com, and
+  ["Part 2"](https://chandrakantha.com/music-and-dance/i-class-music/north-indian-musical-notation-an-overview-part-2/).
 - Sādhana, ["Notating Indian Classical Music"](https://raag-hindustani.com/Notation.html),
   *Raag Hindustani* (2011).
 
