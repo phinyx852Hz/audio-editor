@@ -487,9 +487,13 @@ private:
     void setSixteenTracks (bool on);
     // Room for `needed` more tracks; at 8 with room at 16, asks to go to 16 first.
     bool roomForTracks (int needed, const QString& title);
-    // Pointing at a strip selects its track (Strips > Focus Follows Mouse, off at first).
-    bool focusFollowsMouse = false;
+    // Pointing at a strip selects its track (Strips > Focus Follows Mouse, on at first since
+    // 2026-10-31, as the editor's panels): once the pointer has rested on it a moment, so
+    // crossing other strips on the way to the Device Chain or the Inspector leaves them be.
+    bool focusFollowsMouse = true;
     void hoverSelect (int track);
+    QTimer* hoverTimer = nullptr;
+    int hoverTrack = -1;
     // Selecting a track that plays an instrument arms it for the MIDI keyboard and recording
     // (Mixer Preferences, on at first, as Ableton's); a hover never arms.
     bool autoArm = true;

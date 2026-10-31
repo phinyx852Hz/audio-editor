@@ -23,7 +23,9 @@
 #include <QLayout>
 #include <QMessageBox>
 #include <QProgressDialog>
+#include <QKeyEvent>
 #include <QScreen>
+#include <QScrollArea>
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QtConcurrent>
@@ -454,8 +456,21 @@ void MainWindow::showMidiEditor (bool on)
         };
         host.closeRequested = [this] { commands.action (QStringLiteral ("view.midiEditor"))->setChecked (false); };
         host.say = [this] (const QString& text) { statusBar()->showMessage (text, 6000); };
-        midiPanel = new MidiPanel (std::move (host), trackHolder);
-        trackHolder->layout()->addWidget (midiPanel);
+        // In a scroll area, so its rows of tools do not hold the editor as wide as they are: the
+        // Find panel and the other side panels widen over it, and it scrolls sideways instead
+        // (owner, 2026-10-31: "the finder no longer expands rightward").
+        struct Scroller final : QScrollArea
+        {
+            using QScrollArea::QScrollArea;
+            void keyPressEvent (QKeyEvent* e) override { e->ignore(); }   // the keys stay the editor's and the window's
+        };
+        auto* scroller = new Scroller (trackHolder);
+        scroller->setFrameShape (QFrame::NoFrame);
+        scroller->setFocusPolicy (Qt::NoFocus);
+        scroller->setWidgetResizable (true);
+        midiPanel = new MidiPanel (std::move (host), scroller);
+        scroller->setWidget (midiPanel);
+        trackHolder->layout()->addWidget (scroller);
         focusFollowsMouse->addAreas ({ midiPanel });
     }
     trackHolder->setVisible (on);
