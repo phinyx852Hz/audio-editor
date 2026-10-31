@@ -62,6 +62,27 @@ West African bell pattern of bembé, and E(5,16) the bossa nova. Rotating the pa
 on another step. Lanes of different lengths run against each other, which is polymeter, and
 meet again only after the least common multiple of their lengths.
 
+When the hits divide the steps exactly, as 4 in 16, they fall every n/k steps. When they do not,
+the gaps must be of two sizes, and the point is to spread those sizes evenly too. A naive
+spacing of 5 in 13, for example, bunches the short gaps at the start: x.x.x..x..x... Toussaint's
+method takes the steps through Euclid's remainders (13 = 2×5 + 3, 5 = 1×3 + 2, 3 = 1×2 + 1):
+
+1. Write the five hits, then the eight rests, in one row.
+2. Fold the leftovers on the right under the row, again and again, as long as more than one
+   column is left over.
+3. Read the columns off in order. The result is x..x.x..x.x.., with its gaps of 3 and 2 as evenly
+   mixed as they can be.
+
+Bresenham's line-drawing algorithm gives the same patterns. Other examples:
+- E(2,4) is the rock backbeat and E(3,4) cumbia's figure;
+- E(2,5) is the meter of "Take Five", and E(4,7) the Bulgarian râčenica;
+- rotated, E(7,12) is the Ewe bell and E(5,16) bossa nova.
+
+Some Indian tālas are among the few rhythms it does not produce. Euclid's algorithm turned up in
+music theory before, in tuning: Conrad Henfling used it in letters to Leibniz in the
+17th century, and Viggo Brun used it to build scales of up to four step sizes. Erv Wilson took
+the idea further, and Kraig Grady applied it to long rhythmic cycles.
+
 *In PHI*: Compose > Rhythm Generator writes drum lanes, each a Euclidean rhythm (or a written
 pattern, or a Xenakis sieve as a mask) of its own length, with a chance for each hit, humanized
 loudness and timing, and rules: a fill every few bars, a rising or falling density, skipped
@@ -72,5 +93,5 @@ same groove.
   [Tresillo (rhythm)](https://en.wikipedia.org/wiki/Tresillo_(rhythm)) and
   [Polyrhythm](https://en.wikipedia.org/wiki/Polyrhythm), Wikipedia.
 - Godfried Toussaint, "The Euclidean Algorithm Generates Traditional Musical Rhythms",
-  *Proceedings of BRIDGES* (2005), and *The Geometry of Musical Rhythm* (CRC Press, 2013;
+  *Proceedings of BRIDGES* (Banff, 2005), pp. 47–56, and *The Geometry of Musical Rhythm* (CRC Press, 2013;
   2nd ed. 2019).
