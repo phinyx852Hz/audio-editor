@@ -1572,7 +1572,7 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     laneChannelBox = new QSpinBox (this);
     laneChannelBox->setRange (1, 16);
     laneChannelBox->setPrefix (tr ("channel "));
-    laneChannelBox->setToolTip (tr ("The controller's channel. With MPE, channel 1 is the zone's master: what it sends, every note follows"));
+    laneChannelBox->setToolTip (tr ("The controller's channel. With MPE, channel 1 is the zone's manager channel: what it sends, every note follows"));
     lanes->addWidget (laneChannelBox);
     lanes->addSpacing (16);
     stepBox = new QCheckBox (tr ("Step input"), this);
