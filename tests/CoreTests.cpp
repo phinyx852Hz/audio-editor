@@ -8948,6 +8948,34 @@ namespace
         check (bp::strokes ("dha").size() == 2 && bp::strokes ("ta").size() == 1 && bp::strokes ("Dhin").size() == 2 && bp::strokes ("C4").empty(),
                "bol processor: dha is two strokes, ta one, a note none");
 
+        // Bols written together split as BP's alphabets let them be, a unit each; a speed written onto them;
+        // a polymetric expression's written duration.
+        {
+            const auto w = bp::parse ("4+4+4+4/4 dhatidhage . nadhatrkt");
+            const auto d = bp::parse ("/6 dhin--dhagena");
+            const auto k = bp::parse ("/4 dhati dha-/4 taki kite/2tete");
+            const auto p = bp::parse ("{3/2,takiteta kite} {1,dha}");
+            check (w.events.size() == 8 && std::abs (w.beats - 2.0) < 1e-9 && w.events[6].symbol == "tr" && std::abs (w.events[6].beat - 1.5) < 1e-9
+                       && d.events.size() == 4 && std::abs (d.beats - 1.0) < 1e-9 && std::abs (d.events[1].beat - 0.5) < 1e-9
+                       && k.events.size() == 9 && std::abs (k.beats - 3.0) < 1e-9
+                       && p.events.size() == 7 && std::abs (p.beats - 2.5) < 1e-9 && std::abs (p.events[6].beat - 1.5) < 1e-9,
+                   "bol processor: bols written together, speeds on them, and a written duration");
+        }
+
+        // A data file: its items read as written (the header, comments and remarks left out), without BP3.
+        {
+            const auto data = bp::run ("", "", bp::companions (PHI_SHARE_SOURCE_DIR "/bolprocessor/-da.kathak"), 0);
+            const auto items = bp::splitItems (data.items);
+            const auto first = items.empty() ? bp::Item {} : bp::parse (items.front());
+            bool bols = ! first.events.empty();
+            for (const auto& e : first.events)
+                bols = bols && ! bp::strokes (e.symbol).empty();
+            // "Check that the last bol falls on the 17th beat."
+            check (bp::isData (PHI_SHARE_SOURCE_DIR "/bolprocessor/-da.kathak") && data.ok && items.size() >= 5 && bols
+                       && std::abs (first.events.back().beat - 16.0) < 1e-9,
+                   "bol processor: a data file's items, Birju Maharaj's kathak landing on the 17th beat");
+        }
+
         // BP3 itself, on a grammar of our own: two statements of a cell and a polymetric cadence, at four bols a beat.
         const std::string exe = PHI_BP3_BUILD_PATH;
         if (! std::filesystem::exists (exe))
@@ -8982,6 +9010,20 @@ namespace
                     bols = bols && ! bp::strokes (e.symbol).empty();
             }
             check (q.ok && bols, "bol processor: the Ajrada qāʿida's grammar produces items of 32 beats, all bols");
+        }
+        // Kippen and Bel's other qāʿidas: items of 16 beats, every bol played, glued ones split.
+        for (const char* name : { "-gr.dhati2", "-gr.dhadhatite" })
+        {
+            const auto q = bp::run (exe, PHI_BOLPROCESSOR_SOURCE_DIR "/console_strings.json", bp::companions (std::string (PHI_SHARE_SOURCE_DIR "/bolprocessor/") + name), 5, 30);
+            bool bols = q.ok;
+            for (const auto& i : bp::splitItems (q.items))
+            {
+                const auto item = bp::parse (i);
+                bols = bols && std::abs (item.beats - 16.0) < 1e-9 && ! item.events.empty();
+                for (const auto& e : item.events)
+                    bols = bols && ! bp::strokes (e.symbol).empty();
+            }
+            check (bols, std::string ("bol processor: ") + name + " produces 16-beat items, all bols");
         }
     }
 

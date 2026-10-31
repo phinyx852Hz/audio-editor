@@ -35,7 +35,9 @@ namespace bolprocessor
         std::string log;                 // what it said, errors included
     };
     // Runs `executable` (phi-bp3) in a folder of its own, with `strings` (console_strings.json)
-    // copied there, for at most `seconds`.
+    // copied there, for at most `seconds`; a data file's items are read without it.
+    // A data file (-da.name, name.bpda): items already, read as they are rather than produced.
+    bool isData (const std::string& path);
     Run run (const std::string& executable, const std::string& strings, const Files&, uint32_t seed, int seconds = 60);
 
     // An item laid out in time, in beats: each symbol and its length; '-' rests are not events and

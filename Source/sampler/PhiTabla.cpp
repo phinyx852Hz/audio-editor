@@ -75,7 +75,7 @@ namespace phitabla
             { "tu", "tu" }, { "tun", "tu" }, { "thun", "tu" },
             { "ge", "ge" }, { "ghe", "ge" }, { "ga", "ge" }, { "gaa", "ge" }, { "gi", "ge" },
             { "ke", "ke" }, { "ka", "ke" }, { "ki", "ke" }, { "kat", "ke" }, { "kath", "ke" },
-            { "tak", "tak" }, { "trika", "trika" },
+            { "tak", "tak" }, { "trika", "trika" }, { "tr", "te" }, { "kt", "ke" },
         };
         const auto f = as.find (s);
         return f == as.end() ? std::string() : f->second;

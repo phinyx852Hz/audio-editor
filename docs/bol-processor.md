@@ -22,7 +22,7 @@ and Anthony Kozar. The full license and credits are installed with PHI.
 
 ## The dialog
 
-- **Grammar**: a grammar file (`-gr.name` or `name.bpgr`). The alphabet, settings, sound-object,
+- **Grammar**: a grammar file (`-gr.name` or `name.bpgr`), or a data file of items (`-da.name`). The alphabet, settings, sound-object,
   tonality and Csound files it names in its header are found beside it and passed to BP3. It opens
   on PHI's example (below).
 - **Seed**: the same seed produces the same items again. 0 means a new seed each time.
@@ -39,14 +39,28 @@ and Anthony Kozar. The full license and credits are installed with PHI.
   - **BP's own MIDI file**, for a grammar that makes notes rather than bols.
 - **Open the Score** opens the result in the MIDI editor.
 
-## The example
+## The examples
 
-`share/bolprocessor` holds the grammar, alphabet and settings of an Ajrada gharānā qāʿida,
-"dhin--dhagena". Kippen and Bel wrote this grammar in BP1, with rule weights inferred from real
+`share/bolprocessor` holds Kippen and Bel's tablā and kathak examples from Bel's BP3 test set
+(the owner chose "Tabla and kathak grammars only", 2026-10-31); its README lists them.
+
+- Grammars: the Ajrada gharānā qāʿida "dhin--dhagena" (the default), "dhatidhagena" (the one
+  Kippen and Bel's 1992 chapter comments), "dhadhatite", and a kathak tihāī on the counting
+  syllables (it makes notes, so it plays as BP's own MIDI file).
+- Data files (`-da.name`): items already written, Pandit Birju Maharaj's kathak material among
+  them. The dialog reads their items as they are, without BP3.
+
+Kippen and Bel wrote the dhin--dhagena grammar in BP1, with rule weights inferred from real
 performances, and Bel carried it over to BP3. PHI's owner learned the qāʿida from Ustad Akram Khan,
 a direct descendant of that lineage, and included it on that authority. Each item is 32 beats: the
 theme or a variation, bharī and then khālī. The alphabet's `*` homomorphism makes the khālī
 (dha→ta, ge→ke).
+
+BP's alphabets let bols be written together ("dhatidhage", "dhin--dhagena"): the dialog splits
+such a word into its bols, a unit each, as BP does. A BP2 header's homomorphism file (`-ho.name`)
+is read as the alphabet, and BP2 settings files, which BP3 cannot read, are left out. **Save BP's
+MIDI...** saves BP's own MIDI file, to play on another synth: Bel's sound-objects for dhatidhagena
+and the tihāī were made on a Roland D-50.
 
 ## Built in
 

@@ -17,6 +17,7 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
+#include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFontDatabase>
@@ -70,7 +71,7 @@ void MainWindow::bolProcessorDialog()
     auto* form = new QFormLayout;
     auto* row = new QHBoxLayout;
     auto* grammar = new QLineEdit (settings.value (QStringLiteral ("bolprocessor/grammar"), bp3Example()).toString(), &dialog);
-    grammar->setPlaceholderText (tr ("a grammar file, -gr.name or name.bpgr"));
+    grammar->setPlaceholderText (tr ("a grammar file, -gr.name or name.bpgr, or a data file, -da.name"));
     auto* browse = new QPushButton (tr ("&Browse..."), &dialog);
     row->addWidget (grammar, 1);
     row->addWidget (browse);
@@ -123,7 +124,7 @@ void MainWindow::bolProcessorDialog()
     connect (browse, &QPushButton::clicked, &dialog, [&]
     {
         const auto file = QFileDialog::getOpenFileName (&dialog, tr ("A Bol Processor grammar"), QFileInfo (grammar->text()).absolutePath(),
-                                                        tr ("Grammars (-gr.* *.bpgr);;All files (*)"));
+                                                        tr ("Grammars and data (-gr.* *.bpgr -da.* *.bpda);;All files (*)"));
         if (! file.isEmpty())
         {
             grammar->setText (file);
@@ -134,6 +135,9 @@ void MainWindow::bolProcessorDialog()
     auto* buttons = new QDialogButtonBox (&dialog);
     auto* produce = buttons->addButton (tr ("P&roduce"), QDialogButtonBox::ActionRole);
     produce->setToolTip (tr ("Run the grammar: BP3 derives its items"));
+    auto* save = buttons->addButton (tr ("Save BP's &Save BP's MIDI...MIDI..."), QDialogButtonBox::ActionRole);
+    save->setToolTip (tr ("BP's own MIDI file, for another synth or DAW (Bel's tablā prototypes were made on a Roland D-50)"));
+    save->setEnabled (false);
     auto* open = buttons->addButton (tr ("&Open the Score"), QDialogButtonBox::AcceptRole);
     open->setEnabled (false);
     buttons->addButton (QDialogButtonBox::Close);
@@ -156,6 +160,7 @@ void MainWindow::bolProcessorDialog()
             summary->setText (tr ("The Bol Processor produced nothing; what it said is below."));
             text->setPlainText (QString::fromStdString (produced.log));
             open->setEnabled (false);
+            save->setEnabled (false);
             return;
         }
         const auto score = bolprocessor::toScore (items, tempo->value());
@@ -168,6 +173,20 @@ void MainWindow::bolProcessorDialog()
         summary->setText (tr ("Seed %1: %2.").arg (s).arg (QString::fromStdString (score.summary)));
         text->setPlainText (QString::fromStdString (produced.items));
         open->setEnabled (! score.parts[0].notes.empty() || midi);
+        save->setEnabled (midi);
+    });
+    connect (save, &QPushButton::clicked, &dialog, [&]
+    {
+        const auto file = QFileDialog::getSaveFileName (&dialog, tr ("Save BP's MIDI file"),
+                                                        QFileInfo (grammar->text()).completeBaseName() + QStringLiteral (".mid"),
+                                                        tr ("MIDI files (*.mid)"));
+        if (file.isEmpty())
+            return;
+        QFile out (file);
+        if (! out.open (QIODevice::WriteOnly) || out.write ((const char*) produced.midi.data(), (qint64) produced.midi.size()) != (qint64) produced.midi.size())
+            summary->setText (tr ("Could not write %1.").arg (file));
+        else
+            summary->setText (tr ("Saved %1.").arg (QFileInfo (file).fileName()));
     });
     connect (open, &QPushButton::clicked, &dialog, &QDialog::accept);
     connect (buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);

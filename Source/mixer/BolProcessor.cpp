@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <sstream>
 #include <thread>
@@ -57,12 +58,19 @@ namespace bolprocessor
             line = trim (line);
             if (line.size() < 4 || line[0] != '-' || line[3] != '.')
                 continue;
-            const auto kind = line.substr (1, 2);
-            const auto path = folder / line;
+            auto kind = line.substr (1, 2);
+            auto path = folder / line;
+            // BP1 and BP2 called the alphabet a homomorphism file (-ho.dhati); BP3 keeps it as -al.
+            if (kind == "ho")
+            {
+                kind = "al";
+                if (! fs::exists (path))
+                    path = folder / ("-al" + line.substr (3));
+            }
             if (! fs::exists (path))
                 continue;
             if (kind == "al") f.alphabet = path.string();
-            else if (kind == "se") f.settings = path.string();
+            else if (kind == "se" && slurp (path.string()).find ('{') != std::string::npos) f.settings = path.string();   // BP3's JSON; BP2's settings it cannot read
             else if (kind == "so") f.soundObjects = path.string();
             else if (kind == "to") f.tonality = path.string();
             else if (kind == "cs") f.csound = path.string();
@@ -83,9 +91,36 @@ namespace bolprocessor
         return a;
     }
 
+    bool isData (const std::string& path)
+    {
+        const auto name = fs::path (path).filename().string();
+        return name.rfind ("-da.", 0) == 0 || fs::path (path).extension() == ".bpda";
+    }
+
     Run run (const std::string& executable, const std::string& strings, const Files& files, uint32_t seed, int seconds)
     {
         Run out;
+        if (isData (files.grammar))
+        {
+            // A data file is items already: its blocks, without the header, comments and [remarks].
+            std::istringstream in (slurp (files.grammar));
+            std::string line;
+            while (std::getline (in, line))
+            {
+                if (const auto c = line.find ("//"); c != std::string::npos)
+                    line.erase (c);
+                for (size_t a; (a = line.find ('[')) != std::string::npos;)
+                    line.erase (a, line.find (']', a) == std::string::npos ? std::string::npos : line.find (']', a) - a + 1);
+                const auto t = trim (line);
+                if (t.size() >= 4 && t[0] == '-' && t[3] == '.' && std::isalpha ((unsigned char) t[1]))
+                    continue;
+                out.items += t + "\n";
+            }
+            out.ok = ! splitItems (out.items).empty();
+            out.log = out.ok ? "Read the items in " + files.grammar : "No items in " + files.grammar;
+            (void) executable; (void) strings; (void) seed; (void) seconds;
+            return out;
+        }
         std::error_code ec;
         auto base = fs::temp_directory_path (ec) / "phi-bp3-XXXXXX";
         std::string pattern = base.string();
@@ -223,6 +258,12 @@ namespace bolprocessor
                 }
                 else
                 {
+                    // A speed written onto the bols around it, "dha-/4 taki", "kite/6takite": apart.
+                    const bool speedHere = (c == '/' || c == '*') && w.find_first_not_of ("0123456789+") != std::string::npos;
+                    const bool speedDone = std::isalpha ((unsigned char) c) && ! w.empty() && std::isdigit ((unsigned char) w.back())
+                                           && (w[0] == '/' || w[0] == '*');
+                    if (speedHere || speedDone)
+                        flush();
                     w += c;
                     if (c == '(')
                         ++depth;
@@ -254,10 +295,59 @@ namespace bolprocessor
 
         Node sequenceOf (const std::vector<std::string>& t, size_t& i, double speed);
 
+        bool isBol (const std::string& s) { return ! strokes (s).empty(); }
+
+        // A word that is bols written together, split into them (rests and prolongations too), the
+        // longest bol first; empty when it is one bol or not bols at all.
+        std::vector<std::string> syllables (const std::string& w)
+        {
+            if (w.size() < 3 || isBol (w))
+                return {};
+            std::vector<std::string> out;
+            std::function<bool (size_t)> from = [&] (size_t at)
+            {
+                if (at == w.size())
+                    return true;
+                if (w[at] == '-' || w[at] == '_')
+                {
+                    out.push_back (std::string (1, w[at]));
+                    if (from (at + 1))
+                        return true;
+                    out.pop_back();
+                    return false;
+                }
+                for (size_t n = std::min<size_t> (5, w.size() - at); n >= 2; --n)
+                {
+                    const auto x = w.substr (at, n);
+                    if (! isBol (x))
+                        continue;
+                    out.push_back (x);
+                    if (from (at + n))
+                        return true;
+                    out.pop_back();
+                }
+                return false;
+            };
+            return from (0) ? out : std::vector<std::string> {};
+        }
+
+        // A duration written first in a polymetric expression, "{3/2, ...}": its beats, else 0.
+        double durationOf (const std::string& w)
+        {
+            if (w.empty() || ! std::isdigit ((unsigned char) w[0]) || w.find_first_not_of ("0123456789/.") != std::string::npos)
+                return 0.0;
+            const auto slash = w.find ('/');
+            const auto n = std::atof (w.c_str()), d = slash == std::string::npos ? 1.0 : std::atof (w.c_str() + slash + 1);
+            return d > 0.0 ? n / d : 0.0;
+        }
+
         Node polyOf (const std::vector<std::string>& t, size_t& i, double speed)
         {
             Node p;
             p.kind = Node::poly;
+            double written = 0.0;
+            if (i + 1 < t.size() && t[i + 1] == "," && (written = durationOf (t[i])) > 0.0)
+                i += 2;
             while (i < t.size())
             {
                 p.kids.push_back (sequenceOf (t, i, speed));
@@ -271,7 +361,7 @@ namespace bolprocessor
                 break;
             }
             // The first field gives the expression its length; the others fit it.
-            p.natural = p.length = p.kids.empty() ? 0.0 : p.kids.front().length;
+            p.natural = p.length = written > 0.0 ? written / speed : p.kids.empty() ? 0.0 : p.kids.front().length;
             return p;
         }
 
@@ -299,6 +389,20 @@ namespace bolprocessor
                 if (const auto s = speedOf (w, speed); s > 0.0)
                 {
                     speed = s;
+                    continue;
+                }
+                // Bols written together, as BP's alphabets let them be ("dhatidhage", "dhin--dhagena"): one a unit.
+                if (const auto pieces = syllables (w); pieces.size() > 1)
+                {
+                    for (const auto& x : pieces)
+                    {
+                        Node n;
+                        n.length = n.natural = 1.0 / speed;
+                        n.kind = x == "-" ? Node::rest : x == "_" ? Node::prolong : Node::symbol;
+                        if (n.kind == Node::symbol)
+                            n.text = x;
+                        field.kids.push_back (n);
+                    }
                     continue;
                 }
                 Node n;
@@ -413,6 +517,7 @@ namespace bolprocessor
             { "tu", { tu } }, { "tun", { tu } }, { "thun", { tu } },
             { "ge", { ge } }, { "ghe", { ge } }, { "ga", { ge } }, { "gi", { ge } },
             { "ke", { ke } }, { "ka", { ke } }, { "ki", { ke } }, { "kat", { ke } }, { "kran", { ke, na } },
+            { "tr", { tin } }, { "kt", { ke } }, { "tak", { na } }, { "trika", { tin, ke } },
         };
         const auto f = table.find (bol);
         return f == table.end() ? std::vector<int> {} : f->second;
