@@ -85,6 +85,8 @@ namespace mixer
         const auto saHz = keyHz (saKey);
         player.setRaga (&raga, saKey, saHz);
         player.setOrnaments (current.ornaments);
+        // In equal temperament each svara is a piano key, and its āndolan swings about it.
+        player.setCentredSwing (forced >= 0 && forcedEqual);
         meendOn = current.meend;
         meendTime = current.meendSeconds;
         sitar.setJawari (current.jawari);

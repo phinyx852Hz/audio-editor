@@ -358,6 +358,7 @@ The few `Super` keys are the desktop's standard keys for closing and full screen
 | Delete Selected Track |  |
 | Edit MIDI Notes | `Alt+Shift+N` |
 | Mix Assistant | `Alt+Shift+X` |
+| Mixer Inspector | `Ctrl+I` |
 | Mix Down to Editor | `Ctrl+F3` |
 | Mixer | `F3` |
 | New Project | `Ctrl+N` |

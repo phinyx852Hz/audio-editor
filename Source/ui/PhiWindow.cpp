@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "PhiWindow.h"
+#include "EditorWindow.h"
 #include "MasterPanel.h"
 #include "PhiMark.h"
 
@@ -795,5 +796,6 @@ QDialog* openParameterWindow (AudioEngine& engine, const ChainPath& path, QWidge
                                                                                : (QDialog*) new ParameterDialog (engine, path, parent);
     dialog->setAttribute (Qt::WA_DeleteOnClose);
     dialog->show();
+    editorwindow::mark (dialog);
     return dialog;
 }

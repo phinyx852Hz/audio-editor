@@ -120,6 +120,83 @@ namespace x11
                   + " ; dispatch centerwindow");
     }
 
+    void setDialogType (void* handle)
+    {
+        auto* d = display();
+        if (d == nullptr || handle == nullptr || lost)
+            return;
+        auto* x = juce::X11Symbols::getInstance();
+        // Dialog first; normal for window managers that do not know it.
+        Atom types[] = { x->xInternAtom (d, "_NET_WM_WINDOW_TYPE_DIALOG", False),
+                         x->xInternAtom (d, "_NET_WM_WINDOW_TYPE_NORMAL", False) };
+        x->xChangeProperty (d, (::Window) (juce::pointer_sized_uint) handle, x->xInternAtom (d, "_NET_WM_WINDOW_TYPE", False),
+                            XA_ATOM, 32, PropModeReplace, reinterpret_cast<unsigned char*> (types), 2);
+        x->xFlush (d);
+    }
+
+    void grabWindowKeys (void* handle)
+    {
+        auto* d = display();
+        if (d == nullptr || handle == nullptr || lost)
+            return;
+        // JUCE's X11Symbols has no XGrabKey; libX11 is loaded already (by JUCE).
+        using GrabKey = int (*) (::Display*, int, unsigned int, ::Window, Bool, int, int);
+        auto* library = dlopen ("libX11.so.6", RTLD_LAZY | RTLD_NOLOAD);
+        auto* grab = library != nullptr ? reinterpret_cast<GrabKey> (dlsym (library, "XGrabKey")) : nullptr;
+        if (grab == nullptr)
+            return;
+
+        auto* x = juce::X11Symbols::getInstance();
+        const auto window = (::Window) (juce::pointer_sized_uint) handle;
+        const struct { KeySym key; unsigned int modifiers; } keys[] =
+            { { XK_w, ControlMask }, { XK_w, Mod4Mask }, { XK_f, ControlMask }, { XK_f, Mod4Mask } };
+        // With Caps Lock and Num Lock (usually Mod2) on or off.
+        const unsigned int locks[] = { 0, LockMask, Mod2Mask, LockMask | Mod2Mask };
+        for (const auto& k : keys)
+        {
+            const auto code = x->xKeysymToKeycode (d, k.key);
+            if (code == 0)
+                continue;
+            for (const auto lock : locks)
+                grab (d, code, k.modifiers | lock, window, False, GrabModeAsync, GrabModeAsync);
+        }
+        x->xFlush (d);
+    }
+
+    bool superHeld()
+    {
+        auto* d = display();
+        if (d == nullptr || lost)
+            return false;
+        auto* x = juce::X11Symbols::getInstance();
+        ::Window root = 0, child = 0;
+        int rootX = 0, rootY = 0, winX = 0, winY = 0;
+        unsigned int mask = 0;
+        if (! x->xQueryPointer (d, x->xRootWindow (d, x->xDefaultScreen (d)), &root, &child, &rootX, &rootY, &winX, &winY, &mask))
+            return false;
+        return (mask & Mod4Mask) != 0;
+    }
+
+    void toggleFullScreen (void* handle)
+    {
+        auto* d = display();
+        if (d == nullptr || handle == nullptr || lost)
+            return;
+        auto* x = juce::X11Symbols::getInstance();
+        XEvent ev {};
+        ev.xclient.type = ClientMessage;
+        ev.xclient.window = (::Window) (juce::pointer_sized_uint) handle;
+        ev.xclient.message_type = x->xInternAtom (d, "_NET_WM_STATE", False);
+        ev.xclient.format = 32;
+        ev.xclient.data.l[0] = 2;   // toggle
+        ev.xclient.data.l[1] = (long) x->xInternAtom (d, "_NET_WM_STATE_FULLSCREEN", False);
+        ev.xclient.data.l[2] = 0;
+        ev.xclient.data.l[3] = 1;   // from an application
+        x->xSendEvent (d, x->xRootWindow (d, x->xDefaultScreen (d)), False,
+                       SubstructureRedirectMask | SubstructureNotifyMask, &ev);
+        x->xFlush (d);
+    }
+
     void surviveLostConnection (std::function<void()> whenLost)
     {
         auto* d = display();

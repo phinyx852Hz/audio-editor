@@ -24,8 +24,8 @@ The main window has two halves in a split you can drag: the audio editor (the wa
 and ruler) above, and the MIDI editor below.
 
 - **View > Audio Editor** (`Shift+F2`) closes or opens the top half.
-- **View > MIDI Editor** (`Shift+F4`), or the ✕ at the right of the MIDI editor's bar, closes or
-  opens the bottom half.
+- **View > MIDI Editor** (`Shift+F4`), the ✕ at the right of the MIDI editor's bar, or `Ctrl+W`
+  while it has the keyboard, closes the bottom half; `Shift+F4` opens it again.
 - Closing one while the other is closed opens the other, so the window is never empty.
 - Both are kept as they were left, for the next start (`view/audioEditor`, `view/midiEditor`).
 
@@ -56,6 +56,10 @@ the editor's sound onto the mixer's selected track.
     by where its energy lies, at the loudness it was played (mixer/DrumsToMidi.h).
   - Chords (several notes at once) are not heard yet: a chord comes out as its loudest line.
   The choice is kept for the next start (`midiEditor/dropAs`).
+
+In the MIDI editor, **Home** goes to the start and **End** to the end of the last note: the step
+cursor and the playhead move there and the roll scrolls to it (playing, it plays on from there).
+Alt+arrows and F6 move the keyboard into and out of the MIDI editor as they do between panels.
 
 Below the bar is the MIDI editor itself ([midi-editor.md](midi-editor.md)): the piano roll, the
 pitch systems, step input, quantise, restyle and the rest, without its Apply and Cancel buttons.
