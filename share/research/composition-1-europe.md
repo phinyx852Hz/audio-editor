@@ -14,17 +14,36 @@ music and sieves, Minimalism) are folded in here.
 
 ## Organum
 
-Organum is the earliest written European polyphony: one or more voices added to a plainchant.
-The treatise *Musica enchiriadis* (9th century) describes parallel organum, a voice a fourth or
-fifth below the chant; by the 11th and 12th centuries the added voice moved freely against it,
-and at Saint-Martial in Limoges and in the Codex Calixtinus it sang melismas over held chant
-notes. The Notre Dame school of Paris (about 1170 to 1230) gave organum measured rhythm. Léonin
-is credited with the *Magnus liber organi*, two-voice organa for the church year, and Pérotin
-with organa in three and four voices such as *Viderunt omnes* and *Sederunt principes*; both
-names come from a single English student's account, known as Anonymous IV. The upper voices move
-in the six rhythmic modes, patterns of long and short notes, over the chant tenor held in long
-notes (organum purum) or set in a rhythmic mode of its own (discant, in sections called
-clausulae).
+Organum is the earliest European polyphony: a plainchant with at least one voice added to it.
+At first it was improvised: one singer read the chant (the vox principalis) while another added
+a voice by ear (the vox organalis), usually the same melody a fourth or fifth below, starting
+and ending on a unison with the chant. The first treatise to describe it and give rules for it
+is *Musica enchiriadis* (c. 895); its companion *Scolica enchiriadis* treats it in more
+detail and accepts octave doubling, which happens anyway when men and boys sing together. It
+was sung to make the high feasts more splendid. Over the 11th and 12th centuries the added
+voice grew independent of the chant, and at Saint-Martial in Limoges it sang melismas over held
+chant notes.
+
+The Notre Dame school of Paris, active while the cathedral was being built (1163–1238), gave
+organum measured rhythm through the six rhythmic modes, repeating patterns of long and short
+notes. Léonin compiled the *Magnus liber organi*, two-voice organa (organa dupla) on the
+graduals, Alleluias and responsories of the church year, the first large collection credited to
+one composer. In it three styles alternate: organum purum, where the chant is syllabic and the
+tenor holds each note under a florid upper voice; discant, where the chant is melismatic and
+both voices move in a rhythmic mode, the tenor always in the fifth mode, in long notes; and
+copula, which Johannes de Garlandia placed "between organum and discant", a short cadential
+link. Pérotin, a generation later, wrote replacement discant sections (clausulae) with new
+tenor rhythms, and organa in three voices, where every part is modal, and four: *Viderunt omnes*
+and *Sederunt principes*, sung at Notre Dame on New Year's Day 1198 and on St Stephen's Day 1199,
+when a decree of Bishop Odon de Sully allowed organa in three or four parts. He also wrote
+conductus on new texts, many by Philip the Chancellor. Most of what is known of both men comes
+from Anonymous IV, an English student writing around 1275, who called Pérotin the best composer
+of discant. Giving new words to the upper voice of a clausula made the motellus, the ancestor
+of the motet. The repertory survives in three manuscripts: W1 (St Andrews, now at
+Wolfenbüttel), F (Florence, Pluteo 29.1, the largest, with 462 clausulae) and W2 (Wolfenbüttel,
+the latest, with the most motets). How strictly modal rhythm governed organum purum is still
+debated: Willi Apel and William Waite read all of it as modal, a view most scholars no longer
+hold.
 
 *In PHI*: Compose > Europe and the Americas > Organum holds a chant tenor in long notes under two
 or three voices in the rhythmic modes, consonant with it on each long, then a discant clausula
@@ -35,8 +54,15 @@ with the tenor in the fifth mode; Pérotin's voices exchange their phrases.
   [Léonin](https://en.wikipedia.org/wiki/L%C3%A9onin), [Pérotin](https://en.wikipedia.org/wiki/P%C3%A9rotin) and
   [Rhythmic mode](https://en.wikipedia.org/wiki/Rhythmic_mode), Wikipedia.
 - Johannes de Garlandia, *De mensurabili musica* (c. 1240), on the rhythmic modes.
+- Claude V. Palisca (ed.), *Musica enchiriadis and Scolica enchiriadis*, trans. Raymond
+  Erickson (Yale University Press, 1995).
+- Sarah Fuller, "Early Polyphony", in Richard Crocker and David Hiley (eds), *The New Oxford
+  History of Music* 2 (Oxford University Press, 1990).
+- William G. Waite, *The Rhythm of Twelfth-Century Polyphony* (Yale University Press, 1954).
+- Wikipedia's Organum article is flagged for possible original research in its history
+  sections, so the facts here are those its cited sources support.
 - Edward H. Roesner (ed.), *Le Magnus liber organi de Notre-Dame de Paris* (Éditions de
-  l'Oiseau-Lyre, 1993–2009).
+  l'Oiseau-Lyre, 1988–93; Wikipedia's dates, which differ from other listings).
 
 ## Isorhythm
 
