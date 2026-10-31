@@ -95,9 +95,10 @@ Before logarithms (1614) there was no exact answer. Stopping early and treating 
 nothing gives an approximation. Taking a tone as exactly two semitones makes the fourth 5
 semitones, the fifth 7 and the octave 12, which is the piano's division. Going one, two or three
 steps further gives fifths of 24/41, 31/53 and 179/306 of an octave. Divisions of 41 and 53 were
-in fact tried on instruments, and 53 is the comma count behind Turkish makam theory. It is the
-same mathematics as the Euclidean rhythm: spreading 7 fifths as evenly as possible through 12
-steps is E(7,12), the Ewe bell's pattern, laid out as pitch instead of time.
+in fact tried on instruments, and 53 is the comma count behind Turkish makam theory. The two uses
+meet in one shape. Spread 7 notes as evenly as possible through the 12 semitones and you get the
+diatonic scale, whose steps (2 2 1 2 2 2 1, in some rotation) follow the same pattern as E(7,12),
+the Ewe bell.
 
 *In PHI*: Compose > Rhythm Generator writes drum lanes, each a Euclidean rhythm (or a written
 pattern, or a Xenakis sieve as a mask) of its own length, with a chance for each hit, humanized
@@ -108,7 +109,7 @@ same groove.
 - [Euclidean rhythm](https://en.wikipedia.org/wiki/Euclidean_rhythm),
   [Tresillo (rhythm)](https://en.wikipedia.org/wiki/Tresillo_(rhythm)) and
   [Polyrhythm](https://en.wikipedia.org/wiki/Polyrhythm), Wikipedia.
-- Benjamin Wardhaugh, ["Music and Euclid's algorithm"](https://plus.maths.org/content/music-and-euclids-algorithm),
+- Benjamin Wardhaugh, ["Music and Euclid's algorithm"](https://plus.maths.org/os/issue40/features/wardhaugh/index),
   *Plus Magazine* (University of Cambridge, 2006).
 - Godfried Toussaint, "The Euclidean Algorithm Generates Traditional Musical Rhythms",
   *Proceedings of BRIDGES* (Banff, 2005), pp. 47–56, and *The Geometry of Musical Rhythm* (CRC Press, 2013;
