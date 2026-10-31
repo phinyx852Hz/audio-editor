@@ -78,7 +78,8 @@ one, three against two, the lead drum's calls changing their responses, with can
 - Jeremy Cohen, ["Great Grooves #2: Adzrowo"](https://thisworldmusic.com/adzro-african-drumming-dance-from-ghana/),
   *ThisWorldMusic*.
 - Jeremy Cohen, ["Great Grooves #3: Agbekor (slow)"](https://thisworldmusic.com/agbekor-african-drumming-and-dance-from-ghana/),
-  *ThisWorldMusic*. The series also has mixers for fast Agbekor, Tokoe and Cuban guaguancó,
+  *ThisWorldMusic*. The series also has mixers for fast Agbekor, Tokoe and Cuban guaguancó (one of the three
+  main kinds of rumba, played by Wilson "Chembo" Corniel),
   for listening to each part alone.
 - ["Great Grooves #6: Kpanlogo"](https://thisworldmusic.com/kpanlogo-african-drumming-dance-ghana/),
   *ThisWorldMusic*, played by Francis Kofi Akotuah.
