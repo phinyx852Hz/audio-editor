@@ -134,7 +134,8 @@ planners.
 ## Pauline Oliveros and Deep Listening
 
 Pauline Oliveros (1932–2016), an American composer and accordionist, co-founder of the San
-Francisco Tape Music Center, developed through her *Sonic Meditations* (1971) a practice of
+Francisco Tape Music Center, whose *A Little Noise in the System* (1967) is among the earliest
+contemporary noise works, developed through her *Sonic Meditations* (1971) a practice of
 attentive listening to everything, inner and outer, which she named Deep Listening. The name
 came from the album *Deep Listening* (1989), recorded in 1988 with Stuart Dempster and Panaiotis
 in the Dan Harpole Cistern at Fort Worden, Washington, a reverberation of some 45 seconds. Her
