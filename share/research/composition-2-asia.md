@@ -59,10 +59,13 @@ jhālā and a gat in tīntāl ending in a tihāī on sam, over the tānpūrā.
 
 ## Maqām: taqsīm and waṣla
 
-In Arab music a taqsīm is an unmetred solo improvisation that sets out a maqām. It begins on
-the maqām's tonic (qarār) in its lowest jins (a tetrachord or pentachord), climbs through its
-ajnās to the dominant (ghammāz) and the upper octave (jawāb), often modulates to a neighbouring
-maqām, and ends with a cadence (qafla) home. A waṣla is a suite of pieces in one maqām, joining
+A taqsīm (Turkish taksim, Greek taximi) is an unmetred improvisation that usually comes before
+a composed piece in Arab, Turkish, Kurdish, Greek, Iranian and Azerbaijani music, the nearest
+Western relative being the cadenza. It is played solo, or over a drone on the tonic or a
+percussionist's pulse. It begins on the maqām's tonic (qarār) and stays at first in its lowest
+jins (a tetrachord or pentachord), so that the listener learns the maqām; then the player may
+range freely, climbing through its ajnās to the dominant (ghammāz) and the upper octave
+(jawāb), and modulate to other maqāms, as long as the end, a cadence (qafla), comes home. A waṣla is a suite of pieces in one maqām, joining
 taqsīm with composed forms: an instrumental samāʿī in four sections (khānāt) with a recurring
 refrain (taslīm), in a ten-beat rhythm and a closing section in another metre; vocal
 muwashshaḥāt; and further improvisation. It is the Levantine and Egyptian cousin of the
