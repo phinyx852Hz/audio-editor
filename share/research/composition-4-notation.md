@@ -140,14 +140,44 @@ ear.
 ## Jianpu (numbered notation)
 
 Jianpu writes the degrees of a scale as numbers, 1 to 7 for do to ti, with 0 for a rest, dots
-above or below for octaves, underlines to halve a note's length and dashes to extend it. It
-descends from the cipher notation Jean-Jacques Rousseau proposed in 1742 and the Galin-Paris-Chevé
-system of 19th-century France, came to Japan and China around 1900, and is now the everyday
-notation for Chinese music, folk song and much popular music in East and Southeast Asia.
+above or below for octaves, underlines to halve a note's length and dashes to extend it. Its
+history runs through three stages:
+- **France:** the Franciscan Jean-Jacques Souhaitty used numbers in the 17th century, Jean-Jacques
+  Rousseau proposed a similar system in 1742, and the Galin-Paris-Chevé system of 19th-century
+  France spread it (*Grove* credits Émile Chevé).
+- **Japan:** it was taken up there first.
+- **China:** Chinese students in Japan, Li Shutong among them, brought it home.
+
+It is now the everyday notation for Chinese traditional and popular music, and in Indonesia it is
+called not angka. It suits a melody-centred tradition that already wrote notes as characters, in
+gongche notation.
+
+It is movable-do. "1=C" names the key, and minor is written from 6 of the relative major, often
+still under "1=C". Accidentals belong to the degree, before the number, so the leading note of C
+harmonic minor is ♯5. Not angka slashes the figure instead: 4/ for a raised 4, 7\ for a lowered
+7. Durations work like this:
+- a bare number is a quarter note;
+- each underline halves it, and each dash adds a quarter;
+- a dot after the note adds half its length;
+- rests repeat 0 rather than take dashes;
+- X stands for an unpitched stroke.
+
+Chords stack upward, with length lines only on the lowest note. Other marks:
+- grace notes are small, on the line above;
+- a staccato needs a heavier dot or a wedge, so as not to look like an octave dot;
+- glissando signs on the zither mean running through the scale's notes, usually the pentatonic
+  1 2 3 5 6;
+- some books write octaves with a line or a side bar instead of dots.
+
+It is compact for one line and gets crowded as the harmony thickens. Because it gives exact
+degrees, hymnals and songbooks can index tunes by their opening numbers. On computers it has
+Chinese score editors, LilyPond converters (jianpu-ly), fonts such as Doulos SIL Cipher and
+x-Vacle, and Guitar Pro 8.1 and later.
 
 - [Numbered musical notation](https://en.wikipedia.org/wiki/Numbered_musical_notation) and
   [Galin-Paris-Chevé system](https://en.wikipedia.org/wiki/Galin-Paris-Chev%C3%A9_system),
   Wikipedia.
+- Alan R. Thrasher et al., "China, §II: History and theory", *Grove Music Online*.
 
 ## Kepatihan (gamelan)
 
