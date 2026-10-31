@@ -152,6 +152,9 @@ void MainWindow::registerComposeCommands()
         if (mixerWin != nullptr)
             mixerWin->minimalizeCursorScene();
     })->setStatusTip (tr ("The launcher's scene at the cursor arranged by Reich's and Glass's processes (also on a scene's and the timeline's right-click menus)"));
+    add (QStringLiteral ("compose.bolprocessor"), tr ("&Bol Processor..."), [this] { bolProcessorDialog(); })
+        ->setStatusTip (tr ("Bernard Bel and Jim Kippen's Bol Processor (BP3) on a grammar file: a qāʿida's variations, or any grammar's items, "
+                            "played as bols on the tablā or as its MIDI"));
     add (QStringLiteral ("compose.rhythm"), tr ("&Rhythm Generator..."), [this] { rhythmGenerator(); })
         ->setStatusTip (tr ("Euclidean timelines against each other (polymeter), with chance and rules"));
 
@@ -218,6 +221,8 @@ void MainWindow::fillComposeMenu (QMenu* menu)
             }
             if (m.method == composition::Method::process)
                 sub->addAction (commands.action (QStringLiteral ("compose.minimalize")));
+            if (m.method == composition::Method::bolGrammar)
+                sub->addAction (commands.action (QStringLiteral ("compose.bolprocessor")));
         }
     }
     menu->addSeparator();

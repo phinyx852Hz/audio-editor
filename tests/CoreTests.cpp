@@ -24,6 +24,7 @@
 #include "../Source/mixer/Rhythms.h"
 #include "../Source/mixer/Architectonics.h"
 #include "../Source/mixer/Compose.h"
+#include "../Source/mixer/BolProcessor.h"
 #include "../Source/mixer/Harmonies.h"
 #include "../Source/mixer/ModalHarmony.h"
 #include "../Source/mixer/RhythmGenerator.h"
@@ -8932,6 +8933,57 @@ namespace
         }
     }
 
+    // The Bol Processor (owner, 2026-10-31): BP3's items read back in time, and BP3 itself (phi-bp3) run on a grammar.
+    void testBolProcessor()
+    {
+        namespace bp = bolprocessor;
+        // Speed /2; a polymetric expression takes its first field's time; fields between periods a beat each; '_' lengthens.
+        const auto t = bp::parse ("/2 a b {c d e, f g} . h _ - i");
+        auto at = [&] (const std::string& s) { for (const auto& e : t.events) if (e.symbol == s) return e; return bp::Event {}; };
+        check (t.events.size() == 9 && std::abs (t.beats - 2.0) < 1e-9 && std::abs (at ("c").beat - 0.4) < 1e-9 && std::abs (at ("f").length - 0.3) < 1e-9
+                   && std::abs (at ("h").length - 0.5) < 1e-9 && std::abs (at ("i").beat - 1.75) < 1e-9,
+               "bol processor: an item laid out by speeds, periods and polymetry");
+        check (bp::splitItems ("dha ti\n\n// a comment\nge na\nka\n\n").size() == 2, "bol processor: the items, a blank line between");
+        check (bp::strokes ("dha").size() == 2 && bp::strokes ("ta").size() == 1 && bp::strokes ("Dhin").size() == 2 && bp::strokes ("C4").empty(),
+               "bol processor: dha is two strokes, ta one, a note none");
+
+        // BP3 itself, on a grammar of our own: two statements of a cell and a polymetric cadence, at four bols a beat.
+        const std::string exe = PHI_BP3_BUILD_PATH;
+        if (! std::filesystem::exists (exe))
+            return;
+        const auto folder = std::filesystem::temp_directory_path() / "phi-bp3-test";
+        std::filesystem::create_directories (folder);
+        std::ofstream (folder / "-gr.phitest") << "-al.phitest\n\nORD\ngram#1 [1] S --> /4 A A B\ngram#1 [2] A --> dha ti dha ge\n"
+                                                  "gram#1 [3] B --> {dhin na ge na, tin - - tin}\n";
+        std::ofstream (folder / "-al.phitest") << "*\ndha --> ta\nti --> ti\nge --> ke\ndhin --> tin\nna --> na\ntin --> tin\n";
+        const auto files = bp::companions ((folder / "-gr.phitest").string());
+        const auto r = bp::run (exe, PHI_BOLPROCESSOR_SOURCE_DIR "/console_strings.json", files, 7, 30);
+        const auto items = bp::splitItems (r.items);
+        const auto item = items.empty() ? bp::Item {} : bp::parse (items.front());
+        const auto score = bp::toScore ({ item }, 90.0);
+        check (r.ok && ! files.alphabet.empty() && items.size() == 1 && item.events.size() == 14 && std::abs (item.beats - 3.0) < 1e-9
+                   && score.parts.size() == 1 && score.parts[0].drums && score.parts[0].notes.size() == 19,
+               "bol processor: BP3 produces the grammar's item, read back as bols on the tablā");
+        std::filesystem::remove_all (folder);
+
+        // The example PHI has: Kippen and Bel's grammar of an Ajrada qāʿida. Its items are 32 beats, theme and
+        // variations bharī then khālī, every symbol a bol.
+        {
+            const auto q = bp::run (exe, PHI_BOLPROCESSOR_SOURCE_DIR "/console_strings.json", bp::companions (PHI_SHARE_SOURCE_DIR "/bolprocessor/-gr.dhin--"), 3, 30);
+            std::vector<bp::Item> all;
+            for (const auto& i : bp::splitItems (q.items))
+                all.push_back (bp::parse (i));
+            bool bols = ! all.empty();
+            for (const auto& i : all)
+            {
+                bols = bols && std::abs (i.beats - 32.0) < 1e-9;
+                for (const auto& e : i.events)
+                    bols = bols && ! bp::strokes (e.symbol).empty();
+            }
+            check (q.ok && bols, "bol processor: the Ajrada qāʿida's grammar produces items of 32 beats, all bols");
+        }
+    }
+
     void testRhythmGenerator()
     {
         // Toussaint (2005): the tresillo E(3,8), the cinquillo E(5,8), the bembé bell E(7,12) turned.
@@ -9809,6 +9861,7 @@ int main()
     testRhythmGenerator();
     testArchitectonics();
     testCompose();
+    testBolProcessor();
     testStochastic();
     testCubify();
     testSerial();

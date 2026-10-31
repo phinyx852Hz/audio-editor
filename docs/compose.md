@@ -104,6 +104,8 @@ cycles, its layers and how its parts relate. All of them are in mixer/Compose.h,
   33 bols from beat 9, whose last dha lands on sam. A lehrā repeats its nagma each cycle, with the
   tānpūrā beneath. The rule engine is our own code written from the published descriptions. None
   of the Bol Processor's code is used.
+- **Bol Processor...**: the Bol Processor BP3 itself, by Bel and Kippen, on any grammar file. It
+  opens on their grammar of an Ajrada qāʿida ([bol-processor.md](bol-processor.md)).
 
 ### East and Southeast Asia
 
