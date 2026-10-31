@@ -263,8 +263,10 @@ void decodeBext (const std::string& p, Tags& tags)
         const char* names[] { "loudnessValue", "loudnessRange", "maxTruePeakLevel", "maxMomentaryLoudness", "maxShortTermLoudness" };
         for (int i = 0; i < 5; ++i)
         {
+            // Tech 3285 v2 2.4: 7FFFh means unused, and values outside -99.99..99.99 (0..99.99
+            // for the loudness range) are ignored too.
             const auto raw = (int16_t) (u[412 + 2 * i] | (u[413 + 2 * i] << 8));
-            if (raw != 0x7fff)
+            if (raw >= (i == 1 ? 0 : -9999) && raw <= 9999)
                 v.emplace_back (names[i], number (raw / 100.0));
         }
     }
@@ -304,8 +306,12 @@ std::string encodeBext (const Tags& tags)
         out += (char) (2 * i + 1 < umid.size() ? std::strtoul (umid.substr (2 * i, 2).c_str(), nullptr, 16) : 0);
     for (const auto* n : names)
     {
+        // Tech 3285 v2 2.4: round(100x), ties away from zero; a value outside the valid range
+        // (-99.99..99.99, or 0..99.99 for the loudness range) is written as unused (7FFFh).
         const auto s = valueOf (v, n);
-        putLe16 (out, s.empty() ? (uint16_t) 0x7fff : (uint16_t) (int16_t) std::clamp (std::lround (std::atof (s.c_str()) * 100.0), -32767L, 32766L));
+        const auto x = s.empty() ? 0L : std::lround (std::atof (s.c_str()) * 100.0);
+        const bool valid = ! s.empty() && x >= (n == names[1] ? 0L : -9999L) && x <= 9999L;
+        putLe16 (out, valid ? (uint16_t) (int16_t) x : (uint16_t) 0x7fff);
     }
     out.append (180, '\0');
     if (const auto history = valueOf (v, "codingHistory"); ! history.empty())

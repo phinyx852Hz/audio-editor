@@ -985,6 +985,19 @@ namespace
                    && back[tag::bwfTruePeak] == "-1.00" && back.count (tag::bwfLoudnessRange) == 0 && back[tag::bwfCodingHistory] == "A=PCM,F=48000,W=16,M=mono"
                    && back[tag::bwfUmid].compare (0, 8, "060a2b34") == 0 && back.count (tag::bwfDescription) == 0,
                "riff: bext round trip (the description follows the comment)");
+        {
+            // Tech 3285 v2 2.4: round(100x) ties away from zero, and anything out of range is unused.
+            Tags l;
+            l[tag::bwfLoudness] = "-22.645";
+            l[tag::bwfTruePeak] = "12.765";
+            l[tag::bwfLoudnessRange] = "-3";
+            l["bwf.maxMomentaryLoudness"] = "-120";
+            const auto e = riff::encodeBext (l);
+            const auto* u = (const unsigned char*) e.data();
+            const auto w16 = [&] (int at) { return (int) (int16_t) (u[at] | (u[at + 1] << 8)); };
+            check (e.size() >= 602 && w16 (346) == 2 && w16 (412) == -2265 && w16 (416) == 1277 && w16 (414) == 0x7fff && w16 (418) == 0x7fff,
+                   "riff: bext loudness rounded and range-checked as Tech 3285 v2 says");
+        }
         check (back["cart:CutID"] == "C1234" && back["cart:Timer.SEG1"] == "48000" && back["cart:Timers"] == "MRK =96000" && back.count ("cart:Title") == 0,
                "riff: cart round trip");
         check (back["ixml:SCENE"] == "4" && back["xmp:xmpDM:scene"] == "Scene 4" && back["raw:wav:umid"] == read["raw:wav:umid"], "riff: iXML, XMP and raw chunk round trip");
