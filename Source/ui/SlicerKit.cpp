@@ -8,6 +8,7 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QStandardPaths>
 
 #include <algorithm>
 #include <cmath>
@@ -368,5 +369,10 @@ namespace slicerkit
                             l.end = std::min (l.end, l.sound->length());
                     }
         return true;
+    }
+
+    QString phiTablaDefaultPath()
+    {
+        return QStandardPaths::writableLocation (QStandardPaths::GenericDataLocation) + QStringLiteral ("/" APP_ID "/phi-tabla/PHI tabla.phikit");
     }
 }

@@ -9576,6 +9576,20 @@ mixer::InstrumentPtr MixerWindow::makePhiTabla()
     }, &missing);
     auto made = std::make_shared<mixer::SlicerInstrument>();
     made->phiTabla = true;
+    // The owner's own default (the Slicer's Kit > Make This the PHI tabla Default), tuning and all, else the built-in kit.
+    if (const auto own = slicerkit::phiTablaDefaultPath(); QFileInfo::exists (own))
+    {
+        slicerkit::Loaded loaded;
+        QString error;
+        if (slicerkit::loadKitFile (own, rate(), loaded, error))
+        {
+            made->engine().setKit (loaded.kit);
+            if (loaded.song != nullptr)
+                made->engine().setSong (*loaded.song);
+            return made;
+        }
+        status->setText (tr ("PHI tabla: your default kit could not be opened (%1), so the built-in one is used").arg (error));
+    }
     made->engine().setKit (kit);
     if (! missing.empty())
         status->setText (tr ("PHI tabla: %1 of its sounds could not be read (in %2)").arg (missing.size()).arg (folder));
@@ -9770,6 +9784,8 @@ void MixerWindow::editInstrument (int track)
             auto* w = new SlicerWindow (s.engine(), this);
             w->setAttribute (Qt::WA_DeleteOnClose);
             w->keepPlayingWhenClosed (true);
+            if (s.phiTabla)
+                w->setPhiTabla();
             if (const auto sound = s.engine().sample(); sound != nullptr)
                 w->setSample (sound, t.sound != nullptr ? t.sound : soundAsAudio (*sound, rate()), rate(), title, true, BeatGrid {}, {});
             w->setWindowTitle (tr ("Slicer: %1").arg (title));

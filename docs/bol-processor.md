@@ -95,3 +95,10 @@ one level each, so softer hits are quieter and also darker: the Slicer's new **v
 Where there are two or three takes of a stroke, the Bol Processor plays them in turn.
 
 Still to do: slicing the phrases into strokes with the Slicer, as more takes.
+
+PHI tabla can be changed after it is made (owner, 2026-10-31: "I would like to be able to tune
+the sounds ... after the instrument is made"). In the track's Slicer window each sound has Tune
+(semitones, to the cent), level, start and end and fades, and each pad its pitch, pan, envelope
+and choke group; the edits are saved with the project. **Kit > Make This the PHI tabla Default**
+saves the kit, as edited, where every new PHI tabla (and the Bol Processor's) starts from it
+(`PHI tabla.phikit` in PHI's data folder); **Restore PHI tabla's Built-in Default** goes back.

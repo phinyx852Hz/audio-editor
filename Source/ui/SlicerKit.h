@@ -49,4 +49,7 @@ namespace slicerkit
         QStringList problems;
     };
     bool loadKitFile (const QString& path, double rate, Loaded& out, QString& error);
+
+    // Where the owner's own PHI tabla default is kept (Make This the PHI tabla Default), in PHI's data folder.
+    QString phiTablaDefaultPath();
 }
