@@ -279,15 +279,26 @@ voice answered by the tār, a chahārmezrāb and a reng to close.
 ## Gamelan colotomic form
 
 Central Javanese gamelan pieces (gendhing) are built in cycles marked off by gongs, a structure
-called colotomic, after Jaap Kunst. The skeletal melody, the balungan, is grouped in gatra of
+called colotomic, a word Jaap Kunst coined from the Greek for a rhythmic unit and for cutting; it
+has since been applied to Japanese gagaku and Thai piphat too. The skeletal melody, the balungan, is grouped in gatra of
 four beats whose last note, the seleh, is the goal. The large gong ends each cycle (gongan);
 kenong, kempul and kethuk divide it at fixed points, so that a ladrang of 32 beats, for
 example, has four kenong strokes and kempul between them. Faster instruments elaborate the
 balungan at multiples of its density, saron peking and bonang among them, and the soft
 instruments (gendèr, rebab, voice) weave around it. The drummer (kendhang) leads changes of
 tempo and of irama, the density level: in each slower irama the elaborating parts play twice
-as many notes per balungan beat. A piece starts with a solo introduction (buka) and ends with a
-slowing (suwuk). Each piece belongs to a tuning, sléndro or pélog, and a pathet.
+as many notes per balungan beat. The gongs' Javanese names
+imitate their sounds, and in kepatihan notation their strokes are marks over the balungan
+numbers. Each structure (bentuk) nests its divisions, mostly in fours, so that the bigger gongs
+fall on the stressed ends of the groups. A lancaran is 16 beats: the gong once, the kenong four
+times, the kempul between (silent at the first point, the wela) and the kethuk between those; a
+ketawang is 16 beats with two kenong strokes, and a ladrang 32 with four, both adding the
+kempyang between every beat. The long gendhing proper has a slow merong and a minggah, each one
+gong cycle of four kenong phrases, with no kempul, the kethuk strokes sparse (arang) or frequent
+(kerep) and a single merong cycle possibly lasting 256 beats and many minutes. The shadow-play
+(wayang) forms, ayak-ayakan, srepeg and the fast sampak, have gong cycles of varying length,
+with kenong and kempul on every goal note, and may stop wherever the drummer signals. A piece
+starts with a solo introduction (buka) and ends with a slowing (suwuk). Each piece belongs to a tuning, sléndro or pélog, and a pathet.
 
 *In PHI*: a balungan in gatra of four in a ladrang's gong cycle (default sléndro pathet
 manyura), kenong, kempul, kethuk and gong at its points, peking and bonang elaborating it twice
@@ -301,6 +312,8 @@ as densely in irama II, with a buka and a suwuk.
 - Sumarsam, *Gamelan: Cultural Interaction and Musical Development in Central Java*
   (University of Chicago Press, 1995).
 - Richard Pickvance, *A Gamelan Manual* (Jaman Mas, 2005).
+- Jennifer Lindsay, *Javanese Gamelan* (Oxford University Press, 1992).
+- Neil Sorrell, *A Guide to the Gamelan* (Faber, 1990).
 
 ## Jo-ha-kyū
 
