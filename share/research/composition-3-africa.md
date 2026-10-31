@@ -9,7 +9,7 @@ to be checked against them. African rhythm itself is under Research > Modes > Rh
 ## Layered ostinato (Ewe drumming)
 
 The dance-drumming of the Ewe people of southeastern Ghana and Togo, in pieces such as Gahu,
-Agbekor and Atsiagbekor, is built from layers of ostinato over a timeline. The iron bell
+Adzrowo and Atsiagbekɔ (Agbekor), is built from layers of ostinato over a timeline. The iron bell
 (gankogui) plays the timeline, an asymmetric pattern of seven strokes in twelve pulses, against
 which every other part is heard; the rattle (axatse) doubles it or marks the beat. Supporting
 drums enter one at a time, the kaganu, kidi and sogo, each repeating a short figure placed
@@ -28,7 +28,11 @@ heard at funerals, which in Ghana are largely joyful, uses the same timekeepers 
 to the atsimevu, with a small hand-played boba joining kidi and sogo as a response drum; its
 call-and-response dialogues give it a similar theme-and-variations shape, but its dancers keep a
 much simpler step, largely independent of the drumming, and older Ewe prize it for its
-sophistication. A cantor and chorus
+sophistication. Atsiagbekɔ, a warrior dance and one of the oldest in the Ewe canon,
+retells in drumming, dance, song and chant, as Agbeli tells it, a small village's victory over a
+far larger army some five centuries ago. Its supporting drums are kaganu, kidi, kroboto and
+totodzi, and none leaves its ostinato: here the call and response runs almost wholly between
+the atsimevu and the dancers. A cantor and chorus
 sing over it in call and response. David Locke's studies and those of A. M. Jones made the
 style the textbook case of African polyrhythm; Kofi Agawu has warned against hearing it only as
 rhythm, apart from dance, language and meaning.
@@ -62,6 +66,8 @@ one, three against two, the lead drum's calls changing their responses, with can
 - Jeremy Cohen, ["Great Grooves #1: Gahu"](https://thisworldmusic.com/gahu-african-drumming-and-dance-from-ghana/),
   *ThisWorldMusic*, with a multitrack mixer of the six parts.
 - Jeremy Cohen, ["Great Grooves #2: Adzrowo"](https://thisworldmusic.com/adzro-african-drumming-dance-from-ghana/),
+  *ThisWorldMusic*.
+- Jeremy Cohen, ["Great Grooves #3: Agbekor (slow)"](https://thisworldmusic.com/agbekor-african-drumming-and-dance-from-ghana/),
   *ThisWorldMusic*.
 - C. K. Ladzekpo, *Foundation Course in African Dance-Drumming*, "Six against four cross
   rhythms" (1995), [archived](https://web.archive.org/web/2012/https://home.comcast.net/~dzinyaladzekpo/SixFour.html).
