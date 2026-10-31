@@ -26,11 +26,16 @@ are known; a performer's working repertoire is perhaps forty or fifty. Rāgas al
 scripture, qawwali and much film song.
 
 A Hindustani performance unfolds a rāga in stages, from free to strict time and from slow to
-fast. The ālāp, unmetred, introduces the rāga note by note from the lower Sa upward, dwelling
-on its strongest notes, the vādī and samvādī, and on its characteristic phrases (pakaḍ), a
-gradual expansion called baṛhat; it reaches the upper Sa and returns. In instrumental music the
-joṛ adds a steady pulse and the jhālā quickens it with rapid strokes on the drone strings
-(chikārī). Then the composition, a gat for instruments or a bandish for voice, enters with the
+fast. The ālāp opens it: in dhrupad it is unmetred and unaccompanied but for the tānpūrā, and
+slow, setting out the rāga's mood and which notes lead and which serve. Many musicians build
+it methodically (vistār), bringing in the notes one at a time so that no phrase goes more than
+a step past what has already been heard, dwelling on the vādī, samvādī and pakaḍ; the first
+reach into a new octave then lands with great force. Some shape the ālāp like a four-part
+composition, sthāyī, antarā, sañchārī and ābhog, and Bimalakanta Roychaudhuri's dictionary
+lists thirteen stages, the last long extinct. In instrumental music the joṛ adds a steady pulse
+and the jhālā quickens it until rhythm overtakes melody, with rapid strokes on the drone
+strings (chikārī); in dhrupad singing the fast part is called nomtom, and an ālāp sung on
+syllables or words is called sākṣar, one without them anakṣar. Then the composition, a gat for instruments or a bandish for voice, enters with the
 tablā in a tāla such as tīntāl (16 beats), alternating the fixed tune with improvisation, and
 sections often close with a tihāī, a phrase played three times to land on sam, the first beat
 of the cycle. The tānpūrā's drone sounds throughout.
@@ -47,6 +52,10 @@ jhālā and a gat in tīntāl ending in a tihāī on sam, over the tānpūrā.
 - Joep Bor, Suvarnalata Rao, Wim van der Meer and Jane Harvey, *The Raga Guide* (Nimbus,
   1999).
 - Martin Clayton, *Time in Indian Music* (Oxford University Press, 2000).
+- Bimalakanta Roychaudhuri, *The Dictionary of Hindustani Classical Music* (Motilal
+  Banarsidass, 2000).
+- The Wikipedia Alap article rests on a single source, so the stages above follow Clayton and
+  Roychaudhuri.
 
 ## Maqām: taqsīm and waṣla
 
