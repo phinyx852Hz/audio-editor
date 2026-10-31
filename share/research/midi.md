@@ -54,8 +54,8 @@ Jupiter-6, and the MIDI 1.0 specification was published in August 1983. Kakehash
 received a Technical Grammy for it in 2013.
 
 The standard is kept by two bodies together: the MIDI Manufacturers Association (MMA, 1985, since
-2016 the MIDI Association) and Japan's AMEI (Association of Musical Electronics Industry, formerly
-the Japan MIDI Standards Committee).
+2016 the MIDI Association) and Japan's AMEI (Association of Musical Electronics Industry, whose Japan
+MIDI Standards Committee does the MIDI work).
 
 The 1980s made MIDI the studio's backbone: the Yamaha DX7 (1983), Roland's MPU-401 interface (1984)
 for the IBM PC, the Atari ST (1985) with MIDI ports built in, and sequencers from Steinberg, C-Lab,
@@ -70,13 +70,13 @@ expression, and MIDI 2.0 (2020) a new protocol.
 - [Ikutaro Kakehashi](https://en.wikipedia.org/wiki/Ikutaro_Kakehashi), Wikipedia.
 - [Dave Smith (engineer)](https://en.wikipedia.org/wiki/Dave_Smith_(engineer)), Wikipedia.
 - [Tom Oberheim](https://en.wikipedia.org/wiki/Tom_Oberheim), Wikipedia.
-- [Sequential Circuits Prophet-600](https://en.wikipedia.org/wiki/Sequential_Circuits_Prophet-600), Wikipedia.
+- [Sequential (company), 1981–1982: MIDI](https://en.wikipedia.org/wiki/Sequential_(company)#1981%E2%80%931982:_MIDI), Wikipedia (the Prophet-600 has no article of its own).
 - [Roland Jupiter-6](https://en.wikipedia.org/wiki/Roland_Jupiter-6), Wikipedia.
 - [Yamaha DX7](https://en.wikipedia.org/wiki/Yamaha_DX7), Wikipedia.
 - [Roland MPU-401](https://en.wikipedia.org/wiki/Roland_MPU-401), Wikipedia.
 - [Atari ST](https://en.wikipedia.org/wiki/Atari_ST), Wikipedia.
 - [MIDI Manufacturers Association](https://en.wikipedia.org/wiki/MIDI_Manufacturers_Association), Wikipedia.
-- [Association of Musical Electronics Industry](https://en.wikipedia.org/wiki/Association_of_Musical_Electronics_Industry), Wikipedia.
+- [Japan MIDI Standards Committee](https://en.wikipedia.org/wiki/Japan_MIDI_Standards_Committee), Wikipedia (AMEI has no article of its own).
 - Dave Smith and Chet Wood, "The 'USI', or Universal Synthesizer Interface", AES convention paper
   (New York, October 1981).
 
@@ -156,8 +156,8 @@ string on its own channel; MPE grew from it.
 
 PHI's Rhythms, Drums to MIDI and built-in Synth put drums on channel 10, as General MIDI does.
 
-- [MIDI, Channels](https://en.wikipedia.org/wiki/MIDI#Channels), Wikipedia.
-- [Multitimbrality](https://en.wikipedia.org/wiki/Multitimbrality), Wikipedia.
+- [MIDI, Technical specifications](https://en.wikipedia.org/wiki/MIDI#Technical_specifications), Wikipedia.
+- [Timbrality](https://en.wikipedia.org/wiki/Timbrality), Wikipedia.
 - [Guitar synthesizer](https://en.wikipedia.org/wiki/Guitar_synthesizer), Wikipedia.
 
 ## Notes and velocity
@@ -304,7 +304,7 @@ SMF in a RIFF file; **.kar** karaoke files are SMFs with lyrics.
 PHI reads types 0, 1 and 2 and RMID, and writes type 0 files (the tempo map, markers and channel
 events in one track) from the MIDI editors and Rhythms. The MIDI editor keeps a clip's tuning system in a marker event, so the file still plays on any player.
 
-- [MIDI, Standard files](https://en.wikipedia.org/wiki/MIDI#Standard_files), Wikipedia.
+- [MIDI, Computer files](https://en.wikipedia.org/wiki/MIDI#Computer_files), Wikipedia.
 - [Variable-length quantity](https://en.wikipedia.org/wiki/Variable-length_quantity), Wikipedia.
 - [Interchange File Format](https://en.wikipedia.org/wiki/Interchange_File_Format), Wikipedia.
 - [Resource Interchange File Format](https://en.wikipedia.org/wiki/Resource_Interchange_File_Format), Wikipedia, for RMID.
@@ -479,7 +479,7 @@ and ALSA's sequencer (and JACK or PipeWire) on Linux.
 PHI uses ALSA: it lists every MIDI input (Sample > MIDI Inputs), opens new ones as they are plugged
 in (it looks every two seconds) and remembers them by name.
 
-- [MIDI, Connectors](https://en.wikipedia.org/wiki/MIDI#Connectors), Wikipedia.
+- [MIDI, Connectors and interface](https://en.wikipedia.org/wiki/MIDI#Connectors_and_interface), Wikipedia.
 - [DIN connector](https://en.wikipedia.org/wiki/DIN_connector), Wikipedia.
 - [Opto-isolator](https://en.wikipedia.org/wiki/Opto-isolator), Wikipedia.
 - [RTP-MIDI](https://en.wikipedia.org/wiki/RTP-MIDI), Wikipedia.
