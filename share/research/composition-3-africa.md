@@ -8,10 +8,15 @@ to be checked against them. African rhythm itself is under Research > Modes > Rh
 
 ## Layered ostinato (Ewe drumming)
 
-The dance-drumming of the Ewe people of southeastern Ghana and Togo, in pieces such as Gahu,
+The dance-drumming of the Ewe people of southeastern Ghana, Togo and Benin, in pieces such as Gahu,
 Adzrowo and Atsiagbekɔ (Agbekor), is built from layers of ostinato over a timeline. The iron bell
 (gankogui) plays the timeline, an asymmetric pattern of seven strokes in twelve pulses, against
-which every other part is heard; the rattle (axatse) doubles it or marks the beat. Supporting
+which every other part is heard. The gankogui is a clapperless double bell, hammered into
+shape rather than cast, with a purer tone than a Western bell; its two notes differ from bell to
+bell, so that several can play together. The bell sets the pattern, but the master drummer sets
+the tempo. With the standard pattern, the rattle (axatse) sounds the bell's strokes by striking
+the gourd on the knee and fills the pulses between with the free hand. It begins on the bell's
+second stroke and ends on the first, so that its phrase closes the cycle. Supporting
 drums enter one at a time, the kaganu, kidi and sogo, each repeating a short figure placed
 against the bell, so that groupings of three and two pulses sound at once. The high kaganu keeps
 time with bell and rattle, while kidi and sogo are response drums. The master drummer leads, on
@@ -65,6 +70,28 @@ plays the timeline. Eugene Novotney's thesis argues more broadly that the 3:2 re
 underlies the timelines of much West African music and, as clave, of the music of the African
 diaspora, and that these rhythms are best understood as integrated wholes rather than sums of
 groupings; he also sorts out the often confused terms polyrhythm, cross-rhythm, beat and pulse.
+Kofi Agawu puts the same point briefly: three and two are not independent but one shape.
+Ladzekpo also gives the Anlo-Ewe reading of why it matters. The clashing cross-rhythms stand for
+the stresses of life, and drumming and dancing through them trains a calm, fearless mind.
+
+Not every bell is twelve pulses long: Ewe timelines run from 8 to 24 pulses. The bell of kadodo,
+recorded by the Ladzekpo brothers, spans 24 pulses, two bars of four beats, in three groups of
+five strokes that cross the bar line. Under them lie three slow cross-beats against eight main
+beats (3:8). Beyond the drum ensembles there are work songs, such as the fishing songs of Anlo
+migrants, and play songs. A. M. Jones's *Studies in African Music* (1959), built largely on Ewe
+music, set out rules that still shape how it is described:
+
+- Phrases are built from twos and threes and their sums: a phrase of ten is 2+3+2+3, or
+  2+2+2+4.
+- Repeats and rests are part of the song. A form like A A B B B cannot lose one of its B's.
+- Melodies are additive, while the time-background (claps, bell) is divisive, and the claps put
+  no accent on the song.
+- A song sounds free but sits on a fixed time-background, and many lines lean toward their ends,
+  where they meet it.
+- Melodies are diatonic. The main exception is the turn dominant, sharpened subdominant,
+  dominant.
+- Short triplets appear now and then, and there is no fermata.
+- Call and response is the usual form, and the repeats give it many variants.
 
 *In PHI*: the bell's twelve-pulse timeline, then rattle, kaganu, kidi and sogo entering one by
 one, three against two, the lead drum's calls changing their responses, with cantor and chorus.
@@ -72,6 +99,11 @@ one, three against two, the lead drum's calls changing their responses, with can
 - [Ewe music](https://en.wikipedia.org/wiki/Ewe_music),
   [Gankogui](https://en.wikipedia.org/wiki/Gankogui) and
   [Bell pattern](https://en.wikipedia.org/wiki/Bell_pattern), Wikipedia.
+- David Locke, "Principles of Off-Beat Timing and Cross-Rhythm in Southern Ewe Dance Drumming",
+  *Ethnomusicology* (1982).
+- Eric Debrah Otchere, ["In a world of their own: memory and identity in the fishing songs of a
+  migrant Ewe community in Ghana"](https://doi.org/10.21504/amj.v10i3.2193), *African Music*
+  10/3 (2017).
 - David Locke, *Drum Gahu* (White Cliffs Media, 1987).
 - Jeremy Cohen, ["Great Grooves #1: Gahu"](https://thisworldmusic.com/gahu-african-drumming-and-dance-from-ghana/),
   *ThisWorldMusic*, with a multitrack mixer of the six parts.
@@ -84,12 +116,14 @@ one, three against two, the lead drum's calls changing their responses, with can
 - ["Great Grooves #6: Kpanlogo"](https://thisworldmusic.com/kpanlogo-african-drumming-dance-ghana/),
   *ThisWorldMusic*, played by Francis Kofi Akotuah.
 - C. K. Ladzekpo, *Foundation Course in African Dance-Drumming*, "Six against four cross
-  rhythms" (1995), [archived](https://web.archive.org/web/2012/https://home.comcast.net/~dzinyaladzekpo/SixFour.html).
+  rhythms" and "The Myth of Cross-Rhythm" (1995),
+  [archived](https://web.archive.org/web/20121123000213/https://home.comcast.net/~dzinyaladzekpo/Myth.html) and [archived](https://web.archive.org/web/2012/https://home.comcast.net/~dzinyaladzekpo/SixFour.html).
 - Eugene D. Novotney, *The 3:2 Relationship as the Foundation of Timelines in West African
   Musics*, doctoral thesis, [abstract](https://web.archive.org/web/2012/http://www.unlockingclave.com/3-2-thesis-abstract.html)
   on David Peñalosa's *Unlocking Clave* site.
-- A. M. Jones, *Studies in African Music* (Oxford University Press, 1959).
-- Kofi Agawu, *Representing African Music* (Routledge, 2003).
+- A. M. Jones, *Studies in African Music* (Oxford University Press, 1959), pp. 17, 24, 49.
+- Kofi Agawu, *Representing African Music* (Routledge, 2003), p. 92.
+- The Ladzekpo brothers, "Kadodo", on *Ritual Music of the Yeve* (Makossa 86011, 1982).
 
 ## Hocket and interlocking
 
