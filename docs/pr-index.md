@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**122 pull requests:** 109 merged, 13 open.
+**129 pull requests:** 111 merged, 18 open.
 
 ## Contents
 
@@ -53,7 +53,8 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#111](https://github.com/phinyx852Hz/audio-editor/pull/111) | MIDI editor and score: a transport bar of their own | merged |  | `Source/ui/MidiEditor.cpp`<br>`Source/ui/MidiEditor.h`<br>`docs/midi-editor.md` |
 | [#116](https://github.com/phinyx852Hz/audio-editor/pull/116) | MIDI editor and score: transport tied to the main one | open |  | `Source/ui/MidiEditor.cpp`<br>`Source/ui/MixerWindow.cpp`<br>`Source/ui/MidiEditor.h` |
 | [#118](https://github.com/phinyx852Hz/audio-editor/pull/118) | MIDI editor: Ableton-style note keys and mouse gestures | open |  | `Source/ui/MidiEditor.cpp`<br>`Source/mixer/NoteEditor.cpp`<br>`docs/midi-editor.md` |
-| [#119](https://github.com/phinyx852Hz/audio-editor/pull/119) | Closing the main editor's MIDI editor stops playback and offers to save | open |  | `Source/ui/MidiPanel.cpp`<br>`Source/ui/MixerSection.cpp`<br>`Source/ui/MidiPanel.h` |
+| [#119](https://github.com/phinyx852Hz/audio-editor/pull/119) | Closing the main editor's MIDI editor stops playback and offers to save | merged |  | `Source/ui/MidiPanel.cpp`<br>`Source/ui/MixerSection.cpp`<br>`Source/ui/MidiPanel.h` |
+| [#123](https://github.com/phinyx852Hz/audio-editor/pull/123) | Research: add an Editing section | open | Research > Editing | `share/research/editing-1-editors.md`<br>`share/research/editing-0-basics.md` |
 
 ### Analysis and meters
 
@@ -157,6 +158,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#32](https://github.com/phinyx852Hz/audio-editor/pull/32) | Bundle Airwindows Consolidated as a stock plugin | merged | Add plugin, Built-in, Airwindows | `cmake/StockPlugins.cmake`<br>`cmake/airwindows/consolidated-phi.patch` |
 | [#34](https://github.com/phinyx852Hz/audio-editor/pull/34) | Plugin windows: view follows its frame, standard size, PHI's opacity | merged | Any plugin or instrument window | `Source/engine/PluginWindow.h`<br>`Source/engine/EmbeddedView.h`<br>`Source/engine/X11Windows.cpp` |
 | [#37](https://github.com/phinyx852Hz/audio-editor/pull/37) | Stop Cardinal crashing PHI on quit | merged | Quitting the app | `Source/main.cpp` |
+| [#127](https://github.com/phinyx852Hz/audio-editor/pull/127) | Research: add Synthesis, its types and its history | open |  | `share/research/synthesis-1-types.md`<br>`share/research/synthesis-2-history.md`<br>`share/research/synthesis-0-overview.md` |
 
 ### Trackers
 
@@ -198,6 +200,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#109](https://github.com/phinyx852Hz/audio-editor/pull/109) | Window opacity keys work from every window and any focus | open |  | `Source/ui/PanelNavigation.cpp`<br>`README.md` |
 | [#117](https://github.com/phinyx852Hz/audio-editor/pull/117) | UI fixes: Alt+menu letters, strip hover, Find panel width, Interface Size | open | Options > Interface Size | `Source/ui/ToolsSection.cpp`<br>`Source/ui/InterfaceSize.h`<br>`Source/ui/PanelNavigation.cpp` |
 | [#122](https://github.com/phinyx852Hz/audio-editor/pull/122) | Research: add Engineering, the audio engineering behind PHI's menus | open |  | `share/research/engineering-1-analysis-meters.md`<br>`share/research/engineering-4-process.md`<br>`share/research/engineering-6-restoration.md` |
+| [#125](https://github.com/phinyx852Hz/audio-editor/pull/125) | Research menu: a MIDI section | open |  | `share/research/midi.md` |
 
 ### Documentation
 
@@ -217,10 +220,14 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#78](https://github.com/phinyx852Hz/audio-editor/pull/78) | Simplest phase 1: sound shaping and a Simpler-style layout | merged |  | `Source/ui/SamplerWindow.cpp`<br>`Source/sampler/SamplerEngine.cpp`<br>`tests/CoreTests.cpp` |
 | [#93](https://github.com/phinyx852Hz/audio-editor/pull/93) | Minimalize: fix a use-after-free when phase or canon adds new voices | merged |  | `tests/CoreTests.cpp`<br>`Source/mixer/Minimalize.cpp` |
 | [#99](https://github.com/phinyx852Hz/audio-editor/pull/99) | File > New Project (Ctrl+N); start on a blank project and ask to save on quit | merged | File > New Project | `Source/ui/MixerWindow.cpp`<br>`Source/ui/MainWindow.cpp`<br>`Source/ui/ProjectSection.cpp` |
-| [#112](https://github.com/phinyx852Hz/audio-editor/pull/112) | Cut idle CPU, and add Options > Wallpaper | open |  | `Source/ui/VisualizerSection.cpp`<br>`Source/ui/Wallpaper.cpp`<br>`Source/ui/MixerWindow.cpp` |
+| [#112](https://github.com/phinyx852Hz/audio-editor/pull/112) | Cut idle CPU, and add Options > Wallpaper | merged |  | `Source/ui/VisualizerSection.cpp`<br>`Source/ui/Wallpaper.cpp`<br>`Source/ui/MixerWindow.cpp` |
 | [#114](https://github.com/phinyx852Hz/audio-editor/pull/114) | Build an Arch package and an AppImage in CI | open |  | `.github/workflows/build.yml`<br>`packaging/arch/ci.PKGBUILD`<br>`packaging/arch/PKGBUILD` |
 | [#120](https://github.com/phinyx852Hz/audio-editor/pull/120) | Research: add a Metadata section | open |  | `share/research/metadata.md` |
 | [#121](https://github.com/phinyx852Hz/audio-editor/pull/121) | Research: open source, licensing, copyright and Creative Commons | open | Licensing › Software | `share/research/licensing.md` |
+| [#124](https://github.com/phinyx852Hz/audio-editor/pull/124) | Research: add Audio file formats | open |  | `share/research/file-formats.md` |
+| [#126](https://github.com/phinyx852Hz/audio-editor/pull/126) | Research: add a Sampling section | open | Research > Sampling | `share/research/sampling-1-techniques.md`<br>`share/research/sampling-0-history.md`<br>`share/research/sampling-2-instruments.md` |
+| [#128](https://github.com/phinyx852Hz/audio-editor/pull/128) | Research: add Acoustic Ecology (Schafer, composers, Feld and the Kaluli) | open |  | `share/research/ecology-1-composers.md`<br>`share/research/ecology-3-noise.md`<br>`share/research/ecology-0-schafer.md` |
+| [#129](https://github.com/phinyx852Hz/audio-editor/pull/129) | Compose: John Cage's and Pauline Oliveros's techniques | open |  | `Source/mixer/Compose.cpp`<br>`tests/CoreTests.cpp`<br>`docs/compose.md` |
 
 ## By number
 
@@ -337,14 +344,21 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#109](https://github.com/phinyx852Hz/audio-editor/pull/109) | Window opacity keys work from every window and any focus | Ctrl+Alt+- and Ctrl+Alt+= often did nothing, so opacity could only be changed with the mouse. *(auto)* | open | 2026-10-30 | Interface and branding |
 | [#110](https://github.com/phinyx852Hz/audio-editor/pull/110) | MIDI editor in the main window: Alt+arrows/F6 reach it, Home/End, Ctrl+W closes it | Alt+arrows and F6 reach it. *(auto)* | merged | 2026-10-30 | Editing and warping |
 | [#111](https://github.com/phinyx852Hz/audio-editor/pull/111) | MIDI editor and score: a transport bar of their own | A transport bar across the top of MidiEditor, above the tool row. *(auto)* | merged | 2026-10-30 | Editing and warping |
-| [#112](https://github.com/phinyx852Hz/audio-editor/pull/112) | Cut idle CPU, and add Options > Wallpaper | The Visualizer behind PHI is a child widget lowered under everything else. *(auto)* | open | 2026-10-30 | Not yet sorted |
+| [#112](https://github.com/phinyx852Hz/audio-editor/pull/112) | Cut idle CPU, and add Options > Wallpaper | The Visualizer behind PHI is a child widget lowered under everything else. *(auto)* | merged | 2026-10-31 | Not yet sorted |
 | [#113](https://github.com/phinyx852Hz/audio-editor/pull/113) | Fix the crash on quit with the mixer open | The SIGSEGV on quit (2026-10-30 crash report) happened like this. ~MainWindow deleted the docked mixer. *(auto)* | merged | 2026-10-30 | Mixer and clip launcher |
 | [#114](https://github.com/phinyx852Hz/audio-editor/pull/114) | Build an Arch package and an AppImage in CI | Stage 1 of the installers: ready-made Linux downloads that put PHI in the app launcher with the Φ icon (the .desktop file, icon and MIME type were already in... *(auto)* | open | 2026-10-30 | Not yet sorted |
 | [#115](https://github.com/phinyx852Hz/audio-editor/pull/115) | Manual: Analysing a Plugin; Forensic Φ finds wider golden ratios | New chapter, "Analysing a Plugin" (docs/manual/chapters/plugin-analyzer.md), in the Mastering part after Effects. *(auto)* | open | 2026-10-30 | Φ effects and sounds |
 | [#116](https://github.com/phinyx852Hz/audio-editor/pull/116) | MIDI editor and score: transport tied to the main one | How it behaves *(auto)* | open | 2026-10-30 | Editing and warping |
 | [#117](https://github.com/phinyx852Hz/audio-editor/pull/117) | UI fixes: Alt+menu letters, strip hover, Find panel width, Interface Size | Alt+O (and every Alt+menu letter) opens the menu right away. *(auto)* | open | 2026-10-31 | Interface and branding |
 | [#118](https://github.com/phinyx852Hz/audio-editor/pull/118) | MIDI editor: Ableton-style note keys and mouse gestures | Ctrl+D and Ctrl+A did nothing in the MIDI editor docked in the main window. *(auto)* | open | 2026-10-31 | Editing and warping |
-| [#119](https://github.com/phinyx852Hz/audio-editor/pull/119) | Closing the main editor's MIDI editor stops playback and offers to save | MidiPanel::closing(): stops the editor's playback and recording (new MidiEditor::stop()). *(auto)* | open | 2026-10-31 | Editing and warping |
+| [#119](https://github.com/phinyx852Hz/audio-editor/pull/119) | Closing the main editor's MIDI editor stops playback and offers to save | MidiPanel::closing(): stops the editor's playback and recording (new MidiEditor::stop()). *(auto)* | merged | 2026-10-31 | Editing and warping |
 | [#120](https://github.com/phinyx852Hz/audio-editor/pull/120) | Research: add a Metadata section | Adds share/research/metadata.md, which the Research menu picks up as a new Metadata submenu (no code changes; every .md in the folder is read). *(auto)* | open | 2026-10-31 | Not yet sorted |
 | [#121](https://github.com/phinyx852Hz/audio-editor/pull/121) | Research: open source, licensing, copyright and Creative Commons | Adds a Licensing group to the Research menu, as one new file, share/research/licensing.md. *(auto)* | open | 2026-10-31 | Not yet sorted |
 | [#122](https://github.com/phinyx852Hz/audio-editor/pull/122) | Research: add Engineering, the audio engineering behind PHI's menus | Adds an Engineering submenu to Research. *(auto)* | open | 2026-10-31 | Interface and branding |
+| [#123](https://github.com/phinyx852Hz/audio-editor/pull/123) | Research: add an Editing section | Adds Research > Editing as two new Markdown files in share/research/ (new files only, so no conflict with the Engineering, Metadata and Licensing PRs): *(auto)* | open | 2026-10-31 | Editing and warping |
+| [#124](https://github.com/phinyx852Hz/audio-editor/pull/124) | Research: add Audio file formats | Adds an Audio file formats submenu to Research, as one new file, share/research/file-formats.md, so it does not touch the other open Research PRs. *(auto)* | open | 2026-10-31 | Not yet sorted |
+| [#125](https://github.com/phinyx852Hz/audio-editor/pull/125) | Research menu: a MIDI section | Adds share/research/midi.md, a MIDI submenu of the Research menu, in the same form as the other sections: what each thing is, its history, what PHI does with... *(auto)* | open | 2026-10-31 | Interface and branding |
+| [#126](https://github.com/phinyx852Hz/audio-editor/pull/126) | Research: add a Sampling section | Adds Research > Sampling, a companion to the Synthesis section, as three new Markdown files in share/research/ (no code changes, so no conflicts with #120 to... *(auto)* | open | 2026-10-31 | Not yet sorted |
+| [#127](https://github.com/phinyx852Hz/audio-editor/pull/127) | Research: add Synthesis, its types and its history | Adds a Synthesis submenu to the Research menu: the major types of synthesis with example instruments, and the history from the origins to today's virtual syn... *(auto)* | open | 2026-10-31 | Instruments and plugins |
+| [#128](https://github.com/phinyx852Hz/audio-editor/pull/128) | Research: add Acoustic Ecology (Schafer, composers, Feld and the Kaluli) | Adds an Acoustic Ecology submenu to Research, as three new files in share/research/ (no existing files touched, so no conflicts with #120–#124): *(auto)* | open | 2026-10-31 | Not yet sorted |
+| [#129](https://github.com/phinyx852Hz/audio-editor/pull/129) | Compose: John Cage's and Pauline Oliveros's techniques | Compose already had Chance and Aleatory, which covers Cage's I Ching chance operations in *Music of Changes*. *(auto)* | open | 2026-10-31 | Not yet sorted |
