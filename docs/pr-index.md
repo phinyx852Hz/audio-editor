@@ -68,7 +68,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#48](https://github.com/phinyx852Hz/audio-editor/pull/48) | Add the Plugin Analyzer, Forensic Φ and the Aliasing scope | merged | Analyze menu, Plugin Analyzer | `Source/core/PluginMeasure.cpp`<br>`Source/core/PhiForensics.cpp`<br>`Source/ui/PluginAnalyzer.cpp` |
 | [#75](https://github.com/phinyx852Hz/audio-editor/pull/75) | Spectrum: 20 FFT windows, Welch averaging, zero padding, multitaper, Selector hold colours | merged | 1. Windows (Options > Window): | `Source/core/Windows.cpp`<br>`Source/ui/AnalysisWindow.cpp`<br>`tests/CoreTests.cpp` |
 | [#96](https://github.com/phinyx852Hz/audio-editor/pull/96) | Analysis Meters: an opacity slider of its own | merged |  | `Source/ui/AnalysisWindow.cpp`<br>`Source/ui/Theme.cpp`<br>`Source/ui/Theme.h` |
-| [#130](https://github.com/phinyx852Hz/audio-editor/pull/130) | Analysis Meters: EBU-tested loudness, classic VU/PPM/K meters, a bitscope, OVERs, Heinzel flat tops | open |  | `Source/ui/AnalysisWindow.cpp`<br>`docs/testing/ebu-tests.md`<br>`tools/ebu-tests/phi.cpp` |
+| [#130](https://github.com/phinyx852Hz/audio-editor/pull/130) | Analysis Meters: EBU-tested loudness, classic VU/PPM/K meters, a bitscope, OVERs, Heinzel flat tops | open |  | `Source/ui/AnalysisWindow.cpp`<br>`Source/core/EbuCore.cpp`<br>`docs/testing/ebu-tests.md` |
 
 ### Mastering
 
