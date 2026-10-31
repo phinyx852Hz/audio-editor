@@ -52,6 +52,7 @@ PHI measures in three places. The **Meters panel** sits beside the waveform whil
 | Phase Wheel | Each frequency between mono, left, right and inverse |
 | Correlation | Per third octave, with the overall correlation and balance |
 | Amplitude Statistics | Peak, true peak, sample values, possibly clipped samples, OVERs, DC offset, total, maximum, minimum and average RMS, dynamic range, crest factor, with an RMS histogram and Copy |
+| Bits | A bitscope: each bit of the left and right samples, from the sign bit to the 16th, 20th or 24th (chosen on the card), filled by how often it is set and outlined while it moves, with how many bits are in use and how much of the signal is finer than the chosen depth |
 | Ambisonics | Where the sound is in an ambisonic file (see below) |
 
 **Loudness targets**: Streaming −14, Apple Music and podcasts −16, Amazon −14 at −2 dBTP, EBU R128 −23, ATSC A/85 −24, CD and club −9.

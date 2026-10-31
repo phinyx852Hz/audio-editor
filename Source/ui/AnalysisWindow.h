@@ -41,6 +41,8 @@ namespace analysis
 //   frequency sits between mono, left, right and inverse), Correlation per band
 //   with the overall correlation and balance, and Amplitude Statistics as in
 //   Audition (Copy puts them on the clipboard), with an RMS histogram.
+// - Bits: a bitscope, each bit of the samples read as 16-, 20- or 24-bit words,
+//   with the bits in use and how much is finer than that depth.
 // - Ambisonics (AmbiVisualizer): where the sound is in an ambisonic file, up to
 //   10th order, in seven views; read from the file at the playhead.
 // Measured from what is heard, after the Master Section, since the last reset

@@ -200,6 +200,26 @@ namespace analysis
         };
         std::array<Stats, 2> stats;
         long long frames = 0;
+
+        // Bits (a bitscope): each sample read as a two's-complement integer of bitDepth bits, as a
+        // WAV or AIFF file of that depth would hold it. Bit 0 is the sign bit (the MSB), as bitscopes
+        // number them from the left.
+        static constexpr int maxBits = 24;
+        int bitDepth = 24;
+        std::array<std::array<long long, maxBits>, 2> tickOnes {};    // samples with each bit set since the last tick
+        std::array<long long, 2> tickCount {};
+        std::array<std::array<double, maxBits>, 2> bitOn {};          // as shown: the share of samples with the bit set
+        std::array<std::array<double, maxBits>, 2> bitSeen {};        // as shown: 1 while the bit moves, then falling
+        std::array<int, 2> lowestBit { -1, -1 };                      // the lowest bit ever set since the reset (-1: none)
+        std::array<long long, 2> finer {}, quantised {};              // samples with detail below bitDepth bits, and all of them
+        void resetBits()
+        {
+            tickOnes = {};
+            tickCount = {};
+            bitOn = bitSeen = {};
+            lowestBit = { -1, -1 };
+            finer = quantised = {};
+        }
         int windowLength = 2400, windowFill = 0;
 
         // Spectrum: the newest samples, transformed each tick and smoothed per bin.
@@ -327,6 +347,7 @@ namespace analysis
             hasSignal = false;
             stats = {};
             frames = 0;
+            resetBits();
             windowFill = 0;
             averaged = 0;
         }
@@ -352,6 +373,7 @@ namespace analysis
                     s.windowSquares += v * v;
                     s.minimum = std::min (s.minimum, x[ch]);
                     s.maximum = std::max (s.maximum, x[ch]);
+                    addBits (ch, v);
                     if (a >= clipLevel)
                     {
                         ++s.clipped;
@@ -452,6 +474,56 @@ namespace analysis
             windowFill = 0;
         }
 
+        void addBits (int ch, double v)
+        {
+            const auto c = (size_t) ch;
+            const double scale = (double) (1LL << (bitDepth - 1));
+            const double q = v * scale;
+            const auto top = (long long) scale - 1;
+            const auto code = std::clamp ((long long) std::llround (q), -top - 1, top);
+            ++quantised[c];
+            if (std::abs (q - (double) code) > 1.0e-3 && std::abs (q) < scale)
+                ++finer[c];   // more detail than bitDepth bits hold: not truncated or dithered to that depth
+            const auto word = (unsigned long long) code & ((1ULL << bitDepth) - 1);
+            for (int b = 0; b < bitDepth; ++b)
+                if ((word >> (bitDepth - 1 - b)) & 1ULL)
+                    ++tickOnes[c][(size_t) b];
+            ++tickCount[c];
+            if (code != 0)
+            {
+                // The lowest bit set (two's complement keeps it where the magnitude has it).
+                int low = bitDepth - 1;
+                while (low > 0 && ((word >> (bitDepth - 1 - low)) & 1ULL) == 0)
+                    --low;
+                lowestBit[c] = std::max (lowestBit[c], low);
+            }
+        }
+
+        void updateBits (double dt)
+        {
+            for (size_t ch = 0; ch < 2; ++ch)
+            {
+                for (int b = 0; b < maxBits; ++b)
+                {
+                    const auto i = (size_t) b;
+                    if (tickCount[ch] > 0 && b < bitDepth)
+                    {
+                        const auto on = (double) tickOnes[ch][i] / (double) tickCount[ch];
+                        bitOn[ch][i] = on;
+                        const bool moves = on > 0.0 && on < 1.0;
+                        bitSeen[ch][i] = moves ? 1.0 : std::max (0.0, bitSeen[ch][i] - dt / 1.5);
+                    }
+                    else
+                    {
+                        bitOn[ch][i] = std::max (0.0, bitOn[ch][i] - dt / 1.5);
+                        bitSeen[ch][i] = std::max (0.0, bitSeen[ch][i] - dt / 1.5);
+                    }
+                }
+                tickOnes[ch] = {};
+                tickCount[ch] = 0;
+            }
+        }
+
         // Runs every UI tick: ballistics, then the spectrum and what is worked out from it.
         void update (double dt)
         {
@@ -480,6 +552,7 @@ namespace analysis
                 maxTrue[ch] = std::max (maxTrue[ch], tickTrue[ch]);
             }
             tickPeak = tickTrue = {};
+            updateBits (dt);
 
             hasSignal = sumLL + sumRR > 1.0e-9;
             correlation = sumLL * sumRR > 1.0e-18 ? std::clamp (sumLR / std::sqrt (sumLL * sumRR), -1.0, 1.0) : 0.0;
@@ -1896,6 +1969,96 @@ namespace analysis
 
     //==============================================================================
     // Amplitude Statistics, as in Audition, with the RMS histogram below.
+    //==============================================================================
+    // Bits: a bitscope, as Bob Katz describes it in "Digital Detective" (digido.com). One row
+    // per channel, one cell per bit from the sign bit (1, the MSB) on the left to the LSB on the
+    // right. The fill is the share of samples with the bit set, so a bit in use flickers about
+    // half full and an unused one stays empty (or full, below a DC offset); a bright outline
+    // marks a bit that moved in the last moment. Under it: how many bits are in use since the
+    // reset, and how much of the signal has more detail than the chosen depth holds.
+    class BitsMeter final : public Meter
+    {
+    public:
+        using Meter::Meter;
+        QSize sizeHint() const override { return { 300, 200 }; }
+        QSize minimumSizeHint() const override { return { 180, 110 }; }
+
+    protected:
+        void paintEvent (QPaintEvent*) override
+        {
+            QPainter g (this);
+            g.setRenderHint (QPainter::Antialiasing);
+            const auto r = QRectF (rect()).adjusted (6, 4, -6, -4);
+            const int n = state.bitDepth;
+            const double labelWidth = 14.0;
+            const QRectF grid (r.left() + labelWidth, r.top() + 14, r.width() - labelWidth, std::max (30.0, r.height() - 14 - 34));
+            const auto cell = grid.width() / n;
+            const auto rowHeight = grid.height() / 2.0;
+
+            // Bit numbers along the top, every fourth (and the first and last).
+            g.setFont (smallFont (0.65));
+            g.setPen (labelColor());
+            for (int b = 0; b < n; ++b)
+                if (b == 0 || b == n - 1 || (b + 1) % 4 == 0)
+                    g.drawText (QRectF (grid.left() + b * cell - 6, r.top(), cell + 12, 12), Qt::AlignCenter, QString::number (b + 1));
+
+            const QString names[2] { QObject::tr ("L"), QObject::tr ("R") };
+            for (int ch = 0; ch < 2; ++ch)
+            {
+                const auto top = grid.top() + ch * rowHeight;
+                g.setPen (labelColor());
+                g.setFont (smallFont (0.8));
+                g.drawText (QRectF (r.left(), top, labelWidth, rowHeight), Qt::AlignLeft | Qt::AlignVCenter, names[ch]);
+                for (int b = 0; b < n; ++b)
+                {
+                    const auto i = (size_t) b;
+                    const QRectF box (grid.left() + b * cell + 1, top + 2, cell - 2, rowHeight - 4);
+                    plotBackground (g, box);
+                    const auto on = state.bitOn[(size_t) ch][i];
+                    if (on > 0.0)
+                    {
+                        const auto h = box.height() * on;
+                        g.fillRect (QRectF (box.left(), box.bottom() - h, box.width(), h),
+                                    faded (b == 0 ? color ("meterMid") : color ("meterLow"), 0.85));
+                    }
+                    const auto seen = state.bitSeen[(size_t) ch][i];
+                    if (seen > 0.0)
+                    {
+                        g.setPen (QPen (faded (color ("highlight"), seen), 1.5));
+                        g.setBrush (Qt::NoBrush);
+                        g.drawRoundedRect (box, 3, 3);
+                    }
+                }
+            }
+
+            // Dividers after bits 16 and 20: where 16- and 20-bit words end.
+            g.setPen (QPen (faded (color ("meterHigh"), 0.7), 1.0, Qt::DashLine));
+            for (int edge : { 16, 20 })
+                if (edge < n)
+                {
+                    const auto x = grid.left() + edge * cell;
+                    g.drawLine (QPointF (x, grid.top()), QPointF (x, grid.bottom()));
+                }
+
+            // Readouts.
+            g.setFont (smallFont (0.75));
+            QStringList inUse, finer;
+            for (size_t ch = 0; ch < 2; ++ch)
+            {
+                inUse << (state.lowestBit[ch] < 0 ? QStringLiteral ("-") : QString::number (state.lowestBit[ch] + 1));
+                finer << (state.quantised[ch] == 0 ? QStringLiteral ("-")
+                                                   : QStringLiteral ("%1 %").arg (100.0 * (double) state.finer[ch] / (double) state.quantised[ch], 0, 'f', 1));
+            }
+            g.setPen (color ("windowText"));
+            g.drawText (QRectF (r.left(), grid.bottom() + 3, r.width(), 14), Qt::AlignLeft | Qt::AlignVCenter,
+                        QObject::tr ("Bits in use: L %1, R %2 of %3").arg (inUse[0], inUse[1]).arg (n));
+            const bool any = state.finer[0] + state.finer[1] > 0;
+            g.setPen (any ? color ("meterHigh") : labelColor());
+            g.drawText (QRectF (r.left(), grid.bottom() + 17, r.width(), 14), Qt::AlignLeft | Qt::AlignVCenter,
+                        QObject::tr ("Finer than %1 bits: L %2, R %3").arg (n).arg (finer[0], finer[1]));
+        }
+    };
+
     class StatsMeter final : public Meter
     {
     public:
@@ -2132,6 +2295,7 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
     auto* wheel = new PhaseWheelMeter (*state, this);
     auto* correlation = new CorrelationMeter (*state, this);
     auto* stats = new StatsMeter (*state, this);
+    auto* bits = new BitsMeter (*state, this);
     ambisonics = new AmbiVisualizer (this);
 
     const auto hidden = settings.value (QStringLiteral ("analysis/hidden")).toStringList();
@@ -2167,6 +2331,7 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
     auto* wheelCard = addCard ("phaseWheel", tr ("Phase Wheel"), wheel);
     auto* correlationCard = addCard ("correlation", tr ("Correlation"), correlation);
     auto* statsCard = addCard ("statistics", tr ("Amplitude Statistics"), stats);
+    auto* bitsCard = addCard ("bits", tr ("Bits"), bits);
     auto* ambiCard = addCard ("ambisonics", tr ("Ambisonics"), ambisonics);
 
     // Loudness History: how much time it shows.
@@ -2200,6 +2365,25 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
         apply (count->currentIndex());
         connect (count, &QComboBox::currentIndexChanged, levels, apply);
         levelsCard->addControl (count);
+    }
+
+    // Bits: the word length the samples are read at.
+    {
+        const QList<int> depths { 16, 20, 24 };
+        auto* depth = smallCombo (bitsCard, { tr ("16 bits"), tr ("20 bits"), tr ("24 bits") },
+                                  settings.value (QStringLiteral ("analysis/bits/depth"), 2).toInt(),
+                                  tr ("Read each sample as a whole number of this many bits, as a WAV or AIFF file of that depth "
+                                      "would hold it. Choose the depth of the file or of the output to see whether anything below it moves"));
+        const auto apply = [this, bits, depths] (int i)
+        {
+            state->bitDepth = depths.value (i, 24);
+            state->resetBits();
+            bits->update();
+            appSettings().setValue (QStringLiteral ("analysis/bits/depth"), i);
+        };
+        apply (depth->currentIndex());
+        connect (depth, &QComboBox::currentIndexChanged, bits, apply);
+        bitsCard->addControl (depth);
     }
 
     // Spectrum: channels, smoothing, holds 1-8, and the rest in a menu.
@@ -2464,7 +2648,7 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
     };
     addRow ({ { loudnessCard, 30 }, { historyCard, 50 }, { levelsCard, 14 } });
     addRow ({ { spectrumCard, 56 }, { spectrogramCard, 22 }, { imagingCard, 22 } });
-    addRow ({ { wheelCard, 18 }, { correlationCard, 26 }, { statsCard, 26 }, { ambiCard, 30 } });
+    addRow ({ { wheelCard, 16 }, { correlationCard, 22 }, { statsCard, 22 }, { bitsCard, 18 }, { ambiCard, 22 } });
     rows->setSizes ({ 340, 360, 330 });
     connect (rows, &QSplitter::splitterMoved, this, [this] { saveLayout(); });
 

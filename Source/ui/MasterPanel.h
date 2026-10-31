@@ -17,7 +17,8 @@ class QTreeWidget;
 // WaveLab-style Master Section: plugin slots applied to playback and renders,
 // then the master gain, then the final dither (always there, never in a slot). In the slot list: Enter edits parameters (or adds a
 // plugin to an empty slot), Insert picks a plugin, Delete removes it, B
-// bypasses, E opens the plugin's own window, A measures it in the Plugin Analyzer,
+// bypasses, E opens the plugin's own window, A measures it in the Plugin Analyzer (the
+// Analyze button opens the Analysis Meters window),
 // Ctrl+Up/Down reorders. Under the slots, the Aliasing scope watches the whole section.
 class MasterPanel final : public QWidget
 {
@@ -34,6 +35,7 @@ public:
 Q_SIGNALS:
     void renderRequested();
     void analyzeRequested (int slot);   // the Plugin Analyzer on a slot, -1 the whole Master Section
+    void metersRequested();             // the Analysis Meters window (the Analyze button)
     void message (const QString&);
 
 protected:
