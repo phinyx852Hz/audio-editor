@@ -177,7 +177,7 @@ and 1950s often used an open tuning (D-G-D-G-B-D) with a capo, prized for its bu
   [Sébène](https://en.wikipedia.org/wiki/S%C3%A9b%C3%A8ne) and
   [Cavacha](https://en.wikipedia.org/wiki/Cavacha), Wikipedia.
 - Gary Stewart, *Rumba on the River: A History of the Popular Music of the Two Congos* (Verso,
-  2000; 2020).
+  2003; 2020).
 - Gary Stewart, *Breakout: Profiles in African Rhythm* (University of Chicago Press, 1992).
 - Bob W. White, *Rumba Rules: The Politics of Dance Music in Mobutu's Zaire* (Duke University
   Press, 2008).
