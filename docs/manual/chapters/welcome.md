@@ -10,7 +10,7 @@ PHI is an open-source digital audio workstation for Linux: an audio editor, a ma
 
 **Mastering.** Like WaveLab, PHI has a Master Section: a chain of plugins every sound plays through, with final dither and a gain stage, and Render to apply it. Around it are loudness meters to broadcast standards, reference tracks to compare against, a Master Assistant that tunes your chain towards a target, export to every format FFmpeg knows, a batch processor and an album editor that writes CD images.
 
-**Producing and performing.** PHI also makes music. An eight-track mixer plays audio and MIDI clips through instruments; a patchbay routes everything to everything; a clip launcher plays loops in scenes; samplers, synths and two trackers make the sounds; and the Visualizer and the video recorder take the performance to an audience.
+**Producing and performing.** PHI also makes music. An eight-track mixer (sixteen when you need them) plays audio and MIDI clips through instruments; a patchbay routes everything to everything; a clip launcher plays loops in scenes; samplers, synths and two trackers make the sounds; and the Visualizer and the video recorder take the performance to an audience.
 
 **Spatial audio.** Surround up to 9.1.6, binaural placement for headphones, and ambisonics from first to tenth order, with a studio of spatial effects modelled on Envelop for Live.
 
