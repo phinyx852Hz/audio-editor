@@ -51,6 +51,7 @@
 #include "../Source/core/SpatialStudio.h"
 #include "../Source/core/PhiVoice.h"
 #include "../Source/core/PhiPhaser.h"
+#include "../Source/core/PhiRepeat.h"
 #include "../Source/core/PhiTuning.h"
 #include "../Source/core/PhiRaga.h"
 #include "../Source/core/PhiSitar.h"
@@ -7051,6 +7052,140 @@ namespace
         }
     }
 
+    // Φ Repeat: slices caught at the interval points, repeated for the gate, lower and quieter if asked.
+    void testPhiRepeat()
+    {
+        const double rate = 48000.0;   // at 120 BPM a beat is 24000 samples, a sixteenth 6000
+        const int frames = 96000 * 2;  // two bars
+        auto ramp = [&] (int i) { return (float) ((i % 48000) / 48000.0); };
+        auto run = [&] (phi::Repeat::Settings s, int channels = 1)
+        {
+            phi::Repeat r;
+            r.prepare (rate, channels);
+            r.set (s);
+            std::vector<std::vector<float>> out ((size_t) channels, std::vector<float> ((size_t) frames));
+            for (int i = 0; i < frames; ++i)
+                for (auto& c : out)
+                    c[(size_t) i] = ramp (i);
+            for (int at = 0; at < frames; at += 512)
+            {
+                std::vector<float*> p;
+                for (auto& c : out)
+                    p.push_back (c.data() + at);
+                r.process (p.data(), channels, std::min (512, frames - at));
+            }
+            return out;
+        };
+
+        phi::Repeat::Settings s;
+        s.interval = 5;            // a bar
+        s.offsetSixteenths = 0;
+        s.grid = 3;                // 1/16
+        s.gateSixteenths = 4;      // one beat
+        s.mix = phi::Repeat::Mix::insert;
+
+        auto never = s;
+        never.chance = 0.0;
+        const auto dry = run (never)[0];
+        bool same = true;
+        for (int i = 0; i < frames; ++i)
+            same = same && dry[(size_t) i] == ramp (i);
+        check (same, "phi repeat: no chance, no repeats, the sound untouched");
+
+        const auto rep = run (s)[0];
+        check (near (rep[3000], ramp (3000), 1.0e-6), "phi repeat: the first slice is the live sound");
+        check (near (rep[9000], ramp (3000), 1.0e-6) && near (rep[15000], ramp (3000), 1.0e-6) && near (rep[21000], ramp (3000), 1.0e-6),
+               "phi repeat: the slice plays again each sixteenth for the gate");
+        check (near (rep[30000], ramp (30000), 1.0e-6), "phi repeat: after the gate the sound comes back");
+        check (near (rep[96000 + 9000], ramp (96000 + 3000), 1.0e-6), "phi repeat: and repeats again at the next bar");
+
+        auto offset = s;
+        offset.offsetSixteenths = 4;   // a beat into the bar
+        const auto late = run (offset)[0];
+        check (near (late[9000], ramp (9000), 1.0e-6) && near (late[24000 + 9000], ramp (24000 + 3000), 1.0e-6),
+               "phi repeat: offset moves where in the bar it repeats");
+
+        auto lower = s;
+        lower.pitch = -12.0;
+        const auto down = run (lower)[0];
+        check (near (down[2000], ramp (1000), 1.0e-6) && near (down[6000 + 2000], ramp (1000), 1.0e-6),
+               "phi repeat: an octave down reads the slice at half speed");
+
+        auto falling = s;
+        falling.pitchDecay = 1.0;   // 3 semitones lower each repetition
+        const auto fall = run (falling)[0];
+        check (near (fall[6000 + 3000], ramp ((int) std::lround (3000 * std::pow (2.0, -3.0 / 12.0))), 1.0e-4),
+               "phi repeat: pitch decay lowers each repetition");
+
+        auto fading = s;
+        fading.decay = 1.0;
+        const auto fade = run (fading)[0];
+        check (std::abs (fade[23000]) < 0.05f * ramp (5000) + 1.0e-3f && near (fade[9000], ramp (3000) * (1.0 - 9000.0 / 24000.0), 1.0e-4),
+               "phi repeat: decay fades the repeats out by the gate's end");
+
+        auto gated = s;
+        gated.mix = phi::Repeat::Mix::gate;
+        const auto only = run (gated)[0];
+        check (only[40000] == 0.0f && near (only[9000], ramp (3000), 1.0e-6), "phi repeat: gate mode hears only the repeats");
+
+        auto mixed = s;
+        mixed.mix = phi::Repeat::Mix::mix;
+        const auto both = run (mixed)[0];
+        check (near (both[9000], ramp (9000) + ramp (3000), 1.0e-6), "phi repeat: mix mode keeps the dry sound under them");
+
+        auto held = s;
+        held.chance = 0.0;
+        held.repeat = true;
+        const auto hold = run (held)[0];
+        check (near (hold[96000 + 9000], ramp (3000), 1.0e-6), "phi repeat: held Repeat repeats whatever the chance, past the gate");
+
+        auto triplet = s;
+        triplet.triplets = true;   // 1/16 triplets: 4000 samples
+        const auto three = run (triplet)[0];
+        check (near (three[4000 + 1000], ramp (1000), 1.0e-6), "phi repeat: triplets shorten the grid by a third");
+
+        // Golden chance: the repeats fall on the golden rhythm's hits (Φ Rhythm's), 61.8 % of the points.
+        {
+            phi::Repeat r;
+            r.prepare (rate, 1);
+            auto g = s;
+            g.interval = 1;    // every sixteenth
+            g.gateSixteenths = 1;
+            g.golden = true;
+            g.chance = 0.6180339887;
+            r.set (g);
+            int repeats = 0;
+            bool hits = true;
+            std::vector<float> block (6000, 0.5f);
+            float* p[] { block.data() };
+            for (int k = 0; k < 89; ++k)
+            {
+                r.process (p, 1, 1);
+                const bool on = r.repeating();
+                repeats += on ? 1 : 0;
+                hits = hits && on == phi::hit (k, g.chance);
+                r.process (p, 1, 5999);
+            }
+            int expected = 0;
+            for (int k = 0; k < 89; ++k)
+                expected += phi::hit (k, g.chance) ? 1 : 0;
+            check (repeats == expected && repeats >= 55 && repeats <= 56 && hits, "phi repeat: golden chance repeats on the golden rhythm's steps, 61.8 % of them");
+        }
+
+        auto band = s;
+        band.filter = true;
+        band.filterHz = 2000.0;
+        band.filterOctaves = 1.0;
+        band.variation = 1.0;
+        band.variationMode = phi::Repeat::Variation::everyRepeat;
+        const auto stereo = run (band, 2);
+        bool finite = true;
+        for (const auto& c : stereo)
+            for (auto v : c)
+                finite = finite && std::isfinite (v) && std::abs (v) < 4.0f;
+        check (finite, "phi repeat: stable with the filter and every grid variation");
+    }
+
     // Φ Phaser: stages φ apart, a sweep that never repeats, and a response that matches what it does.
     void testPhiPhaser()
     {
@@ -9609,6 +9744,7 @@ int main()
     testModulatorRack();
     testPhiVoice();
     testPhiPhaser();
+    testPhiRepeat();
     testPhiTuning();
     testRagaSheets();
     testSitar();

@@ -107,6 +107,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/PhiChorus.cpp
     Source/core/PhiVoice.cpp
     Source/core/PhiPhaser.cpp
+    Source/core/PhiRepeat.cpp
     Source/core/PhiTuning.cpp
     Source/core/Scala.cpp
     Source/core/XenTuner.cpp
@@ -519,6 +520,7 @@ if(PHI_BUILD_TESTS)
         Source/core/PhiChorus.cpp
         Source/core/PhiVoice.cpp
         Source/core/PhiPhaser.cpp
+        Source/core/PhiRepeat.cpp
         Source/core/PhiTuning.cpp
         Source/core/Scala.cpp
         Source/core/XenTuner.cpp
