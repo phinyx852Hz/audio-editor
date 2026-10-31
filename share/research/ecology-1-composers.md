@@ -2,7 +2,7 @@
 Research > Acoustic Ecology > Composers (owner, 2026-10-31): those who composed from Schafer's
 ideas, the forerunners they drew on, and the projects of listening, recording and sound-mapping
 that carry acoustic ecology on today. Schafer himself is in ecology-0-schafer.md.
-The John Cage and Pauline Oliveros entries were checked against their Wikipedia articles, the
+The John Cage, Pauline Oliveros, Barry Truax and Hildegard Westerkamp entries were checked against their Wikipedia articles, the
 Tuning Meditation against its published score, and the WFAE entry against wfae.net; every
 Wikipedia link was checked to open (2026-10-31). The other entries are partly from memory.
 -->
@@ -82,16 +82,21 @@ synthesis, filtering and spatialisation.
 
 ## Barry Truax
 
-Barry Truax (born 1947) is a Canadian composer and the theorist of acoustic communication.
-He joined the World Soundscape Project in 1973, edited its *Handbook for Acoustic Ecology*
-(1978), and taught at Simon Fraser University. *Acoustic Communication* (1984) recasts
+Barry Truax (born 10 May 1947, Chatham, Ontario) is a Canadian composer of electroacoustic
+music and the theorist of acoustic communication. After physics at Queen's University and the
+Institute of Sonology in Utrecht (1971–73), where he wrote the POD programs for interactive
+composition with digital synthesis, he joined the World Soundscape Project in 1973 at
+Schafer's invitation, directed it after Schafer left Simon Fraser University in 1975, and
+edited its *Handbook for Acoustic Ecology* (1978); he is professor emeritus at SFU. *Acoustic Communication* (1984) recasts
 acoustic ecology as the study of how sound mediates between listener and environment, a
 model of information exchange rather than of signal transfer.
 
-He was the first to make granular synthesis run in real time: his PODX system made
-*Riverrun* (1986), a river built from millions of tiny grains, and he extended it to
-granulate recorded sound, which joined his synthesis to his soundscape work in pieces such as
-*Pacific* (1990) and *Basilica* (1992), the latter from the bells of a church in Quebec City.
+He made the first real-time granular synthesis, with the GSX system he built at SFU in 1986
+for *Riverrun* (1986), a river built from thousands of grains of 10 to 50 milliseconds. With
+his PODX system he then granulated recorded sound, joining his synthesis to his soundscape
+work: *Pacific* (1990) time-stretches sounds of the Pacific coast, *Basilica* (1992) the bells
+of Notre-Dame de Québec. His soundscape compositions keep the context of their sounds, to
+evoke the listener's associations and memories.
 
 - [Barry Truax](https://en.wikipedia.org/wiki/Barry_Truax) and
   [Granular synthesis](https://en.wikipedia.org/wiki/Granular_synthesis), Wikipedia.
@@ -100,10 +105,14 @@ granulate recorded sound, which joined his synthesis to his soundscape work in p
 
 ## Hildegard Westerkamp
 
-Hildegard Westerkamp (born 1946) is a German-Canadian composer, radio artist and teacher, a
-member of the World Soundscape Project from the early 1970s and a founding member of the
-World Forum for Acoustic Ecology. Her radio programme *Soundwalking* on Vancouver Co-op Radio
-(from 1978) and her essay "Soundwalking" (1974) made the soundwalk a practice and an art form.
+Hildegard Westerkamp (born 8 April 1946, Osnabrück, Germany) is a Canadian composer, radio
+artist, teacher and sound ecologist. She studied in Freiburg and at the University of British
+Columbia, worked with Schafer at the World Soundscape Project from 1973 to 1980, cataloguing
+its archive of recordings, and from 1974 produced and hosted programmes at Vancouver
+Co-operative Radio (CFRO). She taught acoustic communication at Simon Fraser University until
+1990, edited *The Soundscape Newsletter* (1991–95), and is a founding member of the World
+Forum for Acoustic Ecology. She made the soundwalk, "any excursion whose main purpose is to
+listen to the environment", a practice and an art form.
 
 Her compositions put the recordist's own listening into the piece, often with her voice
 speaking to the listener: *A Walk Through the City* (1981), *Cricket Voice* (1987), made in
@@ -128,7 +137,8 @@ planners.
 
 - [Soundwalk](https://en.wikipedia.org/wiki/Soundwalk) and
   [Janet Cardiff](https://en.wikipedia.org/wiki/Janet_Cardiff), Wikipedia.
-- Hildegard Westerkamp, "Soundwalking", *Sound Heritage* 3/4 (1974).
+- Hildegard Westerkamp, "Soundwalking", *Sound Heritage* 3/4 (1974), and *The Soundscape
+  Speaks: Soundwalking Revisited* (2021).
 
 ## Pauline Oliveros and Deep Listening
 
