@@ -180,7 +180,10 @@ Arab, Turkish and Persian art music are written on the Western staff with extra 
 their intervals. Arab notation uses the half-flat and half-sharp, a quarter tone each, which
 were agreed at the Cairo Congress of Arab Music in 1932. Turkish makam music is written in the
 Arel–Ezgi–Uzdilek (AEU) system, which divides the whole tone into nine commas and gives
-accidentals for 1, 4, 5 and 8 commas. Persian music uses the koron (a lowered note, about a
+accidentals for 1, 4, 5 and 8 commas, sharp and flat: six signs beyond the Western four. Of the
+53 commas in the octave, 24 are used. AEU borrows the shapes of the Arab half-flat and half-sharp
+but gives them comma values, not quarter tones. So Rast looks the same on paper in both
+traditions, though its Turkish third is a just major third and the Arab one is neutral. Persian music uses the koron (a lowered note, about a
 quarter tone flat) and the sori (raised), both introduced by Ali-Naqi Vaziri in the 1920s.
 Each staff is a convention: players bend the written pitch toward the maqām's intonation.
 
