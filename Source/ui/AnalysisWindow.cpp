@@ -55,6 +55,9 @@ namespace analysis
 {
     constexpr double minusInfinity = -200.0;
     constexpr double clipLevel = 0.99997;     // about -0.0003 dBFS: a sample at full scale
+    // A digital OVER, as dedicated meters count it: this many samples in a row at full scale
+    // (the Sony PCM-1630 convention, which Bob Katz recommends in "Level Practices", Part 1).
+    constexpr int overRun = 3;
     constexpr int numBands = 31;              // third octaves from 20 Hz to 20 kHz
     const char* const bandNames[numBands] { "20", "25", "31", "40", "50", "63", "80", "100", "125", "160", "200", "250", "315", "400", "500",
                                             "630", "800", "1k", "1.25k", "1.6k", "2k", "2.5k", "3.15k", "4k", "5k", "6.3k", "8k", "10k",
@@ -188,7 +191,9 @@ namespace analysis
         {
             double sum = 0.0, squares = 0.0, windowSquares = 0.0;
             float minimum = 0.0f, maximum = 0.0f;
-            long long clipped = 0;
+            long long clipped = 0;   // every sample at full scale
+            long long overs = 0;     // runs of at least overRun samples at full scale, each counted once
+            int run = 0;             // full-scale samples in a row so far
             double maxRms = minusInfinity, minRms = 0.0, rmsDbSum = 0.0;
             int windows = 0;
             std::array<int, 61> histogram {};   // window RMS, 1 dB bins from -60 to 0
@@ -348,7 +353,13 @@ namespace analysis
                     s.minimum = std::min (s.minimum, x[ch]);
                     s.maximum = std::max (s.maximum, x[ch]);
                     if (a >= clipLevel)
+                    {
                         ++s.clipped;
+                        if (++s.run == overRun)
+                            ++s.overs;
+                    }
+                    else
+                        s.run = 0;
                 }
 
                 sumLR = c * sumLR + d * (double) x[0] * x[1];
@@ -647,6 +658,7 @@ namespace analysis
         row (QObject::tr ("Maximum sample value"), measured ([&] (int ch) { return QString::number (stat (ch).maximum, 'f', 5); }));
         row (QObject::tr ("Minimum sample value"), measured ([&] (int ch) { return QString::number (stat (ch).minimum, 'f', 5); }));
         row (QObject::tr ("Possibly clipped samples"), measured ([&] (int ch) { return QString::number (stat (ch).clipped); }));
+        row (QObject::tr ("OVERs (3 or more samples in a row)"), measured ([&] (int ch) { return QString::number (stat (ch).overs); }));
         row (QObject::tr ("DC offset"), measured ([&] (int ch) { return QStringLiteral ("%1 %").arg (stat (ch).sum / (double) s.frames * 100.0, 0, 'f', 3); }));
         row (QObject::tr ("Total RMS amplitude"), measured ([&] (int ch) { return number (totalRms (ch), 2, "dB"); }));
         row (QObject::tr ("Maximum RMS amplitude"), rmsMeasured ([&] (int ch) { return number (stat (ch).maxRms, 2, "dB"); }));
@@ -1222,6 +1234,7 @@ namespace analysis
     {
     public:
         using Meter::Meter;
+        bool countOvers = false;   // the clip light counts OVERs (runs of full-scale samples), not every sample
         QSize sizeHint() const override { return { 170, 260 }; }
         QSize minimumSizeHint() const override { return { 110, 140 }; }
 
@@ -1281,14 +1294,15 @@ namespace analysis
                 }
 
                 // Clip light with the count, and the highest true peak under it.
-                const auto clips = state.stats[(size_t) ch].clipped;
+                const auto& st = state.stats[(size_t) ch];
+                const auto clips = countOvers ? st.overs : st.clipped;
                 const QRectF light (x, r.top(), barWidth, 14);
                 g.setPen (Qt::NoPen);
                 g.setBrush (clips > 0 ? color ("meterHigh") : faded (color ("meterHigh"), 0.15));
                 g.drawRoundedRect (light, 3, 3);
                 g.setPen (clips > 0 ? color ("highlightedText") : labelColor());
                 g.setFont (smallFont (0.7));
-                g.drawText (light, Qt::AlignCenter, clips > 0 ? QString::number (clips) : QObject::tr ("CLIP"));
+                g.drawText (light, Qt::AlignCenter, clips > 0 ? QString::number (clips) : countOvers ? QObject::tr ("OVER") : QObject::tr ("CLIP"));
                 const auto truePeak = ampDb (state.maxTrue[(size_t) ch]);
                 g.setPen (truePeak > state.targetTruePeak ? color ("meterHigh") : color ("windowText"));
                 g.drawText (QRectF (x - 6, r.top() + 15, barWidth + 12, 15), Qt::AlignCenter, number (truePeak, 1));
@@ -1304,7 +1318,7 @@ namespace analysis
             }
             g.setFont (smallFont (0.65));
             g.setPen (labelColor());
-            g.drawText (QRectF (r.left() + barWidth, r.top(), scaleWidth, 14), Qt::AlignCenter, QObject::tr ("clips"));
+            g.drawText (QRectF (r.left() + barWidth, r.top(), scaleWidth, 14), Qt::AlignCenter, countOvers ? QObject::tr ("overs") : QObject::tr ("clips"));
             g.drawText (QRectF (r.left() + barWidth, r.top() + 15, scaleWidth, 15), Qt::AlignCenter, QObject::tr ("dBTP"));
             g.drawText (QRectF (r.left() + barWidth, bars.bottom() + 14, scaleWidth, 11), Qt::AlignCenter, QObject::tr ("peak"));
             g.drawText (QRectF (r.left() + barWidth, bars.bottom() + 24, scaleWidth, 11), Qt::AlignCenter, QObject::tr ("RMS"));
@@ -2169,6 +2183,23 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
         apply (span->currentIndex());
         connect (span, &QComboBox::currentIndexChanged, history, apply);
         historyCard->addControl (span);
+    }
+
+    // Levels: what the clip light counts.
+    {
+        auto* count = smallCombo (levelsCard, { tr ("Clips"), tr ("OVERs") },
+                                  settings.value (QStringLiteral ("analysis/levels/countOvers"), 0).toInt(),
+                                  tr ("Clips: every sample at full scale. OVERs: 3 or more samples in a row at full scale, "
+                                      "each run counted once, as dedicated digital meters count them (the Sony 1630 convention)"));
+        const auto apply = [levels] (int i)
+        {
+            levels->countOvers = i == 1;
+            levels->update();
+            appSettings().setValue (QStringLiteral ("analysis/levels/countOvers"), i);
+        };
+        apply (count->currentIndex());
+        connect (count, &QComboBox::currentIndexChanged, levels, apply);
+        levelsCard->addControl (count);
     }
 
     // Spectrum: channels, smoothing, holds 1-8, and the rest in a menu.

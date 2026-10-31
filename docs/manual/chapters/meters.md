@@ -45,13 +45,13 @@ PHI measures in three places. The **Meters panel** sits beside the waveform whil
 |---|---|
 | Loudness | A gauge around a target you pick: short-term inside, momentary outside, integrated in the middle, with max momentary and short-term, loudness range, true peak and PLR |
 | Loudness History | 30 s to 10 min, coloured by how far from the target, with the integrated line |
-| Levels | Peak, RMS, peak hold, true peak and clip counts for left and right |
+| Levels | Peak, RMS, peak hold, true peak and clip counts for left and right; the menu on the card switches the count between every full-scale sample (Clips) and OVERs, runs of 3 or more full-scale samples counted once each |
 | Spectrum | Like Audition's Frequency Analysis (see below) |
 | Spectrogram | Scrolling |
 | Imaging | The goniometer with all its views |
 | Phase Wheel | Each frequency between mono, left, right and inverse |
 | Correlation | Per third octave, with the overall correlation and balance |
-| Amplitude Statistics | Peak, true peak, sample values, possibly clipped samples, DC offset, total, maximum, minimum and average RMS, dynamic range, crest factor, with an RMS histogram and Copy |
+| Amplitude Statistics | Peak, true peak, sample values, possibly clipped samples, OVERs, DC offset, total, maximum, minimum and average RMS, dynamic range, crest factor, with an RMS histogram and Copy |
 | Ambisonics | Where the sound is in an ambisonic file (see below) |
 
 **Loudness targets**: Streaming −14, Apple Music and podcasts −16, Amazon −14 at −2 dBTP, EBU R128 −23, ATSC A/85 −24, CD and club −9.
