@@ -33,7 +33,10 @@ the basic motif followed by its variant, with one note split in two for a smooth
 source of the familiar seven-stroke bell timeline; a pickup on the third main beat gives a
 second seven-stroke form, and leaving out a note gives the five-stroke line common in sacred
 dance-drumming. Learners tap the four main beats with feet and one hand while the other hand
-plays the timeline.
+plays the timeline. Eugene Novotney's thesis argues more broadly that the 3:2 relationship
+underlies the timelines of much West African music and, as clave, of the music of the African
+diaspora, and that these rhythms are best understood as integrated wholes rather than sums of
+groupings; he also sorts out the often confused terms polyrhythm, cross-rhythm, beat and pulse.
 
 *In PHI*: the bell's twelve-pulse timeline, then rattle, kaganu, kidi and sogo entering one by
 one, three against two, the lead drum's calls changing their responses, with cantor and chorus.
@@ -44,6 +47,9 @@ one, three against two, the lead drum's calls changing their responses, with can
 - David Locke, *Drum Gahu* (White Cliffs Media, 1987).
 - C. K. Ladzekpo, *Foundation Course in African Dance-Drumming*, "Six against four cross
   rhythms" (1995), [archived](https://web.archive.org/web/2012/https://home.comcast.net/~dzinyaladzekpo/SixFour.html).
+- Eugene D. Novotney, *The 3:2 Relationship as the Foundation of Timelines in West African
+  Musics*, doctoral thesis, [abstract](https://web.archive.org/web/2012/http://www.unlockingclave.com/3-2-thesis-abstract.html)
+  on David Peñalosa's *Unlocking Clave* site.
 - A. M. Jones, *Studies in African Music* (Oxford University Press, 1959).
 - Kofi Agawu, *Representing African Music* (Routledge, 2003).
 
