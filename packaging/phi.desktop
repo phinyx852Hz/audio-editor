@@ -8,5 +8,5 @@ Icon=phi
 Keywords=Phi;Φ;Audio;Editor;Mastering;Wave;
 Terminal=false
 Categories=AudioVideo;Audio;AudioVideoEditing;
-MimeType=audio/x-wav;audio/wav;audio/flac;audio/x-aiff;audio/mpeg;audio/ogg;application/x-phi-project;
+MimeType=audio/x-wav;audio/wav;audio/flac;audio/x-aiff;audio/mpeg;audio/ogg;application/x-phi-project;application/x-dawproject;
 StartupWMClass=phi

@@ -11,6 +11,9 @@
 // Plugin files are searched for in CLAP_PATH, ~/.clap, /usr/lib/clap and
 // /usr/local/lib/clap, folders included, so the CLAP copies yabridge makes of
 // Windows plugins in ~/.clap/yabridge are found too.
+// The CLAP id ("org.surge-synth-team.surge-xt") of an instance made here; empty for any other.
+std::string clapPluginId (const juce::AudioPluginInstance&);
+
 class ClapPluginFormat final : public juce::AudioPluginFormat
 {
 public:

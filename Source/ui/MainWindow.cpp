@@ -948,7 +948,7 @@ void MainWindow::buildMenus()
         { tr ("&Analyze"),   { "analyze.loudness", "-", "analyze.beats", "analyze.onsets", "analyze.tempoKey", "analyze.vamp", "-", "analyze.window", "view.meters", "analyze.imagingView", "analyze.resetMeters", "-", "analyze.plugin", "-", "view.spectral", "-", "@nyquist.analyze" } },
         { tr ("&Compose"),   { "@compose" } },
         { tr ("&Master"),    { "#album", "-", "view.master", "view.chain", "view.modulators", "master.addPlugin", "master.bypass", "analyze.plugin", "-", "master.assistant", "-", "master.render", "master.renderNew", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
-        { tr ("Mi&xer"),     { "mixer.window", "mixer.dock", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
+        { tr ("Mi&xer"),     { "mixer.window", "mixer.dock", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "mixer.importDaw", "mixer.exportDaw", "-", "mixer.addTrack", "mixer.removeTrack", "-",
                                "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "mixer.sendToTimeline", "-", "mixer.editNotes", "mixer.trackToEditor", "-", "view.inspector", "-", "mixer.assistant", "mixer.preferences" } },
         { tr ("Mo&de"),      { "@mode" } },
         { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "mixer.preferences", "-", "options.keymap", "options.theme", "options.waveformColors", "-", "options.wallpaper", "options.chooseWallpaper" } },
@@ -1953,7 +1953,7 @@ void MainWindow::showOpenDialog()
 
     const auto start = doc.path().empty() ? QString() : QFileInfo (QString::fromStdString (doc.path())).absolutePath();
     patterns << QStringLiteral ("*.") + albumfile::extension << QStringLiteral ("*.") + albumfile::oldExtension
-             << QStringLiteral ("*.") + MixerWindow::projectSuffix;
+             << QStringLiteral ("*.") + MixerWindow::projectSuffix << QStringLiteral ("*.dawproject");
     const auto path = QFileDialog::getOpenFileName (this, tr ("Open Audio File"), start,
                                                     tr ("Audio files, albums and projects (%1);;All files (*)").arg (patterns.join (QLatin1Char (' '))));
     if (! path.isEmpty())

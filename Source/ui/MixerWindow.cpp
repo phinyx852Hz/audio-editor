@@ -442,7 +442,7 @@ namespace
 
     QString projectFilter()
     {
-        return MixerWindow::tr ("PHI projects (*.phi *.phinyxmix);;All files (*)");
+        return MixerWindow::tr ("PHI projects (*.phi *.phinyxmix);;DAWproject: Bitwig, Studio One, Cubase... (*.dawproject);;All files (*)");
     }
 
     enum Choice { noInstrument, synthChoice, samplerChoice, slicerChoice, ragaChoice, prismChoice, firstPlugin };
@@ -10739,8 +10739,11 @@ QString MixerWindow::autosavePath() { return configFile ("last.phi"); }
 bool MixerWindow::isProjectFile (const QString& file)
 {
     const auto suffix = QFileInfo (file).suffix();
-    return suffix.compare (projectSuffix, Qt::CaseInsensitive) == 0 || suffix.compare (QLatin1String ("phinyxmix"), Qt::CaseInsensitive) == 0;
+    return suffix.compare (projectSuffix, Qt::CaseInsensitive) == 0 || suffix.compare (QLatin1String ("phinyxmix"), Qt::CaseInsensitive) == 0
+        || isDawProject (file);
 }
+
+void MixerWindow::showStatus (const QString& text) { status->setText (text); }
 
 bool MixerWindow::askToSave (const QString& title, const QString& question)
 {
@@ -10878,7 +10881,7 @@ void MixerWindow::openMix()
     if (file.isEmpty())
         return;
     QString error;
-    if (! loadMix (file, error))
+    if (! (isDawProject (file) ? importDawProject (file, error) : loadMix (file, error)))
         QMessageBox::warning (this, tr ("Open Project"), error);
     setFocus();
 }
@@ -10889,7 +10892,8 @@ bool MixerWindow::openMixFile (const QString& file)
                                                                            .arg (QFileInfo (file).fileName(), mixName())) != QMessageBox::Yes)
         return false;
     QString error;
-    if (! loadMix (QFileInfo (file).absoluteFilePath(), error))
+    const auto full = QFileInfo (file).absoluteFilePath();
+    if (! (isDawProject (full) ? importDawProject (full, error) : loadMix (full, error)))
     {
         QMessageBox::warning (this, tr ("Open Project"), error);
         return false;

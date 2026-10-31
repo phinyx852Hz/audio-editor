@@ -143,6 +143,14 @@ public:
     bool saveMix (bool saveAs);
     bool loadMix (const QString& path, QString& error);
     bool writeMix (const QString& path, QString& error);
+    // DAWproject (docs/dawproject.md), the open format of Bitwig Studio, Studio One, Cubase and
+    // others: one opened becomes a PHI project in a folder beside it ("<name> PHI"), with its
+    // audio and its note clips as MIDI files; this one is written as one, its audio in it.
+    // What does not carry over is listed when it is done. DawProjectSection.cpp.
+    static bool isDawProject (const QString& path);
+    bool importDawProject (const QString& path, QString& error);
+    void importDawProjectFromMenu();
+    void exportDawProject();
     // Unsaved changes offered a save first: Save, Discard or Cancel. False when the user
     // cancels, or cancels the save, and keeps the project.
     bool askToSave (const QString& title, const QString& question);
@@ -675,6 +683,7 @@ private:
     bool launcherKey (class QKeyEvent*);   // the grid's keys, while it is shown
     QString slotName (int track, int scene) const;
     void changed();                  // the mix differs from its file
+    void showStatus (const QString&);   // the line under the strips, for a few seconds
     void updateTitle();
     double rate() const;
     QString folder() const;

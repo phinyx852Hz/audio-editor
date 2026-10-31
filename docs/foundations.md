@@ -196,6 +196,10 @@ Note-a-Bhairavi's cmtranslit (no licence).
 - CLAP, VST3, LV2, LADSPA and Vamp plugin interfaces.
 - SOFA (AES69) HRTF files; AmbiX (ACN, SN3D) and FuMa (Furse-Malham) ambisonics.
 - Scala `.scl` and `.kbm` (PR #68).
+- [DAWproject](https://github.com/bitwig/dawproject) 1.0 (Bitwig and PreSonus, MIT): its
+  `Project.xsd` and reference, for `Source/mixer/DawProject.cpp`; the zip format (PKWARE APPNOTE)
+  for `Source/core/Zip.cpp`, on zlib; Steinberg's `.vstpreset` layout. PHI's own code, none of
+  the reference library's (Java). See [dawproject.md](dawproject.md).
 - SMuFL (the Standard Music Font Layout, W3C Music Notation Community Group) code points; Xen
   Tuner's tuning config format.
 - MTS-ESP (ODDSound's MIDI Tuning Standard, External Shared Platform).

@@ -74,6 +74,10 @@ void MainWindow::registerMixerCommands()
     add ("mixer.save", tr ("&Save Project"), {}, [this] { mixerWindow()->saveMix (false); })
         ->setStatusTip (tr ("Save the mix, the patchbay and the view in a PHI project (.phi)"));
     add ("mixer.saveAs", tr ("Save Project &As..."), {}, [this] { mixerWindow()->saveMix (true); });
+    add ("mixer.importDaw", tr ("&Import DAWproject..."), {}, [this] { showMixer(); mixerWin->importDawProjectFromMenu(); })
+        ->setStatusTip (tr ("Open a project of Bitwig Studio, Studio One, Cubase or another program that writes DAWproject, as a PHI project beside it"));
+    add ("mixer.exportDaw", tr ("E&xport DAWproject..."), {}, [this] { mixerWindow()->exportDawProject(); })
+        ->setStatusTip (tr ("Write the project as a DAWproject, with its audio, for Bitwig Studio, Studio One, Cubase and others"));
     add ("mixer.addTrack", tr ("Add &Track"), {}, [this] { showMixer(); mixerWin->addTrack(); });
     add ("mixer.removeTrack", tr ("&Delete Selected Track"), {}, [this] { showMixer(); mixerWin->removeTrack(); });
     add ("mixer.playStop", tr ("&Play or Stop the Mix"), { KS (Qt::SHIFT | Qt::Key_F3) }, [this]
