@@ -68,7 +68,8 @@ one, three against two, the lead drum's calls changing their responses, with can
 - Jeremy Cohen, ["Great Grooves #2: Adzrowo"](https://thisworldmusic.com/adzro-african-drumming-dance-from-ghana/),
   *ThisWorldMusic*.
 - Jeremy Cohen, ["Great Grooves #3: Agbekor (slow)"](https://thisworldmusic.com/agbekor-african-drumming-and-dance-from-ghana/),
-  *ThisWorldMusic*.
+  *ThisWorldMusic*. The series also has mixers for fast Agbekor, Tokoe, Kpanlogo and Cuban
+  guaguancó, for listening to each part alone.
 - C. K. Ladzekpo, *Foundation Course in African Dance-Drumming*, "Six against four cross
   rhythms" (1995), [archived](https://web.archive.org/web/2012/https://home.comcast.net/~dzinyaladzekpo/SixFour.html).
 - Eugene D. Novotney, *The 3:2 Relationship as the Foundation of Timelines in West African
