@@ -13,8 +13,17 @@ Agbekor and Atsiagbekor, is built from layers of ostinato over a timeline. The i
 (gankogui) plays the timeline, an asymmetric pattern of seven strokes in twelve pulses, against
 which every other part is heard; the rattle (axatse) doubles it or marks the beat. Supporting
 drums enter one at a time, the kaganu, kidi and sogo, each repeating a short figure placed
-against the bell, so that groupings of three and two pulses sound at once. The master drummer on
-the atsimevu leads, and his calls change what the supporting drums answer. A cantor and chorus
+against the bell, so that groupings of three and two pulses sound at once. The high kaganu keeps
+time with bell and rattle, while kidi and sogo are response drums. The master drummer leads, on
+the atsimevu in Agbekor or the boba in Gahu, and the lead drum's calls change what the response
+drums answer and guide the dancers from section to section.
+
+Gahu shows the form. It is social music, with no religious ties or set season, which Emmanuel
+Agbeli of Kopeyia traces to Kokosawa, a Yoruba style from Nigeria that the Ewe played at more than
+twice its tempo. The present Kopeyia arrangement opens with a short slow Kokosawa, then works like
+a rondo: the "free movement" (A), a light, easy dance, is followed each time by the more intense
+"serious movement" (B), which leads into a new variation, C, D, E and on to H, in turn (ABA,
+ABCABC, ABDABD and so on), each variation cued by the lead drum. A cantor and chorus
 sing over it in call and response. David Locke's studies and those of A. M. Jones made the
 style the textbook case of African polyrhythm; Kofi Agawu has warned against hearing it only as
 rhythm, apart from dance, language and meaning.
@@ -45,6 +54,8 @@ one, three against two, the lead drum's calls changing their responses, with can
   [Gankogui](https://en.wikipedia.org/wiki/Gankogui) and
   [Bell pattern](https://en.wikipedia.org/wiki/Bell_pattern), Wikipedia.
 - David Locke, *Drum Gahu* (White Cliffs Media, 1987).
+- Jeremy Cohen, ["Great Grooves #1: Gahu"](https://thisworldmusic.com/gahu-african-drumming-and-dance-from-ghana/),
+  *ThisWorldMusic*, with a multitrack mixer of the six parts.
 - C. K. Ladzekpo, *Foundation Course in African Dance-Drumming*, "Six against four cross
   rhythms" (1995), [archived](https://web.archive.org/web/2012/https://home.comcast.net/~dzinyaladzekpo/SixFour.html).
 - Eugene D. Novotney, *The 3:2 Relationship as the Foundation of Timelines in West African
