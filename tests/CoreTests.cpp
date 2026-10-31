@@ -8770,6 +8770,40 @@ namespace
                 alone = alone && count == 1;
             check (alone, "compose: hocket, one player a pulse");
         }
+        // Congolese guitar: in the sebene the mi-solo plays only in the accompagnement's gaps, and the
+        // solo sits above the mi-solo, the mi-solo above the accompagnement.
+        {
+            const auto r = run (co::Method::congolese, 8);
+            int64_t from = -1, to = r.end;
+            for (const auto& x : r.sections)
+                if (from < 0 && x.name.rfind ("sebene", 0) == 0)
+                    from = x.start;
+                else if (x.name == "the close")
+                    to = x.start;
+            std::set<int64_t> accomp;
+            for (const auto& n : r.parts[2].notes)
+                if (n.start >= from && n.start < to)
+                    accomp.insert (n.start);
+            bool interlocked = from >= 0 && ! accomp.empty();
+            size_t mi = 0;
+            for (const auto& n : r.parts[1].notes)
+                if (n.start >= from && n.start < to)
+                {
+                    ++mi;
+                    interlocked = interlocked && accomp.count (n.start) == 0;
+                }
+            auto mean = [] (const co::Part& p)
+            {
+                double sum = 0.0;
+                for (const auto& n : p.notes)
+                    sum += n.key;
+                return p.notes.empty() ? 0.0 : sum / (double) p.notes.size();
+            };
+            check (interlocked && mi > 0, "compose: Congolese guitar, the mi-solo in the accompagnement's gaps through the sebene");
+            check (mean (r.parts[0]) > mean (r.parts[1]) && mean (r.parts[1]) > mean (r.parts[2]) && mean (r.parts[2]) > mean (r.parts[3])
+                       && r.parts[4].drums && r.parts[7].drums && ! r.parts[0].drums,
+                   "compose: Congolese guitar, solo above mi-solo above accompagnement above bass");
+        }
         // Rāga: the gat ends on sam with a tihāī.
         {
             const auto r = run (co::Method::raga, 3, "yaman (kalyan)");
