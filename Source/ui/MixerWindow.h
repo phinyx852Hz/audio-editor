@@ -759,6 +759,7 @@ private:
     StatusLine* status;
     QTimer timer;
     qint64 lastTick = 0;
+    int idleTicks = 0;
     int selected = 0;
     int shownTrack = 0;              // the editor's track: the last track selected
     EditorTrack* editorView = nullptr;
