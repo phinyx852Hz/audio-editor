@@ -14,6 +14,9 @@ class QLineEdit;
 class QListWidget;
 class QTreeWidget;
 
+// A dither choice as menus name it (dsp::ditherOrder is the order to offer them in).
+QString ditherLabel (dsp::Dither);
+
 // WaveLab-style Master Section: plugin slots applied to playback and renders,
 // then the master gain, then the final dither (always there, never in a slot). In the slot list: Enter edits parameters (or adds a
 // plugin to an empty slot), Insert picks a plugin, Delete removes it, B
