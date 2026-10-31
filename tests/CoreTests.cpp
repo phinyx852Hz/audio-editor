@@ -8775,6 +8775,57 @@ namespace
             const auto r = run (co::Method::raga, 3, "yaman (kalyan)");
             check (r.sections.back().name == "tihāī" && r.parts[2].drums, "compose: rāga, the gat ends in a tihāī");
         }
+        // Interlocking polyphony: with every voice in, the voices together fill most pulses of the period
+        // though none alone fills half of them; and a yodelling voice leaps a sixth or more.
+        {
+            const auto r = run (co::Method::interlocking, 5);
+            int64_t from = -1;
+            for (const auto& x : r.sections)
+                if (x.name == "all the voices interlock")
+                    from = x.start;
+            const int64_t pulse = co::ticksPerQuarter / 2, period = 24;
+            std::set<int64_t> together;
+            size_t most = 0;
+            int leaps = 0;
+            for (size_t v = 0; v < r.parts.size(); ++v)
+            {
+                std::set<int64_t> own;
+                const co::Note* last = nullptr;
+                for (const auto& n : r.parts[v].notes)
+                    if (from >= 0 && n.start >= from && n.start < from + period * pulse)
+                    {
+                        own.insert ((n.start - from) / pulse);
+                        together.insert ((n.start - from) / pulse);
+                        if (v == 1 && last != nullptr && std::abs (n.key - last->key) >= 8)
+                            ++leaps;
+                        last = &n;
+                    }
+                most = std::max (most, own.size());
+            }
+            check (from > 0 && together.size() >= 20 && most < 12, "compose: interlocking, the composite fills the period, no voice alone does");
+            check (leaps >= 2, "compose: interlocking, the yodel leaps between chest and head voice");
+        }
+        // Bol Processor grammar: the theme bharī has the bāyāṅ's open stroke, its khālī half none until the
+        // last two cells open again; variations follow, and the tihāī lands on sam, a tīntāl cycle's start.
+        {
+            const auto r = run (co::Method::bolGrammar, 3);
+            const int64_t beat = co::ticksPerQuarter;
+            auto open = [&] (int64_t a, int64_t b)
+            {
+                int k = 0;
+                for (const auto& n : r.parts[0].notes)
+                    k += n.key == 64 && n.start >= a * beat && n.start < b * beat;
+                return k;
+            };
+            int variations = 0;
+            for (const auto& x : r.sections)
+                variations += x.name.rfind ("variation", 0) == 0;
+            const auto sam = r.sections.back().start;
+            const auto lands = std::any_of (r.parts[0].notes.begin(), r.parts[0].notes.end(), [&] (const co::Note& n) { return n.start == sam && n.key == 64; });
+            check (r.parts[0].drums && open (0, 8) > 0 && open (8, 14) == 0 && open (14, 16) > 0, "compose: bol grammar, bharī then khālī, open again for sam");
+            check (variations >= 2 && r.sections.back().name == "sam" && r.sections[r.sections.size() - 2].name == "tihāī"
+                       && sam % (16 * beat) == 0 && lands, "compose: bol grammar, variations and a tihāī landing on sam");
+        }
     }
 
     void testRhythmGenerator()
