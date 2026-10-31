@@ -44,11 +44,26 @@ of another note before the main one, is written small and raised before it: Ma b
 touch of Ga. A murki, a short, quick turn of three or four neighbouring notes, is shown by
 brackets around a note, and which notes it uses is left to the rāga and the performer.
 
+A Bhatkhande page sets out a composition (bandish) in rows of three for each line: the notes, the
+syllables of the text beneath them, and the tāla marks at the bottom. Vertical lines divide the
+page into the tāla's sections, four for tīntāl. Writing starts at the left edge even when the song
+begins mid-cycle, and the marks show where the cycle falls. A hyphen holds the previous note for
+another beat, and a sign like a large S (the avagraha, ऽ) holds the syllable. The reader is
+expected to know the tāla already, so the marks are few. Notation of this kind is for teaching
+and remembering, not for performing from: a performance is improvised, and printed compositions
+give a bare outline of the melody and leave ornaments to be learnt by ear. Websites and teachers
+adapt the system for typing, each in their own way. On Raag Hindustani, for instance, a
+spreadsheet column stands for each beat, a tilde stretches a vowel, and brackets mark grace notes.
+Staff versions usually put the tonic on C and use a key signature for the rāga's altered notes.
+Rāg Yaman, with its sharp Ma, takes one sharp, though it is not G major.
+
 - [Bhatkhande music notation](https://en.wikipedia.org/wiki/Bhatkhande_music_notation) and
   [Svara](https://en.wikipedia.org/wiki/Svara), Wikipedia.
 - Vishnu Narayan Bhatkhande, *Kramik Pustak Malika* (1913–37).
 - ["Bhatkhande Notation"](https://www.indianclassicalmusic.com/bhatkhande-notation-script),
   IndianClassicalMusic.com.
+- Sādhana, ["Notating Indian Classical Music"](https://raag-hindustani.com/Notation.html),
+  *Raag Hindustani* (2011).
 
 ## Carnatic swaras
 
