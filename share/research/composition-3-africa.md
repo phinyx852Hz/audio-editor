@@ -115,7 +115,7 @@ Sanders, writing in *New Grove*, sets aside an older idea that the word came fro
 Europe the technique belonged to the Notre Dame school of the 13th and early 14th centuries,
 first in sacred music and later in secular songs, where two upper voices traded notes and rests,
 usually on a vowel, as in the textless *In seculum* pieces. Later examples include Louis
-Andriessen's *Hoketus* (1976), split parts in drum corps, Andean siku panpipe pairs, Ukrainian
+Andriessen's *Hoketus*, split parts in drum corps, Andean siku panpipe pairs, Ukrainian
 and Russian kuvytsi and Lithuanian skudučiai panpipes, handbell choirs, Haitian rara and
 Dominican gagá bands, Javanese imbal, and guitar pairs that split one line between them.
 
@@ -132,4 +132,4 @@ their figures interlocking, then each figure varying within the cycle while the 
 - Ernest H. Sanders, "Hocket", in *The New Grove Dictionary of Music and Musicians*, 2nd ed.
   (Macmillan, 2001).
 - Robert Gottlieb, notes to *The Gumuz Tribe: Music of the Blue Nile Province*, Anthology of
-  African Music (Bärenreiter-Musicaphon, 1980).
+  African Music D8072 (1980).
