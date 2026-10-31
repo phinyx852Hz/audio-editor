@@ -130,6 +130,21 @@ taksim apart from free improvisation, he argues, is the makam, which it prepares
 that follow; it has been learned in the meşk tradition by listening, watching and repeating, and
 he proposes written template phrases, shown for Rast and Uşşak, as a guide for students.
 
+Güniz Alkaç's study (2025) of a Hicaz taksim on the kanun by Hasan Ferid Alnar, recorded in
+Berlin on a 1926–27 tour and about three and a half minutes long, gathers the history. The word,
+from Arabic *qism* (a part), appears in Ottoman writing from the early 17th century, according
+to Walter Feldman; Suphi Ezgi traced the form to gazels sung without metre; Cantemir has the
+singer open the vocal fasıl with a taksim; and only in the late 19th and early 20th centuries,
+helped by recording, did the word come to mean chiefly an instrumental improvisation, the vocal
+kind being called gazel instead. Recording also brought a new virtuosity, heard in Tanburi Cemil
+Bey, Alnar, Şerif Muhittin Targan and Yorgo Bacanos. Writers classify taksims as traditional,
+in three parts that keep to the makam's seyir, or free and modern, built around its central
+notes rather than its customary path; İhsan Özgen calls the latter "romantic", composed around
+an idea and changing mood, rhythm and dynamics within one taksim. Alnar's Hicaz taksim falls
+into four sections, an introduction ending on the tonic, two developments and a conclusion, and
+Alkaç notates its kanun techniques: flicks of the left hand, vibrato from the tuning levers,
+unmeasured tremolo on one string or in octaves, appoggiaturas, accents, glissandi and trills.
+
 A waṣla (plural waṣalāt) is a suite of eight or more pieces, usually in one maqām, that joins
 improvisation with composed forms. Instrumental pieces such as the bashraf, the dūlāb and the
 samāʿī open it; the samāʿī has four sections (khānāt) with a recurring refrain (taslīm), in a
@@ -162,6 +177,10 @@ qafla, then a waṣla of a samāʿī with its taslīm and a muwashshaḥ.
 - Halil Altınköprü, ["Geleneksel Türk sanat müziğinde taksim icrasını geliştirmeye yönelik
   öneriler: Rast ve Uşşak makamı örneği"](https://doi.org/10.51576/ymd.1352559), *Yegah Müzikoloji
   Dergisi* 6/2 (2023), in Turkish.
+- Güniz Alkaç, ["Taksim practice in Turkish music qanun education: An example of Hicaz Taksim
+  by Hasan Ferid Alnar"](https://doi.org/10.12975/rastmd.20251342), *Rast Müzikoloji Dergisi*
+  13/4 (2025).
+- Walter Feldman, *Music of the Ottoman Court* (VWB, 1996).
 - Johnny Farraj, [Improvised forms](https://maqamworld.com/en/form/improv.php) and
   [vocal composed forms](https://maqamworld.com/en/form/vocal_comp.php), *Maqam World*, with
   recorded examples.
