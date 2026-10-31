@@ -42,6 +42,7 @@ jobs:
           cd packaging/arch
           sudo -u builder PHI_BUILD_DIR="$GITHUB_WORKSPACE/build" PHI_PKGVER="$pkgver" PKGEXT=.pkg.tar.zst makepkg -p ci.PKGBUILD --nodeps
           pacman -Qlp phi-*.pkg.tar.zst | grep -E 'bin/|applications/|icons/'
+          ! pacman -Qlp phi-*.pkg.tar.zst | grep JUCE
       - uses: actions/upload-artifact@v4
         with:
           name: phi-arch-package
@@ -95,6 +96,7 @@ jobs:
           version=$(sed -n 's/^project(Phi VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
           if [ "$GITHUB_REF_TYPE" = tag ]; then export LINUXDEPLOY_OUTPUT_VERSION=${GITHUB_REF_NAME#v}; else export LINUXDEPLOY_OUTPUT_VERSION=$version-${GITHUB_SHA::7}; fi
           DESTDIR="$PWD/AppDir" cmake --install build
+          rm -rf AppDir/usr/{bin,include,lib/cmake}/JUCE-*  # JUCE's own install files; PHI needs none of them
           base=https://github.com/linuxdeploy
           wget -q $base/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage \
                   $base/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage

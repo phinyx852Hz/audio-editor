@@ -15,4 +15,6 @@ options=('!strip' '!debug')
 
 package() {
   DESTDIR="$pkgdir" cmake --install "$PHI_BUILD_DIR"
+  # JUCE installs its headers, CMake files and juceaide build helper too; PHI needs none of them
+  rm -rf "$pkgdir"/usr/{bin,include,lib/cmake}/JUCE-*
 }
