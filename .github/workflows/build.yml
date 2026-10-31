@@ -42,7 +42,7 @@ jobs:
           cd packaging/arch
           sudo -u builder PHI_BUILD_DIR="$GITHUB_WORKSPACE/build" PHI_PKGVER="$pkgver" PKGEXT=.pkg.tar.zst makepkg -p ci.PKGBUILD --nodeps
           pacman -Qlp phi-*.pkg.tar.zst | grep -E 'bin/|applications/|icons/'
-          ! pacman -Qlp phi-*.pkg.tar.zst | grep JUCE
+          ! pacman -Qlp phi-*.pkg.tar.zst | grep /JUCE-  # JUCE's headers and juceaide, not the plugins' JUCE licences
       - uses: actions/upload-artifact@v4
         with:
           name: phi-arch-package
