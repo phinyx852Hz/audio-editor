@@ -89,6 +89,21 @@ cycles, its layers and how its parts relate. All of them are in mixer/Compose.h,
 - **Radif and Dastgāh** (Persian). A pishdarāmad, then the gushe-hā from the darāmad to the owj,
   each on a higher shāhed with its own ist. Kereshmeh is in its 6/8 rhythm, and the forud returns
   home. The voice's phrases are answered by the tār (javāb). A chahārmezrāb and a reng close it.
+- **Bol Processor Grammar** (tablā qāʿida, Lucknow; after Bel and Kippen's Bol Processor). Bernard
+  Bel and Jim Kippen modelled tablā qāʿida with formal grammars in the Bol Processor. This method
+  works the same way, with weighted rewriting rules in subgrammars that run one after another.
+  Subgrammar 1 writes the theme's cells, a beat of four bols each. Subgrammar 2 writes the theme's
+  form, eight cells ending on its cadence (for example A B A C A B D K). Subgrammar 3 writes each
+  variation from the theme's own cells by position. A variation is either a new first half followed
+  by the theme's second half as refrain, or two new halves followed by the whole theme. Its rules
+  use decremental weights (`<20-6>`), so a rule that has been used becomes less likely the next
+  time. Subgrammar 4 writes the tihāī. Every statement is played bharī (open) and then khālī. In
+  the khālī half the bāyāṅ's resonance is taken away (dha becomes ta, dhin tin, ge ke), and the
+  last two cells open again to lead back to sam. In tīntāl an eight-beat statement and its khālī
+  fill one cycle, so the khālī falls on beat 9. The last cycle plays the theme and then a tihāī of
+  33 bols from beat 9, whose last dha lands on sam. A lehrā repeats its nagma each cycle, with the
+  tānpūrā beneath. The rule engine is our own code written from the published descriptions. None
+  of the Bol Processor's code is used.
 
 ### East and Southeast Asia
 
@@ -117,6 +132,21 @@ cycles, its layers and how its parts relate. All of them are in mixer/Compose.h,
 - **Hocket and Interlocking** (Banda-Linda horns, Aka; Arom). A cyclic melody of 24 pulses is shared
   out note by note, one pitch a player, one player a pulse. Then each figure varies while the
   melody stays.
+- **Interlocking Polyphony** (Mbuti and Aka singing, Central African rainforest). This is the other
+  way to make interlocking music. Hocket shares out a melody that already exists. Here each voice
+  sings a short figure of its own, and the melody is what the figures make together. All the
+  figures fit one period of 24 pulses, but their lengths differ (24, 12, 8 or 6 pulses). Each voice
+  places its notes in the pulses the voices before it leave empty. They still overlap in places,
+  which gives simultaneous polyphony. The leader and two other voices yodel, moving between a chest
+  note and a head note a sixth to an octave above. The pitches are the mode's degrees nearest an
+  anhemitonic pentatonic. The leader begins alone and the voices enter one by one. Then each voice
+  now and then varies its own figure (a note moved to an empty pulse, or sung a step away), and the
+  ensemble holds together. The voices then leave, the leader last. An eighth part claps.
+
+  This models the principle (Arom on the Aka; Fürniss on Aka yodel and polyphony). It is not a
+  transcription of Mbuti music. Interlocking short figures are not the same as strict alternation
+  of one melody, so this method and Hocket and Interlocking are kept separate. For the music itself, hear Turnbull and Chapman's Ituri recordings, *Mbuti Pygmies of
+  the Ituri Rainforest* (Smithsonian Folkways).
 - **Congolese Guitar: Rumba and Sebene** (Congolese rumba and soukous, Kinshasa and Brazzaville).
   Three guitars interlock on a short cycle of I, IV and V, built on the mode's own degrees. The
   accompagnement repeats a figure that arpeggiates each chord. The mi-solo plays only in its gaps,
@@ -143,5 +173,8 @@ Formalized Music, Pritchett on Cage, Reich's "Music as a Gradual Process", Hilli
 Fineberg on spectral music. For Asia and Africa: Jairazbhoy, Bor and Clayton (rāga); Marcus, Racy
 and Touma (maqām); During, Nettl and Farhat (radif); Becker, Sumarsam and Pickvance (gamelan);
 Zeami, Malm and Garfias (gagaku); Howard and Provine (sanjo); Witzleben, Lau and Jones (Chinese);
-Locke and Agawu (Ewe); Arom (Central African polyphony); and Stewart, White and Eyre (Congolese
-rumba). No other program's code is used.
+Locke and Agawu (Ewe); Arom, Fürniss, Kisliuk and Turnbull (Central African polyphony and Mbuti and
+Aka singing); Stewart, White and Eyre (Congolese rumba); and Kippen and Bel (the tablā qāʿida and
+the Bol Processor's grammars). No other program's code is used. The Bol Processor Grammar method
+follows the Bol Processor's ideas, its weighted and decremental rules and its subgrammars, from Bel
+and Kippen's papers.
