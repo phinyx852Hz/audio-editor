@@ -173,7 +173,13 @@ Andalusian nūba. From the 1930s the long solo song (ughniyya) displaced it in E
 concert life (Marcus 1993).
 
 *In PHI*: a taqsīm through the maqām's ajnās (default Rast) to the jawāb, a modulation and a
-qafla, then a waṣla of a samāʿī with its taslīm and a muwashshaḥ.
+qafla, then a waṣla of a samāʿī with its taslīm, a layālī and a muwashshaḥ. Following Nettl and
+Riddle and Marcus:
+- the taqsīm's sections grow longer, with the longest and the modulation in the second half;
+- each section opens on a set figure (a rising fourth or three falling notes) and closes on a
+  qafla of three falling notes and a silence;
+- the drone sounds early, in broken strokes, then stops;
+- the line moves from a near-metre to free rhythm.
 
 - [Taqsim](https://en.wikipedia.org/wiki/Taqsim),
   [Waslah](https://en.wikipedia.org/wiki/Waslah),
