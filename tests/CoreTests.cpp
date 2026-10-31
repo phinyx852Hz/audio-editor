@@ -5127,7 +5127,7 @@ namespace
             s.ceilingDb = -1.0;
             l.prepare (rate, 2);
             l.set (s);
-            check (l.latency() == (int) std::lround (phi::Limiter::lookaheadMs * rate / 1000.0) + 6, "phi limiter latency");
+            check (l.latency() == (int) std::lround (phi::Limiter::lookaheadMs * rate / 1000.0) + phi::TruePeak::delay, "phi limiter latency");
             std::mt19937 random (5);
             std::normal_distribution<float> gauss (0.0f, 0.3f);
             std::vector<float> a ((size_t) rate), b ((size_t) rate);
