@@ -158,8 +158,49 @@ groups of four (gatra) with symbols over them for the gong, kenong, kempul and k
 It records only the skeleton; the elaborating parts are improvised from it within each
 instrument's idiom.
 
+It grew from the Galin-Paris-Chevé number system that missionaries brought for hymns, and it
+displaced several Javanese notations of the same years, which were first meant for archives
+rather than for playing. A dot above a number raises it an octave, and two dots raise it two; a
+dot below lowers it. The numbers are names, not Western degrees. Sléndro can sound roughly like
+do re mi sol la, but pélog is just numbered from low to high, and its 4 and 7 act like
+accidentals: 4 as a raised 3 or a lowered 5, 7 as a lowered 1, depending on the pathet.
+
+Every number lasts one beat unless marked. A line over notes halves them, though this is often
+written loosely. A dot standing in for a number holds the previous note; it is not a rest. Only
+vocal parts write rests, as 0, since the instruments play on through. Gong strokes have marks
+that vary from book to book, and one common set is:
+- a circle for gong ageng, brackets for gong suwukan;
+- ^ for kenong, ˇ for kempul;
+- + for kethuk, – for kempyang.
+
+They are often left out, since the form implies them. Sundanese notation runs the other way: 1
+is the highest note, and a dot above lowers the octave.
+
+There are older scripts too. Surakarta's set the balungan on a horizontal staff, with a wavy
+line for the singer's free rhythm, and Yogyakarta's "chequered" notation used a ladder-like
+vertical staff with dots for the balungan and signs for the main drum strokes. Staff
+transcriptions are common in scholarship. They fit poorly, because the heaviest beat in
+gamelan is the last of each group of four, not the first. In the 1920s Walter Spies arranged
+gamelan pieces for piano at the Yogyakarta kraton.
+
+The notation moved onto computers through fonts that map signs to a US keyboard, such as a dot
+below on the key row below the numbers:
+- Kepatihan, by Carter Scholz (1987);
+- Matthew Arciniega's expanded font (1994), which Raymond Weisling made into KepatihanPro for
+  Windows (2000), now the standard;
+- the Yogyakarta kraton's Kridhamardawa (2020).
+
+SIL's Doulos SIL Cipher (2014) puts such signs at standard Unicode points and also covers
+jianpu.
+
 - [Kepatihan](https://en.wikipedia.org/wiki/Kepatihan) and
   [Balungan](https://en.wikipedia.org/wiki/Balungan), Wikipedia.
+- Jennifer Lindsay, *Javanese Gamelan* (Oxford University Press, 1992), pp. 43–45.
+- Sumarsam, *Gamelan: Cultural Interaction and Musical Development in Central Java* (University of
+  Chicago Press, 1995).
+- Ethan Schwartz, "Chains, Ladders, Ciphers, and Glyphs: The Development and Standardization of
+  Central Javanese Gamelan Notation".
+- Benjamin Brinner, *Music in Central Java* (Oxford University Press, 2007).
 
 ## Jeongganbo (Korean)
 
