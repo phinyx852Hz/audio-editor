@@ -2,6 +2,7 @@
 Research > Acoustic Ecology > Composers (owner, 2026-10-31): those who composed from Schafer's
 ideas, the forerunners they drew on, and the projects of listening, recording and sound-mapping
 that carry acoustic ecology on today. Schafer himself is in ecology-0-schafer.md.
+The John Cage entry was checked against Wikipedia's John Cage article, pasted by the owner.
 
 Written from memory: Wikipedia could not be reached from the session that wrote this, so the
 links were not opened then and dates and titles should be checked against them.
@@ -16,8 +17,8 @@ music. Luigi Russolo's manifesto *The Art of Noises* (1913) called for a music o
 noises and built intonarumori to make them. Pierre Schaeffer's musique concrète (from 1948)
 composed with recorded sounds, and his idea of reduced listening, hearing a sound for itself
 apart from its source, is the opposite pole to Schafer's, who wanted sounds heard in their
-place. John Cage's *4′33″* (1952) framed the sounds of the room as the piece; for Schafer it
-was the founding gesture, opening music's frame to the whole soundscape.
+place. John Cage's *4′33″* (1952) framed the sounds of the room as the piece (the next
+entry).
 
 Luc Ferrari's *Presque rien no. 1, ou Le lever du jour au bord de la mer* (1967–70), a
 morning on a beach in Yugoslavia compressed into twenty minutes with almost no
@@ -31,6 +32,31 @@ drone beneath a subway grating. Annea Lockwood and Pauline Oliveros began in the
   [Luc Ferrari](https://en.wikipedia.org/wiki/Luc_Ferrari) and
   [Max Neuhaus](https://en.wikipedia.org/wiki/Max_Neuhaus), Wikipedia.
 - Brandon LaBelle, *Background Noise: Perspectives on Sound Art* (Continuum, 2006).
+
+## John Cage
+
+John Cage (1912–1992), an American composer, visual artist and music theorist, opened music
+to the sounds of the environment more than anyone before Schafer. A student of Henry Cowell
+and Arnold Schoenberg, he drew his main influences from Indian philosophy and Zen Buddhism,
+which he studied in the late 1940s (attending D. T. Suzuki's lectures), and from 1951
+composed by chance with the *I Ching*. In "Experimental Music" (1957) he called music "a
+purposeless play", "simply a way of waking up to the very life we're living".
+
+His *4′33″* (1952), premiered by David Tudor at Woodstock, New York, on 29 August 1952, asks
+the performer not to play for its whole length: its content is the sound of the environment
+the audience hears. For acoustic ecology it is the founding gesture, the frame of music
+opened to the whole soundscape. Around it stand *Imaginary Landscape No. 4* (1951) for twelve
+radios, *Williams Mix* (1952–53) for eight magnetic tapes, *Child of Tree* (1975) and
+*Branches* (1976), played on plants such as cactus, *Inlets* (1977) on water-filled conch
+shells, and *Roaratorio* (1979), which sets his text on *Finnegans Wake* among field
+recordings made around Ireland. He was also an amateur mycologist and a co-founder of the New
+York Mycological Society. His lectures are collected in *Silence* (1961); he received the
+Kyoto Prize in 1989.
+
+- [John Cage](https://en.wikipedia.org/wiki/John_Cage) and
+  [4′33″](https://en.wikipedia.org/wiki/4%E2%80%B233%E2%80%B3), Wikipedia (checked from the
+  page the owner pasted, 2026-10-31).
+- John Cage, *Silence: Lectures and Writings* (Wesleyan University Press, 1961).
 
 ## Soundscape composition
 
