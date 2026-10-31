@@ -109,14 +109,36 @@ upper voices that repeat taleae of their own, with hockets at the joins.
 
 ## Species counterpoint
 
-Counterpoint is the art of writing independent voices that sound well together. Species
-counterpoint teaches it in five steps against a given melody, the cantus firmus: note against
-note (first species), two notes against one (second), four against one (third), syncopations
-across the beat, where dissonance is prepared and resolved (fourth), and a free mixture of
-them all (fifth, florid). Johann Joseph Fux codified the method in *Gradus ad Parnassum*
-(Vienna, 1725), a Latin dialogue between a master, Aloysius (for Palestrina), and his pupil
-Josephus, and it has taught composers ever since, Haydn, Mozart and Beethoven among them.
-Knud Jeppesen's *Counterpoint* (1931) refined it on the evidence of Palestrina's own music.
+Counterpoint (from Latin *punctus contra punctum*, "point against point", that is, note against
+note) is the relationship between voices that depend on each other harmonically but are
+independent in rhythm and contour. Its first concern is that each line stays itself: voices
+moving in parallel perfect intervals fuse into one sound, as an organ's mixture stops do, which
+is why counterpoint forbids parallel fifths and octaves.
+
+Species counterpoint teaches it in five steps against a given melody, the cantus firmus: note
+against note (first species), two notes against one (second), four against one (third),
+notes tied over the beat as suspensions, where dissonance is prepared and resolved (fourth),
+and a free mixture of all four (fifth, florid). The idea goes back at least to Giovanni Maria
+Lanfranco's *Scintille di musica* (1533) and Gioseffo Zarlino's *Le istitutioni harmoniche*
+(1558), and Lodovico Zacconi first set it out systematically in *Prattica di musica* (1619).
+Johann Joseph Fux gave it its lasting form in *Gradus ad Parnassum* (Vienna, 1725), a Latin
+dialogue between a master, Aloysius (for Palestrina), and his pupil Josephus; Mozart, Beethoven
+and Schumann still learned strict counterpoint this way, and free counterpoint was not widely
+taught until the late 19th century. The rules include beginning and ending on a perfect
+consonance, approaching perfect consonances only by contrary or oblique motion, preferring
+contrary motion, avoiding hidden fifths and octaves, giving each line one high point, and
+following a leap with a step the other way. Third species adds the nota cambiata and double
+neighbour and passing figures. Knud Jeppesen's *Counterpoint* (1931) refined the method on the
+evidence of Palestrina's own music.
+
+Later practice loosened or inverted it. Free counterpoint, from the Baroque on, admits
+chromaticism, sevenths and accented dissonance. Linear counterpoint, a neoclassical idea first
+heard in Stravinsky's Octet (1923), lets the lines run with little regard for the chords they
+make. Charles Seeger's dissonant counterpoint (1930) reversed the rules, dissonance the norm and
+consonance to be resolved, and was taken up by Ruth Crawford Seeger, Carl Ruggles, Henry Cowell,
+John Cage and Lou Harrison among others. Sergei Taneyev's *Invertible Counterpoint* (1909)
+treated the exchange of voices algebraically, and Guerino Mazzola has given the ban on parallel
+fifths a mathematical model.
 
 *In PHI*: Compose > Species Counterpoint writes against the MIDI clip shown in the mixer, or a
 cantus firmus written by Fux's rules, each species in turn, in the Mode menu's mode.
@@ -126,7 +148,11 @@ cantus firmus written by Fux's rules, each species in turn, in the Mode menu's m
 - Johann Joseph Fux, *Gradus ad Parnassum* (1725); *The Study of Counterpoint*, trans. Alfred
   Mann (Norton, 1965).
 - Knud Jeppesen, *Counterpoint: The Polyphonic Vocal Style of the Sixteenth Century* (1931;
-  Prentice-Hall, 1939).
+  Prentice-Hall, 1939; Dover, 1992).
+- Kent Kennan, *Counterpoint* (4th ed., Prentice-Hall, 1999).
+- Charles Seeger, "On Dissonant Counterpoint", *Modern Music* 7/4 (1930).
+- Octavio Agustín-Aquino, Julien Junod and Guerino Mazzola, *Computational Counterpoint
+  Worlds* (Springer, 2015).
 
 ## Fugue
 
