@@ -100,6 +100,18 @@ meet in one shape. Spread 7 notes as evenly as possible through the 12 semitones
 diatonic scale, whose steps (2 2 1 2 2 2 1, in some rotation) follow the same pattern as E(7,12),
 the Ewe bell.
 
+Toussaint found the link in 2004, two years into studying rhythm mathematically: the two
+numbers fed to Euclid's procedure (*Elements* VII.1–2) become the counts of sounded and silent
+pulses in a cycle. His later papers went further:
+- **What makes a "good" timeline:** why the son clave spread so widely, measured by features
+  such as evenness and off-beatness.
+- **Families of African ternary bell patterns:** classified and drawn as family trees.
+- **The swap distance:** the number of swaps of a neighbouring note and rest needed to turn one
+  rhythm into another, with a fast algorithm by Toussaint and Justin Colannino.
+- **Flamenco compás (2004–05):** with Spanish colleagues, he used the swap distance to build a
+  family tree of the flamenco metres. It placed the fandango, traditionally held to be the
+  oldest and to come from Huelva, at the root.
+
 *In PHI*: Compose > Rhythm Generator writes drum lanes, each a Euclidean rhythm (or a written
 pattern, or a Xenakis sieve as a mask) of its own length, with a chance for each hit, humanized
 loudness and timing, and rules: a fill every few bars, a rising or falling density, skipped
@@ -112,5 +124,11 @@ same groove.
 - Benjamin Wardhaugh, ["Music and Euclid's algorithm"](https://plus.maths.org/os/issue40/features/wardhaugh/index),
   *Plus Magazine* (University of Cambridge, 2006).
 - Godfried Toussaint, "The Euclidean Algorithm Generates Traditional Musical Rhythms",
-  *Proceedings of BRIDGES* (Banff, 2005), pp. 47–56, and *The Geometry of Musical Rhythm* (CRC Press, 2013;
-  2nd ed. 2019).
+  *Proceedings of BRIDGES* (Banff, 2005), pp. 47–56
+  ([PDF](https://cgm.cs.mcgill.ca/~godfried/publications/banff.pdf)); "The rhythm that conquered
+  the world: What makes a 'good' rhythm good", *Percussive Notes* (November 2011), pp. 52–59;
+  "Classification and phylogenetic analysis of African ternary rhythm timelines", *BRIDGES*
+  (Granada, 2003); with J.-M. Díaz-Báñez et al., "El compás flamenco: a phylogenetic analysis",
+  *BRIDGES* (Winfield, 2004), pp. 61–70; and *The Geometry of Musical Rhythm* (CRC Press, 2013;
+  2nd ed. 2019). His publications on rhythm are listed on his
+  [Comparative Musicology page](https://cgm.cs.mcgill.ca/~godfried/rhythm-and-mathematics.html).
