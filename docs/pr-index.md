@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**120 pull requests:** 109 merged, 11 open.
+**122 pull requests:** 109 merged, 13 open.
 
 ## Contents
 
@@ -197,6 +197,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#86](https://github.com/phinyx852Hz/audio-editor/pull/86) | Compose menu: every compositional method in PHI, plus 15 more from Western and other traditions | merged |  | `Source/mixer/Compose.cpp`<br>`Source/ui/ComposeSection.cpp`<br>`docs/compose.md` |
 | [#109](https://github.com/phinyx852Hz/audio-editor/pull/109) | Window opacity keys work from every window and any focus | open |  | `Source/ui/PanelNavigation.cpp`<br>`README.md` |
 | [#117](https://github.com/phinyx852Hz/audio-editor/pull/117) | UI fixes: Alt+menu letters, strip hover, Find panel width, Interface Size | open | Options > Interface Size | `Source/ui/ToolsSection.cpp`<br>`Source/ui/InterfaceSize.h`<br>`Source/ui/PanelNavigation.cpp` |
+| [#122](https://github.com/phinyx852Hz/audio-editor/pull/122) | Research: add Engineering, the audio engineering behind PHI's menus | open |  | `share/research/engineering-1-analysis-meters.md`<br>`share/research/engineering-4-process.md`<br>`share/research/engineering-6-restoration.md` |
 
 ### Documentation
 
@@ -219,6 +220,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#112](https://github.com/phinyx852Hz/audio-editor/pull/112) | Cut idle CPU, and add Options > Wallpaper | open |  | `Source/ui/VisualizerSection.cpp`<br>`Source/ui/Wallpaper.cpp`<br>`Source/ui/MixerWindow.cpp` |
 | [#114](https://github.com/phinyx852Hz/audio-editor/pull/114) | Build an Arch package and an AppImage in CI | open |  | `.github/workflows/build.yml`<br>`packaging/arch/ci.PKGBUILD`<br>`packaging/arch/PKGBUILD` |
 | [#120](https://github.com/phinyx852Hz/audio-editor/pull/120) | Research: add a Metadata section | open |  | `share/research/metadata.md` |
+| [#121](https://github.com/phinyx852Hz/audio-editor/pull/121) | Research: open source, licensing, copyright and Creative Commons | open | Licensing › Software | `share/research/licensing.md` |
 
 ## By number
 
@@ -344,3 +346,5 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#118](https://github.com/phinyx852Hz/audio-editor/pull/118) | MIDI editor: Ableton-style note keys and mouse gestures | Ctrl+D and Ctrl+A did nothing in the MIDI editor docked in the main window. *(auto)* | open | 2026-10-31 | Editing and warping |
 | [#119](https://github.com/phinyx852Hz/audio-editor/pull/119) | Closing the main editor's MIDI editor stops playback and offers to save | MidiPanel::closing(): stops the editor's playback and recording (new MidiEditor::stop()). *(auto)* | open | 2026-10-31 | Editing and warping |
 | [#120](https://github.com/phinyx852Hz/audio-editor/pull/120) | Research: add a Metadata section | Adds share/research/metadata.md, which the Research menu picks up as a new Metadata submenu (no code changes; every .md in the folder is read). *(auto)* | open | 2026-10-31 | Not yet sorted |
+| [#121](https://github.com/phinyx852Hz/audio-editor/pull/121) | Research: open source, licensing, copyright and Creative Commons | Adds a Licensing group to the Research menu, as one new file, share/research/licensing.md. *(auto)* | open | 2026-10-31 | Not yet sorted |
+| [#122](https://github.com/phinyx852Hz/audio-editor/pull/122) | Research: add Engineering, the audio engineering behind PHI's menus | Adds an Engineering submenu to Research. *(auto)* | open | 2026-10-31 | Interface and branding |
