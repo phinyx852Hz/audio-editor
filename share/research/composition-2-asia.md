@@ -159,7 +159,16 @@ Aleppo's qudūd and popular songs. Ṣāliḥ ʿAbd al-Ḥayy's recording of *Le
 Rast through an ʿūd taqsīm, a samāʿī, a qānūn taqsīm, the samāʿī's taslīm again and a layālī
 before the song itself, a late example of the form. Ali Jihad Racy has described it as a compound
 form, a principle of linking pieces rather than a fixed order, and the word also names a section
-of a Sufi ceremony. It is the Egyptian and Levantine cousin of the Ottoman fasıl and the
+of a Sufi ceremony. A typical Egyptian order, never a fixed one, moves from composed instrumental
+music through freer improvisation to a long vocal close: an ʿūd taqsīm setting out the maqām, a
+dūlāb or samāʿī, a second taqsīm on violin or nāy, muwashshaḥāt, a qānūn taqsīm, the singer's
+layālī or mawwāl, and a dawr as the climax. Unity comes from the maqām, explored, left for nearby
+modes and regained, and from the contrast of free rhythm with the measured rhythmic cycles
+(īqāʿāt), not from themes or harmony. A waṣla could last about an hour, and an evening held
+several. The AMAR Foundation's *Durūb al-Nagham*, following Nidāʾ Abū Murād, reads it in three
+broad stages: the maqām presented in composed, metred pieces, then explored with growing
+improvisational freedom, then gathered up in an extended vocal performance. In Aleppo the waṣla
+leans on muwashshaḥāt and the lighter qudūd ḥalabiyya, which Jonathan Shannon has studied. It is the Egyptian and Levantine cousin of the Ottoman fasıl and the
 Andalusian nūba. From the 1930s the long solo song (ughniyya) displaced it in Egyptian
 concert life (Marcus 1993).
 
@@ -198,6 +207,13 @@ qafla, then a waṣla of a samāʿī with its taslīm and a muwashshaḥ.
   open access.
 - Ali Jihad Racy, "The Waslah: A Compound-Form Principle in Egyptian Music", *Arab Studies
   Quarterly* 5/4 (1983).
+- Jonathan H. Shannon, ["Al-Muwashshaḥāt and al-Qudūd al-Ḥalabiyya: Two Genres in the
+  Aleppine Waṣla"](https://doi.org/10.1017/S0026318400045454), *Middle East Studies Association
+  Bulletin* 37/1 (2003).
+- Amnon Shiloah, *Music in the World of Islam: A Socio-Cultural Study* (Wayne State University
+  Press, 1995), chapter 10, comparing the waṣla with the fasıl, the nūba and the Iraqi maqām.
+- AMAR Foundation, [*Durūb al-Nagham*: the waṣla](https://www.amar-foundation.org/021-the-wasla-1/),
+  with archival recordings.
 - Virginia Danielson, *The Voice of Egypt: Umm Kulthūm, Arabic Song, and Egyptian Society in
   the Twentieth Century* (University of Chicago Press, 1997).
 - Ali Jihad Racy, *Making Music in the Arab World* (Cambridge University Press, 2003).
