@@ -278,7 +278,14 @@ voice answered by the tār, a chahārmezrāb and a reng to close.
 
 ## Gamelan colotomic form
 
-Central Javanese gamelan pieces (gendhing) are built in cycles marked off by gongs, a structure
+Gamelan, from the Javanese *gamel*, to strike, is the gong-chime ensemble of Java, Sunda and Bali,
+inscribed by UNESCO in 2021. Musicians much like it already appear on the 8th-century reliefs of
+Borobudur, and the instruments took their present form under the Majapahit kingdom. Each
+gamelan is tuned as a set, to sléndro or pélog, and Colin McPhee remarked that tunings differ so
+much that there are as many scales as gamelans; in Bali paired instruments are tuned slightly
+apart so that their beating (ombak, "wave") shimmers. The music passed by ear; the courts of
+Yogyakarta and Surakarta wrote it down in the 19th century only to preserve it, and kepatihan
+cipher notation replaced their grid notation around 1900. Central Javanese gamelan pieces (gendhing) are built in cycles marked off by gongs, a structure
 called colotomic, a word Jaap Kunst coined from the Greek for a rhythmic unit and for cutting; it
 has since been applied to Japanese gagaku and Thai piphat too. The skeletal melody, the balungan, is grouped in gatra of
 four beats whose last note, the seleh, is the goal. The large gong ends each cycle (gongan);
@@ -312,19 +319,34 @@ as densely in irama II, with a buka and a suwuk.
 - Sumarsam, *Gamelan: Cultural Interaction and Musical Development in Central Java*
   (University of Chicago Press, 1995).
 - Richard Pickvance, *A Gamelan Manual* (Jaman Mas, 2005).
+- Colin McPhee, *Music in Bali* (Yale University Press, 1966).
 - Jennifer Lindsay, *Javanese Gamelan* (Oxford University Press, 1992).
 - Neil Sorrell, *A Guide to the Gamelan* (Faber, 1990).
 
 ## Jo-ha-kyū
 
-Jo-ha-kyū is a Japanese principle of tempo and form: jo, a slow beginning; ha, a "breaking"
-that develops and quickens; kyū, a rapid close. It comes from gagaku, the court music, where a
-suite opens with an unmetred prelude (netori) and pieces accelerate, and Zeami (c. 1363–1443)
-made it the rule of nō, applying it to a day's programme, to a play and to each phrase within
-it, so that every part also quickens within itself. In the gagaku ensemble the ryūteki flute
-and hichiriki oboe play the melody in heterophony, the shō mouth organ holds tone clusters
-(aitake), the koto and biwa mark the beats with patterns, and the kakko, taiko and shōko drums
-keep the cycle.
+Jo-ha-kyū ("beginning, break, rapid") is a Japanese principle of tempo and form: everything
+should begin slowly, gather speed and end swiftly. It came from the way gagaku, the court music,
+was described, where a suite opens with an unmetred prelude (netori) and pieces accelerate, and
+spread to the tea ceremony, the martial arts, linked verse (Nijō Yoshimoto required it for renga
+in 1356) and above all the theatre. Zeami (c. 1363–1443) treated it as the pattern of all motion
+and made it the rule of nō, applied to a day's programme, to a play and to each action within it,
+so that every part also quickens within itself. His ideal play in *Sandō* has five sections
+(dan): an auspicious, slow jo; three of ha building tension, the climax in the third; and a
+quick kyū returning to calm. Jōruri and kabuki kept the five-act plan, which the chanter
+Takemoto Gidayū described as love, battle, a tragic climax, a journey of song and dance (michiyuki)
+and a swift, happy end. Gagaku ("elegant music"), named for the court music bureau founded in 701 and settled in
+form by the 10th century, joins native song and dance with music from Tang China and from Korea,
+grouped as music of the left (tōgaku) and of the right (komagaku, which survives only as dance).
+It is played as kangen, concert music, as bugaku, dance music without strings, and as sung
+poetry, mostly on the pentatonic yo scale. Every player plays the one melody from memory, each in
+an instrument's own version, in eight distinct parts: the hichiriki oboe leads, bending the line
+with microtones; the ryūteki flute varies it higher up; the shō mouth organ simplifies it under
+chords of five or six notes (aitake); the biwa adds single notes and chords and the koto
+repeated patterns; the taiko gives each phrase its main accent, the shōko gong supports, and the
+kakko drum leads the ensemble and sets the changes of tempo. Henry Cowell, Messiaen (*Sept
+haïkaï*, 1962), Britten (*Curlew River*, 1964), Takemitsu and La Monte Young's drones all drew
+on it.
 
 *In PHI*: jo, an unmetred netori; ha, metred and quickening; kyū, fast to a sudden close; with the
 gagaku layers (default mode Hyōjō).
@@ -333,6 +355,10 @@ gagaku layers (default mode Hyōjō).
   [Gagaku](https://en.wikipedia.org/wiki/Gagaku) and
   [Zeami Motokiyo](https://en.wikipedia.org/wiki/Zeami_Motokiyo), Wikipedia.
 - William P. Malm, *Traditional Japanese Music and Musical Instruments* (Kodansha, 2000).
+- Shelley Fenno Quinn, "How to Write a Noh Play: Zeami's *Sandō*", *Monumenta Nipponica* 48/1
+  (1993).
+- J. Thomas Rimer and Yamazaki Masakazu (trans.), *On the Art of the Nō Drama: The Major Treatises
+  of Zeami* (Princeton University Press, 1984).
 - Robert Garfias, *Music of a Thousand Autumns: The Tōgaku Style of Japanese Court Music*
   (University of California Press, 1975).
 
