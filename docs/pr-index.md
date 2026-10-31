@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**119 pull requests:** 109 merged, 10 open.
+**120 pull requests:** 109 merged, 11 open.
 
 ## Contents
 
@@ -218,6 +218,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#99](https://github.com/phinyx852Hz/audio-editor/pull/99) | File > New Project (Ctrl+N); start on a blank project and ask to save on quit | merged | File > New Project | `Source/ui/MixerWindow.cpp`<br>`Source/ui/MainWindow.cpp`<br>`Source/ui/ProjectSection.cpp` |
 | [#112](https://github.com/phinyx852Hz/audio-editor/pull/112) | Cut idle CPU, and add Options > Wallpaper | open |  | `Source/ui/VisualizerSection.cpp`<br>`Source/ui/Wallpaper.cpp`<br>`Source/ui/MixerWindow.cpp` |
 | [#114](https://github.com/phinyx852Hz/audio-editor/pull/114) | Build an Arch package and an AppImage in CI | open |  | `.github/workflows/build.yml`<br>`packaging/arch/ci.PKGBUILD`<br>`packaging/arch/PKGBUILD` |
+| [#120](https://github.com/phinyx852Hz/audio-editor/pull/120) | Research: add a Metadata section | open |  | `share/research/metadata.md` |
 
 ## By number
 
@@ -342,3 +343,4 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#117](https://github.com/phinyx852Hz/audio-editor/pull/117) | UI fixes: Alt+menu letters, strip hover, Find panel width, Interface Size | Alt+O (and every Alt+menu letter) opens the menu right away. *(auto)* | open | 2026-10-31 | Interface and branding |
 | [#118](https://github.com/phinyx852Hz/audio-editor/pull/118) | MIDI editor: Ableton-style note keys and mouse gestures | Ctrl+D and Ctrl+A did nothing in the MIDI editor docked in the main window. *(auto)* | open | 2026-10-31 | Editing and warping |
 | [#119](https://github.com/phinyx852Hz/audio-editor/pull/119) | Closing the main editor's MIDI editor stops playback and offers to save | MidiPanel::closing(): stops the editor's playback and recording (new MidiEditor::stop()). *(auto)* | open | 2026-10-31 | Editing and warping |
+| [#120](https://github.com/phinyx852Hz/audio-editor/pull/120) | Research: add a Metadata section | Adds share/research/metadata.md, which the Research menu picks up as a new Metadata submenu (no code changes; every .md in the folder is read). *(auto)* | open | 2026-10-31 | Not yet sorted |
