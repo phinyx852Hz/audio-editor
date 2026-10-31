@@ -115,9 +115,12 @@ lines, in leap-year calendars and in the Sturmian words of combinatorics.
 Demaine and others proved that the Euclidean rhythms and their rotations are exactly the
 maximally even rhythms, in Clough and Douthett's sense (1991), and the complement of one is
 another. Long Indian tālas mostly fall outside: of the 35 sūlādi tālas only 4 are maximally even.
-Toussaint also notes a pattern in which kinds of Euclidean string are favoured where. The kinds
-built from steps of 1 and 2 turn up in Africa, those from steps of 2 and 3 only in Bulgaria, and
-a third kind is preferred in classical music and jazz but rare in African music.
+Toussaint also sorts them by a property from the study of strings, with a striking result:
+- **Euclidean strings:** the ones that are strings in this sense are the ones classical music and
+  jazz favour, and they are rare in Africa.
+- **Their reverses:** these are the most widely used.
+- **The rest:** these split by step sizes. Those of 1 and 2 are African, and those of 2 and 3 are
+  found only in Bulgaria.
 
 Viggo Brun, in a ten-minute lecture at the International Congress of Mathematicians (Stockholm,
 1962), went back to Euclid's own form of the algorithm. Aristotle called it antanairesis,
