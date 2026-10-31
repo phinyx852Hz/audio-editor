@@ -346,15 +346,46 @@ ad libitum, every part looping its own figure out of time until a cue.
 
 ## Process music and minimalism
 
-Minimal music builds pieces from repetition and slow, audible change. La Monte Young's long
-drones and Terry Riley's *In C* (1964), 53 figures each player repeats at will over a pulse,
-began it. Steve Reich found phasing in his tape pieces *It's Gonna Rain* (1965) and *Come Out*
-(1966), two loops of the same recording drifting apart, and carried it to live players in
-*Piano Phase* (1967); his essay "Music as a Gradual Process" (1968) asked for processes slow
-enough to hear happening. *Drumming* (1971) builds patterns up beat by beat. Philip Glass
-grew figures by additive and subtractive process, adding and removing notes in repeated
-cells, in *Music in Fifths* and *Music in Twelve Parts* (1971–74) and the opera *Einstein on
-the Beach* (1976).
+Minimal music makes a piece from few materials: repeated figures or a steady pulse, long drones,
+consonant harmony and change slow enough to follow. It does not tell a story or drive toward a
+goal; Leonard Meyer heard its sections simply following one another rather than leading on, and
+Timothy Johnson pointed to its unbroken textures of short interlocking patterns in place of long
+melodies. It began in the San Francisco Bay Area in the late 1950s and early 1960s, where La
+Monte Young, Terry Riley and Steve Reich were then working, and moved with them to New York's
+Downtown scene, at first called the "New York Hypnotic School". Moondog's static counterpoint
+over steady, often unusual metres in the 1940s and 1950s was taken seriously by Reich and Philip
+Glass, and some hear Sibelius as a forerunner.
+
+The first works were mostly sustained. Young's *Trio for Strings* (1958) is nearly all long
+tones and silences; Dennis Johnson's *November* (1959), about six hours of solo piano, already
+had diatonic harmony, repeated phrases and additive growth, and Young named it the source of his
+*The Well-Tuned Piano*. Riley brought in repetition with tape delay in *Mescalin Mix* (1960–62)
+and *The Gift* (1963), and in *In C* (1964) any group of players works through 53 short figures
+on one page, each repeating a figure as long as they choose; Keith Potter calls it the usual
+starting point of the style. Playing in its premiere led Reich to phasing, two identical loops
+at slightly different speeds drifting out of step, in the tape pieces *It's Gonna Rain* (1965)
+and *Come Out* (1966) and then for live players in *Piano Phase* (1967); his essay "Music as a
+Gradual Process" (1968) asked for processes slow enough to hear happening. From *1 + 1* (1968)
+Glass built works by additive process, a figure growing 1, 1 2, 1 2 3 and so on, in *Two Pages*,
+*Music in Fifths* and *Music in Contrary Motion*, then *Music in Twelve Parts* (1971–74) and the
+opera *Einstein on the Beach* (1976); he credited transcribing Ravi Shankar's film music with
+showing him time built up from small units rather than divided.
+
+Where the name came from is unsettled. Michael Nyman used "minimal music" in a review in *The
+Spectator* in 1968 and in *Experimental Music: Cage and Beyond* (1974); Tom Johnson, one of the
+few composers to call himself a minimalist, claimed it from his *Village Voice* column; and in
+1965 the art historian Barbara Rose had already counted Young's drones and Morton Feldman's
+quiet music as "minimal art". Critics from Boulez to Elliott Carter, who compared its
+repetition to propaganda and advertising, dismissed it; Reich answered that postwar America was
+not Vienna, and Kyle Gann sees in it the familiar swing back to simplicity after extreme
+complexity. Nyman noted that Reich's phasing produces patterns no one actually plays, so the
+music is less simple than it looks. In the 1980s it loosened into postminimalism and totalism,
+and in Europe Louis Andriessen, Gavin Bryars, Howard Skempton, Henryk Górecki and Arvo Pärt
+share its traits. In popular music John Cale carried Young's drones into the Velvet
+Underground, Riley's *A Rainbow in Curved Air* (1969) reached rock audiences, and The Orb's
+"Little Fluffy Clouds" (1990) samples Reich's *Electric Counterpoint* (1987). The Wikipedia
+article is flagged as containing original research, so its claims are best checked against
+Potter, Gann or Fink.
 
 *In PHI*: Compose > Europe and the Americas > Process Music runs phasing and build-up, additive
 and subtractive process and a pulse on a cell; Minimalize a Scene arranges the launcher's scene
@@ -367,35 +398,69 @@ at the cursor by the same processes.
 - Steve Reich, "Music as a Gradual Process" (1968), in *Writings on Music 1965–2000* (Oxford
   University Press, 2002).
 - Keith Potter, *Four Musical Minimalists* (Cambridge University Press, 2000).
+- Timothy A. Johnson, "Minimalism: Aesthetic, Style, or Technique?", *The Musical Quarterly*
+  78/4 (1994).
+- Robert Fink, *Repeating Ourselves: American Minimal Music as Cultural Practice* (University of
+  California Press, 2005).
+- Kyle Gann, "Reconstructing *November*", *American Music* 28/4 (2010).
 
 ## Tintinnabuli
 
-Tintinnabuli (Latin, "little bells") is the style Arvo Pärt arrived at in 1976, after years of
-near silence, with the piano piece *Für Alina*. It pairs two voices: an M-voice (melody) moving
-mostly by step around a central pitch, and a T-voice (tintinnabuli) that sounds only the notes
-of the tonic triad, each time the triad note nearest to the melody note above or below it by a
-fixed rule. Phrase lengths often follow the syllables of a text or grow by one note each time.
-*Cantus in Memory of Benjamin Britten* (1977) is a mensuration canon, each voice at half the
-speed of the one above and lower; *Fratres* and *Tabula rasa* (1977) and *Spiegel im Spiegel*
-(1978) followed.
+Tintinnabuli (from Latin *tintinnabulum*, a bell) is the style Arvo Pärt arrived at in 1976,
+after years of near silence spent with chant and early polyphony, in the piano piece *Für
+Alina*. It pairs two kinds of voice: a melodic voice (the M-voice) moving mostly by step, and a
+tintinnabuli voice (the T-voice) that sounds only the notes of the tonic triad, each time the
+triad note nearest the melody note above or below it by a fixed rule. Pärt likens the triad's
+three notes to bells, and says the two voices are really one, the melody and its accompaniment
+joined by an exact rule. Phrase lengths often follow the syllables of a text or grow by one note
+each time, and the music is usually slow and sparing. *Cantus in Memoriam Benjamin Britten*
+(1977) is a mensuration canon, each voice at half the speed of the one above and lower;
+*Fratres* and *Tabula rasa* (1977), *Spiegel im Spiegel* (1978), *Passio* (1982) and *Te Deum*
+(1985) followed, and the style is often grouped with the "holy minimalism" of Górecki and John
+Tavener.
 
 *In PHI*: an M-voice around a centre, phrases growing by a note, its T-voice, their mirror, a
 bell and a mensuration canon, each voice slower and lower.
 
-- [Tintinnabuli](https://en.wikipedia.org/wiki/Tintinnabuli) and
-  [Arvo Pärt](https://en.wikipedia.org/wiki/Arvo_P%C3%A4rt), Wikipedia.
-- Paul Hillier, *Arvo Pärt* (Oxford University Press, 1997).
+- [Tintinnabuli](https://en.wikipedia.org/wiki/Tintinnabuli),
+  [Arvo Pärt](https://en.wikipedia.org/wiki/Arvo_P%C3%A4rt) and
+  [Holy minimalism](https://en.wikipedia.org/wiki/Holy_minimalism), Wikipedia.
+- Paul Hillier, *Arvo Pärt* (Oxford Studies of Composers, Oxford University Press, 1997),
+  pp. 86–100 on the technique.
+- [Arvo Pärt Centre](https://www.arvopart.ee/en/), on tintinnabuli in Pärt's own words.
 
 ## Spectral music
 
-Spectral music takes its harmony and form from the analysis of sound itself, its spectrum of
-partials, as computers and the sonogram made it visible. Gérard Grisey and Tristan Murail, with
-Michaël Levinas and Roger Tessier, founded the group L'Itinéraire in Paris in 1973. Grisey's
-*Partiels* (1975), part of the cycle *Les Espaces acoustiques*, orchestrates the spectrum of a
-trombone's low E, each instrument a partial, and breathes between harmonic and inharmonic
-sound; Murail's *Gondwana* (1980) builds its chords by frequency modulation. The partials are
-not tempered, so the parts play in quarter tones and finer. Hugues Dufourt named the movement
-in 1979; Kaija Saariaho and Magnus Lindberg carried it on, and IRCAM's tools gave it analysis.
+Spectral music takes its harmony, orchestration and form from sound itself: the spectrum of
+partials that the sonogram and computer analysis made visible. Pitches come from the harmonic
+series, so the parts play in quarter tones and finer; in additive instrumental synthesis each
+instrument plays one partial of a sound so that together they fuse into a single timbre; and
+ring and frequency modulation, difference tones, residue pitch and other effects of
+psychoacoustics generate chords. Forms are processes that stretch time and pass smoothly from
+one state to another, harmonic to inharmonic, sound to noise. Grisey called it an attitude
+rather than a technique, and Murail an aesthetic rather than a style; several of its composers
+dislike the label.
+
+Debussy, Varèse, Scelsi, Messiaen, Ligeti, Xenakis, Young and Stockhausen (*Stimmung*, 1968)
+anticipated it, and Julian Anderson counts Per Nørgård's *Voyage into the Golden Screen* (1968)
+as the first instrumental piece composed this way. It became a movement in the 1970s, partly
+against serialism's focus on pitch. In Paris Gérard Grisey, Tristan Murail, Michaël Levinas and
+Roger Tessier founded the Ensemble l'Itinéraire in 1973, and IRCAM's analysis tools refined the
+methods; Scelsi's single-note pieces, *Quattro pezzi su una nota sola* (1959), were a strong
+influence. Grisey's *Partiels* (1975), part of the cycle *Les Espaces acoustiques*, orchestrates
+the spectrum of a trombone's low E; Murail's *Gondwana* (1980) builds its chords by frequency
+modulation; Hugues Dufourt, who named the movement *musique spectrale* in 1979, wrote *Saturne*
+(1978–79), and Claude Vivier *Lonely Child* (1980). Around Cologne the Feedback group of
+Stockhausen's students, Johannes Fritsch, Mesías Maiguashca, Péter Eötvös and Clarence Barlow
+among them, wrote more melodically within the spectrum. In Romania Corneliu Cezar, Ștefan
+Niculescu, Horațiu Rădulescu and Iancu Dumitrescu drew on the natural-harmonic scales of folk
+alphorns such as the bucium and tulnic and treated sound as a living, changing presence. In the
+United States James Tenney reached similar ideas on his own, in *Clang* and *Quintext* (1972).
+Later, Grisey (*Vortex Temporum*, 1994–96) and Murail admitted sharper contrasts and
+counterpoint, Kaija Saariaho, Magnus Lindberg, Jonathan Harvey, Julian Anderson and Georg
+Friedrich Haas (*in vain*, 2000) carried it on, and Steve Lehman brought it into jazz. The
+Istanbul Spectral Music Conference of 2003 proposed widening the term to any music that makes
+timbre structural.
 
 *In PHI*: the harmonic series of a low fundamental as the harmony, each part a partial in its own
 cents, each cycle an attack and its resonance, breathing from harmonic to inharmonic and back.
@@ -403,5 +468,11 @@ cents, each cycle an attack and its resonance, breathing from harmonic to inharm
 - [Spectral music](https://en.wikipedia.org/wiki/Spectral_music),
   [Gérard Grisey](https://en.wikipedia.org/wiki/G%C3%A9rard_Grisey) and
   [Tristan Murail](https://en.wikipedia.org/wiki/Tristan_Murail), Wikipedia.
-- Joshua Fineberg, "Guide to the Basic Concepts and Techniques of Spectral Music",
-  *Contemporary Music Review* 19/2 (2000).
+- Julian Anderson, "A Provisional History of Spectral Music", *Contemporary Music Review* 19/2
+  (2000).
+- Joshua Fineberg (ed.), *Spectral Music: History and Techniques*, *Contemporary Music Review*
+  19/2 (2000), with Fineberg's "Guide to the Basic Concepts and Techniques of Spectral Music".
+- François Rose, "Introduction to the Pitch Organization of French Spectral Music",
+  *Perspectives of New Music* 34/2 (1996).
+- Robert Wannamaker, "The Spectral Music of James Tenney", *Contemporary Music Review* 27/1
+  (2008).
