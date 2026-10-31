@@ -110,6 +110,22 @@ voice figure Herbie Hancock borrowed for the 1973 "Watermelon Man"), the Mbuti, 
 Bigwala gourd trumpets of Busoga in Uganda. Its article carries a request for more citations, so
 those names are a starting point rather than a settled list.
 
+Colin Turnbull's notes to his Ituri forest recordings of the 1950s, written in 1957–61, describe
+how the Mbuti do it. Each singer takes one or two notes and hoots them at the right moment, so the
+melody passes from voice to voice, note by note, and builds a harmony as it goes. Turnbull says
+this is used mainly in hunting and honey-gathering songs, sung on vowels, since the sound matters
+more than the words. In the elephant-hunting song a soloist gives the story and the chorus answers
+in this way, then the solo singer drops out and the hocket carries on. He describes the melodies
+as resting almost entirely on the dominant, with an occasional seventh, falling in shape, over a
+single chord, so the skill lies in improvising within narrow limits. The Mbuti also sing rounds
+(*rondisa*), stretching or shortening the phrase to suit the number of singers as it passes
+anticlockwise round the circle. They keep no drums of their own, a burden for people on the move,
+and borrow them from villagers; the beat comes from sticks struck together, split sticks called
+ngbengbe, and clapping. In her 1991 introduction to the reissue, Michelle Kisliuk notes that Alan
+Lomax used Mbuti hocketing as evidence that an egalitarian society makes an interlocking music,
+and that Charles Keil questioned the comparison. She also notes that hocketing and yodelling are
+shared across many forest peoples, while their repertoires differ a good deal.
+
 The name is French: *hoquet*, a hiccup or sudden catch, latinised as *hoquetus* or *ochetus*.
 Sanders, writing in *New Grove*, sets aside an older idea that the word came from Arabic. In
 Europe the technique belonged to the Notre Dame school of the 13th and early 14th centuries,
@@ -131,6 +147,9 @@ their figures interlocking, then each figure varying within the cycle while the 
 - Gerhard Kubik, *Theory of African Music* (University of Chicago Press, 1994–2010).
 - Ernest H. Sanders, "Hocket", in *The New Grove Dictionary of Music and Musicians*, 2nd ed.
   (Macmillan, 2001).
+- Colin Turnbull and Francis S. Chapman, *Mbuti Pygmies of the Ituri Rainforest*, notes by
+  Turnbull, introduction by Michelle Kisliuk (Smithsonian Folkways SF 40401, 1992; first issued
+  as Folkways FE 4457 and FE 4483, 1957–58).
 - Robert Gottlieb, notes to *The Gumuz Tribe: Music of the Blue Nile Province*, Anthology of
   African Music D8072 (1980).
 
