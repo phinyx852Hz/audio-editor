@@ -915,6 +915,16 @@ namespace
                "ixml: paths read");
         Tags again;
         check (ixml::read (ixml::write (t), again, error) && again == t, "ixml: round trip " + error);
+
+        // A BEXT copy is not written back (the bext chunk is the official one), and the
+        // bext loudness is repeated in iXML's own LOUDNESS object.
+        Tags b = t;
+        b["ixml:BEXT/BWF_ORIGINATOR"] = "Old";
+        b[tag::bwfLoudness] = "-23.00";
+        const auto x = ixml::write (b);
+        Tags back;
+        check (ixml::read (x, back, error) && back.count ("ixml:BEXT/BWF_ORIGINATOR") == 0 && back["ixml:LOUDNESS/LOUDNESS_VALUE"] == "-23.00",
+               "ixml: no stale BEXT copy, LOUDNESS from bext");
     }
 
     uint32_t le32 (const unsigned char* p) { return (uint32_t) p[0] | ((uint32_t) p[1] << 8) | ((uint32_t) p[2] << 16) | ((uint32_t) p[3] << 24); }

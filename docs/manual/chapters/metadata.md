@@ -19,7 +19,7 @@ The **Common** tab holds the fields every format shares: title, artist, album, a
 | ID3 | MP3 tags |
 | RIFF INFO | WAV's own tags |
 | Cart | AES46 radio cart chunk |
-| iXML | Production sound metadata |
+| iXML | Production sound metadata (iXML 2.0): scene, take and take type, speed and timecode, tracks, file set, location, the AFSI user fields, and a LOUDNESS copy of the bext loudness |
 | Vorbis comments | FLAC and Ogg tags |
 | MP4 atoms | M4A and MP4 tags |
 | APEv2 | WavPack and APE tags |

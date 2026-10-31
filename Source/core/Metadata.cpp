@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <initializer_list>
 #include <map>
 #include <set>
 
@@ -138,11 +139,12 @@ namespace
             .add ("PROJECT", "Project")
             .add ("SCENE", "Scene")
             .add ("TAKE", "Take")
+            .add ("TAKE_TYPE", "Take Type (comma-separated: DEFAULT, NO_GOOD, FALSE_START, WILD_TRACK, PICKUP, REHEARSAL...)")
             .add ("TAPE", "Tape")
             .add ("CIRCLED", "Circled (TRUE/FALSE)")
-            .add ("NO_GOOD", "No Good (TRUE/FALSE)")
-            .add ("FALSE_START", "False Start (TRUE/FALSE)")
-            .add ("WILD_TRACK", "Wild Track (TRUE/FALSE)")
+            .add ("NO_GOOD", "No Good (TRUE/FALSE; old, see Take Type)")
+            .add ("FALSE_START", "False Start (TRUE/FALSE; old, see Take Type)")
+            .add ("WILD_TRACK", "Wild Track (TRUE/FALSE; old, see Take Type)")
             .add ("FILE_UID", "File UID")
             .add ("UBITS", "User Bits")
             .add ("NOTE", "Note", {}, F::same, K::lines)
@@ -171,7 +173,22 @@ namespace
             .add ("LOCATION/LOCATION_ALTITUDE", "Location: Altitude")
             .add ("LOCATION/LOCATION_TYPE", "Location: Type")
             .add ("LOCATION/LOCATION_TIME", "Location: Time")
+            .add ("LOUDNESS/LOUDNESS_VALUE", "Loudness: Integrated (LUFS)")
+            .add ("LOUDNESS/LOUDNESS_RANGE", "Loudness: Range (LU)")
+            .add ("LOUDNESS/MAX_TRUE_PEAK_LEVEL", "Loudness: Max True Peak (dBTP)")
+            .add ("LOUDNESS/MAX_MOMENTARY_LOUDNESS", "Loudness: Max Momentary (LUFS)")
+            .add ("LOUDNESS/MAX_SHORT_TERM_LOUDNESS", "Loudness: Max Short-Term (LUFS)")
             .add ("USER", "User", {}, F::same, K::lines);
+        // iXML 2.0's USER fields, as AFSI recommends.
+        for (const auto& [id, label] : std::initializer_list<std::pair<const char*, const char*>> {
+                 { "FULL_TITLE", "Full Title" }, { "DIRECTOR_NAME", "Director" }, { "PRODUCTION_NAME", "Production" },
+                 { "PRODUCTION_ADDRESS", "Production Address" }, { "PRODUCTION_EMAIL", "Production Email" },
+                 { "PRODUCTION_PHONE", "Production Phone" }, { "PRODUCTION_NOTE", "Production Note" },
+                 { "SOUND_MIXER_NAME", "Sound Mixer" }, { "SOUND_MIXER_ADDRESS", "Sound Mixer Address" },
+                 { "SOUND_MIXER_EMAIL", "Sound Mixer Email" }, { "SOUND_MIXER_PHONE", "Sound Mixer Phone" },
+                 { "SOUND_MIXER_NOTE", "Sound Mixer Note" }, { "AUDIO_RECORDER_MODEL", "Recorder Model" },
+                 { "AUDIO_RECORDER_SERIAL_NUMBER", "Recorder Serial Number" }, { "AUDIO_RECORDER_FIRMWARE", "Recorder Firmware" } })
+            c.add (std::string ("USER/") + id, std::string ("User: ") + label);
         for (int t = 1; t <= 8; ++t)
         {
             const auto base = "TRACK_LIST/TRACK[" + std::to_string (t) + "]/";

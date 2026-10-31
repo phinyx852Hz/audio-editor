@@ -95,9 +95,23 @@ bool read (const std::string& xml, Tags& tags, std::string& error)
 
 std::string write (const Tags& tags)
 {
-    const auto values = meta::valuesFor (tags, meta::Schema::ixml);
+    auto values = meta::valuesFor (tags, meta::Schema::ixml);
+    // The iXML BEXT object only repeats the bext chunk and must match it, so PHI, which
+    // writes the chunk itself, leaves it out rather than risk a stale copy.
+    std::erase_if (values, [] (const auto& v) { return v.first == "BEXT" || v.first.compare (0, 5, "BEXT/") == 0; });
     if (values.empty())
         return {};
+
+    // iXML readers ignore the BEXT object, so loudness has its own LOUDNESS object:
+    // filled from the bext loudness where the iXML has none of its own.
+    const std::pair<const char*, const char*> loudness[] {
+        { "LOUDNESS/LOUDNESS_VALUE", tag::bwfLoudness }, { "LOUDNESS/LOUDNESS_RANGE", tag::bwfLoudnessRange },
+        { "LOUDNESS/MAX_TRUE_PEAK_LEVEL", tag::bwfTruePeak }, { "LOUDNESS/MAX_MOMENTARY_LOUDNESS", "bwf.maxMomentaryLoudness" },
+        { "LOUDNESS/MAX_SHORT_TERM_LOUDNESS", "bwf.maxShortTermLoudness" } };
+    for (const auto& [path, key] : loudness)
+        if (const auto it = tags.find (key); it != tags.end() && ! it->second.empty()
+            && std::none_of (values.begin(), values.end(), [p = path] (const auto& v) { return v.first == p; }))
+            values.emplace_back (path, it->second);
 
     Element root;
     root.name = "BWFXML";
