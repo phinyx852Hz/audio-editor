@@ -204,11 +204,14 @@ jianpu.
 
 ## Jeongganbo (Korean)
 
-Jeongganbo is the Korean mensural notation invented under King Sejong in the 15th century, the
+Jeongganbo (정간보, 井間譜) is the Korean mensural notation invented under King Sejong
+(r. 1418–1450), the
 first East Asian notation to show rhythm exactly. The page is ruled into columns of squares
 (jeonggan), each square one unit of time, read top to bottom and right to left; the pitch names
 written in the squares are taken from the Chinese twelve-pitch system (yullyeo), and subdividing
-a square divides its time. The pitch names are yulmyeong, such as hwang for hwangjong. Sejong's
+a square divides its time. A square left empty holds the note before it, and the notes inside a
+divided square follow their own reading order within it. The pitch names are yulmyeong, each
+written with one character: 黃 hwang, 太 tae, 仲 jung, 林 im and so on. Sejong's
 annals record pieces in it. A page can hold a whole ensemble score, part beside part, with the
 words and ornament signs in their own columns. It is still used for court music (jeongak) and
 classical music.
