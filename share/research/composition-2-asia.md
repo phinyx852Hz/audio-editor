@@ -9,6 +9,22 @@ Research > Modes; these entries are about how a piece is built from them.
 
 ## Rāga development
 
+A rāga (Sanskrit, "colouring" or "dyeing", for its power to colour the listener's mind) is the
+melodic framework of Indian classical music, shared by the Hindustani north and the Carnatic
+south. It is more than a scale, since several rāgas can share one, and less than a tune, since
+one rāga yields endless tunes: Joep Bor calls it a tonal framework for composition and
+improvisation, and Nazir Jairazbhoy tells rāgas apart by scale, ascent and descent, the notes
+they stress, register, intonation and ornament. Each has a strongest note (vādī) and a second
+one consonant with it (samvādī), in opposite halves of the octave, and a catch phrase (pakaḍ or
+chalan) by which listeners know it even when another rāga has the same notes. Rāgas may use
+five (auḍava), six (ṣāḍava) or seven (sampūrṇa) notes, a different number going up and down,
+as Bhimpalasi does, or a zigzag (vakra) path. Hindustani rāgas belong to times of day and
+seasons; Bhatkhande sorted them into ten parent scales (thāṭ), while Carnatic rāgas derive from
+72 melakarta scales. The modern sense of the word first appears in Mataṅga's *Bṛhaddeśī* (8th or
+9th century), and Śārṅgadeva's *Saṅgītaratnākara* (13th century) discusses 253 rāgas. Hundreds
+are known; a performer's working repertoire is perhaps forty or fifty. Rāgas also carry Sikh
+scripture, qawwali and much film song.
+
 A Hindustani performance unfolds a rāga in stages, from free to strict time and from slow to
 fast. The ālāp, unmetred, introduces the rāga note by note from the lower Sa upward, dwelling
 on its strongest notes, the vādī and samvādī, and on its characteristic phrases (pakaḍ), a
@@ -25,8 +41,11 @@ jhālā and a gat in tīntāl ending in a tihāī on sam, over the tānpūrā.
 - [Raga](https://en.wikipedia.org/wiki/Raga), [Alap](https://en.wikipedia.org/wiki/Alap),
   [Tala (music)](https://en.wikipedia.org/wiki/Tala_(music)) and
   [Tihai](https://en.wikipedia.org/wiki/Tihai), Wikipedia.
-- N. A. Jairazbhoy, *The Rāgs of North Indian Music* (Faber, 1971).
-- Joep Bor (ed.), *The Raga Guide* (Nimbus, 1999).
+- N. A. Jairazbhoy, *The Rāgs of North Indian Music: Their Structure and Evolution* (Faber,
+  1971; revised Indian edition, Popular Prakashan, 1995).
+- Walter Kaufmann, *The Ragas of North India* (Indiana University Press, 1968).
+- Joep Bor, Suvarnalata Rao, Wim van der Meer and Jane Harvey, *The Raga Guide* (Nimbus,
+  1999).
 - Martin Clayton, *Time in Indian Music* (Oxford University Press, 2000).
 
 ## Maqām: taqsīm and waṣla

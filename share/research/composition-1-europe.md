@@ -416,8 +416,8 @@ joined by an exact rule. Phrase lengths often follow the syllables of a text or 
 each time, and the music is usually slow and sparing. *Cantus in Memoriam Benjamin Britten*
 (1977) is a mensuration canon, each voice at half the speed of the one above and lower;
 *Fratres* and *Tabula rasa* (1977) and *Spiegel im Spiegel* (1978) followed, then choral works
-such as *Passio* and *Te Deum*, and the style is often grouped with the "holy minimalism" of Górecki and John
-Tavener.
+such as *Passio* and *Te Deum*, and the style is often grouped with the "holy minimalism" of
+Górecki and John Tavener.
 
 *In PHI*: an M-voice around a centre, phrases growing by a note, its T-voice, their mirror, a
 bell and a mensuration canon, each voice slower and lower.
