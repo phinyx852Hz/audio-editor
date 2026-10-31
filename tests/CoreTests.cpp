@@ -25,6 +25,7 @@
 #include "../Source/mixer/Architectonics.h"
 #include "../Source/mixer/Compose.h"
 #include "../Source/mixer/BolProcessor.h"
+#include "../Source/sampler/PhiTabla.h"
 #include "../Source/mixer/Harmonies.h"
 #include "../Source/mixer/ModalHarmony.h"
 #include "../Source/mixer/RhythmGenerator.h"
@@ -8984,6 +8985,65 @@ namespace
         }
     }
 
+    // PHI tabla (owner, 2026-10-31): the owner's strokes as a Slicer kit of 32 pads for Push, the takes in turn,
+    // and softer hits darker.
+    void testPhiTabla()
+    {
+        namespace pt = phitabla;
+        bool files = true, unique = true;
+        std::set<int> seen;
+        for (const auto& p : pt::pads())
+        {
+            unique = unique && p.pad >= 0 && p.pad < 32 && seen.insert (p.pad).second;
+            for (const auto* f : p.files)
+                files = files && std::filesystem::exists (std::string (PHI_SHARE_SOURCE_DIR "/phi-tabla/") + f + ".wav");
+        }
+        check (unique && files && pt::pads().size() >= 30, "phi tabla: 32 pads at most, each sound in share/phi-tabla");
+        check (pt::padFor ("dha", 0) == 0 && pt::padFor ("dha", 1) == 1 && pt::padFor ("dha", 2) == 0 && pt::padFor ("ne", 0) == pt::padFor ("ta", 0)
+                   && pt::padFor ("dhee", 0) == pt::padFor ("dhi", 0) && pt::padFor ("C4", 0) < 0 && pt::noteFor ("dha", 0) == 36,
+               "phi tabla: a bol's takes in turn, its spellings as one, the first pad on Push's first note");
+
+        auto sound = std::make_shared<sampler::Sample>();
+        uint32_t x = 1;
+        for (int i = 0; i < 4800; ++i)   // white noise: its brightness shows
+        {
+            x = x * 1664525u + 1013904223u;
+            const auto v = (float) ((x >> 8) / 8388608.0 - 1.0) * 0.5f;
+            sound->left.push_back (v);
+            sound->right.push_back (v);
+        }
+        const auto kit = pt::kit ("folder", [&] (const std::string&) { return sound; });
+        check (kit.pads[0].layerCount() == 2 && kit.pads[8].layerCount() == 1 && kit.pads[0].name == "dha" && kit.layout == slicer::Layout::push,
+               "phi tabla: dha is tā and ge together; a pad a stroke");
+
+        // A soft hit: quieter, and with less of its highs (the sample to sample difference) for its level.
+        auto brightness = [&] (double tone)
+        {
+            slicer::Engine e;
+            e.prepare (48000.0);
+            auto k = kit;
+            k.velocityTone = tone;
+            e.setKit (k);
+            e.hit (8, 0.3f);
+            std::vector<float> l (2048, 0.0f), r (2048, 0.0f);
+            e.render (l.data(), r.data(), 2048);
+            double level = 0.0, high = 0.0;
+            for (size_t i = 1; i < l.size(); ++i)
+            {
+                level += l[i] * l[i];
+                high += (l[i] - l[i - 1]) * (l[i] - l[i - 1]);
+            }
+            return high / std::max (1e-12, level);
+        };
+        check (brightness (0.5) < 0.5 * brightness (0.0), "phi tabla: a soft hit is darker");
+
+        // The Bol Processor on PHI tabla: dha twice is its two takes.
+        const auto score = bolprocessor::toScore ({ bolprocessor::parse ("dha dha ne") }, 90.0, true);
+        check (score.parts[0].notes.size() == 3 && score.parts[0].notes[0].key == pt::noteFor ("dha", 0) && score.parts[0].notes[1].key == pt::noteFor ("dha", 1)
+                   && score.parts[0].notes[0].key != score.parts[0].notes[1].key,
+               "phi tabla: the Bol Processor's bols on its pads, the takes in turn");
+    }
+
     void testRhythmGenerator()
     {
         // Toussaint (2005): the tresillo E(3,8), the cinquillo E(5,8), the bembé bell E(7,12) turned.
@@ -9862,6 +9922,7 @@ int main()
     testArchitectonics();
     testCompose();
     testBolProcessor();
+    testPhiTabla();
     testStochastic();
     testCubify();
     testSerial();

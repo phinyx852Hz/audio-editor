@@ -24,3 +24,5 @@ install(FILES third_party/bolprocessor/console_strings.json DESTINATION "${CMAKE
 install(DIRECTORY share/bolprocessor/ DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/bolprocessor/examples")
 install(FILES third_party/bolprocessor/License.txt DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/${APP_ID}" RENAME BolProcessor-License.txt)
 install(FILES third_party/bolprocessor/Credits.txt DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/${APP_ID}" RENAME BolProcessor-Credits.txt)
+# PHI tabla (Source/sampler/PhiTabla.h): the owner's own recorded strokes, a Slicer kit.
+install(DIRECTORY share/phi-tabla/ DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/phi-tabla")

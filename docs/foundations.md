@@ -145,6 +145,7 @@ Built by `cmake/Instruments.cmake`, installed beside the stock plugins with thei
 | Nyquist runtime and STK rawwaves | Audacity 3.7.9 (section 3) | Nyquist; STK | data (`share/phi/nyquist`) |
 | Audacity's Nyquist plug-ins | section 3 | GPL-2.0-or-later | data (`share/phi/nyquist-plug-ins`) |
 | Vaporizer2 starter wavetables, noises and presets | VAST Dynamics | GPL-3.0 (the repository's licence; the files carry none of their own) | inside the plugin bundle |
+| PHI tabla (`share/phi-tabla`, 23 WAVs) | PHI's owner, recorded on their own tablā | PHI's own, with PHI | data (`share/phi/phi-tabla`) |
 | Ajrada qāʿida grammar (`-gr.dhin--`, `-al.dhin--`, `-se.dhin--`) | Jim Kippen and Bernard Bel (BP1, carried to BP3 in [bp3-ctests](https://github.com/bolprocessor/bp3-ctests), commit a34bd4a); the qāʿida is the Ajrada gharānā's, included on the owner's authority as Ustad Akram Khan's student | no licence file in the repository; see share/bolprocessor/README.md | data (`share/phi/bolprocessor/examples`) |
 | Helm factory patches | Matt Tytel and the patch authors | CC-BY-4.0 | inside the plugin bundle |
 | Furnace instruments and wavetables | the Furnace project | not stated separately (check) | with Furnace |

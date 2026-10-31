@@ -117,7 +117,7 @@ namespace slicerkit
                 o.insert ("receive", p.receive);
             pads.append (o);
         }
-        return { { "version", 2 }, { "pads", pads }, { "velocity", k.velocity }, { "voices", k.voices },
+        return { { "version", 2 }, { "pads", pads }, { "velocity", k.velocity }, { "velocityTone", k.velocityTone }, { "voices", k.voices },
                  { "layout", k.layout == slicer::Layout::push ? "push" : "chromatic" }, { "pushPage", k.pushPage } };
     }
 
@@ -125,6 +125,7 @@ namespace slicerkit
     {
         slicer::Kit k;
         k.velocity = o.value ("velocity").toDouble (0.6);
+        k.velocityTone = std::clamp (o.value ("velocityTone").toDouble (0.0), 0.0, 1.0);
         k.voices = std::clamp (o.value ("voices").toInt (16), 1, slicer::Engine::maxVoices);
         k.layout = o.value ("layout").toString() == QLatin1String ("chromatic") ? slicer::Layout::chromatic : slicer::Layout::push;
         k.pushPage = std::clamp (o.value ("pushPage").toInt(), 0, 1);

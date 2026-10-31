@@ -28,11 +28,14 @@ and Anthony Kozar. The full license and credits are installed with PHI.
 - **Seed**: the same seed produces the same items again. 0 means a new seed each time.
 - **Produce**: BP3 derives the items, and the dialog shows them as BP3 writes them.
 - **Play**:
-  - **the bols on the tablā**: each item in turn on a tablā part, a section per item, laid out
+  - **the bols on PHI tabla** (the default): the owner's own strokes (below). Each use of a bol
+    plays its next take. The score's track gets PHI tabla, and PHI tabla plays it while it is
+    edited.
+  - **the bols on General MIDI drums**: each item in turn on a tablā part, a section per item, laid out
     by BP's notation. Fields between periods take a beat each, `/6` and `*2` set the speed, a
     `{a, b}` expression fits its other fields to the first one, `-` is a rest, and `_` lengthens
     the stroke before it. dha is na with ge, dhin is tin with ge, and so on (`strokes()` in
-    mixer/BolProcessor.cpp). Until PHI tabla exists, the strokes are General MIDI drums.
+    mixer/BolProcessor.cpp), on the high and low congas, timbale and rim.
   - **BP's own MIDI file**, for a grammar that makes notes rather than bols.
 - **Open the Score** opens the result in the MIDI editor.
 
@@ -59,7 +62,24 @@ theme or a variation, bharī and then khālī. The alphabet's `*` homomorphism m
 - `Source/mixer/BolProcessor.h`: runs it and reads its items back. `Source/ui/BolProcessorDialog.cpp`
   is the dialog.
 
-## Next
+## PHI tabla
 
-PHI tabla: the owner's own recorded strokes as a drum instrument, a sample a bol, so the items play
-on them. Then the slicer, to cut long takes into strokes and tag each with its bol.
+The owner's own recorded strokes (`share/phi-tabla`, 8.6 MB) as an instrument: **PHI tabla** in a
+track's instrument list (Built-in). It is a Slicer kit of 31 pads in banks A and B, so Push plays
+it on its grid and the Slicer window edits it (`Source/sampler/PhiTabla.h`).
+
+| Pads | What |
+|---|---|
+| 1–8 (A) | dha, dha 2, dhin, dhin 2, dhi, dhi 2, dhun, kran: compounds, the dāyāṅ stroke and ge (or ke) layered |
+| 9–16 (A) | tā, tā 2, tin, tin 2 (sur), te, te 2, te 3, tu |
+| 17–24 (B) | tu 2, ge, ge 2, ge (mīṇḍ), ke (kath), ke 2 (kath), tak, trika |
+| 25–29 (B) | phrases: dhātete (bharī), tātete (khālī), tirakiṭe roll, gege ×3, ge modulations |
+| 30–31 (B) | Sa: the dāyāṅ's (C♯) and the bāyāṅ's (F♯) |
+
+The dāyāṅ's strokes stop each other, and so do the bāyāṅ's, as on the drum. The recordings have
+one level each, so softer hits are quieter and also darker: the Slicer's new **velocity tone**
+(`Kit::velocityTone`, 0.5 for PHI tabla) closes a low-pass by up to six octaves as velocity falls.
+Where there are two or three takes of a stroke, the Bol Processor plays them in turn.
+
+Still to do: the owner's 32-pad Ableton rack layout, if it differs; and slicing the phrases into
+strokes with the Slicer, as more takes.

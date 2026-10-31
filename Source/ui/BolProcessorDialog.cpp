@@ -91,8 +91,11 @@ void MainWindow::bolProcessorDialog()
     tempo->setToolTip (tr ("A beat: a field between BP's periods, or one symbol at speed 1"));
     form->addRow (tr ("&Tempo"), tempo);
     auto* as = new QComboBox (&dialog);
-    as->addItem (tr ("the bols on the tablā"), 0);
+    as->addItem (tr ("the bols on PHI tabla"), 2);
+    as->addItem (tr ("the bols on General MIDI drums"), 0);
     as->addItem (tr ("BP's own MIDI file"), 1);
+    as->setCurrentIndex (std::clamp (settings.value (QStringLiteral ("bolprocessor/play"), 0).toInt(), 0, 1));
+    as->setToolTip (tr ("PHI tabla: your own strokes, each bol's takes in turn; the score's track gets PHI tabla"));
     form->addRow (tr ("&Play"), as);
     layout->addLayout (form);
     auto* summary = new QLabel (&dialog);
@@ -157,11 +160,11 @@ void MainWindow::bolProcessorDialog()
         }
         const auto score = bolprocessor::toScore (items, tempo->value());
         const bool midi = produced.midi.size() > 64;
-        as->setItemData (1, midi ? QVariant() : QVariant (0), Qt::UserRole - 1);   // BP's MIDI only when it made notes
-        if (! midi && as->currentIndex() == 1)
+        as->setItemData (2, midi ? QVariant() : QVariant (0), Qt::UserRole - 1);   // BP's MIDI only when it made notes
+        if (! midi && as->currentIndex() == 2)
             as->setCurrentIndex (0);
         if (midi && score.parts[0].notes.empty())
-            as->setCurrentIndex (1);
+            as->setCurrentIndex (2);
         summary->setText (tr ("Seed %1: %2.").arg (s).arg (QString::fromStdString (score.summary)));
         text->setPlainText (QString::fromStdString (produced.items));
         open->setEnabled (! score.parts[0].notes.empty() || midi);
@@ -174,6 +177,8 @@ void MainWindow::bolProcessorDialog()
     settings.setValue (QStringLiteral ("bolprocessor/grammar"), grammar->text());
     settings.setValue (QStringLiteral ("bolprocessor/seed"), seed->value());
     settings.setValue (QStringLiteral ("bolprocessor/tempo"), tempo->value());
+    if (as->currentIndex() < 2)
+        settings.setValue (QStringLiteral ("bolprocessor/play"), as->currentIndex());
     if (! accepted)
         return;
 
@@ -184,6 +189,7 @@ void MainWindow::bolProcessorDialog()
         if (const auto song = midifile::parse (produced.midi.data(), produced.midi.size(), why))
             return mixerWin->openScore (*song, {}, title, QStringLiteral ("phi"));
     }
-    const auto song = composition::toSong (bolprocessor::toScore (items, tempo->value()), title.toStdString());
-    mixerWin->openScore (*song, {}, title, QStringLiteral ("phi"));
+    const bool tabla = as->currentData().toInt() == 2;
+    const auto song = composition::toSong (bolprocessor::toScore (items, tempo->value(), tabla), title.toStdString());
+    mixerWin->openScore (*song, {}, title, QStringLiteral ("phi"), tabla ? mixerWin->makePhiTabla() : nullptr);
 }

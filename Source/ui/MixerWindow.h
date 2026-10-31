@@ -195,7 +195,12 @@ public:
     // has one), played on the selected track; kept, it goes on a new track (else the selected
     // one) from the start, the track tuned to `tuning`. `notation`: the notation the editor opens
     // on (mixer/Notation.h's ids, "phi" PHI's microtonal staff), empty the piano roll.
-    void openScore (const midifile::Song& score, mixer::TuningChoice tuning, const QString& title, const QString& notation = {});
+    // `instrument`: what the score plays on while it is edited and on the track it is kept on
+    // (PHI tabla for the Bol Processor); none: the selected track's.
+    void openScore (const midifile::Song& score, mixer::TuningChoice tuning, const QString& title, const QString& notation = {},
+                    mixer::InstrumentPtr instrument = nullptr);
+    // PHI tabla (sampler/PhiTabla.h): a Slicer with the owner's own strokes on 32 pads.
+    mixer::InstrumentPtr makePhiTabla();
     void composeScene (int scene, const std::vector<int>& tracks, const QStringList& files,
                        const std::vector<midifile::SongPtr>& midi, mixer::TuningChoice tuning, const QString& name);
     // A file chosen in the Find panel's Selector: into the first empty slot of the track with

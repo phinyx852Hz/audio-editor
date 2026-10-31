@@ -12,6 +12,7 @@
 #include "ExtremeSettings.h"
 #include "Settings.h"
 #include "SlicerKit.h"
+#include "../sampler/PhiTabla.h"
 #include "SlicerWindow.h"
 #include "Theme.h"
 #include "TransportBar.h"
@@ -500,7 +501,7 @@ namespace
         return MixerWindow::tr ("PHI projects (*.phi *.phinyxmix);;All files (*)");
     }
 
-    enum Choice { noInstrument, synthChoice, samplerChoice, slicerChoice, ragaChoice, prismChoice, firstPlugin };
+    enum Choice { noInstrument, synthChoice, samplerChoice, slicerChoice, ragaChoice, prismChoice, tablaChoice, firstPlugin };
 
     // Whether the lanes and the launcher have something moving to show: playing, counting in,
     // a launcher clip playing or queued, a take, or a drag. Otherwise they only show edits,
@@ -1250,7 +1251,7 @@ public:
         {
             box->clear();
             box->addItems ({ MixerWindow::tr ("No instrument"), MixerWindow::tr ("Synth"), MixerWindow::tr ("Sampler"), MixerWindow::tr ("Slicer"),
-                             QString::fromUtf8 ("PHI rāga"), MixerWindow::tr ("Instrument Prism") });
+                             QString::fromUtf8 ("PHI rāga"), MixerWindow::tr ("Instrument Prism"), QStringLiteral ("PHI tabla") });
             for (const auto& p : plugins)
                 box->addItem (QString::fromStdString (p.name) + QStringLiteral (" (") + QString::fromStdString (p.format) + QStringLiteral (")"),
                               QString::fromStdString (p.id));
@@ -1262,7 +1263,9 @@ public:
             {
                 case mixer::Instrument::Kind::synth:   choice = synthChoice; break;
                 case mixer::Instrument::Kind::sampler: choice = samplerChoice; break;
-                case mixer::Instrument::Kind::slicer:  choice = slicerChoice; break;
+                case mixer::Instrument::Kind::slicer:
+                    choice = static_cast<const mixer::SlicerInstrument&> (*inst).phiTabla ? tablaChoice : slicerChoice;
+                    break;
                 case mixer::Instrument::Kind::raga:    choice = ragaChoice; break;
                 case mixer::Instrument::Kind::prism:   choice = prismChoice; break;
                 case mixer::Instrument::Kind::plugin:
@@ -3576,6 +3579,7 @@ private:
             add (MixerWindow::tr ("Built-in"), MixerWindow::tr ("Slicer"), "slicer");
             add (MixerWindow::tr ("Built-in"), QString::fromUtf8 ("PHI rāga"), "raga");
             add (MixerWindow::tr ("Built-in"), MixerWindow::tr ("Instrument Prism"), "prism");
+            add (MixerWindow::tr ("Built-in"), QStringLiteral ("PHI tabla"), "tabla");
             for (const auto& p : window.audio.knownInstruments())
                 add (QString::fromStdString (p.format), QString::fromStdString (p.name), "instrument\n" + QByteArray::fromStdString (p.id));
         }
@@ -8656,7 +8660,7 @@ bool MixerWindow::dropPlugin (int track, const QByteArray& what)
     }
     const int choice = kind == QLatin1String ("synth") ? synthChoice : kind == QLatin1String ("sampler") ? samplerChoice
                      : kind == QLatin1String ("slicer") ? slicerChoice : kind == QLatin1String ("raga") ? ragaChoice
-                     : kind == QLatin1String ("prism") ? prismChoice
+                     : kind == QLatin1String ("prism") ? prismChoice : kind == QLatin1String ("tabla") ? tablaChoice
                      : kind == QLatin1String ("instrument") ? firstPlugin : -1;
     if (choice < 0)
         return false;
@@ -9559,6 +9563,25 @@ void MixerWindow::placeAllMidi()
     refreshTransport();
 }
 
+// PHI tabla (sampler/PhiTabla.h): a Slicer with the owner's own tablā strokes on 32 pads, for Push.
+mixer::InstrumentPtr MixerWindow::makePhiTabla()
+{
+    const auto installed = QDir (QCoreApplication::applicationDirPath()).absoluteFilePath (QStringLiteral (PHI_SHARE_RELATIVE "/phi-tabla"));
+    const auto folder = QFileInfo (installed).isDir() ? QDir::cleanPath (installed) : QStringLiteral (PHI_SHARE_SOURCE_DIR "/phi-tabla");
+    std::vector<std::string> missing;
+    const auto kit = phitabla::kit (folder.toStdString(), [this] (const std::string& path)
+    {
+        QString error;
+        return slicerkit::loadSound (QString::fromStdString (path), rate(), error);
+    }, &missing);
+    auto made = std::make_shared<mixer::SlicerInstrument>();
+    made->phiTabla = true;
+    made->engine().setKit (kit);
+    if (! missing.empty())
+        status->setText (tr ("PHI tabla: %1 of its sounds could not be read (in %2)").arg (missing.size()).arg (folder));
+    return made;
+}
+
 void MixerWindow::setInstrumentKind (int track, int choice, const QString& pluginId)
 {
     auto& t = info[(size_t) track];
@@ -9571,6 +9594,7 @@ void MixerWindow::setInstrumentKind (int track, int choice, const QString& plugi
         case synthChoice: made = std::make_shared<mixer::Synth>(); break;
         case ragaChoice: made = std::make_shared<mixer::RagaInstrument>(); break;
         case prismChoice: made = makePrism (track); break;
+        case tablaChoice: made = makePhiTabla(); break;
         case samplerChoice:
         case slicerChoice:
             if (choice == samplerChoice)
@@ -11106,7 +11130,7 @@ bool MixerWindow::writeMix (const QString& file, QString& error)
                 case mixer::Instrument::Kind::slicer:
                 {
                     auto& sl = static_cast<mixer::SlicerInstrument&> (*inst);
-                    io = { { "kind", "slicer" }, { "sound", soundFile (sl.engine().sample(), sl.samplePath) }, { "kit", slicerkit::toJson (sl.engine().kit(), base, [&] (const sampler::Sample& padSound, int pad, int layer)
+                    io = { { "kind", "slicer" }, { "phiTabla", sl.phiTabla }, { "sound", soundFile (sl.engine().sample(), sl.samplePath) }, { "kit", slicerkit::toJson (sl.engine().kit(), base, [&] (const sampler::Sample& padSound, int pad, int layer)
                          {
                              // A pad's own sound that came from no file goes beside the mix too.
                              const auto folderName = QFileInfo (file).completeBaseName() + tr (" Samples");
@@ -11301,6 +11325,7 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
                 auto& sl = static_cast<mixer::SlicerInstrument&> (*inst);
                 QStringList missing;
                 sl.engine().setKit (slicerkit::fromJson (io.value ("kit").toObject(), base, rate(), &missing));
+                sl.phiTabla = io.value ("phiTabla").toBool();
                 for (const auto& m : missing)
                     problems << tr ("Track %1: %2").arg (i + 1).arg (m);
             }
@@ -12733,7 +12758,8 @@ std::vector<int> MixerWindow::colourTracks (const QStringList& names, const QLis
     return out;
 }
 
-void MixerWindow::openScore (const midifile::Song& score, mixer::TuningChoice tuning, const QString& title, const QString& notation)
+void MixerWindow::openScore (const midifile::Song& score, mixer::TuningChoice tuning, const QString& title, const QString& notation,
+                             mixer::InstrumentPtr instrument)
 {
     MidiEditor::Host host;
     host.notation = notation;
@@ -12758,6 +12784,11 @@ void MixerWindow::openScore (const midifile::Song& score, mixer::TuningChoice tu
     const auto armed = engine.liveTrack();
     if (selected < engine.numTracks())
         engine.setLiveTrack (selected);
+    // The score's own instrument plays it while it is edited, in the selected track's place.
+    const auto previewTrack = selected < engine.numTracks() ? selected : -1;
+    const auto before = previewTrack >= 0 && instrument != nullptr ? engine.instrument (previewTrack) : nullptr;
+    if (previewTrack >= 0 && instrument != nullptr)
+        engine.setInstrument (previewTrack, instrument);
     MidiEditor editor (score, host, this);
     auto* target = &editor;
     engine.setLiveListener ([target] (uint8_t s, uint8_t a, uint8_t b)
@@ -12767,6 +12798,8 @@ void MixerWindow::openScore (const midifile::Song& score, mixer::TuningChoice tu
     const auto accepted = editor.exec() == QDialog::Accepted;
     engine.setLiveListener (nullptr);
     engine.setLiveTrack (armed);
+    if (previewTrack >= 0 && instrument != nullptr)
+        engine.setInstrument (previewTrack, before);
     if (! accepted)
         return;
     const auto kept = editor.result();
@@ -12797,6 +12830,11 @@ void MixerWindow::openScore (const midifile::Song& score, mixer::TuningChoice tu
     }
     info[(size_t) track].tuning = tuning;
     applyTunings();
+    if (instrument != nullptr)
+    {
+        engine.setInstrument (track, instrument);
+        strips[(size_t) track]->refresh();
+    }
     addFiles (track, { file }, 0);
     changed();
     status->setText (tr ("%1 is on %2, from the start: %3").arg (title, trackName (track), editor.summary()));
