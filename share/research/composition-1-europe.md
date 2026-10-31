@@ -270,13 +270,26 @@ sieves came in *Nomos Alpha* (1965–66), which also orders its sections by the 
 cube, and his article "Sieves" (1990). He founded EMAMu (1966, later CEMAMu) and built the UPIC
 drawing system (1977) and the GENDY programs of dynamic stochastic synthesis (1991).
 
+Each work tried another branch of mathematics: the statistical mechanics of gases in
+*Pithoprakta*, the distribution of points on a plane in *Diamorphoses*, a game of minimal
+constraints in *Achorripsis*, the normal distribution in *ST/10* and *Atrées*, Markov chains in
+*Analogiques*, game theory in *Duel* and *Stratégie*, group theory in *Nomos Alpha* (for the
+cellist Siegfried Palm) and set theory in *Herma* and *Eonta*. The word comes from a Greek verb
+for aiming at a mark, or guessing; Jakob Bernoulli called probability "the art of conjecturing,
+or stochastics" in *Ars Conjectandi* (1713). Stochastic music differs from Cage's chance music,
+which uses chance without a mathematical law behind it. In the same years Lejaren Hiller and
+Leonard Isaacson composed the *Illiac Suite* (1957) for string quartet on a computer at the
+University of Illinois, with Markov chains among its rules, and today random and probability
+features are built into synthesisers, sequencers and drum machines.
+
 *In PHI*: Compose > Europe and the Americas > Stochastic Matrix fills an *Achorripsis*-style
 matrix by Poisson's law, each cell a cloud of notes; Stochasticize the Clip adds a new line
 beside the MIDI clip in the mixer by clouds, sieves and Markov screens; and Cubify arranges a
 clip or the launcher's scene by the cube rotations of *Nomos Alpha* and Messiaen's modes.
 
-- [Iannis Xenakis](https://en.wikipedia.org/wiki/Iannis_Xenakis) and
-  [Stochastic music](https://en.wikipedia.org/wiki/Stochastic_music), Wikipedia.
+- [Iannis Xenakis](https://en.wikipedia.org/wiki/Iannis_Xenakis),
+  [Stochastic § Music](https://en.wikipedia.org/wiki/Stochastic#Music) and
+  [Illiac Suite](https://en.wikipedia.org/wiki/Illiac_Suite), Wikipedia.
 - [Les Amis de Xenakis](https://www.iannis-xenakis.org), the composer's archive and catalogue.
 - Iannis Xenakis, *Formalized Music: Thought and Mathematics in Composition* (Pendragon,
   revised edition 1992), and "Sieves", *Perspectives of New Music* 28/1 (1990).
