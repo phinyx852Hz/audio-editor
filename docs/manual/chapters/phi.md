@@ -251,6 +251,19 @@ Moving one band never restarts another, so you can sweep while it plays. A Φ EQ
 
 Φ De-resonator delays the sound by 2048 samples (43 ms at 48 kHz) so it can look at each frequency before it plays; PHI compensates for that delay automatically. **Delta** plays only what it takes away, which is the quickest way to hear what it is doing.
 
+## Tested against the EBU test set {#phi-ebu}
+
+[]{.ix t="Φ effects!EBU tests"}[]{.ix t="EBU loudness test set"}The Φ dynamics and Φ EQ were measured on the European Broadcasting Union's loudness test set (version 05, the signals of EBU Tech 3341 and Tech 3342, with the Tech 3343 reference pink noise), using PHI's own loudness and true-peak meters. Those meters were checked first against the same set and pass all 110 of its checks (see [The Analysis Meters window](#analysis-meters)).
+
+| Effect | Test | Result |
+|---|---|---|
+| Φ Limiter | Programme, pink noise and the inter-sample test signals, ceiling −1 dBTP, driven 0 to 18 dB | PHI's meter reads −1.00 dBTP or below every time; a finer 32× check finds up to 0.1 dB more on dense programme driven hard |
+| Φ Compressor | 1 kHz tones from −60 to 0 dBFS at ratios φ, φ² and φ⁴; EBU signal 5's 6 dB step | Exact below the threshold; about 93 % of the drawn reduction on a held tone; attack and release measured and listed |
+| Φ Multiband | Every band at unity, 20 Hz to 20 kHz, and the EBU programme | Flat within ±0.000002 dB; integrated loudness unchanged |
+| Φ EQ | Each band type against Robert Bristow-Johnson's Audio EQ Cookbook | Within 0.0014 dB |
+
+The test set is made to check meters, not effects, so the Φ effects are not certified by the EBU: they were measured *with* meters that the EBU set validates, on the EBU's signals. The full report, with every number, the graphs, and the scripts to repeat the tests, is in `docs/testing/ebu-tests.md`.
+
 ## The Φ mark {#phi-mark}
 
 []{.ix t="Φ mark"}PHI's logo is its own capital phi, drawn from golden-ratio geometry rather than taken from a font. In units where the mark is 1000 tall:
