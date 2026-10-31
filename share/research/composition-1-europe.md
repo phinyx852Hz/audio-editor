@@ -301,16 +301,34 @@ clip or the launcher's scene by the cube rotations of *Nomos Alpha* and Messiaen
 
 ## Chance and aleatory
 
-Aleatory music (from Latin *alea*, dice) leaves some of its choices to chance, either when it is
-composed or when it is played. John Cage composed by chance operations from 1951: in *Music of
-Changes* for piano every sound, duration and dynamic was chosen by tossing coins to consult
-charts of 64 cells, after the I Ching, and its sections follow square-root proportions. In
-*4′33″* (1952) and the indeterminate scores that followed, chance moved into performance.
-In Europe, Pierre Boulez ("Alea", 1957) and Karlheinz Stockhausen (*Klavierstück XI*, 1956) let
-performers choose the order of fixed fragments. Witold Lutosławski heard Cage's Piano Concerto
-on the radio in 1960 and developed limited aleatory, or aleatory counterpoint: in *Jeux
-vénitiens* (1960–61) each player repeats a written figure at their own speed, out of time
-with the others, until a cue from the conductor ends the section.
+Aleatory or aleatoric music (from Latin *alea*, dice), also called chance music, leaves some of
+its choices to chance, either when it is composed or when it is played. The acoustician Werner
+Meyer-Eppler brought the term to the Darmstadt summer courses in the early 1950s, calling a
+process aleatoric if "its course is determined in general but depends on chance in detail";
+his translator's slip between the German *Aleatorik* and *aleatorisch* gave English the word
+"aleatoric", and Pierre Boulez's essay "Alea" (1957) made it current. There are precedents:
+Ockeghem's *Missa cuiusvis toni*, singable in any mode; the musical dice games
+(*Musikalisches Würfelspiel*) of the late 18th century, attributed to C. P. E. Bach, Haydn and
+Mozart, which pick each bar by a throw; Marcel Duchamp's *Erratum Musical* (1913), notes drawn
+from a hat; and in America Charles Ives, Henry Cowell's *Mosaic Quartet* (1934), whose players
+order its fragments, and Alan Hovhaness's *Lousadzak* (1944), with figures repeated out of
+step.
+
+Chance can enter in three ways. In the first, it decides a fixed score: John Cage's *Music of
+Changes* (1951) for piano, "the first composition to be largely determined by random
+procedures", chose every sound, duration and dynamic by tossing coins to consult charts of 64
+cells after the I Ching, its sections in square-root proportions, yet sounds the same at every
+performance. In the second, mobile or open form, the performer orders composed sections:
+Karlheinz Stockhausen's *Klavierstück XI* (1956) has 19 of them, Roman Haubenstock-Ramati wrote
+"mobiles" such as *Interpolation* (1958), and in Earle Brown's *Available Forms II* (1962) the
+conductor decides the order as the piece is played. In the third, notation itself becomes
+open: Morton Feldman's *Intersection No. 2* (1951) on graph paper gives only high, middle and
+low, and Brown's *December 1952* is a page of lines and rectangles the player reads as they
+choose. Witold Lutosławski developed limited aleatory, or aleatory counterpoint: in *Jeux
+vénitiens* (1960–61) each player repeats a fully written figure at their own speed, out of time
+with the others, until a cue from the conductor ends the section. Film composers use the same
+effect for menace: John Williams in *Images* (1972), Mark Snow, and Howard Shore for the Watcher
+in the Water in *The Fellowship of the Ring* (2001).
 
 *In PHI*: Cage's chance charts cast by the I Ching in square-root sections, then Lutosławski's
 ad libitum, every part looping its own figure out of time until a cue.
@@ -319,6 +337,11 @@ ad libitum, every part looping its own figure out of time until a cue.
   [Music of Changes](https://en.wikipedia.org/wiki/Music_of_Changes) and
   [Witold Lutosławski](https://en.wikipedia.org/wiki/Witold_Lutos%C5%82awski), Wikipedia.
 - James Pritchett, *The Music of John Cage* (Cambridge University Press, 1993).
+- Werner Meyer-Eppler, "Statistic and Psychologic Problems of Sound", *Die Reihe* 1 (1955;
+  English 1957).
+- Pierre Boulez, "Alea" (1957), in *Stocktakings from an Apprenticeship* (Oxford University
+  Press, 1991).
+- Paul Griffiths, "Aleatory", *Grove Music Online*.
 - Charles Bodman Rae, *The Music of Lutosławski* (Faber, 1994).
 
 ## Process music and minimalism
