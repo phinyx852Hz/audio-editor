@@ -36,9 +36,19 @@ beat, and the tāla's divisions marked with sam (×), khālī (0) and numbered t
 Digambar Paluskar devised a rival system. Bhatkhande's is the one used in his anthology
 *Kramik Pustak Malika* and in most printed collections since.
 
+Ornaments have signs of their own. An arc under a group of notes (chhand) means they all fall
+within one beat, as in fast tāns. Meend, a smooth glide from one note to another touching those
+between, is marked by an arc over the notes, so that a slide from komal Dha down to komal Re
+through tivra Ma and Ga, as heard in Rāg Shree, is written as one gesture. A kan, a quick touch
+of another note before the main one, is written small and raised before it: Ma begun with a
+touch of Ga. A murki, a short, quick turn of three or four neighbouring notes, is shown by
+brackets around a note, and which notes it uses is left to the rāga and the performer.
+
 - [Bhatkhande music notation](https://en.wikipedia.org/wiki/Bhatkhande_music_notation) and
   [Svara](https://en.wikipedia.org/wiki/Svara), Wikipedia.
 - Vishnu Narayan Bhatkhande, *Kramik Pustak Malika* (1913–37).
+- ["Bhatkhande Notation"](https://www.indianclassicalmusic.com/bhatkhande-notation-script),
+  IndianClassicalMusic.com.
 
 ## Carnatic swaras
 
