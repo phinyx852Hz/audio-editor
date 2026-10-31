@@ -17,6 +17,7 @@
 #include <QDialog>
 
 #include <functional>
+#include <map>
 #include <memory>
 #include <vector>
 
@@ -29,6 +30,7 @@ class QMenu;
 class QSpinBox;
 class QTimer;
 class QToolButton;
+class TransportButton;
 
 namespace phi::scala { struct Scale; struct KeyboardMap; }
 
@@ -70,6 +72,8 @@ public:
     // hears it, or its drum hits as kick, snare and hat on channel 10 (mixer/DrumsToMidi.h), put
     // in from the step cursor. False when nothing was heard.
     bool putInAudio (const AudioData&, bool drums);
+    // Playback and recording stopped, every note let go (the panel closing).
+    void stop() { setRecording (false); stopPlay(); }
     // A message from the MIDI keyboard, on the UI thread: step input when it is on.
     void midiIn (uint8_t status, uint8_t data1, uint8_t data2);
 
@@ -80,6 +84,7 @@ public:
 
 protected:
     void keyPressEvent (QKeyEvent*) override;
+    bool event (QEvent*) override;   // Home and End are the editor's, not the window's
     void done (int) override;
 
 private:
@@ -118,10 +123,17 @@ private:
     void humDialog();        // hum or sing to notes, or a recording's melody
     void putInHeard (const std::vector<noteedit::Heard>&, const noteedit::HumOptions&);
     double tempo() const;    // beats a minute: the mixer's, else the file's
-    void togglePlay();
+    void goTo (int64_t tick);   // Home and End: the step cursor and the playhead there, in view
+    void togglePlay();       // Play and Pause: on from the playhead, or held where it is
     void startPlay (bool original);
     void stopPlay();
+    void stopToStart();      // Stop: back to where Play was pressed; pressed again, to the start
     void playTick();
+    void updateTransport();  // the Play symbol and the time
+    // Record: the MIDI keyboard's notes go in at the playhead while it plays, a take one undo.
+    void setRecording (bool);
+    void closeHeld();        // the notes still held, ended at the playhead
+    bool loopRange (int64_t& from, int64_t& to) const;   // the picked notes' span, else the clip
     void audition (double pitch, int velocity = 100);
     void stepPitch (double pitch, bool chord);
     int64_t grid() const;
@@ -170,7 +182,12 @@ private:
     QSpinBox* octaveBox = nullptr;
     QComboBox* laneBox = nullptr;
     QSpinBox* laneChannelBox = nullptr;
-    QToolButton* playButton = nullptr;
+    // The transport (owner, 2026-10-30: "another transport control for the MIDI Editor and Staff
+    // Notation Score"): over the roll and the staff alike, playing on the editor's own clock.
+    TransportButton* playButton = nullptr;
+    TransportButton* recordButton = nullptr;
+    TransportButton* loopButton = nullptr;
+    QLabel* timeLabel = nullptr;
     QToolButton* abButton = nullptr;
     std::vector<QToolButton*> toolButtons;
     QLabel* infoLabel = nullptr;
@@ -192,5 +209,11 @@ private:
     qint64 playStarted = 0;     // ms, the clock when it started
     bool playingOriginal = false;
     int64_t playheadTick = -1;
+    int64_t pressedAt = 0;      // the tick Play was pressed at, where Stop goes back to
+    int64_t loopFrom = 0, loopTo = 0;   // while it loops
     midifile::SongPtr playSong;
+    // Recording: the keys held, with where and how hard they went down.
+    bool recording = false;
+    struct Held { int64_t start; int velocity; double pitch; };
+    std::map<int, Held> held;
 };

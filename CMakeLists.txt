@@ -236,6 +236,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/SpeakerArrays.cpp
     Source/ui/Visualizer.cpp
     Source/ui/VisualizerSection.cpp
+    Source/ui/Wallpaper.cpp
     Source/ui/SonifyPanel.cpp
     Source/ui/SonifySection.cpp
     Source/ui/TrackerSection.cpp

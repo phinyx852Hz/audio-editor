@@ -238,6 +238,7 @@ mixer.removeTrack	Mixer	Remove Last Track
 mixer.playStop	Mixer	Play or Stop the Mix	Shift+F3
 mixer.mixdown	Mixer	Mix Down to Editor	Ctrl+F3
 mixer.assistant	Mixer	Mix Assistant	Alt+Shift+X
+view.inspector	Mixer	Mixer Inspector	Ctrl+I
 mixer.patchbay	Mixer	Patchbay	F4
 reference.toggle	References	Switch Between Your Audio and Reference	A
 reference.next	References	Next Reference	Shift+A

@@ -632,6 +632,12 @@ private:
     class WebBackdrop* webBackdrop = nullptr;
     int visualMode = 0;
     double opacityBeforeBackdrop = 0.0;
+    // A still picture behind PHI (Options > Wallpaper; VisualizerSection.cpp, Wallpaper.h),
+    // hidden while the Visualizer or a web page is behind PHI.
+    void toggleWallpaper();
+    bool chooseWallpaper();   // false when cancelled
+    void syncWallpaper();
+    class Wallpaper* wallpaper = nullptr;
 
     // Sonifying the Visualizer (SonifySection.cpp): what it shows, played as notes.
     void registerSonifyCommands();

@@ -10,6 +10,7 @@
 #include "EditorWindow.h"
 #include "FindPanel.h"
 #include "MasterPanel.h"
+#include "MidiPanel.h"
 #include "MixerWindow.h"
 #include "Panels.h"
 #include "QuantizePanel.h"
@@ -83,14 +84,25 @@ void MainWindow::buildNavigation()
 
 std::vector<MainWindow::PanelStop> MainWindow::panelStops() const
 {
-    // The mixer in the editor's place stands in for the waveform.
-    QWidget* editor = waveform;
+    // The mixer in the editor's place stands in for the waveform; the MIDI editor under the
+    // waveform is a stop of its own, and a closed half of the editor is none.
+    std::vector<PanelStop> stops;
     if (mixerDocked() && centralStack->currentWidget() == mixerWin)
-        editor = mixerWin;
-    return { { editor, nullptr }, { samplerWin, samplerPanel }, { chainRow, chainPanel }, { masterWidget, masterPanel },
+        stops.push_back ({ mixerWin, nullptr });
+    else
+    {
+        const bool midi = midiPanel != nullptr && ! trackHolder->isHidden();
+        if (! waveform->isHidden() || ! midi)
+            stops.push_back ({ waveform, nullptr });
+        if (midi)
+            stops.push_back ({ midiPanel, nullptr });
+    }
+    for (const auto& s : std::initializer_list<PanelStop> { { samplerWin, samplerPanel }, { chainRow, chainPanel }, { masterWidget, masterPanel },
              { metersPanel->content(), metersPanel }, { markerList, markerPanel }, { historyList, historyPanel },
              { diagnostics, diagnosticsPanel }, { referencePanel, referencesPanel }, { ambiSceneView, ambiScenePanel },
-             { findWidget, findPanel }, { slicerWin, slicerPanel }, { quantizeWidget, quantizePanel } };
+             { findWidget, findPanel }, { slicerWin, slicerPanel }, { quantizeWidget, quantizePanel } })
+        stops.push_back (s);
+    return stops;
 }
 
 int MainWindow::stopWithFocus (const std::vector<PanelStop>& stops) const
@@ -143,7 +155,7 @@ void MainWindow::focusStop (const PanelStop& next)
         activateWindow();
         next.widget->setFocus (Qt::TabFocusReason);
     }
-    const auto name = next.panel != nullptr ? next.panel->dock()->windowTitle() : (next.widget == mixerWin ? tr ("Mixer") : tr ("Waveform"));
+    const auto name = next.panel != nullptr ? next.panel->dock()->windowTitle() : (next.widget == mixerWin ? tr ("Mixer") : next.widget == midiPanel ? tr ("MIDI Editor") : tr ("Waveform"));
     statusBar()->showMessage (name, 1500);
 }
 
@@ -220,6 +232,17 @@ void MainWindow::closeFocused()
     if (mixerDocked() && mixerWin->isVisible() && (holds (mixerWin, QApplication::focusWidget()) || ! panelFocused))
     {
         mixerWin->close();
+        return;
+    }
+    // The MIDI editor under the waveform closes as a panel does (View > MIDI Editor brings it back).
+    if (midiPanel != nullptr && midiPanel->isVisible() && holds (midiPanel, QApplication::focusWidget()))
+    {
+        commands.action (QStringLiteral ("view.midiEditor"))->setChecked (false);
+        if (! trackHolder->isHidden())
+            return;   // Cancel when asked to save its notes
+        activateWindow();
+        waveform->setFocus();
+        statusBar()->showMessage (tr ("Closed the MIDI Editor (Shift+F4 opens it again)"), 3000);
         return;
     }
     for (auto* p : panels)

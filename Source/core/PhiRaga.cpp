@@ -641,7 +641,9 @@ namespace phi
         if (v.swingCents <= 0.0)
             return v.hz;
         // Āndolan: from the svara down by its depth and back, slowly, as long as it is held.
-        const auto below = ornaments * v.swingCents * 0.5 * (1.0 - std::cos (twoPi * v.swingHz * seconds));
+        // Centred, it starts on the svara and swings half its depth either side.
+        const auto below = centredSwing ? ornaments * v.swingCents * 0.5 * std::sin (twoPi * v.swingHz * seconds)
+                                        : ornaments * v.swingCents * 0.5 * (1.0 - std::cos (twoPi * v.swingHz * seconds));
         return v.hz * std::pow (2.0, -below / 1200.0);
     }
 

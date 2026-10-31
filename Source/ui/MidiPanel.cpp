@@ -207,6 +207,21 @@ bool MidiPanel::mayDiscard()
     return true;
 }
 
+bool MidiPanel::closing()
+{
+    if (editor != nullptr)
+        editor->stop();
+    const bool changed = bytesNow() != saved;
+    if (! mayDiscard())
+        return false;
+    if (changed && bytesNow() != saved)
+    {
+        path.clear();
+        load (emptySong(), {});   // discarded
+    }
+    return true;
+}
+
 void MidiPanel::load (const midifile::Song& song, const QString& songName)
 {
     MidiEditor::Host h;
@@ -231,6 +246,7 @@ void MidiPanel::load (const midifile::Song& song, const QString& songName)
         delete editor.data();
     editor = new MidiEditor (song, h, this);
     layout->addWidget (editor, 1);
+    setFocusProxy (editor);
     editor->show();
     name = songName;
     saved = bytesNow();
