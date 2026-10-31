@@ -181,6 +181,8 @@ possessing a strong tonal center".
 - Heidi Von Gunden, *The Music of Pauline Oliveros* (Scarecrow Press, 1983).
 - [The Tuning Meditation by Pauline Oliveros with IONE](https://hammer.ucla.edu/programs-events/2022/tuning-meditation-pauline-oliveros-ione),
   Hammer Museum, 2022, with the score (© Deep Listening Publications, 2007).
+- [Tuning Meditation](https://www.indexical.org/pieces/tuning-meditation), Indexical, with the
+  score and the performance *Listening Through* (2016).
 
 ## Annea Lockwood
 
