@@ -104,6 +104,17 @@ Gerhard Kubik named the "inherent patterns" that listeners hear from the interlo
 single player plays. The same technique appears in medieval European hocket, in the Shona
 mbira, where two players interlock, and in Balinese kotekan.
 
+In the hocket chapter of that book, Arom calls it polyphony reached through polyrhythm. Several
+rhythmic figures, each fixed to its own pitch within a set scale, overlap and mesh. In Africa
+south of the Sahara the ensembles are wind instruments of one kind, horns or whistles, in
+different sizes, from five up to about twenty. Each sounds one degree of the scale, so no single
+player has a melody: the melody exists only in the ensemble. Every player has a figure of their
+own for each piece, sometimes with room to vary it. Arom treats this strict form as sitting right
+on the line between polyrhythm and polyphony. He finds it in Cameroon, the Congo, Zaire, the
+Central African Republic, Kenya, Uganda, Ethiopia and South Africa. In the Central African
+Republic, only two Banda peoples, the Dakpa and the Linda, seem to use it, each with repertories
+written for its horn ensembles.
+
 Elsewhere in Africa, Wikipedia names hocketing among the Ba-Benzélé (whose hindewhu whistle-and-
 voice figure Herbie Hancock borrowed for the 1973 "Watermelon Man"), the Mbuti, the Basarwa
 (San), the Gumuz of the Blue Nile region of Sudan, and the Gogo of Tanzania, and points to the
@@ -143,7 +154,8 @@ their figures interlocking, then each figure varying within the cycle while the 
   [Bigwala](https://en.wikipedia.org/wiki/Bigwala) and
   [Simha Arom](https://en.wikipedia.org/wiki/Simha_Arom), Wikipedia.
 - Simha Arom, *African Polyphony and Polyrhythm: Musical Structure and Methodology* (Cambridge
-  University Press, 1991).
+  University Press, 1991), especially "Polyrhythmics as a way to polyphony: hocket",
+  [doi:10.1017/CBO9780511518317.029](https://doi.org/10.1017/CBO9780511518317.029).
 - Gerhard Kubik, *Theory of African Music* (University of Chicago Press, 1994–2010).
 - Ernest H. Sanders, "Hocket", in *The New Grove Dictionary of Music and Musicians*, 2nd ed.
   (Macmillan, 2001).
