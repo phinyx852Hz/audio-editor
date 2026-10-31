@@ -24,7 +24,8 @@ was sung to make the high feasts more splendid. Over the 11th and 12th centuries
 voice grew independent of the chant, and at Saint-Martial in Limoges it sang melismas over held
 chant notes.
 
-The Notre Dame school of Paris, active while the cathedral was being built (1163–1238), gave
+The Notre Dame school, the composers working at or near the cathedral in Paris from about 1160
+to 1250, while it was being built (1163–1238), gave
 organum measured rhythm through the six rhythmic modes, repeating patterns of long and short
 notes. Léonin compiled the *Magnus liber organi*, two-voice organa (organa dupla) on the
 graduals, Alleluias and responsories of the church year, the first large collection credited to
@@ -41,9 +42,14 @@ from Anonymous IV, an English student writing around 1275, who called Pérotin t
 of discant. Giving new words to the upper voice of a clausula made the motellus, the ancestor
 of the motet. The repertory survives in three manuscripts: W1 (St Andrews, now at
 Wolfenbüttel), F (Florence, Pluteo 29.1, the largest, with 462 clausulae) and W2 (Wolfenbüttel,
-the latest, with the most motets). How strictly modal rhythm governed organum purum is still
-debated: Willi Apel and William Waite read all of it as modal, a view most scholars no longer
-hold.
+the latest, with the most motets); none is older than the 1230s, though the music was sung from
+the last quarter of the 12th century. How strictly modal rhythm governed organum purum is still
+debated, because the theorists who describe it, Garlandia, Franco of Cologne and Anonymous IV,
+wrote two generations after it was composed: Willi Apel and William Waite read all of it as
+modal, a view most scholars no longer hold. Not everyone liked the new style. John of
+Salisbury, who taught in Paris in Léonin's time, complained in his *Policraticus* (1159) that the
+singers' high and low parts, running scales and broken notes made worship sound like a concert
+of sirens, though he allowed that in moderation it lifted the soul.
 
 *In PHI*: Compose > Europe and the Americas > Organum holds a chant tenor in long notes under two
 or three voices in the rhythmic modes, consonant with it on each long, then a discant clausula
@@ -56,6 +62,10 @@ with the tenor in the fifth mode; Pérotin's voices exchange their phrases.
 - Johannes de Garlandia, *De mensurabili musica* (c. 1240), on the rhythmic modes.
 - Claude V. Palisca (ed.), *Musica enchiriadis and Scolica enchiriadis*, trans. Raymond
   Erickson (Yale University Press, 1995).
+- Gregorio Bevilacqua, "The Earliest Source of Notre-Dame Polyphony?", *Music and Letters*
+  97/1 (2016).
+- Catherine A. Bradley, *Polyphony in Medieval Paris: The Art of Composing with Plainchant*
+  (Cambridge University Press, 2018).
 - Sarah Fuller, "Early Polyphony", in Richard Crocker and David Hiley (eds), *The New Oxford
   History of Music* 2 (Oxford University Press, 1990).
 - William G. Waite, *The Rhythm of Twelfth-Century Polyphony* (Yale University Press, 1954).
@@ -66,14 +76,23 @@ with the tenor in the fifth mode; Pérotin's voices exchange their phrases.
 
 ## Isorhythm
 
-Isorhythm ("same rhythm") is the organising principle of the 14th-century motet. The tenor,
-usually a fragment of chant, is laid out as a repeating rhythm (the talea) and a repeating
-melody (the color) of different lengths, so that they fall out of step and meet again only
-after several statements. Philippe de Vitry, whose treatise *Ars nova* (c. 1322) named the new
-style, and Guillaume de Machaut wrote the classic examples; later motets, by Dunstable and
-Dufay among others, extend the repetition to the upper voices (panisorhythm), state the tenor
-again in diminution, and put hockets at the joins. The terms talea and color are medieval; the
-word isorhythm was coined by Friedrich Ludwig in 1904.
+Isorhythm ("same rhythm") builds a voice from a repeating rhythm, the talea, laid over a
+repeating series of pitches, the color, of the same or a different length. It grew out of the
+rhythmic modes and first appears in French motets of the 13th century, such as those of the
+Montpellier Codex; the motets in the illuminated *Roman de Fauvel* (early 14th century) are among
+the first built around it, and it became the main organising principle of the 14th-century
+motet. The tenor, usually a fragment of chant, carries it: in the Kyrie of Machaut's *Messe de
+Nostre Dame* (c. 1360) a color of 28 pitches runs through a talea of four durations seven times.
+When the two lengths differ, they meet again only after several statements; a color of nine
+notes against a talea of five realigns after five colors. Philippe de Vitry, whose treatise *Ars
+nova* (c. 1322) named the new style, and Guillaume de Machaut are its masters. Later motets
+restate the tenor in diminution, as in Johannes Alanus's *Sub Arturo plebs*, whose tenor runs
+three times at the proportions 9:6:4, and extend isorhythm to every voice (panisorhythm), as
+Dunstable, Ciconia and Du Fay did; a mass by Pycard in the English Old Hall manuscript sets its
+upper and lower parts at 4:9 and contracts the lower through 12:9:8:6 until they align again.
+The terms talea and color are medieval; the word isorhythm was coined by Friedrich Ludwig in
+1904 for 13th-century music and later extended to Machaut. As an analytical idea it has been
+applied to Peyote songs of some North American peoples and to music of India and Africa.
 
 *In PHI*: the tenor's talea and color of different lengths, its second half in diminution, and
 upper voices that repeat taleae of their own, with hockets at the joins.
@@ -81,7 +100,12 @@ upper voices that repeat taleae of their own, with hockets at the joins.
 - [Isorhythm](https://en.wikipedia.org/wiki/Isorhythm),
   [Ars nova](https://en.wikipedia.org/wiki/Ars_nova) and
   [Guillaume de Machaut](https://en.wikipedia.org/wiki/Guillaume_de_Machaut), Wikipedia.
-- Margaret Bent, "Isorhythm", *Grove Music Online*.
+- Margaret Bent, "Isorhythm", *Grove Music Online*, and "What Is Isorhythm?", in *Quomodo
+  Cantabimus Canticum? Studies in Honor of Edward H. Roesner* (American Institute of
+  Musicology, 2008).
+- Richard Taruskin, *The Oxford History of Western Music*, vol. 1 (Oxford University Press, 2010).
+- Anna Zayaruznaya, *The Monstrous New Art: Divided Forms in the Late Medieval Motet* (Cambridge
+  University Press, 2015).
 
 ## Species counterpoint
 
