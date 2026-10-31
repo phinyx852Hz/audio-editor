@@ -196,6 +196,25 @@ namespace
             c.add (base + "FUNCTION", "Track " + std::to_string (t) + " Function");
         }
 
+        // EBUCore (EBU Tech 3293) in a WAV axml chunk: the descriptive core.
+        c.in (Schema::ebucore, "EBUCore")
+            .add ("title", "Title", tag::title)
+            .add ("creator", "Creator (one per line)", tag::artist, F::same, K::lines)
+            .add ("composer", "Creator: Composer (one per line)", tag::composer, F::same, K::lines)
+            .add ("lyricist", "Creator: Lyricist (one per line)", tag::lyricist, F::same, K::lines)
+            .add ("contributor", "Contributor (one per line)", {}, F::same, K::lines)
+            .add ("conductor", "Contributor: Conductor", tag::conductor, F::same, K::lines)
+            .add ("engineer", "Contributor: Engineer", tag::engineer, F::same, K::lines)
+            .add ("publisher", "Publisher", tag::publisher)
+            .add ("subject", "Subject (one per line)", tag::keywords, F::same, K::lines)
+            .add ("description", "Description", tag::comment, F::same, K::lines)
+            .add ("created", "Date Created", tag::date)
+            .add ("issued", "Date Issued", tag::originalDate)
+            .add ("genre", "Genre", tag::genre, F::same, K::lines)
+            .add ("isrc", "ISRC", tag::isrc)
+            .add ("rights", "Rights", tag::copyright)
+            .add ("language", "Language", tag::language, F::same, K::lines);
+
         // ID3v2 frames (MP3, WAV, AIFF). ID3v1 is written from the same values.
         c.in (Schema::id3, "ID3v2")
             .add ("TIT2", "Title", tag::title)
@@ -553,7 +572,7 @@ namespace
         return value;
     }
 
-    const std::vector<Schema> order { Schema::riff, Schema::bext, Schema::cart, Schema::ixml, Schema::id3,
+    const std::vector<Schema> order { Schema::riff, Schema::bext, Schema::cart, Schema::ixml, Schema::ebucore, Schema::id3,
                                       Schema::vorbis, Schema::mp4, Schema::ape, Schema::xmp };
 }
 
@@ -612,6 +631,7 @@ const char* schemaName (Schema s)
         case Schema::bext:   return "BWF";
         case Schema::cart:   return "Cart";
         case Schema::ixml:   return "iXML";
+        case Schema::ebucore: return "EBUCore";
         case Schema::id3:    return "ID3";
         case Schema::vorbis: return "Vorbis";
         case Schema::mp4:    return "MP4";
@@ -630,6 +650,7 @@ const char* schemaPrefix (Schema s)
         case Schema::bext:   return "bwf";
         case Schema::cart:   return "cart";
         case Schema::ixml:   return "ixml";
+        case Schema::ebucore: return "ebucore";
         case Schema::id3:    return "id3";
         case Schema::vorbis: return "vorbis";
         case Schema::mp4:    return "mp4";

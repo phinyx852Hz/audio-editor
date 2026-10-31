@@ -30,6 +30,7 @@
 #include "../Source/mixer/Stochastic.h"
 #include "../Source/mixer/Serial.h"
 #include "../Source/patchbay/PatchBay.h"
+#include "../Source/core/EbuCore.h"
 #include "../Source/core/Ixml.h"
 #include "../Source/core/Metadata.h"
 #include "../Source/core/RiffChunks.h"
@@ -925,6 +926,45 @@ namespace
         Tags back;
         check (ixml::read (x, back, error) && back.count ("ixml:BEXT/BWF_ORIGINATOR") == 0 && back["ixml:LOUDNESS/LOUDNESS_VALUE"] == "-23.00",
                "ixml: no stale BEXT copy, LOUDNESS from bext");
+    }
+
+    void testEbuCore()
+    {
+        // A new document from the common fields.
+        Tags t;
+        t[tag::title] = "Night Drive";
+        t[tag::artist] = "Ana\nBo";
+        t[tag::composer] = "Cy";
+        t[tag::isrc] = "AA6Q72000047";
+        t[tag::date] = "2026-10-31";
+        const auto x = ebucore::write (t);
+        Tags back;
+        std::string error;
+        check (ebucore::read (x, back, error) && back[tag::title] == "Night Drive" && back[tag::artist] == "Ana\nBo" && back[tag::composer] == "Cy"
+                   && back[tag::isrc] == "AA6Q72000047" && back[tag::date] == "2026-10-31",
+               "ebucore: round trip " + error);
+        check (x.find ("<created startDate=\"2026-10-31\"/>") != std::string::npos && x.find ("typeLabel=\"ISRC\"") != std::string::npos,
+               "ebucore: dates as attributes, ISRC labelled");
+
+        // Merging into a file's document keeps what PHI does not show (an ADM description,
+        // another identifier) and what did not change (a composer's split name).
+        const std::string original = R"(<?xml version="1.0"?><ebucore:ebuCoreMain xmlns:ebucore="urn:ebu:metadata-schema:ebuCore_2014">)"
+            R"(<ebucore:coreMetadata><ebucore:title><dc:title xmlns:dc="http://purl.org/dc/elements/1.1/">Old</dc:title></ebucore:title>)"
+            R"(<ebucore:identifier typeLabel="UUID"><dc:identifier xmlns:dc="http://purl.org/dc/elements/1.1/">u-1</dc:identifier></ebucore:identifier>)"
+            R"(<ebucore:creator><ebucore:contactDetails><ebucore:givenName>Dee</ebucore:givenName><ebucore:familyName>Eff</ebucore:familyName>)"
+            R"(</ebucore:contactDetails><ebucore:role typeLabel="Composer"/></ebucore:creator><ebucore:format><ebucore:audioFormatExtended>)"
+            R"(<audioProgramme audioProgrammeID="APR_1001"/></ebucore:audioFormatExtended></ebucore:format></ebucore:coreMetadata></ebucore:ebuCoreMain>)";
+        Tags file;
+        check (ebucore::read (original, file, error) && file[tag::title] == "Old" && file[tag::composer] == "Dee Eff", "ebucore: read a file's document");
+        file[tag::title] = "New";
+        const auto merged = ebucore::write (file, original);
+        Tags again;
+        check (merged.find ("<ebucore:title><dc:title>New</dc:title></ebucore:title>") != std::string::npos
+                   && merged.find ("audioProgrammeID=\"APR_1001\"") != std::string::npos && merged.find ("u-1") != std::string::npos
+                   && merged.find ("<ebucore:givenName>Dee</ebucore:givenName>") != std::string::npos
+                   && ebucore::read (merged, again, error) && again[tag::title] == "New",
+               "ebucore: merge keeps the rest " + error);
+        check (ebucore::write (Tags {}).empty() && ebucore::write (t, "<BWFXML/>").empty(), "ebucore: nothing to write, not EBUCore");
     }
 
     uint32_t le32 (const unsigned char* p) { return (uint32_t) p[0] | ((uint32_t) p[1] << 8) | ((uint32_t) p[2] << 16) | ((uint32_t) p[3] << 24); }
@@ -9654,6 +9694,7 @@ int main()
     testMetadata();
     testXmp();
     testIxml();
+    testEbuCore();
     testRiffChunks();
     testNyquist();
     testAlbum();

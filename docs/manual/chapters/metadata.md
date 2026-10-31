@@ -20,6 +20,7 @@ The **Common** tab holds the fields every format shares: title, artist, album, a
 | RIFF INFO | WAV's own tags |
 | Cart | AES46 radio cart chunk |
 | iXML | Production sound metadata (iXML 2.0): scene, take and take type, speed and timecode, tracks, file set, location, the AFSI user fields, and a LOUDNESS copy of the bext loudness |
+| EBUCore | The EBU's description for broadcasters and archives (EBU Tech 3293), in a WAV `axml` chunk: title, creators and contributors by role, publisher, subjects, description, dates, genre, ISRC, rights and language. Written only when ticked on the Write tab; anything else in the chunk, such as an ADM description, is kept |
 | Vorbis comments | FLAC and Ogg tags |
 | MP4 atoms | M4A and MP4 tags |
 | APEv2 | WavPack and APE tags |

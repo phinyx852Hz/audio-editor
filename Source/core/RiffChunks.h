@@ -40,7 +40,7 @@ namespace riff
     // Which schemas to write.
     struct Write
     {
-        bool riff = true, bext = true, cart = true, ixml = true, xmp = true;
+        bool riff = true, bext = true, cart = true, ixml = true, ebucore = false, xmp = true;   // ebucore: an axml chunk
         std::string id3;         // the ID3 chunk's bytes, made by the caller; empty: none
         std::string software;    // ISFT, xmp:CreatorTool and the cart ProducerAppID when not set
     };
