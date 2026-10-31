@@ -36,6 +36,38 @@ beat, and the tāla's divisions marked with sam (×), khālī (0) and numbered t
 Digambar Paluskar devised a rival system. Bhatkhande's is the one used in his anthology
 *Kramik Pustak Malika* and in most printed collections since.
 
+David Courtney traces how it came about. Notation in India (swar lipi) is old:
+- **Vedic chant:** Rigveda texts mark three pitches, one raised by a stroke above, one plain and
+  one by a line below. Scholars disagree, sometimes bitterly, over which of udātta, anudātta and
+  svarita is which. The Sāmaveda, a song book, needed more pitches and in some texts uses numbers.
+- **Treatises:** the *Nāṭyaśāstra*, Matanga's *Bṛhaddeśī* (said to be the first to name notes by
+  something like the present sargam) and Śārṅgadeva's *Saṅgītaratnākara* (13th century) all
+  needed some notation, though verse hides how it worked in practice.
+- **Under the sultanates and Mughals:** musicians mostly guarded their compositions and did not
+  write them down.
+- **After 1858:** the old courts lost their power to patronise, musicians turned to the new middle
+  class, and books on music multiplied, each with a notation of its own:
+  - Sadiq Ali Khan's *Sarmaye Ishrat* (1874) wrote sitar music by its frets;
+  - Pannalal Goswami's *Nad Vinod* (1896) put duration marks over sargam;
+  - Paluskar's system, around 1900, fixed every note's length exactly. A pupil, B. R. Deodhar,
+    links that to Paluskar learning Western staff notation from a bandleader.
+
+Paluskar's system spread through his Gandharva Mahavidyalaya schools (Lahore 1901, Bombay 1908),
+but it was cluttered. From the second quarter of the century, Bhatkhande's took its place, and
+by 2000 Paluskar's was all but gone. Bhatkhande's change was rhythmic. Instead of writing each
+note's length, he fitted everything into the beat (mātrā), which made the page cleaner. The cost
+is tālas with half beats, such as 8½ or 9½ mātrās, which are awkward to write; Paluskar's system
+handled them better. In Courtney's summary:
+- a dash marks a rest;
+- an arc beneath joins notes that share a beat;
+- grace notes (kan) sit above the beat;
+- the tāla marks may go above or below the line.
+
+The system names no script, so it is written in Devanagari, Roman, Kannada, Urdu and others.
+Ustad Mahfooz Khokhar's *Rag Swaroop* (Pakistan, 1998) writes it in Urdu, right to left, and puts
+an X on every clap, X1 X2 0 X3 for tīntāl. Courtney dates the first volume to 1920, against the
+1913 often given elsewhere.
+
 Ornaments have signs of their own. An arc under a group of notes (chhand) means they all fall
 within one beat, as in fast tāns. Meend, a smooth glide from one note to another touching those
 between, is marked by an arc over the notes, so that a slide from komal Dha down to komal Re
@@ -62,6 +94,8 @@ Rāg Yaman, with its sharp Ma, takes one sharp, though it is not G major.
 - Vishnu Narayan Bhatkhande, *Kramik Pustak Malika* (1913–37).
 - ["Bhatkhande Notation"](https://www.indianclassicalmusic.com/bhatkhande-notation-script),
   IndianClassicalMusic.com.
+- David Courtney, ["North Indian Musical Notation: An Overview (Part 1)"](https://chandrakantha.com/music-and-dance/i-class-music/n-indian-notation/),
+  chandrakantha.com.
 - Sādhana, ["Notating Indian Classical Music"](https://raag-hindustani.com/Notation.html),
   *Raag Hindustani* (2011).
 
