@@ -72,6 +72,8 @@ public:
     // hears it, or its drum hits as kick, snare and hat on channel 10 (mixer/DrumsToMidi.h), put
     // in from the step cursor. False when nothing was heard.
     bool putInAudio (const AudioData&, bool drums);
+    // Playback and recording stopped, every note let go (the panel closing).
+    void stop() { setRecording (false); stopPlay(); }
     // A message from the MIDI keyboard, on the UI thread: step input when it is on.
     void midiIn (uint8_t status, uint8_t data1, uint8_t data2);
 

@@ -238,6 +238,8 @@ void MainWindow::closeFocused()
     if (midiPanel != nullptr && midiPanel->isVisible() && holds (midiPanel, QApplication::focusWidget()))
     {
         commands.action (QStringLiteral ("view.midiEditor"))->setChecked (false);
+        if (! trackHolder->isHidden())
+            return;   // Cancel when asked to save its notes
         activateWindow();
         waveform->setFocus();
         statusBar()->showMessage (tr ("Closed the MIDI Editor (Shift+F4 opens it again)"), 3000);
