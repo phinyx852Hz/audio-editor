@@ -4,16 +4,17 @@ writings and terms, the World Soundscape Project and his own environmental music
 took up his ideas are in ecology-1-composers.md; the anthropologists and scientists in
 ecology-2-anthropology.md.
 
-Written from memory: Wikipedia could not be reached from the session that wrote this, so the
-links were not opened then and dates and titles should be checked against them.
+The Schafer and World Soundscape Project entries were checked against Wikipedia on
+2026-10-31, and every Wikipedia link was checked to open. The other entries are partly from
+memory.
 -->
 
 # Acoustic Ecology / Schafer
 
 ## Acoustic ecology
 
-Acoustic ecology, also called soundscape ecology in its scientific branch, studies the
-relationship between living beings and their environment through sound: what a place sounds
+Acoustic ecology, sometimes called ecoacoustics or soundscape studies, studies the
+relationship, mediated through sound, between living beings and their environment: what a place sounds
 like, how its sounds change, and what they mean to those who hear them. It asks the listener to
 treat the whole sound of a place, birds, machines, weather and speech together, as one
 composition whose balance can be healthy or ruined, and whose design is everyone's business.
@@ -53,26 +54,30 @@ sounds of a landscape, biological, geological and human.
 
 ## R. Murray Schafer
 
-Raymond Murray Schafer (1933–2021) was a Canadian composer, writer, educator and
-environmentalist, the founder of acoustic ecology. Born in Sarnia, Ontario, he studied at the
-Royal Conservatory and the University of Toronto, leaving without a degree, and spent the early
-1960s in Europe, in Vienna and in England, where he wrote about British composers and edited
-Ezra Pound's writings on music (*Ezra Pound and Music*, 1977).
+Raymond Murray Schafer (18 July 1933 – 14 August 2021) was a Canadian composer, writer, music
+educator and environmentalist, the founder of acoustic ecology. Born in Sarnia, Ontario, he
+studied at the Royal Schools of Music in London, with Alberto Guerrero at the Royal
+Conservatory of Music in Toronto, and at the University of Toronto with Richard Johnston. His
+early books include *Ezra Pound and Music*, which he edited, and *British Composers in
+Interview* (1963).
 
-From 1965 to 1975 he taught at Simon Fraser University, where his course on noise pollution
-became the World Soundscape Project. He then moved to a farm near Bancroft, Ontario, and later
-to Indian River near Peterborough, writing music theatre for the outdoors and teaching. His
-works include twelve string quartets, *North/White* (1973) against the noise of snowmobiles in
-the Canadian north, the choral *Miniwanka, or The Moments of Water* (1971) and *Snowforms*
-(1981), whose graphic score traces the outline of snowdrifts, and the twelve-part *Patria*
-cycle. He received the first Glenn Gould Prize in 1987. He died in Peterborough in August
-2021.
+He started soundscape studies at Simon Fraser University in the 1960s, where his course on
+noise pollution grew into the World Soundscape Project. He coined the word schizophonia in
+1969. A practitioner of graphic notation, he wrote over a hundred works: thirteen string
+quartets (1970–2015), *North/White* (1973) for orchestra and snowmobile, the choral
+*Miniwanka, or The Moments of Water* (1971) and *Snowforms* (1981, on Inuit words for snow),
+*Music for Wilderness Lake* (1979) and the twelve-part *Patria* cycle. He was the first
+recipient of the Jules Léger Prize (1978) and of the Glenn Gould Prize (1987), won the Walter
+Carsen Prize (2005) and Juno Awards in 2004 and 2011, and was made a Companion of the Order of
+Canada in 2013 for his work in music and acoustic ecology. He died at his rural home in Indian
+River, near Peterborough, Ontario. World Listening Day is held each year on 18 July, his
+birthday.
 
 - [R. Murray Schafer](https://en.wikipedia.org/wiki/R._Murray_Schafer), Wikipedia.
 - [R. Murray Schafer](https://www.thecanadianencyclopedia.ca/en/article/r-murray-schafer-emc),
   *The Canadian Encyclopedia*.
 - Stephen Adams, *R. Murray Schafer* (University of Toronto Press, 1983).
-- Ellen Waterman, "R. Murray Schafer's Environmental Music", *Musicworks* 79 (2001).
+- R. Murray Schafer, *My Life on Earth & Elsewhere* (2012), his memoir.
 
 ## The Tuning of the World
 
@@ -88,8 +93,8 @@ ceaselessly", of which we are at once the audience, the performers and the compo
 set out the vocabulary of the field (the next entry) and ended with a call for quiet and for
 ear cleaning.
 
-- [The Soundscape: Our Sonic Environment and the Tuning of the World](https://en.wikipedia.org/wiki/The_Soundscape:_Our_Sonic_Environment_and_the_Tuning_of_the_World),
-  and [R. Murray Schafer](https://en.wikipedia.org/wiki/R._Murray_Schafer), Wikipedia.
+- [R. Murray Schafer](https://en.wikipedia.org/wiki/R._Murray_Schafer) and
+  [Soundscape](https://en.wikipedia.org/wiki/Soundscape), Wikipedia.
 - R. Murray Schafer, *The Tuning of the World* (Knopf, 1977).
 
 ## Schafer's vocabulary
@@ -107,17 +112,18 @@ Schafer gave acoustic ecology most of its terms:
   sounds are heard clearly and from far off, as in the country or at night; in a lo-fi
   soundscape sounds are crowded and masked, and perspective is lost, as in a modern city.
 - **Schizophonia**: the split between an original sound and its electroacoustic reproduction,
-  a word Schafer meant to sound nervous, since he thought the loudspeaker had cut sounds from
-  their sources.
+  a word Schafer coined in 1969 and meant to sound nervous: "Sounds have been torn from their
+  natural sockets and given an amplified and independent existence." Steven Feld later built
+  on it with schizophonic mimesis.
 - **Sacred noise**: a loud sound allowed, even honoured, by a society, such as church bells,
   cannon or, later, industry, whose making is a sign of power.
 - **Earwitness**: one who testifies to a sound heard, such as the writers whose descriptions are
   the only record of the soundscapes of the past.
 - **Sound romance and sound phobia**: the nostalgia for a vanished sound, and the fear of a sound.
 
-- [Keynote sound](https://en.wikipedia.org/wiki/Keynote_sound),
-  [Soundmark](https://en.wikipedia.org/wiki/Soundmark) and
-  [Schizophonia](https://en.wikipedia.org/wiki/Schizophonia), Wikipedia.
+- [Acoustic ecology](https://en.wikipedia.org/wiki/Acoustic_ecology) (soundmarks and keynotes)
+  and [R. Murray Schafer](https://en.wikipedia.org/wiki/R._Murray_Schafer) (schizophonia),
+  Wikipedia.
 - Barry Truax (ed.), *Handbook for Acoustic Ecology* (A.R.C. Publications, 1978; CD-ROM
   edition, Cambridge Street Publishing, 1999), the field's dictionary, with an online edition at
   [sfu.ca](https://www.sfu.ca/sonic-studio-webdav/handbook/).
@@ -143,30 +149,43 @@ still used in music education in Canada, Brazil, Argentina, Japan and elsewhere.
 
 ## The World Soundscape Project
 
-The World Soundscape Project (WSP) was the research group Schafer founded at Simon Fraser
-University, Burnaby, British Columbia, at the end of the 1960s, from a study of noise pollution
-in Vancouver. Its members included Barry Truax, Hildegard Westerkamp, Howard Broomfield, Bruce
-Davis and Peter Huse.
+The World Soundscape Project (WSP) was the international research project Schafer founded at
+Simon Fraser University at the end of the 1960s, which began the modern study of acoustic
+ecology. Its aim was "to find solutions for an ecologically balanced soundscape where the
+relationship between the human community and its sonic environment is in harmony": education
+about the soundscape and noise pollution, and the recording and cataloguing of soundscapes,
+above all soundmarks and dying sounds. Its members included Barry Truax, Hildegard
+Westerkamp, Howard Broomfield, Bruce Davis, Peter Huse and John Oswald.
 
-Its work was to record and document soundscapes and their change. *The Vancouver Soundscape*
-(1973, a book and two LPs) was its first study; *Five Village Soundscapes* (1977) followed a
-European tour of 1975 that recorded villages in Sweden, Germany, Italy, France and Scotland;
-the *Soundscapes of Canada* series (1974) for CBC Radio's *Ideas* was a cross-country portrait.
-The WSP also published *The Book of Noise*, a comparative survey of noise bylaws, and Truax's
-*Handbook for Acoustic Ecology* (1978). Its archive of tape recordings is held at SFU. Later
-projects revisited its work: *Soundscape Vancouver* (1996) recorded the city again, and
-*Acoustic Environments in Change* (published 2009) returned to the five villages in 2000.
+With support from the Donner Canadian Foundation it studied Vancouver in 1972; *The Vancouver
+Soundscape* (1973) set recordings of the city's soundscapes and soundmarks beside Schafer's
+spoken documentary on acoustic design, and its track "Entrance to the Harbour" condensed a
+thirty-minute boat journey into seven minutes, an early step toward soundscape composition.
+In 1973 Huse and Davis crossed Canada recording bells, chimes, foghorns, machines and natural
+ambiences for *Soundscapes of Canada*, ten one-hour programmes on CBC Radio's *Ideas* (1974).
+In 1975 a larger group with Schafer toured Europe, recording five villages: Skruv in Sweden,
+Bissingen in Germany, Cembra in Italy, Lesconil in France and Dollar in Scotland, published as
+*European Sound Diary* and *Five Village Soundscapes*. Other publications were *The Book of
+Noise*, *A Survey of Community Noise By-Laws in Canada* (1972), *The Music of the
+Environment* and Truax's *Handbook for Acoustic Ecology* (1978).
+
+The project slowed in the 1980s. In the 1990s its library was digitised, and *Soundscape
+Vancouver '96* returned to the city with soundscape compositions by Darren Copeland, Sabine
+Breitsameter, Hans Ulrich Werner, Barry Truax and Claude Schryer, released with the 1973
+recordings. In 2009 Finnish researchers led by Helmi Järviluoma, Heikki Uimonen and Noora
+Vikman, with Truax, revisited the five villages to hear how they had changed. In 1993 members
+of the acoustic ecology community the WSP had created formed the World Forum for Acoustic
+Ecology.
 
 - [World Soundscape Project](https://en.wikipedia.org/wiki/World_Soundscape_Project), Wikipedia.
 - [World Soundscape Project](https://www.sfu.ca/~truax/wsp.html), Barry Truax's pages at Simon
   Fraser University.
-- Helmi Järviluoma and others, *Acoustic Environments in Change* (TAMK University of Applied
-  Sciences, 2009).
+- Helmi Järviluoma and others, *Acoustic Environments in Change* (2009).
 
 ## Patria and the Theatre of Confluence
 
 *Patria* is Schafer's cycle of twelve music-theatre works (a prologue, ten parts and an
-epilogue), written from 1966 into the 2000s, which he called the Theatre of Confluence: a
+epilogue), written over some forty years, which he called the Theatre of Confluence: a
 theatre where music, drama, ritual, myth and the natural world flow together, performed
 not in opera houses but in lakes, forests, parks and a planetarium, often over hours or days,
 with audiences who take part.
@@ -181,8 +200,9 @@ participants camping for a week in the Haliburton Forest, Ontario. *Music for Wi
 (1979), for twelve trombones placed around a lake at dawn and dusk, belongs to the same
 thinking.
 
-- [Patria (Schafer)](https://en.wikipedia.org/wiki/Patria_(Schafer)) and
-  [R. Murray Schafer](https://en.wikipedia.org/wiki/R._Murray_Schafer), Wikipedia.
-- R. Murray Schafer, *Patria: The Complete Cycle* (Coach House Books, 2002).
+- [R. Murray Schafer](https://en.wikipedia.org/wiki/R._Murray_Schafer), Wikipedia, with the
+  list of the *Patria* works.
+- R. Murray Schafer, *Patria and the Theatre of Confluence* (1991) and *Patria: The Complete
+  Cycle* (2002).
 - R. Murray Schafer, *Voices of Tyranny, Temples of Silence* (Arcana Editions, 1993), and
   *HearSing* (Arcana Editions, 2005).

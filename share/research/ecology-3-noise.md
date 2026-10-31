@@ -7,7 +7,8 @@ and the US, Japanese noise, and the scenes elsewhere.
 Checked against Wikipedia's "Noise music" article, which the owner pasted on 2026-10-31
 (Wikipedia itself could not be reached from the session that wrote this). Facts the article
 does not give, such as the details of single artists under Merzbow and the Japanese groups,
-are from memory and should be checked against their own pages.
+are from memory and should be checked against their own pages. Every Wikipedia link was
+checked to open on 2026-10-31.
 -->
 
 # Acoustic Ecology / Noise music
@@ -113,10 +114,9 @@ extreme form, harsh noise wall, holds a single dense static texture for a whole 
 artists and, in the 1990s, the Haters, Daniel Menche, Vomir (France) and Richard Ramirez
 shaped both. Ambient noise wall is its softer, sparser offshoot.
 
-- [Power electronics](https://en.wikipedia.org/wiki/Power_electronics_(music)),
-  [Whitehouse](https://en.wikipedia.org/wiki/Whitehouse_(band)),
-  [Harsh noise](https://en.wikipedia.org/wiki/Harsh_noise) and
-  [Harsh noise wall](https://en.wikipedia.org/wiki/Harsh_noise_wall), Wikipedia.
+- [Power electronics](https://en.wikipedia.org/wiki/Power_electronics_(music_genre)),
+  [Whitehouse](https://en.wikipedia.org/wiki/Whitehouse_(band)) and
+  [Harsh noise](https://en.wikipedia.org/wiki/Harsh_noise) (with harsh noise wall), Wikipedia.
 
 ## Noise in the United States
 
@@ -157,7 +157,7 @@ in Japan, where it was always marginal; the CD *The Japanese-American Noise Trea
 1995) marks that exchange.
 
 - [Japanoise](https://en.wikipedia.org/wiki/Japanoise),
-  [Kansai no wave](https://en.wikipedia.org/wiki/Kansai_no_wave) and
+  [No wave](https://en.wikipedia.org/wiki/No_wave) (with Kansai no wave) and
   [Group Ongaku](https://en.wikipedia.org/wiki/Group_Ongaku), Wikipedia.
 - David Novak, *Japanoise: Music at the Edge of Circulation* (Duke University Press, 2013).
 - Paul Hegarty, "Full with Noise: Theory and Japanese Noise Music", in Arthur and Marilouise
@@ -191,7 +191,7 @@ scene, and KK Null and Keiji Haino work at its border with rock and improvisatio
 - [Hijokaidan](https://en.wikipedia.org/wiki/Hijokaidan),
   [Incapacitants](https://en.wikipedia.org/wiki/Incapacitants),
   [Hanatarash](https://en.wikipedia.org/wiki/Hanatarash),
-  [Masonna](https://en.wikipedia.org/wiki/Masonna),
+  [Masonna](https://en.wikipedia.org/wiki/Maso_Yamazaki),
   [Boredoms](https://en.wikipedia.org/wiki/Boredoms) and
   [List of Japanoise artists](https://en.wikipedia.org/wiki/List_of_Japanoise_artists), Wikipedia.
 
@@ -209,7 +209,7 @@ audiences through social media.
 
 - [Noise music](https://en.wikipedia.org/wiki/Noise_music),
   [Senyawa](https://en.wikipedia.org/wiki/Senyawa),
-  [Esplendor Geométrico](https://en.wikipedia.org/wiki/Esplendor_Geom%C3%A9trico),
+  [Esplendor Geométrico](https://en.wikipedia.org/wiki/Esplendor_Geometrico),
   [SPK](https://en.wikipedia.org/wiki/SPK_(band)) and
   [Pan Sonic](https://en.wikipedia.org/wiki/Pan_Sonic), Wikipedia.
 - Cedrik Fermont and Dimitri della Faille, *Not Your World Music: Noise in South East Asia*

@@ -4,38 +4,47 @@ peoples hear their worlds, above all Steven Feld among the Kaluli of Bosavi, and
 natural soundscapes that grew alongside it. Schafer is in ecology-0-schafer.md; the composers
 in ecology-1-composers.md.
 
-Written from memory: Wikipedia could not be reached from the session that wrote this, so the
-links were not opened then and dates and titles should be checked against them.
+The Steven Feld entry and the Kaluli facts were checked against Wikipedia on 2026-10-31, and
+every Wikipedia link was checked to open. Wikipedia does not cover the muni bird, gisalo,
+lift-up-over sounding or *Voices of the Rainforest*'s production; those, and the other entries,
+are partly from memory.
 -->
 
 # Acoustic Ecology / Anthropology and science
 
 ## Steven Feld
 
-Steven Feld (born 1949) is an American anthropologist, ethnomusicologist, recordist and
-musician, who studied with the linguistic anthropologists of his generation and the
-ethnographic filmmaker Jean Rouch, and taught at the Universities of Pennsylvania and Texas,
-New York and Columbia Universities and the University of New Mexico. From 1976 he worked
-among the Kaluli people of Bosavi, in the rainforest of Papua New Guinea, and his study of
-them is the founding work of the anthropology of sound.
+Steven Feld (born 20 August 1949, Philadelphia) is an American ethnomusicologist,
+anthropologist and linguist, who worked for many years with the Kaluli (Bosavi) people of
+Papua New Guinea. After a BA in anthropology at Hofstra University (1971), he first went to
+Bosavi in 1976 with the anthropologist Edward L. Schieffelin, whose recordings of the Bosavi
+had inspired him; the work became his PhD at Indiana University (1979) and the book *Sound and
+Sentiment*. He returned through the 1980s and 1990s to study Bosavi song, rainforest ecology
+and poetics. He has taught at Columbia, New York University, the University of California,
+Santa Cruz, the University of Texas at Austin and the University of Pennsylvania, and since
+2003 at the University of New Mexico; he received a MacArthur Fellowship in 1991.
 
-He coined acoustemology (acoustic epistemology) for knowing the world through sound: not
-sound as a sign of something else, but listening as a way of being in and understanding a
-place. His later work turned to the bells of Europe (*The Time of Bells*, five CDs,
-2004–06), and to jazz in Ghana, with the musicians of Accra (*Jazz Cosmopolitanism in Accra*,
-2012), on his label VoxLox.
+He coined acoustemology (acoustic epistemology) for knowing the world through sound, and
+schizophonic mimesis, after Schafer's schizophonia, for what happens when a recording split
+from its source is placed in a new context, as when a Solomon Islands lullaby recorded in
+1969 became Deep Forest's "Sweet Lullaby" (1992). With Charles Keil he wrote *Music Grooves*
+(1994). In 2002 he founded the label VoxLox, "documentary sound art advocates for human rights
+and acoustic ecology", for which he recorded the bells of Europe (*The Time of Bells*, four
+volumes, 2004–06) and a Japanese water zither (*Suikinkutsu*, 2006); *Jazz Cosmopolitanism in
+Accra* (2012) comes from five years with musicians in Ghana.
 
 - [Steven Feld](https://en.wikipedia.org/wiki/Steven_Feld), Wikipedia.
 - [Steven Feld](https://www.stevenfeld.net), his own site, with his recordings and writings.
 - Steven Feld, "Waterfalls of Song: An Acoustemology of Place Resounding in Bosavi, Papua New
   Guinea", in Steven Feld and Keith Basso (eds), *Senses of Place* (School of American Research
   Press, 1996).
+- Charles Keil and Steven Feld, *Music Grooves* (University of Chicago Press, 1994).
 
 ## The Kaluli and Sound and Sentiment
 
-The Kaluli (Bosavi people) live on the slopes of Mount Bosavi, a volcano in the Southern
-Highlands of Papua New Guinea, in longhouse communities in dense rainforest where one hears
-far more than one sees. Feld's *Sound and Sentiment: Birds, Weeping, Poetics, and Song in Kaluli
+The Kaluli, about 2,000 people in 1987, live in the rainforest of the Great Papuan Plateau
+near Mount Bosavi, in the Southern Highlands of Papua New Guinea, in some twenty communities,
+each traditionally a single longhouse, in a forest where one hears far more than one sees. Feld's *Sound and Sentiment: Birds, Weeping, Poetics, and Song in Kaluli
 Expression* (1982; 2nd ed. 1990; 3rd ed. 2012) showed how their song, weeping and poetry are
 built from the sounds of the forest, above all its birds, which the Kaluli hear as the
 voices of the dead.
@@ -50,8 +59,8 @@ place, the names of places and the structure of song into one system.
 
 - [Kaluli people](https://en.wikipedia.org/wiki/Kaluli_people) and
   [Mount Bosavi](https://en.wikipedia.org/wiki/Mount_Bosavi), Wikipedia.
-- Steven Feld, *Sound and Sentiment* (University of Pennsylvania Press, 1982; Duke University
-  Press, 3rd ed. 2012).
+- Steven Feld, *Sound and Sentiment* (University of Pennsylvania Press, 1982; 2nd ed. 1990;
+  Duke University Press, 3rd ed. 2012).
 - Edward L. Schieffelin, *The Sorrow of the Lonely and the Burning of the Dancers* (St. Martin's
   Press, 1976).
 
@@ -72,10 +81,11 @@ centre.
 ## Voices of the Rainforest and the Bosavi recordings
 
 Feld's recordings carried the Kaluli soundscape to listeners outside anthropology.
-*Voices of the Rainforest* (Rykodisc, 1991), produced by Mickey Hart of the Grateful Dead in
-his *World* series, composes a day in Bosavi, from dawn to night, in an hour, the
-forest's birds, insects and water with the Kaluli's songs, work and play, as a soundscape
-composition rather than a catalogue; its royalties went to a fund for the Bosavi people.
+*Music of the Kaluli* (Institute of Papua New Guinea Studies, 1981) and *The Kaluli of
+Papua Nugini: Weeping and Song* (Bärenreiter Musicaphon, 1985) came first. *Voices of the
+Rainforest* (Rykodisc, 1991), produced by Mickey Hart of the Grateful Dead, composes a day in
+Bosavi, from dawn to night, in an hour, the forest's birds, insects and water with the
+Kaluli's songs, work and play, as a soundscape composition rather than a catalogue.
 *Rainforest Soundwalks: Ambiences of Bosavi, Papua New Guinea* (EarthEar, 2001) gives four
 unedited soundwalks; and *Bosavi: Rainforest Music from Papua New Guinea* (Smithsonian
 Folkways, 2001, three CDs) gathers the music Feld recorded from 1976 to 2000.
@@ -116,7 +126,7 @@ of habitats, many now gone, which his *The Great Animal Orchestra* (2012) descri
 Fondation Cartier in Paris made an installation of it (2016).
 
 - [Bernie Krause](https://en.wikipedia.org/wiki/Bernie_Krause) and
-  [Biophony](https://en.wikipedia.org/wiki/Biophony), Wikipedia.
+  [Soundscape ecology](https://en.wikipedia.org/wiki/Soundscape_ecology) (biophony), Wikipedia.
 - Bernie Krause, *The Great Animal Orchestra: Finding the Origins of Music in the World's Wild
   Places* (Little, Brown, 2012).
 
@@ -131,8 +141,8 @@ spectrograms (the acoustic complexity index, the bioacoustic index, acoustic ent
 estimate how many voices a place holds without naming each species. Coral reefs, rainforests
 and cities are now surveyed this way.
 
-- [Soundscape ecology](https://en.wikipedia.org/wiki/Soundscape_ecology) and
-  [Ecoacoustics](https://en.wikipedia.org/wiki/Ecoacoustics), Wikipedia.
+- [Soundscape ecology](https://en.wikipedia.org/wiki/Soundscape_ecology), Wikipedia, with
+  ecoacoustics.
 - Bryan C. Pijanowski and others, "Soundscape Ecology: The Science of Sound in the Landscape",
   *BioScience* 61/3 (2011).
 - Almo Farina, *Soundscape Ecology: Principles, Patterns, Methods and Applications* (Springer,
@@ -148,8 +158,7 @@ International (2019), which certifies quiet places. The US National Park Service
 Sounds and Night Skies Division measures and manages park soundscapes, and noise is studied as
 a pollutant of human and animal health.
 
-- [Gordon Hempton](https://en.wikipedia.org/wiki/Gordon_Hempton),
-  [One Square Inch of Silence](https://en.wikipedia.org/wiki/One_Square_Inch_of_Silence) and
+- [One Square Inch of Silence](https://en.wikipedia.org/wiki/One_Square_Inch_of_Silence) and
   [Noise pollution](https://en.wikipedia.org/wiki/Noise_pollution), Wikipedia.
 - Gordon Hempton and John Grossmann, *One Square Inch of Silence* (Free Press, 2009).
 
@@ -159,7 +168,7 @@ From Schafer onward, acoustic ecology has held that how we listen is an ethical 
 attending to a place, its creatures and its people is a form of care, and that noise is not
 only a nuisance but the sound of who is allowed to be heard. Westerkamp and Oliveros made
 listening itself the practice; Feld asked who records whom, and whose voices a recording
-keeps, which is why the royalties of his Bosavi recordings went to the Kaluli; and recent
+keeps, and named the traffic of recordings cut from their sources schizophonic mimesis; and recent
 writers turn the question to the voices of species and lands that cannot speak for
 themselves in human courts.
 

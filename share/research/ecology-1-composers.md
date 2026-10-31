@@ -2,10 +2,9 @@
 Research > Acoustic Ecology > Composers (owner, 2026-10-31): those who composed from Schafer's
 ideas, the forerunners they drew on, and the projects of listening, recording and sound-mapping
 that carry acoustic ecology on today. Schafer himself is in ecology-0-schafer.md.
-The John Cage entry was checked against Wikipedia's John Cage article, pasted by the owner.
-
-Written from memory: Wikipedia could not be reached from the session that wrote this, so the
-links were not opened then and dates and titles should be checked against them.
+The John Cage and Pauline Oliveros entries were checked against their Wikipedia articles, the
+Tuning Meditation against its published score, and the WFAE entry against wfae.net; every
+Wikipedia link was checked to open (2026-10-31). The other entries are partly from memory.
 -->
 
 # Acoustic Ecology / Composers and projects
@@ -74,8 +73,8 @@ Canadian and European radio art of the 1980s and 1990s. Its forms run from the b
 "phonography" of a single place to works where recordings are transformed by granular
 synthesis, filtering and spatialisation.
 
-- [Soundscape composition](https://en.wikipedia.org/wiki/Soundscape_composition), Wikipedia
-  (if that page is missing, see [Soundscape](https://en.wikipedia.org/wiki/Soundscape)).
+- [Soundscape](https://en.wikipedia.org/wiki/Soundscape), Wikipedia (soundscape composition
+  has no page of its own).
 - Barry Truax, "Genres and Techniques of Soundscape Composition as Developed at Simon Fraser
   University", *Organised Sound* 7/1 (2002).
 - Katharine Norman, "Real-World Music as Composed Listening", *Contemporary Music Review*
@@ -172,8 +171,7 @@ Wide Tuning Meditation* online in April 2020.
 Practised, sonic awareness makes, in Von Gunden's words, "complex sound masses
 possessing a strong tonal center".
 
-- [Pauline Oliveros](https://en.wikipedia.org/wiki/Pauline_Oliveros) and
-  [Deep Listening](https://en.wikipedia.org/wiki/Deep_Listening), Wikipedia (checked from the
+- [Pauline Oliveros](https://en.wikipedia.org/wiki/Pauline_Oliveros), Wikipedia, with Deep Listening (checked from the
   page the owner pasted, 2026-10-31).
 - Pauline Oliveros, *Deep Listening: A Composer's Sound Practice* (iUniverse, 2005), and
   *Anthology of Text Scores 1971–2013* (Deep Listening Publications, 2013).
@@ -218,7 +216,7 @@ bark beetles inside piñon pines that he made with the scientist Richard Hofstet
 studies followed the beetle plague of the American West. His book *Why Do Whales and Children
 Sing?* (1999) is a guide to listening to nature.
 
-- [David Dunn (composer)](https://en.wikipedia.org/wiki/David_Dunn_(composer)), Wikipedia.
+- [David Dunn (musician)](https://en.wikipedia.org/wiki/David_Dunn_(musician)), Wikipedia.
 
 ## Field recordists
 
@@ -267,7 +265,7 @@ University. The WFAE Library is an open-access, community-built catalogue of art
 publications, audiovisual and creative works, projects, organisations, radio, podcasts and
 sound maps in acoustic ecology, soundscape studies and ecoacoustics.
 
-- [World Forum for Acoustic Ecology](https://en.wikipedia.org/wiki/World_Forum_for_Acoustic_Ecology), Wikipedia.
+- [Acoustic ecology](https://en.wikipedia.org/wiki/Acoustic_ecology), Wikipedia, on the WFAE's founding (it has no page of its own).
 - [WFAE](https://wfae.net), its site; [About the WFAE](https://wfae.net/about/) (checked
   2026-10-31); [Publications](https://wfae.net/publications/), with *Acoustic Ecology Review*.
 - [WFAE Library](https://wfae.net/library/), the open-access catalogue of the field.
