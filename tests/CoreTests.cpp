@@ -9384,6 +9384,30 @@ namespace
         rampVelocity (q, 40, 120);
         check (q.notes.front().velocity == 40 && q.notes.back().velocity == 120, "note editor: velocity ramp");
 
+        // Live's edits: duplicate, duplicate and push, delete and close the gap, chop.
+        {
+            Sequence d;
+            d.notes = { { 0, 100, 6000.0 }, { 120, 100, 6200.0 }, { 480, 120, 6400.0 } };
+            d.notes[0].selected = d.notes[1].selected = true;
+            duplicate (d, 120);
+            check (d.notes.size() == 5 && d.notes[2].start == 240 && d.notes[3].start == 360 && d.notes[2].selected && ! d.notes[0].selected
+                       && d.notes[4].start == 480,
+                   "note editor: duplicated after the span, rounded to the grid");
+            duplicate (d, 120, true);
+            check (d.notes.size() == 7 && d.notes[4].start == 480 && d.notes[5].start == 600 && d.notes[6].start == 720 && ! d.notes[6].selected,
+                   "note editor: duplicate and push moves the later notes on");
+            deleteAndClose (d, 120);
+            check (d.notes.size() == 5 && d.notes[4].start == 480 && d.notes[4].pitch == 6400.0, "note editor: deleted and the gap closed");
+            invertSelection (d);
+            check (d.notes[4].selected && d.notes[0].selected, "note editor: selection inverted");
+            selectAll (d, false);
+            d.notes[4].selected = true;
+            chop (d, 40);
+            check (d.notes.size() == 7 && d.notes[5].start == 520 && d.notes[6].length == 40, "note editor: chopped on the grid");
+            lengthen (d, -100, 10);
+            check (d.notes[6].length == 10, "note editor: shortened, not below the shortest");
+        }
+
         // Restyle: C major's degrees into sléndro keep the line rising.
         Sequence melody;
         for (int i = 0; i < 8; ++i)

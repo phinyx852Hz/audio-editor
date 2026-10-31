@@ -82,7 +82,7 @@ public:
 
 protected:
     void keyPressEvent (QKeyEvent*) override;
-    bool event (QEvent*) override;   // Home and End are the editor's, not the window's
+    bool event (QEvent*) override;   // the editor's keys are its own, not the main window's
     void done (int) override;
 
 private:
@@ -121,7 +121,7 @@ private:
     void humDialog();        // hum or sing to notes, or a recording's melody
     void putInHeard (const std::vector<noteedit::Heard>&, const noteedit::HumOptions&);
     double tempo() const;    // beats a minute: the mixer's, else the file's
-    void goTo (int64_t tick);   // Home and End: the step cursor and the playhead there, in view
+    void goTo (int64_t tick, bool reveal = true);   // the step cursor and the playhead there (in view, scrolled to if `reveal`)
     void togglePlay();       // Play and Pause: on from the playhead, or held where it is
     void startPlay (bool original);
     void stopPlay();
