@@ -48,9 +48,47 @@ Dimitrie Cantemir wrote it down around 1700. After the Republic (1923) it was at
 from radio; the Arel-Ezgi-Uzdilek system, with 24 unequal notes from 53 commas to the octave,
 became the official theory.
 
+A makam is a melody type with rules for both composing and improvising. Composed forms (peşrev,
+beste, şarkı, âyin) follow it, and so do free ones such as the taksim, the gazel and the recited
+Qurʾān and Mevlid; its rhythmic partner is the usul. Its relatives are the Arab maqām, the
+Byzantine echos, Uyghur muqam and Uzbek shashmaqom, and some trace a debt to Mosul, through the
+Iraqi musician Mulla Othman al-Musili at the Ottoman court.
+
+The building blocks are four- and five-note segments, the dörtlü and beşli. There are six basic
+ones, Çârgâh, Bûselik, Kürdî, Uşşâk, Hicaz and Rast, and each beşli is its dörtlü plus a whole
+tone. They are spelled in named steps counted in commas:
+- koma 1; eksik bakiye 3; bakiye 4;
+- küçük mücenneb 5; büyük mücenneb 8;
+- tanîni (whole tone) 9; artık ikili (augmented second) 12 or 13.
+
+Any segment can be moved to another note and keeps its shape. A makam joins a dörtlü and a beşli,
+one above the other, and often a genişleme, an extension above or below. Three notes matter
+most:
+- the **durak**, the tonic and final, where every piece ends;
+- the **güçlü**, the first note of the upper segment, a resting point in mid-piece, usually the
+  fifth but often the fourth and sometimes the third;
+- the **yeden**, the note below the durak that leads into it.
+
+Makams are simple (most of them rising in seyir), transposed (şed), or compound, and the
+compound ones number in the hundreds. Some simple ones:
+- **Rast:** Rast beşli on G with a Rast dörtlü on D. Coming down, F♯ falls four commas to F,
+  making a Bûselik dörtlü.
+- **Uşşâk:** an Uşşâk dörtlü on A with a Bûselik beşli on D, so its güçlü is the fourth.
+- **Bûselik:** on A, like the minor or the harmonic minor, with F♯ and a lowered E possible
+  coming down.
+- **Çârgâh:** on C, looks like the major scale, but is not best thought of that way.
+
+The notes have names of their own in each octave, from Kaba Çârgâh (C4) through Rast (G4),
+Dügâh (A4) and Nevâ (D5) to Tîz Çârgâh (C6), rather than letters repeated. Rast is common for the
+afternoon and night calls to prayer, and Uşşâk for the noon call.
+
 - [Turkish makam](https://en.wikipedia.org/wiki/Turkish_makam), Wikipedia.
 - Walter Feldman, *Music of the Ottoman Court* (VWB, 1996).
-- Karl Signell, *Makam: Modal Practice in Turkish Art Music* (Asian Music Publications, 1977).
+- Karl Signell, *Makam: Modal Practice in Turkish Art Music* (Asian Music Publications, 1977;
+  Usul Editions, 2004).
+- Münir Beken and Karl Signell, "Confirming, delaying, and deceptive elements in Turkish
+  improvisation", in *Maqām Traditions of Turkic Peoples*, ed. Jürgen Elsner and Gisa Jähnichen
+  (trafo, 2006).
 
 ## Iraq (maqām ʿirāqī)
 

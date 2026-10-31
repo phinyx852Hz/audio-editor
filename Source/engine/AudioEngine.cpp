@@ -1277,7 +1277,7 @@ namespace
     {
         using S = meta::Schema;
         if (ext == "wav" || ext == "bwf")
-            return { S::riff, S::bext, S::cart, S::ixml, S::xmp, S::id3 };
+            return { S::riff, S::bext, S::cart, S::ixml, S::ebucore, S::xmp, S::id3 };
         if (ext == "aiff" || ext == "aif" || ext == "aifc")
             return { S::id3, S::xmp };
         if (ext == "mp3" || ext == "mp2" || ext == "tta")
@@ -1413,6 +1413,7 @@ bool AudioEngine::writeTags (const std::string& path, const std::vector<Marker>&
         w.bext = options.bext;
         w.cart = options.cart;
         w.ixml = options.ixml;
+        w.ebucore = options.ebucore;
         w.xmp = options.xmp;
         w.software = options.software;
         if (options.id3)

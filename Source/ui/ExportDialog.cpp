@@ -582,6 +582,7 @@ void ExportDialog::showOutput (int row)
             addBox (tr ("Broadcast Wave (bext)"), &tagio::Options::bext);
             addBox (tr ("Cart chunk"), &tagio::Options::cart);
             addBox (tr ("iXML"), &tagio::Options::ixml);
+            addBox (tr ("EBUCore (axml)"), &tagio::Options::ebucore);
         }
         if (ext == "aiff")
             addBox (tr ("AIFF text chunks"), &tagio::Options::riff);

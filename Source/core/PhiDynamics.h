@@ -61,18 +61,18 @@ namespace phi
     };
 
     // The true peak of a sample stream, 4x oversampled as ITU-R BS.1770 measures it
-    // (a 48-tap Hann-windowed sinc; the same as dsp::TruePeakDetector, kept here so the
-    // Φ cores need nothing outside the standard library). Late by 6 samples.
+    // (a 96-tap Hann-windowed sinc; the same as dsp::TruePeakDetector, kept here so the
+    // Φ cores need nothing outside the standard library). Late by 12 samples.
     class TruePeak
     {
     public:
-        static constexpr int delay = 6;
+        static constexpr int delay = 12;
         TruePeak();
         float process (float x);   // the largest |value| of the 4 interpolated points
         void reset();
 
     private:
-        static constexpr int tapsPerPhase = 12;
+        static constexpr int tapsPerPhase = 24;
         std::array<std::array<float, tapsPerPhase>, 4> phases {};
         std::array<float, tapsPerPhase> history {};
         int writeIndex = 0;
