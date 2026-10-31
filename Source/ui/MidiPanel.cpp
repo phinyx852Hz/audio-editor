@@ -207,6 +207,21 @@ bool MidiPanel::mayDiscard()
     return true;
 }
 
+bool MidiPanel::closing()
+{
+    if (editor != nullptr)
+        editor->stop();
+    const bool changed = bytesNow() != saved;
+    if (! mayDiscard())
+        return false;
+    if (changed && bytesNow() != saved)
+    {
+        path.clear();
+        load (emptySong(), {});   // discarded
+    }
+    return true;
+}
+
 void MidiPanel::load (const midifile::Song& song, const QString& songName)
 {
     MidiEditor::Host h;

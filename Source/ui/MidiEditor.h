@@ -87,6 +87,8 @@ public:
     // hears it, or its drum hits as kick, snare and hat on channel 10 (mixer/DrumsToMidi.h), put
     // in from the step cursor. False when nothing was heard.
     bool putInAudio (const AudioData&, bool drums);
+    // Playback and recording stopped, every note let go (the panel closing).
+    void stop() { setRecording (false); stopPlay(); }
     // A message from the MIDI keyboard, on the UI thread: step input when it is on.
     void midiIn (uint8_t status, uint8_t data1, uint8_t data2);
 
@@ -97,7 +99,7 @@ public:
 
 protected:
     void keyPressEvent (QKeyEvent*) override;
-    bool event (QEvent*) override;   // Home and End are the editor's, not the window's
+    bool event (QEvent*) override;   // the editor's keys are its own, not the main window's
     void done (int) override;
 
 private:
@@ -136,7 +138,7 @@ private:
     void humDialog();        // hum or sing to notes, or a recording's melody
     void putInHeard (const std::vector<noteedit::Heard>&, const noteedit::HumOptions&);
     double tempo() const;    // beats a minute: the mixer's, else the file's
-    void goTo (int64_t tick);   // Home and End: the step cursor and the playhead there, in view
+    void goTo (int64_t tick, bool reveal = true);   // the step cursor and the playhead there (in view, scrolled to if `reveal`)
     void togglePlay();       // Play and Pause: on from the playhead, or held where it is
     void startPlay (bool original);
     void stopPlay (bool stopTied = true);   // and the transport it is tied to, unless false

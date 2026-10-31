@@ -57,6 +57,9 @@ public:
     int synthSlot() const { return slot; }
     // False when the user would rather keep unsaved notes (asked here).
     bool mayDiscard();
+    // The panel closing (Ctrl+W, its ✕, View > MIDI Editor): playback stops and unsaved notes
+    // are offered for saving; discarded, it opens empty next time. False: Cancel, it stays open.
+    bool closing();
 
 protected:
     void showEvent (QShowEvent*) override;

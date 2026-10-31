@@ -990,7 +990,7 @@ void MixerWindow::recordMenu (QPoint at)
             a->setChecked (inputSource == target);
             group->addAction (a);
         };
-        add ({}, tr ("The First Input (a Microphone or Line In)"));
+        add ({}, tr ("The System's Default Input (as the desktop's sound settings have it)"));
         for (const auto& source : capture->sources())
         {
             const auto kind = source.kind == CaptureSource::Kind::input ? tr ("Input") : source.kind == CaptureSource::Kind::desktop ? tr ("Desktop")
@@ -1034,11 +1034,14 @@ bool MixerWindow::ensureInput (QString& error)
         }
     if (capture->isRunning())
         return true;
-    // The source chosen, else the first input.
+    // The source chosen, else the system's default input (as the desktop's sound settings have
+    // it). It was the first input by name, which could be a webcam's or the board's microphone
+    // rather than the interface, heard as noise on an armed track (owner, 2026-10-30).
     std::optional<CaptureSource> chosen;
+    if (inputSource.isEmpty())
+        chosen = CaptureSource { CaptureSource::Kind::input, {}, tr ("the default input").toStdString(), {}, 0 };
     for (const auto& s : capture->sources())
-        if ((! inputSource.isEmpty() && QString::fromStdString (s.target) == inputSource)
-            || (inputSource.isEmpty() && s.kind == CaptureSource::Kind::input && ! chosen.has_value()))
+        if (! inputSource.isEmpty() && QString::fromStdString (s.target) == inputSource)
             chosen = s;
     if (! chosen.has_value())
     {

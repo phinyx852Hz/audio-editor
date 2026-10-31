@@ -346,6 +346,7 @@ The few `Super` keys are the desktop's standard keys for closing and full screen
 |---|---|
 | Add Track |  |
 | Mix Assistant | `Alt+Shift+X` |
+| Mixer Inspector | `Ctrl+I` |
 | Mix Down to Editor | `Ctrl+F3` |
 | Mixer | `F3` |
 | New Project | `Ctrl+N` |

@@ -59,6 +59,7 @@ namespace
 
     // The grids, in quarter notes.
     struct GridChoice { const char* name; double quarters; };
+    constexpr int straightGrids = 6;   // 1/1 to 1/32, then the triplets
     const GridChoice grids[] { { "1/1", 4.0 }, { "1/2", 2.0 }, { "1/4", 1.0 }, { "1/8", 0.5 }, { "1/16", 0.25 }, { "1/32", 0.125 },
                                { "1/4 triplet", 2.0 / 3.0 }, { "1/8 triplet", 1.0 / 3.0 }, { "1/16 triplet", 1.0 / 6.0 } };
 
@@ -84,6 +85,9 @@ namespace
                 return false;
         return true;
     }
+
+    // The notes Ctrl+C and Ctrl+X took, from the first one's start: pasted in any MIDI editor.
+    std::vector<Note> noteClipboard;
 
     QString barText (int64_t tick, int tpq)
     {
@@ -446,12 +450,8 @@ protected:
         drag = Drag::none;
         if (y < rulerHeight && x >= keyWidth)
         {
-            // The ruler: the step cursor and the playhead go there.
-            ed.step.position = snapTick (tickAt (x), false);
-            if (! ed.playTimer->isActive())
-                ed.playheadTick = ed.step.position;
-            ed.showSystemAt (ed.step.position);
-            viewport()->update();
+            // The ruler: the step cursor and the playhead go there, playing on from there if it plays.
+            ed.goTo (snapTick (tickAt (x), false), false);
             return;
         }
         if (y > gridBottom + laneGap && x >= keyWidth)
@@ -540,9 +540,19 @@ protected:
                 if (hit < 0)
                 {
                     newNote (t, pitch);
+                    if (e->modifiers() & Qt::ShiftModifier)
+                    {
+                        // Freehand (Live's Alt in Draw, which is "between the degrees" here): a note a
+                        // grid step wherever the mouse goes.
+                        drag = Drag::painting;
+                        paintedTo = snapTick (t, false) + ed.noteLength();
+                    }
                     return;
                 }
-                break;
+                // As in Live's Draw mode: a click on a note erases it, so drawing needs no other tool.
+                ed.edit ([hit] (Sequence& s) { s.notes.erase (s.notes.begin() + hit); });
+                drag = Drag::erasing;
+                return;
             default: break;
         }
         if (hit < 0)
@@ -563,12 +573,44 @@ protected:
             return;
         }
         auto& n = ed.seq.notes[(size_t) hit];
+        if (e->modifiers() & Qt::ControlModifier)
+        {
+            // Ctrl-click picks or unpicks the note (on the release, if it was picked); Ctrl-drag
+            // sets the picked notes' velocity, as in Live.
+            toggled = n.selected ? hit : -1;
+            n.selected = true;
+            anchorTick = n.start;
+            anchorPitch = n.pitch;
+            ed.undoList.push_back (ed.seq);
+            ed.redoList.clear();
+            before = ed.seq;
+            drag = Drag::velocity;
+            ed.updateInfo();
+            viewport()->update();
+            return;
+        }
         if (e->modifiers() & Qt::ShiftModifier)
-            n.selected = ! n.selected;
+        {
+            // From the last note clicked to this one: the notes between them in time and pitch.
+            if (anchorTick >= 0)
+            {
+                const auto from = std::min (anchorTick, n.start), to = std::max (anchorTick, n.start);
+                const auto low = std::min (anchorPitch, n.pitch) - 0.5, high = std::max (anchorPitch, n.pitch) + 0.5;
+                for (auto& m : ed.seq.notes)
+                    if (m.start >= from && m.start <= to && m.pitch >= low && m.pitch <= high)
+                        m.selected = true;
+            }
+            n.selected = true;
+        }
         else if (! n.selected)
         {
             selectAll (ed.seq, false);
             n.selected = true;
+        }
+        if (! (e->modifiers() & Qt::ShiftModifier))
+        {
+            anchorTick = n.start;
+            anchorPitch = n.pitch;
         }
         if (n.selected)
             ed.audition (n.pitch, n.velocity);
@@ -592,6 +634,8 @@ protected:
                 ed.edit ([hit] (Sequence& s) { s.notes.erase (s.notes.begin() + hit); });
             return;
         }
+        if (tool != toolPick)
+            return;   // Draw has drawn it on the press already (or erased the note there)
         newNote (tickAt (x), pitchAt (y - rulerHeight + verticalScrollBar()->value(), ! (e->modifiers() & Qt::AltModifier)));
     }
 
@@ -644,6 +688,36 @@ protected:
                 }
                 break;
             }
+            case Drag::painting:
+            {
+                const auto at = snapTick (tickAt (x), false);
+                if (at >= paintedTo)
+                {
+                    Note n;
+                    n.start = at;
+                    n.length = ed.noteLength();
+                    n.pitch = pitchAt (e->position().y() - rulerHeight + verticalScrollBar()->value(), ! free);
+                    n.velocity = ed.step.velocity;
+                    ed.seq.notes.push_back (n);
+                    ed.seq.sort();
+                    ed.seq.lastTick = std::max (ed.seq.lastTick, ed.seq.end());
+                    paintedTo = at + n.length;
+                    ed.audition (n.pitch, n.velocity);
+                    ed.changed();
+                }
+                break;
+            }
+            case Drag::velocity:
+                if (std::abs (dy) > 2.0 || velocityDragged)
+                {
+                    velocityDragged = true;
+                    ed.seq = before;
+                    for (auto& n : ed.seq.notes)
+                        if (n.selected)
+                            n.velocity = std::clamp (n.velocity - (int) std::lround (dy / 2.0), 1, 127);
+                    ed.changed();
+                }
+                break;
             case Drag::erasing:
                 if (const auto hit = noteAt (e->position()); hit >= 0)
                 {
@@ -673,6 +747,13 @@ protected:
 
     void mouseReleaseEvent (QMouseEvent*) override
     {
+        if (drag == Drag::rubber && (currentPos - pressPos).manhattanLength() < 4.0)
+        {
+            // A click on empty space, not a box: the playhead there (playing on from there if it plays).
+            drag = Drag::none;
+            ed.goTo (snapTick (tickAt (pressPos.x()), false), false);
+            return;
+        }
         if (drag == Drag::curve && ! ed.undoList.empty() && drawn >= 0 && (size_t) drawn < ed.seq.notes.size()
             && ed.seq.notes[(size_t) drawn].curve == before.notes[(size_t) drawn].curve)
             ed.undoList.pop_back();
@@ -693,8 +774,18 @@ protected:
                         break;
                     }
         }
+        if (drag == Drag::velocity && ! velocityDragged && ! ed.undoList.empty())
+        {
+            // A Ctrl-click: the note unpicked if it was picked, and no undo step.
+            ed.undoList.pop_back();
+            if (toggled >= 0 && (size_t) toggled < ed.seq.notes.size())
+                ed.seq.notes[(size_t) toggled].selected = false;
+            ed.updateInfo();
+        }
         drag = Drag::none;
         drawn = -1;
+        toggled = -1;
+        velocityDragged = false;
         viewport()->update();
     }
 
@@ -724,7 +815,12 @@ protected:
     }
 
 private:
-    enum class Drag { none, move, resize, drawing, erasing, rubber, lane, laneErase, curve };
+    enum class Drag { none, move, resize, drawing, painting, erasing, rubber, lane, laneErase, curve, velocity };
+    int64_t paintedTo = 0;           // painting: where the last note painted ends
+    int toggled = -1;                // a Ctrl-click on a picked note: unpicked unless it drags
+    bool velocityDragged = false;
+    int64_t anchorTick = -1;         // the last note clicked, where Shift-click picks from
+    double anchorPitch = 0.0;
 
     double rowHeight() const { return rowPixels; }
     double pixelsPerCent() const { return rowPixels / 100.0 * std::max (1.0, 1200.0 / std::max (1.0, ed.system.period) * ed.system.size() / 12.0); }
@@ -1368,8 +1464,11 @@ MidiEditor::MidiEditor (const midifile::Song& song, Host h, QWidget* parent)
     // The tools, the grid and the functions.
     auto* tools = new QHBoxLayout;
     auto* group = new QButtonGroup (this);
-    const std::pair<QString, QString> toolNames[] { { tr ("Pick"), tr ("Pick, move (Alt: by the cent) and stretch notes; drag on empty space to pick several. Ctrl-click draws (1)") },
-                                                    { tr ("Draw"), tr ("Click to put a note, drag to its length; Alt puts it between the degrees (2)") },
+    const std::pair<QString, QString> toolNames[] { { tr ("Pick"), tr ("Pick, move (Alt: by the cent) and stretch notes; drag on empty space to pick several. Ctrl-click picks or "
+                                                                                 "unpicks a note, Ctrl-drag sets the picked notes' velocity, Shift-click picks from the last note "
+                                                                                 "clicked to this one; Ctrl-click on empty space draws (1)") },
+                                                    { tr ("Draw"), tr ("Click to put a note, drag to its length, click a note to erase it; Shift-drag paints notes "
+                                                                       "freehand along the mouse; Alt puts them between the degrees (2, or B to switch Draw on and off)") },
                                                     { tr ("Erase"), tr ("Click or drag over notes to delete them (3)") },
                                                     { tr ("Split"), tr ("Cut a note in two where you click (4)") },
                                                     { tr ("Glue"), tr ("Join a note to the next of its pitch (5)") },
@@ -2827,8 +2926,29 @@ bool MidiEditor::event (QEvent* e)
 {
     if (e->type() == QEvent::ShortcutOverride)
     {
+        // In the main window the editor's keys would otherwise go to the window's own shortcuts
+        // (Ctrl+A and Ctrl+D picking and duplicating audio, Space playing it...): the keys
+        // keyPressEvent handles are taken here first.
         const auto* k = static_cast<QKeyEvent*> (e);
-        if ((k->key() == Qt::Key_Home || k->key() == Qt::Key_End) && (k->modifiers() & ~Qt::KeypadModifier) == Qt::NoModifier)
+        const auto mods = k->modifiers() & ~Qt::KeypadModifier;
+        const auto key = k->key();
+        const auto in = [key] (std::initializer_list<int> keys) { return std::find (keys.begin(), keys.end(), key) != keys.end(); };
+        const auto arrow = in ({ Qt::Key_Up, Qt::Key_Down, Qt::Key_Left, Qt::Key_Right });
+        bool ours = false;
+        if (mods == Qt::NoModifier)
+            ours = arrow || in ({ Qt::Key_Home, Qt::Key_End, Qt::Key_Delete, Qt::Key_Backspace, Qt::Key_Space, Qt::Key_Q, Qt::Key_B, Qt::Key_Return,
+                                  Qt::Key_Enter, Qt::Key_1, Qt::Key_2, Qt::Key_3, Qt::Key_4, Qt::Key_5, Qt::Key_6 });
+        else if (mods == Qt::ShiftModifier)
+            ours = arrow;
+        else if (mods == Qt::ControlModifier)
+            ours = in ({ Qt::Key_Z, Qt::Key_Y, Qt::Key_A, Qt::Key_D, Qt::Key_C, Qt::Key_X, Qt::Key_V, Qt::Key_U, Qt::Key_J, Qt::Key_E, Qt::Key_L,
+                         Qt::Key_Up, Qt::Key_Down, Qt::Key_1, Qt::Key_2, Qt::Key_3, Qt::Key_4, Qt::Key_Delete, Qt::Key_Backspace });
+        else if (mods == (Qt::ControlModifier | Qt::ShiftModifier))
+            ours = in ({ Qt::Key_Z, Qt::Key_A, Qt::Key_D, Qt::Key_Delete, Qt::Key_Backspace, Qt::Key_Up, Qt::Key_Down });
+        // Step input: the computer's keys are notes.
+        if (stepBox->isChecked() && (mods & ~Qt::ShiftModifier) == Qt::NoModifier && k->text().size() == 1 && k->text()[0].isPrint())
+            ours = true;
+        if (ours)
         {
             e->accept();
             return true;
@@ -2837,7 +2957,7 @@ bool MidiEditor::event (QEvent* e)
     return QDialog::event (e);
 }
 
-void MidiEditor::goTo (int64_t tick)
+void MidiEditor::goTo (int64_t tick, bool reveal)
 {
     const bool playing = playTimer->isActive();
     if (playing)
@@ -2845,7 +2965,8 @@ void MidiEditor::goTo (int64_t tick)
     step.position = std::max<int64_t> (0, tick);
     playheadTick = step.position;
     showSystemAt (step.position);
-    roll->reveal (step.position);
+    if (reveal)
+        roll->reveal (step.position);
     if (tied())
         host.transport.locate (secondsAt (playheadTick));   // and the tied transport there
     if (playing)
@@ -2872,12 +2993,116 @@ void MidiEditor::keyPressEvent (QKeyEvent* e)
         redo();
         return;
     }
-    if (ctrl && e->key() == Qt::Key_A)
+    const auto snapGrid = [this] { return snapBox->isChecked() ? grid() : (int64_t) 0; };
+    const auto setTool = [this] (int t)
     {
-        selectAll (seq, true);
-        changed();
-        return;
-    }
+        toolButtons[(size_t) t]->setChecked (true);
+        roll->tool = t;
+    };
+    // Live's MIDI editor keys, where they leave PHI's own alone.
+    if (ctrl && ! alt)
+        switch (e->key())
+        {
+            case Qt::Key_A:
+                if (shift)
+                    invertSelection (seq);
+                else
+                    selectAll (seq, true);
+                changed();
+                return;
+            case Qt::Key_D:
+                edit ([&] (Sequence& s) { duplicate (s, snapGrid(), shift); });
+                return;
+            case Qt::Key_Delete:
+            case Qt::Key_Backspace:
+                if (shift)
+                {
+                    edit ([&] (Sequence& s) { deleteAndClose (s, snapGrid()); });
+                    return;
+                }
+                break;
+            case Qt::Key_C:
+            case Qt::Key_X:
+            {
+                if (! seq.anySelected())
+                    return;
+                noteClipboard.clear();
+                for (const auto& n : seq.notes)
+                    if (n.selected)
+                        noteClipboard.push_back (n);
+                const auto first = noteClipboard.front().start;   // the notes are in start order
+                for (auto& n : noteClipboard)
+                    n.start -= first;
+                if (e->key() == Qt::Key_X)
+                    edit ([] (Sequence& s) { deleteTargets (s); });
+                return;
+            }
+            case Qt::Key_V:
+            {
+                if (noteClipboard.empty())
+                    return;
+                // At the playhead (the step cursor), the pasted notes picked and the cursor after them.
+                const auto at = step.position;
+                int64_t end = at;
+                edit ([&] (Sequence& s)
+                {
+                    selectAll (s, false);
+                    for (auto n : noteClipboard)
+                    {
+                        n.start += at;
+                        n.selected = true;
+                        end = std::max (end, n.end());
+                        s.notes.push_back (n);
+                    }
+                    s.sort();
+                    s.lastTick = std::max (s.lastTick, s.end());
+                });
+                goTo (end);
+                return;
+            }
+            case Qt::Key_U:
+                edit ([this] (Sequence& s) { quantizeStarts (s, grid(), strengthBox->value() / 100.0, swingBox->value() / 100.0); });
+                return;
+            case Qt::Key_J:
+                edit ([] (Sequence& s) { glue (s); });
+                return;
+            case Qt::Key_E:
+                edit ([this] (Sequence& s) { chop (s, grid()); });
+                return;
+            case Qt::Key_L:
+                loopButton->toggle();
+                return;
+            case Qt::Key_Up:
+            case Qt::Key_Down:
+                // The picked notes' velocity (the staff takes Ctrl+Up and Down for the next written pitch first).
+                if (seq.anySelected())
+                {
+                    const auto by = (e->key() == Qt::Key_Up ? 1 : -1) * (shift ? 1 : 5);
+                    edit ([by] (Sequence& s) { scaleVelocity (s, 1.0, by); });
+                }
+                return;
+            case Qt::Key_1:
+            case Qt::Key_2:
+            {
+                // The grid narrower (Ctrl+1) or wider (Ctrl+2), straight or triplet as it is.
+                const auto at = gridBox->currentIndex();
+                const auto triplet = at >= straightGrids;
+                const auto first = triplet ? straightGrids : 0, last = triplet ? gridBox->count() - 1 : straightGrids - 1;
+                gridBox->setCurrentIndex (std::clamp (at + (e->key() == Qt::Key_1 ? 1 : -1), first, last));
+                return;
+            }
+            case Qt::Key_3:
+            {
+                // Triplets on and off: 1/4 to 1/4 triplet, 1/8 to 1/8 triplet, 1/16 to 1/16 triplet.
+                const auto at = gridBox->currentIndex();
+                gridBox->setCurrentIndex (at >= straightGrids ? at - straightGrids + 2 : straightGrids + std::clamp (at - 2, 0, 2));
+                return;
+            }
+            case Qt::Key_4:
+                snapBox->toggle();
+                return;
+            default: break;
+        }
     if (stepBox->isChecked() && ! ctrl && ! alt)
     {
         // The computer's keys as the system's degrees: A row from the tonic, Q row the period up,
@@ -2944,7 +3169,10 @@ void MidiEditor::keyPressEvent (QKeyEvent* e)
             if (seq.anySelected())
             {
                 const auto by = (e->key() == Qt::Key_Left ? -1 : 1) * (alt ? 1 : grid());
-                edit ([by] (Sequence& s) { nudge (s, by); });
+                if (shift)   // shorter or longer, as in Live
+                    edit ([by, alt, this] (Sequence& s) { lengthen (s, by, alt ? 1 : grid()); });
+                else
+                    edit ([by] (Sequence& s) { nudge (s, by); });
             }
             return;
         case Qt::Key_Space:
@@ -2953,9 +3181,15 @@ void MidiEditor::keyPressEvent (QKeyEvent* e)
         case Qt::Key_1: case Qt::Key_2: case Qt::Key_3: case Qt::Key_4: case Qt::Key_5: case Qt::Key_6:
             if (! ctrl)
             {
-                const auto t = e->key() - Qt::Key_1;
-                toolButtons[(size_t) t]->setChecked (true);
-                roll->tool = t;
+                setTool (e->key() - Qt::Key_1);
+                return;
+            }
+            break;
+        case Qt::Key_B:
+            // Live's Draw mode key: Draw on, or back to Pick.
+            if (! ctrl && ! alt)
+            {
+                setTool (roll->tool == toolDraw ? toolPick : toolDraw);
                 return;
             }
             break;

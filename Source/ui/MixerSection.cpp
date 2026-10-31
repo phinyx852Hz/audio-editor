@@ -121,6 +121,17 @@ void MainWindow::registerMixerCommands()
         mixerWindow();
         mixDownToEditor (mixerWin->editorTrack());
     })->setStatusTip (tr ("The editor's track as it sounds, its MIDI through its instrument and its audio, as one sound in a new tab"));
+    add ("mixer.preferences", tr ("Mixer &Preferences..."), {}, [this] { mixerWindow()->showPreferences(); })
+        ->setStatusTip (tr ("Arm on Select (as Ableton Live's) and Focus Follows Mouse"));
+    // The Inspector column can close; picking a track does not bring it back until this or the button opens it.
+    auto* inspector = add ("view.inspector", tr ("Mixer &Inspector"), { KS (Qt::CTRL | Qt::Key_I) }, [this]
+    {
+        auto* w = mixerWindow();
+        w->showInspector (! w->inspectorShown());
+    });
+    inspector->setCheckable (true);
+    inspector->setChecked (! appSettings().value (QStringLiteral ("mixer/inspectorClosed"), false).toBool());
+    inspector->setStatusTip (tr ("Show or close the mixer's Inspector, the column left of the strips (also the top bar's Inspector button)"));
     add ("mixer.assistant", tr ("Mix &Assistant..."), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_X) }, [this] { mixAssistant(); })
         ->setStatusTip (tr ("Sets the faders and pans of the mix by what each track is, with headroom for mastering"));
 }
@@ -185,6 +196,7 @@ MixerWindow* MainWindow::mixerWindow()
             if (mixerDocked() && in (now) && ! in (old))
                 midiTarget = 2;
         });
+        mixerWin->setInspectorAction (commands.action (QStringLiteral ("view.inspector")));
         mixerWin->restoreAutosave();
         // The tracks follow the Selector set, bottom category first, as long as they keep its names.
         mixerWin->applySelectorSet();
@@ -471,6 +483,10 @@ void MainWindow::showMidiEditor (bool on)
         trackHolder->layout()->addWidget (midiPanel);
         focusFollowsMouse->addAreas ({ midiPanel });
     }
+    // Closing stops its playback and offers to save its notes; Cancel keeps it open.
+    if (! on && midiPanel != nullptr && ! trackHolder->isHidden() && ! midiPanel->closing())
+        on = true;
+    appSettings().setValue (QStringLiteral ("view/midiEditor"), on);
     trackHolder->setVisible (on);
     if (! on && ! waveform->isVisible())
         commands.action (QStringLiteral ("view.audioEditor"))->setChecked (true);   // never an empty window

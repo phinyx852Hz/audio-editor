@@ -4,6 +4,7 @@
 #include "Settings.h"
 #include "Theme.h"
 #include "Visualizer.h"
+#include "Wallpaper.h"
 #include "WaveformView.h"
 
 #if PHI_HAVE_PROJECTM
@@ -19,6 +20,8 @@
 #include <QMenu>
 #include <QDialogButtonBox>
 #include <QDir>
+#include <QFileDialog>
+#include <QImageReader>
 #include <QFileInfo>
 #include <QInputDialog>
 #include <QKeyEvent>
@@ -242,6 +245,7 @@ void MainWindow::toggleVisualizerBehind()
             changeOpacity (opacityBeforeBackdrop, false);
         opacityBeforeBackdrop = 0.0;
         statusBar()->showMessage (tr ("Visualizer behind PHI off"), 3000);
+        syncWallpaper();
         return;
     }
 
@@ -265,6 +269,7 @@ void MainWindow::toggleVisualizerBehind()
         changeOpacity (0.55, false);
     }
     statusBar()->showMessage (tr ("Visualizer behind PHI: Ctrl+Alt+- and Ctrl+Alt+= (or the Opacity slider) show more or less of it; Alt+F11 changes the view"), 8000);
+    syncWallpaper();
 }
 
 void MainWindow::addVisualizerSubmenu (QMenu* menu, const QString& which)
@@ -590,6 +595,7 @@ void MainWindow::toggleWebBackdrop()
             changeOpacity (opacityBeforeBackdrop, false);
         opacityBeforeBackdrop = 0.0;
         statusBar()->showMessage (tr ("Web page behind PHI off"), 3000);
+        syncWallpaper();
         return;
     }
 
@@ -623,6 +629,7 @@ void MainWindow::toggleWebBackdrop()
         changeOpacity (0.55, false);
     }
     statusBar()->showMessage (tr ("Web page behind PHI: the Opacity slider shows more or less of it; Visualizer > Web Page > Use the Web Page to click in it"), 8000);
+    syncWallpaper();
 }
 
 bool MainWindow::chooseWebAddress (bool reload)
@@ -642,3 +649,93 @@ bool MainWindow::chooseWebAddress (bool reload)
     return true;
 }
 #endif
+
+//==============================================================================
+// Options > Wallpaper: a still picture behind PHI. One background at a time: the
+// Visualizer or a web page behind PHI hides it while they show.
+void MainWindow::toggleWallpaper()
+{
+    const auto key = QStringLiteral ("appearance/wallpaperOn");
+    const bool on = ! appSettings().value (key, false).toBool();
+    if (on && appSettings().value (QStringLiteral ("appearance/wallpaper")).toString().isEmpty() && ! chooseWallpaper())
+    {
+        commands.action (QStringLiteral ("options.wallpaper"))->setChecked (false);
+        return;
+    }
+    if (on && visualBackdrop != nullptr && visualBackdrop->isVisible())
+        toggleVisualizerBehind();
+#if PHI_WEB_BACKDROP
+    if (on && webBackdrop != nullptr && webBackdrop->isVisible())
+        toggleWebBackdrop();
+#endif
+    appSettings().setValue (key, on);
+    syncWallpaper();
+
+    if (on)
+    {
+        // A fully opaque window would hide it: see through the window by default.
+        opacityBeforeBackdrop = 0.0;
+        if (Theme::opacity() > 0.8)
+        {
+            opacityBeforeBackdrop = Theme::opacity();
+            changeOpacity (0.55, false);
+        }
+        statusBar()->showMessage (tr ("Wallpaper: the Opacity slider shows more or less of it"), 6000);
+    }
+    else
+    {
+        if (opacityBeforeBackdrop > 0.0)
+            changeOpacity (opacityBeforeBackdrop, false);
+        opacityBeforeBackdrop = 0.0;
+        statusBar()->showMessage (tr ("Wallpaper off"), 3000);
+    }
+}
+
+bool MainWindow::chooseWallpaper()
+{
+    QStringList patterns;
+    for (const auto& format : QImageReader::supportedImageFormats())
+        patterns << QStringLiteral ("*.") + QString::fromLatin1 (format);
+    const auto current = appSettings().value (QStringLiteral ("appearance/wallpaper")).toString();
+    const auto path = QFileDialog::getOpenFileName (this, tr ("Choose Wallpaper"),
+                                                    current.isEmpty() ? QStandardPaths::writableLocation (QStandardPaths::PicturesLocation) : QFileInfo (current).absolutePath(),
+                                                    tr ("Pictures (%1);;All files (*)").arg (patterns.join (QLatin1Char (' '))));
+    if (path.isEmpty())
+        return false;
+    if (! QImageReader (path).canRead())
+    {
+        QMessageBox::warning (this, tr ("Choose Wallpaper"), tr ("%1 is not a picture PHI can read.").arg (QFileInfo (path).fileName()));
+        return false;
+    }
+    appSettings().setValue (QStringLiteral ("appearance/wallpaper"), path);
+    syncWallpaper();
+    return true;
+}
+
+void MainWindow::syncWallpaper()
+{
+    const bool on = appSettings().value (QStringLiteral ("appearance/wallpaperOn"), false).toBool();
+    const auto path = appSettings().value (QStringLiteral ("appearance/wallpaper")).toString();
+    commands.action (QStringLiteral ("options.wallpaper"))->setChecked (on);
+    bool covered = visualBackdrop != nullptr && visualBackdrop->isVisible();
+#if PHI_WEB_BACKDROP
+    covered = covered || (webBackdrop != nullptr && webBackdrop->isVisible());
+#endif
+    bool show = on && ! path.isEmpty() && ! covered;
+    if (show && wallpaper == nullptr)
+        wallpaper = new Wallpaper (this);
+    if (show && wallpaper->path() != path && ! wallpaper->load (path))
+    {
+        statusBar()->showMessage (tr ("The wallpaper %1 could not be read").arg (QDir::toNativeSeparators (path)), 6000);
+        show = false;
+    }
+    if (wallpaper != nullptr)
+    {
+        wallpaper->setVisible (show);
+        if (show)
+        {
+            wallpaper->setGeometry (rect());
+            wallpaper->lower();
+        }
+    }
+}
