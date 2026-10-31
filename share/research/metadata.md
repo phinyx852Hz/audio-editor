@@ -30,6 +30,9 @@ its parts fit together; and **administrative** metadata (rights, provenance, tec
 which says how it may be used and kept. Every schema in PHI's Metadata editor is a mixture of
 the three.
 
+- [Library catalog](https://en.wikipedia.org/wiki/Library_catalog), Wikipedia.
+- [MARC standards](https://en.wikipedia.org/wiki/MARC_standards), Wikipedia.
+- [Dublin Core](https://en.wikipedia.org/wiki/Dublin_Core), Wikipedia.
 - [Metadata](https://en.wikipedia.org/wiki/Metadata), Wikipedia.
 - Philip R. Bagley, *Extension of Programming Language Concepts* (University City Science
   Center, Philadelphia, 1968).
@@ -67,6 +70,9 @@ identifiers, rights), how it is preserved (format, provenance, coding history) a
 can act on it (tempo, key, loudness, timecode). A sound whose metadata is lost has lost its name,
 its maker and its history.
 
+- [Semiosis](https://en.wikipedia.org/wiki/Semiosis), Wikipedia.
+- [Charles Sanders Peirce](https://en.wikipedia.org/wiki/Charles_Sanders_Peirce), Wikipedia.
+- [A Mathematical Theory of Communication](https://en.wikipedia.org/wiki/A_Mathematical_Theory_of_Communication), Wikipedia.
 - [Semiotics](https://en.wikipedia.org/wiki/Semiotics), Wikipedia.
 - [Jakobson's functions of language](https://en.wikipedia.org/wiki/Jakobson%27s_functions_of_language),
   Wikipedia.
@@ -107,6 +113,9 @@ signature describe its structure for musicians and software; ISRC and rights fie
 legal and economic life. The cover and title are often the first signs a listener meets, before
 any sound.
 
+- [Jean-Jacques Nattiez](https://en.wikipedia.org/wiki/Jean-Jacques_Nattiez), Wikipedia.
+- [Pierre Schaeffer](https://en.wikipedia.org/wiki/Pierre_Schaeffer), Wikipedia.
+- [Soundscape](https://en.wikipedia.org/wiki/Soundscape), Wikipedia.
 - [Musical semiotics](https://en.wikipedia.org/wiki/Musical_semiotics), Wikipedia.
 - [Acousmatic sound](https://en.wikipedia.org/wiki/Acousmatic_sound), Wikipedia.
 - Jean-Jacques Nattiez, *Music and Discourse: Toward a Semiology of Music* (Princeton University
@@ -148,6 +157,8 @@ field that only one schema has is kept as that schema's own. Chunks and frames P
 are kept as they were and written back, so saving in PHI does not strip what another program put
 there.
 
+- [Tag (metadata)](https://en.wikipedia.org/wiki/Tag_(metadata)), Wikipedia.
+- [Resource Interchange File Format](https://en.wikipedia.org/wiki/Resource_Interchange_File_Format), Wikipedia.
 - [Sidecar file](https://en.wikipedia.org/wiki/Sidecar_file), Wikipedia.
 - [Interchange File Format](https://en.wikipedia.org/wiki/Interchange_File_Format), Wikipedia.
 - [Embedded Metadata Manifesto](https://www.embeddedmetadata.org/), IPTC.
@@ -189,6 +200,10 @@ pools, and in the United States the Music Modernization Act (2018) set up the Me
 Licensing Collective largely to match them. Most of that matching is done with identifiers and
 names that were, or should have been, in the metadata from the start.
 
+- [Music Modernization Act](https://en.wikipedia.org/wiki/Music_Modernization_Act), Wikipedia.
+- [Mechanical Licensing Collective](https://en.wikipedia.org/wiki/Mechanical_Licensing_Collective), Wikipedia.
+- [Liner notes](https://en.wikipedia.org/wiki/Liner_notes), Wikipedia.
+- [Album cover](https://en.wikipedia.org/wiki/Album_cover), Wikipedia.
 - Recording Academy Producers & Engineers Wing, *Recommendations for Delivery of Recorded Music
   Projects*.
 - [DDEX](https://ddex.net/), Digital Data Exchange.
@@ -217,6 +232,11 @@ be paid on.
 - [ISWC](https://www.iswc.org/), CISAC.
 - [ISNI](https://isni.org/).
 - [GS1 barcodes](https://www.gs1.org/standards/barcodes).
+- [International Standard Musical Work Code](https://en.wikipedia.org/wiki/International_Standard_Musical_Work_Code), Wikipedia.
+- [Universal Product Code](https://en.wikipedia.org/wiki/Universal_Product_Code), Wikipedia.
+- [International Article Number](https://en.wikipedia.org/wiki/International_Article_Number), Wikipedia.
+- [International Standard Name Identifier](https://en.wikipedia.org/wiki/International_Standard_Name_Identifier), Wikipedia.
+- [Interested Parties Information](https://en.wikipedia.org/wiki/Interested_Parties_Information), Wikipedia.
 
 ## CD-Text, CUE sheets and DDP
 
@@ -227,6 +247,7 @@ text file from Jeff Arnold's CDRWIN in the late 1990s, describes a disc's tracks
 and CD-Text beside a single audio file, and is still the common sidecar for album masters. The
 **DDP** (Disc Description Protocol, Doug Carson & Associates) is the image factories press from.
 
+- [Compact Disc Digital Audio](https://en.wikipedia.org/wiki/Compact_Disc_Digital_Audio), Wikipedia.
 - [CD-Text](https://en.wikipedia.org/wiki/CD-Text), Wikipedia.
 - [Cue sheet](https://en.wikipedia.org/wiki/Cue_sheet_(computing)), Wikipedia.
 - [Disc Description Protocol](https://en.wikipedia.org/wiki/Disc_Description_Protocol), Wikipedia.
@@ -241,6 +262,7 @@ the audio file, but it is where most of the metadata a listener sees on a stream
 comes from, and the embedded tags of a master are often its first source. Its role vocabulary
 (producer, mixing engineer, mastering engineer...) is the model for full studio credits.
 
+- [DDEX](https://en.wikipedia.org/wiki/DDEX), Wikipedia.
 - [DDEX standards](https://ddex.net/standards/).
 - [Electronic Release Notification](https://kb.ddex.net/), DDEX knowledge base.
 
@@ -307,6 +329,9 @@ For music production: what a radio station needs from a delivered single or adve
 intro and segue timers let DJs and automation talk up to the vocal and crossfade at the right
 point.
 
+- [Fidelipac](https://en.wikipedia.org/wiki/Fidelipac), Wikipedia. (the NAB cartridge)
+- [Radio automation](https://en.wikipedia.org/wiki/Radio_automation), Wikipedia.
+- [Broadcast Wave Format](https://en.wikipedia.org/wiki/Broadcast_Wave_Format), Wikipedia.
 - AES46-2002, *Radio traffic audio delivery extension to the broadcast-WAVE-file format*,
   [Audio Engineering Society standards](https://www.aes.org/publications/standards/).
 
@@ -477,6 +502,7 @@ URL and advisory. Part of XMP since 2001.
 For music production: the rating and label are how Bridge and Audition sort and colour files,
 useful for choosing takes and sounds; the creator tool records the software that wrote the file.
 
+- [Extensible Metadata Platform](https://en.wikipedia.org/wiki/Extensible_Metadata_Platform), Wikipedia.
 - [XMP Basic namespace](https://github.com/adobe/xmp-docs/tree/master/XMPNamespaces), Adobe.
 
 ## XMP Rights Management
@@ -488,6 +514,8 @@ place Creative Commons recommended for its licences.
 For music production: where to say how a recording, sample or stem may be used, in words and
 with a link, beside the plain copyright line.
 
+- [Extensible Metadata Platform](https://en.wikipedia.org/wiki/Extensible_Metadata_Platform), Wikipedia.
+- [Copyright notice](https://en.wikipedia.org/wiki/Copyright_notice), Wikipedia.
 - [XMP Rights Management namespace](https://github.com/adobe/xmp-docs/tree/master/XMPNamespaces),
   Adobe.
 - [Creative Commons: XMP](https://wiki.creativecommons.org/wiki/XMP).
@@ -502,6 +530,8 @@ actions and the files a file was derived from, which PHI keeps as they are.
 For music production: provenance. The IDs and history let a mix be traced to the session and
 files it came from; asset managers and archives rely on them.
 
+- [Extensible Metadata Platform](https://en.wikipedia.org/wiki/Extensible_Metadata_Platform), Wikipedia.
+- [Digital asset management](https://en.wikipedia.org/wiki/Digital_asset_management), Wikipedia.
 - [XMP Media Management namespace](https://github.com/adobe/xmp-docs/tree/master/XMPNamespaces),
   Adobe.
 
@@ -513,6 +543,8 @@ name, an ID and a URL. Meant for print and publishing workflows.
 For music production: a place to tie a file to a client's job or project number, which few
 audio applications read.
 
+- [Extensible Metadata Platform](https://en.wikipedia.org/wiki/Extensible_Metadata_Platform), Wikipedia.
+- [Job Definition Format](https://en.wikipedia.org/wiki/Job_Definition_Format), Wikipedia.
 - [XMP Basic Job Ticket namespace](https://github.com/adobe/xmp-docs/tree/master/XMPNamespaces),
   Adobe.
 
@@ -524,6 +556,8 @@ plate names. It is in the editor because Adobe's Metadata panels list every XMP 
 For music production: not used for audio; it describes documents such as scores or liner notes
 in PDF.
 
+- [Extensible Metadata Platform](https://en.wikipedia.org/wiki/Extensible_Metadata_Platform), Wikipedia.
+- [PDF](https://en.wikipedia.org/wiki/PDF), Wikipedia.
 - [XMP Paged-Text namespace](https://github.com/adobe/xmp-docs/tree/master/XMPNamespaces),
   Adobe.
 
@@ -544,6 +578,9 @@ For music production: the richest musical schema of all. Key, tempo, time signat
 loop are what sample and loop libraries need to be found and matched; the engineer and composer
 credits follow PHI's common fields.
 
+- [Extensible Metadata Platform](https://en.wikipedia.org/wiki/Extensible_Metadata_Platform), Wikipedia.
+- [Loop (music)](https://en.wikipedia.org/wiki/Loop_(music)), Wikipedia.
+- [Adobe Audition](https://en.wikipedia.org/wiki/Adobe_Audition), Wikipedia.
 - [XMP Dynamic Media namespace](https://github.com/adobe/xmp-docs/tree/master/XMPNamespaces),
   Adobe.
 
@@ -554,6 +591,8 @@ whether it has been trapped for print. From Acrobat, which first carried XMP.
 
 For music production: for PDFs such as scores, lyric sheets and liner notes, not audio files.
 
+- [Extensible Metadata Platform](https://en.wikipedia.org/wiki/Extensible_Metadata_Platform), Wikipedia.
+- [PDF](https://en.wikipedia.org/wiki/PDF), Wikipedia.
 - [Adobe PDF namespace](https://github.com/adobe/xmp-docs/tree/master/XMPNamespaces), Adobe.
 
 ## Photoshop schema
@@ -566,6 +605,8 @@ transmission reference and urgency. They are the IPTC fields from before IPTC Co
 For music production: credit and source say who supplied a recording and where it came from;
 city, country and date created place a field recording.
 
+- [Extensible Metadata Platform](https://en.wikipedia.org/wiki/Extensible_Metadata_Platform), Wikipedia.
+- [Adobe Photoshop](https://en.wikipedia.org/wiki/Adobe_Photoshop), Wikipedia.
 - [Photoshop namespace](https://github.com/adobe/xmp-docs/tree/master/XMPNamespaces),
   Adobe.
 
@@ -594,6 +635,9 @@ recording of the world, a digital creation, a composite, or, since IPTC's vocabu
 For music production: the digital source type is now how platforms and C2PA content credentials
 recognize generated or AI-assisted audio, and a place to state that a recording is genuine.
 
+- [IPTC Information Interchange Model](https://en.wikipedia.org/wiki/IPTC_Information_Interchange_Model), Wikipedia.
+- [Synthetic media](https://en.wikipedia.org/wiki/Synthetic_media), Wikipedia.
+- [Content Authenticity Initiative](https://en.wikipedia.org/wiki/Content_Authenticity_Initiative), Wikipedia.
 - [IPTC Photo Metadata Extension](https://iptc.org/std/photometadata/specification/IPTC-PhotoMetadata),
   IPTC.
 - [Digital source type vocabulary](https://cv.iptc.org/newscodes/digitalsourcetype/), IPTC.
@@ -605,6 +649,8 @@ The **crs:** namespace: Adobe Camera Raw's (2003) settings for a photograph's ra
 PHI's editor lists the raw file name and version. For photographs, not audio; it is listed
 because Adobe's panels show it.
 
+- [Extensible Metadata Platform](https://en.wikipedia.org/wiki/Extensible_Metadata_Platform), Wikipedia.
+- [Raw image format](https://en.wikipedia.org/wiki/Raw_image_format), Wikipedia.
 - [Camera Raw namespace](https://github.com/adobe/xmp-docs/tree/master/XMPNamespaces), Adobe.
 
 ## EXIF: TIFF properties
@@ -635,6 +681,8 @@ The **aux:** namespace: Adobe's additions to EXIF for what the camera's tags did
 device's serial number, the lens and the owner. For photographs; on audio they can identify the
 recorder and microphone of a recording.
 
+- [Exif](https://en.wikipedia.org/wiki/Exif), Wikipedia.
+- [Extensible Metadata Platform](https://en.wikipedia.org/wiki/Extensible_Metadata_Platform), Wikipedia.
 - [EXIF auxiliary namespace](https://github.com/adobe/xmp-docs/tree/master/XMPNamespaces),
   Adobe.
 
@@ -647,5 +695,7 @@ and recordings to the script.
 For music production: for dialogue, voice-over and audio drama, where each recording answers a
 line of a script.
 
+- [Extensible Metadata Platform](https://en.wikipedia.org/wiki/Extensible_Metadata_Platform), Wikipedia.
+- [Screenplay](https://en.wikipedia.org/wiki/Screenplay), Wikipedia.
 - [XMP Script namespace](https://github.com/adobe/xmp-docs/tree/master/XMPNamespaces),
   Adobe.
