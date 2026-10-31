@@ -23,7 +23,12 @@ Agbeli of Kopeyia traces to Kokosawa, a Yoruba style from Nigeria that the Ewe p
 twice its tempo. The present Kopeyia arrangement opens with a short slow Kokosawa, then works like
 a rondo: the "free movement" (A), a light, easy dance, is followed each time by the more intense
 "serious movement" (B), which leads into a new variation, C, D, E and on to H, in turn (ABA,
-ABCABC, ABDABD and so on), each variation cued by the lead drum. A cantor and chorus
+ABCABC, ABDABD and so on), each variation cued by the lead drum. Adzrowo (Adzro), about 150 years old by Agbeli's account and often
+heard at funerals, which in Ghana are largely joyful, uses the same timekeepers but gives the lead
+to the atsimevu, with a small hand-played boba joining kidi and sogo as a response drum; its
+call-and-response dialogues give it a similar theme-and-variations shape, but its dancers keep a
+much simpler step, largely independent of the drumming, and older Ewe prize it for its
+sophistication. A cantor and chorus
 sing over it in call and response. David Locke's studies and those of A. M. Jones made the
 style the textbook case of African polyrhythm; Kofi Agawu has warned against hearing it only as
 rhythm, apart from dance, language and meaning.
@@ -56,6 +61,8 @@ one, three against two, the lead drum's calls changing their responses, with can
 - David Locke, *Drum Gahu* (White Cliffs Media, 1987).
 - Jeremy Cohen, ["Great Grooves #1: Gahu"](https://thisworldmusic.com/gahu-african-drumming-and-dance-from-ghana/),
   *ThisWorldMusic*, with a multitrack mixer of the six parts.
+- Jeremy Cohen, ["Great Grooves #2: Adzrowo"](https://thisworldmusic.com/adzro-african-drumming-dance-from-ghana/),
+  *ThisWorldMusic*.
 - C. K. Ladzekpo, *Foundation Course in African Dance-Drumming*, "Six against four cross
   rhythms" (1995), [archived](https://web.archive.org/web/2012/https://home.comcast.net/~dzinyaladzekpo/SixFour.html).
 - Eugene D. Novotney, *The 3:2 Relationship as the Foundation of Timelines in West African
