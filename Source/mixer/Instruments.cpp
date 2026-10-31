@@ -439,6 +439,8 @@ namespace mixer
             case 0xB0:
                 if (e.data1 == 64)
                     sound.sustainPedal (e.data2 >= 64);
+                else if (e.data1 == 1)
+                    sound.modWheel (e.data2 / 127.0);
                 else if (e.data1 == 120)
                     sound.panic();
                 else if (e.data1 == 123)
