@@ -100,6 +100,20 @@ meet in one shape. Spread 7 notes as evenly as possible through the 12 semitones
 diatonic scale, whose steps (2 2 1 2 2 2 1, in some rotation) follow the same pattern as E(7,12),
 the Ewe bell.
 
+Erv Wilson's worksheets of 1997 show this with Viggo Brun's version of the algorithm. He starts
+with an octave of N steps and a generator, usually the fifth, of G steps, such as 12 and 7. At
+each stage he takes the smaller number from the larger, re-sorts, and records how many of each
+kind of step the scale has so far. Every stage is a "moment of symmetry" (MOS): a scale with just
+two sizes of step. For 12 and 7 the stages give scales of 2, 3, 5, 7 and finally 12 notes:
+- the pentatonic is 3 large steps and 2 small;
+- the diatonic is 5 and 2;
+- the chromatic is all 12 semitones.
+
+The fractions climb toward 7/12, each next one a mediant of two before, as in the Stern-Brocot
+"scale tree". He works the same table for octaves of 19, 31, 50, 53, 69 and 88 steps, and for
+generators that are thirds (minor, neutral, subminor) rather than fifths. He follows it as far as
+1995 steps with a generator of 527, which reproduces the fifth of Larry Hanson's tuning.
+
 Toussaint found the link in 2004, two years into studying rhythm mathematically: the two
 numbers fed to Euclid's procedure (*Elements* VII.1–2) become the counts of sounded and silent
 pulses in a cycle. His later papers went further:
@@ -121,6 +135,10 @@ same groove.
 - [Euclidean rhythm](https://en.wikipedia.org/wiki/Euclidean_rhythm),
   [Tresillo (rhythm)](https://en.wikipedia.org/wiki/Tresillo_(rhythm)) and
   [Polyrhythm](https://en.wikipedia.org/wiki/Polyrhythm), Wikipedia.
+- Erv Wilson, "Viggo Brun's algorithm applied" (worksheets, 1997),
+  [anaphoria.com](https://anaphoria.com/viggo2.pdf); see also Viggo Brun, ["Euclidean Algorithms and
+  Musical Theory"](https://anaphoria.com/brun-euclideanalgo.pdf), and Kraig Grady, ["Applying Viggo
+  Brun's Algorithm to Rhythm"](https://anaphoria.com/ViggoRhythm.pdf).
 - Benjamin Wardhaugh, ["Music and Euclid's algorithm"](https://plus.maths.org/os/issue40/features/wardhaugh/index),
   *Plus Magazine* (University of Cambridge, 2006).
 - Godfried Toussaint, "The Euclidean Algorithm Generates Traditional Musical Rhythms",
