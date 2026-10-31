@@ -145,7 +145,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#42](https://github.com/phinyx852Hz/audio-editor/pull/42) | Add the Φ Phaser, and the Φ DSP as a library the PHI synth can link | merged | Add plugin, Built-in, Φ Phaser | `Source/core/PhiPhaser.cpp`<br>`Source/engine/PhiEffects.cpp`<br>`Source/core/CMakeLists.txt` |
 | [#43](https://github.com/phinyx852Hz/audio-editor/pull/43) | Φ Compressor, Φ Multiband, Φ Limiter and Φ Chorus | merged | Add plugin, Built-in | `Source/core/PhiDynamics.cpp`<br>`Source/core/PhiChorus.cpp`<br>`Source/engine/PhiEffects.cpp` |
 | [#89](https://github.com/phinyx852Hz/audio-editor/pull/89) | Φ Modulation (PhiFlow, PhiSpace, PhiGrain, PhiMatrix) and a Cubase-style Modulators panel | merged |  | `Source/core/PhiModulation.cpp`<br>`Source/ui/ModulatorsPanel.cpp`<br>`Source/core/Modulators.cpp` |
-| [#115](https://github.com/phinyx852Hz/audio-editor/pull/115) | Manual: Analysing a Plugin; Forensic Φ finds wider golden ratios | open |  | `docs/manual/chapters/plugin-analyzer.md`<br>`Source/core/PhiForensics.cpp`<br>`docs/manual/chapters/phi.md` |
+| [#115](https://github.com/phinyx852Hz/audio-editor/pull/115) | Plugin Analyzer manual, wider Forensic Φ, LINpro-style dither | open |  | `docs/manual/chapters/plugin-analyzer.md`<br>`Source/core/Dsp.cpp`<br>`tests/CoreTests.cpp` |
 
 ### Instruments and plugins
 
@@ -230,7 +230,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#128](https://github.com/phinyx852Hz/audio-editor/pull/128) | Research: add Acoustic Ecology (Schafer, composers, Feld and the Kaluli, noise music) | open |  | `share/research/ecology-1-composers.md`<br>`share/research/ecology-3-noise.md`<br>`share/research/ecology-0-schafer.md` |
 | [#129](https://github.com/phinyx852Hz/audio-editor/pull/129) | Compose: John Cage's and Pauline Oliveros's techniques | open |  | `Source/mixer/Compose.cpp`<br>`tests/CoreTests.cpp`<br>`docs/compose.md` |
 | [#131](https://github.com/phinyx852Hz/audio-editor/pull/131) | Compose: Congolese guitar, rumba and sebene | open |  | `Source/mixer/Compose.cpp`<br>`tests/CoreTests.cpp`<br>`docs/compose.md` |
-| [#132](https://github.com/phinyx852Hz/audio-editor/pull/132) | Compose: Mbuti interlocking, the Bol Processor (BP3) with an Ajrada qāʿida, and PHI tabla | open |  | `Source/mixer/BolProcessor.cpp`<br>`Source/mixer/Compose.cpp`<br>`share/bolprocessor/-se.dhin--` |
+| [#132](https://github.com/phinyx852Hz/audio-editor/pull/132) | Compose: Mbuti interlocking, the Bol Processor (BP3) with an Ajrada qāʿida, and PHI tabla | open |  | `share/bolprocessor/-so.EkDoTin`<br>`Source/mixer/BolProcessor.cpp`<br>`share/bolprocessor/-so.dhati` |
 
 ## By number
 
@@ -350,7 +350,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#112](https://github.com/phinyx852Hz/audio-editor/pull/112) | Cut idle CPU, and add Options > Wallpaper | The Visualizer behind PHI is a child widget lowered under everything else. *(auto)* | merged | 2026-10-31 | Not yet sorted |
 | [#113](https://github.com/phinyx852Hz/audio-editor/pull/113) | Fix the crash on quit with the mixer open | The SIGSEGV on quit (2026-10-30 crash report) happened like this. ~MainWindow deleted the docked mixer. *(auto)* | merged | 2026-10-30 | Mixer and clip launcher |
 | [#114](https://github.com/phinyx852Hz/audio-editor/pull/114) | Build an Arch package and an AppImage in CI | Stage 1 of the installers: ready-made Linux downloads that put PHI in the app launcher with the Φ icon (the .desktop file, icon and MIME type were already in... *(auto)* | open | 2026-10-30 | Not yet sorted |
-| [#115](https://github.com/phinyx852Hz/audio-editor/pull/115) | Manual: Analysing a Plugin; Forensic Φ finds wider golden ratios | New chapter, "Analysing a Plugin" (docs/manual/chapters/plugin-analyzer.md), in the Mastering part after Effects. *(auto)* | open | 2026-10-30 | Φ effects and sounds |
+| [#115](https://github.com/phinyx852Hz/audio-editor/pull/115) | Plugin Analyzer manual, wider Forensic Φ, LINpro-style dither | New chapter, "Analysing a Plugin" (docs/manual/chapters/plugin-analyzer.md). *(auto)* | open | 2026-10-30 | Φ effects and sounds |
 | [#116](https://github.com/phinyx852Hz/audio-editor/pull/116) | MIDI editor and score: transport tied to the main one | How it behaves *(auto)* | open | 2026-10-30 | Editing and warping |
 | [#117](https://github.com/phinyx852Hz/audio-editor/pull/117) | UI fixes: Alt+menu letters, strip hover, Find panel width, Interface Size | Alt+O (and every Alt+menu letter) opens the menu right away. *(auto)* | open | 2026-10-31 | Interface and branding |
 | [#118](https://github.com/phinyx852Hz/audio-editor/pull/118) | MIDI editor: Ableton-style note keys and mouse gestures | Ctrl+D and Ctrl+A did nothing in the MIDI editor docked in the main window. *(auto)* | open | 2026-10-31 | Editing and warping |
