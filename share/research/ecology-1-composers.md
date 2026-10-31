@@ -161,18 +161,26 @@ circle in scores such as *Rose Moon* (1977); later she quartered the circle into
 making sound, imagining sound, listening to present sound and remembering past sound, the model
 of the *Sonic Meditations*. Those are text scores, prose instructions for anyone ("Teach
 Yourself to Fly" is the first), collected with her later ones in the *Anthology of Text Scores
-1971–2013*. In the best known, *Tuning Meditation*, each singer sings a pitch, listens to the
-group, then either matches a pitch someone else is singing or sings one no one else is
-singing. Practised, sonic awareness makes, in Von Gunden's words, "complex sound masses
+1971–2013*. The best known is *The Tuning Meditation*, first performed in 1981 by seventy-five singers
+directed by William Duckworth along the spiral walkway of the Guggenheim Museum, New York, for
+Elaine Summers's *Crows Nest*, and open to anyone regardless of training. Each singer listens
+inwardly for a tone and sings it on one breath; listens to the whole field; tunes as exactly as
+possible to a distant voice; listens again; sings a new tone no one else is singing; and goes
+on alternating between tuning to another and offering a tone of their own, one tone to a
+breath, until everyone ends together ("It happens"). IONE, Oliveros's partner, led a *World
+Wide Tuning Meditation* online in April 2020.
+Practised, sonic awareness makes, in Von Gunden's words, "complex sound masses
 possessing a strong tonal center".
 
 - [Pauline Oliveros](https://en.wikipedia.org/wiki/Pauline_Oliveros) and
   [Deep Listening](https://en.wikipedia.org/wiki/Deep_Listening), Wikipedia (checked from the
-  page the owner pasted, 2026-10-31; *Tuning Meditation* is described from memory).
+  page the owner pasted, 2026-10-31).
 - Pauline Oliveros, *Deep Listening: A Composer's Sound Practice* (iUniverse, 2005), and
   *Anthology of Text Scores 1971–2013* (Deep Listening Publications, 2013).
 - Pauline Oliveros, *Software for People: Collected Writings 1963–80* (Printed Editions, 1984).
 - Heidi Von Gunden, *The Music of Pauline Oliveros* (Scarecrow Press, 1983).
+- [The Tuning Meditation by Pauline Oliveros with IONE](https://hammer.ucla.edu/programs-events/2022/tuning-meditation-pauline-oliveros-ione),
+  Hammer Museum, 2022, with the score (© Deep Listening Publications, 2007).
 
 ## Annea Lockwood
 
