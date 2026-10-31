@@ -206,6 +206,11 @@ The quality features are safe to leave on: the Φ switches in Stereoize and Mid/
 | Φ Stack | Copies (4), Decay, Tone (8 kHz), Mix, Width | Copies pitched up by φ, φ², φ³, φ⁴ |
 | Φ Tame | Depth, Fundamental (55 Hz), Width (Q 1.618), Find Fundamental | A cut at the fundamental × φ ÷ 2 × 10 |
 | Φ De-resonator | Depth, Sharpness, Speed, Mix, Low, High, Delta | Turns resonances down while they ring |
+| Φ Phaser | Stages (5), Rate (0.382 Hz), Depth (61.8 %), Centre (618 Hz), Spread, Feedback (38.2 %), Stereo, Mix (50 %) | 2, 3, 5, 8 or 13 allpass stages tuned φ apart, swept by LFOs at rate × 1 and φ |
+| Φ Chorus | Rate (0.618 Hz), Depth (2.618 ms), Delay (13 ms), Voices (5), Width, Mix (38.2 %) | 2, 3, 5 or 8 voices with rates √φ apart, LFOs and pans a golden angle apart |
+| Φ Compressor | Threshold (−18 dB), Ratio (φ, 1.62:1), Attack (13 ms), Release (233 ms), Knee (φ⁴ dB), Makeup, Mix | Ratios φ^(n/2); a two-stage release at release ÷ φ and × φ |
+| Φ Multiband | Threshold and Gain for Low, Low Mid, High Mid and High, Crossovers 1 to 3, Ratio, Attack, Release, Mix | Four bands split at 80 Hz × φⁿ (209 Hz, 887 Hz, 3.76 kHz), times a golden step slower below and faster above |
+| Φ Limiter | Drive, Ceiling (−1 dBTP), Release (89 ms) | A true-peak limiter with φ² ms of look-ahead and the golden release |
 | Φ Modulation | Four pages: Flow, Space, Grain, Matrix (see below) | A sequence engine and three effects that follow it |
 
 ### The Φ window {#phi-window}
@@ -225,6 +230,11 @@ The quality features are safe to leave on: the Φ switches in Stereoize and Mid/
 | Φ Stack | The copies, by pitch |
 | Φ Tame | Its cut, at the fundamental it found |
 | Φ De-resonator | Live: the level it hears and the cut it makes |
+| Φ Phaser | Its notches with the LFOs at rest |
+| Φ Chorus | The voices, by delay, moving as they sweep |
+| Φ Compressor | Its curve, level out against level in, beside a dashed line where nothing changes |
+| Φ Multiband | The four bands, with a handle for each crossover |
+| Φ Limiter | The last three seconds of gain reduction |
 | Φ Modulation | The page chosen: Flow's next events, Space's spectrum before and after, the grains playing, Matrix's nodes and route |
 
 ### Φ Modulation {#phi-modulation}

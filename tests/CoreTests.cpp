@@ -7811,6 +7811,13 @@ namespace
             check (report.verdict != forensic::Verdict::strong && report.verdict != forensic::Verdict::suggestive,
                    "forensic: echoes 3:2 apart are no evidence of φ (" + report.summary + ")");
         }
+        {
+            // Bands far apart: a cut at 80 Hz × φ² and a boost at 80 Hz × φ¹⁰ are φ⁸ (47) apart.
+            const std::vector<forensic::Feature> features { { "frequency", "Notch at 209.4 Hz", 209.44, 0.003, "Hz" },
+                                                            { "frequency", "Peak at 9836 Hz", 9839.2, 0.003, "Hz" } };
+            const auto report = forensic::analyse (features);
+            check (report.matches.size() == 1 && report.matches.front().target == "φ⁸", "forensic: finds golden ratios wider than φ⁶");
+        }
     }
 
     // The splash's sound: phase distortion, a patch per start, a granular reverb with a long tail.
