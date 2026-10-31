@@ -398,7 +398,10 @@ namespace
 
         bool eventFilter (QObject* watched, QEvent* e) override
         {
-            if (e->type() == QEvent::Paint)
+            // Docked inside another window, it is that window's background that shows (with a
+            // visualizer behind PHI between them): painting with Source here would punch through
+            // to the desktop.
+            if (e->type() == QEvent::Paint && static_cast<QWidget*> (watched)->isWindow())
             {
                 auto* w = static_cast<QWidget*> (watched);
                 QPainter g (w);

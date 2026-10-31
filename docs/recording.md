@@ -121,7 +121,8 @@ launch quantise; the take length; **Capture**; and **Record Options**.
   the keyboard and the timeline both), or its instrument as audio. Its **input channels**: the stereo
   pair, or the left or right alone (a mono clip). Its **monitoring**: auto (the input heard through
   the track while it is armed and records audio), always on, or off.
-- **Audio Input**: the first input (a microphone or line in), or any PipeWire source: an input, the
+- **Audio Input**: the system's default input (as the desktop's sound settings have it; until
+  2026-10-30 the first input by name, which could be the wrong device), or any PipeWire source: an input, the
   desktop's output or one application. **Input Delay** (10 ms to start): how late the input
   arrives; takes are moved earlier by it, and a slot's last few milliseconds are written as they
   come in after it has started to loop.

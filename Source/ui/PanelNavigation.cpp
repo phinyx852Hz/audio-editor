@@ -7,8 +7,10 @@
 #include "MainWindow.h"
 #include "AmbiScene.h"
 #include "ChainRow.h"
+#include "EditorWindow.h"
 #include "FindPanel.h"
 #include "MasterPanel.h"
+#include "MidiPanel.h"
 #include "MixerWindow.h"
 #include "Panels.h"
 #include "QuantizePanel.h"
@@ -82,14 +84,25 @@ void MainWindow::buildNavigation()
 
 std::vector<MainWindow::PanelStop> MainWindow::panelStops() const
 {
-    // The mixer in the editor's place stands in for the waveform.
-    QWidget* editor = waveform;
+    // The mixer in the editor's place stands in for the waveform; the MIDI editor under the
+    // waveform is a stop of its own, and a closed half of the editor is none.
+    std::vector<PanelStop> stops;
     if (mixerDocked() && centralStack->currentWidget() == mixerWin)
-        editor = mixerWin;
-    return { { editor, nullptr }, { samplerWin, samplerPanel }, { chainRow, chainPanel }, { masterWidget, masterPanel },
+        stops.push_back ({ mixerWin, nullptr });
+    else
+    {
+        const bool midi = midiPanel != nullptr && ! trackHolder->isHidden();
+        if (! waveform->isHidden() || ! midi)
+            stops.push_back ({ waveform, nullptr });
+        if (midi)
+            stops.push_back ({ midiPanel, nullptr });
+    }
+    for (const auto& s : std::initializer_list<PanelStop> { { samplerWin, samplerPanel }, { chainRow, chainPanel }, { masterWidget, masterPanel },
              { metersPanel->content(), metersPanel }, { markerList, markerPanel }, { historyList, historyPanel },
              { diagnostics, diagnosticsPanel }, { referencePanel, referencesPanel }, { ambiSceneView, ambiScenePanel },
-             { findWidget, findPanel }, { slicerWin, slicerPanel }, { quantizeWidget, quantizePanel } };
+             { findWidget, findPanel }, { slicerWin, slicerPanel }, { quantizeWidget, quantizePanel } })
+        stops.push_back (s);
+    return stops;
 }
 
 int MainWindow::stopWithFocus (const std::vector<PanelStop>& stops) const
@@ -142,7 +155,7 @@ void MainWindow::focusStop (const PanelStop& next)
         activateWindow();
         next.widget->setFocus (Qt::TabFocusReason);
     }
-    const auto name = next.panel != nullptr ? next.panel->dock()->windowTitle() : (next.widget == mixerWin ? tr ("Mixer") : tr ("Waveform"));
+    const auto name = next.panel != nullptr ? next.panel->dock()->windowTitle() : (next.widget == mixerWin ? tr ("Mixer") : next.widget == midiPanel ? tr ("MIDI Editor") : tr ("Waveform"));
     statusBar()->showMessage (name, 1500);
 }
 
@@ -221,6 +234,15 @@ void MainWindow::closeFocused()
         mixerWin->close();
         return;
     }
+    // The MIDI editor under the waveform closes as a panel does (View > MIDI Editor brings it back).
+    if (midiPanel != nullptr && midiPanel->isVisible() && holds (midiPanel, QApplication::focusWidget()))
+    {
+        commands.action (QStringLiteral ("view.midiEditor"))->setChecked (false);
+        activateWindow();
+        waveform->setFocus();
+        statusBar()->showMessage (tr ("Closed the MIDI Editor (Shift+F4 opens it again)"), 3000);
+        return;
+    }
     for (auto* p : panels)
         if (p->isShown() && p->containsFocus())
         {
@@ -296,7 +318,9 @@ bool MainWindow::navigationKey (QObject* o, QEvent* e)
     if (! ours && type != QEvent::KeyRelease)
     {
         const bool closeKey = key == Qt::Key_W && (mods == Qt::ControlModifier || mods == Qt::MetaModifier);
-        const bool fullKey = key == Qt::Key_F && mods == Qt::MetaModifier;
+        // Ctrl+F too in an instrument's or effect's own window (EditorWindow.h), as REAPER-like
+        // editors float: full screen and back to its floating size (owner, 2026-10-30).
+        const bool fullKey = key == Qt::Key_F && (mods == Qt::MetaModifier || (mods == Qt::ControlModifier && editorwindow::is (window)));
         const auto pressed = QKeySequence (k->keyCombination());
         const bool dockKey = window == mixerWin && mixerWin != nullptr
                           && (commands.action (QStringLiteral ("mixer.dock"))->shortcuts().contains (pressed)
@@ -334,6 +358,21 @@ bool MainWindow::navigationKey (QObject* o, QEvent* e)
     }
     if (! ours)
         return false;
+
+    // Simplest or the Slicer popped out into a window of its own: Ctrl+F, like Super+F, takes
+    // it full screen and back to its floating size, as the instruments' own windows do.
+    if (key == Qt::Key_F && mods == Qt::ControlModifier && type != QEvent::KeyRelease
+        && ((samplerPanel->isPoppedOut() && samplerPanel->content()->window() == window)
+            || (slicerPanel->isPoppedOut() && slicerPanel->content()->window() == window)))
+    {
+        if (type == QEvent::KeyPress && ! k->isAutoRepeat())
+        {
+            QPointer<QWidget> w = window;
+            QTimer::singleShot (0, this, [this, w] { if (w != nullptr) toggleFullScreen (w); });
+        }
+        e->accept();
+        return true;
+    }
 
     // Alt, under the left hand: tapped on its own it goes to the next panel, held with an
     // arrow it goes to the panel that way. Alt with any other key (menus, Ctrl+Alt+arrows)

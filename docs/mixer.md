@@ -198,6 +198,7 @@ More templates can be added in the same way; each is a small file.
 | T | Step the thumbnail display |
 | V | Show or hide the tracks across time above the strips |
 | Ctrl+B, Ctrl+F | The Finder or the Inspector in the left column |
+| Ctrl+I | Show or close the Inspector (View > Mixer Inspector, or the top bar's Inspector button) |
 | F6 | Next section: browser, tracks, strips (Shift: back) |
 | Tab | Switch between the clip launcher and the tracks across time (Ableton) |
 | Ctrl+Z, Ctrl+Shift+Z | Undo, redo clip edits |
@@ -366,6 +367,15 @@ snapshots and mixer history, then In/Out routing (Ableton's Audio From and Audio
 and recording, thumbnails, templates and the spatial panner. The Inspector (owner, 2026-10-25) is a column at the mixer's
 left in both views with the selected track's mode, instrument, Pre, inserts, sends and width; the
 strips stay lean (four insert slots, sends, trim and pan, fader, name) in both views.
+The Inspector button (or `Ctrl+I`, View > Mixer Inspector) closes the column and opens it again
+(owner, 2026-10-30): closed, picking a track leaves it closed and the strips have the room, and it
+stays closed the next time PHI starts. `Ctrl+F` still brings the Finder. The track names on the
+strips, the Inspector and the launcher's headers are black on every colour (owner, 2026-10-30).
+A track moves by its name (owner, 2026-10-30): drag the name bar at the bottom of its strip, or its
+header at the top of the launcher, sideways onto another track's place. Both show where it will
+land, the tracks between move over by one, and the strip and its launcher column go together with
+everything on them (clips, slots, instrument, inserts, sends, the arm, ducks keyed to it).
+`Ctrl+Z` moves it back.
 
 Device Chain and drag and drop (owner, 2026-10-25, "very close to Ableton's workflow"):
 - The mixer has its own Device Chain along its bottom, the whole width, in both views. It shows
@@ -711,6 +721,13 @@ is the patchbay's Mix Bus. Mix Down still renders the mixer's own sum.
   sideways together. The strip under the mouse (or, from the keys, the selected one) stays where
   it is. Ctrl+= and Ctrl+- zoom the tracks across time instead, apart from the strips.
 - Strips > Focus Follows Mouse (off at first): pointing at a strip selects its track, so the keys
-  and the Device Chain act on it without a click. Strips > Arm the Selected Track (on at first):
-  selecting a track that plays an instrument arms it, as Ableton's auto-arm; an audio-only track
-  leaves the arm where it is, a hover never arms, nor does anything while a take records.
+  and the Device Chain act on it without a click. Options > Mixer Preferences (and the Mixer menu) has
+  Arm on Select, on at first, as Ableton's auto-arm: selecting a track the MIDI keyboard plays arms
+  it, and selecting another moves the arm. A track that would record the audio input (an audio
+  track, or a hybrid with no instrument yet) is never armed this way, since arming it opens its
+  input (the first version did, and the input's noise showed on its meter); selecting one takes
+  the arm off the track selecting armed. A hover never arms, nor does anything while a take
+  records, and an arm set by hand stays until it is changed by hand.
+- The audio input, with none chosen in Record Options, is the system's default input; it was the
+  first input by name, which could be a webcam's or the board's microphone instead of the
+  interface.

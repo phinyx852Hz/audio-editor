@@ -99,6 +99,9 @@ public:
     void setSample (sampler::SamplePtr, double rate, const QString& name, bool keepMarkers);
     bool followsEditor() const;
     void setMidiStatus (const QString&);
+    // A track's instrument editor in the mixer: closing it (Ctrl+W) leaves the instrument
+    // playing, so notes that are sounding ring on. Otherwise closing silences it at once.
+    void keepPlayingWhenClosed (bool keep) { keepsPlaying = keep; }
 
 Q_SIGNALS:
     void refreshRequested();
@@ -186,4 +189,5 @@ private:
     int keyVelocity = 100;
     std::vector<std::pair<int, int>> heldKeys;   // scan code, note
     bool updating = false;
+    bool keepsPlaying = false;
 };
