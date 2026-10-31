@@ -450,12 +450,8 @@ protected:
         drag = Drag::none;
         if (y < rulerHeight && x >= keyWidth)
         {
-            // The ruler: the step cursor and the playhead go there.
-            ed.step.position = snapTick (tickAt (x), false);
-            if (! ed.playTimer->isActive())
-                ed.playheadTick = ed.step.position;
-            ed.showSystemAt (ed.step.position);
-            viewport()->update();
+            // The ruler: the step cursor and the playhead go there, playing on from there if it plays.
+            ed.goTo (snapTick (tickAt (x), false), false);
             return;
         }
         if (y > gridBottom + laneGap && x >= keyWidth)
@@ -751,6 +747,13 @@ protected:
 
     void mouseReleaseEvent (QMouseEvent*) override
     {
+        if (drag == Drag::rubber && (currentPos - pressPos).manhattanLength() < 4.0)
+        {
+            // A click on empty space, not a box: the playhead there (playing on from there if it plays).
+            drag = Drag::none;
+            ed.goTo (snapTick (tickAt (pressPos.x()), false), false);
+            return;
+        }
         if (drag == Drag::curve && ! ed.undoList.empty() && drawn >= 0 && (size_t) drawn < ed.seq.notes.size()
             && ed.seq.notes[(size_t) drawn].curve == before.notes[(size_t) drawn].curve)
             ed.undoList.pop_back();
@@ -2916,8 +2919,29 @@ bool MidiEditor::event (QEvent* e)
 {
     if (e->type() == QEvent::ShortcutOverride)
     {
+        // In the main window the editor's keys would otherwise go to the window's own shortcuts
+        // (Ctrl+A and Ctrl+D picking and duplicating audio, Space playing it...): the keys
+        // keyPressEvent handles are taken here first.
         const auto* k = static_cast<QKeyEvent*> (e);
-        if ((k->key() == Qt::Key_Home || k->key() == Qt::Key_End) && (k->modifiers() & ~Qt::KeypadModifier) == Qt::NoModifier)
+        const auto mods = k->modifiers() & ~Qt::KeypadModifier;
+        const auto key = k->key();
+        const auto in = [key] (std::initializer_list<int> keys) { return std::find (keys.begin(), keys.end(), key) != keys.end(); };
+        const auto arrow = in ({ Qt::Key_Up, Qt::Key_Down, Qt::Key_Left, Qt::Key_Right });
+        bool ours = false;
+        if (mods == Qt::NoModifier)
+            ours = arrow || in ({ Qt::Key_Home, Qt::Key_End, Qt::Key_Delete, Qt::Key_Backspace, Qt::Key_Space, Qt::Key_Q, Qt::Key_B, Qt::Key_Return,
+                                  Qt::Key_Enter, Qt::Key_1, Qt::Key_2, Qt::Key_3, Qt::Key_4, Qt::Key_5, Qt::Key_6 });
+        else if (mods == Qt::ShiftModifier)
+            ours = arrow;
+        else if (mods == Qt::ControlModifier)
+            ours = in ({ Qt::Key_Z, Qt::Key_Y, Qt::Key_A, Qt::Key_D, Qt::Key_C, Qt::Key_X, Qt::Key_V, Qt::Key_U, Qt::Key_J, Qt::Key_E, Qt::Key_L,
+                         Qt::Key_Up, Qt::Key_Down, Qt::Key_1, Qt::Key_2, Qt::Key_3, Qt::Key_4, Qt::Key_Delete, Qt::Key_Backspace });
+        else if (mods == (Qt::ControlModifier | Qt::ShiftModifier))
+            ours = in ({ Qt::Key_Z, Qt::Key_A, Qt::Key_D, Qt::Key_Delete, Qt::Key_Backspace, Qt::Key_Up, Qt::Key_Down });
+        // Step input: the computer's keys are notes.
+        if (stepBox->isChecked() && (mods & ~Qt::ShiftModifier) == Qt::NoModifier && k->text().size() == 1 && k->text()[0].isPrint())
+            ours = true;
+        if (ours)
         {
             e->accept();
             return true;
@@ -2926,7 +2950,7 @@ bool MidiEditor::event (QEvent* e)
     return QDialog::event (e);
 }
 
-void MidiEditor::goTo (int64_t tick)
+void MidiEditor::goTo (int64_t tick, bool reveal)
 {
     const bool playing = playTimer->isActive();
     if (playing)
@@ -2934,7 +2958,8 @@ void MidiEditor::goTo (int64_t tick)
     step.position = std::max<int64_t> (0, tick);
     playheadTick = step.position;
     showSystemAt (step.position);
-    roll->reveal (step.position);
+    if (reveal)
+        roll->reveal (step.position);
     if (playing)
         startPlay (playingOriginal);   // on from there
     viewsUpdate();
