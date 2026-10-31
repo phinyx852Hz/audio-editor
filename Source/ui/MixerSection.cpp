@@ -458,6 +458,10 @@ void MainWindow::showMidiEditor (bool on)
         trackHolder->layout()->addWidget (midiPanel);
         focusFollowsMouse->addAreas ({ midiPanel });
     }
+    // Closing stops its playback and offers to save its notes; Cancel keeps it open.
+    if (! on && midiPanel != nullptr && ! trackHolder->isHidden() && ! midiPanel->closing())
+        on = true;
+    appSettings().setValue (QStringLiteral ("view/midiEditor"), on);
     trackHolder->setVisible (on);
     if (! on && ! waveform->isVisible())
         commands.action (QStringLiteral ("view.audioEditor"))->setChecked (true);   // never an empty window

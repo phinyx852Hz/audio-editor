@@ -26,6 +26,9 @@ and ruler) above, and the MIDI editor below.
 - **View > Audio Editor** (`Shift+F2`) closes or opens the top half.
 - **View > MIDI Editor** (`Shift+F4`), the ✕ at the right of the MIDI editor's bar, or `Ctrl+W`
   while it has the keyboard, closes the bottom half; `Shift+F4` opens it again.
+  Closing it stops its playback, and when its notes have changed since they were opened or saved
+  it asks whether to save them first: Save, Discard (it opens empty next time) or Cancel (it stays
+  open).
 - Closing one while the other is closed opens the other, so the window is never empty.
 - Both are kept as they were left, for the next start (`view/audioEditor`, `view/midiEditor`).
 
