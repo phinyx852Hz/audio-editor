@@ -187,14 +187,22 @@ field recording with a reimagined composition of it; and the British Library's U
 
 ## The World Forum for Acoustic Ecology
 
-The World Forum for Acoustic Ecology (WFAE) was founded in 1993 at an international conference,
-The Tuning of the World, in Banff, Alberta, to gather those working in the field across
-disciplines. It is a federation of national and regional societies (Canada, the United
-States, the United Kingdom and Ireland, Japan, Australia and New Zealand, Finland, Greece,
-Germany and others), holds international conferences, and published the journal *Soundscape:
-The Journal of Acoustic Ecology* from 2000. The Canadian Association for Sound Ecology and the
-Hellenic Society for Acoustic Ecology are among its member societies.
+The World Forum for Acoustic Ecology (WFAE), founded in 1993 at an international conference,
+The Tuning of the World, in Banff, Alberta, is an international association of affiliated
+organisations and individuals who share a concern for the state of the world's soundscapes.
+Its affiliates are national and regional societies (Canada, the United States, the United
+Kingdom and Ireland, Japan, Australia and New Zealand, Finland, Greece, Germany and others).
+Its mission is education in listening, research into the social, cultural, scientific and
+ecological sides of the sonic environment, publishing, the protection of natural soundscapes
+and of times and places of quiet, and the design of acoustically balanced environments.
+
+Its journal *Soundscape: The Journal of Acoustic Ecology* has led the field since the early
+2000s; its successor, the online *Acoustic Ecology Review*, is published with Simon Fraser
+University. The WFAE Library is an open-access, community-built catalogue of articles,
+publications, audiovisual and creative works, projects, organisations, radio, podcasts and
+sound maps in acoustic ecology, soundscape studies and ecoacoustics.
 
 - [World Forum for Acoustic Ecology](https://en.wikipedia.org/wiki/World_Forum_for_Acoustic_Ecology), Wikipedia.
-- [WFAE](https://wfae.net), its site, and its [library](https://wfae.net/library/) of
-  writings, the journal's back issues among them.
+- [WFAE](https://wfae.net), its site; [About the WFAE](https://wfae.net/about/) (checked
+  2026-10-31); [Publications](https://wfae.net/publications/), with *Acoustic Ecology Review*.
+- [WFAE Library](https://wfae.net/library/), the open-access catalogue of the field.

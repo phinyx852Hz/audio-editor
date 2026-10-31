@@ -23,15 +23,15 @@ University in Vancouver at the end of the 1960s, and from Schafer's book *The Tu
 World* (1977). It brought together composers, who record and compose with environmental
 sound; anthropologists, who study how cultures hear; acousticians and planners, who study
 noise; and, later, biologists, who measure the health of habitats by their sound. The World
-Forum for Acoustic Ecology, founded in 1993, gathers the national societies.
+Forum for Acoustic Ecology, founded in 1993, links the societies and people who work in it.
 
 - [Acoustic ecology](https://en.wikipedia.org/wiki/Acoustic_ecology) and
   [Soundscape](https://en.wikipedia.org/wiki/Soundscape), Wikipedia.
 - R. Murray Schafer, *The Soundscape: Our Sonic Environment and the Tuning of the World*
   (Destiny Books, 1994; first published as *The Tuning of the World*, Knopf, 1977).
 - Barry Truax, *Acoustic Communication* (Ablex, 1984; 2nd ed. 2001).
-- [WFAE library](https://wfae.net/library/), the World Forum for Acoustic Ecology's
-  collection of writings on the field.
+- [WFAE Library](https://wfae.net/library/), the World Forum for Acoustic Ecology's
+  open-access catalogue of resources on acoustic ecology, soundscape studies and ecoacoustics.
 
 ## Soundscape
 
