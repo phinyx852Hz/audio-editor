@@ -94,6 +94,23 @@ strings give an interrupted drone on the tonic or fifth, mostly early on. The pl
 metrical and more ornamented as it goes. No two performances were alike, yet they shared one
 range of shapes.
 
+Scott Marcus's guide to recordings (1993) fills in the practice. Most taqāsīm last three to five
+minutes, though one may end within a minute or run ten, depending on the time allowed and the
+player's mood. Silences divide the sections, each section dwelling on one feature of the maqām,
+so that the whole unfolds the mode, usually rising from the bottom of its scale toward the upper
+octave; listeners relish the modulations, the obligatory return and above all the stock cadences
+(qaflāt) that close the sections, which draw shouts of approval: a good qafla is said to rescue a
+weak taqsīm, and a bad one to spoil a strong one. Audiences call out ("Allāh!", or the player's
+name) and so spur the player on. Young players learn by imitating elders and memorising the
+masters' recordings, then must find their own style. In the early 20th century taqāsīm opened
+and punctuated the waṣla; when the waṣla gave way from the 1930s to the long solo song
+(ughniyya), taqāsīm retreated to informal gatherings and dance, until Farīd al-Aṭrash wrote long
+ʿūd taqāsīm into the instrumental introductions (muqaddima) of his own songs and became "king of
+the ʿūd", famous for the right-hand virtuosity with which he ended them. Musicians rate Riyāḍ
+al-Sunbāṭī's slower, deeper taqāsīm higher, with their echoes of single notes an octave below;
+Marcus also recommends the violinist Aḥmad al-Ḥifnāwī, the Iraqi ʿūd player Munīr Bashīr, Simon
+Shaheen and Racy.
+
 A waṣla (plural waṣalāt) is a suite of eight or more pieces, usually in one maqām, that joins
 improvisation with composed forms. Instrumental pieces such as the bashraf, the dūlāb and the
 samāʿī open it; the samāʿī has four sections (khānāt) with a recurring refrain (taslīm), in a
@@ -102,7 +119,8 @@ ten-beat rhythm, and a closing section in another metre. Then come taqsīm, voca
 the qaṣīda, the Egyptian dawr and popular songs. Ali Jihad Racy has described it as a compound
 form, a principle of linking pieces rather than a fixed order, and the word also names a section
 of a Sufi ceremony. It is the Egyptian and Levantine cousin of the Ottoman fasıl and the
-Andalusian nūba.
+Andalusian nūba. From the 1930s the long solo song (ughniyya) displaced it in Egyptian
+concert life (Marcus 1993).
 
 *In PHI*: a taqsīm through the maqām's ajnās (default Rast) to the jawāb, a modulation and a
 qafla, then a waṣla of a samāʿī with its taslīm and a muwashshaḥ.
@@ -113,6 +131,8 @@ qafla, then a waṣla of a samāʿī with its taslīm and a muwashshaḥ.
   [Arabic maqam](https://en.wikipedia.org/wiki/Arabic_maqam) and
   [Samai](https://en.wikipedia.org/wiki/Samai), Wikipedia.
 - Scott L. Marcus, *Music in Egypt* (Oxford University Press, 2007).
+- Scott L. Marcus, "Solo Instrumental Improvisation (Taqāsīm) in Arab Music", *Middle East
+  Studies Association Bulletin* 27/1 (1993), a guide to recordings.
 - Ali Jihad Racy, "The Many Faces of Improvisation: The Arab Taqāsīm as a Musical Symbol",
   *Ethnomusicology* 44/2 (2000).
 - Bruno Nettl and Ronald Riddle, "Taqsim Nahawand: A Study of Sixteen Performances by Jihad
