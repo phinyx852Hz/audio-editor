@@ -86,7 +86,10 @@ namespace phi
         constexpr int totalTaps = tapsPerPhase * 4;
         for (int i = 0; i < totalTaps; ++i)
         {
-            const double x = (i - (totalTaps - 1) / 2.0) / 4.0;
+            // Centred on a whole sample, so the four phases land on the sample itself and a
+            // quarter, a half and three quarters after it: a peak exactly between two samples
+            // is read, not missed (EBU Tech 3341, signals 16 to 19).
+            const double x = (i - totalTaps / 2.0) / 4.0;
             const double sinc = std::abs (x) < 1.0e-12 ? 1.0 : std::sin (pi * x) / (pi * x);
             const double window = 0.5 - 0.5 * std::cos (2.0 * pi * (i + 0.5) / totalTaps);
             phases[(size_t) (i % 4)][(size_t) (i / 4)] = (float) (sinc * window);

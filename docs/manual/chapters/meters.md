@@ -39,6 +39,8 @@ PHI measures in three places. The **Meters panel** sits beside the waveform whil
 
 []{.ix t="Analysis Meters window"}Analyze > Analysis Meters Window (`Ctrl+Alt+A`) is a mega meter suite in its own window, with Adobe Audition's analysis detail and the look of a mastering meter.
 
+PHI's loudness readings pass every check of the EBU loudness test set (Tech 3341 and 3342): integrated, momentary and short-term loudness, loudness range and true peak. The report, with the Φ effects measured the same way, is in `docs/testing/ebu-tests.md`.
+
 ![The Analysis Meters window: loudness gauge, history, levels and spectrum.](images/analysis-meters.png)
 
 | Meter | Shows |

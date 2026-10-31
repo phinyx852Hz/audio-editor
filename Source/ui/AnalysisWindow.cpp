@@ -168,6 +168,14 @@ namespace analysis
         std::array<dsp::TruePeakDetector, 2> truePeak;
         int blockLength = 4800, blockFill = 0;
         double blockPower = 0.0;
+        // The maximum momentary and short-term loudness are taken every 10 ms, not just at the
+        // 100 ms blocks: a 400 ms burst that starts between blocks still reads its full level
+        // (EBU Tech 3341, test signals 13 and 14).
+        static constexpr int stepsPerShort = 300, stepsPerMomentary = 40;
+        int stepLength = 480, stepFill = 0, stepIndex = 0;
+        long long steps = 0;
+        double stepPower = 0.0, momentarySum = 0.0, shortSum = 0.0;
+        std::array<double, stepsPerShort> stepRing {};
         std::vector<double> blocks;
         dsp::IntegratedLoudness loudness;   // the same blocks, gated as they come
         std::vector<float> momentaryHistory, shortHistory;   // LUFS, one per block
@@ -373,6 +381,7 @@ namespace analysis
             for (auto& k : kWeighting)
                 k.prepare (rate);
             blockLength = std::max (1, (int) std::lround (rate * 0.1));
+            stepLength = std::max (1, (int) std::lround (rate * 0.01));
             windowLength = std::max (1, (int) std::lround (rate * 0.05));
             rmsCoefficient = std::exp (-1.0 / (0.3 * rate));
             setClassicRate();
@@ -439,6 +448,10 @@ namespace analysis
                 t.reset();
             blockFill = 0;
             blockPower = 0.0;
+            stepFill = stepIndex = 0;
+            steps = 0;
+            stepPower = momentarySum = shortSum = 0.0;
+            stepRing = {};
             blocks.clear();
             loudness.reset();
             momentaryHistory.clear();
@@ -502,6 +515,9 @@ namespace analysis
 
                 const double kl = kWeighting[0].process (x[0]), kr = kWeighting[1].process (x[1]);
                 blockPower += kl * kl + kr * kr;
+                stepPower += kl * kl + kr * kr;
+                if (++stepFill == stepLength)
+                    finishStep();
                 if (++blockFill == blockLength)
                     finishBlock();
 
@@ -514,6 +530,29 @@ namespace analysis
                 ringPos = (ringPos + 1) & (ringSize - 1);
             }
             freshSamples += (int) n;
+        }
+
+        void finishStep()
+        {
+            const auto p = stepPower / stepLength;
+            stepPower = 0.0;
+            stepFill = 0;
+            const auto at = [this] (int back) { return stepRing[(size_t) ((stepIndex - back + stepsPerShort) % stepsPerShort)]; };
+            momentarySum += p - (steps >= stepsPerMomentary ? at (stepsPerMomentary) : 0.0);
+            shortSum += p - (steps >= stepsPerShort ? at (stepsPerShort) : 0.0);
+            stepRing[(size_t) stepIndex] = p;
+            stepIndex = (stepIndex + 1) % stepsPerShort;
+            ++steps;
+            if (stepIndex == 0)
+            {
+                // Once round the ring, add the sums up afresh so rounding never builds up over hours.
+                shortSum = std::accumulate (stepRing.begin(), stepRing.end(), 0.0);
+                momentarySum = std::accumulate (stepRing.end() - stepsPerMomentary, stepRing.end(), 0.0);
+            }
+            if (steps >= stepsPerMomentary)
+                maxMomentary = std::max (maxMomentary, lufsOf (std::max (0.0, momentarySum) / stepsPerMomentary));
+            if (steps >= stepsPerShort)
+                maxShortTerm = std::max (maxShortTerm, lufsOf (std::max (0.0, shortSum) / stepsPerShort));
         }
 
         void finishBlock()
@@ -532,10 +571,6 @@ namespace analysis
             shortTerm = lufsOf (meanOfLast (30));
             momentaryHistory.push_back ((float) momentary);
             shortHistory.push_back ((float) shortTerm);
-            if (blocks.size() >= 4)
-                maxMomentary = std::max (maxMomentary, momentary);
-            if (blocks.size() >= 30)
-                maxShortTerm = std::max (maxShortTerm, shortTerm);
             if (blocks.size() % 5 == 0)
                 integrated = loudness.value();
             if (blocks.size() % 10 == 0)

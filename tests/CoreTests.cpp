@@ -596,6 +596,18 @@ namespace
         check (near (report.truePeakDb, -23.0, 0.3), "true peak " + std::to_string (report.truePeakDb));
         check (report.loudnessRange < 0.5, "steady tone has no loudness range");
 
+        // EBU Tech 3341 signals 16 and 19: sines at fs/4 whose peaks fall exactly between two
+        // samples (phase 45 degrees) must read their true peak, -6.0 and +3.0 dBTP (+0.2/-0.4).
+        for (const auto [amplitude, expected] : { std::pair { 0.5, -6.0 }, std::pair { 1.41, 3.0 } })
+        {
+            dsp::TruePeakDetector detector;
+            float peak = 0.0f;
+            for (int i = 0; i < 4800; ++i)
+                peak = std::max (peak, detector.process ((float) (amplitude * std::sin (M_PI / 2.0 * i + M_PI / 4.0))));
+            const auto db = 20.0 * std::log10 (peak);
+            check (db <= expected + 0.2 && db >= expected - 0.1, "true peak between samples " + std::to_string (db));
+        }
+
         // DC removal.
         AudioData::Builder b (1, 48000.0);
         std::vector<float> dc (48000, 0.25f);
