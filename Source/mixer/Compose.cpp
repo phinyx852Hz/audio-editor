@@ -48,6 +48,21 @@ namespace composition
               "square-root proportions; then Lutosławski's ad libitum, every part looping its own figure out of time, ended by a cue.",
               "Cage, Music of Changes; Pritchett, The Music of John Cage; Lutosławski, Jeux vénitiens; Rae", "",
               4, 8, "piano|flute|clarinet|violin|cello|vibraphone|harp|percussion" },
+            { Method::silence, "silence", "4′33″ (Silence)", "John Cage (1952)", "europe",
+              "Three movements, all tacet, in the premiere's lengths (33″, 2′40″, 1′20″), the lid closed and opened for each; "
+              "what sounds is the place, by chance: the room, the audience, the street, rain and wind, and the high and low sounds Cage heard in an anechoic chamber.",
+              "Cage, 4′33″ (1952) and Silence (1961); Kahn, Noise Water Meat; Gann, No Such Thing as Silence", "",
+              2, 8, "performer (the lid)|room|audience|street|rain|nervous system (high)|circulation (low)|wind" },
+            { Method::starCharts, "starcharts", "Star Charts", "John Cage, Atlas Eclipticalis (1961–62)", "europe",
+              "A page of a star atlas laid over each part's staff: across is time, up is pitch, each star a sound, louder and "
+              "longer the brighter it is; stars in constellations on a scattered field, and a conductor's clock marking the pages.",
+              "Cage, Atlas Eclipticalis; Pritchett, The Music of John Cage; Nicholls (ed.), The Cambridge Companion to John Cage", "",
+              6, 8, "flute|clarinet|horn|trumpet|violin|viola|cello|harp" },
+            { Method::musicircus, "musicircus", "Musicircus", "John Cage (Champaign-Urbana, 1967)", "europe",
+              "Many musics at once and none of them coordinated: each part is one part of another Compose method, at a tempo of its "
+              "own, coming in and going out by chance.",
+              "Cage, Musicircus (1967) and HPSCHD (1969, with Hiller); Pritchett, The Music of John Cage", "",
+              5, 8, "act 1|act 2|act 3|act 4|act 5|act 6|act 7|act 8" },
             { Method::process, "process", "Process Music", "Steve Reich and Philip Glass (1960s–70s)", "europe",
               "A cell written for it, then gradual processes on it: phasing and build-up (Reich), additive and subtractive "
               "process (Glass), and a pulse, each stage repeated.",
@@ -63,6 +78,23 @@ namespace composition
               "its resonance, breathing from harmonic to inharmonic (a stretched spectrum) and back.",
               "Grisey, Partiels; Murail, Gondwana; Fineberg, \"Guide to the Basic Concepts of Spectral Music\"", "",
               6, 8, "fundamental|partial 3|partial 5|partial 7|partial 2|partial 9|partial 11|partial 13" },
+            { Method::tuningMeditation, "tuningmeditation", "Tuning Meditation", "Pauline Oliveros (first sung at the Guggenheim, 1981)", "europe",
+              "As its score gives it, a breath at a time, each voice at its own pace: breathe out, listen for a tone, sing it; listen; "
+              "tune to a distant voice; listen; sing a new tone no one is singing; then listen, and sing one's own tone or tune to another's, by turns.",
+              "Oliveros, The Tuning Meditation (Deep Listening Publications, 2007); Oliveros, Deep Listening: A Composer's Sound Practice (2005)", "",
+              4, 8, "voice 1 (soprano)|voice 2 (alto)|voice 3 (tenor)|voice 4 (bass)|voice 5|voice 6|voice 7|voice 8" },
+            { Method::timeBrackets, "timebrackets", "Time Brackets", "John Cage, the Number Pieces (1987–92)", "europe",
+              "Each part a row of time brackets: a window to start in and an overlapping one to stop in (0′00″↔0′45″, 0′30″↔1′15″), "
+              "each holding one quiet sound or a few, cast by the I Ching from a small gamut; some brackets are empty.",
+              "Cage, Four, Five, Seven, One11; Haskins, \"Time Brackets\"; Weisser, The Number Pieces of John Cage", "",
+              4, 8, "flute|clarinet|percussion|piano|violin|viola|cello|trombone" },
+            { Method::deepListening, "deeplistening", "Deep Listening", "Pauline Oliveros and the Deep Listening Band (1989)", "europe",
+              "Sonic awareness: attention moving between the global (the circle: long tones that blend in the space, each one making, "
+              "imagining, listening or remembering a sound) and the focal (the dot: one player's phrase over the tonal centre); "
+              "the Expanded Instrument System's delays and a cistern's long ring.",
+              "Oliveros, Dempster, Panaiotis, Deep Listening (1989, the Fort Worden cistern); Von Gunden, The Music of Pauline Oliveros; "
+              "Oliveros, \"The Expanded Instrument System\"", "",
+              4, 8, "accordion|trombone|voice|didjeridu|EIS (accordion's delays)|EIS (trombone's delays)|cistern (the ring)|conch" },
             { Method::raga, "raga", "Rāga Development", "Hindustani music (North India)", "south and west asia",
               "The rāga unfolded note by note from the lower Sa in ālāp (badhat), around its vādī and samvādī, rising to the upper "
               "Sa; then joṛ with a pulse, jhālā with the chikārī, and a gat in tīntāl ending in a tihāī on sam, over the tānpūrā.",
@@ -946,6 +978,586 @@ namespace composition
             out.parts.resize ((size_t) parts);
             out.summary = "Chance operations by the I Ching in six parts of square-root proportions, then ad libitum to a cue, for "
                           + std::to_string (parts) + (parts == 1 ? " part" : " parts");
+            return out;
+        }
+
+        //======================================================================
+        // Cage after Music of Changes. A time in seconds at the score's tempo, and a clock time as
+        // Cage's scores write it (1′30″).
+        int64_t seconds (const Settings& s, double sec) { return (int64_t) std::llround (sec * s.bpm / 60.0 * Q); }
+        std::string clock (const Settings& s, int64_t ticks)
+        {
+            const auto sec = (int) std::lround ((double) ticks / Q * 60.0 / std::max (1.0, s.bpm));
+            auto two = [] (int x) { return (x < 10 ? "0" : "") + std::to_string (x); };
+            return std::to_string (sec / 60) + "′" + two (sec % 60) + "″";
+        }
+
+        // 4′33″ (1952): three movements, each tacet, in the premiere's lengths (David Tudor,
+        // Woodstock, 1952: 33″, 2′40″, 1′20″), which the piece is named for. Tudor closed the
+        // keyboard's lid to begin each movement and opened it to end it. What sounds is the
+        // place: sounds that come and go by chance (Poisson arrivals, each layer at its own rate),
+        // all quiet, and the two sounds Cage heard in the anechoic chamber (1951), one high (his
+        // nervous system) and one low (his blood circulating).
+        Result silence (const Settings& s, Random& r)
+        {
+            Scale sc (s.mode);
+            auto out = begin (s);
+            const int parts = std::clamp (s.parts, 1, 8);
+            const std::array<double, 3> movement { 33.0, 160.0, 80.0 };
+            const std::array<const char*, 3> name { "I (33″)", "II (2′40″)", "III (1′20″)" };
+            // The layers: how often each sounds (a second between, on average), and what with.
+            struct Layer { double every; std::vector<int> sounds; int lo, hi; };
+            const std::array<Layer, 8> layers {
+                Layer { 0.0, { gm::lowWood }, 0, 0 },                                               // the lid
+                Layer { 7.0, { gm::rim, gm::cabasa, gm::lowWood, gm::shaker }, 14, 34 },            // the room: a creak, a chair
+                Layer { 5.0, { gm::maracas, gm::rim, gm::shaker, gm::tambourine }, 12, 40 },        // the audience: a cough, a programme
+                Layer { 11.0, { gm::lowFloorTom, gm::kick, gm::chineseCymbal, gm::rideBell }, 10, 30 },   // the street
+                Layer { 0.6, { gm::shaker, gm::cabasa, gm::maracas }, 8, 22 },                      // rain on the roof (Woodstock's second movement)
+                Layer { 0.0, {}, 6, 14 },                                                           // the nervous system, high
+                Layer { 0.0, {}, 6, 14 },                                                           // the circulation, low
+                Layer { 9.0, { gm::cabasa, gm::shaker }, 8, 20 },                                   // wind in the trees (the first movement)
+            };
+            int64_t at = 0;
+            for (size_t m = 0; m < movement.size(); ++m)
+            {
+                const auto length = seconds (s, movement[m]);
+                mark (out, at, std::string ("movement ") + name[m] + ", tacet");
+                for (int v = 0; v < parts; ++v)
+                {
+                    auto& part = out.parts[(size_t) v];
+                    const auto& layer = layers[(size_t) v];
+                    if (v == 0)   // the lid closed, then opened
+                    {
+                        add (part, at, Q / 4, gm::lowWood, 24);
+                        add (part, at + length - Q / 4, Q / 4, gm::highWood, 18);
+                        continue;
+                    }
+                    if (v == 5 || v == 6)   // a long tone, near the edge of hearing, that comes and goes
+                    {
+                        const int d = v == 5 ? 3 * sc.n() + between (r, 0, sc.n() - 1) : -3 * sc.n();
+                        int64_t t = at + seconds (s, 2.0 + 6.0 * r.uniform());
+                        while (t < at + length - seconds (s, 2.0))
+                        {
+                            const auto len = std::min (seconds (s, 6.0 + 14.0 * r.uniform()), at + length - t);
+                            add (part, t, len, sc.key (d), between (r, layer.lo, layer.hi));
+                            t += len + seconds (s, 4.0 + 10.0 * r.uniform());
+                        }
+                        continue;
+                    }
+                    // Rain in the second movement, wind in the first, the rest throughout.
+                    if ((v == 4 && m != 1) || (v == 7 && m != 0))
+                        continue;
+                    int64_t t = at;
+                    while (true)
+                    {
+                        t += std::max<int64_t> (1, seconds (s, -std::log (1.0 - r.uniform()) * layer.every));
+                        if (t >= at + length)
+                            break;
+                        hit (part, t, layer.sounds[(size_t) below (r, (int) layer.sounds.size())], between (r, layer.lo, layer.hi),
+                             std::min<int64_t> (Q / 4, at + length - t));
+                    }
+                }
+                at += length;
+            }
+            for (int v = 0; v < parts; ++v)
+                out.parts[(size_t) v].drums = v != 5 && v != 6;
+            out.end = at;
+            out.parts.resize ((size_t) parts);
+            out.summary = "4′33″ in three movements of 33″, 2′40″ and 1′20″ (at " + std::to_string ((int) s.bpm)
+                          + " bpm), each tacet: only the place sounds, by chance, in " + std::to_string (parts) + (parts == 1 ? " layer" : " layers");
+            return out;
+        }
+
+        // Atlas Eclipticalis (1961–62): star charts laid over staves. Each part has a page of its own
+        // atlas: across it is time, up it is pitch, each star a sound, and the brighter the star the
+        // louder and the longer. Stars lie in clusters (constellations) on a scattered field, and the
+        // faint ones far outnumber the bright (about 2.5 times as many each magnitude). A conductor's
+        // arms, a clock, mark each page's minutes; a player may leave a sound out.
+        Result starCharts (const Settings& s, Random& r)
+        {
+            Scale sc (s.mode);
+            auto out = begin (s);
+            const int parts = std::clamp (s.parts, 1, 8);
+            const auto total = std::max<int64_t> (s.bars, 8) * barTicks();
+            const int pages = std::clamp ((int) (total / (8 * barTicks())), 1, 8);
+            const auto page = total / pages;
+            // Each part's range, in degrees: low instruments low.
+            const std::array<std::pair<int, int>, 8> range { { { 0, 2 }, { -1, 1 }, { -2, 0 }, { 0, 2 }, { -1, 1 }, { -2, 0 }, { -3, -1 }, { -2, 2 } } };
+            auto magnitude = [&r]
+            {
+                // 1 (brightest) .. 6: weights 1, 2.5, 6.25 ...
+                const double pick = r.uniform() * (1 + 2.5 + 6.25 + 15.625 + 39.0625 + 97.65625);
+                double acc = 0;
+                for (int m = 1; m <= 6; ++m)
+                {
+                    acc += std::pow (2.5, m - 1);
+                    if (pick < acc)
+                        return m;
+                }
+                return 6;
+            };
+            for (int p = 0; p < pages; ++p)
+                mark (out, p * page, "page " + std::to_string (p + 1) + " (the conductor's clock at " + clock (s, p * page) + ")");
+            for (int v = 0; v < parts; ++v)
+            {
+                auto& part = out.parts[(size_t) v];
+                const auto lo = range[(size_t) v].first * sc.n(), hi = (range[(size_t) v].second + 1) * sc.n() - 1;
+                struct Star { double x, y; int mag; };
+                std::vector<Star> stars;
+                for (int p = 0; p < pages; ++p)
+                {
+                    // A few constellations, and the field between them.
+                    const int clusters = between (r, 1, 3);
+                    for (int c = 0; c < clusters; ++c)
+                    {
+                        const double cx = p + r.uniform(), cy = r.uniform();
+                        const int count = between (r, 3, 8);
+                        for (int k = 0; k < count; ++k)
+                            stars.push_back ({ std::clamp (cx + (r.uniform() - 0.5) * 0.18, (double) p, p + 0.999),
+                                               std::clamp (cy + (r.uniform() - 0.5) * 0.3, 0.0, 1.0), magnitude() });
+                    }
+                    const int field = between (r, 4, 10);
+                    for (int k = 0; k < field; ++k)
+                        stars.push_back ({ p + r.uniform(), r.uniform(), magnitude() });
+                }
+                std::sort (stars.begin(), stars.end(), [] (const Star& a, const Star& b) { return a.x < b.x; });
+                for (size_t i = 0; i < stars.size(); ++i)
+                {
+                    const auto& st = stars[i];
+                    if (st.mag >= 5 && chance (r, 0.3))   // the player leaves out a faint one
+                        continue;
+                    const auto t = (int64_t) (st.x * page);
+                    const auto next = i + 1 < stars.size() ? (int64_t) (stars[i + 1].x * page) : total;
+                    const auto len = std::clamp<int64_t> ((int64_t) (Q * (7 - st.mag) / 2), Q / 4, std::max<int64_t> (Q / 4, next - t + Q));
+                    const int d = lo + (int) std::lround (st.y * (hi - lo));
+                    add (part, t, std::min (len, total - t), sc.key (d), 118 - (st.mag - 1) * 18);
+                }
+                if (part.notes.empty())
+                    add (part, 0, Q, sc.key (lo), 64);
+            }
+            out.end = total;
+            out.parts.resize ((size_t) parts);
+            out.summary = "Star charts: " + std::to_string (pages) + (pages == 1 ? " page" : " pages")
+                          + " of an atlas a part, each star a sound, louder and longer the brighter it is, for " + std::to_string (parts)
+                          + (parts == 1 ? " part" : " parts");
+            return out;
+        }
+
+        // Musicircus (1967): many musics at once, none of them coordinated. Each act here is one part
+        // of another Compose method, played at its own tempo; it comes in and goes out by chance.
+        // Only the methods in the Mode menu's mode (no tradition's own tuning, no spectral cents) join.
+        Result musicircus (const Settings& s, Random& r)
+        {
+            auto out = begin (s);
+            const int parts = std::clamp (s.parts, 1, 8);
+            const auto total = std::max<int64_t> (s.bars, 8) * barTicks();
+            std::vector<Method> acts;
+            for (const auto& m : methods())
+                if (*m.home == 0 && m.method != Method::spectral && m.method != Method::musicircus && m.method != Method::silence)
+                    acts.push_back (m.method);
+            // Shuffled, so each act is a different music while there are enough.
+            for (size_t i = acts.size(); i > 1; --i)
+                std::swap (acts[i - 1], acts[(size_t) below (r, (int) i)]);
+            struct Entry { int64_t at; std::string text; };
+            std::vector<Entry> entries;
+            for (int v = 0; v < parts; ++v)
+            {
+                auto& part = out.parts[(size_t) v];
+                const auto method = acts[(size_t) v % acts.size()];
+                const auto& inf = info (method);
+                Settings x = s;
+                x.method = method;
+                x.parts = inf.defaultParts;
+                x.bars = s.bars;
+                x.bpm = s.bpm * (0.6 + 0.9 * r.uniform());   // its own tempo
+                x.seed = s.seed * 7919u + (uint32_t) v * 104729u + 1;
+                const auto act = generate (x);
+                // One of its parts, not an empty one.
+                std::vector<size_t> full;
+                for (size_t k = 0; k < act.parts.size(); ++k)
+                    if (! act.parts[k].notes.empty())
+                        full.push_back (k);
+                if (full.empty())
+                    continue;
+                const auto& from = act.parts[full[(size_t) below (r, (int) full.size())]];
+                const double stretch = s.bpm / x.bpm;   // its ticks at our tempo
+                part.name = std::string (inf.name) + " (" + from.name + ")";
+                part.drums = from.drums;
+                // In and out: one to three stays, each a time bracket of its own.
+                const int stays = between (r, 1, 3);
+                int64_t t = (int64_t) (r.uniform() * total / (stays + 1)) / Q * Q;
+                for (int k = 0; k < stays && t < total; ++k)
+                {
+                    const auto room = total - t;
+                    const auto len = std::max<int64_t> (4 * barTicks(), (int64_t) (room * (0.35 + 0.5 * r.uniform()) / (stays - k)));
+                    const auto until = std::min (total, t + len);
+                    // Where in its own music it is: it went on playing while out of earshot.
+                    const auto offset = (int64_t) (t / stretch);
+                    for (const auto& n : from.notes)
+                    {
+                        const auto a = t + (int64_t) ((n.start - offset) * stretch);
+                        const auto b = t + (int64_t) ((n.end - offset) * stretch);
+                        if (n.start < offset || a >= until)
+                            continue;
+                        add (part, a, std::min (b, until) - a, n.key, n.velocity, n.cents);
+                    }
+                    entries.push_back ({ t, part.name + " comes in" });
+                    entries.push_back ({ until, part.name + " goes out" });
+                    t = until + (int64_t) (r.uniform() * barTicks() * 6) / Q * Q;
+                }
+                if (part.notes.empty())   // came in where its music had ended: from its beginning
+                    for (const auto& n : from.notes)
+                    {
+                        const auto a = (int64_t) (n.start * stretch);
+                        if (a >= total)
+                            break;
+                        add (part, a, std::min ((int64_t) ((n.end - n.start) * stretch), total - a), n.key, n.velocity, n.cents);
+                    }
+            }
+            std::stable_sort (entries.begin(), entries.end(), [] (const Entry& a, const Entry& b) { return a.at < b.at; });
+            mark (out, 0, "the circus opens");
+            for (const auto& e : entries)
+                if (e.at < total)
+                {
+                    if (! out.sections.empty() && out.sections.back().start == e.at)
+                        out.sections.back().name += "; " + e.text;
+                    else
+                        mark (out, e.at, e.text);
+                }
+            out.end = total;
+            out.parts.resize ((size_t) parts);
+            out.summary = "Musicircus: " + std::to_string (parts) + (parts == 1 ? " act" : " acts")
+                          + " from other methods, each at its own tempo, in and out by chance";
+            return out;
+        }
+
+        // The Number Pieces (1987–92: Two, Four, Five, Seven, One11 ...): each part a row of time
+        // brackets. A bracket gives a window to start in and an overlapping window to stop in
+        // (0′00″↔0′45″, 0′30″↔1′15″); its sound, one held tone or a few, is chosen by chance from the
+        // piece's small gamut, mostly quiet. Some brackets are empty. The player decides when, within
+        // the windows; here chance decides.
+        Result timeBrackets (const Settings& s, Random& r)
+        {
+            Scale sc (s.mode);
+            auto out = begin (s);
+            const int parts = std::clamp (s.parts, 1, 8);
+            const auto total = std::max<int64_t> (s.bars, 8) * barTicks();
+            out.parts[2].drums = true;
+            // The window and the bracket's length: Cage's 45″ and 30″, smaller when the piece is short.
+            const auto window = std::min (seconds (s, 45.0), total / 6);
+            const auto overlap = window * 2 / 3;
+            // The gamut: a handful of the mode's degrees over two periods and a half, cast by the I Ching.
+            std::vector<int> gamut;
+            const int size = std::min (between (r, 5, 9), 5 * sc.n() / 2);
+            while ((int) gamut.size() < size)
+            {
+                bool mv = false;
+                const int d = hexagram (r, mv) % std::max (1, 5 * sc.n() / 2) - sc.n();
+                if (std::find (gamut.begin(), gamut.end(), d) == gamut.end())
+                    gamut.push_back (d);
+            }
+            std::sort (gamut.begin(), gamut.end());
+            const std::array<int, 4> metal { gm::chineseCymbal, gm::rideBell, gm::lowTom, gm::tambourine };
+            for (int64_t m = 0; m < total; m += window + overlap)
+                mark (out, m, "time brackets from " + clock (s, m));
+            int brackets = 0;
+            for (int v = 0; v < parts; ++v)
+            {
+                auto& part = out.parts[(size_t) v];
+                const auto low = v == 6 || v == 7 ? -sc.n() : 0;   // the cello and trombone an octave down
+                // A part's brackets start at staggered times, so the parts do not change together.
+                int64_t a = (int64_t) (r.uniform() * overlap);
+                while (a + window + overlap <= total)
+                {
+                    ++brackets;
+                    if (! chance (r, 0.22))   // else an empty bracket: silence
+                    {
+                        const auto start = a + (int64_t) (r.uniform() * window);
+                        const auto stop = std::max (start + Q, a + overlap + (int64_t) (r.uniform() * window));
+                        bool mv = false;
+                        const int count = chance (r, 0.7) ? 1 : between (r, 2, 3);
+                        const auto each = (stop - start) / count;
+                        const int velocity = 34 + 6 * below (r, 8);   // pp to mf
+                        for (int k = 0; k < count; ++k)
+                        {
+                            if (part.drums)
+                                add (part, start + k * each, each, metal[(size_t) below (r, 4)], velocity);
+                            else
+                                add (part, start + k * each, each, sc.key (gamut[(size_t) (hexagram (r, mv) % (int) gamut.size())] + low), velocity);
+                        }
+                    }
+                    a += window + overlap - (int64_t) (r.uniform() * overlap / 2);
+                }
+                if (part.notes.empty())
+                    add (part, 0, window, part.drums ? gm::rideBell : sc.key (gamut.front() + low), 40);
+            }
+            out.end = total;
+            out.parts.resize ((size_t) parts);
+            out.summary = "Time brackets of " + clock (s, window) + " (to start) and " + clock (s, window) + " (to stop, " + clock (s, overlap)
+                          + " later) in " + std::to_string (parts) + (parts == 1 ? " part" : " parts") + ", " + std::to_string (brackets)
+                          + " brackets on a gamut of " + std::to_string (gamut.size()) + " pitches";
+            return out;
+        }
+
+        //======================================================================
+        // Pauline Oliveros. The Tuning Meditation (first sung by 75 singers under William Duckworth
+        // at the Guggenheim, 1981), followed as its score gives it, a breath at a time, each singer at
+        // their own pace: breathe out with air sound; listen with the mind's ear for a tone; sing it,
+        // on one breath; listen to the whole field; tune as exactly as possible to a distant voice;
+        // listen again; sing a new tone no one else is singing; then go on, listening and then
+        // singing a tone of one's own or tuning to another's, by turns. One tone a breath, a new one
+        // on the next; tune to distant partners and to as many voices as possible; a new tone
+        // sounded so that it is heard far off; end when everyone else does.
+        Result tuningMeditation (const Settings& s, Random& r)
+        {
+            Scale sc (s.mode);
+            auto out = begin (s);
+            const int parts = std::clamp (s.parts, 1, 8);
+            const auto total = std::max<int64_t> (s.bars, 8) * barTicks();
+            const auto end = total - seconds (s, 2.0) > total / 2 ? total - seconds (s, 2.0) : total;   // everyone ends together
+            // Each voice's own register, soprano to bass, twice over.
+            const std::array<int, 8> centre { sc.n(), sc.n() / 2, 0, -sc.n() / 2, sc.n() * 3 / 4, sc.n() / 4, -sc.n() / 4, -sc.n() };
+            enum Step { air, inner, own, field, tune, again, fresh, go };
+            struct Voice { int64_t next = 0; int step = air; int degree = 0; int64_t until = 0; bool tuneNext = true; std::vector<int> partners; };
+            std::vector<Voice> voices ((size_t) parts);
+            for (auto& v : voices)
+                v.next = (int64_t) (r.uniform() * seconds (s, 3.0));
+            int counts[3] = { 0, 0, 0 };   // own, tuned, new
+            const std::array<const char*, 8> stepName { "breathing out, with air sound", "listening for a tone with the mind's ear",
+                                                         "singing the tone heard", "listening to the whole field",
+                                                         "tuning to a distant voice", "listening to the whole field again",
+                                                         "a new tone no one is singing", "listening, then one's own tone or another's, by turns" };
+            int marked = -1;
+            while (true)
+            {
+                size_t who = 0;
+                for (size_t k = 1; k < voices.size(); ++k)
+                    if (voices[k].next < voices[who].next)
+                        who = k;
+                auto& v = voices[who];
+                const auto t = v.next;
+                if (t >= end - seconds (s, 2.0))
+                    break;
+                // The ensemble's stages, marked as the first voice reaches each.
+                if (v.step > marked && v.step <= go)
+                {
+                    marked = v.step;
+                    mark (out, out.sections.empty() ? 0 : std::max (out.sections.back().start + 1, t), stepName[(size_t) v.step]);
+                }
+                const auto breath = seconds (s, 4.0 + 6.0 * r.uniform());
+                const auto len = std::min (breath - seconds (s, 0.8), end - t);
+                // What the others sing now.
+                std::vector<size_t> singing;
+                for (size_t k = 0; k < voices.size(); ++k)
+                    if (k != who && voices[k].until > t)
+                        singing.push_back (k);
+                auto pickTone = [&] (bool unsung)
+                {
+                    int d = centre[who] + between (r, -2, 3);
+                    for (int tries = 0; unsung && tries < 32; ++tries)
+                    {
+                        bool taken = false;
+                        for (auto k : singing)
+                            taken = taken || sc.index (voices[k].degree) == sc.index (d);
+                        if (! taken)
+                            break;
+                        d = centre[who] + between (r, -sc.n() / 2 - 1, sc.n() / 2 + 1);
+                    }
+                    return d;
+                };
+                auto sing = [&] (int d, int velocity)
+                {
+                    v.degree = d;
+                    if (len > 0)
+                        add (out.parts[who], t, len, sc.key (d), velocity);
+                    v.until = t + len;
+                };
+                int step = v.step;
+                bool listen = step == air || step == inner || step == field || step == again;
+                if (step == go)
+                {
+                    listen = chance (r, 0.4);   // "listening then singing"
+                    if (! listen)
+                        step = v.tuneNext && ! singing.empty() ? tune : own;
+                }
+                if (step == tune && singing.empty())
+                    step = own;   // nobody to tune to on this breath: a tone of one's own
+                if (! listen)
+                {
+                    if (step == tune)
+                    {
+                        // The most distant voice not yet a partner (then the most distant at all).
+                        size_t best = singing.front();
+                        int bestScore = -1;
+                        for (auto k : singing)
+                        {
+                            const int distance = std::abs ((int) k - (int) who) * 2
+                                                 + (std::find (v.partners.begin(), v.partners.end(), (int) k) == v.partners.end() ? 16 : 0);
+                            if (distance > bestScore)
+                            {
+                                bestScore = distance;
+                                best = k;
+                            }
+                        }
+                        v.partners.push_back ((int) best);
+                        // The same pitch class, in this voice's own register.
+                        const auto target = voices[best].degree;
+                        auto d = target;
+                        while (d - centre[who] > sc.n() / 2 + 1)
+                            d -= sc.n();
+                        while (centre[who] - d > sc.n() / 2 + 1)
+                            d += sc.n();
+                        sing (d, between (r, 46, 64));
+                        ++counts[1];
+                    }
+                    else if (step == fresh)
+                    {
+                        sing (pickTone (true), between (r, 66, 84));   // heard far off
+                        ++counts[2];
+                    }
+                    else
+                    {
+                        sing (pickTone (false), between (r, 46, 64));
+                        ++counts[0];
+                    }
+                    if (v.step == go)
+                        v.tuneNext = step != tune;
+                }
+                if (v.step < go)
+                    ++v.step;
+                v.next = t + breath;
+            }
+            mark (out, std::max (out.sections.empty() ? 0 : out.sections.back().start + 1, end - seconds (s, 2.0)), "ending when everyone else does");
+            for (int k = 0; k < parts; ++k)
+                if (out.parts[(size_t) k].notes.empty())
+                    add (out.parts[(size_t) k], 0, std::min (seconds (s, 6.0), total), sc.key (centre[(size_t) k]), 50);
+            out.end = end;
+            out.parts.resize ((size_t) parts);
+            out.summary = "The Tuning Meditation for " + std::to_string (parts) + (parts == 1 ? " voice: " : " voices: ") + std::to_string (counts[0])
+                          + " breaths on a tone of one's own, " + std::to_string (counts[1]) + " tuned to a distant voice, " + std::to_string (counts[2])
+                          + " on a new tone no one was singing";
+            return out;
+        }
+
+        // Deep Listening (1989): the Deep Listening Band in the cistern at Fort Worden, with its
+        // forty-five seconds of reverberation. Oliveros's sonic awareness: attention moves between
+        // global (the circle: the whole field, everyone holding long tones that overlap and blend
+        // in the space) and focal (the dot: one player's phrase stands out while the rest hold the
+        // tonal centre underneath). In the circle each tone is one of its quarters: making a sound,
+        // imagining one (a silence), listening to the sound present (joining the centre), or
+        // remembering a past one; practised, it makes "complex sound masses possessing a strong
+        // tonal center" (Von Gunden, The Music of Pauline Oliveros).
+        // Oliveros's Expanded Instrument System repeats the accordion's and the trombone's sounds
+        // through delays of different lengths, each quieter; the cistern holds every sound long after.
+        Result deepListening (const Settings& s, Random& r)
+        {
+            Scale sc (s.mode);
+            auto out = begin (s);
+            const int parts = std::clamp (s.parts, 1, 8);
+            const auto total = std::max<int64_t> (s.bars, 8) * barTicks();
+            const int players = std::min (parts, 4);   // accordion, trombone, voice, didjeridu
+            const std::array<int, 4> centre { 0, -sc.n(), sc.n() / 2, -2 * sc.n() };
+            int64_t at = 0;
+            bool global = true;
+            int focalPlayer = 0;
+            std::array<std::vector<int>, 4> remembered;   // what each player has sounded
+            while (at < total)
+            {
+                auto length = std::min<int64_t> (total - at, (int64_t) between (r, global ? 6 : 4, global ? 12 : 8) * barTicks());
+                if (total - at - length < 4 * barTicks())
+                    length = total - at;
+                if (global)
+                {
+                    mark (out, at, "global attention (the circle)");
+                    for (int p = 0; p < players; ++p)
+                    {
+                        int64_t t = at + (int64_t) (r.uniform() * 2 * Q);
+                        int d = centre[(size_t) p] + (p == 3 ? 0 : between (r, -1, 2));
+                        auto& memory = remembered[(size_t) p];
+                        while (t < at + length)
+                        {
+                            const auto len = std::min<int64_t> ((int64_t) between (r, 6, 18) * Q, at + length - t);
+                            // The circle's quarters: making a sound, imagining one (silent), listening to
+                            // the sound present (joining the tonal centre), remembering a past one.
+                            const int quarter = p == 3 ? 0 : below (r, 4);
+                            if (quarter == 2)
+                                d = centre[(size_t) p];   // the tonic in this player's octave
+                            else if (quarter == 3 && ! memory.empty())
+                                d = memory[(size_t) below (r, (int) memory.size())];
+                            if (quarter != 1)
+                            {
+                                add (out.parts[(size_t) p], t, len, sc.key (p == 3 ? centre[3] : d), between (r, 38, 58));
+                                memory.push_back (d);
+                            }
+                            if (p != 3)
+                                d = consonant (sc, centre[0], d + between (r, -1, 1), centre[(size_t) p] - 2, centre[(size_t) p] + 3, false, true, r);
+                            t += std::max<int64_t> (Q, len - (int64_t) (r.uniform() * Q));   // overlapping a little: breath and bellows
+                        }
+                    }
+                }
+                else
+                {
+                    mark (out, at, "focal attention (the dot: " + split (info (s.method).parts)[(size_t) focalPlayer] + ")");
+                    for (int p = 0; p < players; ++p)
+                    {
+                        auto& part = out.parts[(size_t) p];
+                        if (p != focalPlayer)   // underneath, very soft: the tonal centre
+                        {
+                            add (part, at, length, sc.key (p == 3 ? centre[3] : centre[(size_t) p]), between (r, 24, 34));
+                            continue;
+                        }
+                        int64_t t = at;
+                        int d = centre[(size_t) p] + between (r, 0, 3);
+                        int dir = 0;
+                        while (t < at + length)
+                        {
+                            const int notes = between (r, 3, 7);
+                            for (int k = 0; k < notes && t < at + length; ++k)
+                            {
+                                const auto len = std::min<int64_t> ((int64_t) between (r, 1, 4) * Q / 2, at + length - t);
+                                add (part, t, len, sc.key (p == 3 ? centre[3] + (k % 2) * sc.fifth() : d), between (r, 64, 92));
+                                d = walk (sc, d, centre[(size_t) p] - 3, centre[(size_t) p] + 5, r, dir, 0.3);
+                                t += len;
+                            }
+                            t += (int64_t) between (r, 2, 6) * Q;   // listening between phrases
+                        }
+                    }
+                    focalPlayer = (focalPlayer + 1 + below (r, std::max (1, players - 1))) % std::max (1, players);
+                }
+                at += length;
+                global = ! global;
+            }
+            // The Expanded Instrument System: each accordion and trombone sound again after delays
+            // of 1.5, 3.7 and 6.1 seconds (each its own line), each repeat softer.
+            const std::array<double, 3> delays { 1.5, 3.7, 6.1 };
+            for (int e = 4; e < std::min (parts, 6); ++e)
+            {
+                const auto source = out.parts[(size_t) (e - 4)].notes;
+                for (const auto& n : source)
+                    for (size_t k = 0; k < delays.size(); ++k)
+                    {
+                        const auto d = seconds (s, delays[k]);
+                        if (n.start + d < total)
+                            add (out.parts[(size_t) e], n.start + d, std::min (n.end + d, total) - n.start - d, n.key,
+                                 (int) (n.velocity * std::pow (0.6, (double) k + 1)));
+                    }
+            }
+            // The cistern: every focal phrase's notes ring on, long and soft, the space's own sound.
+            if (parts >= 7)
+                for (int p = 0; p < players; ++p)
+                    for (const auto& n : out.parts[(size_t) p].notes)
+                        if (n.velocity >= 64 && n.start < total)
+                            add (out.parts[6], n.end, std::min (n.end + seconds (s, 12.0), total) - n.end, n.key, 22);
+            // A conch at each turn to the whole field, low and long.
+            if (parts >= 8)
+                for (const auto& x : out.sections)
+                    if (x.name.rfind ("global", 0) == 0)
+                        add (out.parts[7], x.start, std::min<int64_t> (4 * barTicks(), total - x.start), sc.key (-sc.n() + sc.fifth()), 54);
+            out.end = total;
+            out.parts.resize ((size_t) parts);
+            out.summary = "Deep Listening: " + std::to_string (out.sections.size()) + " turns between global and focal attention, for "
+                          + std::to_string (parts) + (parts == 1 ? " part" : " parts") + (parts > 4 ? ", the Expanded Instrument System's delays" : "")
+                          + (parts > 6 ? " and the cistern's ring" : "");
             return out;
         }
 
@@ -3177,6 +3789,12 @@ namespace composition
             case Method::congolese:    out = congolese (s, r); break;
             case Method::interlocking: out = interlocking (s, r); break;
             case Method::bolGrammar:   out = bolGrammar (s, r); break;
+            case Method::silence:      out = silence (s, r); break;
+            case Method::starCharts:   out = starCharts (s, r); break;
+            case Method::musicircus:   out = musicircus (s, r); break;
+            case Method::timeBrackets: out = timeBrackets (s, r); break;
+            case Method::tuningMeditation: out = tuningMeditation (s, r); break;
+            case Method::deepListening: out = deepListening (s, r); break;
         }
         if ((int) out.parts.size() > maxParts)
             out.parts.resize ((size_t) maxParts);

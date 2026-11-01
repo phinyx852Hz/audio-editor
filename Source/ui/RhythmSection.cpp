@@ -350,6 +350,15 @@ void MainWindow::useRhythm (const rhythm::Rhythm& r)
     auto* buttons = new QDialogButtonBox (&dialog);
     auto* toMixer = buttons->addButton (tr ("add to the &mixer"), QDialogButtonBox::AcceptRole);
     toMixer->setToolTip (tr ("a midi clip on the selected track, at the playhead"));
+    auto* toFrameDrum = buttons->addButton (tr ("on PHI &frame drum"), QDialogButtonBox::AcceptRole);
+    toFrameDrum->setToolTip (tr ("a midi clip on the selected track, played on your own frame drum: dum the bass, tak the rimshot, "
+                                 "ka (and soft taks) the side knock, each stroke's takes in turn; the track gets PHI frame drum"));
+    // An iqāʿ (its lanes dum and tak) plays on the frame drum first.
+    if (std::any_of (r.lanes.begin(), r.lanes.end(), [] (const rhythm::Lane& l) { return l.name == "dum"; }))
+    {
+        toFrameDrum->setDefault (true);
+        toFrameDrum->setFocus();
+    }
     auto* toTracker = buttons->addButton (tr ("write a t&racker pattern"), QDialogButtonBox::AcceptRole);
     toTracker->setToolTip (tr ("a new pattern at the end of the song, a channel and an instrument for each sound"));
     auto* toFile = buttons->addButton (tr ("&save as midi..."), QDialogButtonBox::AcceptRole);
@@ -358,7 +367,7 @@ void MainWindow::useRhythm (const rhythm::Rhythm& r)
     buttons->addButton (QDialogButtonBox::Cancel);
     layout->addWidget (buttons);
     int choice = -1;
-    for (auto [b, n] : { std::pair { toMixer, 0 }, { toTracker, 1 }, { toFile, 2 }, { toGenerator, 3 } })
+    for (auto [b, n] : { std::pair { toMixer, 0 }, { toTracker, 1 }, { toFile, 2 }, { toGenerator, 3 }, { toFrameDrum, 4 } })
         connect (b, &QPushButton::clicked, &dialog, [&choice, &dialog, n] { choice = n; dialog.accept(); });
     connect (buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     if (dialog.exec() != QDialog::Accepted || choice < 0)
@@ -384,7 +393,13 @@ void MainWindow::useRhythmAs (const rhythm::Rhythm& r, int choice, int cycles, d
         return;
     }
     const auto song = rhythm::toSong (r, cycles, bpm);
-    if (choice == 0)
+    if (choice == 4)
+    {
+        showMixer();
+        if (! mixerWin->addRhythmOnPhiFrameDrum (*song, text (r.name)))
+            statusBar()->showMessage (tr ("Pick a track in the mixer first"), 5000);
+    }
+    else if (choice == 0)
     {
         showMixer();
         if (! mixerWin->addRhythm (*song, text (r.name)))

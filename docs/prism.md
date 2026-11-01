@@ -147,6 +147,33 @@ Code: `Source/mixer/InstrumentPrism.*` (`mixer::InstrumentPrism`, a `mixer::Inst
 routing by range, the rays' chains, alignment and gains; tested in `tests/CoreTests.cpp`) and
 `Source/ui/MixerPrism.cpp` (the window, and saving it in a project).
 
+## Prisms in the returns
+
+Owner's ask (2026-11-01): "Allow for either one of the FX sends to be a Prism, but with fx only, no
+instruments."
+
+Either of the mixer's two returns (Return A and Return B, the strips between the tracks and the
+master that the tracks' sends A and B feed) can hold a Prism of effects in place of a single
+effect. Click the ▾ on the return's effect button (or right-click it) and choose Prism (Rays of
+Effects). The effect that was there moves into the Prism's first ray and keeps its settings, and
+the Prism opens in a window. Clicking the effect button again opens the Prism.
+
+- The Split along the top divides what the sends bring in among the rays, as in the Master
+  Section's Prism: Parallel (every ray hears all of it, up to eight rays), Bands (up to four, with
+  their crossovers beside the Split), Mid/Side or Left/Right. Choosing a split adds the rays it
+  needs; a ray past what the split feeds is marked not heard.
+- Each ray is a chain of up to eight effects in series: built-in, stock or any VST3, CLAP, LV2 or
+  LADSPA plug-in, each with bypass and Mix. An empty ray passes its share as it came in, so a
+  Parallel Prism with a reverb on one ray and nothing on the other blends wet and dry.
+- Each ray has its gain (−60 dB is off, up to +12 dB), mute, solo and a level bar. Rays whose
+  effects have less latency wait for the slowest, so they stay together when joined.
+- No instruments: a send carries sound, not notes. The return's strip after the Prism (pan, mute,
+  fader) is unchanged, and projects save the Prism with every ray's effects and settings.
+
+Code: `Source/mixer/EffectPrism.*` (`mixer::EffectPrism`, a `mixer::Effect`: the split, the rays'
+chains, alignment and gains; tested in `tests/CoreTests.cpp`) and `Source/ui/MixerFxPrism.cpp`
+(the window, and saving it in a project).
+
 ## Next
 
 - Sampler and Slicer in an Instrument Prism's rays, more than two instruments a ray, Prisms inside its rays, and its macros.

@@ -9,8 +9,8 @@
 // The time ruler above the waveform: numbered ticks that follow the zoom,
 // from hours and minutes when zoomed out down to microseconds when zoomed in,
 // with the cursor and selection marked. Clicking it moves the cursor.
-// With a beat grid it can count bars and beats (1, 1.2, 1.2.3) instead of
-// time, or show both on two rows (bars and beats above, time below).
+// With a beat grid it can also count bars and beats (1, 1.2, 1.2.3) on a
+// row above the time. Time is always shown.
 class TimeRuler final : public QWidget
 {
     Q_OBJECT
@@ -23,7 +23,7 @@ public:
     void setView (double startFrame, double lengthFrames, double sampleRate, Frame fileLength,
                   Frame cursor, Frame selStart, Frame selEnd);
 
-    enum class Mode { time, beats, both };
+    enum class Mode { time, both };
     void setGrid (const BeatGrid&, Mode);
 
     // The label for a time on a ruler whose ticks are `decimals` places apart
@@ -46,8 +46,7 @@ private:
     void drawTime (QPainter&, double top, double bottom) const;
     void drawBeats (QPainter&, double top, double bottom) const;
     bool showsBeats() const { return mode != Mode::time && grid.isSet(); }
-    bool showsTime() const  { return mode != Mode::beats || ! grid.isSet(); }
-
+    
     double start = 0.0, length = 0.0, rate = 48000.0;
     Frame fileLength = 0, cursor = 0, selStart = 0, selEnd = 0;
     BeatGrid grid;

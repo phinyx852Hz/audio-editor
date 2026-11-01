@@ -151,8 +151,10 @@ public:
     void hotSwap (const QString& path);
     // The Mixer's beat and tempo, for the step sequencer's Follow Mixer.
     void setMixerClock (std::function<slicer::Engine::Clock()> make);
-    // PHI tabla's kit (sampler/PhiTabla.h): the Kit menu can make this kit, as edited here, the one
-    // every new PHI tabla starts from, or go back to the built-in one.
+    // A built-in kit, PHI tabla's (sampler/PhiTabla.h) or PHI frame drum's (sampler/PhiFrameDrum.h):
+    // the Kit menu can make this kit, as edited here, the one every new one (`name`) starts from,
+    // kept in `defaultFile`, or go back to the built-in one.
+    void setBuiltInKit (const QString& name, const QString& defaultFile);
     void setPhiTabla();
 
 Q_SIGNALS:

@@ -51,6 +51,7 @@ target_sources(${APP_ID} PRIVATE
     Source/sampler/SamplerEngine.cpp
     Source/sampler/SlicerEngine.cpp
     Source/sampler/PhiTabla.cpp
+    Source/sampler/PhiFrameDrum.cpp
     Source/sampler/StepSequencer.cpp
     Source/mixer/MidiFile.cpp
     Source/mixer/DawProject.cpp
@@ -77,6 +78,7 @@ target_sources(${APP_ID} PRIVATE
     Source/mixer/BolProcessor.cpp
     Source/mixer/Instruments.cpp
     Source/mixer/InstrumentPrism.cpp
+    Source/mixer/EffectPrism.cpp
     Source/mixer/MixerEngine.cpp
     Source/mixer/Spatial.cpp
     Source/mixer/Recording.cpp
@@ -93,6 +95,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/Repair.cpp
     Source/core/Restoration.cpp
     Source/core/Fft.cpp
+    Source/core/LinearPhase.cpp
     Source/core/Windows.cpp
     Source/core/SpectrumView.cpp
     Source/core/Generate.cpp
@@ -210,6 +213,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/MidiMapOverlay.cpp
     Source/ui/MixerSection.cpp
     Source/ui/MixerPrism.cpp
+    Source/ui/MixerFxPrism.cpp
     Source/ui/ModeSection.cpp
     Source/ui/ModeAtlas.cpp
     Source/ui/RhythmSection.cpp
@@ -482,6 +486,7 @@ if(PHI_BUILD_TESTS)
         Source/sampler/SamplerEngine.cpp
         Source/sampler/SlicerEngine.cpp
         Source/sampler/PhiTabla.cpp
+        Source/sampler/PhiFrameDrum.cpp
         Source/sampler/StepSequencer.cpp
         Source/mixer/MidiFile.cpp
         Source/mixer/DawProject.cpp
@@ -507,6 +512,7 @@ if(PHI_BUILD_TESTS)
         Source/mixer/BolProcessor.cpp
         Source/mixer/Instruments.cpp
         Source/mixer/InstrumentPrism.cpp
+        Source/mixer/EffectPrism.cpp
         Source/mixer/MixerEngine.cpp
         Source/mixer/Spatial.cpp
         Source/mixer/Recording.cpp
@@ -525,6 +531,7 @@ if(PHI_BUILD_TESTS)
         Source/core/Repair.cpp
         Source/core/Restoration.cpp
         Source/core/Fft.cpp
+        Source/core/LinearPhase.cpp
         Source/core/Windows.cpp
         Source/core/SpectrumView.cpp
         Source/core/Generate.cpp
