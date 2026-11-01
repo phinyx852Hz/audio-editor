@@ -242,6 +242,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/ScriptSection.cpp
     Source/script/ScriptApi.cpp
     Source/script/ScriptRunner.cpp
+    Source/script/ReaperImport.cpp
     Source/ui/ToolsSection.cpp
     Source/ui/ResearchSection.cpp
     Source/ui/AmbiDialogs.cpp
@@ -580,7 +581,8 @@ if(PHI_BUILD_TESTS)
     add_executable(phi-script-tests
         tests/ScriptTests.cpp
         Source/script/ScriptApi.cpp
-        Source/script/ScriptRunner.cpp)
+        Source/script/ScriptRunner.cpp
+        Source/script/ReaperImport.cpp)
     target_link_libraries(phi-script-tests PRIVATE Qt6::Core phi_lua)
     add_test(NAME scripts COMMAND phi-script-tests)
 

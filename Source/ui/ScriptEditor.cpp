@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Tools > Scripts > Script Editor (see ScriptEditor.h, docs/scripting.md).
 #include "ScriptEditor.h"
+#include "../script/ReaperImport.h"
 
 #include <QAction>
 #include <QCloseEvent>
@@ -280,6 +281,8 @@ ScriptEditor::ScriptEditor (QWidget* parent) : QWidget (parent, Qt::Window)
     auto* newMenu = new QMenu (this);
     for (const auto l : { script::Language::lua, script::Language::python, script::Language::nyquist })
         newMenu->addAction (tr ("%1 Script").arg (script::languageName (l)), this, [this, l] { if (askToSave()) newScript (l); });
+    newMenu->addSeparator();
+    newMenu->addAction (tr ("From a &Reaper Script..."), this, [this] { importReaperScript(); });
     auto* newButton = new QToolButton;
     newButton->setText (tr ("&New"));
     newButton->setMenu (newMenu);
@@ -399,8 +402,45 @@ void ScriptEditor::setLanguage (script::Language l)
     updateTitle();
 }
 
+void ScriptEditor::importReaperScript()
+{
+    if (! askToSave())
+        return;
+    const auto file = QFileDialog::getOpenFileName (this, tr ("Import Reaper Script"), QDir::homePath(), tr ("Reaper scripts (*.lua *.py *.eel);;All files (*)"));
+    if (file.isEmpty())
+        return;
+    QFile f (file);
+    if (! f.open (QIODevice::ReadOnly))
+    {
+        QMessageBox::warning (this, tr ("Import Reaper Script"), tr ("Could not read %1.").arg (file));
+        return;
+    }
+    const auto result = reaperimport::convert (QString::fromUtf8 (f.readAll()), file);
+    if (! result.ok)
+    {
+        QMessageBox box (QMessageBox::Warning, tr ("Import Reaper Script"),
+                         tr ("\"%1\" cannot be converted for PHI.").arg (QFileInfo (file).fileName()), QMessageBox::Ok, this);
+        box.setInformativeText (result.reasons.join (QStringLiteral ("\n\n")));
+        box.exec();
+        return;
+    }
+    path.clear();
+    suggestedName = QFileInfo (file).completeBaseName() + tr (" (from Reaper)");
+    code->setPlainText (result.code);
+    code->document()->setModified (true);
+    setLanguage (script::languageFor (file));
+    list->clearSelection();
+    console->clear();
+    showOutput (result.report(), false);
+    if (! result.unsupported.isEmpty())
+        showOutput (tr ("Lines marked in the header need changing by hand for the script to run to its end.\n"), true);
+    showOutput (tr ("Look it over, then Save to keep it.\n"), false);
+    code->setFocus();
+}
+
 void ScriptEditor::newScript (script::Language l)
 {
+    suggestedName.clear();
     path.clear();
     code->setPlainText (scripts::templateFor (l));
     code->document()->setModified (false);
@@ -433,7 +473,7 @@ bool ScriptEditor::save (bool as)
     if (as || target.isEmpty())
     {
         const auto ext = script::extensionFor (language);
-        const auto suggested = QDir (scripts::folder()).filePath ((path.isEmpty() ? tr ("New script") : displayName (path)) + QLatin1Char ('.') + ext);
+        const auto suggested = QDir (scripts::folder()).filePath ((! path.isEmpty() ? displayName (path) : ! suggestedName.isEmpty() ? suggestedName : tr ("New script")) + QLatin1Char ('.') + ext);
         target = QFileDialog::getSaveFileName (this, tr ("Save Script"), suggested, tr ("%1 scripts (*.%2)").arg (script::languageName (language), ext));
         if (target.isEmpty())
             return false;

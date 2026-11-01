@@ -32,6 +32,9 @@ public:
 
     void openScript (const QString& path);
     void newScript (script::Language);
+    // Tools > Scripts > Import Reaper Script: a ReaScript (.lua, .py) converted for PHI
+    // (ReaperImport.h) as a new, unsaved script; one that cannot be is refused with why.
+    void importReaperScript();
     void showOutput (const QString& text, bool error);
     void setRunning (bool);
     void refreshList();
@@ -50,6 +53,7 @@ private:
     void setLanguage (script::Language);
 
     QString path;            // empty: not saved yet
+    QString suggestedName;   // Save's first name for an imported script
     script::Language language = script::Language::lua;
     QListWidget* list;
     QPlainTextEdit* code;

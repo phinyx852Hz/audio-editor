@@ -102,6 +102,11 @@ void MainWindow::registerScriptCommands()
         if (! file.isEmpty())
             runScriptFile (file);
     });
+    add ("tools.scriptImportReaper", tr ("&Import Reaper Script..."), {}, [this]
+    {
+        showScriptEditor();
+        scriptEditor->importReaperScript();
+    });
     add ("tools.scriptStop", tr ("&Stop Script"), {}, [this] { scriptRunner->stop(); })->setEnabled (false);
     add ("tools.scriptsFolder", tr ("Open Scripts &Folder"), {}, [this]
     {

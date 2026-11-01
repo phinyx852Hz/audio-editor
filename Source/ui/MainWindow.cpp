@@ -938,7 +938,7 @@ void MainWindow::buildMenus()
                                "album.properties", "album.twoTracks", "album.export" } } },
         { QStringLiteral ("#effect"), { tr ("&Effect"),    { "effect.repeat", "-", "@nyquist.generate", "-", "@nyquist.effect" } } },
         { QStringLiteral ("#markers"), { tr ("Mar&kers"),   { "marker.add", "marker.addRegion", "-", "marker.next", "marker.previous", "-", "marker.exportSlices", "warp.exportLoop", "marker.exportLabels", "-", "view.markers" } } },
-        { QStringLiteral ("#scripts"), { tr ("&Scripts"),  { "tools.scriptEditor", "tools.scriptRun", "tools.scriptStop", "-", "@scripts", "-", "tools.scriptsFolder" } } },
+        { QStringLiteral ("#scripts"), { tr ("&Scripts"),  { "tools.scriptEditor", "tools.scriptRun", "tools.scriptImportReaper", "tools.scriptStop", "-", "@scripts", "-", "tools.scriptsFolder" } } },
         { QStringLiteral ("#transport"), { tr ("Tr&ansport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } } },
     };

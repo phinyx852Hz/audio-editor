@@ -14,6 +14,7 @@ Tools > Scripts:
 | --- | --- |
 | Script Editor... (`Ctrl+Shift+F9`) | The editor: the scripts folder on the left, the script in the middle, its output below |
 | Run Script... | Runs a script file without opening it |
+| Import Reaper Script... | A ReaScript (.lua, .py) rewritten for PHI, opened in the editor (below) |
 | Stop Script | Ends the script that is running (also the Stop Script button in the status bar) |
 | *each script* | Every script in the scripts folder, by name; runs it |
 | Open Scripts Folder | `~/.config/phi/scripts` |
@@ -45,6 +46,33 @@ even a script stuck in a loop. EEL (Reaper's own language) may come later.
   spaces and Enter keeps the indent.
 - The first time the folder is made, PHI puts five examples in it: Markers every few seconds, Fade
   out the last two seconds, Reset the mixer (Lua), Gain the selection and List commands (Python).
+
+## Import Reaper Script
+
+Owner's ask (2026-11-01): "Can Phi import reaper scripts and adapt them to fit Phi DAW", choosing a
+converter over a compatibility layer, "but an error message in case it is entirely uncompatible".
+
+Tools > Scripts > Import Reaper Script (also New > From a Reaper Script in the editor) reads a
+ReaScript in Lua (`reaper.*`) or Python (`RPR_*`) and opens it, rewritten, as a new unsaved script
+(Source/script/ReaperImport.cpp). The output pane lists what each Reaper call became.
+
+- Calls PHI matches one for one become `phi` calls in place (`reaper.GetCursorPosition()` becomes
+  `phi.cursor()`); ones that need a few `phi` calls go through short helpers written at the top of
+  the script (`R.AddProjectMarker` in Lua, `_R_AddProjectMarker` in Python).
+- Matched: the console and message boxes, GetUserInputs, the cursor and time selection, markers and
+  regions (PHI's marker ids stand in for Reaper's marker numbers), undo blocks, play and stop, the
+  project length, the tempo (the BPM tag), mixer tracks (a track is its index; D_VOL, D_PAN, B_MUTE,
+  I_SOLO and the name), a few common actions by number (undo, redo, play, stop, go to start or end,
+  insert marker, region from time selection, remove time selection, save), and `defer`, which runs
+  its function once since PHI has no background scripts. Calls that only refresh Reaper's windows
+  are removed.
+- A call PHI cannot match becomes one that stops the script with "not supported in PHI: reaper.X
+  (what it needs)", and the script's header lists each with its line, so it can be changed by hand.
+- Refused, with the reasons: EEL scripts, scripts that draw a window of their own (gfx or
+  ReaImGui), and scripts none of whose Reaper calls PHI can match (media items and takes,
+  envelopes, track FX, MIDI editing and so on), or that call none at all.
+
+The mapping was written from Reaper's public API documentation; no code of Reaper's is used.
 
 ## The phi API
 
@@ -96,5 +124,6 @@ phi.set_samples(0, 0, [x * 0.5 for x in phi.get_samples(0, 0, n)])
 
 `phi-script-tests` (tests/ScriptTests.cpp) runs Lua and Python scripts against a dispatch of its own:
 values both ways, lists and tables, several results, errors with their line, pcall and PhiError,
-and Stop ending a runaway loop. The Python part is skipped where there is no python3. The core
+and Stop ending a runaway loop; and Reaper scripts converted (Lua and Python) and run, the call PHI
+lacks named with its line, and EEL, window and all-unsupported scripts refused. The Python part is skipped where there is no python3. The core
 tests check that a script's steps squash into one undo step.

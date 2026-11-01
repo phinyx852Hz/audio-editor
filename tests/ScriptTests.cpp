@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Tools > Scripts: the Lua bridge and the Python bridge, against a dispatch of
 // their own (no editor). Python's part is skipped when there is no python3.
+#include "../Source/script/ReaperImport.h"
 #include "../Source/script/ScriptRunner.h"
 
 #include <QCoreApplication>
@@ -25,6 +26,8 @@ namespace
         QVariantList samples { 0.0, 0.25, -0.5, 1.0 };
         QVariantMap lastTrack;
         QStringList calls;
+        QList<QVariantList> added;
+        QString undoName;
 
         QVariant operator() (const QString& name, const QVariantList& args)
         {
@@ -51,6 +54,20 @@ namespace
             }
             if (name == QLatin1String ("ask"))
                 return {};   // cancelled
+            if (name == QLatin1String ("cursor"))
+                return 12.5;
+            if (name == QLatin1String ("add_marker") || name == QLatin1String ("add_region"))
+            {
+                added << args;
+                return 7;
+            }
+            if (name == QLatin1String ("set_undo_name"))
+            {
+                undoName = args.value (0).toString();
+                return {};
+            }
+            if (name == QLatin1String ("track"))
+                return QVariantMap { { "name", "Drums" }, { "volume", 0.0 }, { "pan", 0.0 }, { "trim", 0.0 }, { "mute", false }, { "solo", false } };
             if (name == QLatin1String ("run"))
                 throw script::Error (QStringLiteral ("no command \"%1\"").arg (args.value (0).toString()));
             return {};
@@ -165,6 +182,78 @@ print(phi.ask("name?") is None)
             const auto r = run (runner, script::Language::python, QStringLiteral ("while True:\n    pass\n"), fake);
             check (! r.ok && runner.wasStopped(), "python: Stop ends a runaway loop");
         }
+    }
+
+
+    // Import Reaper Script: a ReaScript converted, then run against the fake.
+    {
+        const auto lua = QStringLiteral (R"(-- a Reaper script
+local pos = reaper.GetCursorPosition()
+reaper.Undo_BeginBlock()
+local s, e = reaper.GetSet_LoopTimeRange(false, false, 0, 0, false)
+reaper.AddProjectMarker(0, false, pos, 0, "Here", -1)
+reaper.AddProjectMarker2(0, true, s, e, "Verse", -1, 0)
+reaper.ShowConsoleMsg("cursor " .. pos .. " sel " .. s .. "-" .. e .. "\n")
+local tr = reaper.GetTrack(0, 0)
+local ok, name = reaper.GetTrackName(tr)
+reaper.SetMediaTrackInfo_Value(tr, "D_VOL", 0.5)
+reaper.ShowConsoleMsg(name .. "\n")
+if reaper.CountSelectedMediaItems(0) > 99 then reaper.ShowConsoleMsg("never") end
+reaper.Undo_EndBlock("Mark it", -1)
+reaper.UpdateArrange()
+)");
+        const auto r = reaperimport::convert (lua, QStringLiteral ("Mark.lua"));
+        check (r.ok && r.suffix == QLatin1String ("lua"), "reaper: a Lua script converts");
+        check (r.unsupported.size() == 1 && r.unsupported[0].line == 12 && r.unsupported[0].function == QLatin1String ("reaper.CountSelectedMediaItems"),
+               "reaper: the call PHI lacks is named with its line");
+        check (r.code.contains (QStringLiteral ("local pos = phi.cursor()")) && ! r.code.contains (QStringLiteral ("reaper.GetCursorPosition()\n")),
+               "reaper: a simple call becomes a phi call in place");
+        Fake fake;
+        const auto run1 = run (runner, script::Language::lua, r.code, fake);
+        check (! run1.ok && run1.err.contains (QStringLiteral ("not supported in PHI: reaper.CountSelectedMediaItems")),
+               "reaper: the converted script runs until the call PHI lacks, and says so");
+        check (run1.out.contains (QStringLiteral ("cursor 12.5 sel 1.5-2.5")) && run1.out.contains (QStringLiteral ("Drums")),
+               "reaper: cursor, selection, console and track name work");
+        check (fake.added.size() == 2 && fake.added[0].value (1).toString() == QLatin1String ("Here") && fake.added[1].value (2).toString() == QLatin1String ("Verse"),
+               "reaper: a marker and a region added");
+        check (fake.lastTrack.value (QStringLiteral ("volume")).toDouble() < -6.0 && fake.lastTrack.value (QStringLiteral ("volume")).toDouble() > -6.1,
+               "reaper: D_VOL 0.5 becomes -6 dB");
+    }
+    {
+        const auto lua = QStringLiteral ("reaper.Undo_BeginBlock()\nreaper.Main_OnCommand(40157, 0)\nreaper.Undo_EndBlock('Add one', -1)\n");
+        const auto r = reaperimport::convert (lua, QStringLiteral ("one.lua"));
+        Fake fake;
+        const auto out = run (runner, script::Language::lua, r.code, fake);
+        check (r.ok && out.ok && fake.added.size() == 1 && fake.undoName == QLatin1String ("Add one"), "reaper: a known action and the undo name");
+    }
+    check (! reaperimport::convert (QStringLiteral ("a = 1;"), QStringLiteral ("x.eel")).ok, "reaper: EEL is refused");
+    {
+        const auto r = reaperimport::convert (QStringLiteral ("gfx.init('x', 200, 100)\nlocal p = reaper.GetCursorPosition()\n"), QStringLiteral ("w.lua"));
+        check (! r.ok && r.report().contains (QStringLiteral ("window")), "reaper: a script with its own window is refused");
+    }
+    {
+        const auto r = reaperimport::convert (QStringLiteral ("local it = reaper.GetSelectedMediaItem(0, 0)\nreaper.SetMediaItemInfo_Value(it, 'D_VOL', 2)\n"), QStringLiteral ("items.lua"));
+        check (! r.ok && r.report().contains (QStringLiteral ("media items")), "reaper: a script whose every call PHI lacks is refused, saying what it needs");
+    }
+    {
+        const auto r = reaperimport::convert (QStringLiteral ("-- reaper.GetCursorPosition() in a comment\nlocal s = \"reaper.Foo()\"\nprint(reaper.GetCursorPosition())\n"), QStringLiteral ("c.lua"));
+        check (r.ok && r.converted.size() == 1 && r.unsupported.isEmpty() && r.code.contains (QStringLiteral ("\"reaper.Foo()\"")), "reaper: comments and strings are left alone");
+    }
+    if (! ScriptRunner::pythonExecutable().isEmpty())
+    {
+        const auto py = QStringLiteral ("from reaper_python import *\n"
+                                        "pos = RPR_GetCursorPosition()\n"
+                                        "r = RPR_GetSet_LoopTimeRange(False, False, 0, 0, False)\n"
+                                        "RPR_AddProjectMarker(0, False, pos, 0, \"Py\", -1)\n"
+                                        "RPR_ShowConsoleMsg(\"py %s %s %s\\n\" % (pos, r[2], r[3]))\n"
+                                        "RPR_Undo_EndBlock(\"Py mark\", -1)\n");
+        const auto r = reaperimport::convert (py, QStringLiteral ("mark.py"));
+        Fake fake;
+        const auto out = run (runner, script::Language::python, r.code, fake);
+        if (! out.ok)
+            std::printf ("%s\n%s\n", qPrintable (r.code), qPrintable (out.err));
+        check (r.ok && out.ok && out.out.contains (QStringLiteral ("py 12.5 1.5 2.5")) && fake.added.size() == 1 && fake.undoName == QLatin1String ("Py mark"),
+               "reaper: a Python script converts and runs");
     }
 
     // The Python module has every function.
