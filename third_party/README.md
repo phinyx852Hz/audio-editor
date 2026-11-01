@@ -106,3 +106,17 @@ sigimsae, which the font draws as ligatures).
 
 `share/xen-tuner/` holds Xen Tuner's `tunings/` folder (github.com/euwbah/musescore-xen-tuner,
 commit 936c5c6, GPL-3.0-or-later, `share/xen-tuner/LICENSE`); see `share/xen-tuner/README.md`.
+
+## Bol Processor (BP3)
+
+`bolprocessor/source/` is the Bol Processor BP3 console's C source (version 3.5.6), unchanged, from
+github.com/bolprocessor/bolprocessor, branch `graphics-for-BP3`, commit 16642df. It is © 1990–2000
+Bernard Bel, Jim Kippen and Srikumar Karaikudi Subramanian and © 2006–2012 Bernard Bel, Anthony
+Kozar and Srikumar Karaikudi Subramanian. License: BSD-style, see `bolprocessor/License.txt` and
+`bolprocessor/Credits.txt`.
+
+`bolprocessor/console_strings.json` is BP3's table of message strings, from its PHP interface
+(github.com/bolprocessor/php-frontend, GPL-3.0, by Bernard Bel), unchanged.
+`bolprocessor/curl-shim/curl/curl.h` stands in for libcurl, which BP3 uses only to send notes to
+that interface. Built as `phi-bp3` by `cmake/BolProcessor.cmake`; see docs/bol-processor.md.
+

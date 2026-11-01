@@ -28,6 +28,8 @@
 #include <QStatusBar>
 #include <QtConcurrent>
 
+#include <cmath>
+
 void MainWindow::registerMixerCommands()
 {
     using KS = QKeySequence;
@@ -74,6 +76,10 @@ void MainWindow::registerMixerCommands()
     add ("mixer.save", tr ("&Save Project"), {}, [this] { mixerWindow()->saveMix (false); })
         ->setStatusTip (tr ("Save the mix, the patchbay and the view in a PHI project (.phi)"));
     add ("mixer.saveAs", tr ("Save Project &As..."), {}, [this] { mixerWindow()->saveMix (true); });
+    add ("mixer.importDaw", tr ("&Import DAWproject..."), {}, [this] { showMixer(); mixerWin->importDawProjectFromMenu(); })
+        ->setStatusTip (tr ("Open a project of Bitwig Studio, Studio One, Cubase or another program that writes DAWproject, as a PHI project beside it"));
+    add ("mixer.exportDaw", tr ("E&xport DAWproject..."), {}, [this] { mixerWindow()->exportDawProject(); })
+        ->setStatusTip (tr ("Write the project as a DAWproject, with its audio, for Bitwig Studio, Studio One, Cubase and others"));
     add ("mixer.addTrack", tr ("Add &Track"), {}, [this] { showMixer(); mixerWin->addTrack(); });
     add ("mixer.removeTrack", tr ("&Delete Selected Track"), {}, [this] { showMixer(); mixerWin->removeTrack(); });
     add ("mixer.playStop", tr ("&Play or Stop the Mix"), { KS (Qt::SHIFT | Qt::Key_F3) }, [this]
@@ -425,6 +431,29 @@ void MainWindow::showMidiEditor (bool on)
         MidiPanel::Host host;
         host.engine = &engine;
         host.patchBay = patchBay.get();
+        // Its transport tied to the audio editor's, when a file is open: its first tick at the
+        // file's start, so the notes play against the sound.
+        auto& t = host.transport;
+        t.available = [this] { return data() != nullptr; };
+        t.playing = [this] { return engine.isPlaying(); };
+        t.seconds = [this] { return engine.position(); };
+        t.play = [this] (double seconds)
+        {
+            if (engine.hasLiveSource())
+                trackerStop();
+            if (const auto d = data())
+            {
+                setCursor ((Frame) std::llround (seconds * d->sampleRate()));
+                playStart = cursor;
+                engine.play();
+            }
+        };
+        t.stop = [this] { engine.stop(); };
+        t.locate = [this] (double seconds)
+        {
+            if (const auto d = data())
+                setCursor ((Frame) std::llround (seconds * d->sampleRate()));
+        };
         host.heard = [this] { playInstruments(); };
         host.keyboard = [this] (int synth)
         {

@@ -1,0 +1,32 @@
+// Bol Processor BP3
+// Data saved as "-da.dhin--". Date: 2026-04-23 15:36:40
+-se.dhin--data
+-al.dhin--
+-gr.dhin-- // This grammar will be used to analyse data
+
+4+4+4+4/6 dhin - - dha ge na . dha - - dha ge na . dha ti ge ge na ka . dhee ne dhee na ge na .
+ta ge ti ra ki ta . dhin - - dha ge na . dha ti ge ge na ka . tee ne tee na ke na .
+dha ge na dha - - . dha ge na dha - - . dha ti ge ge na ka . tee ne tee na ke na .
+ta ge ti ra ki ta . dhin - - dha ge na . dha ti ge ge na ka . tee ne tee na ke na .
+tin - - ta ke na . ta - - ta ke na . ta ti ke ke na ka . tee ne tee na ke na .
+ta ke ti ra ki ta . tin - - ta ke na . ta ti ke ke na ka . tee ne tee na ke na .
+dha ge na dha - - . dha ge na dha - - . dha ti ge ge na ka . tee ne tee na ke na .
+ta ge ti ra ki ta . dhin - - dha ge na . dha ti ge ge na ka . dhee ne dhee na ge na
+
+[old divisions] 4+4+4+4*1/6 dhin - - dha ge na . dha - - dha ge na . dha ti ge ge na ka . dhee ne dhee na ge na .
+ta ge ti ra ki ta . dhin - - dha ge na . dha ti ge ge na ka . tee ne tee na ke na .
+dha ti ge ge na ka . tee ne tee na ke na . ta ti ke ke na ka . tee ne tee na ke na .
+ta ge ti ra ki ta . dhin - - dha ge na . dha ti ge ge na ka . tee ne tee na ke na .
+tin - - ta ke na . ta - - ta ke na . ta ti ke ke na ka . tee ne tee na ke na .
+ta ke ti ra ki ta . tin - - ta ke na . ta ti ke ke na ka . tee ne tee na ke na .
+dha ti ge ge na ka . tee ne tee na ke na . ta ti ke ke na ka . tee ne tee na ke na .
+ta ge ti ra ki ta . dhin - - dha ge na . dha ti ge ge na ka . dhee ne dhee na ge na
+
+4+4+4+4/6 dhin - - dha ge na . dha - - dha ge na . dha ti ge ge na ka . dhee ne dhee na ge na .
+ta ge ti ra ki ta . dhin - - dha ge na . dha ti ge ge na ka . tee ne tee na ke na .
+dhee ne dhee na ge na . dhee ne dhee na ge na . tee ne tee na ke na . tee ne tee na ke na .
+ta ge ti ra ki ta . dhin - - dha ge na . dha ti ge ge na ka . tee ne tee na ke na .
+tin - - ta ke na . ta - - ta ke na . ta ti ke ke na ka . tee ne tee na ke na .
+ta ke ti ra ki ta . tin - - ta ke na . ta ti ke ke na ka . tee ne tee na ke na .
+dhee ne dhee na ge na . dhee ne dhee na ge na . tee ne tee na ke na . tee ne tee na ke na .
+ta ge ti ra ki ta . dhin - - dha ge na . dha ti ge ge na ka . dhee ne dhee na ge na

@@ -131,7 +131,26 @@ Modulators move parameters during playback and in renders alike, every 128 sampl
 
 ## Final dither {#final-dither}
 
-[]{.ix t="Dither!final"}Dither is built into the Master card, after the master gain, so it never takes a plugin slot: **Off**, **16**, **20** or **24** bits, with plain rounding, TPDF or shaped noise (the Dither and Noise knobs on the Master card, or the Final dither row in the Master Section panel). It applies to playback and to Render in Place. Exports and batch outputs round to their own bit depth as their last step instead.
+[]{.ix t="Dither!final"}Dither is built into the Master card, after the master gain, so it never takes a plugin slot: **Off**, **16**, **20** or **24** bits (the Dither and Noise knobs on the Master card, or the Final dither row in the Master Section panel). It applies to playback and to Render in Place. Exports and batch outputs round to their own bit depth as their last step instead, with the same choice of noise in the Export dialog; Convert Sample Type offers it too.
+
+[]{.ix t="Dither!types"}[]{.ix t="Noise shaping"}The noise, from none to the most shaped:
+
+| Noise | What it does | Use it |
+|---|---|---|
+| Plain rounding | Rounds to the nearest step, no dither. Quiet detail below the last bit is lost, and fades turn grainy | To compare |
+| Truncate | Cuts the extra bits off: distortion and a DC offset | To hear why not |
+| RPDF | Rectangular noise of ±½ step. Removes the distortion, but the noise rises and falls with the music | To compare |
+| TPDF | Triangular noise of ±1 step: no distortion and a steady, even hiss | The safe choice for any delivery, and for audio that will be processed again |
+| TPDF high-pass | TPDF with its noise tilted towards the treble, less in the bass | 24-bit masters, and whenever you don't use noise shaping |
+| TPDF, gentle shaping | TPDF with 2nd-order shaping: the hiss rises steadily towards the top | Monitoring |
+| TPDF, Lipshitz 5th order | Shaped to the ear's sensitivity at low levels (Lipshitz, Wannamaker and Vanderkooy, 1991) | 16-bit masters at 44.1 or 48 kHz |
+| TPDF, Wannamaker 9th order | The deepest shaping: about 24 dB less noise at 3 to 4 kHz, where hearing is keenest, and more above 15 kHz (Wannamaker, 1992) | 16-bit masters at 44.1 or 48 kHz |
+
+The shaped kinds are made for 16 bits at 44.1 kHz, and work at 48 kHz too. At 88.2 kHz and above, use TPDF. Shaped dither makes the noise much quieter, but only as long as nothing changes the level afterwards. A volume control, a player's sample-rate converter or a streaming service's loudness normalisation can lift the shaped hiss into hearing, so TPDF travels better through today's digital playback. For a 24-bit master, use high-passed TPDF without shaping; truncating at 24 bits can still be heard as a grain on very quiet passages.
+
+[]{.ix t="Auto-blanking"}**Auto-blanking:** after about 11 ms of digital silence (exact zeros), every kind stops adding noise, so gaps between songs and the ends of fades stay truly silent.
+
+Every save to 16 or 24 bits adds TPDF dither, unless the audio is already on that bit depth's steps. Inside PHI everything is 32-bit floating point, so nothing is rounded between plugins and no dither is needed there.
 
 ## Latency and timing
 

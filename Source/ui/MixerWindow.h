@@ -143,6 +143,14 @@ public:
     bool saveMix (bool saveAs);
     bool loadMix (const QString& path, QString& error);
     bool writeMix (const QString& path, QString& error);
+    // DAWproject (docs/dawproject.md), the open format of Bitwig Studio, Studio One, Cubase and
+    // others: one opened becomes a PHI project in a folder beside it ("<name> PHI"), with its
+    // audio and its note clips as MIDI files; this one is written as one, its audio in it.
+    // What does not carry over is listed when it is done. DawProjectSection.cpp.
+    static bool isDawProject (const QString& path);
+    bool importDawProject (const QString& path, QString& error);
+    void importDawProjectFromMenu();
+    void exportDawProject();
     // Unsaved changes offered a save first: Save, Discard or Cancel. False when the user
     // cancels, or cancels the save, and keeps the project.
     bool askToSave (const QString& title, const QString& question);
@@ -195,7 +203,12 @@ public:
     // has one), played on the selected track; kept, it goes on a new track (else the selected
     // one) from the start, the track tuned to `tuning`. `notation`: the notation the editor opens
     // on (mixer/Notation.h's ids, "phi" PHI's microtonal staff), empty the piano roll.
-    void openScore (const midifile::Song& score, mixer::TuningChoice tuning, const QString& title, const QString& notation = {});
+    // `instrument`: what the score plays on while it is edited and on the track it is kept on
+    // (PHI tabla for the Bol Processor); none: the selected track's.
+    void openScore (const midifile::Song& score, mixer::TuningChoice tuning, const QString& title, const QString& notation = {},
+                    mixer::InstrumentPtr instrument = nullptr);
+    // PHI tabla (sampler/PhiTabla.h): a Slicer with the owner's own strokes on 32 pads.
+    mixer::InstrumentPtr makePhiTabla();
     void composeScene (int scene, const std::vector<int>& tracks, const QStringList& files,
                        const std::vector<midifile::SongPtr>& midi, mixer::TuningChoice tuning, const QString& name);
     // A file chosen in the Find panel's Selector: into the first empty slot of the track with
@@ -675,6 +688,7 @@ private:
     bool launcherKey (class QKeyEvent*);   // the grid's keys, while it is shown
     QString slotName (int track, int scene) const;
     void changed();                  // the mix differs from its file
+    void showStatus (const QString&);   // the line under the strips, for a few seconds
     void updateTitle();
     double rate() const;
     QString folder() const;

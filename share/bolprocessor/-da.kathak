@@ -1,0 +1,108 @@
+// Bol Processor BP3
+// Data saved as "-da.kathak". Date: 2026-04-23 15:37:02
+-se.kathak
+-al.kathak
+
+// This is an example of Kathak dance material composed by Pandit Birju Maharaj and documented by Andréine Bel
+// All these examples are in 'tintal' (16-beat measure)
+
+// MULTI CHANGE OF SPEED
+
+// Old notation: explicit "bol density" markers: "/4" etc.
+// Check that the last bol falls on the 17th beat
+
+/4 takiteta kite /6 takite takitetakite /8 takitetakitetaki
+tetakite /4 dhati dha-/4 taki tetakite /6 takitetakite
+takite /8 takiteta kitetakitetakite /4 dhati dha- /4 takiteta
+kite /6 takite takitetakite /8 takitetakitetaki tetakite /4 dhati
+dha
+
+// Another notation of the same composition: using polymetric structures
+
+{3/2,takiteta kite} {3/2,takite takitetakite} {3/2,takitetakitetaki
+tetakite} {1,dhati dha-} {3/2,taki tetakite} {3/2,takitetakite
+takite}{3/2,takiteta kitetakitetakite} {1,dhati dha-} {3/2,takiteta
+kite}{3/2,takite takitetakite} {3/2,takitetakitetaki tetakite} {1/2,dhati}
+{1,dha}
+
+// Chakkardar
+// Check that the last bol falls on the 17th beat
+
+/4 takiteta kitetaki tetakite takiteta
+kite/6takite takitetakite takitetakite takitetakite
+takitetakite /8 takitetakitetaki tetakitedha-ti- dha---takiteta
+kitetakitetakite dha-ti-dha--- takitetakitetaki tetakitedha-ti-
+dha
+
+// Reverse
+
+/8 takitetakitetaki tetakitetakiteta kitetakitetakite takitetakitetaki
+tetakite/6takite takitetakite takitetakite takitetakite
+takitetakite /4 takiteta kitedhati dha-taki
+tetakite dhatidha- takiteta kitedhati
+dha
+
+// Tihai in 12 beats
+// Check that the last bol falls on the 25th beat
+
+/4 takitedi gitedha- nedha-ne dha- /6 takite
+digite dha-nedha-ne dha-- /8 takitedigitedha- nedha-nedha---
+-- /4 takitedi gitedha- nedha-ne dha- /6 takite
+digite dha-nedha-ne dha-- /8 takitedigitedha- nedha-nedha---
+-- /4 takitedi gitedha- nedha-ne dha- /6 takite
+digite dha-nedha-ne dha-- /8 takitedigitedha- nedha-ne
+dha
+
+// A few "number tihais" by Pdt Birju Maharaj
+// Here we use period notation
+// Check that the last bol falls onn the 33d beat
+
+/6 ek-do-teen- . car-panc-che- . ek-do-teen- . car-panc-che- .
+ek-do-teen . -car-panc- . ek-do-teen . -car-panc- .
+ek-do-teen . -car-panc- . che---- . ek-do-teen- .
+car-panc-che- . ek-do-teen- . car-panc-che- . ek-do-teen .
+-car-panc- . ek-do-teen . -car-panc- . ek-do-teen .
+-car-panc- . che---- . ek-do-teen- . car-panc-che- .
+ek-do-teen- . car-panc-che- . ek-do-teen . -car-panc- .
+ek-do-teen . -car-panc- . ek-do-teen . -car-panc- .
+che
+
+/6 ek-do-teen- . car-panc-che- . ek-do-teen . -car-panc- .
+che---- . ek-do-teen . -car-panc- . che---- .
+ek-do-teen . -car-panc- . che---- . ek-do-teen- .
+car-panc-che- . ek-do-teen . -car-panc- . che---- .
+ek-do-teen . -car-panc- . che---- . ek-do-teen .
+-car-panc- . che---- . ek-do-teen- . car-panc-che- .
+ek-do-teen . -car-panc- . che---- . ek-do-teen .
+-car-panc- . che---- . ek-do-teen . -car-panc- .
+che
+
+/8 ek-do-teen-car- . panc-che-sat-ath- . ek-do-teen- . car-panc-che- .
+ek-do-teen . -car-panc- . ek-do- . teen-car- .
+--ek- . -do-- . teen--- . ek-do-teen-car- .
+panc-che-sat-ath- . ek-do-teen- . car-panc-che- . ek-do-teen .
+-car-panc- . ek-do- . teen-car- . --ek- .
+-do-- . teen--- . ek-do-teen-car- . panc-che-sat-ath- .
+ek-do-teen- . car-panc-che- . ek-do-teen . -car-panc- .
+ek-do- . teen-car- . --ek- . -do-- .
+teen
+
+/8 ek-do-teen-car- . panc-che-sat-ath- . ek-do-teen-car . -panc-che-sat- .
+ek-do-teen- . car-panc-che- . ek-do-teen . -car-panc- .
+ek-do- . teen-car- . dha--- . ek-do-teen-car- .
+panc-che-sat-ath- . ek-do-teen-car . -panc-che-sat- . ek-do-teen- .
+car-panc-che- . ek-do-teen . -car-panc- . ek-do- .
+teen-car- . dha--- . ek-do-teen-car- . panc-che-sat-ath- .
+ek-do-teen-car . -panc-che-sat- . ek-do-teen- . car-panc-che- .
+ek-do-teen . -car-panc- . ek-do- . teen-car- .
+dha
+
+/4 ekdo-teen . car-panc- . che--- . ekdo- .
+teencar- . pancche- . -ek . do- .
+teencar . -panc . che- . ekdo-teen .
+car-panc- . che--- . ekdo- . teencar- .
+pancche- . -ek . do- . teencar .
+-panc . che- . ekdo-teen . car-panc- .
+che--- . ekdo- . teencar- . pancche- .
+-ek . do- . teencar . -panc .
+che

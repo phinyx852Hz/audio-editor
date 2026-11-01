@@ -179,7 +179,7 @@ DeviceCard::DeviceCard (AudioEngine& e, Kind k, ChainPath where, QWidget* parent
         addKnob (masterGain, tr ("Gain"), 0);
         // The final dither lives here, after the gain, so it never takes a plugin slot.
         addKnob (ditherDepth, tr ("Dither"), 4);
-        addKnob (ditherNoise, tr ("Noise"), 3);
+        addKnob (ditherNoise, tr ("Noise"), dsp::numDitherTypes);
     }
 
     // Every slot has a dry/wet, whatever the plugin has: parallel processing in one place.
@@ -331,7 +331,7 @@ void DeviceCard::knobMoved (const Knob& kn, int position)
     else if (kn.parameter == ditherDepth)
         engine.setMasterDither (depths[std::clamp (position, 0, 3)], engine.masterDitherType());
     else if (kn.parameter == ditherNoise)
-        engine.setMasterDither (engine.masterDitherBits(), (dsp::Dither) std::clamp (position, 0, 2));
+        engine.setMasterDither (engine.masterDitherBits(), dsp::ditherOrder[(size_t) std::clamp (position, 0, dsp::numDitherTypes - 1)]);
     else if (kn.parameter == slotMix)
         engine.setChainMix (place, (float) position / 100.0f);
     else
@@ -359,8 +359,10 @@ void DeviceCard::setKnobFromEngine (Knob& kn)
     else if (kn.parameter == ditherNoise)
     {
         const auto type = engine.masterDitherType();
-        position = (int) type;
-        text = type == dsp::Dither::none ? tr ("Round") : type == dsp::Dither::tpdf ? tr ("TPDF") : tr ("Shaped");
+        position = (int) (std::find (dsp::ditherOrder.begin(), dsp::ditherOrder.end(), type) - dsp::ditherOrder.begin());
+        text = type == dsp::Dither::none ? tr ("Round") : type == dsp::Dither::truncate ? tr ("Truncate") : type == dsp::Dither::rpdf ? tr ("RPDF")
+             : type == dsp::Dither::tpdf ? tr ("TPDF") : type == dsp::Dither::hpTpdf ? tr ("TPDF HP") : type == dsp::Dither::shaped ? tr ("Shaped")
+             : type == dsp::Dither::lipshitz ? tr ("Lipshitz") : tr ("Wannamaker");
         kn.dial->setEnabled (engine.masterDitherBits() > 0);
     }
     else if (kn.parameter == slotMix)
@@ -538,13 +540,18 @@ void DeviceCard::applyTypedValue (int index, const QString& text)
         }
         else
         {
-            const auto type = t.startsWith (QStringLiteral ("t")) ? dsp::Dither::tpdf
+            const auto type = t.startsWith (QStringLiteral ("tr")) ? dsp::Dither::truncate
+                            : t.contains (QStringLiteral ("hp")) || t.contains (QStringLiteral ("high")) ? dsp::Dither::hpTpdf
+                            : t.startsWith (QStringLiteral ("t")) ? dsp::Dither::tpdf
+                            : t.startsWith (QStringLiteral ("rp")) ? dsp::Dither::rpdf
+                            : t.startsWith (QStringLiteral ("l")) ? dsp::Dither::lipshitz
+                            : t.startsWith (QStringLiteral ("w")) ? dsp::Dither::wannamaker
                             : t.startsWith (QStringLiteral ("s")) ? dsp::Dither::shaped
                             : t.startsWith (QStringLiteral ("r")) || t.startsWith (QStringLiteral ("n")) || t.startsWith (QStringLiteral ("p")) ? dsp::Dither::none
                                                                                                                                             : (dsp::Dither) -1;
             if ((int) type < 0)
             {
-                Q_EMIT message (tr ("Type TPDF, shaped or round"));
+                Q_EMIT message (tr ("Type round, truncate, RPDF, TPDF, HP, shaped, Lipshitz or Wannamaker"));
                 return;
             }
             engine.setMasterDither (engine.masterDitherBits(), type);

@@ -3,6 +3,7 @@
 // patchbay's FX buses and the mixer's inserts: stereo in, stereo out. Made through AudioEngine::loadEffectPlugin.
 #include "AudioEngine.h"
 #include "MasterChain.h"
+#include "PluginNative.h"
 #include "PluginWindow.h"
 #include "../patchbay/PatchBay.h"
 
@@ -132,6 +133,20 @@ namespace
                 return;
             lastState = text;
             guard ([&] { plugin->setStateInformation (block.getData(), (int) block.getSize()); });
+        }
+
+        bool nativeState (std::string& format, std::string& deviceId, std::vector<uint8_t>& bytes) const override
+        {
+            bool ok = false;
+            const_cast<PluginEffect*> (this)->guard ([&] { ok = pluginnative::save (*plugin, format, deviceId, bytes); });
+            return ok;
+        }
+
+        bool setNativeState (const std::vector<uint8_t>& bytes) override
+        {
+            bool ok = false;
+            guard ([&] { ok = pluginnative::load (*plugin, bytes); });
+            return ok;
         }
 
         std::vector<Parameter> parameters() const override

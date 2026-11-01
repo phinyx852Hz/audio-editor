@@ -276,6 +276,12 @@ namespace slicer
             chosen->pitch = semitones;
             chosen->position = l.reverse ? (double) (std::min (l.end, length) - 1) : (double) std::max<Frame> (0, l.start);
             chosen->level = p.attack > 0.0 ? 0.0 : 1.0;
+            // Softer, darker: at full velocity the filter is open; at none it is about six octaves lower.
+            if (current.velocityTone > 0.0)
+            {
+                const auto cutoff = 18000.0 * std::pow (2.0, -6.0 * std::clamp (current.velocityTone, 0.0, 1.0) * (1.0 - chosen->velocity));
+                chosen->tone = 1.0 - std::exp (-2.0 * 3.14159265358979 * std::min (cutoff, 0.45 * rate) / rate);
+            }
             chosen->age = ++clock;
         }
         if (played)
@@ -404,8 +410,15 @@ namespace slicer
                 const auto i0 = (Frame) v.position;
                 const auto t = (float) (v.position - (double) i0);
                 auto at = [&] (const std::vector<float>& x, Frame n) { return n >= 0 && n < length ? x[(size_t) n] : 0.0f; };
-                const auto lo = at (s->left, i0) + t * (at (s->left, i0 + 1) - at (s->left, i0));
-                const auto ro = at (s->right, i0) + t * (at (s->right, i0 + 1) - at (s->right, i0));
+                auto lo = at (s->left, i0) + t * (at (s->left, i0 + 1) - at (s->left, i0));
+                auto ro = at (s->right, i0) + t * (at (s->right, i0 + 1) - at (s->right, i0));
+                if (v.tone < 1.0)
+                {
+                    v.toneLeft += v.tone * (lo - v.toneLeft);
+                    v.toneRight += v.tone * (ro - v.toneRight);
+                    lo = (float) v.toneLeft;
+                    ro = (float) v.toneRight;
+                }
                 const auto a = (float) (v.level * shape);
                 left[i] += lo * a * leftGain;
                 right[i] += ro * a * rightGain;

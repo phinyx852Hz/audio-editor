@@ -14,8 +14,9 @@ namespace forensic
 namespace
 {
     constexpr double phi = 1.6180339887498949;
-    constexpr int numPowers = 12;              // φ^(n/2), n = 1..12: √φ up to φ⁶
-    const double logRange = std::log (20.0);  // ratios are looked for between 1 and 20
+    constexpr int numPowers = 28;               // φ^(n/2), n = 1..28: √φ up to φ¹⁴ (843)
+    constexpr double maxRatio = 1000.0;          // ratios are looked for between 1 and 1000: 20 Hz to 20 kHz
+    const double logRange = std::log (maxRatio);
 
     std::string format (const char* pattern, double value)
     {
@@ -26,7 +27,9 @@ namespace
 
     std::string powerName (int halves)
     {
-        static const char* names[] = { "", "√φ", "φ", "φ^1.5", "φ²", "φ^2.5", "φ³", "φ^3.5", "φ⁴", "φ^4.5", "φ⁵", "φ^5.5", "φ⁶" };
+        static const char* names[] = { "", "√φ", "φ", "φ^1.5", "φ²", "φ^2.5", "φ³", "φ^3.5", "φ⁴", "φ^4.5", "φ⁵", "φ^5.5", "φ⁶",
+                                       "φ^6.5", "φ⁷", "φ^7.5", "φ⁸", "φ^8.5", "φ⁹", "φ^9.5", "φ¹⁰", "φ^10.5", "φ¹¹", "φ^11.5", "φ¹²",
+                                       "φ^12.5", "φ¹³", "φ^13.5", "φ¹⁴" };
         return halves >= 1 && halves <= numPowers ? names[halves] : "φ^" + format ("%.1f", halves / 2.0);
     }
 
@@ -564,7 +567,7 @@ Report analyse (const std::vector<Feature>& list)
             {
                 const auto ratio = members[j]->value / members[i]->value;
                 const auto tolerance = std::max (0.0025, 2.0 * std::hypot (members[i]->sigma, members[j]->sigma));
-                if (ratio < 1.0 + 2 * tolerance || ratio > 20.0)
+                if (ratio < 1.0 + 2 * tolerance || ratio > maxRatio)
                     continue;
                 candidates.push_back ({ members[j]->label + " / " + members[i]->label, name, std::log (ratio), tolerance });
             }

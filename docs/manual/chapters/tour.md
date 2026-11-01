@@ -16,22 +16,25 @@ PHI opens to one window. In its middle is the editor, where the open file is dra
 | Edit | Undo, cut, copy, paste, selection, snapping |
 | Process | Gain, normalize, fades, reverse, stereo tools, sample type |
 | Repair | Spectral repair, restoration, diagnostics, pitch correction |
+| Research | Short references on the ideas behind PHI (see [The Research menu](#research)) |
 | Effect | Nyquist effects and generators |
 | Spatial | Binaural, channel layouts, ambisonics, speaker arrays |
 | Warp | Beat grid, tempo, stretching, warp markers, quantize |
 | Markers | Markers, regions, export at markers |
 | Album | Albums of songs and CD images |
 | Analyze | Loudness, tempo and key, beats and onsets, Vamp plugins |
+| Compose | New scores, the Compose dialog and its methods, Architectonics, the Rhythm Generator (see [Composing](#compose)) |
 | Tools | Batch processor, macros, Nyquist prompt, plug-in manager |
 | Master | Master Section, Device Chain, references, Master Assistant |
 | Transport | Play, stop, loop, record and moving the cursor |
-| View | Panels, zoom, spectral view, rulers, meters, opacity |
+| View | The audio and MIDI editors, panels, zoom, spectral view, rulers, meters, opacity |
 | Visualizer | The Visualizer, MilkDrop, Sonify, the web page behind PHI |
-| Mixer | The eight-track mixer, patchbay, projects, Mix Assistant |
+| Mixer | The mixer of 8 or 16 tracks, patchbay, projects, Edit MIDI Notes, Mix Assistant |
+| Mode | The mode, harmony, tuning and rhythm PHI composes in (see [The Mode menu](#mode-menu)) |
 | Sample | Simplest, the Slicer, Granular, Retro Sampler, MIDI inputs |
 | Synth | The synthesizers |
 | Tracker | Tracker1 and Tracker2 |
-| Performance | Video recording, live streaming, the clip launcher |
+| Performance | Video recording, live streaming, the clip launcher, control surfaces, MIDI Learn and MIDI Map Mode |
 | Options | Audio device, theme, colours, shortcuts |
 | Help | About PHI, the keyboard reference |
 
@@ -79,6 +82,10 @@ Two small controls float over the waveform:
 [Selecting and Editing](#editing) explains both. View > Gain Knob (`Ctrl+Alt+K`) hides the knob.
 
 The editor can also show a spectrogram instead of the waveform, or a blend of the two: see [The Spectral View](#spectral).
+
+## The MIDI editor
+
+[]{.ix t="MIDI editor"}Under the waveform, in a split you can drag, is a MIDI editor with an instrument of its own, for sketching and designing a sound. View > Audio Editor (`Shift+F2`) and View > MIDI Editor (`Shift+F4`) close or open either half, so the window can be audio only, MIDI only, or both. See [The MIDI Editor](#midi-editor).
 
 ## The file details
 

@@ -302,6 +302,8 @@ void MainWindow::playMidi (int status, int channel, int a, int b)
         case 0xB0:
             if (a == 64)
                 e->sustainPedal (b >= 64);
+            else if (a == 1)
+                e->modWheel (b / 127.0);
             else if (a == 120)
             {
                 e->panic();
