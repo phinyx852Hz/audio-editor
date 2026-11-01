@@ -352,6 +352,7 @@ namespace
         }
 
         const juce::String getName() const override { return descriptor.name; }
+        const char* clapId() const { return descriptor.id; }
         bool isBusesLayoutSupported (const BusesLayout& layout) const override
         {
             // CLAP ports have a fixed width; the main buses may only be on or off.
@@ -1096,4 +1097,10 @@ juce::FileSearchPath ClapPluginFormat::getDefaultLocationsToSearch()
     result.add (juce::File ("/usr/lib/clap"));
     result.add (juce::File ("/usr/local/lib/clap"));
     return result;
+}
+
+std::string clapPluginId (const juce::AudioPluginInstance& instance)
+{
+    const auto* clap = dynamic_cast<const ClapInstance*> (&instance);
+    return clap != nullptr && clap->clapId() != nullptr ? std::string (clap->clapId()) : std::string();
 }

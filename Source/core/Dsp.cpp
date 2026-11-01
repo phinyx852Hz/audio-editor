@@ -943,11 +943,32 @@ namespace dsp
         return out.finish();
     }
 
+    namespace
+    {
+        // Error-feedback filters: the error that reaches the output is shaped by
+        // 1 - sum (c[k] z^-(k+1)). Lipshitz, Wannamaker and Vanderkooy, "Minimally audible noise
+        // shaping", JAES 39 (1991): 5 taps, E-weighted; Wannamaker, "Psychoacoustically optimal
+        // noise shaping", JAES 40 (1992): 9 taps, F-weighted. Both designed for 44.1 kHz; at
+        // 48 kHz the curve lies 9 % higher, and at higher rates more of the noise moves above hearing.
+        struct Shape { int taps; std::array<float, Quantizer::maxTaps> c; };
+        Shape shapeOf (Dither d)
+        {
+            switch (d)
+            {
+                case Dither::shaped:     return { 2, { 2.0f, -1.0f } };
+                case Dither::lipshitz:   return { 5, { 2.033f, -2.165f, 1.959f, -1.590f, 0.6149f } };
+                case Dither::wannamaker: return { 9, { 2.412f, -3.370f, 3.937f, -4.174f, 3.353f, -2.205f, 1.281f, -0.569f, 0.0847f } };
+                default:                 return { 0, {} };
+            }
+        }
+    }
+
     void Quantizer::set (int newBits, Dither newDither, int numChannels)
     {
         bits = std::clamp (newBits, 8, 24);
-        dither = newDither;
-        errors.assign ((size_t) std::max (0, numChannels), { 0.0f, 0.0f });
+        dither = (Dither) std::clamp ((int) newDither, 0, numDitherTypes - 1);
+        state.assign ((size_t) std::max (0, numChannels), {});
+        silent = 0;
     }
 
     void Quantizer::process (float* const* channels, int numChannels, int numFrames)
@@ -955,28 +976,55 @@ namespace dsp
         const auto steps = (float) (1 << (bits - 1));
         const auto lsb = 1.0f / steps;
         std::uniform_real_distribution<float> uniform (-0.5f, 0.5f);
-        if ((int) errors.size() < numChannels)
-            errors.resize ((size_t) numChannels, { 0.0f, 0.0f });
+        if ((int) state.size() < numChannels)
+            state.resize ((size_t) numChannels);
+        const auto shape = shapeOf (dither);
+        const auto noisy = dither != Dither::none && dither != Dither::truncate;
 
-        // Noise shaping: the rounding error is fed back through (1 - z^-1)^2, which
-        // moves its noise towards high frequencies.
-        for (int ch = 0; ch < numChannels; ++ch)
+        for (int i = 0; i < numFrames; ++i)
         {
-            auto& e = errors[(size_t) ch];
-            auto* x = channels[ch];
-            for (int i = 0; i < numFrames; ++i)
+            bool zero = true;
+            for (int ch = 0; ch < numChannels && zero; ++ch)
+                zero = channels[ch][i] == 0.0f;
+            silent = zero ? std::min (silent + 1, silenceRun) : 0;
+            if (silent >= silenceRun)
             {
-                auto v = x[i];
-                if (dither == Dither::shaped)
-                    v -= 2.0f * e[0] - e[1];
-                const auto noise = dither == Dither::none ? 0.0f : (uniform (rng) + uniform (rng)) * lsb;
-                const auto q = std::clamp (std::round ((v + noise) * steps), -steps, steps - 1.0f) / steps;
-                if (dither == Dither::shaped)
+                // Digital silence: stays silent, and the shaper comes to rest.
+                for (int ch = 0; ch < numChannels; ++ch)
+                    state[(size_t) ch].errors.fill (0.0f);
+                continue;
+            }
+
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                auto& st = state[(size_t) ch];
+                auto v = channels[ch][i];
+                for (int k = 0; k < shape.taps; ++k)
+                    v -= shape.c[(size_t) k] * st.errors[(size_t) k];
+
+                float noise = 0.0f;
+                if (noisy)
                 {
-                    e[1] = e[0];
-                    e[0] = std::clamp (q - v, -4.0f * lsb, 4.0f * lsb);   // bounded, so a clipped peak cannot run away
+                    if (dither == Dither::rpdf)
+                        noise = uniform (rng) * lsb;
+                    else if (dither == Dither::hpTpdf)
+                    {
+                        const auto u = uniform (rng);
+                        noise = (u - st.lastUniform) * lsb;
+                        st.lastUniform = u;
+                    }
+                    else
+                        noise = (uniform (rng) + uniform (rng)) * lsb;
                 }
-                x[i] = q;
+                const auto scaled = (v + noise) * steps;
+                const auto q = std::clamp (dither == Dither::truncate ? std::floor (scaled) : std::round (scaled), -steps, steps - 1.0f) / steps;
+                if (shape.taps > 0)
+                {
+                    for (int k = shape.taps - 1; k > 0; --k)
+                        st.errors[(size_t) k] = st.errors[(size_t) k - 1];
+                    st.errors[0] = std::clamp (q - v, -4.0f * lsb, 4.0f * lsb);   // bounded, so a clipped peak cannot run away
+                }
+                channels[ch][i] = q;
             }
         }
     }

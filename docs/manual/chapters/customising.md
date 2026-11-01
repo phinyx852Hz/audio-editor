@@ -78,7 +78,27 @@ A theme you choose is remembered, so if you picked PHI Dark before PHI Gold arri
 
 []{.ix t="Window opacity"}The **Opacity** slider at the bottom right of the window (or View > Window Opacity) makes the whole PHI window see-through; `Ctrl+Alt+-` and `Ctrl+Alt+=` change it from the keyboard. Your compositor's own opacity, such as a Hyprland window rule, applies on top.
 
+A moving background behind a see-through PHI uses processor time all the while it shows; see [What a moving background costs](#background-cpu).
+
+The Analysis Meters window has an Opacity slider of its own; see [The Analysis Meters window](#analysis-meters).
+
 With the Visualizer behind PHI (`Ctrl+F11`), the same slider sets how much of it glows through. See [The Visualizer and Sonify](#visualizer).
+
+## A wallpaper of your own {#wallpaper}
+
+[]{.ix t="Wallpaper"}PHI can show any picture of yours behind the whole window, as a desktop shows its wallpaper.
+
+::: steps
+1. Choose Options > Choose Wallpaper Picture... and pick a picture (PNG, JPEG or any other kind PHI can read).
+2. The wallpaper turns on. It fills the window, cropped and centred, whatever the window's size.
+3. Use the **Opacity** slider (or `Ctrl+Alt+-` and `Ctrl+Alt+=`) to show more or less of it through PHI.
+:::
+
+Options > Wallpaper turns it off and on again; PHI remembers the picture and whether it was on. If PHI was fully opaque, turning the wallpaper on drops the opacity to 55 % so the picture shows, and turning it off puts the opacity back.
+
+PHI shows one background at a time: turning the wallpaper on turns off the Visualizer or web page behind PHI, and while either of those is behind PHI the wallpaper steps aside.
+
+A still wallpaper costs almost no processor time, so it is the background to choose for long sessions, recording and laptops. See [What a moving background costs](#background-cpu).
 
 ## Focus follows the mouse {#focus-follows-mouse}
 

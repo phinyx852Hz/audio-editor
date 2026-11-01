@@ -28,6 +28,23 @@
 #include <algorithm>
 #include <cmath>
 
+// The dither choices, in the order they are offered.
+QString ditherLabel (dsp::Dither d)
+{
+    switch (d)
+    {
+        case dsp::Dither::none:       return QObject::tr ("Plain rounding");
+        case dsp::Dither::truncate:   return QObject::tr ("Truncate (to compare)");
+        case dsp::Dither::rpdf:       return QObject::tr ("RPDF (to compare)");
+        case dsp::Dither::tpdf:       return QObject::tr ("TPDF");
+        case dsp::Dither::hpTpdf:     return QObject::tr ("TPDF high-pass");
+        case dsp::Dither::shaped:     return QObject::tr ("TPDF, gentle shaping");
+        case dsp::Dither::lipshitz:   return QObject::tr ("TPDF, Lipshitz 5th order");
+        case dsp::Dither::wannamaker: return QObject::tr ("TPDF, Wannamaker 9th order");
+    }
+    return {};
+}
+
 //==============================================================================
 MasterPanel::MasterPanel (AudioEngine& e, QWidget* home, QWidget* parent)
     : QWidget (parent), engine (e), slotList (new QListWidget (this)), gainBox (new QDoubleSpinBox (this)),
@@ -57,11 +74,11 @@ MasterPanel::MasterPanel (AudioEngine& e, QWidget* home, QWidget* parent)
     ditherBits->setToolTip (tr ("Last in the Master Section, after the gain: rounds playback and Render in Place to this bit depth. "
                                 "Exports round to their own bit depth instead."));
     ditherType = new QComboBox (this);
-    ditherType->addItem (tr ("Plain rounding"), (int) dsp::Dither::none);
-    ditherType->addItem (tr ("TPDF"), (int) dsp::Dither::tpdf);
-    ditherType->addItem (tr ("Shaped (noise shaping)"), (int) dsp::Dither::shaped);
+    for (const auto d : dsp::ditherOrder)
+        ditherType->addItem (ditherLabel (d), (int) d);
     ditherType->setAccessibleName (tr ("Final dither noise"));
-    ditherType->setToolTip (tr ("TPDF hides the rounding as faint even hiss; shaped moves that hiss up where the ear hears it least."));
+    ditherType->setToolTip (tr ("TPDF hides the rounding as faint even hiss. The shaped kinds move that hiss to where the ear hears it least: "
+                                "Wannamaker's 9th order the most. Truncate and RPDF are there to hear why not."));
     for (auto* box : { ditherBits, ditherType })
         box->installEventFilter (new NavigationKeyGuard (home, {}, box));
 

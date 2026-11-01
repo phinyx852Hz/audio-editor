@@ -95,21 +95,50 @@ namespace dsp
 
     // Rounds every sample to `bits` (8 to 24) with optional dither, so the file
     // sounds now as it will once saved at that depth. Noise shaping moves the
-    // dither noise up to where hearing is least sensitive.
-    enum class Dither { none, tpdf, shaped };
+    // dither noise up to where hearing is least sensitive. The values are stored in
+    // projects and settings: new ones go at the end.
+    enum class Dither
+    {
+        none,          // plain rounding
+        tpdf,          // triangular (TPDF) noise of ±1 LSB: no distortion, no noise modulation
+        shaped,        // TPDF, the error fed back through (1 - z^-1)^2: gentle, rising all the way up
+        hpTpdf,        // high-passed TPDF: the difference of successive uniform values, less noise in the bass
+        lipshitz,      // TPDF with Lipshitz et al.'s 5th-order E-weighted shape (JAES 1991)
+        wannamaker,    // TPDF with Wannamaker's 9th-order F-weighted shape (JAES 1992): the deepest dip at 3-4 kHz
+        rpdf,          // rectangular noise of ±½ LSB: removes distortion but leaves noise modulation (to compare)
+        truncate       // cuts the extra bits off: the worst choice, to hear why not
+    };
+    constexpr int numDitherTypes = 8;
+    // The order to offer them in: from no dither, through plain TPDF, to the deepest shaping.
+    inline constexpr std::array<Dither, numDitherTypes> ditherOrder
+    {
+        Dither::none, Dither::truncate, Dither::rpdf, Dither::tpdf, Dither::hpTpdf,
+        Dither::shaped, Dither::lipshitz, Dither::wannamaker
+    };
     AudioDataPtr quantize (const AudioData&, int bits, Dither, const ProgressCallback& = {});
 
-    // The same rounding a block at a time, for the live Dither effect.
+    // The same rounding a block at a time, for the live Dither effect. Auto-blanking: in
+    // digital silence (exact zeros on every channel for silenceRun samples, about 11 ms,
+    // as in MAAT's LINpro) it adds no noise, so gaps and the ends of fades stay silent, and
+    // noise shaping starts again from rest when the sound comes back.
     class Quantizer
     {
     public:
+        static constexpr int silenceRun = 512;
+        static constexpr int maxTaps = 9;
         void set (int bits, Dither, int numChannels);
         void process (float* const* channels, int numChannels, int numFrames);
 
     private:
         int bits = 24;
         Dither dither = Dither::tpdf;
-        std::vector<std::array<float, 2>> errors;   // last two rounding errors per channel, for noise shaping
+        struct Channel
+        {
+            std::array<float, maxTaps> errors {};   // the last rounding errors, newest first, for noise shaping
+            float lastUniform = 0.0f;               // for high-passed TPDF
+        };
+        std::vector<Channel> state;
+        int silent = 0;   // how many frames of digital silence in a row
         std::mt19937 rng { 20261017 };
     };
 

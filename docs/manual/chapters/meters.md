@@ -41,6 +41,8 @@ PHI measures in three places. The **Meters panel** sits beside the waveform whil
 
 PHI's loudness readings pass every check of the EBU loudness test set (Tech 3341 and 3342): integrated, momentary and short-term loudness, loudness range and true peak. The report, with the Φ effects measured the same way, is in `docs/testing/ebu-tests.md`.
 
+[]{.ix t="Window opacity!Analysis Meters"}The **Opacity** slider at the right of its bar makes this window see-through on its own, so it can float over the editor or the Visualizer; `Ctrl+Alt+-` and `Ctrl+Alt+=` change it from the keyboard while the window is in front. It starts at the main window's opacity, and PHI remembers its own setting from then on.
+
 ![The Analysis Meters window: loudness gauge, history, levels and spectrum.](images/analysis-meters.png)
 
 | Meter | Shows |

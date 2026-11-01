@@ -7,6 +7,8 @@
 #include "../Source/sampler/SamplerEngine.h"
 #include "../Source/sampler/SlicerEngine.h"
 #include "../Source/mixer/MidiFile.h"
+#include "../Source/mixer/DawProject.h"
+#include "../Source/core/Zip.h"
 #include "../Source/mixer/Tunings.h"
 #include "../Source/mixer/NoteEditor.h"
 #include "../Source/core/Scala.h"
@@ -782,6 +784,65 @@ namespace
             return total;
         };
         check (lowNoise (q) < lowNoise (p) * 0.1, "noise shaping moves the dither noise out of the low frequencies");
+
+        // The error's level in a band, for comparing the dither kinds.
+        auto bandNoise = [&] (const std::vector<float>& y, double from, double to)
+        {
+            double total = 0.0;
+            for (double hz = from; hz < to; hz += (to - from) / 8.0)
+            {
+                double re = 0.0, im = 0.0;
+                for (size_t i = 0; i < y.size(); ++i)
+                {
+                    const auto e = (double) y[i] - x[i];
+                    re += e * std::cos (2.0 * M_PI * hz * (double) i / 48000.0);
+                    im -= e * std::sin (2.0 * M_PI * hz * (double) i / 48000.0);
+                }
+                total += re * re + im * im;
+            }
+            return total;
+        };
+        {
+            // Wannamaker's 9th-order shape: far less noise where hearing is keenest (3-4 kHz), more up high.
+            const auto w = samples (*dsp::quantize (*quiet, 16, dsp::Dither::wannamaker), 0, 48000);
+            const auto l = samples (*dsp::quantize (*quiet, 16, dsp::Dither::lipshitz), 0, 48000);
+            check (bandNoise (w, 3000.0, 4000.0) < bandNoise (p, 3000.0, 4000.0) * 0.03, "Wannamaker shaping: at least 15 dB less noise at 3-4 kHz than TPDF");
+            check (bandNoise (l, 3500.0, 4500.0) < bandNoise (p, 3500.0, 4500.0) * 0.1, "Lipshitz shaping: at least 10 dB less noise near 4 kHz than TPDF");
+            check (bandNoise (w, 17000.0, 20000.0) > bandNoise (p, 17000.0, 20000.0), "Wannamaker shaping: the noise goes up high");
+
+            // High-passed TPDF: on the grid, within ±1 LSB, less noise in the bass than plain TPDF.
+            const auto h = samples (*dsp::quantize (*quiet, 16, dsp::Dither::hpTpdf), 0, 48000);
+            bool within = true;
+            for (size_t i = 0; i < h.size(); ++i)
+                within = within && std::abs (h[i] - x[i]) < 1.5 / 32768.0;
+            check (within && bandNoise (h, 100.0, 1000.0) < bandNoise (p, 100.0, 1000.0) * 0.85, "high-passed TPDF: less bass noise, within the dither");
+
+            // Truncation always rounds down; rounding without dither is never more than half a step out.
+            const auto t = samples (*dsp::quantize (*quiet, 16, dsp::Dither::truncate), 0, 48000);
+            const auto r = samples (*dsp::quantize (*quiet, 16, dsp::Dither::none), 0, 48000);
+            bool down = true, half = true;
+            for (size_t i = 0; i < t.size(); ++i)
+            {
+                down = down && t[i] <= x[i] && x[i] - t[i] <= 1.0f / 32768.0f;
+                half = half && std::abs (r[i] - x[i]) <= 0.5f / 32768.0f + 1.0e-9f;
+            }
+            check (down && half, "truncate rounds down, plain rounding stays within half a step");
+        }
+        {
+            // Auto-blanking: after about 11 ms of digital silence the dither stops, for every kind.
+            auto gap = makeSignal (48000, [] (Frame f) { return f < 12000 ? (float) (0.001 * std::sin (2.0 * M_PI * 440.0 * f / 48000.0)) : 0.0f; });
+            bool silent = true, dithered = false;
+            for (const auto kind : dsp::ditherOrder)
+            {
+                const auto y = samples (*dsp::quantize (*gap, 16, kind), 0, 48000);
+                for (size_t i = 12000 + dsp::Quantizer::silenceRun; i < y.size(); ++i)
+                    silent = silent && y[i] == 0.0f;
+                if (kind == dsp::Dither::wannamaker)
+                    for (size_t i = 12000; i < 12000 + dsp::Quantizer::silenceRun; ++i)
+                        dithered = dithered || y[i] != 0.0f;
+            }
+            check (silent && dithered, "auto-blanking: digital silence stays silent once it has lasted a moment");
+        }
 
         // The true-peak limiter keeps a loud tone under its ceiling, including the
         // peaks between samples (fs/4 at 45 degrees peaks 3 dB above its samples).
@@ -8130,6 +8191,13 @@ namespace
             check (report.verdict != forensic::Verdict::strong && report.verdict != forensic::Verdict::suggestive,
                    "forensic: echoes 3:2 apart are no evidence of φ (" + report.summary + ")");
         }
+        {
+            // Bands far apart: a cut at 80 Hz × φ² and a boost at 80 Hz × φ¹⁰ are φ⁸ (47) apart.
+            const std::vector<forensic::Feature> features { { "frequency", "Notch at 209.4 Hz", 209.44, 0.003, "Hz" },
+                                                            { "frequency", "Peak at 9836 Hz", 9839.2, 0.003, "Hz" } };
+            const auto report = forensic::analyse (features);
+            check (report.matches.size() == 1 && report.matches.front().target == "φ⁸", "forensic: finds golden ratios wider than φ⁶");
+        }
     }
 
     // The splash's sound: phase distortion, a patch per start, a granular reverb with a long tail.
@@ -10147,6 +10215,294 @@ namespace
         check (! parseSystemMarker ("verse", junk) && ! parseSystemMarker ("PHI system: x | y | tonic a | period 1200 | 0 |", junk), "note editor: other markers are not systems");
     }
 
+    // DAWproject: a project as Bitwig writes one (a zip of project.xml, the audio and the plugins'
+    // states) read into what PHI holds, and PHI's own written and read back.
+    void testDawProject()
+    {
+        namespace fs = std::filesystem;
+        const auto folder = fs::temp_directory_path() / "phi-dawproject-test";
+        fs::remove_all (folder);
+        fs::create_directories (folder / "unpacked");
+
+        // The zip on its own: stored and deflated entries back as they went in.
+        {
+            const auto path = (folder / "test.zip").string();
+            std::string error;
+            zip::Writer w;
+            const std::string text (5000, 'a');
+            const std::vector<uint8_t> binary { 0, 1, 2, 3, 255 };
+            check (w.open (path, error) && w.add ("a/text.txt", text.data(), text.size(), true, error)
+                   && w.add ("b.bin", binary.data(), binary.size(), false, error) && w.close (error), "zip: written");
+            zip::Reader r;
+            std::vector<uint8_t> back;
+            check (r.open (path, error) && r.entries().size() == 2, "zip: two entries");
+            check (r.find ("a/text.txt") != nullptr && r.find ("a/text.txt")->method == 8, "zip: text deflated");
+            check (r.read ("a/text.txt", back, error) && std::string (back.begin(), back.end()) == text, "zip: text back");
+            check (r.read ("b.bin", back, error) && back == binary, "zip: binary back");
+        }
+
+        // As Bitwig writes it: an instrument track with a CLAP synth, a note clip with a loop, an
+        // audio track with a warped clip and a plain one, an FX track the audio sends to, a
+        // group, a scene with a clip in it, and tempo automation.
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Project version="1.0">
+  <Application name="Bitwig Studio" version="5.2"/>
+  <Transport>
+    <Tempo unit="bpm" value="150.0" id="id0" name="Tempo"/>
+    <TimeSignature denominator="8" numerator="6" id="id1"/>
+  </Transport>
+  <Structure>
+    <Track contentType="notes" loaded="true" id="id2" name="Bass" color="#a2eabf">
+      <Channel audioChannels="2" destination="id15" role="regular" solo="true" id="id3">
+        <Devices>
+          <ClapPlugin deviceID="org.surge-synth-team.surge-xt" deviceName="Surge XT" deviceRole="instrument" loaded="true" id="id7" name="Surge XT">
+            <Parameters/>
+            <Enabled value="true" id="id8" name="On/Off"/>
+            <State path="plugins/surge.clap-preset"/>
+          </ClapPlugin>
+          <Equalizer deviceName="EQ+" deviceRole="audioFX" id="id9"/>
+        </Devices>
+        <Mute value="false" id="id6" name="Mute"/>
+        <Pan max="1.000000" min="0.000000" unit="normalized" value="0.250000" id="id5" name="Pan"/>
+        <Volume max="2.000000" min="0.000000" unit="linear" value="0.5" id="id4" name="Volume"/>
+      </Channel>
+    </Track>
+    <Track contentType="tracks" loaded="true" id="id30" name="Drums group">
+      <Channel role="submix" id="id31"/>
+      <Track contentType="audio" loaded="true" id="id10" name="Loop">
+        <Channel audioChannels="2" destination="id31" role="regular" solo="false" id="id11">
+          <Mute value="true" id="id12" name="Mute"/>
+          <Sends>
+            <Send destination="id21" type="pre" id="id13" name="Send">
+              <Enable value="true" id="id14"/>
+              <Volume max="2" min="0" unit="linear" value="1.0" id="id16"/>
+            </Send>
+          </Sends>
+          <Volume unit="decibel" value="-6.0" id="id17" name="Volume"/>
+        </Channel>
+      </Track>
+    </Track>
+    <Track contentType="audio" loaded="true" id="id20" name="Reverb">
+      <Channel audioChannels="2" destination="id15" role="effect" id="id21">
+        <Volume max="2" min="0" unit="linear" value="1.0" id="id22"/>
+      </Channel>
+    </Track>
+    <Track contentType="audio notes" loaded="true" id="id40" name="Master">
+      <Channel audioChannels="2" role="master" id="id15">
+        <Volume max="2" min="0" unit="linear" value="0.25" id="id41"/>
+      </Channel>
+    </Track>
+  </Structure>
+  <Arrangement id="id50">
+    <TempoAutomation unit="bpm" id="id51">
+      <RealPoint time="0" value="150"/>
+      <RealPoint time="16" value="140"/>
+    </TempoAutomation>
+    <Lanes timeUnit="beats" id="id52">
+      <Lanes track="id2" id="id53">
+        <Clips id="id54">
+          <Clip time="8.0" duration="6.0" playStart="1.0" loopStart="0.0" loopEnd="4.0">
+            <Notes id="id55">
+              <Note time="0.0" duration="0.5" channel="0" key="36" vel="1.0" rel="0.5"/>
+              <Note time="1.0" duration="0.5" channel="0" key="38" vel="0.5" rel="0.5"/>
+              <Note time="3.0" duration="2.0" channel="1" key="40" vel="0.5" rel="0.5"/>
+            </Notes>
+          </Clip>
+        </Clips>
+      </Lanes>
+      <Lanes track="id10" id="id56">
+        <Clips id="id57">
+          <Clip time="4" duration="8" playStart="0" contentTimeUnit="beats">
+            <Warps contentTimeUnit="seconds" timeUnit="beats" id="id58">
+              <Audio algorithm="stretch" channels="2" duration="2.0" sampleRate="44100" id="id59">
+                <File path="audio/loop.wav"/>
+              </Audio>
+              <Warp time="0" contentTime="0"/>
+              <Warp time="8" contentTime="2.0"/>
+            </Warps>
+          </Clip>
+          <Clip time="16" duration="2" contentTimeUnit="seconds" playStart="0.5" name="plain">
+            <Audio channels="2" duration="2.0" sampleRate="44100" id="id60">
+              <File path="audio/loop.wav"/>
+            </Audio>
+          </Clip>
+        </Clips>
+        <Points unit="linear" id="id61"><Target parameter="id17"/><RealPoint time="0" value="1"/></Points>
+      </Lanes>
+    </Lanes>
+  </Arrangement>
+  <Scenes>
+    <Scene id="id70" name="Verse">
+      <Lanes timeUnit="beats" id="id71">
+        <ClipSlot track="id2" hasStop="true" id="id72">
+          <Clip time="0" duration="4" playStart="0">
+            <Notes id="id73"><Note time="2" duration="1" channel="0" key="48" vel="0.5" rel="0.5"/></Notes>
+          </Clip>
+        </ClipSlot>
+      </Lanes>
+    </Scene>
+  </Scenes>
+</Project>)";
+        const auto archive = (folder / "bitwig.dawproject").string();
+        {
+            std::string error;
+            zip::Writer w;
+            const std::vector<uint8_t> wav (1000, 7), clap { 1, 2, 3 };
+            const std::string meta = "<MetaData><Title>Night &amp; Day</Title><Artist>Test</Artist></MetaData>";
+            w.open (archive, error);
+            w.add ("project.xml", xml.data(), xml.size(), true, error);
+            w.add ("metadata.xml", meta.data(), meta.size(), true, error);
+            w.add ("audio/loop.wav", wav.data(), wav.size(), false, error);
+            w.add ("plugins/surge.clap-preset", clap.data(), clap.size(), false, error);
+            check (w.close (error), "dawproject: test archive written");
+        }
+        dawproject::Project p;
+        std::string error;
+        check (dawproject::read (archive, (folder / "unpacked").string(), p, error), "dawproject: read (" + error + ")");
+        check (p.application == "Bitwig Studio" && near (p.bpm, 150.0, 1e-9), "dawproject: application and tempo");
+        check (p.numerator == 6 && p.denominator == 8, "dawproject: time signature");
+        check (p.title == "Night & Day" && p.artist == "Test", "dawproject: metadata");
+        check (near (p.masterDb, -12.04, 0.01), "dawproject: master volume");
+        check (p.tracks.size() == 2 && p.returns.size() == 1, "dawproject: two tracks (the group's kept) and a return");
+        if (p.tracks.size() == 2 && p.returns.size() == 1)
+        {
+            const auto& bass = p.tracks[0];
+            check (bass.name == "Bass" && bass.colour == "#a2eabf" && bass.notes && bass.solo, "dawproject: bass track");
+            check (near (bass.volumeDb, -6.02, 0.01) && near (bass.pan, -0.5, 1e-9), "dawproject: bass volume and pan");
+            const auto* inst = bass.instrument();
+            check (inst != nullptr && inst->format() == "CLAP" && inst->deviceId == "org.surge-synth-team.surge-xt"
+                   && inst->state == std::vector<uint8_t> { 1, 2, 3 }, "dawproject: the CLAP instrument with its state");
+            check (bass.devices.size() == 2 && ! bass.devices[1].isPlugin(), "dawproject: the built-in EQ named");
+            // Played from beat 1 for 6 beats, looping 0..4: beats 1..4 then 0..3.
+            check (bass.noteClips.size() == 1, "dawproject: one note clip");
+            if (bass.noteClips.size() == 1)
+            {
+                const auto& c = bass.noteClips[0];
+                check (near (c.start, 8.0 * 60.0 / 150.0, 1e-9) && near (c.lengthBeats, 6.0, 1e-9), "dawproject: note clip placed");
+                std::vector<std::pair<double, int>> got;
+                for (const auto& n : c.notes)
+                    got.emplace_back (n.time, n.key);
+                const std::vector<std::pair<double, int>> want { { 0.0, 38 }, { 2.0, 40 }, { 3.0, 36 }, { 4.0, 38 } };
+                check (got == want, "dawproject: the loop unrolled");
+                check (c.notes.size() == 4 && near (c.notes[1].duration, 1.0, 1e-9) && c.notes[1].channel == 1,
+                       "dawproject: a note cut at the loop's end, on its channel");
+            }
+            const auto& loop = p.tracks[1];
+            check (loop.name == "Loop" && loop.mute && near (loop.volumeDb, -6.0, 1e-9), "dawproject: track inside the group");
+            check (loop.sends.size() == 1 && loop.sends[0].target == 0 && loop.sends[0].pre && near (loop.sends[0].db, 0.0, 1e-9),
+                   "dawproject: pre-fader send to the return");
+            check (loop.audioClips.size() == 2, "dawproject: two audio clips");
+            if (loop.audioClips.size() == 2)
+            {
+                const auto& warped = loop.audioClips[0];
+                check (near (warped.start, 4.0 * 0.4, 1e-9) && near (warped.length, 8.0 * 0.4, 1e-9) && near (warped.offset, 0.0, 1e-9),
+                       "dawproject: warped clip placed");
+                check (warped.warped, "dawproject: 2 s over 8 beats at 150 is warped");
+                check (fs::exists (warped.file) && fs::file_size (warped.file) == 1000, "dawproject: the audio unpacked");
+                const auto& plain = loop.audioClips[1];
+                check (near (plain.start, 16.0 * 0.4, 1e-9) && near (plain.offset, 0.5, 1e-9) && near (plain.length, 2.0 * 0.4, 1e-9)
+                       && ! plain.warped && plain.name == "plain" && plain.file == warped.file, "dawproject: plain clip, the same file once");
+            }
+            check (p.returns[0].name == "Reverb", "dawproject: the return");
+            check (p.scenes.size() == 1 && p.scenes[0] == "Verse" && bass.slots.size() == 1, "dawproject: the scene and its slot");
+            if (bass.slots.size() == 1)
+                check (! bass.slots[0].audio && bass.slots[0].noteClip.notes.size() == 1 && near (bass.slots[0].noteClip.lengthBeats, 4.0, 1e-9),
+                       "dawproject: the slot's clip");
+        }
+        auto said = [&] (const std::string& part)
+        {
+            return std::any_of (p.notes.begin(), p.notes.end(), [&] (const std::string& n) { return n.find (part) != std::string::npos; });
+        };
+        check (said ("Tempo changes") && said ("group") && said ("Automation") && said ("EQ+") && said ("Warped"),
+               "dawproject: what did not carry over is said");
+
+        // Written and read back.
+        {
+            const auto wav = (folder / "kick.wav").string();
+            {
+                std::ofstream f (wav, std::ios::binary);
+                f << std::string (500, 'k');
+            }
+            dawproject::Project out;
+            out.bpm = 90.0;
+            out.numerator = 3;
+            out.masterDb = -3.0;
+            out.title = "Round";
+            dawproject::Track t;
+            t.name = "Keys & <more>";
+            t.colour = "#112233";
+            t.volumeDb = -10.0;
+            t.pan = 0.5;
+            t.solo = true;
+            dawproject::Device synth;
+            synth.element = "Vst3Plugin";
+            synth.role = "instrument";
+            synth.deviceId = "ABCDEF0123456789ABCDEF0123456789";
+            synth.name = "Synth";
+            synth.state = { 'V', 'S', 'T', '3', 9 };
+            t.devices.push_back (synth);
+            dawproject::NoteClip nc;
+            nc.start = 2.0;   // 3 beats at 90
+            nc.lengthBeats = 4.0;
+            nc.length = 4.0 * 60.0 / 90.0;
+            nc.notes = { { 0.5, 1.0, 60, 2, 0.75, 0.5 } };
+            t.noteClips.push_back (nc);
+            dawproject::AudioClip ac;
+            ac.file = wav;
+            ac.start = 1.0;
+            ac.offset = 0.25;
+            ac.length = 0.5;
+            ac.fileLength = 1.0;
+            t.audioClips.push_back (ac);
+            t.sends.push_back ({ 0, -6.0, false, true });
+            dawproject::Slot slot;
+            slot.scene = 1;
+            slot.noteClip = nc;
+            t.slots.push_back (slot);
+            out.tracks.push_back (t);
+            dawproject::Track ret;
+            ret.name = "FX";
+            out.returns.push_back (ret);
+            const auto file = (folder / "phi.dawproject").string();
+            check (dawproject::write (out, file, error), "dawproject: written (" + error + ")");
+            fs::create_directories (folder / "back");
+            dawproject::Project back;
+            check (dawproject::read (file, (folder / "back").string(), back, error), "dawproject: read back (" + error + ")");
+            check (near (back.bpm, 90.0, 1e-9) && back.numerator == 3 && near (back.masterDb, -3.0, 1e-6) && back.title == "Round",
+                   "dawproject: round trip: transport, master, title");
+            check (back.tracks.size() == 1 && back.returns.size() == 1, "dawproject: round trip: tracks");
+            if (back.tracks.size() == 1)
+            {
+                const auto& b = back.tracks[0];
+                check (b.name == t.name && b.colour == t.colour && near (b.volumeDb, -10.0, 1e-6) && near (b.pan, 0.5, 1e-9) && b.solo,
+                       "dawproject: round trip: mixer");
+                check (b.instrument() != nullptr && b.instrument()->state == synth.state && b.instrument()->deviceId == synth.deviceId,
+                       "dawproject: round trip: plugin and state");
+                check (b.sends.size() == 1 && b.sends[0].target == 0 && near (b.sends[0].db, -6.0, 1e-6), "dawproject: round trip: send");
+                check (b.noteClips.size() == 1 && near (b.noteClips[0].start, 2.0, 1e-9) && b.noteClips[0].notes.size() == 1
+                       && near (b.noteClips[0].notes[0].time, 0.5, 1e-9) && b.noteClips[0].notes[0].channel == 2, "dawproject: round trip: notes");
+                check (b.audioClips.size() == 1 && near (b.audioClips[0].start, 1.0, 1e-9) && near (b.audioClips[0].offset, 0.25, 1e-9)
+                       && near (b.audioClips[0].length, 0.5, 1e-9) && ! b.audioClips[0].warped && fs::file_size (b.audioClips[0].file) == 500,
+                       "dawproject: round trip: audio");
+                check (b.slots.size() == 1 && b.slots[0].scene == 1 && b.slots[0].noteClip.notes.size() == 1, "dawproject: round trip: slot");
+            }
+        }
+
+        // Notes to a MIDI file and back.
+        {
+            const std::vector<dawproject::Note> notes { { 0.0, 1.0, 60, 0, 1.0, 0.5 }, { 1.5, 0.5, 64, 3, 0.5, 0.5 } };
+            const auto song = dawproject::songOf (notes, 8.0, 120.0);
+            check (song->lastTick == 8 * 480 && song->noteCount() == 2, "dawproject: notes as MIDI");
+            const auto back = dawproject::notesOf (*song, 0.25, 2.0, 0.0, 120.0);   // from beat 0.5 for 4 beats
+            check (back.size() == 1 && back[0].key == 64 && back[0].channel == 3 && near (back[0].time, 1.0, 1e-6) && near (back[0].duration, 0.5, 1e-6),
+                   "dawproject: the notes of a trimmed MIDI clip");
+        }
+
+        const std::vector<uint8_t> preset = [] { std::vector<uint8_t> b { 'V', 'S', 'T', '3', 1, 0, 0, 0 }; for (int i = 0; i < 32; ++i) b.push_back ('A'); b.resize (48, 0); return b; }();
+        check (dawproject::vstPresetClassId (preset) == std::string (32, 'A'), "dawproject: a .vstpreset's class id");
+        fs::remove_all (folder);
+    }
+
 int main()
 {
     testStorage();
@@ -10226,6 +10582,7 @@ int main()
     testCubify();
     testSerial();
     testPluginMeasure();
+    testDawProject();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");

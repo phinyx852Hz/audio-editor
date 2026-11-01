@@ -53,6 +53,7 @@ target_sources(${APP_ID} PRIVATE
     Source/sampler/PhiTabla.cpp
     Source/sampler/StepSequencer.cpp
     Source/mixer/MidiFile.cpp
+    Source/mixer/DawProject.cpp
     Source/mixer/Tunings.cpp
     Source/mixer/Atlas.cpp
     Source/mixer/NoteEditor.cpp
@@ -84,6 +85,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/Ixml.cpp
     Source/core/Metadata.cpp
     Source/core/MiniXml.cpp
+    Source/core/Zip.cpp
     Source/core/Mp4Xmp.cpp
     Source/core/RiffChunks.cpp
     Source/core/Xmp.cpp
@@ -142,6 +144,7 @@ target_sources(${APP_ID} PRIVATE
     Source/engine/Prism.cpp
     Source/engine/PluginInstrument.cpp
     Source/engine/PluginEffect.cpp
+    Source/engine/PluginNative.cpp
     Source/engine/PluginProbe.cpp
     Source/engine/AnalyzeCommand.cpp
     Source/engine/StockFrame.cpp
@@ -221,6 +224,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/PatchBayWindow.cpp
     Source/ui/PatchBaySection.cpp
     Source/ui/ProjectSection.cpp
+    Source/ui/DawProjectSection.cpp
     Source/ui/Audition.cpp
     Source/ui/Goniometer.cpp
     Source/ui/AmbiVisualizer.cpp
@@ -373,6 +377,9 @@ target_link_libraries(${APP_ID} PRIVATE phi_rubberband)
 # libmysofa (cmake/Mysofa.cmake): HRTF sets for binaural rendering, with the MIT KEMAR set.
 include(cmake/Mysofa.cmake)
 target_link_libraries(${APP_ID} PRIVATE phi_mysofa)
+# zlib: the zip of a DAWproject (Source/core/Zip.cpp)
+find_package(ZLIB REQUIRED)
+target_link_libraries(${APP_ID} PRIVATE ZLIB::ZLIB)
 target_compile_definitions(${APP_ID} PRIVATE PHI_DEFAULT_HRTF="${PHI_DEFAULT_HRTF}")
 
 # projectM (cmake/ProjectM.cmake): MilkDrop presets in the Visualizer.
@@ -476,6 +483,7 @@ if(PHI_BUILD_TESTS)
         Source/sampler/PhiTabla.cpp
         Source/sampler/StepSequencer.cpp
         Source/mixer/MidiFile.cpp
+        Source/mixer/DawProject.cpp
         Source/mixer/Tunings.cpp
         Source/mixer/Atlas.cpp
         Source/mixer/NoteEditor.cpp
@@ -509,6 +517,7 @@ if(PHI_BUILD_TESTS)
         Source/core/Ixml.cpp
         Source/core/Metadata.cpp
         Source/core/MiniXml.cpp
+        Source/core/Zip.cpp
         Source/core/RiffChunks.cpp
         Source/core/Xmp.cpp
         Source/core/Repair.cpp
@@ -547,7 +556,7 @@ if(PHI_BUILD_TESTS)
         Source/core/PluginMeasure.cpp
         Source/core/PhiForensics.cpp
         Source/mixer/MixAssist.cpp)
-    target_link_libraries(phi-core-tests PRIVATE phi_nyquist phi_rubberband phi_mysofa)
+    target_link_libraries(phi-core-tests PRIVATE phi_nyquist phi_rubberband phi_mysofa ZLIB::ZLIB)
     target_compile_definitions(phi-core-tests PRIVATE PHI_DEFAULT_HRTF="${PHI_DEFAULT_HRTF}")
     target_compile_definitions(phi-core-tests PRIVATE PHI_SHARE_SOURCE_DIR="${CMAKE_SOURCE_DIR}/share")
     # The Bol Processor test runs phi-bp3 on a grammar of its own.

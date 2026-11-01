@@ -2,6 +2,7 @@
 #include "ExportDialog.h"
 #include "Settings.h"
 
+#include "MasterPanel.h"
 #include "MetadataEditor.h"
 #include "../core/Metadata.h"
 #include "../engine/AudioEngine.h"
@@ -172,9 +173,8 @@ ExportDialog::ExportDialog (const Context& c, QWidget* parent)
     depthBox = new QComboBox;
     form->addRow (tr ("&Bit depth:"), depthBox);
     ditherBox = new QComboBox;
-    ditherBox->addItem (tr ("None"), (int) dsp::Dither::none);
-    ditherBox->addItem (tr ("TPDF"), (int) dsp::Dither::tpdf);
-    ditherBox->addItem (tr ("TPDF, noise shaped"), (int) dsp::Dither::shaped);
+    for (const auto d : dsp::ditherOrder)
+        ditherBox->addItem (ditherLabel (d), (int) d);
     form->addRow (tr ("&Dither:"), ditherBox);
 
     normalizeBox = new QCheckBox (tr ("&Normalize loudness to"));

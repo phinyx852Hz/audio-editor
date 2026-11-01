@@ -11,7 +11,7 @@ import re
 HERE = pathlib.Path(__file__).resolve().parent.parent
 ORDER = ["File", "Edit", "Selection", "Process", "Repair", "Effect", "Generate", "Spatial", "Warp",
          "Markers", "Album", "Analyze", "References", "Tools", "Master Section", "Transport", "View",
-         "Mixer", "Sample", "Synth", "Tracker", "Performance", "Options", "Help"]
+         "Mixer", "Compose", "Architectonics", "Mode", "Research", "Sample", "Synth", "Tracker", "Performance", "Options", "Help"]
 NAMES = {"Meta": "Super", "PgDown": "Page Down", "PgUp": "Page Up", "Return": "Enter",
          "Ins": "Insert", "Del": "Delete", "Esc": "Esc"}
 
