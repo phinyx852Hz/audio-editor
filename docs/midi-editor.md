@@ -145,10 +145,18 @@ ghosts (dashed), and **Original** plays the clip as it was, switching while it p
 ## The transport
 
 A transport bar runs across the top of the editor, over the piano roll and the staff notation
-alike, so the clip or score plays on its own (owner, 2026-10-30: "another transport control for
-the MIDI Editor and Staff Notation Score"). It has its own clock and plays through the editor's
-instrument (the clip's track in the mixer, the panel's synth in the main window); the main window's
-and the mixer's transports are left where they are.
+alike (owner, 2026-10-30: "another transport control for the MIDI Editor and Staff Notation
+Score"). It plays through the editor's instrument (the clip's track in the mixer, the panel's synth
+in the main window) and is tied to the main transport (owner, 2026-10-30: "Tied to the main
+transport"): Play in either starts both from one place, Pause or Stop in either stops both, and
+moving one moves the other.
+
+- In the main window, the MIDI panel's first tick is the open file's start, so the notes play
+  against the sound. With no file open, the panel plays on its own clock.
+- In the mixer, a clip on the timeline plays from where its file starts there, and is muted on its
+  track while the editor is open so its edited notes are heard in its place (it is heard again when
+  the editor closes). A launcher clip, and a score from Architectonics, start at the mix's start.
+- A closed MIDI panel follows nothing and sounds nothing.
 
 - **To the start** and **To the end** (Home, End) move the playhead there and scroll to it.
 - **Play** from the playhead, or **Pause** where it is (Space). Click the ruler to move the playhead.

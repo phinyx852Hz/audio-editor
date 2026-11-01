@@ -11,6 +11,7 @@
 // panel each close on their own (View > Audio Editor, View > MIDI Editor). An audio file dropped on
 // it becomes notes right away (owner, 2026-10-30): its melody, or its drums.
 #include "../core/AudioData.h"
+#include "MidiEditor.h"
 
 #include <QCoreApplication>
 #include <QFrame>
@@ -22,7 +23,6 @@
 #include <vector>
 
 class AudioEngine;
-class MidiEditor;
 class QComboBox;
 class QLabel;
 class QPushButton;
@@ -46,6 +46,7 @@ public:
         std::function<void (AudioDataPtr, const QString& name)> bounced;   // into a new tab
         std::function<void()> closeRequested;
         std::function<void (const QString&)> say;     // the status bar
+        MidiEditor::Transport transport;              // the audio editor's, which its own is tied to
     };
 
     MidiPanel (Host, QWidget* parent);
