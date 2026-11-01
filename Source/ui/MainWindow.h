@@ -658,6 +658,7 @@ private:
     // A still picture behind PHI (Options > Wallpaper; VisualizerSection.cpp, Wallpaper.h),
     // hidden while the Visualizer or a web page is behind PHI.
     void toggleWallpaper();
+    void toggleWallpaperMoves();   // Visualizer > Wallpaper Moves with the Music
     bool chooseWallpaper();   // false when cancelled
     void syncWallpaper();
     class Wallpaper* wallpaper = nullptr;
