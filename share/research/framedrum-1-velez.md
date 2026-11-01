@@ -10,6 +10,9 @@ Percussive Arts Society's Hall of Fame page; Handance from his own site, the Man
 and Yousif Sheronick's Frame Drum School. Those sites could not be opened from the machine these
 entries were written on and were checked against search-engine extracts; the links are listed in
 the pull request for the owner to open by hand.
+Later the same day the owner allowed those sites, and the PAS pages, the Christian Science
+Monitor interview and glenvelez.com's programs and books pages were opened and the entry
+corrected against them (Reich and Winter dates, the Cage title, Redmond's 1981 start).
 -->
 
 # Frame Drums / Glen Velez
@@ -20,9 +23,10 @@ Glen Velez (born 1949, Dallas, Texas) is the American percussionist, singer and 
 than anyone responsible for the frame drum's return to the West. Of Mexican American family, he
 grew up in Texas, played jazz drums, studied classical percussion with Fred Hinger at the
 Manhattan School of Music, served as a percussionist in the U.S. Army's 1st Armored Division
-Band (1968–70) and settled in New York, where he played for years with Steve Reich and Musicians
+Band (1968–70) and settled in New York, where he toured and recorded with Steve Reich and Musicians from 1973 to 1993
 (he is on the first recording of *Music for 18 Musicians*, 1978) and with the Paul Winter
-Consort. He has shared in four Grammy awards.
+Consort from 1983 to 1998. His recordings with the Paul Winter Consort brought him several
+Grammy awards.
 
 From the 1970s he turned to the hand drums of the world and above all to the frame drum, seeking
 out teachers from one tradition after another. The bodhrán, pandeiro, riq, bendir, tar, kanjira,
@@ -31,7 +35,7 @@ Indian konnakol, and composes for cross-cultural ensembles, often in several met
 first album, *Handdance: Frame Drum Music* (Nomad, 1984), was recorded with Layne Redmond; others
 include *Internal Combustion* (1985), *Seven Heaven* (1987), *Assyrian Rose* (1989), *Doctrine of
 Signatures* (1994), *Rhythms of the Chakras* (1998) and *Breathing Rhythms* (2000). John Cage
-wrote *Composed Improvisation for One-sided Drum with or without Jangles* for him. He has taught
+wrote *Composed Improvisation No. 3 for One-sided Drums With or Without Jangles* (1989) for him. He has taught
 at the Mannes School of Music and The Juilliard School, and the Percussive Arts Society inducted
 him into its Hall of Fame in 2014.
 
@@ -117,9 +121,9 @@ design.
 ## Students and the frame drum movement
 
 Velez's students and the players he influenced made the frame drum an instrument of its own in
-Western music. **Layne Redmond** (1952–2013)
-recorded with him in the 1980s, beginning with *Handdance* (1984), before writing *When the Drummers Were Women*
-(1997) and teaching her own method. **Yousif Sheronick**, a Lebanese American percussionist,
+Western music. **Layne Redmond** (1952–2013) studied with him from 1981 and recorded with
+him, beginning with *Handdance* (1984), before writing *When the Drummers Were Women* (1997)
+and teaching her own method. **Yousif Sheronick**, a Lebanese American percussionist,
 teaches online at the Frame Drum School, joining South Indian vocalizations with Velez's Handance
 of stepping, playing and vocalizing at once. Many of today's frame drum teachers learned the lap
 style and the unified technique from him or from his students, and the instrument now has its

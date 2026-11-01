@@ -9,6 +9,9 @@ Checked on 2026-11-01 against the Wikipedia articles linked below, every one of 
 Sites other than Wikipedia could not be opened from the machine these entries were written on;
 their facts were checked against search-engine extracts of the pages, and the links are listed
 in the pull request for the owner to open by hand.
+Later the same day the owner allowed those sites, and the Percussive Arts Society pages, Layne
+Redmond's 2012 article and the World History Encyclopedia were opened and checked; Britannica
+refuses automated reading and is still to be opened by hand.
 -->
 
 # Frame Drums
@@ -91,9 +94,9 @@ in 2021.
 
 ## Further reading
 
-- "Frame Drums and History", *Percussive Notes* (January 2012),
-  [pp. 6–15](https://pas.org/wp-content/uploads/2024/02/1201.06-15.pdf), Percussive Arts Society,
-  with pictures of Layne Redmond and Glen Velez.
+- Layne Redmond, "Frame Drums and History", *Percussive Notes* (January 2012),
+  [pp. 6–15](https://pas.org/wp-content/uploads/2024/02/1201.06-15.pdf), Percussive Arts Society:
+  her survey of the ancient images, and of how she came to the drum through Glen Velez.
 - [Tamburi Mundi](https://www.tamburimundi.com), the international frame drum festival in
   Freiburg, Germany, founded and directed by the percussionist Murat Coşkun, with master classes
   and concerts each year.

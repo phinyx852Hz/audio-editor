@@ -10,6 +10,8 @@ checked against search-engine extracts of the sources named, since sites other t
 could not be opened from the machine these entries were written on; those links are listed in
 the pull request for the owner to open by hand. The Siberian drum's construction and the
 cosmos painted on it are partly from memory.
+Later the same day the owner allowed those sites; the Library of Congress post on the Paulsen
+drum was opened and agrees with the entry.
 -->
 
 # Frame Drums / Shamanism
@@ -124,7 +126,7 @@ are cultures. Later studies have not settled the question.
 - Jörg Fachner, "Time Is the Key: Music and Altered States of Consciousness", in Etzel Cardeña
   and Michael Winkelman (eds), *Altering Consciousness: Multidisciplinary Perspectives*, vol. 1
   (Praeger, 2011), pp. 355–376,
-  [online](https://jyx.jyu.fi/bitstream/123456789/36926/1/acvol1ch16fachner.pdf).
+  [online](https://jyx.jyu.fi/handle/123456789/36926).
 
 ## Core shamanism and the modern drum
 

@@ -10,6 +10,8 @@ Belloni's site. Those sites could not be opened from the machine these entries w
 and were checked against search-engine extracts; the links are listed in the pull request for
 the owner to open by hand. The Korean, Japanese, Chinese and Native American drums, the pandeiro's players, the tamborim
 and the pandereta are from memory.
+Later the same day the owner allowed those sites; Maqam World, Francesco Turrisi's article and
+Alessandra Belloni's site were opened and the riq corrected against Maqam World.
 -->
 
 # Frame Drums / Around the world
@@ -28,9 +30,10 @@ a concert instrument of Persian classical music. The smaller **doira** of Uzbeki
 Tajikistan and the **ghaval** of Azerbaijan are its Central Asian and Caucasian cousins.
 
 The **riq** (riqq) is the Arab tambourine and the timekeeper of the Egyptian and Syrian *takht*
-ensemble: a small frame, about 20 cm across, with five pairs of heavy brass jingles set in
-slots in the frame and a head of fish skin, now often plastic. The riq player often leads the
-ensemble. The **mazhar** is its large, heavy-headed relative, with big brass jingles shaken for
+ensemble: a small wooden frame, 9 to 10 inches across, with five (sometimes six) groups of four
+brass cymbals set in slots in the frame and a head of fish skin, now often plastic. It is usually
+the only percussion in the *takht*, and its player is the *dabet al-iqa'*, the keeper of the
+rhythm. The **mazhar** is its large, heavy-headed relative, with big brass jingles shaken for
 a roar of sound; the Egyptian percussionist Hossam Ramzy was one of its masters. The **tof** of
 the Hebrew Bible, the drum of Miriam, is a frame drum of the same family, and the **duff** or
 **def** gives its name to the whole family in Arabic, Turkish and the languages of the Balkans.
@@ -51,7 +54,7 @@ folk music. The **adufe** of Portugal and Spain is square, of pine, with a goat 
 both faces and seeds or pebbles inside that rattle as it is struck; in the Beira region of
 Portugal it was traditionally a women's drum, played in religious processions and at festivals.
 The **pandero cuadrado** of Galicia and León is its Spanish twin. In southern Italy the
-**tamburello** and the larger **tammorra**, hung with jingles once cut from tin cans, drive the
+**tamburello** and the larger **tammorra**, hung with jingles, drive the
 tarantella and the *pizzica* of Apulia, the dance once said to cure the bite of the tarantula,
 and the *tammurriata* of Campania; Alessandra Belloni has taught them in America since the 1980s.
 
