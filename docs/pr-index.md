@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**136 pull requests:** 131 merged, 5 open.
+**136 pull requests:** 132 merged, 4 open.
 
 ## Contents
 
@@ -230,7 +230,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#121](https://github.com/phinyx852Hz/audio-editor/pull/121) | Research: open source, licensing, copyright and Creative Commons | merged | Licensing › Software | `share/research/licensing.md` |
 | [#124](https://github.com/phinyx852Hz/audio-editor/pull/124) | Research: add Audio file formats | merged |  | `share/research/file-formats.md` |
 | [#126](https://github.com/phinyx852Hz/audio-editor/pull/126) | Research: add a Sampling section | merged | Research > Sampling | `share/research/sampling-1-techniques.md`<br>`share/research/sampling-0-history.md`<br>`share/research/sampling-2-instruments.md` |
-| [#128](https://github.com/phinyx852Hz/audio-editor/pull/128) | Research: add Acoustic Ecology (Schafer, composers, Feld and the Kaluli, noise music) | open |  | `share/research/ecology-1-composers.md`<br>`share/research/ecology-3-noise.md`<br>`share/research/ecology-0-schafer.md` |
+| [#128](https://github.com/phinyx852Hz/audio-editor/pull/128) | Research: add Acoustic Ecology (Schafer, composers, Feld and the Kaluli, noise music) | merged |  | `share/research/ecology-1-composers.md`<br>`share/research/ecology-3-noise.md`<br>`share/research/ecology-0-schafer.md` |
 | [#129](https://github.com/phinyx852Hz/audio-editor/pull/129) | Compose: John Cage's and Pauline Oliveros's techniques | open |  | `Source/mixer/Compose.cpp`<br>`tests/CoreTests.cpp`<br>`docs/compose.md` |
 | [#131](https://github.com/phinyx852Hz/audio-editor/pull/131) | Compose: Congolese guitar, rumba and sebene | merged |  | `Source/mixer/Compose.cpp`<br>`tests/CoreTests.cpp`<br>`docs/compose.md` |
 | [#132](https://github.com/phinyx852Hz/audio-editor/pull/132) | Compose: Mbuti interlocking, the Bol Processor (BP3) with an Ajrada qāʿida, and PHI tabla | merged |  | `share/bolprocessor/-so.EkDoTin`<br>`Source/mixer/BolProcessor.cpp`<br>`share/bolprocessor/-so.dhati` |
@@ -367,7 +367,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#125](https://github.com/phinyx852Hz/audio-editor/pull/125) | Research menu: a MIDI section | Adds share/research/midi.md, a MIDI submenu of the Research menu, in the same form as the other sections: what each thing is, its history, what PHI does with... *(auto)* | merged | 2026-11-01 | Interface and branding |
 | [#126](https://github.com/phinyx852Hz/audio-editor/pull/126) | Research: add a Sampling section | Adds Research > Sampling, a companion to the Synthesis section, as three new Markdown files in share/research/ (no code changes, so no conflicts with #120 to... *(auto)* | merged | 2026-10-31 | Not yet sorted |
 | [#127](https://github.com/phinyx852Hz/audio-editor/pull/127) | Research: add Synthesis, its types and its history | Adds a Synthesis submenu to the Research menu: the major types of synthesis with example instruments, and the history from the origins to today's virtual syn... *(auto)* | merged | 2026-10-31 | Instruments and plugins |
-| [#128](https://github.com/phinyx852Hz/audio-editor/pull/128) | Research: add Acoustic Ecology (Schafer, composers, Feld and the Kaluli, noise music) | Adds an Acoustic Ecology submenu to Research, as four new files in share/research/. *(auto)* | open | 2026-10-31 | Not yet sorted |
+| [#128](https://github.com/phinyx852Hz/audio-editor/pull/128) | Research: add Acoustic Ecology (Schafer, composers, Feld and the Kaluli, noise music) | Adds an Acoustic Ecology submenu to Research, as four new files in share/research/. *(auto)* | merged | 2026-11-01 | Not yet sorted |
 | [#129](https://github.com/phinyx852Hz/audio-editor/pull/129) | Compose: John Cage's and Pauline Oliveros's techniques | Compose already had Chance and Aleatory, which covers Cage's I Ching chance operations in *Music of Changes*. *(auto)* | open | 2026-10-31 | Not yet sorted |
 | [#130](https://github.com/phinyx852Hz/audio-editor/pull/130) | Analysis Meters: EBU-tested loudness, classic VU/PPM/K meters, a bitscope, OVERs, Heinzel flat tops | PHI's loudness code was run on the EBU Loudness test set v05, which covers Tech 3341, 3342 and 3343. *(auto)* | open | 2026-10-31 | Analysis and meters |
 | [#131](https://github.com/phinyx852Hz/audio-editor/pull/131) | Compose: Congolese guitar, rumba and sebene | Adds a new Compose method, Congolese Guitar: Rumba and Sebene. *(auto)* | merged | 2026-10-31 | Not yet sorted |
