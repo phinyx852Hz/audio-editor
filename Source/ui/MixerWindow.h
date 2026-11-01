@@ -610,6 +610,9 @@ private:
     void recordMenu (QPoint at);                // the advanced options
     bool ensureInput (QString& error);          // the audio input running, when a track records or hears it
     void updateInput();                         // started or stopped as the tracks need it
+    void trackInputMenu (int track, QMenu&);    // what the track records, and the input's channels
+    static QString inputText (const mixer::Strip&, bool words = false);   // "Audio L", or in words
+    void inputChanged (int track);              // its input or monitoring: heard and shown
     QString saveTake (const mixer::Recorded&, QString& error);   // the take's file beside the mix
     int nextSlotFor (int track, int from) const;   // the first empty slot from `from`, a new scene when all are full
     void say (const QString&);                  // on the status line

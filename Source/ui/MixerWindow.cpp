@@ -686,8 +686,8 @@ public:
         setMaximumWidth (170);
 
         auto* layout = new QVBoxLayout (this);
-        layout->setContentsMargins (5, 5, 5, 5);
-        layout->setSpacing (3);
+        layout->setContentsMargins (3, 3, 3, 3);
+        layout->setSpacing (2);
 
         colourBar = new QFrame (this);
         colourBar->setFixedHeight (5);
@@ -730,6 +730,32 @@ public:
             return std::make_pair (part, v);
         };
         QVBoxLayout* sectionLayout = nullptr;
+
+        // Recording, at the top where it is found at once (owner, 2026-11-01: "the input feature
+        // and arm track are important"): arm, what the track records, and whether its input is heard.
+        ioPart = new QWidget (this);
+        auto* ioRow = new QHBoxLayout (ioPart);
+        ioRow->setContentsMargins (0, 0, 0, 0);
+        ioRow->setSpacing (2);
+        armButton = smallButton (QStringLiteral ("●"), MixerWindow::tr ("Arm (R): the track gets the MIDI keyboard and the audio input, and Record records it"), true);
+        armButton->setObjectName (QStringLiteral ("armButton"));
+        inputButton = new QToolButton (this);
+        inputButton->setFocusPolicy (Qt::NoFocus);
+        inputButton->setPopupMode (QToolButton::InstantPopup);
+        inputButton->setToolButtonStyle (Qt::ToolButtonTextOnly);
+        inputButton->setSizePolicy (QSizePolicy::Ignored, QSizePolicy::Fixed);
+        auto* inputs = new QMenu (inputButton);
+        QObject::connect (inputs, &QMenu::aboutToShow, this, [this, inputs]
+        {
+            inputs->clear();
+            window.trackInputMenu (index, *inputs);
+        });
+        inputButton->setMenu (inputs);
+        monitorButton = smallButton (QString(), QString(), true);
+        ioRow->addWidget (armButton);
+        ioRow->addWidget (inputButton, 1);
+        ioRow->addWidget (monitorButton);
+        layout->addWidget (ioPart);
 
         // The track's mode: its audio clips, its instrument, or both as layers (Hybrid).
         modePart = new QWidget (this);
@@ -778,11 +804,9 @@ public:
         transposeBox->setSuffix (MixerWindow::tr (" st"));
         transposeBox->setToolTip (MixerWindow::tr ("Transpose the MIDI clips (channel 10, the drums, stays)"));
         channelsButton = smallButton (MixerWindow::tr ("Ch"), MixerWindow::tr ("Which of the MIDI clips' channels play"), false);
-        armButton = smallButton (QStringLiteral ("●"), MixerWindow::tr ("The MIDI keyboard plays this track's instrument (R)"), true);
         auto* midiOptions = new QHBoxLayout;
         midiOptions->addWidget (transposeBox, 1);
         midiOptions->addWidget (channelsButton);
-        midiOptions->addWidget (armButton);
         sectionLayout->addLayout (midiOptions);
 
         // Hybrid: the two layers' levels and the duck, filled in with the other pots below.
@@ -944,22 +968,39 @@ public:
         placeBy (elDial, [] (mixer::Panner3d& p, int v) { p.elevation = (float) v; });
         placeBy (spreadDial, [] (mixer::Panner3d& p, int v) { p.spread = (float) v; });
         placeBy (distDial, [] (mixer::Panner3d& p, int v) { p.distance = (float) v / 10.0f; });
-        // Two sends a row: A and B, then C and D... as far as the returns in use go.
-        auto* sendRow = new QGridLayout;
-        sendRow->setSpacing (2);
+        // The sends as a list of slim bars, one line each (as REAPER lists them; owner,
+        // 2026-11-01: "a more efficient way to use the space"): the return's letter, its level
+        // as a bar and in dB. As many lines as there are returns in use.
+        auto* sendRow = new QVBoxLayout;
+        sendRow->setSpacing (1);
         for (int r = 0; r < mixer::numReturns; ++r)
         {
-            auto* dial = new Potentiometer (this);
+            auto* line = new QWidget (this);
+            auto* h = new QHBoxLayout (line);
+            h->setContentsMargins (0, 0, 0, 0);
+            h->setSpacing (3);
+            auto* letter = new QLabel (QString (QChar ('A' + r)), line);
+            letter->setEnabled (false);
+            auto smallFont = letter->font();
+            smallFont.setPointSizeF (std::max (6.5, smallFont.pointSizeF() * 0.8));
+            letter->setFont (smallFont);
+            auto* dial = new QSlider (Qt::Horizontal, line);
             dial->setRange (0, faderPosition (0.0));
-            dial->setFixedSize (knob, knob);
+            dial->setFixedHeight (14);
             dial->setFocusPolicy (Qt::NoFocus);
             dial->setContextMenuPolicy (Qt::CustomContextMenu);
             sendDials[(size_t) r] = dial;
-            sendLabels[(size_t) r] = new QLabel (this);
-            sendColumns[(size_t) r] = knobColumn (dial, sendLabels[(size_t) r], MixerWindow::tr ("Send %1").arg (QChar ('A' + r)));
-            sendRow->addWidget (sendColumns[(size_t) r], r / 2, r % 2);
+            sendLabels[(size_t) r] = new QLabel (line);
+            sendLabels[(size_t) r]->setFont (smallFont);
+            sendLabels[(size_t) r]->setAlignment (Qt::AlignRight | Qt::AlignVCenter);
+            sendLabels[(size_t) r]->setFixedWidth (QFontMetrics (smallFont).horizontalAdvance (QStringLiteral ("-60.0 pre")) + 2);
+            h->addWidget (letter);
+            h->addWidget (dial, 1);
+            h->addWidget (sendLabels[(size_t) r]);
+            sendColumns[(size_t) r] = line;
+            sendRow->addWidget (line);
             dial->installEventFilter (this);
-            QObject::connect (dial, &QDial::valueChanged, this, [this, r] (int v)
+            QObject::connect (dial, &QSlider::valueChanged, this, [this, r] (int v)
             {
                 if (updating)
                     return;
@@ -1117,6 +1158,14 @@ public:
         QObject::connect (transposeBox, &QSpinBox::editingFinished, &window, [this] { window.setFocus(); });
         QObject::connect (channelsButton, &QPushButton::clicked, this, [this] { channelMenu(); });
         QObject::connect (armButton, &QPushButton::clicked, this, [this] { window.arm (index); });
+        // Monitoring, a click each: Auto (heard while armed to record audio), On, Off.
+        QObject::connect (monitorButton, &QPushButton::clicked, this, [this]
+        {
+            auto& s = strip();
+            s.monitor = s.monitor.load() == mixer::Strip::monitorAuto ? mixer::Strip::monitorOn
+                      : s.monitor.load() == mixer::Strip::monitorOn ? mixer::Strip::monitorOff : mixer::Strip::monitorAuto;
+            window.inputChanged (index);
+        });
         // Q-Link (or Alt+Shift, every track): a change to one strip goes to the others too,
         // levels moved by the same amount, switches set the same.
         QObject::connect (trimDial, &QDial::valueChanged, this, [this] (int v)
@@ -1304,6 +1353,9 @@ public:
         {
             // Everything the strips leave out; the Strips menu picks the sections.
             modePart->setVisible (true);
+            ioPart->setVisible (true);
+            inputButton->setVisible (true);
+            monitorButton->setVisible (true);
             instrumentPart->setVisible ((shown & instrumentSection) != 0 && mode != mixer::TrackMode::audio);
             layerPart->setVisible ((shown & instrumentSection) != 0);
             audioLayerPart->setVisible (mode == mixer::TrackMode::hybrid);
@@ -1329,6 +1381,10 @@ public:
         // name; a minimal one only the fader, the meter, mute, solo and the track's number.
         const bool slim = window.slimLanes(), minimal = window.minimalLanes();
         const bool full = ! slim;
+        // A slim strip keeps Arm; a minimal one leaves recording to R.
+        ioPart->setVisible (! minimal);
+        inputButton->setVisible (full);
+        monitorButton->setVisible (full);
         instrumentPart->setVisible (full && ! compact && (shown & instrumentSection) != 0 && mode != mixer::TrackMode::audio);
         // The duck in every mode (another track can key it); the layer levels only in a hybrid.
         layerPart->setVisible (full && ! compact && (shown & instrumentSection) != 0);
@@ -1354,7 +1410,7 @@ public:
         static_cast<Fader*> (fader)->setSlim (slim);
         meter->setScale (! minimal);
         meter->setMaximumWidth (minimal ? 10 : QWIDGETSIZE_MAX);
-        layout()->setContentsMargins (slim ? QMargins (2, 3, 2, 3) : QMargins (5, 5, 5, 5));
+        layout()->setContentsMargins (slim ? QMargins (2, 3, 2, 3) : QMargins (3, 3, 3, 3));
         fader->setMinimumHeight (compact ? compactFader : 0);
         refreshInserts();
         // As wide as its column in the launcher (MixerWindow::laneWidth), whatever it shows.
@@ -1577,6 +1633,7 @@ public:
 
         transposeBox->setValue (s.transpose.load());
         armButton->setChecked (window.engine.liveTrack() == index);
+        refreshInput();
         trimDial->setValue ((int) std::lround (s.trimDb.load() * 10.0f));
         invertL->setChecked (s.invertLeft.load());
         invertR->setChecked (s.invertRight.load());
@@ -1603,6 +1660,24 @@ public:
         updating = false;
         showValues();
         showPlace();
+    }
+
+    // What the track records and whether its input is heard, on the buttons beside Arm.
+    void refreshInput()
+    {
+        const auto& s = strip();
+        inputButton->setText (MixerWindow::inputText (s));
+        inputButton->setToolTip (MixerWindow::tr ("What the track records: %1. Click to choose (the MIDI keyboard, the audio input, both, "
+                                                  "or its instrument as audio) and the input's channels").arg (MixerWindow::inputText (s, true)));
+        const auto monitor = s.monitor.load();
+        monitorButton->setText (monitor == mixer::Strip::monitorAuto ? MixerWindow::tr ("Mon A") : MixerWindow::tr ("Mon"));
+        monitorButton->setChecked (monitor == mixer::Strip::monitorOn);
+        auto f = monitorButton->font();
+        f.setStrikeOut (monitor == mixer::Strip::monitorOff);
+        monitorButton->setFont (f);
+        monitorButton->setToolTip (monitor == mixer::Strip::monitorAuto ? MixerWindow::tr ("Monitoring: Auto, the input is heard while the track is armed to record audio. Click: always on")
+                                   : monitor == mixer::Strip::monitorOn ? MixerWindow::tr ("Monitoring: always on, the input is heard through the track. Click: off")
+                                                                        : MixerWindow::tr ("Monitoring: off, the input is not heard. Click: Auto"));
     }
 
     // The sends to the returns in use, named after them.
@@ -1928,7 +2003,7 @@ public:
     QWidget* audioLayerPart;
     QWidget* instLayerPart;
     QWidget* sendPart;
-    std::array<QDial*, mixer::numReturns> sendDials {};
+    std::array<QAbstractSlider*, mixer::numReturns> sendDials {};
     std::array<QLabel*, mixer::numReturns> sendLabels {};
     std::array<QWidget*, mixer::numReturns> sendColumns {};
     QWidget* panPart;
@@ -1966,6 +2041,9 @@ public:
     QSpinBox* transposeBox;
     QPushButton* channelsButton;
     QPushButton* armButton;
+    QWidget* ioPart;
+    QToolButton* inputButton;
+    QPushButton* monitorButton;
     QDial* trimDial;
     QLabel* trimLabel;
     QPushButton* invertL;
@@ -9887,6 +9965,17 @@ void MixerWindow::editInstrument (int track)
         t.editor->raise();
         t.editor->activateWindow();
     }
+}
+
+// A track's input or monitoring changed: heard as it now says, and shown.
+void MixerWindow::inputChanged (int track)
+{
+    changed();
+    updateInput();
+    if (track >= 0 && track < mixer::maxTracks && strips[(size_t) track] != nullptr)
+        strips[(size_t) track]->refreshInput();
+    if (inspectorStrip != nullptr)
+        inspectorStrip->refreshInput();
 }
 
 void MixerWindow::arm (int track)

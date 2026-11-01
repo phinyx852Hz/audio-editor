@@ -60,6 +60,11 @@ Cubase and Harrison Mixbus mixers. What the owner likes most:
 
 1. **Header**
    - Number, name and colour.
+   - **Recording, at the top** (owner, 2026-11-01): **●** arms the track (R), the **input**
+     button says what it records (Auto, Keys, Audio, Both or Inst, with L or R for one channel of
+     the audio input) and opens the choice, and **Mon** sets monitoring a click at a time: Mon A
+     (heard while armed to record audio), Mon lit (always), Mon struck through (off). A slim strip
+     keeps only ●.
    - Source: Stem file, Live input (mono or stereo, from the interface), or Instrument
      (a VST3/LV2/CLAP instrument played from a MIDI keyboard; it outputs audio only).
    - A stem starts at 0. An offset in samples or milliseconds lines it up when another DAW
@@ -80,8 +85,10 @@ Cubase and Harrison Mixbus mixers. What the owner likes most:
    - Right-click picks a display from a list. Double-click opens it large in a floating
      window.
    - It reuses PHI's existing goniometer, spectrum and meter code.
-5. **Sends (Ableton)**: two send dials, **A Reverb** and **B Delay**, from −∞ to 0 dB, and
-   post-fader by default. Right-click a dial to switch it to pre-fader.
+5. **Sends (Ableton)**: one slim bar for each return in use (A and B, then C to H when the mix
+   has them), its letter on the left and its level in dB on the right, as REAPER lists sends;
+   from −∞ to 0 dB, post-fader by default. Right-click a bar to switch it to pre-fader,
+   double-click it for −∞.
 6. **Panner**: both kinds are on every strip, with no switching between them.
    - **Pan pot**, a traditional knob. Mono tracks use an equal-power law (−3 dB in the
      middle; −4.5 and −6 dB laws are options). Stereo tracks use balance.
