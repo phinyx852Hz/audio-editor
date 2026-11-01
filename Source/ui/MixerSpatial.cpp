@@ -96,7 +96,7 @@ std::vector<RoomView::Source> RoomView::sources() const
                           Theme::current().color (QStringLiteral ("highlight")) });
     for (int r = 0; r < mixer::numReturns; ++r)
         list.push_back ({ returnKey - r, &e.returnStrip (r).placed, QString (QChar ('A' + r)),
-                          r == 0 ? MixerWindow::tr ("A Reverb") : MixerWindow::tr ("B Delay"), QColor (0x80, 0x86, 0x90) });
+                          MixerWindow::returnName (r), QColor (0x80, 0x86, 0x90) });
     return list;
 }
 
