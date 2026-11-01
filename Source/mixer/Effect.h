@@ -4,6 +4,7 @@
 // An effect: stereo in, stereo out, in place. The mixer's inserts and the patchbay's
 // FX buses hold them; plugins come from the engine (AudioEngine::loadEffectPlugin).
 // Plain C++.
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
