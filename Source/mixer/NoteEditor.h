@@ -209,6 +209,20 @@ namespace noteedit
     void deleteTargets (Sequence&);
     void selectAll (Sequence&, bool selected = true);
     void nudge (Sequence&, int64_t ticks);
+    // Each target longer or shorter by `ticks`, never shorter than `shortest`.
+    void lengthen (Sequence&, int64_t ticks, int64_t shortest = 1);
+    // The targets cut at every grid line they cross (Live's Chop).
+    void chop (Sequence&, int64_t grid);
+    void invertSelection (Sequence&);
+    // From the first start to the last end of the targets, rounded up to the grid (0: not).
+    int64_t span (const Sequence&, int64_t grid);
+    // Live's Duplicate (Ctrl+D): the targets copied to just after their span, the copies picked and
+    // the originals not. `push` (Ctrl+Shift+D) first moves what starts at or after the span's end
+    // later by it, to make room.
+    void duplicate (Sequence&, int64_t grid, bool push = false);
+    // The picked notes deleted and the gap closed (Ctrl+Shift+Delete): what starts at or after
+    // their span's end moves earlier by it. Nothing picked: nothing done.
+    void deleteAndClose (Sequence&, int64_t grid);
 
     // Restyle (after MIDIRestyle): each note found as a degree of `from` (snapped to the nearest
     // when it is between them) and played as the same degree of `to`, counted from each tonic, so a

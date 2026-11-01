@@ -314,6 +314,28 @@ bool MainWindow::navigationKey (QObject* o, QEvent* e)
     if (QApplication::activePopupWidget() != nullptr)
         return false;
 
+    // Window opacity (Ctrl+Alt+- and Ctrl+Alt+=, or whatever they are bound to) from every PHI
+    // window, whatever has the keyboard: otherwise the docked mixer, a focused control or a
+    // window of its own (where the editor's shortcuts don't reach) takes the keys first. Shift
+    // is let through, for keyboards where = or - needs it. A window with an opacity of its own
+    // (Analysis Meters) keeps the keys for that.
+    if (type != QEvent::KeyRelease && ! window->property ("phiOpacity").isValid())
+    {
+        const QKeySequence pressed (k->keyCombination());
+        const QKeySequence unshifted (QKeyCombination (k->modifiers() & ~Qt::ShiftModifier, (Qt::Key) k->key()));
+        for (const auto* id : { "view.opacityUp", "view.opacityDown", "view.opacityFull" })
+        {
+            auto* a = commands.action (QString::fromLatin1 (id));
+            if (a == nullptr || ! (a->shortcuts().contains (pressed) || a->shortcuts().contains (unshifted)))
+                continue;
+            if (type == QEvent::ShortcutOverride)
+                e->accept();
+            else
+                a->trigger();
+            return true;
+        }
+    }
+
     // Our other windows (the undocked mixer, the tracker, the patchbay, batch, analysis...) close
     // on Ctrl+W and Super+W and go full screen on Super+F, as the editor's panels do.
     const bool ours = window == this || isPanelWindow (window);

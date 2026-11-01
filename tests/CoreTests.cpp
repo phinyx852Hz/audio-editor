@@ -1483,6 +1483,76 @@ namespace
             check (steps && peakOf (vin, 0, 4800) > 0.4, "sampler: Vintage plays at 12 bits");
         }
         e.panic();
+
+        // Phase 2 modulation. A pitch envelope starts an octave up and falls back to the note.
+        s = fresh();
+        s.pitchEnvelope.on = true;
+        s.pitchEnvelope.amount = 12.0;
+        s.pitchEnvelope.attack = 0.0;
+        s.pitchEnvelope.decay = 0.1;
+        s.pitchEnvelope.sustain = 0.0;
+        e.setSettings (s);
+        e.noteOn (60, 1.0f);
+        {
+            auto [pe, peR] = play (24000);
+            check (crossings (pe, 0, 960) > crossings (pe, 12000, 12960) + 1 && near (crossings (pe, 12000, 24000), 50, 2),
+                   "sampler: a pitch envelope sweeps down to the note");
+        }
+        e.panic();
+
+        // A filter envelope opens a closed low pass and lets it close again.
+        s = fresh();
+        s.filter = true;
+        s.steep = true;
+        s.cutoff = 20.0;
+        s.resonance = 0.0;
+        s.filterEnvelope.on = true;
+        s.filterEnvelope.amount = 7.0;
+        s.filterEnvelope.attack = 0.0;
+        s.filterEnvelope.decay = 0.1;
+        s.filterEnvelope.sustain = 0.0;
+        e.setSettings (s);
+        e.noteOn (60, 1.0f);
+        {
+            auto [fe, feR] = play (24000);
+            check (peakOf (fe, 480, 1440) > 0.3 && peakOf (fe, 14400, 24000) < 0.01, "sampler: a filter envelope opens the filter and closes it");
+        }
+        e.panic();
+
+        // An LFO synced to 120 BPM, a beat a cycle, as a pulse on the volume: on for a quarter second, off for one.
+        s = fresh();
+        s.tempo = 120.0;
+        s.lfo[0].wave = sampler::Wave::pulse;
+        s.lfo[0].shape = 0.5;
+        s.lfo[0].sync = true;
+        s.lfo[0].beats = 1.0;
+        s.lfo[0].retrigger = sampler::Retrigger::eachNote;
+        s.lfo[0].toVolume = 1.0;
+        e.setSettings (s);
+        e.noteOn (60, 1.0f);
+        {
+            auto [tr, trR] = play (24000);
+            check (peakOf (tr, 1000, 11000) > 0.4 && peakOf (tr, 13000, 23000) < 1.0e-6, "sampler: a synced LFO pulses the volume in time");
+        }
+        e.panic();
+
+        // The mod wheel: with Mod wheel at 100% the LFO waits for it.
+        s.lfo[0].modWheel = 1.0;
+        e.setSettings (s);
+        e.modWheel (0.0);
+        e.noteOn (60, 1.0f);
+        {
+            auto [mw, mwR] = play (24000);
+            check (peakOf (mw, 13000, 23000) > 0.4, "sampler: the mod wheel down leaves the LFO out");
+        }
+        e.panic();
+        e.modWheel (1.0);
+        e.noteOn (60, 1.0f);
+        {
+            auto [mw, mwR] = play (24000);
+            check (peakOf (mw, 13000, 23000) < 1.0e-6, "sampler: the mod wheel up brings the LFO in");
+        }
+        e.panic();
     }
 
 
@@ -8770,6 +8840,40 @@ namespace
                 alone = alone && count == 1;
             check (alone, "compose: hocket, one player a pulse");
         }
+        // Congolese guitar: in the sebene the mi-solo plays only in the accompagnement's gaps, and the
+        // solo sits above the mi-solo, the mi-solo above the accompagnement.
+        {
+            const auto r = run (co::Method::congolese, 8);
+            int64_t from = -1, to = r.end;
+            for (const auto& x : r.sections)
+                if (from < 0 && x.name.rfind ("sebene", 0) == 0)
+                    from = x.start;
+                else if (x.name == "the close")
+                    to = x.start;
+            std::set<int64_t> accomp;
+            for (const auto& n : r.parts[2].notes)
+                if (n.start >= from && n.start < to)
+                    accomp.insert (n.start);
+            bool interlocked = from >= 0 && ! accomp.empty();
+            size_t mi = 0;
+            for (const auto& n : r.parts[1].notes)
+                if (n.start >= from && n.start < to)
+                {
+                    ++mi;
+                    interlocked = interlocked && accomp.count (n.start) == 0;
+                }
+            auto mean = [] (const co::Part& p)
+            {
+                double sum = 0.0;
+                for (const auto& n : p.notes)
+                    sum += n.key;
+                return p.notes.empty() ? 0.0 : sum / (double) p.notes.size();
+            };
+            check (interlocked && mi > 0, "compose: Congolese guitar, the mi-solo in the accompagnement's gaps through the sebene");
+            check (mean (r.parts[0]) > mean (r.parts[1]) && mean (r.parts[1]) > mean (r.parts[2]) && mean (r.parts[2]) > mean (r.parts[3])
+                       && r.parts[4].drums && r.parts[7].drums && ! r.parts[0].drums,
+                   "compose: Congolese guitar, solo above mi-solo above accompagnement above bass");
+        }
         // Rāga: the gat ends on sam with a tihāī.
         {
             const auto r = run (co::Method::raga, 3, "yaman (kalyan)");
@@ -9383,6 +9487,30 @@ namespace
         check (q.notes.size() == 3, "note editor: glued again");
         rampVelocity (q, 40, 120);
         check (q.notes.front().velocity == 40 && q.notes.back().velocity == 120, "note editor: velocity ramp");
+
+        // Live's edits: duplicate, duplicate and push, delete and close the gap, chop.
+        {
+            Sequence d;
+            d.notes = { { 0, 100, 6000.0 }, { 120, 100, 6200.0 }, { 480, 120, 6400.0 } };
+            d.notes[0].selected = d.notes[1].selected = true;
+            duplicate (d, 120);
+            check (d.notes.size() == 5 && d.notes[2].start == 240 && d.notes[3].start == 360 && d.notes[2].selected && ! d.notes[0].selected
+                       && d.notes[4].start == 480,
+                   "note editor: duplicated after the span, rounded to the grid");
+            duplicate (d, 120, true);
+            check (d.notes.size() == 7 && d.notes[4].start == 480 && d.notes[5].start == 600 && d.notes[6].start == 720 && ! d.notes[6].selected,
+                   "note editor: duplicate and push moves the later notes on");
+            deleteAndClose (d, 120);
+            check (d.notes.size() == 5 && d.notes[4].start == 480 && d.notes[4].pitch == 6400.0, "note editor: deleted and the gap closed");
+            invertSelection (d);
+            check (d.notes[4].selected && d.notes[0].selected, "note editor: selection inverted");
+            selectAll (d, false);
+            d.notes[4].selected = true;
+            chop (d, 40);
+            check (d.notes.size() == 7 && d.notes[5].start == 520 && d.notes[6].length == 40, "note editor: chopped on the grid");
+            lengthen (d, -100, 10);
+            check (d.notes[6].length == 10, "note editor: shortened, not below the shortest");
+        }
 
         // Restyle: C major's degrees into sléndro keep the line rising.
         Sequence melody;

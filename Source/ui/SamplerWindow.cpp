@@ -22,6 +22,7 @@
 #include <QPainter>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QTabWidget>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -36,6 +37,9 @@ namespace
         static const char* names[12] { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
         return QString::fromLatin1 (names[note % 12]) + QString::number (note / 12 - 2);
     }
+
+    // Synced LFO rates as note values, in beats a cycle.
+    constexpr double lfoBeats[] { 16.0, 8.0, 4.0, 2.0, 1.0, 0.5, 0.25, 0.125 };
 
     bool isBlack (int note)
     {
@@ -524,36 +528,101 @@ SamplerWindow::SamplerWindow (sampler::Engine& e, QWidget* parent)
     main->addWidget (labelled (QString(), loopBox), 0, Qt::AlignBottom);
     main->addWidget (edit, 0, Qt::AlignBottom);
 
-    // Edit: everything else, in four short groups.
-    editPanel = new QWidget (this);
-    auto* more = new QGridLayout (editPanel);
-    more->setContentsMargins (0, 4, 0, 0);
-    auto heading = [this] (const QString& text)
+    // Edit's controls for the envelopes, the LFOs and how it plays.
+    envelopeChoice = new QComboBox (this);
+    envelopeChoice->addItems ({ tr ("Pitch"), tr ("Filter") });
+    envelopeChoice->setToolTip (tr ("Which envelope to edit: Pitch moves the pitch, Filter the cutoff"));
+    envOnBox = new QCheckBox (tr ("On"), this);
+    envAttackBox = real (0.0, 10000.0, 5.0, 0, tr (" ms"));
+    envDecayBox = real (0.0, 20000.0, 10.0, 0, tr (" ms"));
+    envSustainBox = whole (0, 100, 5, tr (" %"));
+    envReleaseBox = real (0.0, 20000.0, 10.0, 0, tr (" ms"));
+    envCurveBox = whole (-100, 100, 10, tr (" %"));
+    envCurveBox->setToolTip (tr ("Bends each part of the envelope: above 0 it moves fast first, below 0 slowly first"));
+    envAmountBox = real (-48.0, 48.0, 1.0, 1, QString());
+    envAmountBox->setToolTip (tr ("How far the envelope moves at its top: semitones for Pitch, octaves for Filter; 0 does nothing"));
+    envVelocityBox = whole (0, 100, 10, tr (" %"));
+    envVelocityBox->setToolTip (tr ("How much less soft notes move it"));
+
+    lfoChoice = new QComboBox (this);
+    lfoChoice->addItems ({ tr ("LFO 1"), tr ("LFO 2") });
+    lfoChoice->setToolTip (tr ("Which LFO to edit; both run at once, shared by every note"));
+    waveBox = new QComboBox (this);
+    waveBox->addItems ({ tr ("Sine"), tr ("Triangle"), tr ("Saw"), tr ("Pulse"), tr ("Ramp"), tr ("Log"), tr ("S&&H 1"), tr ("S&&H 2") });
+    waveBox->setToolTip (tr ("S&H 1 steps to a new random value each cycle; S&H 2 alternates random highs and lows"));
+    shapeBox = whole (0, 100, 5, tr (" %"));
+    shapeBox->setToolTip (tr ("Changes the wave: harmonics on the sine, a trapezoid from the triangle, ramp down to up on the saw, "
+                              "the pulse's width, a pause before the ramp, the log's bend, glides between random steps"));
+    syncBox = new QCheckBox (tr ("Sync"), this);
+    syncBox->setToolTip (tr ("Count the rate in beats at Tempo instead of in Hz"));
+    rateBox = real (0.01, 50.0, 0.1, 2, tr (" Hz"));
+    beatsBox = new QComboBox (this);
+    beatsBox->addItems ({ tr ("4 bars"), tr ("2 bars"), tr ("1 bar"), tr ("1/2"), tr ("1/4"), tr ("1/8"), tr ("1/16"), tr ("1/32") });   // as lfoBeats
+    retriggerBox = new QComboBox (this);
+    retriggerBox->addItems ({ tr ("Off"), tr ("First note"), tr ("Each note") });
+    retriggerBox->setToolTip (tr ("Start the cycle again at every note, or only when no other key is held"));
+    phaseBox = whole (0, 100, 5, tr (" %"));
+    phaseBox->setToolTip (tr ("Where a cycle starts again"));
+    randomBox = new QCheckBox (tr ("Random"), this);
+    randomBox->setToolTip (tr ("Start each cycle at a random place"));
+    modWheelBox = whole (0, 100, 10, tr (" %"));
+    modWheelBox->setToolTip (tr ("How far the mod wheel lets it in: at 100% it is silent until the wheel goes up"));
+    toPitchBox = real (0.0, 24.0, 0.1, 1, tr (" st"));
+    toFilterBox = real (0.0, 8.0, 0.1, 1, tr (" oct"));
+    toVolumeBox = whole (0, 100, 5, tr (" %"));
+    toPanBox = whole (0, 100, 5, tr (" %"));
+    bendBox = real (0.0, 24.0, 1.0, 0, tr (" st"));
+    bendBox->setToolTip (tr ("How far a full pitch bend moves the pitch"));
+    tempoBox = real (20.0, 300.0, 1.0, 1, tr (" BPM"));
+    tempoBox->setToolTip (tr ("The tempo synced LFOs count beats at"));
+
+    // Edit: everything else, as tabs one row high, so Simplest stays a short strip.
+    auto* tabs = new QTabWidget (this);
+    tabs->setDocumentMode (true);
+    editPanel = tabs;
+    auto page = [&] (const QString& name, std::initializer_list<QWidget*> widgets)
     {
-        auto* l = new QLabel (text, this);
-        auto f = l->font();
-        f.setBold (true);
-        l->setFont (f);
-        return l;
+        auto* r = row (widgets);
+        static_cast<QHBoxLayout*> (r->layout())->addStretch (1);
+        auto* w = new QWidget (this);
+        auto* l = new QVBoxLayout (w);   // at the top, however tall the LFOs' two rows make the tabs
+        l->setContentsMargins (4, 4, 4, 0);
+        l->addWidget (r);
+        l->addStretch (1);
+        tabs->addTab (w, name);
+        return w;
     };
-    more->addWidget (heading (tr ("Sample")), 0, 0);
-    more->addWidget (row ({ reverseBox, snapBox, cropButton, normalizeButton }), 0, 1);
-    more->addWidget (heading (tr ("Loop")), 1, 0);
     loopRow = row ({ labelled (tr ("Loop mode"), loopModeBox), labelled (tr ("Crossfade"), crossfadeBox) });
-    more->addWidget (row ({ loopRow, labelled (tr ("&Quality"), qualityBox) }), 1, 1);
-    more->addWidget (heading (tr ("Pitch")), 2, 0);
-    more->addWidget (row ({ labelled (tr ("Roo&t key"), rootBox), labelled (tr ("&Detune"), detuneBox), labelled (tr ("Glide"), glideBox),
-                            labelled (QString(), fingeredBox), labelled (QString(), legatoBox), labelled (QString(), fixedBox) }), 2, 1);
-    more->addWidget (heading (tr ("Keys")), 3, 0);
-    more->addWidget (row ({ labelled (tr ("Lo&west"), keyLowBox), labelled (tr ("&Highest"), keyHighBox),
-                            labelled (tr ("Velocity"), velocityBox), labelled (tr ("Pan"), panBox) }), 3, 1);
-    more->addWidget (heading (tr ("Filter")), 4, 0);
-    more->addWidget (row ({ labelled (tr ("Type"), filterTypeBox), labelled (QString(), steepBox), labelled (tr ("Drive"), driveBox),
-                            labelled (tr ("&Key follow"), keyFollowBox), labelled (tr ("Velocity"), filterVelocityBox) }), 4, 1);
-    for (auto* w : editPanel->findChildren<QWidget*> (QString(), Qt::FindDirectChildrenOnly))
-        if (auto* l = qobject_cast<QHBoxLayout*> (w->layout()))
-            l->addStretch (1);
-    more->setColumnStretch (1, 1);
+    page (tr ("Sample"), { labelled (QString(), reverseBox), labelled (QString(), snapBox), labelled (QString(), cropButton),
+                           labelled (QString(), normalizeButton), loopRow, labelled (tr ("&Quality"), qualityBox) });
+    page (tr ("Pitch"), { labelled (tr ("Roo&t key"), rootBox), labelled (tr ("&Detune"), detuneBox), labelled (tr ("Glide"), glideBox),
+                          labelled (QString(), fingeredBox), labelled (QString(), legatoBox), labelled (QString(), fixedBox),
+                          labelled (tr ("Bend"), bendBox) });
+    page (tr ("Filter"), { labelled (tr ("Type"), filterTypeBox), labelled (QString(), steepBox), labelled (tr ("Drive"), driveBox),
+                           labelled (tr ("&Key follow"), keyFollowBox), labelled (tr ("Velocity"), filterVelocityBox) });
+    page (tr ("Envelopes"), { labelled (QString(), envelopeChoice), labelled (QString(), envOnBox), labelled (tr ("Attack"), envAttackBox),
+                              labelled (tr ("Decay"), envDecayBox), labelled (tr ("Sustain"), envSustainBox),
+                              labelled (tr ("Release"), envReleaseBox), labelled (tr ("Curve"), envCurveBox),
+                              labelled (tr ("Amount"), envAmountBox), labelled (tr ("Velocity"), envVelocityBox) });
+    rateField = labelled (tr ("Rate"), rateBox);
+    beatsField = labelled (tr ("Rate"), beatsBox);
+    auto* lfoPage = new QWidget (this);
+    auto* lfoRows = new QVBoxLayout (lfoPage);
+    lfoRows->setContentsMargins (4, 4, 4, 0);
+    lfoRows->setSpacing (2);
+    auto* waveRow = row ({ labelled (QString(), lfoChoice), labelled (tr ("Wave"), waveBox), labelled (tr ("Shape"), shapeBox),
+                           labelled (QString(), syncBox), rateField, beatsField, labelled (tr ("Retrigger"), retriggerBox),
+                           labelled (tr ("Phase"), phaseBox), labelled (QString(), randomBox) });
+    auto* toRow = row ({ labelled (tr ("To pitch"), toPitchBox), labelled (tr ("To cutoff"), toFilterBox), labelled (tr ("To volume"), toVolumeBox),
+                         labelled (tr ("To pan"), toPanBox), labelled (tr ("Mod wheel"), modWheelBox) });
+    for (auto* r : { waveRow, toRow })
+    {
+        static_cast<QHBoxLayout*> (r->layout())->addStretch (1);
+        lfoRows->addWidget (r);
+    }
+    tabs->addTab (lfoPage, tr ("LFOs"));
+    page (tr ("Play"), { labelled (tr ("Lo&west"), keyLowBox), labelled (tr ("&Highest"), keyHighBox),
+                         labelled (tr ("Velocity"), velocityBox), labelled (tr ("Pan"), panBox), labelled (tr ("Tempo"), tempoBox) });
     editPanel->hide();
 
     status->setWordWrap (true);
@@ -596,6 +665,16 @@ SamplerWindow::SamplerWindow (sampler::Engine& e, QWidget* parent)
         adjustSize();
     });
     connect (reverseBox, &QCheckBox::toggled, this, &SamplerWindow::reverse);
+    for (auto* b : { envelopeChoice, lfoChoice })
+        connect (b, &QComboBox::currentIndexChanged, this, &SamplerWindow::toControls);
+    for (auto* b : { waveBox, beatsBox, retriggerBox })
+        connect (b, &QComboBox::currentIndexChanged, this, &SamplerWindow::fromControls);
+    for (auto* b : { envOnBox, syncBox, randomBox })
+        connect (b, &QCheckBox::toggled, this, &SamplerWindow::fromControls);
+    for (auto* b : { envAttackBox, envDecayBox, envReleaseBox, envAmountBox, rateBox, toPitchBox, toFilterBox, bendBox, tempoBox })
+        connect (b, &QDoubleSpinBox::valueChanged, this, &SamplerWindow::fromControls);
+    for (auto* b : { envSustainBox, envCurveBox, envVelocityBox, shapeBox, phaseBox, modWheelBox, toVolumeBox, toPanBox })
+        connect (b, &QSpinBox::valueChanged, this, &SamplerWindow::fromControls);
     connect (cropButton, &QPushButton::clicked, this, &SamplerWindow::crop);
     connect (normalizeButton, &QPushButton::clicked, this, &SamplerWindow::normalize);
     for (auto* b : { rootBox, gateBox, filterTypeBox, loopModeBox, qualityBox, keyLowBox, keyHighBox })
@@ -685,7 +764,45 @@ void SamplerWindow::toControls()
     legatoBox->setChecked (settings.legato);
     keyLowBox->setCurrentIndex (std::clamp (settings.keyLow, 0, 127));
     keyHighBox->setCurrentIndex (std::clamp (settings.keyHigh, 0, 127));
+    const bool pitchEnvelope = envelopeChoice->currentIndex() == 0;
+    const auto& env = pitchEnvelope ? settings.pitchEnvelope : settings.filterEnvelope;
+    envOnBox->setChecked (env.on);
+    envAttackBox->setValue (env.attack * 1000.0);
+    envDecayBox->setValue (env.decay * 1000.0);
+    envSustainBox->setValue ((int) std::lround (env.sustain * 100.0));
+    envReleaseBox->setValue (env.release * 1000.0);
+    envCurveBox->setValue ((int) std::lround (env.curve * 100.0));
+    envAmountBox->setRange (pitchEnvelope ? -48.0 : -8.0, pitchEnvelope ? 48.0 : 8.0);
+    envAmountBox->setSuffix (pitchEnvelope ? tr (" st") : tr (" oct"));
+    envAmountBox->setValue (env.amount);
+    envVelocityBox->setValue ((int) std::lround (env.velocity * 100.0));
+    const auto& lfo = settings.lfo[(size_t) std::clamp (lfoChoice->currentIndex(), 0, 1)];
+    waveBox->setCurrentIndex ((int) lfo.wave);
+    shapeBox->setValue ((int) std::lround (lfo.shape * 100.0));
+    syncBox->setChecked (lfo.sync);
+    rateBox->setValue (lfo.rate);
+    int nearest = 4;
+    for (int i = 0; i < (int) std::size (lfoBeats); ++i)
+        if (std::abs (std::log2 (lfoBeats[i] / std::max (lfo.beats, 1.0e-3))) < std::abs (std::log2 (lfoBeats[nearest] / std::max (lfo.beats, 1.0e-3))))
+            nearest = i;
+    beatsBox->setCurrentIndex (nearest);
+    retriggerBox->setCurrentIndex ((int) lfo.retrigger);
+    phaseBox->setValue ((int) std::lround (lfo.phase * 100.0));
+    randomBox->setChecked (lfo.randomPhase);
+    modWheelBox->setValue ((int) std::lround (lfo.modWheel * 100.0));
+    toPitchBox->setValue (lfo.toPitch);
+    toFilterBox->setValue (lfo.toFilter);
+    toVolumeBox->setValue ((int) std::lround (lfo.toVolume * 100.0));
+    toPanBox->setValue ((int) std::lround (lfo.toPan * 100.0));
+    bendBox->setValue (settings.bendRange);
+    tempoBox->setValue (settings.tempo);
     updating = false;
+
+    for (auto* w : std::initializer_list<QWidget*> { envAttackBox, envDecayBox, envSustainBox, envReleaseBox, envCurveBox, envAmountBox, envVelocityBox })
+        w->setEnabled (env.on);
+    rateField->setVisible (! lfo.sync);
+    beatsField->setVisible (lfo.sync);
+    phaseBox->setEnabled (! lfo.randomPhase);
 
     // Only what the mode has, as Simpler: Classic has the envelope and loop, 1-Shot its fades.
     loopBox->setVisible (classic);
@@ -738,6 +855,31 @@ void SamplerWindow::fromControls()
     settings.legato = legatoBox->isChecked();
     settings.keyLow = keyLowBox->currentIndex();
     settings.keyHigh = std::max (settings.keyLow, keyHighBox->currentIndex());
+    auto& env = envelopeChoice->currentIndex() == 0 ? settings.pitchEnvelope : settings.filterEnvelope;
+    env.on = envOnBox->isChecked();
+    env.attack = envAttackBox->value() / 1000.0;
+    env.decay = envDecayBox->value() / 1000.0;
+    env.sustain = envSustainBox->value() / 100.0;
+    env.release = envReleaseBox->value() / 1000.0;
+    env.curve = envCurveBox->value() / 100.0;
+    env.amount = envAmountBox->value();
+    env.velocity = envVelocityBox->value() / 100.0;
+    auto& lfo = settings.lfo[(size_t) std::clamp (lfoChoice->currentIndex(), 0, 1)];
+    lfo.wave = (sampler::Wave) waveBox->currentIndex();
+    lfo.shape = shapeBox->value() / 100.0;
+    lfo.sync = syncBox->isChecked();
+    lfo.rate = rateBox->value();
+    lfo.beats = lfoBeats[std::clamp (beatsBox->currentIndex(), 0, (int) std::size (lfoBeats) - 1)];
+    lfo.retrigger = (sampler::Retrigger) retriggerBox->currentIndex();
+    lfo.phase = phaseBox->value() / 100.0;
+    lfo.randomPhase = randomBox->isChecked();
+    lfo.modWheel = modWheelBox->value() / 100.0;
+    lfo.toPitch = toPitchBox->value();
+    lfo.toFilter = toFilterBox->value();
+    lfo.toVolume = toVolumeBox->value() / 100.0;
+    lfo.toPan = toPanBox->value() / 100.0;
+    settings.bendRange = bendBox->value();
+    settings.tempo = tempoBox->value();
     engine.setSettings (settings);
     toControls();
 }
