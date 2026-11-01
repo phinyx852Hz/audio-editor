@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**135 pull requests:** 126 merged, 9 open.
+**135 pull requests:** 128 merged, 7 open.
 
 ## Contents
 
@@ -147,7 +147,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#43](https://github.com/phinyx852Hz/audio-editor/pull/43) | Φ Compressor, Φ Multiband, Φ Limiter and Φ Chorus | merged | Add plugin, Built-in | `Source/core/PhiDynamics.cpp`<br>`Source/core/PhiChorus.cpp`<br>`Source/engine/PhiEffects.cpp` |
 | [#89](https://github.com/phinyx852Hz/audio-editor/pull/89) | Φ Modulation (PhiFlow, PhiSpace, PhiGrain, PhiMatrix) and a Cubase-style Modulators panel | merged |  | `Source/core/PhiModulation.cpp`<br>`Source/ui/ModulatorsPanel.cpp`<br>`Source/core/Modulators.cpp` |
 | [#115](https://github.com/phinyx852Hz/audio-editor/pull/115) | Plugin Analyzer manual, wider Forensic Φ, LINpro-style dither | open |  | `docs/manual/chapters/plugin-analyzer.md`<br>`docs/manual/chapters/mixer.md`<br>`docs/manual/chapters/midi-editor.md` |
-| [#133](https://github.com/phinyx852Hz/audio-editor/pull/133) | Add Φ Repeat, a beat repeat effect | open |  | `Source/core/PhiRepeat.cpp`<br>`Source/engine/PhiEffects.cpp`<br>`tests/CoreTests.cpp` |
+| [#133](https://github.com/phinyx852Hz/audio-editor/pull/133) | Add Φ Repeat, a beat repeat effect | merged |  | `Source/core/PhiRepeat.cpp`<br>`Source/engine/PhiEffects.cpp`<br>`tests/CoreTests.cpp` |
 
 ### Instruments and plugins
 
@@ -224,7 +224,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#93](https://github.com/phinyx852Hz/audio-editor/pull/93) | Minimalize: fix a use-after-free when phase or canon adds new voices | merged |  | `tests/CoreTests.cpp`<br>`Source/mixer/Minimalize.cpp` |
 | [#99](https://github.com/phinyx852Hz/audio-editor/pull/99) | File > New Project (Ctrl+N); start on a blank project and ask to save on quit | merged | File > New Project | `Source/ui/MixerWindow.cpp`<br>`Source/ui/MainWindow.cpp`<br>`Source/ui/ProjectSection.cpp` |
 | [#112](https://github.com/phinyx852Hz/audio-editor/pull/112) | Cut idle CPU, and add Options > Wallpaper | merged |  | `Source/ui/VisualizerSection.cpp`<br>`Source/ui/Wallpaper.cpp`<br>`Source/ui/MixerWindow.cpp` |
-| [#114](https://github.com/phinyx852Hz/audio-editor/pull/114) | Build an Arch package and an AppImage in CI | open |  | `.github/workflows/build.yml`<br>`packaging/arch/ci.PKGBUILD`<br>`packaging/arch/PKGBUILD` |
+| [#114](https://github.com/phinyx852Hz/audio-editor/pull/114) | Build an Arch package and an AppImage in CI | merged |  | `.github/workflows/build.yml`<br>`packaging/arch/ci.PKGBUILD`<br>`packaging/arch/PKGBUILD` |
 | [#120](https://github.com/phinyx852Hz/audio-editor/pull/120) | Research: add a Metadata section | merged |  | `share/research/metadata.md` |
 | [#121](https://github.com/phinyx852Hz/audio-editor/pull/121) | Research: open source, licensing, copyright and Creative Commons | merged | Licensing › Software | `share/research/licensing.md` |
 | [#124](https://github.com/phinyx852Hz/audio-editor/pull/124) | Research: add Audio file formats | merged |  | `share/research/file-formats.md` |
@@ -352,7 +352,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#111](https://github.com/phinyx852Hz/audio-editor/pull/111) | MIDI editor and score: a transport bar of their own | A transport bar across the top of MidiEditor, above the tool row. *(auto)* | merged | 2026-10-30 | Editing and warping |
 | [#112](https://github.com/phinyx852Hz/audio-editor/pull/112) | Cut idle CPU, and add Options > Wallpaper | The Visualizer behind PHI is a child widget lowered under everything else. *(auto)* | merged | 2026-10-31 | Not yet sorted |
 | [#113](https://github.com/phinyx852Hz/audio-editor/pull/113) | Fix the crash on quit with the mixer open | The SIGSEGV on quit (2026-10-30 crash report) happened like this. ~MainWindow deleted the docked mixer. *(auto)* | merged | 2026-10-30 | Mixer and clip launcher |
-| [#114](https://github.com/phinyx852Hz/audio-editor/pull/114) | Build an Arch package and an AppImage in CI | Stage 1 of the installers: ready-made Linux downloads that put PHI in the app launcher with the Φ icon (the .desktop file, icon and MIME type were already in... *(auto)* | open | 2026-10-30 | Not yet sorted |
+| [#114](https://github.com/phinyx852Hz/audio-editor/pull/114) | Build an Arch package and an AppImage in CI | Stage 1 of the installers: ready-made Linux downloads that put PHI in the app launcher with the Φ icon (the .desktop file, icon and MIME type were already in... *(auto)* | merged | 2026-11-01 | Not yet sorted |
 | [#115](https://github.com/phinyx852Hz/audio-editor/pull/115) | Plugin Analyzer manual, wider Forensic Φ, LINpro-style dither | New chapter, "Analysing a Plugin" (docs/manual/chapters/plugin-analyzer.md). *(auto)* | open | 2026-10-30 | Φ effects and sounds |
 | [#116](https://github.com/phinyx852Hz/audio-editor/pull/116) | MIDI editor and score: transport tied to the main one | How it behaves *(auto)* | merged | 2026-10-31 | Editing and warping |
 | [#117](https://github.com/phinyx852Hz/audio-editor/pull/117) | UI fixes: Alt+menu letters, strip hover, Find panel width, Interface Size | Alt+O (and every Alt+menu letter) opens the menu right away. *(auto)* | open | 2026-10-31 | Interface and branding |
@@ -371,6 +371,6 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#130](https://github.com/phinyx852Hz/audio-editor/pull/130) | Analysis Meters: EBU-tested loudness, classic VU/PPM/K meters, a bitscope, OVERs, Heinzel flat tops | PHI's loudness code was run on the EBU Loudness test set v05, which covers Tech 3341, 3342 and 3343. *(auto)* | open | 2026-10-31 | Analysis and meters |
 | [#131](https://github.com/phinyx852Hz/audio-editor/pull/131) | Compose: Congolese guitar, rumba and sebene | Adds a new Compose method, Congolese Guitar: Rumba and Sebene. *(auto)* | merged | 2026-10-31 | Not yet sorted |
 | [#132](https://github.com/phinyx852Hz/audio-editor/pull/132) | Compose: Mbuti interlocking, the Bol Processor (BP3) with an Ajrada qāʿida, and PHI tabla | 1. *(auto)* | merged | 2026-11-01 | Not yet sorted |
-| [#133](https://github.com/phinyx852Hz/audio-editor/pull/133) | Add Φ Repeat, a beat repeat effect | A new built-in Φ effect, Φ Repeat: a tempo-synced beat repeat for glitches and rhythmic variations. *(auto)* | open | 2026-10-31 | Φ effects and sounds |
+| [#133](https://github.com/phinyx852Hz/audio-editor/pull/133) | Add Φ Repeat, a beat repeat effect | A new built-in Φ effect, Φ Repeat: a tempo-synced beat repeat for glitches and rhythmic variations. *(auto)* | merged | 2026-11-01 | Φ effects and sounds |
 | [#134](https://github.com/phinyx852Hz/audio-editor/pull/134) | Research: check the Metadata section against Wikipedia | Links *(auto)* | merged | 2026-11-01 | Not yet sorted |
 | [#135](https://github.com/phinyx852Hz/audio-editor/pull/135) | Mixer: open and write DAWproject (Bitwig, Studio One, Cubase) | PHI can now open and write DAWproject, the open format from Bitwig and PreSonus (MIT). *(auto)* | open | 2026-10-31 | Mixer and clip launcher |
