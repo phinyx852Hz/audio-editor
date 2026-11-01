@@ -140,10 +140,10 @@ namespace phi
         configureZone (0, 15);
     }
 
-    void Mpe::configureZone (int master, int members)
+    void Mpe::configureZone (int manager, int members)
     {
         members = std::clamp (members, 0, 15);
-        if (master == 0)
+        if (manager == 0)
         {
             lowerMembers = members;
             upperMembers = std::min (upperMembers, 14 - std::min (14, members));
@@ -153,7 +153,7 @@ namespace phi
             upperMembers = members;
             lowerMembers = std::min (lowerMembers, 14 - std::min (14, members));
         }
-        // MPE's defaults: member channels bend ±48 semitones, master channels ±2.
+        // MPE's defaults: member channels bend ±48 semitones, manager channels ±2.
         for (int ch = 0; ch < 16; ++ch)
             channels[(size_t) ch].bendRange = isMember (ch) ? 48.0 : 2.0;
     }
@@ -165,7 +165,7 @@ namespace phi
         return upperMembers > 0 && ch >= 15 - upperMembers && ch <= 14;
     }
 
-    int Mpe::masterOf (int ch) const
+    int Mpe::managerOf (int ch) const
     {
         if (lowerMembers > 0 && ch >= 0 && ch <= lowerMembers)
             return 0;
@@ -245,11 +245,11 @@ namespace phi
         e.timbre = c.timbre;
         if (key >= 0 && key < Tuning::numKeys && c.polyPressure[(size_t) key] > 0)
             e.pressure = std::max (e.pressure, c.polyPressure[(size_t) key] / 127.0);
-        // A member channel's note also follows its zone's master channel.
-        const auto master = masterOf (ch);
-        if (isMember (ch) && master >= 0)
+        // A member channel's note also follows its zone's manager channel.
+        const auto manager = managerOf (ch);
+        if (isMember (ch) && manager >= 0)
         {
-            const auto& z = channels[(size_t) master];
+            const auto& z = channels[(size_t) manager];
             e.bendSemitones += bendOf (z);
             e.pressure = std::max (e.pressure, z.pressure);
         }

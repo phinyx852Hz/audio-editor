@@ -59,6 +59,7 @@
 #include "RecordDialog.h"
 #include "ReferencePanel.h"
 #include "Theme.h"
+#include "Wallpaper.h"
 #include "WaveformView.h"
 
 #include <QActionGroup>
@@ -222,6 +223,7 @@ MainWindow::MainWindow (AudioEngine& e)
     });
     restoreLayout();
     buildNavigation();
+    syncWallpaper();
 
     connect (waveform, &WaveformView::cursorRequested, this, [this] (Frame f) { setCursor (waveform->snapToGrid (f)); });
     connect (waveform, &WaveformView::selectionMoved, this, &MainWindow::moveSelection);
@@ -893,12 +895,20 @@ void MainWindow::registerCommands()
          [this] { WaveformColorsDialog (this).exec(); });
     add ("options.interfaceSize", Category::options, tr ("Interface Si&ze..."), {},
          [this] { chooseInterfaceSize (interfacesize::saved()); });
-    add ("options.interfaceLarger", Category::options, tr ("&Larger Interface..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_Equal), KS (Qt::CTRL | Qt::SHIFT | Qt::Key_Plus) },
+    add ("options.interfaceLarger", Category::options, tr ("La&rger Interface..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_Equal), KS (Qt::CTRL | Qt::SHIFT | Qt::Key_Plus) },
          [this] { chooseInterfaceSize (interfacesize::step (interfacesize::saved(), 1)); });
     add ("options.interfaceSmaller", Category::options, tr ("Smaller Interfa&ce..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_Minus), KS (Qt::CTRL | Qt::SHIFT | Qt::Key_Underscore) },
          [this] { chooseInterfaceSize (interfacesize::step (interfacesize::saved(), -1)); });
     add ("options.theme", Category::options, tr ("&Theme..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_T) },
          [this] { ThemeDialog (this).exec(); });
+    add ("options.wallpaper", Category::options, tr ("Wa&llpaper"), {}, [this] { toggleWallpaper(); });
+    commands.action (QStringLiteral ("options.wallpaper"))->setCheckable (true);
+    commands.action (QStringLiteral ("options.wallpaper"))->setStatusTip (tr ("A picture of your own behind PHI; a still picture costs no CPU while PHI is idle, unlike the Visualizer or a video"));
+    add ("options.chooseWallpaper", Category::options, tr ("Choose Wallpaper &Picture..."), {}, [this]
+    {
+        if (chooseWallpaper() && ! commands.action (QStringLiteral ("options.wallpaper"))->isChecked())
+            toggleWallpaper();
+    });
 
     add ("help.palette", Category::help, tr ("&Command Palette..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_P), KS (Qt::Key_F1) },
          [this] { CommandPalette (commands, this).exec(); });
@@ -945,10 +955,10 @@ void MainWindow::buildMenus()
         { tr ("&Analyze"),   { "analyze.loudness", "-", "analyze.beats", "analyze.onsets", "analyze.tempoKey", "analyze.vamp", "-", "analyze.window", "view.meters", "analyze.imagingView", "analyze.resetMeters", "-", "analyze.plugin", "-", "view.spectral", "-", "@nyquist.analyze" } },
         { tr ("&Compose"),   { "@compose" } },
         { tr ("&Master"),    { "#album", "-", "view.master", "view.chain", "view.modulators", "master.addPlugin", "master.bypass", "analyze.plugin", "-", "master.assistant", "-", "master.render", "master.renderNew", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
-        { tr ("Mi&xer"),     { "mixer.window", "mixer.dock", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
+        { tr ("Mi&xer"),     { "mixer.window", "mixer.dock", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "mixer.importDaw", "mixer.exportDaw", "-", "mixer.addTrack", "mixer.removeTrack", "-",
                                "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "mixer.sendToTimeline", "-", "mixer.editNotes", "mixer.trackToEditor", "-", "view.inspector", "-", "mixer.assistant", "mixer.preferences" } },
         { tr ("Mo&de"),      { "@mode" } },
-        { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "mixer.preferences", "-", "options.keymap", "options.theme", "options.waveformColors", "-", "options.interfaceSize", "options.interfaceLarger", "options.interfaceSmaller" } },
+        { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "mixer.preferences", "-", "options.keymap", "options.theme", "options.waveformColors", "-", "options.wallpaper", "options.chooseWallpaper", "-", "options.interfaceSize", "options.interfaceLarger", "options.interfaceSmaller" } },
         { tr ("Performan&ce"), { "performance.launcher", "-", "control.surfaces", "control.learn", "control.mapMode", "-", "performance.record", "performance.stream", "-", "performance.settings", "performance.folder" } },
         { tr ("&Repair"),    { "view.diagnostics", "-", "repair.autoHeal", "repair.spectralGain", "repair.findSimilar", "repair.correctPitch", "-", "repair.learnNoise", "repair.noiseReduction", "-",
                                "repair.declick", "repair.declip", "repair.dehum", "repair.deess", "-",
@@ -1103,6 +1113,8 @@ void MainWindow::changeOpacity (double value, bool announce)
         const QSignalBlocker block (s);
         s->setValue (percent);
     }
+    if (wallpaper != nullptr)
+        wallpaper->update();   // still, it repaints only when asked
 
     if (announce)
         statusBar()->showMessage (tr ("Window opacity %1%").arg (percent), 2000);
@@ -1139,6 +1151,13 @@ void MainWindow::buildPanels()
     masterWidget = new MasterPanel (engine, waveform, this);
     connect (masterWidget, &MasterPanel::renderRequested, this, &MainWindow::renderInPlace);
     connect (masterWidget, &MasterPanel::analyzeRequested, this, &MainWindow::analyzeSlot);
+    connect (masterWidget, &MasterPanel::metersRequested, this, [this]
+    {
+        auto* w = analysisWindow();
+        w->show();
+        w->raise();
+        w->activateWindow();
+    });
     connect (masterWidget, &MasterPanel::message, this, [this] (const QString& text)
     {
         if (! text.isEmpty())
@@ -1948,7 +1967,7 @@ void MainWindow::showOpenDialog()
 
     const auto start = doc.path().empty() ? QString() : QFileInfo (QString::fromStdString (doc.path())).absolutePath();
     patterns << QStringLiteral ("*.") + albumfile::extension << QStringLiteral ("*.") + albumfile::oldExtension
-             << QStringLiteral ("*.") + MixerWindow::projectSuffix;
+             << QStringLiteral ("*.") + MixerWindow::projectSuffix << QStringLiteral ("*.dawproject") << QStringLiteral ("*.als");
     const auto path = QFileDialog::getOpenFileName (this, tr ("Open Audio File"), start,
                                                     tr ("Audio files, albums and projects (%1);;All files (*)").arg (patterns.join (QLatin1Char (' '))));
     if (! path.isEmpty())
@@ -2606,6 +2625,10 @@ void MainWindow::convertSampleType()
         rateNames << tr ("%1 Hz").arg ((int) rates[i]);
     const auto channelsNow = QString::fromStdString (dsp::speakerLayout (d->numChannels()).name);
     const int depths[] { 0, 24, 16, 8 };
+    QStringList ditherNames;
+    for (const auto kind : dsp::ditherOrder)
+        ditherNames << ditherLabel (kind);
+    const auto shapedIndex = (double) (std::find (dsp::ditherOrder.begin(), dsp::ditherOrder.end(), dsp::Dither::shaped) - dsp::ditherOrder.begin());
 
     // The choices start at "keep" each time rather than at what was picked last.
     for (auto key : { "convert/rate", "convert/channels", "convert/bits" })
@@ -2619,10 +2642,10 @@ void MainWindow::convertSampleType()
                                { tr ("Keep %1").arg (channelsNow), tr ("Mono (mix all channels)"), tr ("Stereo") } },
                              { QStringLiteral ("convert/bits"), tr ("&Bit depth:"), 0, 0, 0, 1, 0, {}, {},
                                { tr ("Keep (32-bit float while editing)"), tr ("24-bit"), tr ("16-bit"), tr ("8-bit") } },
-                             { QStringLiteral ("convert/dither"), tr ("&Dither:"), 2, 0, 0, 1, 0, {},
+                             { QStringLiteral ("convert/ditherKind"), tr ("&Dither:"), shapedIndex, 0, 0, 1, 0, {},
                                tr ("Dither hides the rounding of a lower bit depth as faint hiss; noise shaping moves that hiss "
                                    "where it is hardest to hear"),
-                               { tr ("None"), tr ("TPDF"), tr ("TPDF with noise shaping") } },
+                               ditherNames },
                          }, this);
     if (dialog.exec() != QDialog::Accepted)
         return;
@@ -2631,7 +2654,7 @@ void MainWindow::convertSampleType()
     const auto newRate = rates[std::clamp ((int) dialog.value (0), 0, (int) std::size (rates) - 1)];
     const auto channels = (int) dialog.value (1);
     const auto bits = depths[std::clamp ((int) dialog.value (2), 0, 3)];
-    const auto dither = (dsp::Dither) std::clamp ((int) dialog.value (3), 0, 2);
+    const auto dither = dsp::ditherOrder[(size_t) std::clamp ((int) dialog.value (3), 0, dsp::numDitherTypes - 1)];
     const auto changeRate = newRate > 0.0 && std::abs (newRate - d->sampleRate()) > 0.5;
     const auto changeChannels = (channels == 1 && d->numChannels() != 1) || (channels == 2 && d->numChannels() != 2);
     if (! changeRate && ! changeChannels && bits == 0)

@@ -151,6 +151,9 @@ public:
     void hotSwap (const QString& path);
     // The Mixer's beat and tempo, for the step sequencer's Follow Mixer.
     void setMixerClock (std::function<slicer::Engine::Clock()> make);
+    // PHI tabla's kit (sampler/PhiTabla.h): the Kit menu can make this kit, as edited here, the one
+    // every new PHI tabla starts from, or go back to the built-in one.
+    void setPhiTabla();
 
 Q_SIGNALS:
     void refreshRequested();
@@ -191,6 +194,8 @@ private:
     void endHotSwap (bool keep);
     void saveKit();
     void loadKit();
+    QMenu* kitMenu = nullptr;
+    bool phiTablaActions = false;
     void showPage (int page);   // 0: the pads, 1: the steps
     double soundRate() const;   // the rate pads' own sounds are read at
     void changed();             // the kit was edited here: to the engine and the views

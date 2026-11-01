@@ -411,6 +411,9 @@ private:
     void registerComposeCommands();
     void fillComposeMenu (QMenu*);
     void composeDialog (int method = -1);
+    // The Bol Processor (BolProcessorDialog.cpp, docs/bol-processor.md): Bel and Kippen's BP3 run
+    // on a grammar file, its items read back as bols on the tablā, or its MIDI file.
+    void bolProcessorDialog();
     // A blank score in the MIDI editor on `notation` ("phi": PHI's microtonal staff).
     void newMicrotonalScore (const QString& notation);
     class ArchitectonicsConductor* conductor = nullptr;
@@ -636,6 +639,12 @@ private:
     class WebBackdrop* webBackdrop = nullptr;
     int visualMode = 0;
     double opacityBeforeBackdrop = 0.0;
+    // A still picture behind PHI (Options > Wallpaper; VisualizerSection.cpp, Wallpaper.h),
+    // hidden while the Visualizer or a web page is behind PHI.
+    void toggleWallpaper();
+    bool chooseWallpaper();   // false when cancelled
+    void syncWallpaper();
+    class Wallpaper* wallpaper = nullptr;
 
     // Sonifying the Visualizer (SonifySection.cpp): what it shows, played as notes.
     void registerSonifyCommands();

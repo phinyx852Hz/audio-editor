@@ -207,10 +207,26 @@ bool MidiPanel::mayDiscard()
     return true;
 }
 
+bool MidiPanel::closing()
+{
+    if (editor != nullptr)
+        editor->stop();
+    const bool changed = bytesNow() != saved;
+    if (! mayDiscard())
+        return false;
+    if (changed && bytesNow() != saved)
+    {
+        path.clear();
+        load (emptySong(), {});   // discarded
+    }
+    return true;
+}
+
 void MidiPanel::load (const midifile::Song& song, const QString& songName)
 {
     MidiEditor::Host h;
     h.embedded = true;
+    h.transport = host.transport;
     h.title = songName;
     h.folder = folder();
     h.play = [this] (uint8_t s, uint8_t a, uint8_t b)

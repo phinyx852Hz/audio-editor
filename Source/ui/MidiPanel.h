@@ -11,6 +11,7 @@
 // panel each close on their own (View > Audio Editor, View > MIDI Editor). An audio file dropped on
 // it becomes notes right away (owner, 2026-10-30): its melody, or its drums.
 #include "../core/AudioData.h"
+#include "MidiEditor.h"
 
 #include <QCoreApplication>
 #include <QFrame>
@@ -22,7 +23,6 @@
 #include <vector>
 
 class AudioEngine;
-class MidiEditor;
 class QComboBox;
 class QLabel;
 class QPushButton;
@@ -46,6 +46,7 @@ public:
         std::function<void (AudioDataPtr, const QString& name)> bounced;   // into a new tab
         std::function<void()> closeRequested;
         std::function<void (const QString&)> say;     // the status bar
+        MidiEditor::Transport transport;              // the audio editor's, which its own is tied to
     };
 
     MidiPanel (Host, QWidget* parent);
@@ -56,6 +57,9 @@ public:
     int synthSlot() const { return slot; }
     // False when the user would rather keep unsaved notes (asked here).
     bool mayDiscard();
+    // The panel closing (Ctrl+W, its ✕, View > MIDI Editor): playback stops and unsaved notes
+    // are offered for saving; discarded, it opens empty next time. False: Cancel, it stays open.
+    bool closing();
 
 protected:
     void showEvent (QShowEvent*) override;

@@ -39,24 +39,30 @@ PHI measures in three places. The **Meters panel** sits beside the waveform whil
 
 []{.ix t="Analysis Meters window"}Analyze > Analysis Meters Window (`Ctrl+Alt+A`) is a mega meter suite in its own window, with Adobe Audition's analysis detail and the look of a mastering meter.
 
+PHI's loudness readings pass every check of the EBU loudness test set (Tech 3341 and 3342): integrated, momentary and short-term loudness, loudness range and true peak. The report, with the Φ effects measured the same way, is in `docs/testing/ebu-tests.md`.
+
+[]{.ix t="Window opacity!Analysis Meters"}The **Opacity** slider at the right of its bar makes this window see-through on its own, so it can float over the editor or the Visualizer; `Ctrl+Alt+-` and `Ctrl+Alt+=` change it from the keyboard while the window is in front. It starts at the main window's opacity, and PHI remembers its own setting from then on.
+
 ![The Analysis Meters window: loudness gauge, history, levels and spectrum.](images/analysis-meters.png)
 
 | Meter | Shows |
 |---|---|
 | Loudness | A gauge around a target you pick: short-term inside, momentary outside, integrated in the middle, with max momentary and short-term, loudness range, true peak and PLR |
 | Loudness History | 30 s to 10 min, coloured by how far from the target, with the integrated line |
-| Levels | Peak, RMS, peak hold, true peak and clip counts for left and right |
+| Levels | Peak, RMS, peak hold, true peak and clip counts for left and right; the menu on the card switches the count between every full-scale sample (Clips) and OVERs, runs of 3 or more full-scale samples counted once each |
 | Spectrum | Like Audition's Frequency Analysis (see below) |
 | Spectrogram | Scrolling |
 | Imaging | The goniometer with all its views |
 | Phase Wheel | Each frequency between mono, left, right and inverse |
 | Correlation | Per third octave, with the overall correlation and balance |
-| Amplitude Statistics | Peak, true peak, sample values, possibly clipped samples, DC offset, total, maximum, minimum and average RMS, dynamic range, crest factor, with an RMS histogram and Copy |
+| Amplitude Statistics | Peak, true peak, sample values, possibly clipped samples, OVERs, DC offset, total, maximum, minimum and average RMS, dynamic range, crest factor, with an RMS histogram and Copy |
+| Bits | A bitscope: each bit of the left and right samples, from the sign bit to the 16th, 20th or 24th (chosen on the card), filled by how often it is set and outlined while it moves, with how many bits are in use and how much of the signal is finer than the chosen depth |
+| Classic Meters | The meters of the analogue studio, on what PHI plays: a VU meter (300 ms, after the 1940 specification), the four quasi-peak programme meters as needles, EBU (Type IIb, marked -12 to +12 around TEST), BBC (Type IIa, 1 to 7), DIN (Type I, -40 to +5) and Nordic (Type I, -36 to +12), and Bob Katz's K-20, K-14 and K-12 as bars (average green to 0, amber to +4, red above, with the peak and a 10 s peak hold). The needles read around the line-up tone, -18 dBFS (EBU R 68) or -20 dBFS (SMPTE RP 155), chosen on the card: it reads 0 VU, TEST, 4 on the BBC meter and -9 on the DIN meter. The BBC meter's fall is taken from the EBU meter's (24 dB in 2.8 s) until IEC 60268-10 confirms it |
 | Ambisonics | Where the sound is in an ambisonic file (see below) |
 
 **Loudness targets**: Streaming −14, Apple Music and podcasts −16, Amazon −14 at −2 dBTP, EBU R128 −23, ATSC A/85 −24, CD and club −9.
 
-**Spectrum** options: Left & Right, Mid & Side, Average or one channel; lines, filled or bars; 1/24 to 1-octave smoothing; a 3 or 4.5 dB per octave slope (so a balanced mix looks flat); FFT size 1024 to 32768, zero padding up to 8x (smoother peaks between bins), a windowed FFT or a multitaper estimate (seven DPSS tapers, a steadier noise floor), Fast, Medium, Slow or Infinite response (every frame since Reset alike, as Welch's method averages), and 20 windows (Hann, Blackman-Harris, Flat Top, Hamming, Rectangular, Triangular, Blackman, Welch, Kaiser 140 and 180 dB, Nuttall, Blackman-Nuttall, Gaussian, Tukey, Dolph-Chebyshev 120 dB, Bartlett-Hann, Bohman, Parzen, Lanczos and Exponential, each with a tooltip on what it is for; levels stay corrected for each window); peak hold; eight hold traces in the Selector's colours, Silver to Ruby (`1` to `8`); the frequency, note and level under the mouse; and the strongest frequency and its note for each side.
+**Spectrum** options: Left & Right, Mid & Side, Average or one channel; lines, filled or bars; 1/24 to 1-octave smoothing; a 3 or 4.5 dB per octave slope (so a balanced mix looks flat); FFT size 1024 to 32768, zero padding up to 8x (smoother peaks between bins), a windowed FFT or a multitaper estimate (seven DPSS tapers, a steadier noise floor), Fast, Medium, Slow or Infinite response (every frame since Reset alike, as Welch's method averages), and 22 windows (Hann, Blackman-Harris, Flat Top (the Stanford Research SR785's), Hamming, Rectangular, Triangular, Blackman, Welch, Kaiser 140 and 180 dB, Nuttall, Blackman-Nuttall, Gaussian, Tukey, Dolph-Chebyshev 120 dB, Bartlett-Hann, Bohman, Parzen, Lanczos, Exponential, and Heinzel's flat tops HFT95 and HFT90D, each with a tooltip on what it is for; levels stay corrected for each window); peak hold; eight hold traces in the Selector's colours, Silver to Ruby (`1` to `8`); the frequency, note and level under the mouse; and the strongest frequency and its note for each side.
 
 Hide meters you do not need from the **Meters** button, and drag the dividers between them. Both are remembered.
 

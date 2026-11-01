@@ -7,6 +7,9 @@
 #include "../Source/sampler/SamplerEngine.h"
 #include "../Source/sampler/SlicerEngine.h"
 #include "../Source/mixer/MidiFile.h"
+#include "../Source/mixer/DawProject.h"
+#include "../Source/mixer/AbletonSet.h"
+#include "../Source/core/Zip.h"
 #include "../Source/mixer/Tunings.h"
 #include "../Source/mixer/NoteEditor.h"
 #include "../Source/core/Scala.h"
@@ -24,12 +27,15 @@
 #include "../Source/mixer/Rhythms.h"
 #include "../Source/mixer/Architectonics.h"
 #include "../Source/mixer/Compose.h"
+#include "../Source/mixer/BolProcessor.h"
+#include "../Source/sampler/PhiTabla.h"
 #include "../Source/mixer/Harmonies.h"
 #include "../Source/mixer/ModalHarmony.h"
 #include "../Source/mixer/RhythmGenerator.h"
 #include "../Source/mixer/Stochastic.h"
 #include "../Source/mixer/Serial.h"
 #include "../Source/patchbay/PatchBay.h"
+#include "../Source/core/EbuCore.h"
 #include "../Source/core/Ixml.h"
 #include "../Source/core/Metadata.h"
 #include "../Source/core/RiffChunks.h"
@@ -51,6 +57,7 @@
 #include "../Source/core/SpatialStudio.h"
 #include "../Source/core/PhiVoice.h"
 #include "../Source/core/PhiPhaser.h"
+#include "../Source/core/PhiRepeat.h"
 #include "../Source/core/PhiTuning.h"
 #include "../Source/core/PhiRaga.h"
 #include "../Source/core/PhiSitar.h"
@@ -68,6 +75,8 @@
 #include "../Source/control/ControlSurface.h"
 #include "../Source/control/MidiLearn.h"
 #include "../Source/engine/PushDisplay.h"
+
+#include <zlib.h>
 
 #include <algorithm>
 #include <chrono>
@@ -596,6 +605,18 @@ namespace
         check (near (report.truePeakDb, -23.0, 0.3), "true peak " + std::to_string (report.truePeakDb));
         check (report.loudnessRange < 0.5, "steady tone has no loudness range");
 
+        // EBU Tech 3341 signals 16 and 19: sines at fs/4 whose peaks fall exactly between two
+        // samples (phase 45 degrees) must read their true peak, -6.0 and +3.0 dBTP (+0.2/-0.4).
+        for (const auto [amplitude, expected] : { std::pair { 0.5, -6.0 }, std::pair { 1.41, 3.0 } })
+        {
+            dsp::TruePeakDetector detector;
+            float peak = 0.0f;
+            for (int i = 0; i < 4800; ++i)
+                peak = std::max (peak, detector.process ((float) (amplitude * std::sin (M_PI / 2.0 * i + M_PI / 4.0))));
+            const auto db = 20.0 * std::log10 (peak);
+            check (db <= expected + 0.2 && db >= expected - 0.1, "true peak between samples " + std::to_string (db));
+        }
+
         // DC removal.
         AudioData::Builder b (1, 48000.0);
         std::vector<float> dc (48000, 0.25f);
@@ -767,6 +788,65 @@ namespace
         };
         check (lowNoise (q) < lowNoise (p) * 0.1, "noise shaping moves the dither noise out of the low frequencies");
 
+        // The error's level in a band, for comparing the dither kinds.
+        auto bandNoise = [&] (const std::vector<float>& y, double from, double to)
+        {
+            double total = 0.0;
+            for (double hz = from; hz < to; hz += (to - from) / 8.0)
+            {
+                double re = 0.0, im = 0.0;
+                for (size_t i = 0; i < y.size(); ++i)
+                {
+                    const auto e = (double) y[i] - x[i];
+                    re += e * std::cos (2.0 * M_PI * hz * (double) i / 48000.0);
+                    im -= e * std::sin (2.0 * M_PI * hz * (double) i / 48000.0);
+                }
+                total += re * re + im * im;
+            }
+            return total;
+        };
+        {
+            // Wannamaker's 9th-order shape: far less noise where hearing is keenest (3-4 kHz), more up high.
+            const auto w = samples (*dsp::quantize (*quiet, 16, dsp::Dither::wannamaker), 0, 48000);
+            const auto l = samples (*dsp::quantize (*quiet, 16, dsp::Dither::lipshitz), 0, 48000);
+            check (bandNoise (w, 3000.0, 4000.0) < bandNoise (p, 3000.0, 4000.0) * 0.03, "Wannamaker shaping: at least 15 dB less noise at 3-4 kHz than TPDF");
+            check (bandNoise (l, 3500.0, 4500.0) < bandNoise (p, 3500.0, 4500.0) * 0.1, "Lipshitz shaping: at least 10 dB less noise near 4 kHz than TPDF");
+            check (bandNoise (w, 17000.0, 20000.0) > bandNoise (p, 17000.0, 20000.0), "Wannamaker shaping: the noise goes up high");
+
+            // High-passed TPDF: on the grid, within ±1 LSB, less noise in the bass than plain TPDF.
+            const auto h = samples (*dsp::quantize (*quiet, 16, dsp::Dither::hpTpdf), 0, 48000);
+            bool within = true;
+            for (size_t i = 0; i < h.size(); ++i)
+                within = within && std::abs (h[i] - x[i]) < 1.5 / 32768.0;
+            check (within && bandNoise (h, 100.0, 1000.0) < bandNoise (p, 100.0, 1000.0) * 0.85, "high-passed TPDF: less bass noise, within the dither");
+
+            // Truncation always rounds down; rounding without dither is never more than half a step out.
+            const auto t = samples (*dsp::quantize (*quiet, 16, dsp::Dither::truncate), 0, 48000);
+            const auto r = samples (*dsp::quantize (*quiet, 16, dsp::Dither::none), 0, 48000);
+            bool down = true, half = true;
+            for (size_t i = 0; i < t.size(); ++i)
+            {
+                down = down && t[i] <= x[i] && x[i] - t[i] <= 1.0f / 32768.0f;
+                half = half && std::abs (r[i] - x[i]) <= 0.5f / 32768.0f + 1.0e-9f;
+            }
+            check (down && half, "truncate rounds down, plain rounding stays within half a step");
+        }
+        {
+            // Auto-blanking: after about 11 ms of digital silence the dither stops, for every kind.
+            auto gap = makeSignal (48000, [] (Frame f) { return f < 12000 ? (float) (0.001 * std::sin (2.0 * M_PI * 440.0 * f / 48000.0)) : 0.0f; });
+            bool silent = true, dithered = false;
+            for (const auto kind : dsp::ditherOrder)
+            {
+                const auto y = samples (*dsp::quantize (*gap, 16, kind), 0, 48000);
+                for (size_t i = 12000 + dsp::Quantizer::silenceRun; i < y.size(); ++i)
+                    silent = silent && y[i] == 0.0f;
+                if (kind == dsp::Dither::wannamaker)
+                    for (size_t i = 12000; i < 12000 + dsp::Quantizer::silenceRun; ++i)
+                        dithered = dithered || y[i] != 0.0f;
+            }
+            check (silent && dithered, "auto-blanking: digital silence stays silent once it has lasted a moment");
+        }
+
         // The true-peak limiter keeps a loud tone under its ceiling, including the
         // peaks between samples (fs/4 at 45 degrees peaks 3 dB above its samples).
         auto loudTone = makeSignal (96000, [] (Frame f) { return (float) (1.6 * std::sin (2.0 * M_PI * 997.0 * f / 48000.0)); });
@@ -903,6 +983,55 @@ namespace
                "ixml: paths read");
         Tags again;
         check (ixml::read (ixml::write (t), again, error) && again == t, "ixml: round trip " + error);
+
+        // A BEXT copy is not written back (the bext chunk is the official one), and the
+        // bext loudness is repeated in iXML's own LOUDNESS object.
+        Tags b = t;
+        b["ixml:BEXT/BWF_ORIGINATOR"] = "Old";
+        b[tag::bwfLoudness] = "-23.00";
+        const auto x = ixml::write (b);
+        Tags back;
+        check (ixml::read (x, back, error) && back.count ("ixml:BEXT/BWF_ORIGINATOR") == 0 && back["ixml:LOUDNESS/LOUDNESS_VALUE"] == "-23.00",
+               "ixml: no stale BEXT copy, LOUDNESS from bext");
+    }
+
+    void testEbuCore()
+    {
+        // A new document from the common fields.
+        Tags t;
+        t[tag::title] = "Night Drive";
+        t[tag::artist] = "Ana\nBo";
+        t[tag::composer] = "Cy";
+        t[tag::isrc] = "AA6Q72000047";
+        t[tag::date] = "2026-10-31";
+        const auto x = ebucore::write (t);
+        Tags back;
+        std::string error;
+        check (ebucore::read (x, back, error) && back[tag::title] == "Night Drive" && back[tag::artist] == "Ana\nBo" && back[tag::composer] == "Cy"
+                   && back[tag::isrc] == "AA6Q72000047" && back[tag::date] == "2026-10-31",
+               "ebucore: round trip " + error);
+        check (x.find ("<created startDate=\"2026-10-31\"/>") != std::string::npos && x.find ("typeLabel=\"ISRC\"") != std::string::npos,
+               "ebucore: dates as attributes, ISRC labelled");
+
+        // Merging into a file's document keeps what PHI does not show (an ADM description,
+        // another identifier) and what did not change (a composer's split name).
+        const std::string original = R"(<?xml version="1.0"?><ebucore:ebuCoreMain xmlns:ebucore="urn:ebu:metadata-schema:ebuCore_2014">)"
+            R"(<ebucore:coreMetadata><ebucore:title><dc:title xmlns:dc="http://purl.org/dc/elements/1.1/">Old</dc:title></ebucore:title>)"
+            R"(<ebucore:identifier typeLabel="UUID"><dc:identifier xmlns:dc="http://purl.org/dc/elements/1.1/">u-1</dc:identifier></ebucore:identifier>)"
+            R"(<ebucore:creator><ebucore:contactDetails><ebucore:givenName>Dee</ebucore:givenName><ebucore:familyName>Eff</ebucore:familyName>)"
+            R"(</ebucore:contactDetails><ebucore:role typeLabel="Composer"/></ebucore:creator><ebucore:format><ebucore:audioFormatExtended>)"
+            R"(<audioProgramme audioProgrammeID="APR_1001"/></ebucore:audioFormatExtended></ebucore:format></ebucore:coreMetadata></ebucore:ebuCoreMain>)";
+        Tags file;
+        check (ebucore::read (original, file, error) && file[tag::title] == "Old" && file[tag::composer] == "Dee Eff", "ebucore: read a file's document");
+        file[tag::title] = "New";
+        const auto merged = ebucore::write (file, original);
+        Tags again;
+        check (merged.find ("<ebucore:title><dc:title>New</dc:title></ebucore:title>") != std::string::npos
+                   && merged.find ("audioProgrammeID=\"APR_1001\"") != std::string::npos && merged.find ("u-1") != std::string::npos
+                   && merged.find ("<ebucore:givenName>Dee</ebucore:givenName>") != std::string::npos
+                   && ebucore::read (merged, again, error) && again[tag::title] == "New",
+               "ebucore: merge keeps the rest " + error);
+        check (ebucore::write (Tags {}).empty() && ebucore::write (t, "<BWFXML/>").empty(), "ebucore: nothing to write, not EBUCore");
     }
 
     uint32_t le32 (const unsigned char* p) { return (uint32_t) p[0] | ((uint32_t) p[1] << 8) | ((uint32_t) p[2] << 16) | ((uint32_t) p[3] << 24); }
@@ -973,6 +1102,19 @@ namespace
                    && back[tag::bwfTruePeak] == "-1.00" && back.count (tag::bwfLoudnessRange) == 0 && back[tag::bwfCodingHistory] == "A=PCM,F=48000,W=16,M=mono"
                    && back[tag::bwfUmid].compare (0, 8, "060a2b34") == 0 && back.count (tag::bwfDescription) == 0,
                "riff: bext round trip (the description follows the comment)");
+        {
+            // Tech 3285 v2 2.4: round(100x) ties away from zero, and anything out of range is unused.
+            Tags l;
+            l[tag::bwfLoudness] = "-22.645";
+            l[tag::bwfTruePeak] = "12.765";
+            l[tag::bwfLoudnessRange] = "-3";
+            l["bwf.maxMomentaryLoudness"] = "-120";
+            const auto e = riff::encodeBext (l);
+            const auto* u = (const unsigned char*) e.data();
+            const auto w16 = [&] (int at) { return (int) (int16_t) (u[at] | (u[at + 1] << 8)); };
+            check (e.size() >= 602 && w16 (346) == 2 && w16 (412) == -2265 && w16 (416) == 1277 && w16 (414) == 0x7fff && w16 (418) == 0x7fff,
+                   "riff: bext loudness rounded and range-checked as Tech 3285 v2 says");
+        }
         check (back["cart:CutID"] == "C1234" && back["cart:Timer.SEG1"] == "48000" && back["cart:Timers"] == "MRK =96000" && back.count ("cart:Title") == 0,
                "riff: cart round trip");
         check (back["ixml:SCENE"] == "4" && back["xmp:xmpDM:scene"] == "Scene 4" && back["raw:wav:umid"] == read["raw:wav:umid"], "riff: iXML, XMP and raw chunk round trip");
@@ -1481,6 +1623,76 @@ namespace
             for (const auto v : vin)
                 steps = steps && std::abs (v * 2048.0f - std::round (v * 2048.0f)) < 1.0e-3f;
             check (steps && peakOf (vin, 0, 4800) > 0.4, "sampler: Vintage plays at 12 bits");
+        }
+        e.panic();
+
+        // Phase 2 modulation. A pitch envelope starts an octave up and falls back to the note.
+        s = fresh();
+        s.pitchEnvelope.on = true;
+        s.pitchEnvelope.amount = 12.0;
+        s.pitchEnvelope.attack = 0.0;
+        s.pitchEnvelope.decay = 0.1;
+        s.pitchEnvelope.sustain = 0.0;
+        e.setSettings (s);
+        e.noteOn (60, 1.0f);
+        {
+            auto [pe, peR] = play (24000);
+            check (crossings (pe, 0, 960) > crossings (pe, 12000, 12960) + 1 && near (crossings (pe, 12000, 24000), 50, 2),
+                   "sampler: a pitch envelope sweeps down to the note");
+        }
+        e.panic();
+
+        // A filter envelope opens a closed low pass and lets it close again.
+        s = fresh();
+        s.filter = true;
+        s.steep = true;
+        s.cutoff = 20.0;
+        s.resonance = 0.0;
+        s.filterEnvelope.on = true;
+        s.filterEnvelope.amount = 7.0;
+        s.filterEnvelope.attack = 0.0;
+        s.filterEnvelope.decay = 0.1;
+        s.filterEnvelope.sustain = 0.0;
+        e.setSettings (s);
+        e.noteOn (60, 1.0f);
+        {
+            auto [fe, feR] = play (24000);
+            check (peakOf (fe, 480, 1440) > 0.3 && peakOf (fe, 14400, 24000) < 0.01, "sampler: a filter envelope opens the filter and closes it");
+        }
+        e.panic();
+
+        // An LFO synced to 120 BPM, a beat a cycle, as a pulse on the volume: on for a quarter second, off for one.
+        s = fresh();
+        s.tempo = 120.0;
+        s.lfo[0].wave = sampler::Wave::pulse;
+        s.lfo[0].shape = 0.5;
+        s.lfo[0].sync = true;
+        s.lfo[0].beats = 1.0;
+        s.lfo[0].retrigger = sampler::Retrigger::eachNote;
+        s.lfo[0].toVolume = 1.0;
+        e.setSettings (s);
+        e.noteOn (60, 1.0f);
+        {
+            auto [tr, trR] = play (24000);
+            check (peakOf (tr, 1000, 11000) > 0.4 && peakOf (tr, 13000, 23000) < 1.0e-6, "sampler: a synced LFO pulses the volume in time");
+        }
+        e.panic();
+
+        // The mod wheel: with Mod wheel at 100% the LFO waits for it.
+        s.lfo[0].modWheel = 1.0;
+        e.setSettings (s);
+        e.modWheel (0.0);
+        e.noteOn (60, 1.0f);
+        {
+            auto [mw, mwR] = play (24000);
+            check (peakOf (mw, 13000, 23000) > 0.4, "sampler: the mod wheel down leaves the LFO out");
+        }
+        e.panic();
+        e.modWheel (1.0);
+        e.noteOn (60, 1.0f);
+        {
+            auto [mw, mwR] = play (24000);
+            check (peakOf (mw, 13000, 23000) < 1.0e-6, "sampler: the mod wheel up brings the LFO in");
         }
         e.panic();
     }
@@ -2672,6 +2884,43 @@ namespace
         for (const auto& [kind, limit] : designed)
             check (highestSidelobeDb (windows::make (kind, n)) <= limit, "window " + std::to_string (kind) + " sidelobes");
         check (near (highestSidelobeDb (windows::make (windows::chebyshev, n)), -windows::chebyshevSidelobeDb, 0.5), "Dolph-Chebyshev sidelobes all at its level");
+
+        // The flat tops, against Heinzel, Ruediger and Schilling (2002): the Stanford Research one
+        // (FTSRS), HFT95 and HFT90D. Highest sidelobe, and the most a tone's level can be off
+        // between bins (here at every tenth of a bin). Heinzel's sidelobe figures are for long
+        // windows; at 256 points HFT95's comes out 0.5 dB higher.
+        struct FlatTop { int kind; double sidelobeDb, maxErrorDb; };
+        for (const auto& [kind, expectedSidelobe, maxError] : { FlatTop { windows::flatTop, -76.6, 0.0156 },
+                                                                 FlatTop { windows::hft95, -95.0, 0.0044 },
+                                                                 FlatTop { windows::hft90d, -90.2, 0.0039 } })
+        {
+            const auto w = windows::make (kind, n);
+            const auto label = "flat top " + std::to_string (kind);
+            // The main lobe is flat on top, so look for the first null from 4 bins out.
+            std::vector<double> magnitude ((size_t) points);
+            for (int f = 0; f < points; ++f)
+            {
+                std::complex<double> sum;
+                for (int i = 0; i < n; ++i)
+                    sum += w[(size_t) i] * std::polar (1.0, -2.0 * M_PI * f * i / (n * pad));
+                magnitude[(size_t) f] = std::abs (sum);
+            }
+            int f = 4 * pad;
+            while (f < points - 1 && magnitude[(size_t) f + 1] < magnitude[(size_t) f])
+                ++f;
+            const auto sidelobe = 20.0 * std::log10 (*std::max_element (magnitude.begin() + f, magnitude.end()) / magnitude[0]);
+            check (near (sidelobe, expectedSidelobe, 0.6), label + " sidelobes " + std::to_string (sidelobe) + " dB");
+            const double onBin = std::accumulate (w.begin(), w.end(), 0.0);
+            double worst = 0.0;
+            for (int tenth = 1; tenth <= 5; ++tenth)
+            {
+                std::complex<double> off;
+                for (int i = 0; i < n; ++i)
+                    off += w[(size_t) i] * std::polar (1.0, 2.0 * M_PI * 0.1 * tenth * i / n);
+                worst = std::max (worst, std::abs (20.0 * std::log10 (std::abs (off) / onBin)));
+            }
+            check (worst <= maxError + 0.0005, label + " level error " + std::to_string (worst) + " dB");
+        }
 
         // The largest FFT size stays finite (the Chebyshev's polynomial and Kaiser's Bessel function).
         for (int kind : { (int) windows::chebyshev, (int) windows::kaiser180 })
@@ -5015,7 +5264,7 @@ namespace
             s.ceilingDb = -1.0;
             l.prepare (rate, 2);
             l.set (s);
-            check (l.latency() == (int) std::lround (phi::Limiter::lookaheadMs * rate / 1000.0) + 6, "phi limiter latency");
+            check (l.latency() == (int) std::lround (phi::Limiter::lookaheadMs * rate / 1000.0) + phi::TruePeak::delay, "phi limiter latency");
             std::mt19937 random (5);
             std::normal_distribution<float> gauss (0.0f, 0.3f);
             std::vector<float> a ((size_t) rate), b ((size_t) rate);
@@ -7051,6 +7300,140 @@ namespace
         }
     }
 
+    // Φ Repeat: slices caught at the interval points, repeated for the gate, lower and quieter if asked.
+    void testPhiRepeat()
+    {
+        const double rate = 48000.0;   // at 120 BPM a beat is 24000 samples, a sixteenth 6000
+        const int frames = 96000 * 2;  // two bars
+        auto ramp = [&] (int i) { return (float) ((i % 48000) / 48000.0); };
+        auto run = [&] (phi::Repeat::Settings s, int channels = 1)
+        {
+            phi::Repeat r;
+            r.prepare (rate, channels);
+            r.set (s);
+            std::vector<std::vector<float>> out ((size_t) channels, std::vector<float> ((size_t) frames));
+            for (int i = 0; i < frames; ++i)
+                for (auto& c : out)
+                    c[(size_t) i] = ramp (i);
+            for (int at = 0; at < frames; at += 512)
+            {
+                std::vector<float*> p;
+                for (auto& c : out)
+                    p.push_back (c.data() + at);
+                r.process (p.data(), channels, std::min (512, frames - at));
+            }
+            return out;
+        };
+
+        phi::Repeat::Settings s;
+        s.interval = 5;            // a bar
+        s.offsetSixteenths = 0;
+        s.grid = 3;                // 1/16
+        s.gateSixteenths = 4;      // one beat
+        s.mix = phi::Repeat::Mix::insert;
+
+        auto never = s;
+        never.chance = 0.0;
+        const auto dry = run (never)[0];
+        bool same = true;
+        for (int i = 0; i < frames; ++i)
+            same = same && dry[(size_t) i] == ramp (i);
+        check (same, "phi repeat: no chance, no repeats, the sound untouched");
+
+        const auto rep = run (s)[0];
+        check (near (rep[3000], ramp (3000), 1.0e-6), "phi repeat: the first slice is the live sound");
+        check (near (rep[9000], ramp (3000), 1.0e-6) && near (rep[15000], ramp (3000), 1.0e-6) && near (rep[21000], ramp (3000), 1.0e-6),
+               "phi repeat: the slice plays again each sixteenth for the gate");
+        check (near (rep[30000], ramp (30000), 1.0e-6), "phi repeat: after the gate the sound comes back");
+        check (near (rep[96000 + 9000], ramp (96000 + 3000), 1.0e-6), "phi repeat: and repeats again at the next bar");
+
+        auto offset = s;
+        offset.offsetSixteenths = 4;   // a beat into the bar
+        const auto late = run (offset)[0];
+        check (near (late[9000], ramp (9000), 1.0e-6) && near (late[24000 + 9000], ramp (24000 + 3000), 1.0e-6),
+               "phi repeat: offset moves where in the bar it repeats");
+
+        auto lower = s;
+        lower.pitch = -12.0;
+        const auto down = run (lower)[0];
+        check (near (down[2000], ramp (1000), 1.0e-6) && near (down[6000 + 2000], ramp (1000), 1.0e-6),
+               "phi repeat: an octave down reads the slice at half speed");
+
+        auto falling = s;
+        falling.pitchDecay = 1.0;   // 3 semitones lower each repetition
+        const auto fall = run (falling)[0];
+        check (near (fall[6000 + 3000], ramp ((int) std::lround (3000 * std::pow (2.0, -3.0 / 12.0))), 1.0e-4),
+               "phi repeat: pitch decay lowers each repetition");
+
+        auto fading = s;
+        fading.decay = 1.0;
+        const auto fade = run (fading)[0];
+        check (std::abs (fade[23000]) < 0.05f * ramp (5000) + 1.0e-3f && near (fade[9000], ramp (3000) * (1.0 - 9000.0 / 24000.0), 1.0e-4),
+               "phi repeat: decay fades the repeats out by the gate's end");
+
+        auto gated = s;
+        gated.mix = phi::Repeat::Mix::gate;
+        const auto only = run (gated)[0];
+        check (only[40000] == 0.0f && near (only[9000], ramp (3000), 1.0e-6), "phi repeat: gate mode hears only the repeats");
+
+        auto mixed = s;
+        mixed.mix = phi::Repeat::Mix::mix;
+        const auto both = run (mixed)[0];
+        check (near (both[9000], ramp (9000) + ramp (3000), 1.0e-6), "phi repeat: mix mode keeps the dry sound under them");
+
+        auto held = s;
+        held.chance = 0.0;
+        held.repeat = true;
+        const auto hold = run (held)[0];
+        check (near (hold[96000 + 9000], ramp (3000), 1.0e-6), "phi repeat: held Repeat repeats whatever the chance, past the gate");
+
+        auto triplet = s;
+        triplet.triplets = true;   // 1/16 triplets: 4000 samples
+        const auto three = run (triplet)[0];
+        check (near (three[4000 + 1000], ramp (1000), 1.0e-6), "phi repeat: triplets shorten the grid by a third");
+
+        // Golden chance: the repeats fall on the golden rhythm's hits (Φ Rhythm's), 61.8 % of the points.
+        {
+            phi::Repeat r;
+            r.prepare (rate, 1);
+            auto g = s;
+            g.interval = 1;    // every sixteenth
+            g.gateSixteenths = 1;
+            g.golden = true;
+            g.chance = 0.6180339887;
+            r.set (g);
+            int repeats = 0;
+            bool hits = true;
+            std::vector<float> block (6000, 0.5f);
+            float* p[] { block.data() };
+            for (int k = 0; k < 89; ++k)
+            {
+                r.process (p, 1, 1);
+                const bool on = r.repeating();
+                repeats += on ? 1 : 0;
+                hits = hits && on == phi::hit (k, g.chance);
+                r.process (p, 1, 5999);
+            }
+            int expected = 0;
+            for (int k = 0; k < 89; ++k)
+                expected += phi::hit (k, g.chance) ? 1 : 0;
+            check (repeats == expected && repeats >= 55 && repeats <= 56 && hits, "phi repeat: golden chance repeats on the golden rhythm's steps, 61.8 % of them");
+        }
+
+        auto band = s;
+        band.filter = true;
+        band.filterHz = 2000.0;
+        band.filterOctaves = 1.0;
+        band.variation = 1.0;
+        band.variationMode = phi::Repeat::Variation::everyRepeat;
+        const auto stereo = run (band, 2);
+        bool finite = true;
+        for (const auto& c : stereo)
+            for (auto v : c)
+                finite = finite && std::isfinite (v) && std::abs (v) < 4.0f;
+        check (finite, "phi repeat: stable with the filter and every grid variation");
+    }
+
     // Φ Phaser: stages φ apart, a sweep that never repeats, and a response that matches what it does.
     void testPhiPhaser()
     {
@@ -7810,6 +8193,13 @@ namespace
             const auto report = forensic::analyse (measure::run (*plain, s));
             check (report.verdict != forensic::Verdict::strong && report.verdict != forensic::Verdict::suggestive,
                    "forensic: echoes 3:2 apart are no evidence of φ (" + report.summary + ")");
+        }
+        {
+            // Bands far apart: a cut at 80 Hz × φ² and a boost at 80 Hz × φ¹⁰ are φ⁸ (47) apart.
+            const std::vector<forensic::Feature> features { { "frequency", "Notch at 209.4 Hz", 209.44, 0.003, "Hz" },
+                                                            { "frequency", "Peak at 9836 Hz", 9839.2, 0.003, "Hz" } };
+            const auto report = forensic::analyse (features);
+            check (report.matches.size() == 1 && report.matches.front().target == "φ⁸", "forensic: finds golden ratios wider than φ⁶");
         }
     }
 
@@ -8770,11 +9160,256 @@ namespace
                 alone = alone && count == 1;
             check (alone, "compose: hocket, one player a pulse");
         }
+        // Congolese guitar: in the sebene the mi-solo plays only in the accompagnement's gaps, and the
+        // solo sits above the mi-solo, the mi-solo above the accompagnement.
+        {
+            const auto r = run (co::Method::congolese, 8);
+            int64_t from = -1, to = r.end;
+            for (const auto& x : r.sections)
+                if (from < 0 && x.name.rfind ("sebene", 0) == 0)
+                    from = x.start;
+                else if (x.name == "the close")
+                    to = x.start;
+            std::set<int64_t> accomp;
+            for (const auto& n : r.parts[2].notes)
+                if (n.start >= from && n.start < to)
+                    accomp.insert (n.start);
+            bool interlocked = from >= 0 && ! accomp.empty();
+            size_t mi = 0;
+            for (const auto& n : r.parts[1].notes)
+                if (n.start >= from && n.start < to)
+                {
+                    ++mi;
+                    interlocked = interlocked && accomp.count (n.start) == 0;
+                }
+            auto mean = [] (const co::Part& p)
+            {
+                double sum = 0.0;
+                for (const auto& n : p.notes)
+                    sum += n.key;
+                return p.notes.empty() ? 0.0 : sum / (double) p.notes.size();
+            };
+            check (interlocked && mi > 0, "compose: Congolese guitar, the mi-solo in the accompagnement's gaps through the sebene");
+            check (mean (r.parts[0]) > mean (r.parts[1]) && mean (r.parts[1]) > mean (r.parts[2]) && mean (r.parts[2]) > mean (r.parts[3])
+                       && r.parts[4].drums && r.parts[7].drums && ! r.parts[0].drums,
+                   "compose: Congolese guitar, solo above mi-solo above accompagnement above bass");
+        }
         // Rāga: the gat ends on sam with a tihāī.
         {
             const auto r = run (co::Method::raga, 3, "yaman (kalyan)");
             check (r.sections.back().name == "tihāī" && r.parts[2].drums, "compose: rāga, the gat ends in a tihāī");
         }
+        // Interlocking polyphony: with every voice in, the voices together fill most pulses of the period
+        // though none alone fills half of them; and a yodelling voice leaps a sixth or more.
+        {
+            const auto r = run (co::Method::interlocking, 5);
+            int64_t from = -1;
+            for (const auto& x : r.sections)
+                if (x.name == "all the voices interlock")
+                    from = x.start;
+            const int64_t pulse = co::ticksPerQuarter / 2, period = 24;
+            std::set<int64_t> together;
+            size_t most = 0;
+            int leaps = 0;
+            for (size_t v = 0; v < r.parts.size(); ++v)
+            {
+                std::set<int64_t> own;
+                const co::Note* last = nullptr;
+                for (const auto& n : r.parts[v].notes)
+                    if (from >= 0 && n.start >= from && n.start < from + period * pulse)
+                    {
+                        own.insert ((n.start - from) / pulse);
+                        together.insert ((n.start - from) / pulse);
+                        if (v == 1 && last != nullptr && std::abs (n.key - last->key) >= 8)
+                            ++leaps;
+                        last = &n;
+                    }
+                most = std::max (most, own.size());
+            }
+            check (from > 0 && together.size() >= 20 && most < 12, "compose: interlocking, the composite fills the period, no voice alone does");
+            check (leaps >= 2, "compose: interlocking, the yodel leaps between chest and head voice");
+        }
+        // Bol Processor grammar: the theme bharī has the bāyāṅ's open stroke, its khālī half none until the
+        // last two cells open again; variations follow, and the tihāī lands on sam, a tīntāl cycle's start.
+        {
+            const auto r = run (co::Method::bolGrammar, 3);
+            const int64_t beat = co::ticksPerQuarter;
+            auto open = [&] (int64_t a, int64_t b)
+            {
+                int k = 0;
+                for (const auto& n : r.parts[0].notes)
+                    k += n.key == 64 && n.start >= a * beat && n.start < b * beat;
+                return k;
+            };
+            int variations = 0;
+            for (const auto& x : r.sections)
+                variations += x.name.rfind ("variation", 0) == 0;
+            const auto sam = r.sections.back().start;
+            const auto lands = std::any_of (r.parts[0].notes.begin(), r.parts[0].notes.end(), [&] (const co::Note& n) { return n.start == sam && n.key == 64; });
+            check (r.parts[0].drums && open (0, 8) > 0 && open (8, 14) == 0 && open (14, 16) > 0, "compose: bol grammar, bharī then khālī, open again for sam");
+            check (variations >= 2 && r.sections.back().name == "sam" && r.sections[r.sections.size() - 2].name == "tihāī"
+                       && sam % (16 * beat) == 0 && lands, "compose: bol grammar, variations and a tihāī landing on sam");
+        }
+    }
+
+    // The Bol Processor (owner, 2026-10-31): BP3's items read back in time, and BP3 itself (phi-bp3) run on a grammar.
+    void testBolProcessor()
+    {
+        namespace bp = bolprocessor;
+        // Speed /2; a polymetric expression takes its first field's time; fields between periods a beat each; '_' lengthens.
+        const auto t = bp::parse ("/2 a b {c d e, f g} . h _ - i");
+        auto at = [&] (const std::string& s) { for (const auto& e : t.events) if (e.symbol == s) return e; return bp::Event {}; };
+        check (t.events.size() == 9 && std::abs (t.beats - 2.0) < 1e-9 && std::abs (at ("c").beat - 0.4) < 1e-9 && std::abs (at ("f").length - 0.3) < 1e-9
+                   && std::abs (at ("h").length - 0.5) < 1e-9 && std::abs (at ("i").beat - 1.75) < 1e-9,
+               "bol processor: an item laid out by speeds, periods and polymetry");
+        check (bp::splitItems ("dha ti\n\n// a comment\nge na\nka\n\n").size() == 2, "bol processor: the items, a blank line between");
+        check (bp::strokes ("dha").size() == 2 && bp::strokes ("ta").size() == 1 && bp::strokes ("Dhin").size() == 2 && bp::strokes ("C4").empty(),
+               "bol processor: dha is two strokes, ta one, a note none");
+
+        // Bols written together split as BP's alphabets let them be, a unit each; a speed written onto them;
+        // a polymetric expression's written duration.
+        {
+            const auto w = bp::parse ("4+4+4+4/4 dhatidhage . nadhatrkt");
+            const auto d = bp::parse ("/6 dhin--dhagena");
+            const auto k = bp::parse ("/4 dhati dha-/4 taki kite/2tete");
+            const auto p = bp::parse ("{3/2,takiteta kite} {1,dha}");
+            check (w.events.size() == 8 && std::abs (w.beats - 2.0) < 1e-9 && w.events[6].symbol == "tr" && std::abs (w.events[6].beat - 1.5) < 1e-9
+                       && d.events.size() == 4 && std::abs (d.beats - 1.0) < 1e-9 && std::abs (d.events[1].beat - 0.5) < 1e-9
+                       && k.events.size() == 9 && std::abs (k.beats - 3.0) < 1e-9
+                       && p.events.size() == 7 && std::abs (p.beats - 2.5) < 1e-9 && std::abs (p.events[6].beat - 1.5) < 1e-9,
+                   "bol processor: bols written together, speeds on them, and a written duration");
+        }
+
+        // A data file: its items read as written (the header, comments and remarks left out), without BP3.
+        {
+            const auto data = bp::run ("", "", bp::companions (PHI_SHARE_SOURCE_DIR "/bolprocessor/-da.kathak"), 0);
+            const auto items = bp::splitItems (data.items);
+            const auto first = items.empty() ? bp::Item {} : bp::parse (items.front());
+            bool bols = ! first.events.empty();
+            for (const auto& e : first.events)
+                bols = bols && ! bp::strokes (e.symbol).empty();
+            // "Check that the last bol falls on the 17th beat."
+            check (bp::isData (PHI_SHARE_SOURCE_DIR "/bolprocessor/-da.kathak") && data.ok && items.size() >= 5 && bols
+                       && std::abs (first.events.back().beat - 16.0) < 1e-9,
+                   "bol processor: a data file's items, Birju Maharaj's kathak landing on the 17th beat");
+        }
+
+        // BP3 itself, on a grammar of our own: two statements of a cell and a polymetric cadence, at four bols a beat.
+        const std::string exe = PHI_BP3_BUILD_PATH;
+        if (! std::filesystem::exists (exe))
+            return;
+        const auto folder = std::filesystem::temp_directory_path() / "phi-bp3-test";
+        std::filesystem::create_directories (folder);
+        std::ofstream (folder / "-gr.phitest") << "-al.phitest\n\nORD\ngram#1 [1] S --> /4 A A B\ngram#1 [2] A --> dha ti dha ge\n"
+                                                  "gram#1 [3] B --> {dhin na ge na, tin - - tin}\n";
+        std::ofstream (folder / "-al.phitest") << "*\ndha --> ta\nti --> ti\nge --> ke\ndhin --> tin\nna --> na\ntin --> tin\n";
+        const auto files = bp::companions ((folder / "-gr.phitest").string());
+        const auto r = bp::run (exe, PHI_BOLPROCESSOR_SOURCE_DIR "/console_strings.json", files, 7, 30);
+        const auto items = bp::splitItems (r.items);
+        const auto item = items.empty() ? bp::Item {} : bp::parse (items.front());
+        const auto score = bp::toScore ({ item }, 90.0);
+        check (r.ok && ! files.alphabet.empty() && items.size() == 1 && item.events.size() == 14 && std::abs (item.beats - 3.0) < 1e-9
+                   && score.parts.size() == 1 && score.parts[0].drums && score.parts[0].notes.size() == 19,
+               "bol processor: BP3 produces the grammar's item, read back as bols on the tablā");
+        std::filesystem::remove_all (folder);
+
+        // The example PHI has: Kippen and Bel's grammar of an Ajrada qāʿida. Its items are 32 beats, theme and
+        // variations bharī then khālī, every symbol a bol.
+        {
+            const auto q = bp::run (exe, PHI_BOLPROCESSOR_SOURCE_DIR "/console_strings.json", bp::companions (PHI_SHARE_SOURCE_DIR "/bolprocessor/-gr.dhin--"), 3, 30);
+            std::vector<bp::Item> all;
+            for (const auto& i : bp::splitItems (q.items))
+                all.push_back (bp::parse (i));
+            bool bols = ! all.empty();
+            for (const auto& i : all)
+            {
+                bols = bols && std::abs (i.beats - 32.0) < 1e-9;
+                for (const auto& e : i.events)
+                    bols = bols && ! bp::strokes (e.symbol).empty();
+            }
+            check (q.ok && bols, "bol processor: the Ajrada qāʿida's grammar produces items of 32 beats, all bols");
+        }
+        // Kippen and Bel's other qāʿidas: items of 16 beats, every bol played, glued ones split.
+        for (const char* name : { "-gr.dhati2", "-gr.dhadhatite" })
+        {
+            const auto q = bp::run (exe, PHI_BOLPROCESSOR_SOURCE_DIR "/console_strings.json", bp::companions (std::string (PHI_SHARE_SOURCE_DIR "/bolprocessor/") + name), 5, 30);
+            bool bols = q.ok;
+            for (const auto& i : bp::splitItems (q.items))
+            {
+                const auto item = bp::parse (i);
+                bols = bols && std::abs (item.beats - 16.0) < 1e-9 && ! item.events.empty();
+                for (const auto& e : item.events)
+                    bols = bols && ! bp::strokes (e.symbol).empty();
+            }
+            check (bols, std::string ("bol processor: ") + name + " produces 16-beat items, all bols");
+        }
+    }
+
+    // PHI tabla (owner, 2026-10-31): the owner's strokes as a Slicer kit of 32 pads for Push, the takes in turn,
+    // and softer hits darker.
+    void testPhiTabla()
+    {
+        namespace pt = phitabla;
+        bool files = true, unique = true;
+        std::set<int> seen;
+        for (const auto& p : pt::pads())
+        {
+            unique = unique && p.pad >= 0 && p.pad < 48 && seen.insert (p.pad).second;
+            // Every sound there (and any stand-ins).
+            for (const auto& list : { p.sounds, p.fallback })
+                for (const auto& x : list)
+                    files = files && std::filesystem::exists (std::string (PHI_SHARE_SOURCE_DIR "/phi-tabla/") + x.file + ".wav");
+        }
+        // The owner's rack: 32 pads on banks A and B, its note 61 the first pad, 92 the last (dhā).
+        bool rack = true;
+        for (int pad = 0; pad < 32; ++pad)
+            rack = rack && seen.count (pad) == 1;
+        check (unique && files && rack && std::string (pt::pads()[31].name) == "dhā", "phi tabla: the owner's 32-pad rack on banks A and B, each sound in share/phi-tabla");
+        check (pt::padFor ("ta", 0) == 82 - 61 && pt::padFor ("ta", 1) == 91 - 61 && pt::padFor ("ta", 2) == 82 - 61 && pt::padFor ("ne", 0) == pt::padFor ("ta", 0)
+                   && pt::padFor ("dhee", 0) == pt::padFor ("dhi", 0) && pt::padFor ("C4", 0) < 0 && pt::noteFor ("ta", 0) == slicer::noteForPad (21, slicer::Layout::push, 0),
+               "phi tabla: a bol's takes in turn, its spellings as one, on Push's notes");
+
+        auto sound = std::make_shared<sampler::Sample>();
+        uint32_t x = 1;
+        for (int i = 0; i < 4800; ++i)   // white noise: its brightness shows
+        {
+            x = x * 1664525u + 1013904223u;
+            const auto v = (float) ((x >> 8) / 8388608.0 - 1.0) * 0.5f;
+            sound->left.push_back (v);
+            sound->right.push_back (v);
+        }
+        const auto kit = pt::kit ("folder", [&] (const std::string&) { return sound; });
+        const auto dha = pt::padFor ("dhin", 0), ta = pt::padFor ("ta", 0);
+        check (kit.pads[(size_t) dha].layerCount() == 2 && kit.pads[(size_t) ta].layerCount() == 1 && kit.pads[(size_t) ta].name == "tā2"
+                   && kit.pads[69 - 61].layers[0].start == 362 && kit.layout == slicer::Layout::push,
+               "phi tabla: dhin is tin and ge together; the rack's names and start points");
+
+        // A soft hit: quieter, and with less of its highs (the sample to sample difference) for its level.
+        auto brightness = [&] (double tone)
+        {
+            slicer::Engine e;
+            e.prepare (48000.0);
+            auto k = kit;
+            k.velocityTone = tone;
+            e.setKit (k);
+            e.hit (pt::padFor ("ta", 0), 0.3f);
+            std::vector<float> l (2048, 0.0f), r (2048, 0.0f);
+            e.render (l.data(), r.data(), 2048);
+            double level = 0.0, high = 0.0;
+            for (size_t i = 1; i < l.size(); ++i)
+            {
+                level += l[i] * l[i];
+                high += (l[i] - l[i - 1]) * (l[i] - l[i - 1]);
+            }
+            return high / std::max (1e-12, level);
+        };
+        check (brightness (0.5) < 0.5 * brightness (0.0), "phi tabla: a soft hit is darker");
+
+        // The Bol Processor on PHI tabla: dha twice is its two takes.
+        const auto score = bolprocessor::toScore ({ bolprocessor::parse ("dha dha ne") }, 90.0, true);
+        check (score.parts[0].notes.size() == 3 && score.parts[0].notes[0].key == pt::noteFor ("dha", 0) && score.parts[0].notes[1].key == pt::noteFor ("dha", 1)
+                   && score.parts[0].notes[0].key != score.parts[0].notes[1].key,
+               "phi tabla: the Bol Processor's bols on its pads, the takes in turn");
     }
 
     void testRhythmGenerator()
@@ -9384,6 +10019,30 @@ namespace
         rampVelocity (q, 40, 120);
         check (q.notes.front().velocity == 40 && q.notes.back().velocity == 120, "note editor: velocity ramp");
 
+        // Live's edits: duplicate, duplicate and push, delete and close the gap, chop.
+        {
+            Sequence d;
+            d.notes = { { 0, 100, 6000.0 }, { 120, 100, 6200.0 }, { 480, 120, 6400.0 } };
+            d.notes[0].selected = d.notes[1].selected = true;
+            duplicate (d, 120);
+            check (d.notes.size() == 5 && d.notes[2].start == 240 && d.notes[3].start == 360 && d.notes[2].selected && ! d.notes[0].selected
+                       && d.notes[4].start == 480,
+                   "note editor: duplicated after the span, rounded to the grid");
+            duplicate (d, 120, true);
+            check (d.notes.size() == 7 && d.notes[4].start == 480 && d.notes[5].start == 600 && d.notes[6].start == 720 && ! d.notes[6].selected,
+                   "note editor: duplicate and push moves the later notes on");
+            deleteAndClose (d, 120);
+            check (d.notes.size() == 5 && d.notes[4].start == 480 && d.notes[4].pitch == 6400.0, "note editor: deleted and the gap closed");
+            invertSelection (d);
+            check (d.notes[4].selected && d.notes[0].selected, "note editor: selection inverted");
+            selectAll (d, false);
+            d.notes[4].selected = true;
+            chop (d, 40);
+            check (d.notes.size() == 7 && d.notes[5].start == 520 && d.notes[6].length == 40, "note editor: chopped on the grid");
+            lengthen (d, -100, 10);
+            check (d.notes[6].length == 10, "note editor: shortened, not below the shortest");
+        }
+
         // Restyle: C major's degrees into sléndro keep the line rising.
         Sequence melody;
         for (int i = 0; i < 8; ++i)
@@ -9559,6 +10218,509 @@ namespace
         check (! parseSystemMarker ("verse", junk) && ! parseSystemMarker ("PHI system: x | y | tonic a | period 1200 | 0 |", junk), "note editor: other markers are not systems");
     }
 
+    // DAWproject: a project as Bitwig writes one (a zip of project.xml, the audio and the plugins'
+    // states) read into what PHI holds, and PHI's own written and read back.
+    void testDawProject()
+    {
+        namespace fs = std::filesystem;
+        const auto folder = fs::temp_directory_path() / "phi-dawproject-test";
+        fs::remove_all (folder);
+        fs::create_directories (folder / "unpacked");
+
+        // The zip on its own: stored and deflated entries back as they went in.
+        {
+            const auto path = (folder / "test.zip").string();
+            std::string error;
+            zip::Writer w;
+            const std::string text (5000, 'a');
+            const std::vector<uint8_t> binary { 0, 1, 2, 3, 255 };
+            check (w.open (path, error) && w.add ("a/text.txt", text.data(), text.size(), true, error)
+                   && w.add ("b.bin", binary.data(), binary.size(), false, error) && w.close (error), "zip: written");
+            zip::Reader r;
+            std::vector<uint8_t> back;
+            check (r.open (path, error) && r.entries().size() == 2, "zip: two entries");
+            check (r.find ("a/text.txt") != nullptr && r.find ("a/text.txt")->method == 8, "zip: text deflated");
+            check (r.read ("a/text.txt", back, error) && std::string (back.begin(), back.end()) == text, "zip: text back");
+            check (r.read ("b.bin", back, error) && back == binary, "zip: binary back");
+        }
+
+        // As Bitwig writes it: an instrument track with a CLAP synth, a note clip with a loop, an
+        // audio track with a warped clip and a plain one, an FX track the audio sends to, a
+        // group, a scene with a clip in it, and tempo automation.
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Project version="1.0">
+  <Application name="Bitwig Studio" version="5.2"/>
+  <Transport>
+    <Tempo unit="bpm" value="150.0" id="id0" name="Tempo"/>
+    <TimeSignature denominator="8" numerator="6" id="id1"/>
+  </Transport>
+  <Structure>
+    <Track contentType="notes" loaded="true" id="id2" name="Bass" color="#a2eabf">
+      <Channel audioChannels="2" destination="id15" role="regular" solo="true" id="id3">
+        <Devices>
+          <ClapPlugin deviceID="org.surge-synth-team.surge-xt" deviceName="Surge XT" deviceRole="instrument" loaded="true" id="id7" name="Surge XT">
+            <Parameters/>
+            <Enabled value="true" id="id8" name="On/Off"/>
+            <State path="plugins/surge.clap-preset"/>
+          </ClapPlugin>
+          <Equalizer deviceName="EQ+" deviceRole="audioFX" id="id9"/>
+        </Devices>
+        <Mute value="false" id="id6" name="Mute"/>
+        <Pan max="1.000000" min="0.000000" unit="normalized" value="0.250000" id="id5" name="Pan"/>
+        <Volume max="2.000000" min="0.000000" unit="linear" value="0.5" id="id4" name="Volume"/>
+      </Channel>
+    </Track>
+    <Track contentType="tracks" loaded="true" id="id30" name="Drums group">
+      <Channel role="submix" id="id31"/>
+      <Track contentType="audio" loaded="true" id="id10" name="Loop">
+        <Channel audioChannels="2" destination="id31" role="regular" solo="false" id="id11">
+          <Mute value="true" id="id12" name="Mute"/>
+          <Sends>
+            <Send destination="id21" type="pre" id="id13" name="Send">
+              <Enable value="true" id="id14"/>
+              <Volume max="2" min="0" unit="linear" value="1.0" id="id16"/>
+            </Send>
+          </Sends>
+          <Volume unit="decibel" value="-6.0" id="id17" name="Volume"/>
+        </Channel>
+      </Track>
+    </Track>
+    <Track contentType="audio" loaded="true" id="id20" name="Reverb">
+      <Channel audioChannels="2" destination="id15" role="effect" id="id21">
+        <Volume max="2" min="0" unit="linear" value="1.0" id="id22"/>
+      </Channel>
+    </Track>
+    <Track contentType="audio notes" loaded="true" id="id40" name="Master">
+      <Channel audioChannels="2" role="master" id="id15">
+        <Volume max="2" min="0" unit="linear" value="0.25" id="id41"/>
+      </Channel>
+    </Track>
+  </Structure>
+  <Arrangement id="id50">
+    <TempoAutomation unit="bpm" id="id51">
+      <RealPoint time="0" value="150"/>
+      <RealPoint time="16" value="140"/>
+    </TempoAutomation>
+    <Lanes timeUnit="beats" id="id52">
+      <Lanes track="id2" id="id53">
+        <Clips id="id54">
+          <Clip time="8.0" duration="6.0" playStart="1.0" loopStart="0.0" loopEnd="4.0">
+            <Notes id="id55">
+              <Note time="0.0" duration="0.5" channel="0" key="36" vel="1.0" rel="0.5"/>
+              <Note time="1.0" duration="0.5" channel="0" key="38" vel="0.5" rel="0.5"/>
+              <Note time="3.0" duration="2.0" channel="1" key="40" vel="0.5" rel="0.5"/>
+            </Notes>
+          </Clip>
+        </Clips>
+      </Lanes>
+      <Lanes track="id10" id="id56">
+        <Clips id="id57">
+          <Clip time="4" duration="8" playStart="0" contentTimeUnit="beats">
+            <Warps contentTimeUnit="seconds" timeUnit="beats" id="id58">
+              <Audio algorithm="stretch" channels="2" duration="2.0" sampleRate="44100" id="id59">
+                <File path="audio/loop.wav"/>
+              </Audio>
+              <Warp time="0" contentTime="0"/>
+              <Warp time="8" contentTime="2.0"/>
+            </Warps>
+          </Clip>
+          <Clip time="16" duration="2" contentTimeUnit="seconds" playStart="0.5" name="plain">
+            <Audio channels="2" duration="2.0" sampleRate="44100" id="id60">
+              <File path="audio/loop.wav"/>
+            </Audio>
+          </Clip>
+        </Clips>
+        <Points unit="linear" id="id61"><Target parameter="id17"/><RealPoint time="0" value="1"/></Points>
+      </Lanes>
+    </Lanes>
+  </Arrangement>
+  <Scenes>
+    <Scene id="id70" name="Verse">
+      <Lanes timeUnit="beats" id="id71">
+        <ClipSlot track="id2" hasStop="true" id="id72">
+          <Clip time="0" duration="4" playStart="0">
+            <Notes id="id73"><Note time="2" duration="1" channel="0" key="48" vel="0.5" rel="0.5"/></Notes>
+          </Clip>
+        </ClipSlot>
+      </Lanes>
+    </Scene>
+  </Scenes>
+</Project>)";
+        const auto archive = (folder / "bitwig.dawproject").string();
+        {
+            std::string error;
+            zip::Writer w;
+            const std::vector<uint8_t> wav (1000, 7), clap { 1, 2, 3 };
+            const std::string meta = "<MetaData><Title>Night &amp; Day</Title><Artist>Test</Artist></MetaData>";
+            w.open (archive, error);
+            w.add ("project.xml", xml.data(), xml.size(), true, error);
+            w.add ("metadata.xml", meta.data(), meta.size(), true, error);
+            w.add ("audio/loop.wav", wav.data(), wav.size(), false, error);
+            w.add ("plugins/surge.clap-preset", clap.data(), clap.size(), false, error);
+            check (w.close (error), "dawproject: test archive written");
+        }
+        dawproject::Project p;
+        std::string error;
+        check (dawproject::read (archive, (folder / "unpacked").string(), p, error), "dawproject: read (" + error + ")");
+        check (p.application == "Bitwig Studio" && near (p.bpm, 150.0, 1e-9), "dawproject: application and tempo");
+        check (p.numerator == 6 && p.denominator == 8, "dawproject: time signature");
+        check (p.title == "Night & Day" && p.artist == "Test", "dawproject: metadata");
+        check (near (p.masterDb, -12.04, 0.01), "dawproject: master volume");
+        check (p.tracks.size() == 2 && p.returns.size() == 1, "dawproject: two tracks (the group's kept) and a return");
+        if (p.tracks.size() == 2 && p.returns.size() == 1)
+        {
+            const auto& bass = p.tracks[0];
+            check (bass.name == "Bass" && bass.colour == "#a2eabf" && bass.notes && bass.solo, "dawproject: bass track");
+            check (near (bass.volumeDb, -6.02, 0.01) && near (bass.pan, -0.5, 1e-9), "dawproject: bass volume and pan");
+            const auto* inst = bass.instrument();
+            check (inst != nullptr && inst->format() == "CLAP" && inst->deviceId == "org.surge-synth-team.surge-xt"
+                   && inst->state == std::vector<uint8_t> { 1, 2, 3 }, "dawproject: the CLAP instrument with its state");
+            check (bass.devices.size() == 2 && ! bass.devices[1].isPlugin(), "dawproject: the built-in EQ named");
+            // Played from beat 1 for 6 beats, looping 0..4: beats 1..4 then 0..3.
+            check (bass.noteClips.size() == 1, "dawproject: one note clip");
+            if (bass.noteClips.size() == 1)
+            {
+                const auto& c = bass.noteClips[0];
+                check (near (c.start, 8.0 * 60.0 / 150.0, 1e-9) && near (c.lengthBeats, 6.0, 1e-9), "dawproject: note clip placed");
+                std::vector<std::pair<double, int>> got;
+                for (const auto& n : c.notes)
+                    got.emplace_back (n.time, n.key);
+                const std::vector<std::pair<double, int>> want { { 0.0, 38 }, { 2.0, 40 }, { 3.0, 36 }, { 4.0, 38 } };
+                check (got == want, "dawproject: the loop unrolled");
+                check (c.notes.size() == 4 && near (c.notes[1].duration, 1.0, 1e-9) && c.notes[1].channel == 1,
+                       "dawproject: a note cut at the loop's end, on its channel");
+            }
+            const auto& loop = p.tracks[1];
+            check (loop.name == "Loop" && loop.mute && near (loop.volumeDb, -6.0, 1e-9), "dawproject: track inside the group");
+            check (loop.sends.size() == 1 && loop.sends[0].target == 0 && loop.sends[0].pre && near (loop.sends[0].db, 0.0, 1e-9),
+                   "dawproject: pre-fader send to the return");
+            check (loop.audioClips.size() == 2, "dawproject: two audio clips");
+            if (loop.audioClips.size() == 2)
+            {
+                const auto& warped = loop.audioClips[0];
+                check (near (warped.start, 4.0 * 0.4, 1e-9) && near (warped.length, 8.0 * 0.4, 1e-9) && near (warped.offset, 0.0, 1e-9),
+                       "dawproject: warped clip placed");
+                check (warped.warped, "dawproject: 2 s over 8 beats at 150 is warped");
+                check (fs::exists (warped.file) && fs::file_size (warped.file) == 1000, "dawproject: the audio unpacked");
+                const auto& plain = loop.audioClips[1];
+                check (near (plain.start, 16.0 * 0.4, 1e-9) && near (plain.offset, 0.5, 1e-9) && near (plain.length, 2.0 * 0.4, 1e-9)
+                       && ! plain.warped && plain.name == "plain" && plain.file == warped.file, "dawproject: plain clip, the same file once");
+            }
+            check (p.returns[0].name == "Reverb", "dawproject: the return");
+            check (p.scenes.size() == 1 && p.scenes[0] == "Verse" && bass.slots.size() == 1, "dawproject: the scene and its slot");
+            if (bass.slots.size() == 1)
+                check (! bass.slots[0].audio && bass.slots[0].noteClip.notes.size() == 1 && near (bass.slots[0].noteClip.lengthBeats, 4.0, 1e-9),
+                       "dawproject: the slot's clip");
+        }
+        auto said = [&] (const std::string& part)
+        {
+            return std::any_of (p.notes.begin(), p.notes.end(), [&] (const std::string& n) { return n.find (part) != std::string::npos; });
+        };
+        check (said ("Tempo changes") && said ("group") && said ("Automation") && said ("EQ+") && said ("Warped"),
+               "dawproject: what did not carry over is said");
+
+        // Written and read back.
+        {
+            const auto wav = (folder / "kick.wav").string();
+            {
+                std::ofstream f (wav, std::ios::binary);
+                f << std::string (500, 'k');
+            }
+            dawproject::Project out;
+            out.bpm = 90.0;
+            out.numerator = 3;
+            out.masterDb = -3.0;
+            out.title = "Round";
+            dawproject::Track t;
+            t.name = "Keys & <more>";
+            t.colour = "#112233";
+            t.volumeDb = -10.0;
+            t.pan = 0.5;
+            t.solo = true;
+            dawproject::Device synth;
+            synth.element = "Vst3Plugin";
+            synth.role = "instrument";
+            synth.deviceId = "ABCDEF0123456789ABCDEF0123456789";
+            synth.name = "Synth";
+            synth.state = { 'V', 'S', 'T', '3', 9 };
+            t.devices.push_back (synth);
+            dawproject::NoteClip nc;
+            nc.start = 2.0;   // 3 beats at 90
+            nc.lengthBeats = 4.0;
+            nc.length = 4.0 * 60.0 / 90.0;
+            nc.notes = { { 0.5, 1.0, 60, 2, 0.75, 0.5 } };
+            t.noteClips.push_back (nc);
+            dawproject::AudioClip ac;
+            ac.file = wav;
+            ac.start = 1.0;
+            ac.offset = 0.25;
+            ac.length = 0.5;
+            ac.fileLength = 1.0;
+            t.audioClips.push_back (ac);
+            t.sends.push_back ({ 0, -6.0, false, true });
+            dawproject::Slot slot;
+            slot.scene = 1;
+            slot.noteClip = nc;
+            t.slots.push_back (slot);
+            out.tracks.push_back (t);
+            dawproject::Track ret;
+            ret.name = "FX";
+            out.returns.push_back (ret);
+            const auto file = (folder / "phi.dawproject").string();
+            check (dawproject::write (out, file, error), "dawproject: written (" + error + ")");
+            fs::create_directories (folder / "back");
+            dawproject::Project back;
+            check (dawproject::read (file, (folder / "back").string(), back, error), "dawproject: read back (" + error + ")");
+            check (near (back.bpm, 90.0, 1e-9) && back.numerator == 3 && near (back.masterDb, -3.0, 1e-6) && back.title == "Round",
+                   "dawproject: round trip: transport, master, title");
+            check (back.tracks.size() == 1 && back.returns.size() == 1, "dawproject: round trip: tracks");
+            if (back.tracks.size() == 1)
+            {
+                const auto& b = back.tracks[0];
+                check (b.name == t.name && b.colour == t.colour && near (b.volumeDb, -10.0, 1e-6) && near (b.pan, 0.5, 1e-9) && b.solo,
+                       "dawproject: round trip: mixer");
+                check (b.instrument() != nullptr && b.instrument()->state == synth.state && b.instrument()->deviceId == synth.deviceId,
+                       "dawproject: round trip: plugin and state");
+                check (b.sends.size() == 1 && b.sends[0].target == 0 && near (b.sends[0].db, -6.0, 1e-6), "dawproject: round trip: send");
+                check (b.noteClips.size() == 1 && near (b.noteClips[0].start, 2.0, 1e-9) && b.noteClips[0].notes.size() == 1
+                       && near (b.noteClips[0].notes[0].time, 0.5, 1e-9) && b.noteClips[0].notes[0].channel == 2, "dawproject: round trip: notes");
+                check (b.audioClips.size() == 1 && near (b.audioClips[0].start, 1.0, 1e-9) && near (b.audioClips[0].offset, 0.25, 1e-9)
+                       && near (b.audioClips[0].length, 0.5, 1e-9) && ! b.audioClips[0].warped && fs::file_size (b.audioClips[0].file) == 500,
+                       "dawproject: round trip: audio");
+                check (b.slots.size() == 1 && b.slots[0].scene == 1 && b.slots[0].noteClip.notes.size() == 1, "dawproject: round trip: slot");
+            }
+        }
+
+        // Notes to a MIDI file and back.
+        {
+            const std::vector<dawproject::Note> notes { { 0.0, 1.0, 60, 0, 1.0, 0.5 }, { 1.5, 0.5, 64, 3, 0.5, 0.5 } };
+            const auto song = dawproject::songOf (notes, 8.0, 120.0);
+            check (song->lastTick == 8 * 480 && song->noteCount() == 2, "dawproject: notes as MIDI");
+            const auto back = dawproject::notesOf (*song, 0.25, 2.0, 0.0, 120.0);   // from beat 0.5 for 4 beats
+            check (back.size() == 1 && back[0].key == 64 && back[0].channel == 3 && near (back[0].time, 1.0, 1e-6) && near (back[0].duration, 0.5, 1e-6),
+                   "dawproject: the notes of a trimmed MIDI clip");
+        }
+
+        const std::vector<uint8_t> preset = [] { std::vector<uint8_t> b { 'V', 'S', 'T', '3', 1, 0, 0, 0 }; for (int i = 0; i < 32; ++i) b.push_back ('A'); b.resize (48, 0); return b; }();
+        check (dawproject::vstPresetClassId (preset) == std::string (32, 'A'), "dawproject: a .vstpreset's class id");
+        fs::remove_all (folder);
+    }
+
+    // Ableton Live Sets: a small set as Live 10 and 11 write them, gzipped, with a Drum Rack.
+    void testAbletonSet()
+    {
+        namespace fs = std::filesystem;
+        const auto folder = fs::temp_directory_path() / "phi-als-test";
+        fs::remove_all (folder);
+        fs::create_directories (folder / "Samples" / "Recorded");
+        for (const auto* name : { "Samples/Recorded/kick.wav", "snare.wav", "loop.wav" })
+            std::ofstream (folder / name, std::ios::binary) << std::string (100, 's');
+        const auto snare = (folder / "snare.wav").string();
+
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+<Ableton MajorVersion="5" MinorVersion="11.0_433" Creator="Ableton Live 11.3">
+  <LiveSet>
+    <Tracks>
+      <MidiTrack Id="1">
+        <Name><EffectiveName Value="Drums" /><UserName Value="Drums" /></Name>
+        <DeviceChain>
+          <Mixer>
+            <Sends>
+              <TrackSendHolder Id="0"><Send><Manual Value="0.5" /></Send></TrackSendHolder>
+            </Sends>
+            <Speaker><Manual Value="true" /></Speaker>
+            <SoloSink Value="true" />
+            <Pan><Manual Value="-0.5" /></Pan>
+            <Volume><Manual Value="0.5" /></Volume>
+          </Mixer>
+          <MainSequencer>
+            <ClipSlotList>
+              <ClipSlot Id="0"><ClipSlot><Value /></ClipSlot></ClipSlot>
+              <ClipSlot Id="1"><ClipSlot><Value>
+                <MidiClip Id="2" Time="0">
+                  <CurrentStart Value="0" /><CurrentEnd Value="4" />
+                  <Loop><LoopStart Value="0" /><LoopEnd Value="4" /><StartRelative Value="0" /><LoopOn Value="true" /></Loop>
+                  <Name Value="Beat" />
+                  <Notes><KeyTracks>
+                    <KeyTrack Id="0"><Notes><MidiNoteEvent Time="1" Duration="0.5" Velocity="127" OffVelocity="64" IsEnabled="true" /></Notes><MidiKey Value="37" /></KeyTrack>
+                  </KeyTracks></Notes>
+                </MidiClip>
+              </Value></ClipSlot></ClipSlot>
+            </ClipSlotList>
+            <ClipTimeable><ArrangerAutomation><Events>
+              <MidiClip Id="1" Time="8">
+                <CurrentStart Value="8" /><CurrentEnd Value="14" />
+                <Loop><LoopStart Value="0" /><LoopEnd Value="4" /><StartRelative Value="1" /><LoopOn Value="true" /></Loop>
+                <Name Value="Groove" />
+                <Disabled Value="false" />
+                <Notes><KeyTracks>
+                  <KeyTrack Id="0"><Notes>
+                    <MidiNoteEvent Time="0" Duration="0.5" Velocity="127" OffVelocity="64" IsEnabled="true" />
+                    <MidiNoteEvent Time="2" Duration="0.5" Velocity="64" OffVelocity="64" IsEnabled="false" />
+                  </Notes><MidiKey Value="36" /></KeyTrack>
+                  <KeyTrack Id="1"><Notes><MidiNoteEvent Time="1" Duration="0.5" Velocity="63.5" OffVelocity="64" IsEnabled="true" /></Notes><MidiKey Value="37" /></KeyTrack>
+                </KeyTracks></Notes>
+              </MidiClip>
+            </Events></ArrangerAutomation></ClipTimeable>
+          </MainSequencer>
+          <DeviceChain><Devices>
+            <MidiVelocity Id="0" />
+            <DrumGroupDevice Id="1">
+              <Branches>
+                <DrumBranch Id="0">
+                  <Name><EffectiveName Value="Kick" /></Name>
+                  <DeviceChain><MidiToAudioDeviceChain Id="0"><Devices>
+                    <OriginalSimpler Id="0">
+                      <Player><MultiSampleMap><SampleParts>
+                        <MultiSamplePart Id="0">
+                          <Volume Value="1" /><Panorama Value="0.25" />
+                          <SampleStart Value="4800" /><SampleEnd Value="47999" />
+                          <SampleRef>
+                            <FileRef>
+                              <RelativePathType Value="3" />
+                              <RelativePath><RelativePathElement Id="0" Dir="Samples" /><RelativePathElement Id="1" Dir="Recorded" /></RelativePath>
+                              <Name Value="kick.wav" />
+                            </FileRef>
+                            <DefaultDuration Value="48000" /><DefaultSampleRate Value="48000" />
+                          </SampleRef>
+                        </MultiSamplePart>
+                      </SampleParts></MultiSampleMap></Player>
+                      <Globals><PlaybackMode Value="1" /></Globals>
+                      <TransposeKey><KeyMidi><NoteOrController Value="60" /></KeyMidi><Manual Value="-2" /></TransposeKey>
+                      <TransposeFine><Manual Value="50" /></TransposeFine>
+                      <Volume><Manual Value="-12" /></Volume>
+                    </OriginalSimpler>
+                  </Devices>
+                  <Mixer><Volume><Manual Value="1" /></Volume><Pan><Manual Value="0" /></Pan><Speaker><Manual Value="true" /></Speaker></Mixer>
+                  </MidiToAudioDeviceChain></DeviceChain>
+                  <BranchInfo><ReceivingNote Value="92" /><SendingNote Value="60" /><ChokeGroup Value="0" /></BranchInfo>
+                </DrumBranch>
+                <DrumBranch Id="1">
+                  <Name><EffectiveName Value="Snare" /></Name>
+                  <DeviceChain><MidiToAudioDeviceChain Id="0"><Devices>
+                    <OriginalSimpler Id="0">
+                      <Player><MultiSampleMap><SampleParts>
+                        <MultiSamplePart Id="0">
+                          <Volume Value="2" /><Panorama Value="0" />
+                          <SampleStart Value="0" /><SampleEnd Value="0" />
+                          <SampleRef>
+                            <FileRef><RelativePath Value="nowhere/snare.wav" /><Path Value="/no/such/folder/snare.wav" /></FileRef>
+                            <DefaultDuration Value="44100" /><DefaultSampleRate Value="44100" />
+                          </SampleRef>
+                        </MultiSamplePart>
+                      </SampleParts></MultiSampleMap></Player>
+                      <Globals><PlaybackMode Value="0" /></Globals>
+                      <Volume><Manual Value="0" /></Volume>
+                    </OriginalSimpler>
+                  </Devices>
+                  <Mixer><Volume><Manual Value="0.5" /></Volume><Pan><Manual Value="-0.5" /></Pan><Speaker><Manual Value="false" /></Speaker></Mixer>
+                  </MidiToAudioDeviceChain></DeviceChain>
+                  <BranchInfo><ReceivingNote Value="91" /><ChokeGroup Value="1" /></BranchInfo>
+                </DrumBranch>
+              </Branches>
+            </DrumGroupDevice>
+            <Reverb Id="2"><On><Manual Value="true" /></On></Reverb>
+          </Devices></DeviceChain>
+        </DeviceChain>
+      </MidiTrack>
+      <AudioTrack Id="2">
+        <Name><EffectiveName Value="Loop" /></Name>
+        <DeviceChain>
+          <Mixer><Volume><Manual Value="1" /></Volume><Speaker><Manual Value="false" /></Speaker></Mixer>
+          <MainSequencer>
+            <Sample><ArrangerAutomation><Events>
+              <AudioClip Id="0" Time="4">
+                <CurrentStart Value="4" /><CurrentEnd Value="12" />
+                <Loop><LoopStart Value="0" /><LoopEnd Value="8" /><StartRelative Value="0" /><LoopOn Value="false" /></Loop>
+                <Name Value="loop" />
+                <SampleRef><FileRef><Path Value=")" + (folder / "loop.wav").string() + R"(" /></FileRef><DefaultDuration Value="96000" /><DefaultSampleRate Value="48000" /></SampleRef>
+                <IsWarped Value="true" />
+                <WarpMarkers><WarpMarker Id="0" SecTime="0" BeatTime="0" /><WarpMarker Id="1" SecTime="4" BeatTime="8" /></WarpMarkers>
+              </AudioClip>
+              <AudioClip Id="1" Time="16">
+                <CurrentStart Value="16" /><CurrentEnd Value="18" />
+                <Loop><LoopStart Value="0.5" /><LoopEnd Value="2" /><StartRelative Value="0" /><LoopOn Value="false" /></Loop>
+                <SampleRef><FileRef><Path Value=")" + (folder / "loop.wav").string() + R"(" /></FileRef></SampleRef>
+                <IsWarped Value="false" />
+              </AudioClip>
+            </Events></ArrangerAutomation></Sample>
+          </MainSequencer>
+        </DeviceChain>
+      </AudioTrack>
+      <GroupTrack Id="3"><Name><EffectiveName Value="Bus" /></Name></GroupTrack>
+      <ReturnTrack Id="4">
+        <Name><EffectiveName Value="A-Reverb" /></Name>
+        <DeviceChain><Mixer><Volume><Manual Value="1" /></Volume></Mixer></DeviceChain>
+      </ReturnTrack>
+    </Tracks>
+    <MasterTrack>
+      <DeviceChain><Mixer><Tempo><Manual Value="120" /></Tempo><Volume><Manual Value="1" /></Volume></Mixer></DeviceChain>
+    </MasterTrack>
+    <SceneNames><Scene Id="0" Value="Intro" /><Scene Id="1" Value="Verse" /><Scene Id="2" Value="" /></SceneNames>
+  </LiveSet>
+</Ableton>)";
+        const auto set = (folder / "song.als").string();
+        {
+            auto* gz = gzopen (set.c_str(), "wb");
+            gzwrite (gz, xml.data(), (unsigned) xml.size());
+            gzclose (gz);
+        }
+        dawproject::Project p;
+        std::string error;
+        check (ableton::read (set, p, error), "als: read (" + error + ")");
+        check (p.application == "Ableton Live 11.3" && near (p.bpm, 120.0, 1e-9), "als: creator and tempo");
+        check (p.tracks.size() == 2 && p.returns.size() == 1, "als: two tracks (the group left out) and a return");
+        check (p.scenes.size() == 2 && p.scenes[1] == "Verse", "als: the scenes up to the last used");
+        if (p.tracks.size() == 2)
+        {
+            const auto& d = p.tracks[0];
+            check (d.name == "Drums" && d.notes && d.solo && ! d.mute && near (d.volumeDb, -6.02, 0.01) && near (d.pan, -0.5, 1e-9), "als: the drum track's mixer");
+            check (d.sends.size() == 1 && d.sends[0].target == 0 && near (d.sends[0].db, -6.02, 0.01), "als: the send to the return");
+            check (d.kit.size() == 2, "als: two pads");
+            if (d.kit.size() == 2)
+            {
+                const auto& k = d.kit[0];
+                check (k.note == 36 && k.name == "Kick" && fs::path (k.file).filename() == "kick.wav" && fs::exists (k.file), "als: kick pad, its sample found beside the set");
+                check (near (k.start, 0.1, 1e-9) && near (k.end, 1.0, 1e-9) && near (k.gainDb, -12.0, 1e-6) && near (k.pan, 0.25, 1e-9)
+                       && near (k.pitch, -1.5, 1e-9) && ! k.gate, "als: kick's start, end, level, pan, transpose and one-shot");
+                const auto& s = d.kit[1];
+                check (s.note == 37 && s.file == snare && s.choke == 1 && s.mute && s.gate && s.end < 0.0, "als: snare found by name, choke group, muted, classic");
+                check (near (s.gainDb, 20.0 * std::log10 (2.0) + 20.0 * std::log10 (0.5), 1e-6) && near (s.pan, -0.5, 1e-9), "als: snare's levels and its chain's pan");
+            }
+            check (d.noteClips.size() == 1, "als: one arrangement clip");
+            if (d.noteClips.size() == 1)
+            {
+                const auto& c = d.noteClips[0];
+                check (near (c.start, 4.0, 1e-9) && near (c.lengthBeats, 6.0, 1e-9) && c.name == "Groove", "als: the clip placed");
+                // From beat 1 of a 4-beat loop for 6 beats: the 37 at 0, the 36 at 3, the 37 at 4; the disabled note left out.
+                std::vector<std::pair<double, int>> got;
+                for (const auto& n : c.notes)
+                    got.emplace_back (n.time, n.key);
+                check (got == (std::vector<std::pair<double, int>> { { 0.0, 37 }, { 3.0, 36 }, { 4.0, 37 } }), "als: the loop unrolled");
+                check (! c.notes.empty() && near (c.notes[0].velocity, 0.5, 1e-9), "als: velocity");
+            }
+            check (d.slots.size() == 1 && d.slots[0].scene == 1 && d.slots[0].noteClip.notes.size() == 1, "als: the Session clip in its scene");
+            const auto& l = p.tracks[1];
+            check (l.name == "Loop" && l.mute && l.audio, "als: the audio track");
+            check (l.audioClips.size() == 2, "als: two audio clips");
+            if (l.audioClips.size() == 2)
+            {
+                // 8 beats over 4 s at 120 BPM: not stretched.
+                check (near (l.audioClips[0].start, 2.0, 1e-9) && near (l.audioClips[0].length, 4.0, 1e-9) && ! l.audioClips[0].warped
+                       && near (l.audioClips[0].fileLength, 2.0, 1e-9), "als: the warped clip at its tempo");
+                check (near (l.audioClips[1].start, 8.0, 1e-9) && near (l.audioClips[1].offset, 0.5, 1e-9) && near (l.audioClips[1].length, 1.0, 1e-9),
+                       "als: the unwarped clip, its start in seconds");
+            }
+        }
+        auto said = [&] (const std::string& part)
+        {
+            return std::any_of (p.notes.begin(), p.notes.end(), [&] (const std::string& n) { return n.find (part) != std::string::npos; });
+        };
+        check (said ("MidiVelocity") && said ("Reverb") && said ("group"), "als: what did not carry over is said");
+        check (! ableton::parse ("<Project/>", folder.string(), p, error), "als: not a set");
+        fs::remove_all (folder);
+    }
+
 int main()
 {
     testStorage();
@@ -9582,6 +10744,7 @@ int main()
     testMetadata();
     testXmp();
     testIxml();
+    testEbuCore();
     testRiffChunks();
     testNyquist();
     testAlbum();
@@ -9609,6 +10772,7 @@ int main()
     testModulatorRack();
     testPhiVoice();
     testPhiPhaser();
+    testPhiRepeat();
     testPhiTuning();
     testRagaSheets();
     testSitar();
@@ -9630,10 +10794,14 @@ int main()
     testRhythmGenerator();
     testArchitectonics();
     testCompose();
+    testBolProcessor();
+    testPhiTabla();
     testStochastic();
     testCubify();
     testSerial();
     testPluginMeasure();
+    testDawProject();
+    testAbletonSet();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");

@@ -97,6 +97,8 @@ As a rhythm it feels like a groove that keeps nearly repeating and then shifts. 
 
 Sonify uses the same word for its drums: with **Φ rhythm** on, a drum only strikes on the ones.
 
+[]{.ix t="Φ Repeat"}[]{.ix t="beat repeat"}**Φ Repeat** is a beat repeat, for glitches and rhythmic variations. At every **Interval** (1/32 to 4 bars), moved later by **Offset** in sixteenths, it may catch one **Grid** of the sound (1/2 to 1/128, or **Triplets**) and play it again and again for the **Gate**, in sixteenths. **Chance** decides whether each interval repeats; turn on **Φ Golden** and the Fibonacci word decides instead, so the repeats fall on Φ Rhythm's never-repeating, never-clumping pattern at Chance's share of the points. **Variation** halves the grid at random, up to four times, once per repeat (*Trigger*), every 1/4, 1/8 or 1/16, or on every repetition (*Auto*). **Pitch** plays the slice lower (down to −48 semitones), **Pitch Decay** drops each repetition up to 3 semitones more, and **Decay** fades the repeats out by the gate's end. **Filter** passes a band (**Frequency**, **Width** in octaves) of the repeats only. **Mode** keeps the dry sound under them (*Mix*), cuts it while they play (*Insert*) or never lets it through (*Gate*); **Volume** sets their level; hold **Repeat** (or map it to a macro) to repeat right now, whatever the chance. Put it on a ray of a Prism to glitch one band or only the side. It follows the host's tempo when there is one, else its **Tempo**.
+
 ### Motion that never repeats
 
 []{.ix t="Φ Drift"}[]{.ix t="Quasi-periodic motion"}An LFO repeats: a chorus or tremolo at 1 Hz sounds exactly the same every second, and the ear soon hears the loop. Add a second LFO at 2 Hz and the pair still repeats every second. Add one at 1.618 Hz instead and the pair never comes back to the same shape. **Φ Drift** sums three LFOs at the rate, the rate × φ and the rate × φ² (0.618, 1 and 1.618 Hz by default). The result is motion that is smooth and steady but never loops. It drives a chorus, a tremolo or an auto-pan.
@@ -184,7 +186,7 @@ What the golden ratio really offers is the one property this chapter began with:
 | Φ Tame | A cut at the fundamental × 8.09 | A rule of thumb that often helps |
 | Φ Echo | Taps that never meet, panned by the golden angle | Character |
 | Φ Drift | Motion that never loops | Character |
-| Φ Rhythm, Sonify's Φ rhythm | A rhythm that never repeats and never clumps | Experiment |
+| Φ Rhythm, Φ Repeat's Golden, Sonify's Φ rhythm | A rhythm that never repeats and never clumps | Experiment |
 | Φ Stack, Φ Resonator, Sonify's Φ scale | Pitches between the keys that still belong together | Experiment |
 
 ::: tip
@@ -202,10 +204,16 @@ The quality features are safe to leave on: the Φ switches in Stereoize and Mid/
 | Φ Space | Size, Decay (2 s), Damping, Mix, Pre-delay (13 ms) | Eight lines √φ apart: a smooth reverb |
 | Φ Drift | Mode (Chorus, Tremolo, Pan), Rate (0.618 Hz), Depth, Mix | Three LFOs at rate × 1, φ, φ² |
 | Φ Rhythm | Tempo, Density (61.8 % to 14.6 %), Shift, Depth, Step, Smooth | A gate playing the Fibonacci word |
+| Φ Repeat | Interval (1 bar), Offset (8/16), Grid (1/16), Triplets, Gate (8/16), Chance (100 %), Φ Golden, Variation, Var. Mode, Repeat, Pitch, Pitch Decay, Decay, Filter, Frequency, Width, Mode (Insert), Volume, Tempo | A beat repeat: slices repeated on the beat, by chance or the golden rhythm |
 | Φ Resonator | Root (220 Hz), Bands (5), Sharpness (Q 30), Mix, Width, Noise, Output | Narrow bands at root × φⁿ |
 | Φ Stack | Copies (4), Decay, Tone (8 kHz), Mix, Width | Copies pitched up by φ, φ², φ³, φ⁴ |
 | Φ Tame | Depth, Fundamental (55 Hz), Width (Q 1.618), Find Fundamental | A cut at the fundamental × φ ÷ 2 × 10 |
 | Φ De-resonator | Depth, Sharpness, Speed, Mix, Low, High, Delta | Turns resonances down while they ring |
+| Φ Phaser | Stages (5), Rate (0.382 Hz), Depth (61.8 %), Centre (618 Hz), Spread, Feedback (38.2 %), Stereo, Mix (50 %) | 2, 3, 5, 8 or 13 allpass stages tuned φ apart, swept by LFOs at rate × 1 and φ |
+| Φ Chorus | Rate (0.618 Hz), Depth (2.618 ms), Delay (13 ms), Voices (5), Width, Mix (38.2 %) | 2, 3, 5 or 8 voices with rates √φ apart, LFOs and pans a golden angle apart |
+| Φ Compressor | Threshold (−18 dB), Ratio (φ, 1.62:1), Attack (13 ms), Release (233 ms), Knee (φ⁴ dB), Makeup, Mix | Ratios φ^(n/2); a two-stage release at release ÷ φ and × φ |
+| Φ Multiband | Threshold and Gain for Low, Low Mid, High Mid and High, Crossovers 1 to 3, Ratio, Attack, Release, Mix | Four bands split at 80 Hz × φⁿ (209 Hz, 887 Hz, 3.76 kHz), times a golden step slower below and faster above |
+| Φ Limiter | Drive, Ceiling (−1 dBTP), Release (89 ms) | A true-peak limiter with φ² ms of look-ahead and the golden release |
 | Φ Modulation | Four pages: Flow, Space, Grain, Matrix (see below) | A sequence engine and three effects that follow it |
 
 ### The Φ window {#phi-window}
@@ -225,6 +233,11 @@ The quality features are safe to leave on: the Φ switches in Stereoize and Mid/
 | Φ Stack | The copies, by pitch |
 | Φ Tame | Its cut, at the fundamental it found |
 | Φ De-resonator | Live: the level it hears and the cut it makes |
+| Φ Phaser | Its notches with the LFOs at rest |
+| Φ Chorus | The voices, by delay, moving as they sweep |
+| Φ Compressor | Its curve, level out against level in, beside a dashed line where nothing changes |
+| Φ Multiband | The four bands, with a handle for each crossover |
+| Φ Limiter | The last three seconds of gain reduction |
 | Φ Modulation | The page chosen: Flow's next events, Space's spectrum before and after, the grains playing, Matrix's nodes and route |
 
 ### Φ Modulation {#phi-modulation}
@@ -250,6 +263,19 @@ Nothing in Φ Modulation is random. When playback starts or jumps, Flow and Matr
 Moving one band never restarts another, so you can sweep while it plays. A Φ EQ saved before these controls arrived opens as it was.
 
 Φ De-resonator delays the sound by 2048 samples (43 ms at 48 kHz) so it can look at each frequency before it plays; PHI compensates for that delay automatically. **Delta** plays only what it takes away, which is the quickest way to hear what it is doing.
+
+## Tested against the EBU test set {#phi-ebu}
+
+[]{.ix t="Φ effects!EBU tests"}[]{.ix t="EBU loudness test set"}The Φ dynamics and Φ EQ were measured on the European Broadcasting Union's loudness test set (version 05, the signals of EBU Tech 3341 and Tech 3342, with the Tech 3343 reference pink noise), using PHI's own loudness and true-peak meters. Those meters were checked first against the same set and pass all 110 of its checks (see [The Analysis Meters window](#analysis-meters)).
+
+| Effect | Test | Result |
+|---|---|---|
+| Φ Limiter | Programme, pink noise and the inter-sample test signals, ceiling −1 dBTP, driven 0 to 18 dB | PHI's meter reads −1.00 dBTP or below every time; a finer 32× check finds up to 0.1 dB more on dense programme driven hard |
+| Φ Compressor | 1 kHz tones from −60 to 0 dBFS at ratios φ, φ² and φ⁴; EBU signal 5's 6 dB step | Exact below the threshold; about 93 % of the drawn reduction on a held tone; attack and release measured and listed |
+| Φ Multiband | Every band at unity, 20 Hz to 20 kHz, and the EBU programme | Flat within ±0.000002 dB; integrated loudness unchanged |
+| Φ EQ | Each band type against Robert Bristow-Johnson's Audio EQ Cookbook | Within 0.0014 dB |
+
+The test set is made to check meters, not effects, so the Φ effects are not certified by the EBU: they were measured *with* meters that the EBU set validates, on the EBU's signals. The full report, with every number, the graphs, and the scripts to repeat the tests, is in `docs/testing/ebu-tests.md`.
 
 ## The Φ mark {#phi-mark}
 

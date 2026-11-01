@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+# A tag such as v0.5.0 publishes the Arch package as a GitHub release
+permissions:
+  contents: write
+
 jobs:
   arch:
     runs-on: ubuntu-24.04
@@ -19,7 +23,7 @@ jobs:
       - name: Configure
         # Fails if PipeWire was not found, since then recording would be left out
         run: |
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release | tee configure.log
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr | tee configure.log
           ! grep -q "building without recording" configure.log
       - name: Mirror speexdsp
         # gitlab.xiph.org (Cardinal's Rack submodule speexdsp) answers 502/504 at times; GitHub's mirror instead
@@ -28,6 +32,26 @@ jobs:
         run: cmake --build build
       - name: Test
         run: ctest --test-dir build --output-on-failure
+      - name: Package
+        # makepkg will not run as root. A tag v0.5.0 gives version 0.5.0; other builds 0.5.0.r<run>.g<commit>.
+        run: |
+          version=$(sed -n 's/^project(Phi VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          if [ "$GITHUB_REF_TYPE" = tag ]; then pkgver=${GITHUB_REF_NAME#v}; else pkgver=$version.r$GITHUB_RUN_NUMBER.g${GITHUB_SHA::7}; fi
+          useradd -m builder
+          chown -R builder build packaging/arch
+          cd packaging/arch
+          sudo -u builder PHI_BUILD_DIR="$GITHUB_WORKSPACE/build" PHI_PKGVER="$pkgver" PKGEXT=.pkg.tar.zst makepkg -p ci.PKGBUILD --nodeps
+          pacman -Qlp phi-*.pkg.tar.zst | grep -E 'bin/|applications/|icons/'
+          ! pacman -Qlp phi-*.pkg.tar.zst | grep /JUCE-  # JUCE's headers and juceaide, not the plugins' JUCE licences
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phi-arch-package
+          path: packaging/arch/phi-*.pkg.tar.zst
+      - name: Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: packaging/arch/phi-*.pkg.tar.zst
       - uses: actions/upload-artifact@v4
         with:
           name: phi-arch
@@ -41,16 +65,16 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build qt6-base-dev libgl1-mesa-dev libasound2-dev libjack-jackd2-dev libpipewire-0.3-dev ladspa-sdk \
+          sudo apt-get install -y ninja-build qt6-base-dev qt6-wayland libqt6svg6 libgl1-mesa-dev libasound2-dev libjack-jackd2-dev libpipewire-0.3-dev ladspa-sdk \
             libfreetype-dev libfontconfig1-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev \
             libxcomposite-dev libxext-dev libcairo2-dev libsndfile1-dev libxi-dev clang \
             libavcodec-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev libavdevice-dev libtag1-dev zlib1g-dev \
-            libxcb-icccm4-dev libxcb-dri2-0-dev libx11-xcb-dev libxcb1-dev libfftw3-dev libcurl4-openssl-dev libusb-1.0-0-dev
+            libxcb-icccm4-dev libxcb-dri2-0-dev libx11-xcb-dev libxcb1-dev libfftw3-dev libcurl4-openssl-dev libusb-1.0-0-dev librsvg2-bin
       - uses: actions/checkout@v4
       - name: Configure
         # Fails if PipeWire was not found, since then recording would be left out
         run: |
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release | tee configure.log
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr | tee configure.log
           ! grep -q "building without recording" configure.log
       - name: Mirror speexdsp
         # gitlab.xiph.org (Cardinal's Rack submodule speexdsp) answers 502/504 at times; GitHub's mirror instead
@@ -59,3 +83,40 @@ jobs:
         run: cmake --build build
       - name: Test
         run: ctest --test-dir build --output-on-failure
+      - name: AppImage
+        # Built on Ubuntu 24.04, so it runs on distributions with that glibc or newer. linuxdeploy bundles
+        # Qt (with its Wayland and SVG plugins) and the other libraries; the sound server's client libraries
+        # (ALSA, JACK, PipeWire) stay the system's, since they must match the running server.
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
+          QMAKE: /usr/bin/qmake6
+          EXTRA_QT_MODULES: svg
+          EXTRA_PLATFORM_PLUGINS: libqwayland-generic.so;libqwayland-egl.so
+        run: |
+          version=$(sed -n 's/^project(Phi VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          if [ "$GITHUB_REF_TYPE" = tag ]; then export LINUXDEPLOY_OUTPUT_VERSION=${GITHUB_REF_NAME#v}; else export LINUXDEPLOY_OUTPUT_VERSION=$version-${GITHUB_SHA::7}; fi
+          DESTDIR="$PWD/AppDir" cmake --install build
+          rm -rf AppDir/usr/{bin,include,lib/cmake}/JUCE-*  # JUCE's own install files; PHI needs none of them
+          # appimagetool makes .DirIcon only from a PNG or XPM at the top of the AppDir, not from the SVG
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          rsvg-convert -w 256 -h 256 AppDir/usr/share/icons/hicolor/scalable/apps/phi.svg -o AppDir/usr/share/icons/hicolor/256x256/apps/phi.png
+          cp AppDir/usr/share/icons/hicolor/256x256/apps/phi.png AppDir/phi.png
+          base=https://github.com/linuxdeploy
+          wget -q $base/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage \
+                  $base/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x linuxdeploy*.AppImage
+          ./linuxdeploy-x86_64.AppImage --appdir AppDir --plugin qt --output appimage \
+            -d AppDir/usr/share/applications/phi.desktop -i AppDir/usr/share/icons/hicolor/scalable/apps/phi.svg \
+            --exclude-library 'libasound.so*' --exclude-library 'libjack.so*' --exclude-library 'libpipewire-0.3.so*'
+          # Every library PHI needs is either in the AppImage or on any desktop system
+          ./PHI-*-x86_64.AppImage --appimage-extract > /dev/null
+          ! LD_LIBRARY_PATH=squashfs-root/usr/lib ldd squashfs-root/usr/bin/phi | grep "not found"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phi-appimage
+          path: PHI-*-x86_64.AppImage
+      - name: Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: PHI-*-x86_64.AppImage

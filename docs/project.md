@@ -77,6 +77,12 @@ and `Ctrl+S` on one saves a `.phi` beside it, leaving the old file alone.
   `settings.ini` when the project has none) and `mixerInView()`, the view hook.
 - `MainWindow::patchBayJson`, `setPatchBayJson` and `resetPatchBay` in `PatchBaySection.cpp`.
 
+## Other programs' projects
+
+A DAWproject (`.dawproject`, from Bitwig Studio, Studio One, Cubase and others) opens as a PHI
+project in a folder beside it, and Mixer > Export DAWproject writes one: [dawproject.md](dawproject.md).
+Ableton Live Sets (`.als`) open the same way, a Drum Rack on the Slicer: [ableton-sets.md](ableton-sets.md).
+
 ## Not yet
 
 - The editor's own tabs (files open, their places and zoom) are not part of a project; the

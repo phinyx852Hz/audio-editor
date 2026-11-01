@@ -2,6 +2,7 @@
 #include "ExportDialog.h"
 #include "Settings.h"
 
+#include "MasterPanel.h"
 #include "MetadataEditor.h"
 #include "../core/Metadata.h"
 #include "../engine/AudioEngine.h"
@@ -172,9 +173,8 @@ ExportDialog::ExportDialog (const Context& c, QWidget* parent)
     depthBox = new QComboBox;
     form->addRow (tr ("&Bit depth:"), depthBox);
     ditherBox = new QComboBox;
-    ditherBox->addItem (tr ("None"), (int) dsp::Dither::none);
-    ditherBox->addItem (tr ("TPDF"), (int) dsp::Dither::tpdf);
-    ditherBox->addItem (tr ("TPDF, noise shaped"), (int) dsp::Dither::shaped);
+    for (const auto d : dsp::ditherOrder)
+        ditherBox->addItem (ditherLabel (d), (int) d);
     form->addRow (tr ("&Dither:"), ditherBox);
 
     normalizeBox = new QCheckBox (tr ("&Normalize loudness to"));
@@ -582,6 +582,7 @@ void ExportDialog::showOutput (int row)
             addBox (tr ("Broadcast Wave (bext)"), &tagio::Options::bext);
             addBox (tr ("Cart chunk"), &tagio::Options::cart);
             addBox (tr ("iXML"), &tagio::Options::ixml);
+            addBox (tr ("EBUCore (axml)"), &tagio::Options::ebucore);
         }
         if (ext == "aiff")
             addBox (tr ("AIFF text chunks"), &tagio::Options::riff);

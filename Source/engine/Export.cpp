@@ -332,6 +332,7 @@ std::string toJson (const std::vector<Output>& outputs)
             if (! on)
                 off.add (name);
         obj->setProperty ("schemasOff", off.joinIntoString (","));
+        obj->setProperty ("ebucore", s.ebucore);
         obj->setProperty ("id3Version", s.id3Version);
         list.add (juce::var (obj));
     }
@@ -355,7 +356,7 @@ std::vector<Output> fromJson (const std::string& text)
                 o.settings[p.name.toString().toStdString()] = p.value.toString().toStdString();
         o.sampleRate = (int) v.getProperty ("sampleRate", o.sampleRate);
         o.bits = (int) v.getProperty ("bits", o.bits);
-        o.dither = (dsp::Dither) std::clamp ((int) v.getProperty ("dither", (int) o.dither), 0, 2);
+        o.dither = (dsp::Dither) std::clamp ((int) v.getProperty ("dither", (int) o.dither), 0, dsp::numDitherTypes - 1);
         o.normalize = (bool) v.getProperty ("normalize", o.normalize);
         o.targetLufs = (double) v.getProperty ("targetLufs", o.targetLufs);
         o.limit = (bool) v.getProperty ("limit", o.limit);
@@ -373,6 +374,7 @@ std::vector<Output> fromJson (const std::string& text)
         s.id3 = ! off.contains ("id3"); s.id3v1 = ! off.contains ("id3v1"); s.vorbis = ! off.contains ("vorbis"); s.mp4 = ! off.contains ("mp4");
         s.ape = ! off.contains ("ape"); s.xmp = ! off.contains ("xmp"); s.chapters = ! off.contains ("chapters");
         s.id3Version = (int) v.getProperty ("id3Version", 4) == 3 ? 3 : 4;
+        s.ebucore = (bool) v.getProperty ("ebucore", false);
         out.push_back (std::move (o));
     }
     return out;

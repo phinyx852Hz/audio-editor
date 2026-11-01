@@ -82,6 +82,7 @@ namespace slicer
     {
         std::array<Pad, numPads> pads {};
         double velocity = 0.6;      // 0: every hit at full level, 1: level follows velocity
+        double velocityTone = 0.0;  // 0: every hit as bright, 1: softer hits darker (a low-pass that closes, as a drum struck softly)
         int voices = 16;            // 1..64, every layer of a hit takes one
         Layout layout = Layout::push;
         int pushPage = 0;           // which half of the pads Push's grid plays: 0 A to D, 1 E to H
@@ -167,6 +168,7 @@ namespace slicer
             float velocity = 1.0f;
             double pitch = 0.0;   // semitones, from the step that hit it
             double position = 0.0, level = 0.0, fastRelease = 0.0;
+            double tone = 1.0, toneLeft = 0.0, toneRight = 0.0;   // velocityTone's one-pole low-pass: its coefficient (1: open) and state
             unsigned age = 0;
         };
 

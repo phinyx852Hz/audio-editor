@@ -4,12 +4,13 @@ This manual describes every part of PHI, from opening your first file to masteri
 
 ## How the manual is laid out
 
-The chapters are grouped in six parts.
+The chapters are grouped in seven parts.
 
 - **Getting Started** installs PHI, walks around its window and explains how it is driven from the keyboard. Read [Working from the Keyboard](#keyboard) even if you only read one chapter: everything else assumes it.
 - **Editing** covers the wave editor: files, recording, selection and editing, markers, processing, the spectral view, repair and restoration, tempo and warping, and Nyquist effects and macros.
 - **Mastering** covers the Master Section and the Device Chain, the effects that come with PHI, the meters, reference tracks and the Master Assistant, exporting, batch processing, albums and metadata.
-- **Producing and Performing** covers the Find panel, the mixer and patchbay, the clip launcher, the samplers, the instruments, the trackers, surround and ambisonics, the Visualizer and video and streaming.
+- **Producing and Performing** covers the Find panel, the mixer and patchbay, the MIDI editor, the clip launcher, the samplers, the instruments, the trackers, surround and ambisonics, the Visualizer, controllers and MIDI mapping, and video and streaming.
+- **Composing** covers the Compose, Mode and Research menus: writing scores by the methods of many traditions, and the modes, harmonies, tunings and rhythms they use.
 - **Φ** is a chapter of its own, about the golden ratio in PHI: what it is, where PHI uses it, and why.
 - **Making PHI Yours** covers themes, colours and settings.
 

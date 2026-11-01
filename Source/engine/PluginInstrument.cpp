@@ -4,6 +4,7 @@
 #include "AudioEngine.h"
 #include "InstrumentFrame.h"
 #include "MasterChain.h"
+#include "PluginNative.h"
 #include "PluginWindow.h"
 #include "../mixer/Instruments.h"
 
@@ -148,6 +149,20 @@ namespace
                 return;
             lastState = text;
             guard ([&] { plugin->setStateInformation (block.getData(), (int) block.getSize()); });
+        }
+
+        bool nativeState (std::string& format, std::string& deviceId, std::vector<uint8_t>& bytes) const override
+        {
+            bool ok = false;
+            const_cast<PluginInstrument*> (this)->guard ([&] { ok = pluginnative::save (*plugin, format, deviceId, bytes); });
+            return ok;
+        }
+
+        bool setNativeState (const std::vector<uint8_t>& bytes) override
+        {
+            bool ok = false;
+            guard ([&] { ok = pluginnative::load (*plugin, bytes); });
+            return ok;
         }
 
         bool setParameter (const std::string& name, float value) override

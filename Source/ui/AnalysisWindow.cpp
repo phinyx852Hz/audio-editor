@@ -55,6 +55,9 @@ namespace analysis
 {
     constexpr double minusInfinity = -200.0;
     constexpr double clipLevel = 0.99997;     // about -0.0003 dBFS: a sample at full scale
+    // A digital OVER, as dedicated meters count it: this many samples in a row at full scale
+    // (the Sony PCM-1630 convention, which Bob Katz recommends in "Level Practices", Part 1).
+    constexpr int overRun = 3;
     constexpr int numBands = 31;              // third octaves from 20 Hz to 20 kHz
     const char* const bandNames[numBands] { "20", "25", "31", "40", "50", "63", "80", "100", "125", "160", "200", "250", "315", "400", "500",
                                             "630", "800", "1k", "1.25k", "1.6k", "2k", "2.5k", "3.15k", "4k", "5k", "6.3k", "8k", "10k",
@@ -165,6 +168,14 @@ namespace analysis
         std::array<dsp::TruePeakDetector, 2> truePeak;
         int blockLength = 4800, blockFill = 0;
         double blockPower = 0.0;
+        // The maximum momentary and short-term loudness are taken every 10 ms, not just at the
+        // 100 ms blocks: a 400 ms burst that starts between blocks still reads its full level
+        // (EBU Tech 3341, test signals 13 and 14).
+        static constexpr int stepsPerShort = 300, stepsPerMomentary = 40;
+        int stepLength = 480, stepFill = 0, stepIndex = 0;
+        long long steps = 0;
+        double stepPower = 0.0, momentarySum = 0.0, shortSum = 0.0;
+        std::array<double, stepsPerShort> stepRing {};
         std::vector<double> blocks;
         dsp::IntegratedLoudness loudness;   // the same blocks, gated as they come
         std::vector<float> momentaryHistory, shortHistory;   // LUFS, one per block
@@ -188,13 +199,141 @@ namespace analysis
         {
             double sum = 0.0, squares = 0.0, windowSquares = 0.0;
             float minimum = 0.0f, maximum = 0.0f;
-            long long clipped = 0;
+            long long clipped = 0;   // every sample at full scale
+            long long overs = 0;     // runs of at least overRun samples at full scale, each counted once
+            int run = 0;             // full-scale samples in a row so far
             double maxRms = minusInfinity, minRms = 0.0, rmsDbSum = 0.0;
             int windows = 0;
             std::array<int, 61> histogram {};   // window RMS, 1 dB bins from -60 to 0
         };
         std::array<Stats, 2> stats;
         long long frames = 0;
+
+        // Bits (a bitscope): each sample read as a two's-complement integer of bitDepth bits, as a
+        // WAV or AIFF file of that depth would hold it. Bit 0 is the sign bit (the MSB), as bitscopes
+        // number them from the left.
+        static constexpr int maxBits = 24;
+        int bitDepth = 24;
+        std::array<std::array<long long, maxBits>, 2> tickOnes {};    // samples with each bit set since the last tick
+        std::array<long long, 2> tickCount {};
+        std::array<std::array<double, maxBits>, 2> bitOn {};          // as shown: the share of samples with the bit set
+        std::array<std::array<double, maxBits>, 2> bitSeen {};        // as shown: 1 while the bit moves, then falling
+        std::array<int, 2> lowestBit { -1, -1 };                      // the lowest bit ever set since the reset (-1: none)
+        std::array<long long, 2> finer {}, quantised {};              // samples with detail below bitDepth bits, and all of them
+        void resetBits()
+        {
+            tickOnes = {};
+            tickCount = {};
+            bitOn = bitSeen = {};
+            lowestBit = { -1, -1 };
+            finer = quantised = {};
+        }
+        // Classic meters: the ballistics of the VU meter, the quasi-peak programme meters (PPMs) and
+        // Bob Katz's K-meters, all run on every sample so the Classic card can switch between them.
+        // Each reads an amplitude where a steady sine reads its own peak; the card turns that into
+        // its scale around the alignment level.
+        // - VU (Chinn, Gannett and Morris, 1940; IEC 60268-17): a full-wave rectifier driving a
+        //   needle of second order, 99 % of the reading in 0.3 s with a 1.25 % overshoot
+        //   (damping 0.813, natural frequency 13.51 rad/s), scaled so a sine reads its peak.
+        // - PPM Type II (IEC 60268-10; EBU Tech 3205-E): two gated integrators on the rectified
+        //   signal, fitted to the EBU table of 5 kHz bursts (10 ms -2 dB, 5 ms -4, 1.5 ms -9,
+        //   0.5 ms -17, within 0.4 dB), falling 24 dB in 2.8 s, a straight line in dB.
+        // - PPM Type I (IEC 60268-10; DIN 45406): the same shape twice as fast (5 ms reads -2 dB),
+        //   falling 20 dB in 1.7 s.
+        // - K-meter (Katz, "Level Practices", Appendix 3): RMS rising and falling to 99 % in
+        //   600 ms, read 3 dB up (AES17) so a sine reads its peak; a sample peak beside it, held
+        //   10 s, falling 26 dB in 3 s.
+        struct Classic
+        {
+            double vu = 0.0, vuSpeed = 0.0;
+            double ppm2Slow = 0.0, ppm2Fast = 0.0, ppm1Slow = 0.0, ppm1Fast = 0.0;
+            double power = 0.0;
+            double tickPeak = 0.0, peak = 0.0, peakHold = 0.0, peakHoldAge = 0.0;
+        };
+        std::array<Classic, 2> classic;
+        double vuStep = 0.0, ppm2Slow = 0.0, ppm2Fast = 0.0, ppm1Slow = 0.0, ppm1Fast = 0.0, ppm2Fall = 1.0, ppm1Fall = 1.0, kCoefficient = 0.0;
+        static constexpr double vuDamping = 0.8127, vuOmega = 13.512;
+
+        void setClassicRate()
+        {
+            const auto perDb = std::log (10.0) / 20.0;
+            vuStep = 1.0 / rate;
+            ppm2Slow = std::min (1.0, 253.9 / rate);
+            ppm2Fast = std::min (1.0, 808.7 / rate);
+            ppm1Slow = std::min (1.0, 2.0 * 253.9 / rate);
+            ppm1Fast = std::min (1.0, 2.0 * 808.7 / rate);
+            ppm2Fall = std::exp (-perDb * (24.0 / 2.8) / rate);
+            ppm1Fall = std::exp (-perDb * (20.0 / 1.7) / rate);
+            kCoefficient = std::exp (-std::log (100.0) / (0.6 * rate));
+        }
+
+        void addClassic (int ch, double v)
+        {
+            auto& c = classic[(size_t) ch];
+            const double a = std::abs (v);
+
+            // The VU needle: the rectified mean of a sine is 2/pi of its peak.
+            const double drive = a * (M_PI / 2.0);
+            c.vuSpeed += (vuOmega * vuOmega * (drive - c.vu) - 2.0 * vuDamping * vuOmega * c.vuSpeed) * vuStep;
+            c.vu += c.vuSpeed * vuStep;
+
+            const auto integrate = [a] (double& z, double w) { if (a > z) z += w * (a - z); };
+            c.ppm2Slow *= ppm2Fall;
+            c.ppm2Fast *= ppm2Fall;
+            c.ppm1Slow *= ppm1Fall;
+            c.ppm1Fast *= ppm1Fall;
+            integrate (c.ppm2Slow, ppm2Slow);
+            integrate (c.ppm2Fast, ppm2Fast);
+            integrate (c.ppm1Slow, ppm1Slow);
+            integrate (c.ppm1Fast, ppm1Fast);
+
+            c.power = kCoefficient * c.power + (1.0 - kCoefficient) * v * v;
+            c.tickPeak = std::max (c.tickPeak, a);
+        }
+
+        // As shown, in dB where a sine reads its peak in dBFS.
+        double vuDb (int ch) const     { return ampDb (std::max (0.0, classic[(size_t) ch].vu)); }
+        double ppm2Db (int ch) const   { const auto& c = classic[(size_t) ch]; return ampDb (0.5 * (c.ppm2Slow + c.ppm2Fast)); }
+        double ppm1Db (int ch) const   { const auto& c = classic[(size_t) ch]; return ampDb (0.5 * (c.ppm1Slow + c.ppm1Fast)); }
+        double kRmsDb (int ch) const   { return powerDb (classic[(size_t) ch].power) + 3.0103; }
+        double kPeakDb (int ch) const  { return classic[(size_t) ch].peak; }
+        double kHoldDb (int ch) const  { return classic[(size_t) ch].peakHold; }
+
+        void updateClassic (double dt, bool fresh)
+        {
+            for (auto& c : classic)
+            {
+                if (! fresh)
+                {
+                    // Nothing played this tick: let the needles and bars fall as they would.
+                    const auto samples = dt * rate;
+                    c.ppm2Slow *= std::pow (ppm2Fall, samples);
+                    c.ppm2Fast *= std::pow (ppm2Fall, samples);
+                    c.ppm1Slow *= std::pow (ppm1Fall, samples);
+                    c.ppm1Fast *= std::pow (ppm1Fall, samples);
+                    c.power *= std::pow (kCoefficient, samples);
+                    c.vu *= std::exp (-dt / 0.065);
+                    c.vuSpeed = 0.0;
+                }
+                c.peak = std::max (ampDb (c.tickPeak), std::max (minusInfinity, c.peak - (26.0 / 3.0) * dt));
+                if (c.peak >= c.peakHold)
+                {
+                    c.peakHold = c.peak;
+                    c.peakHoldAge = 0.0;
+                }
+                else if ((c.peakHoldAge += dt) > 10.0)
+                    c.peakHold = std::max (minusInfinity, c.peakHold - (26.0 / 3.0) * dt);
+                c.tickPeak = 0.0;
+            }
+        }
+
+        void resetClassic()
+        {
+            classic = {};
+            for (auto& c : classic)
+                c.peak = c.peakHold = minusInfinity;
+        }
+
         int windowLength = 2400, windowFill = 0;
 
         // Spectrum: the newest samples, transformed each tick and smoothed per bin.
@@ -242,8 +381,10 @@ namespace analysis
             for (auto& k : kWeighting)
                 k.prepare (rate);
             blockLength = std::max (1, (int) std::lround (rate * 0.1));
+            stepLength = std::max (1, (int) std::lround (rate * 0.01));
             windowLength = std::max (1, (int) std::lround (rate * 0.05));
             rmsCoefficient = std::exp (-1.0 / (0.3 * rate));
+            setClassicRate();
             reset();
         }
 
@@ -307,6 +448,10 @@ namespace analysis
                 t.reset();
             blockFill = 0;
             blockPower = 0.0;
+            stepFill = stepIndex = 0;
+            steps = 0;
+            stepPower = momentarySum = shortSum = 0.0;
+            stepRing = {};
             blocks.clear();
             loudness.reset();
             momentaryHistory.clear();
@@ -322,6 +467,8 @@ namespace analysis
             hasSignal = false;
             stats = {};
             frames = 0;
+            resetBits();
+            resetClassic();
             windowFill = 0;
             averaged = 0;
         }
@@ -347,8 +494,16 @@ namespace analysis
                     s.windowSquares += v * v;
                     s.minimum = std::min (s.minimum, x[ch]);
                     s.maximum = std::max (s.maximum, x[ch]);
+                    addBits (ch, v);
+                    addClassic (ch, v);
                     if (a >= clipLevel)
+                    {
                         ++s.clipped;
+                        if (++s.run == overRun)
+                            ++s.overs;
+                    }
+                    else
+                        s.run = 0;
                 }
 
                 sumLR = c * sumLR + d * (double) x[0] * x[1];
@@ -360,6 +515,9 @@ namespace analysis
 
                 const double kl = kWeighting[0].process (x[0]), kr = kWeighting[1].process (x[1]);
                 blockPower += kl * kl + kr * kr;
+                stepPower += kl * kl + kr * kr;
+                if (++stepFill == stepLength)
+                    finishStep();
                 if (++blockFill == blockLength)
                     finishBlock();
 
@@ -372,6 +530,29 @@ namespace analysis
                 ringPos = (ringPos + 1) & (ringSize - 1);
             }
             freshSamples += (int) n;
+        }
+
+        void finishStep()
+        {
+            const auto p = stepPower / stepLength;
+            stepPower = 0.0;
+            stepFill = 0;
+            const auto at = [this] (int back) { return stepRing[(size_t) ((stepIndex - back + stepsPerShort) % stepsPerShort)]; };
+            momentarySum += p - (steps >= stepsPerMomentary ? at (stepsPerMomentary) : 0.0);
+            shortSum += p - (steps >= stepsPerShort ? at (stepsPerShort) : 0.0);
+            stepRing[(size_t) stepIndex] = p;
+            stepIndex = (stepIndex + 1) % stepsPerShort;
+            ++steps;
+            if (stepIndex == 0)
+            {
+                // Once round the ring, add the sums up afresh so rounding never builds up over hours.
+                shortSum = std::accumulate (stepRing.begin(), stepRing.end(), 0.0);
+                momentarySum = std::accumulate (stepRing.end() - stepsPerMomentary, stepRing.end(), 0.0);
+            }
+            if (steps >= stepsPerMomentary)
+                maxMomentary = std::max (maxMomentary, lufsOf (std::max (0.0, momentarySum) / stepsPerMomentary));
+            if (steps >= stepsPerShort)
+                maxShortTerm = std::max (maxShortTerm, lufsOf (std::max (0.0, shortSum) / stepsPerShort));
         }
 
         void finishBlock()
@@ -390,10 +571,6 @@ namespace analysis
             shortTerm = lufsOf (meanOfLast (30));
             momentaryHistory.push_back ((float) momentary);
             shortHistory.push_back ((float) shortTerm);
-            if (blocks.size() >= 4)
-                maxMomentary = std::max (maxMomentary, momentary);
-            if (blocks.size() >= 30)
-                maxShortTerm = std::max (maxShortTerm, shortTerm);
             if (blocks.size() % 5 == 0)
                 integrated = loudness.value();
             if (blocks.size() % 10 == 0)
@@ -441,6 +618,56 @@ namespace analysis
             windowFill = 0;
         }
 
+        void addBits (int ch, double v)
+        {
+            const auto c = (size_t) ch;
+            const double scale = (double) (1LL << (bitDepth - 1));
+            const double q = v * scale;
+            const auto top = (long long) scale - 1;
+            const auto code = std::clamp ((long long) std::llround (q), -top - 1, top);
+            ++quantised[c];
+            if (std::abs (q - (double) code) > 1.0e-3 && std::abs (q) < scale)
+                ++finer[c];   // more detail than bitDepth bits hold: not truncated or dithered to that depth
+            const auto word = (unsigned long long) code & ((1ULL << bitDepth) - 1);
+            for (int b = 0; b < bitDepth; ++b)
+                if ((word >> (bitDepth - 1 - b)) & 1ULL)
+                    ++tickOnes[c][(size_t) b];
+            ++tickCount[c];
+            if (code != 0)
+            {
+                // The lowest bit set (two's complement keeps it where the magnitude has it).
+                int low = bitDepth - 1;
+                while (low > 0 && ((word >> (bitDepth - 1 - low)) & 1ULL) == 0)
+                    --low;
+                lowestBit[c] = std::max (lowestBit[c], low);
+            }
+        }
+
+        void updateBits (double dt)
+        {
+            for (size_t ch = 0; ch < 2; ++ch)
+            {
+                for (int b = 0; b < maxBits; ++b)
+                {
+                    const auto i = (size_t) b;
+                    if (tickCount[ch] > 0 && b < bitDepth)
+                    {
+                        const auto on = (double) tickOnes[ch][i] / (double) tickCount[ch];
+                        bitOn[ch][i] = on;
+                        const bool moves = on > 0.0 && on < 1.0;
+                        bitSeen[ch][i] = moves ? 1.0 : std::max (0.0, bitSeen[ch][i] - dt / 1.5);
+                    }
+                    else
+                    {
+                        bitOn[ch][i] = std::max (0.0, bitOn[ch][i] - dt / 1.5);
+                        bitSeen[ch][i] = std::max (0.0, bitSeen[ch][i] - dt / 1.5);
+                    }
+                }
+                tickOnes[ch] = {};
+                tickCount[ch] = 0;
+            }
+        }
+
         // Runs every UI tick: ballistics, then the spectrum and what is worked out from it.
         void update (double dt)
         {
@@ -469,6 +696,8 @@ namespace analysis
                 maxTrue[ch] = std::max (maxTrue[ch], tickTrue[ch]);
             }
             tickPeak = tickTrue = {};
+            updateBits (dt);
+            updateClassic (dt, fresh);
 
             hasSignal = sumLL + sumRR > 1.0e-9;
             correlation = sumLL * sumRR > 1.0e-18 ? std::clamp (sumLR / std::sqrt (sumLL * sumRR), -1.0, 1.0) : 0.0;
@@ -647,6 +876,7 @@ namespace analysis
         row (QObject::tr ("Maximum sample value"), measured ([&] (int ch) { return QString::number (stat (ch).maximum, 'f', 5); }));
         row (QObject::tr ("Minimum sample value"), measured ([&] (int ch) { return QString::number (stat (ch).minimum, 'f', 5); }));
         row (QObject::tr ("Possibly clipped samples"), measured ([&] (int ch) { return QString::number (stat (ch).clipped); }));
+        row (QObject::tr ("OVERs (3 or more samples in a row)"), measured ([&] (int ch) { return QString::number (stat (ch).overs); }));
         row (QObject::tr ("DC offset"), measured ([&] (int ch) { return QStringLiteral ("%1 %").arg (stat (ch).sum / (double) s.frames * 100.0, 0, 'f', 3); }));
         row (QObject::tr ("Total RMS amplitude"), measured ([&] (int ch) { return number (totalRms (ch), 2, "dB"); }));
         row (QObject::tr ("Maximum RMS amplitude"), rmsMeasured ([&] (int ch) { return number (stat (ch).maxRms, 2, "dB"); }));
@@ -1222,6 +1452,7 @@ namespace analysis
     {
     public:
         using Meter::Meter;
+        bool countOvers = false;   // the clip light counts OVERs (runs of full-scale samples), not every sample
         QSize sizeHint() const override { return { 170, 260 }; }
         QSize minimumSizeHint() const override { return { 110, 140 }; }
 
@@ -1281,14 +1512,15 @@ namespace analysis
                 }
 
                 // Clip light with the count, and the highest true peak under it.
-                const auto clips = state.stats[(size_t) ch].clipped;
+                const auto& st = state.stats[(size_t) ch];
+                const auto clips = countOvers ? st.overs : st.clipped;
                 const QRectF light (x, r.top(), barWidth, 14);
                 g.setPen (Qt::NoPen);
                 g.setBrush (clips > 0 ? color ("meterHigh") : faded (color ("meterHigh"), 0.15));
                 g.drawRoundedRect (light, 3, 3);
                 g.setPen (clips > 0 ? color ("highlightedText") : labelColor());
                 g.setFont (smallFont (0.7));
-                g.drawText (light, Qt::AlignCenter, clips > 0 ? QString::number (clips) : QObject::tr ("CLIP"));
+                g.drawText (light, Qt::AlignCenter, clips > 0 ? QString::number (clips) : countOvers ? QObject::tr ("OVER") : QObject::tr ("CLIP"));
                 const auto truePeak = ampDb (state.maxTrue[(size_t) ch]);
                 g.setPen (truePeak > state.targetTruePeak ? color ("meterHigh") : color ("windowText"));
                 g.drawText (QRectF (x - 6, r.top() + 15, barWidth + 12, 15), Qt::AlignCenter, number (truePeak, 1));
@@ -1304,7 +1536,7 @@ namespace analysis
             }
             g.setFont (smallFont (0.65));
             g.setPen (labelColor());
-            g.drawText (QRectF (r.left() + barWidth, r.top(), scaleWidth, 14), Qt::AlignCenter, QObject::tr ("clips"));
+            g.drawText (QRectF (r.left() + barWidth, r.top(), scaleWidth, 14), Qt::AlignCenter, countOvers ? QObject::tr ("overs") : QObject::tr ("clips"));
             g.drawText (QRectF (r.left() + barWidth, r.top() + 15, scaleWidth, 15), Qt::AlignCenter, QObject::tr ("dBTP"));
             g.drawText (QRectF (r.left() + barWidth, bars.bottom() + 14, scaleWidth, 11), Qt::AlignCenter, QObject::tr ("peak"));
             g.drawText (QRectF (r.left() + barWidth, bars.bottom() + 24, scaleWidth, 11), Qt::AlignCenter, QObject::tr ("RMS"));
@@ -1882,6 +2114,322 @@ namespace analysis
 
     //==============================================================================
     // Amplitude Statistics, as in Audition, with the RMS histogram below.
+    //==============================================================================
+    // Bits: a bitscope, as Bob Katz describes it in "Digital Detective" (digido.com). One row
+    // per channel, one cell per bit from the sign bit (1, the MSB) on the left to the LSB on the
+    // right. The fill is the share of samples with the bit set, so a bit in use flickers about
+    // half full and an unused one stays empty (or full, below a DC offset); a bright outline
+    // marks a bit that moved in the last moment. Under it: how many bits are in use since the
+    // reset, and how much of the signal has more detail than the chosen depth holds.
+    class BitsMeter final : public Meter
+    {
+    public:
+        using Meter::Meter;
+        QSize sizeHint() const override { return { 300, 200 }; }
+        QSize minimumSizeHint() const override { return { 180, 110 }; }
+
+    protected:
+        void paintEvent (QPaintEvent*) override
+        {
+            QPainter g (this);
+            g.setRenderHint (QPainter::Antialiasing);
+            const auto r = QRectF (rect()).adjusted (6, 4, -6, -4);
+            const int n = state.bitDepth;
+            const double labelWidth = 14.0;
+            const QRectF grid (r.left() + labelWidth, r.top() + 14, r.width() - labelWidth, std::max (30.0, r.height() - 14 - 34));
+            const auto cell = grid.width() / n;
+            const auto rowHeight = grid.height() / 2.0;
+
+            // Bit numbers along the top, every fourth (and the first and last).
+            g.setFont (smallFont (0.65));
+            g.setPen (labelColor());
+            for (int b = 0; b < n; ++b)
+                if (b == 0 || b == n - 1 || (b + 1) % 4 == 0)
+                    g.drawText (QRectF (grid.left() + b * cell - 6, r.top(), cell + 12, 12), Qt::AlignCenter, QString::number (b + 1));
+
+            const QString names[2] { QObject::tr ("L"), QObject::tr ("R") };
+            for (int ch = 0; ch < 2; ++ch)
+            {
+                const auto top = grid.top() + ch * rowHeight;
+                g.setPen (labelColor());
+                g.setFont (smallFont (0.8));
+                g.drawText (QRectF (r.left(), top, labelWidth, rowHeight), Qt::AlignLeft | Qt::AlignVCenter, names[ch]);
+                for (int b = 0; b < n; ++b)
+                {
+                    const auto i = (size_t) b;
+                    const QRectF box (grid.left() + b * cell + 1, top + 2, cell - 2, rowHeight - 4);
+                    plotBackground (g, box);
+                    const auto on = state.bitOn[(size_t) ch][i];
+                    if (on > 0.0)
+                    {
+                        const auto h = box.height() * on;
+                        g.fillRect (QRectF (box.left(), box.bottom() - h, box.width(), h),
+                                    faded (b == 0 ? color ("meterMid") : color ("meterLow"), 0.85));
+                    }
+                    const auto seen = state.bitSeen[(size_t) ch][i];
+                    if (seen > 0.0)
+                    {
+                        g.setPen (QPen (faded (color ("highlight"), seen), 1.5));
+                        g.setBrush (Qt::NoBrush);
+                        g.drawRoundedRect (box, 3, 3);
+                    }
+                }
+            }
+
+            // Dividers after bits 16 and 20: where 16- and 20-bit words end.
+            g.setPen (QPen (faded (color ("meterHigh"), 0.7), 1.0, Qt::DashLine));
+            for (int edge : { 16, 20 })
+                if (edge < n)
+                {
+                    const auto x = grid.left() + edge * cell;
+                    g.drawLine (QPointF (x, grid.top()), QPointF (x, grid.bottom()));
+                }
+
+            // Readouts.
+            g.setFont (smallFont (0.75));
+            QStringList inUse, finer;
+            for (size_t ch = 0; ch < 2; ++ch)
+            {
+                inUse << (state.lowestBit[ch] < 0 ? QStringLiteral ("-") : QString::number (state.lowestBit[ch] + 1));
+                finer << (state.quantised[ch] == 0 ? QStringLiteral ("-")
+                                                   : QStringLiteral ("%1 %").arg (100.0 * (double) state.finer[ch] / (double) state.quantised[ch], 0, 'f', 1));
+            }
+            g.setPen (color ("windowText"));
+            g.drawText (QRectF (r.left(), grid.bottom() + 3, r.width(), 14), Qt::AlignLeft | Qt::AlignVCenter,
+                        QObject::tr ("Bits in use: L %1, R %2 of %3").arg (inUse[0], inUse[1]).arg (n));
+            const bool any = state.finer[0] + state.finer[1] > 0;
+            g.setPen (any ? color ("meterHigh") : labelColor());
+            g.drawText (QRectF (r.left(), grid.bottom() + 17, r.width(), 14), Qt::AlignLeft | Qt::AlignVCenter,
+                        QObject::tr ("Finer than %1 bits: L %2, R %3").arg (n).arg (finer[0], finer[1]));
+        }
+    };
+
+    //==============================================================================
+    // The meters of the analogue studio, on what PHI plays: a VU meter, the four quasi-peak
+    // programme meters (EBU, BBC, DIN and Nordic) as needles, and Bob Katz's K-meters as bars.
+    // The needle meters read around the alignment level, the line-up tone (EBU R 68: -18 dBFS;
+    // SMPTE RP 155: -20 dBFS), which reads 0 VU, TEST on the EBU and Nordic meters, 4 on the BBC
+    // meter and -9 on the DIN meter (ITU-R BS.645-2; EBU Tech 3205-E).
+    class ClassicMeter final : public Meter
+    {
+    public:
+        enum Kind { vu, ppmEbu, ppmBbc, ppmDin, ppmNordic, k20, k14, k12 };
+        using Meter::Meter;
+        Kind kind = vu;
+        double alignment = -18.0;   // dBFS (sine peak) of the line-up tone
+        QSize sizeHint() const override { return { 300, 220 }; }
+        QSize minimumSizeHint() const override { return { 180, 120 }; }
+
+    protected:
+        void paintEvent (QPaintEvent*) override
+        {
+            QPainter g (this);
+            g.setRenderHint (QPainter::Antialiasing);
+            const auto r = QRectF (rect()).adjusted (6, 4, -6, -4);
+            if (kind >= k20)
+                drawK (g, r);
+            else
+            {
+                const auto w = (r.width() - 8.0) / 2.0;
+                for (int ch = 0; ch < 2; ++ch)
+                    drawNeedle (g, QRectF (r.left() + ch * (w + 8.0), r.top(), w, r.height()), ch);
+            }
+        }
+
+    private:
+        struct Scale
+        {
+            double low, high;                // in the meter's own units
+            double red;                      // where the red zone starts
+            std::vector<double> marks;       // with a label each
+            std::vector<double> minor;       // without
+        };
+
+        // The meter's reading in its own units, from a level in dBFS (sine peak).
+        double units (double dbfs) const
+        {
+            const auto rel = dbfs - alignment;   // dB above the line-up tone
+            switch (kind)
+            {
+                case ppmBbc:  return 4.0 + rel / 4.0;   // 4 dB a division, alignment at 4
+                case ppmDin:  return rel - 9.0;         // 0 dB is the permitted maximum, 9 dB above alignment
+                default:      return rel;               // VU, EBU and Nordic: alignment at 0 (TEST)
+            }
+        }
+
+        Scale scale() const
+        {
+            switch (kind)
+            {
+                case vu:        return { -20.0, 3.0, 0.0, { -20, -10, -7, -5, -3, -2, -1, 0, 1, 2, 3 }, { -15, -0.5, 0.5, 1.5, 2.5 } };
+                case ppmEbu:    return { -12.0, 12.0, 9.0, { -12, -8, -4, 0, 4, 8, 12 }, { -10, -6, -2, 2, 6, 9, 10 } };
+                case ppmBbc:    return { 1.0, 7.0, 6.0, { 1, 2, 3, 4, 5, 6, 7 }, {} };
+                case ppmDin:    return { -40.0, 5.0, 0.0, { -40, -30, -20, -10, -5, 0, 5 }, { -35, -25, -15, -9, -3 } };
+                case ppmNordic: return { -36.0, 12.0, 9.0, { -36, -24, -12, -6, 0, 6, 12 }, { -30, -18, -3, 3, 9 } };
+                default:        return { -40.0, 0.0, 0.0, {}, {} };
+            }
+        }
+
+        // 0 at the left end of the scale, 1 at the right. The VU scale is drawn in volts, as the
+        // meter's face is (100 % at 0 VU); the others are linear in dB.
+        double position (double value) const
+        {
+            const auto sc = scale();
+            if (kind == vu)
+            {
+                const auto volts = [] (double vuValue) { return std::pow (10.0, vuValue / 20.0); };
+                return std::clamp ((volts (value) - volts (sc.low)) / (volts (sc.high) - volts (sc.low)), -0.04, 1.04);
+            }
+            return std::clamp ((value - sc.low) / (sc.high - sc.low), -0.04, 1.04);
+        }
+
+        QString label (double mark) const
+        {
+            if (kind == ppmEbu || kind == ppmNordic)
+                return mark == 0.0 ? QObject::tr ("TEST") : (mark > 0 ? QStringLiteral ("+%1") : QStringLiteral ("%1")).arg (mark);
+            if (kind == ppmBbc)
+                return QString::number (mark);
+            return (mark > 0 ? QStringLiteral ("+%1") : QStringLiteral ("%1")).arg (mark);
+        }
+
+        QString title() const
+        {
+            switch (kind)
+            {
+                case vu:        return QObject::tr ("VU");
+                case ppmEbu:    return QObject::tr ("EBU PPM");
+                case ppmBbc:    return QObject::tr ("BBC PPM");
+                case ppmDin:    return QObject::tr ("DIN PPM");
+                case ppmNordic: return QObject::tr ("Nordic PPM");
+                default:        return {};
+            }
+        }
+
+        double readingDb (int ch) const
+        {
+            switch (kind)
+            {
+                case vu:                      return state.vuDb (ch);
+                case ppmEbu: case ppmBbc:     return state.ppm2Db (ch);
+                default:                      return state.ppm1Db (ch);
+            }
+        }
+
+        void drawNeedle (QPainter& g, const QRectF& area, int ch) const
+        {
+            plotBackground (g, area);
+            const auto sc = scale();
+            const double span = 100.0;   // degrees of arc
+            const auto radius = std::min (area.width() * 0.46, area.height() * 0.78);
+            const QPointF centre (area.center().x(), area.top() + 10.0 + radius * 1.02);
+            const auto angleOf = [span] (double pos) { return (90.0 + span / 2.0 - pos * span) * M_PI / 180.0; };
+            const auto at = [&] (double pos, double rad) { const auto a = angleOf (pos); return QPointF (centre.x() + rad * std::cos (a), centre.y() - rad * std::sin (a)); };
+
+            // The arc, red beyond the permitted maximum.
+            const QRectF arcBox (centre.x() - radius, centre.y() - radius, radius * 2, radius * 2);
+            const auto redFrom = position (sc.red);
+            const auto arcAngle = [span] (double pos) { return (int) std::lround ((90.0 + span / 2.0 - pos * span) * 16.0); };
+            g.setBrush (Qt::NoBrush);
+            g.setPen (QPen (gridColor (0.9), 1.5));
+            g.drawArc (arcBox, arcAngle (0.0), arcAngle (redFrom) - arcAngle (0.0));
+            g.setPen (QPen (color ("meterHigh"), 4.0, Qt::SolidLine, Qt::FlatCap));
+            g.drawArc (arcBox.adjusted (2, 2, -2, -2), arcAngle (redFrom), arcAngle (1.0) - arcAngle (redFrom));
+
+            g.setFont (smallFont (0.65));
+            for (auto m : sc.marks)
+            {
+                const auto pos = position (m);
+                g.setPen (QPen (m >= sc.red && m > sc.low ? color ("meterHigh") : labelColor(), 1.2));
+                g.drawLine (at (pos, radius), at (pos, radius - 7));
+                const auto p = at (pos, radius + 9);
+                g.drawText (QRectF (p.x() - 18, p.y() - 7, 36, 14), Qt::AlignCenter, label (m));
+            }
+            g.setPen (QPen (gridColor (0.8), 1.0));
+            for (auto m : sc.minor)
+                g.drawLine (at (position (m), radius), at (position (m), radius - 4));
+
+            // Name and channel under the arc, the reading in figures beneath.
+            const auto value = units (readingDb (ch));
+            g.setPen (labelColor());
+            g.setFont (smallFont (0.8));
+            g.drawText (QRectF (area.left(), centre.y() - radius * 0.5, area.width(), 16), Qt::AlignCenter,
+                        QStringLiteral ("%1  %2").arg (title(), ch == 0 ? QObject::tr ("L") : QObject::tr ("R")));
+            const bool silent = readingDb (ch) <= minusInfinity + 1.0 || value < sc.low - 30.0;
+            g.setPen (! silent && value >= sc.red ? color ("meterHigh") : color ("windowText"));
+            g.setFont (smallFont (0.85));
+            g.drawText (QRectF (area.left(), std::min (area.bottom() - 16.0, centre.y() - radius * 0.5 + 16.0), area.width(), 16), Qt::AlignCenter,
+                        silent ? QStringLiteral ("-") : QString::number (value, 'f', kind == ppmBbc ? 2 : 1));
+
+            // The needle, resting just below the scale when there is nothing.
+            const auto pos = silent ? -0.04 : position (value);
+            g.setPen (QPen (color ("windowText"), 1.6, Qt::SolidLine, Qt::RoundCap));
+            g.drawLine (at (pos, radius * 0.35), at (pos, radius + 2));
+        }
+
+        void drawK (QPainter& g, const QRectF& r) const
+        {
+            const double k = kind == k20 ? 20.0 : kind == k14 ? 14.0 : 12.0;
+            const double low = -40.0, high = k;   // the K scale: 0 at -k dBFS, the top at full scale
+            const double scaleWidth = 30.0;
+            const QRectF bars (r.left(), r.top() + 14, r.width() - scaleWidth, r.height() - 14 - 16);
+            const auto y = [&] (double value) { return bars.bottom() - bars.height() * std::clamp ((value - low) / (high - low), 0.0, 1.0); };
+
+            g.setPen (labelColor());
+            g.setFont (smallFont (0.75));
+            g.drawText (QRectF (r.left(), r.top(), r.width(), 12), Qt::AlignCenter, QStringLiteral ("K-%1").arg (k));
+
+            const auto barWidth = (bars.width() - 6.0) / 2.0;
+            for (int ch = 0; ch < 2; ++ch)
+            {
+                const QRectF bar (bars.left() + ch * (barWidth + 6.0), bars.top(), barWidth, bars.height());
+                plotBackground (g, bar);
+                const auto rms = state.kRmsDb (ch) + k, peak = state.kPeakDb (ch) + k, hold = state.kHoldDb (ch) + k;
+
+                // The peak, light, behind the average.
+                if (peak > low)
+                    g.fillRect (QRectF (bar.left() + 1, y (peak), bar.width() - 2, bar.bottom() - y (peak)), faded (color ("meterLow"), 0.35));
+                // The average: green to 0, amber to +4, red above.
+                const auto band = [&] (double from, double to, const QColor& c)
+                {
+                    const auto top = std::min (rms, to);
+                    if (top > from)
+                        g.fillRect (QRectF (bar.left() + 1, y (top), bar.width() - 2, y (from) - y (top)), c);
+                };
+                band (low, 0.0, color ("meterLow"));
+                band (0.0, 4.0, color ("meterMid"));
+                band (4.0, high, color ("meterHigh"));
+                if (hold > low)
+                {
+                    g.setPen (QPen (color ("meterPeakHold"), 2.0));
+                    g.drawLine (QPointF (bar.left() + 1, y (hold)), QPointF (bar.right() - 1, y (hold)));
+                }
+                g.setPen (labelColor());
+                g.setFont (smallFont (0.7));
+                g.drawText (QRectF (bar.left(), bars.bottom() + 2, bar.width(), 14), Qt::AlignCenter,
+                            rms > low ? QString::number (rms, 'f', 1) : QStringLiteral ("-"));
+            }
+
+            // The scale: every 4 dB down to -24, then -30 and -40.
+            g.setFont (smallFont (0.65));
+            std::vector<double> marks;
+            for (double m = std::floor (high / 4.0) * 4.0; m >= -24.0; m -= 4.0)
+                marks.push_back (m);
+            if (marks.empty() || marks.front() != high)
+                marks.insert (marks.begin(), high);
+            marks.push_back (-30.0);
+            marks.push_back (-40.0);
+            for (auto m : marks)
+            {
+                const auto yy = y (m);
+                g.setPen (QPen (m > 4.0 ? color ("meterHigh") : m > 0.0 ? color ("meterMid") : gridColor (0.9), 1.0));
+                g.drawLine (QPointF (bars.right() + 1, yy), QPointF (bars.right() + 5, yy));
+                g.setPen (labelColor());
+                g.drawText (QRectF (bars.right() + 6, yy - 7, scaleWidth - 6, 14), Qt::AlignLeft | Qt::AlignVCenter,
+                            (m > 0 ? QStringLiteral ("+%1") : QStringLiteral ("%1")).arg (m));
+            }
+        }
+    };
+
     class StatsMeter final : public Meter
     {
     public:
@@ -2118,6 +2666,8 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
     auto* wheel = new PhaseWheelMeter (*state, this);
     auto* correlation = new CorrelationMeter (*state, this);
     auto* stats = new StatsMeter (*state, this);
+    auto* bits = new BitsMeter (*state, this);
+    auto* classic = new ClassicMeter (*state, this);
     ambisonics = new AmbiVisualizer (this);
 
     const auto hidden = settings.value (QStringLiteral ("analysis/hidden")).toStringList();
@@ -2153,6 +2703,8 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
     auto* wheelCard = addCard ("phaseWheel", tr ("Phase Wheel"), wheel);
     auto* correlationCard = addCard ("correlation", tr ("Correlation"), correlation);
     auto* statsCard = addCard ("statistics", tr ("Amplitude Statistics"), stats);
+    auto* bitsCard = addCard ("bits", tr ("Bits"), bits);
+    auto* classicCard = addCard ("classic", tr ("Classic Meters"), classic);
     auto* ambiCard = addCard ("ambisonics", tr ("Ambisonics"), ambisonics);
 
     // Loudness History: how much time it shows.
@@ -2169,6 +2721,73 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
         apply (span->currentIndex());
         connect (span, &QComboBox::currentIndexChanged, history, apply);
         historyCard->addControl (span);
+    }
+
+    // Levels: what the clip light counts.
+    {
+        auto* count = smallCombo (levelsCard, { tr ("Clips"), tr ("OVERs") },
+                                  settings.value (QStringLiteral ("analysis/levels/countOvers"), 0).toInt(),
+                                  tr ("Clips: every sample at full scale. OVERs: 3 or more samples in a row at full scale, "
+                                      "each run counted once, as dedicated digital meters count them (the Sony 1630 convention)"));
+        const auto apply = [levels] (int i)
+        {
+            levels->countOvers = i == 1;
+            levels->update();
+            appSettings().setValue (QStringLiteral ("analysis/levels/countOvers"), i);
+        };
+        apply (count->currentIndex());
+        connect (count, &QComboBox::currentIndexChanged, levels, apply);
+        levelsCard->addControl (count);
+    }
+
+    // Bits: the word length the samples are read at.
+    {
+        const QList<int> depths { 16, 20, 24 };
+        auto* depth = smallCombo (bitsCard, { tr ("16 bits"), tr ("20 bits"), tr ("24 bits") },
+                                  settings.value (QStringLiteral ("analysis/bits/depth"), 2).toInt(),
+                                  tr ("Read each sample as a whole number of this many bits, as a WAV or AIFF file of that depth "
+                                      "would hold it. Choose the depth of the file or of the output to see whether anything below it moves"));
+        const auto apply = [this, bits, depths] (int i)
+        {
+            state->bitDepth = depths.value (i, 24);
+            state->resetBits();
+            bits->update();
+            appSettings().setValue (QStringLiteral ("analysis/bits/depth"), i);
+        };
+        apply (depth->currentIndex());
+        connect (depth, &QComboBox::currentIndexChanged, bits, apply);
+        bitsCard->addControl (depth);
+    }
+
+    // Classic Meters: which meter, and the alignment level the needles read around.
+    {
+        auto* kindBox = smallCombo (classicCard, { tr ("VU"), tr ("PPM: EBU (IIb)"), tr ("PPM: BBC (IIa)"), tr ("PPM: DIN (I)"),
+                                                   tr ("PPM: Nordic (I)"), tr ("K-20"), tr ("K-14"), tr ("K-12") },
+                                    settings.value (QStringLiteral ("analysis/classic/kind"), 0).toInt(),
+                                    tr ("VU: the 1940 volume indicator, 300 ms. PPM: quasi-peak programme meters, 10 ms (EBU, BBC) "
+                                        "or 5 ms (DIN, Nordic), with a slow fall. K-20, K-14, K-12: Bob Katz's meters, 0 at that many dB below full scale"));
+        auto* alignBox = smallCombo (classicCard, { tr ("-18 dBFS (EBU R 68)"), tr ("-20 dBFS (SMPTE RP 155)") },
+                                     settings.value (QStringLiteral ("analysis/classic/alignment"), 0).toInt(),
+                                     tr ("The line-up tone: the level that reads 0 VU, TEST on the EBU and Nordic PPMs, 4 on the BBC PPM and -9 on the DIN PPM"));
+        const auto applyKind = [classic, alignBox] (int i)
+        {
+            classic->kind = static_cast<ClassicMeter::Kind> (std::clamp (i, 0, (int) ClassicMeter::k12));
+            alignBox->setEnabled (classic->kind < ClassicMeter::k20);
+            classic->update();
+            appSettings().setValue (QStringLiteral ("analysis/classic/kind"), i);
+        };
+        const auto applyAlignment = [classic] (int i)
+        {
+            classic->alignment = i == 1 ? -20.0 : -18.0;
+            classic->update();
+            appSettings().setValue (QStringLiteral ("analysis/classic/alignment"), i);
+        };
+        applyKind (kindBox->currentIndex());
+        applyAlignment (alignBox->currentIndex());
+        connect (kindBox, &QComboBox::currentIndexChanged, classic, applyKind);
+        connect (alignBox, &QComboBox::currentIndexChanged, classic, applyAlignment);
+        classicCard->addControl (kindBox);
+        classicCard->addControl (alignBox);
     }
 
     // Spectrum: channels, smoothing, holds 1-8, and the rest in a menu.
@@ -2261,15 +2880,17 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
                  tr ("Zeros after the samples draw the curve between bins (up to 131072 points, 32768 with Multitaper)") });
         // In windows::Kind order, which is what the setting stores.
         radio (tr ("Window"),
-               { tr ("Hann"), tr ("Blackman-Harris"), tr ("Flat Top (exact levels)"), tr ("Hamming"), tr ("Rectangular"),
+               { tr ("Hann"), tr ("Blackman-Harris"), tr ("Flat Top SR785 (exact levels)"), tr ("Hamming"), tr ("Rectangular"),
                  tr ("Triangular"), tr ("Blackman"), tr ("Welch"), tr ("Kaiser (140 dB)"), tr ("Kaiser (180 dB)"),
                  tr ("Nuttall"), tr ("Blackman-Nuttall"), tr ("Gaussian"), tr ("Tukey (tapered cosine)"), tr ("Dolph-Chebyshev (120 dB)"),
-                 tr ("Bartlett-Hann"), tr ("Bohman"), tr ("Parzen"), tr ("Lanczos"), tr ("Exponential") },
+                 tr ("Bartlett-Hann"), tr ("Bohman"), tr ("Parzen"), tr ("Lanczos"), tr ("Exponential"),
+                 tr ("Flat Top HFT95"), tr ("Flat Top HFT90D") },
                key ("window"), 1,
                [this, spectrumMeter] (int i) { state->setFft (state->fftOrder, i); spectrumMeter->clear(); },
                { tr ("General purpose: a good balance of sharp peaks and low leakage"),
                  tr ("Low-level detail: weak harmonics and distortion beside loud tones (sidelobes 92 dB down)"),
-                 tr ("Exact levels of tones and harmonics, at the cost of wide peaks"),
+                 tr ("Exact levels of tones and harmonics, at the cost of wide peaks: "
+                     "the Stanford Research SR785's flat top (sidelobes 76.6 dB down)"),
                  tr ("Like Hann with a lower nearest sidelobe; a balance for tones"),
                  tr ("No window: the sharpest peaks, but much leakage unless the tone fits the frame"),
                  tr ("A simple straight taper with modest leakage"),
@@ -2286,7 +2907,9 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
                  tr ("A smooth taper whose distant leakage falls off fast"),
                  tr ("A smooth, strong taper for general spectral estimation"),
                  tr ("A sinc-shaped taper"),
-                 tr ("Falls 26 dB to each edge; for transients and impulse responses") });
+                 tr ("Falls 26 dB to each edge; for transients and impulse responses"),
+                 tr ("Exact levels with sidelobes 95 dB down (Heinzel's HFT95, like the Agilent analyzers' flat top)"),
+                 tr ("Exact levels with sidelobes 90 dB down that keep falling fast away from the tone (Heinzel's HFT90D)") });
         radio (tr ("Estimate"), { tr ("Windowed FFT"), tr ("Multitaper (7 DPSS tapers)") }, key ("method"), 0,
                [this, spectrumMeter] (int i) { state->method = i; state->setFft (state->fftOrder, state->windowType); spectrumMeter->clear(); },
                { tr ("One transform per frame, shaped by the Window"),
@@ -2427,9 +3050,9 @@ AnalysisWindow::AnalysisWindow (QWidget* parent) : QWidget (parent, Qt::Window),
         rows->addWidget (split);
         connect (split, &QSplitter::splitterMoved, this, [this] { saveLayout(); });
     };
-    addRow ({ { loudnessCard, 30 }, { historyCard, 50 }, { levelsCard, 14 } });
+    addRow ({ { loudnessCard, 28 }, { historyCard, 38 }, { levelsCard, 13 }, { classicCard, 21 } });
     addRow ({ { spectrumCard, 56 }, { spectrogramCard, 22 }, { imagingCard, 22 } });
-    addRow ({ { wheelCard, 18 }, { correlationCard, 26 }, { statsCard, 26 }, { ambiCard, 30 } });
+    addRow ({ { wheelCard, 16 }, { correlationCard, 22 }, { statsCard, 22 }, { bitsCard, 18 }, { ambiCard, 22 } });
     rows->setSizes ({ 340, 360, 330 });
     connect (rows, &QSplitter::splitterMoved, this, [this] { saveLayout(); });
 

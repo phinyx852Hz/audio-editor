@@ -4,6 +4,7 @@
 // An effect: stereo in, stereo out, in place. The mixer's inserts and the patchbay's
 // FX buses hold them; plugins come from the engine (AudioEngine::loadEffectPlugin).
 // Plain C++.
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -24,6 +25,11 @@ namespace mixer
         virtual void showWindow() {}
         virtual std::string state() const { return {}; }
         virtual void setState (const std::string&) {}
+        // For a DAWproject: the plugin's state in its own format (a VST3's .vstpreset, a CLAP's
+        // state stream), with the format ("VST3", "CLAP") and its id as DAWproject names them.
+        // False for what is not a plugin, or a format that has no such state.
+        virtual bool nativeState (std::string& /*format*/, std::string& /*deviceId*/, std::vector<uint8_t>& /*bytes*/) const { return false; }
+        virtual bool setNativeState (const std::vector<uint8_t>&) { return false; }
 
         // Its knobs, for effects without a window of their own (the built-in and Φ ones). UI thread.
         struct Parameter

@@ -1180,6 +1180,106 @@ namespace noteedit
         s.sort();
     }
 
+    void lengthen (Sequence& s, int64_t ticks, int64_t shortest)
+    {
+        for (auto i : s.targets())
+            s.notes[i].length = std::max (std::max<int64_t> (1, shortest), s.notes[i].length + ticks);
+    }
+
+    void chop (Sequence& s, int64_t grid)
+    {
+        if (grid <= 0)
+            return;
+        int64_t first = std::numeric_limits<int64_t>::max(), last = 0;
+        for (auto i : s.targets())
+        {
+            first = std::min (first, s.notes[i].start);
+            last = std::max (last, s.notes[i].end());
+        }
+        // splitAt keeps both halves picked, so each cut reaches the pieces of the last.
+        for (auto t = (first / grid + 1) * grid; t < last; t += grid)
+            splitAt (s, t);
+    }
+
+    void invertSelection (Sequence& s)
+    {
+        for (auto& n : s.notes)
+            n.selected = ! n.selected;
+    }
+
+    int64_t span (const Sequence& s, int64_t grid)
+    {
+        const auto t = s.targets();
+        if (t.empty())
+            return 0;
+        int64_t first = std::numeric_limits<int64_t>::max(), last = 0;
+        for (auto i : t)
+        {
+            first = std::min (first, s.notes[i].start);
+            last = std::max (last, s.notes[i].end());
+        }
+        const auto length = last - first;
+        return grid > 0 ? std::max<int64_t> (1, (length + grid - 1) / grid) * grid : length;
+    }
+
+    namespace
+    {
+        // Everything starting at or after `from` moved by `by` ticks, the notes left out by `keep`.
+        void shiftFrom (Sequence& s, int64_t from, int64_t by, const std::vector<bool>& keep)
+        {
+            for (size_t i = 0; i < s.notes.size(); ++i)
+                if (! keep[i] && s.notes[i].start >= from)
+                    s.notes[i].start = std::max<int64_t> (0, s.notes[i].start + by);
+            for (auto& e : s.other)
+                if (e.tick >= from)
+                    e.tick = std::max<int64_t> (0, e.tick + by);
+            if (s.lastTick >= from)
+                s.lastTick = std::max<int64_t> (0, s.lastTick + by);
+            std::stable_sort (s.other.begin(), s.other.end(), [] (const auto& a, const auto& b) { return a.tick < b.tick; });
+        }
+    }
+
+    void duplicate (Sequence& s, int64_t grid, bool push)
+    {
+        const auto t = s.targets();
+        if (t.empty())
+            return;
+        int64_t first = std::numeric_limits<int64_t>::max();
+        for (auto i : t)
+            first = std::min (first, s.notes[i].start);
+        const auto by = span (s, grid);
+        std::vector<bool> source (s.notes.size(), false);
+        for (auto i : t)
+            source[i] = true;
+        if (push)
+            shiftFrom (s, first + by, by, source);
+        std::vector<Note> copies;
+        for (auto i : t)
+        {
+            auto n = s.notes[i];
+            n.start += by;
+            n.selected = true;
+            copies.push_back (n);
+        }
+        selectAll (s, false);
+        s.notes.insert (s.notes.end(), copies.begin(), copies.end());
+        s.sort();
+    }
+
+    void deleteAndClose (Sequence& s, int64_t grid)
+    {
+        if (! s.anySelected())
+            return;
+        int64_t first = std::numeric_limits<int64_t>::max();
+        for (const auto& n : s.notes)
+            if (n.selected)
+                first = std::min (first, n.start);
+        const auto by = span (s, grid);
+        std::erase_if (s.notes, [] (const Note& n) { return n.selected; });
+        shiftFrom (s, first + by, -by, std::vector<bool> (s.notes.size(), false));
+        s.sort();
+    }
+
     void restyle (Sequence& s, const PitchSystem& from, const PitchSystem& to, bool byDegree)
     {
         for (auto i : s.targets())

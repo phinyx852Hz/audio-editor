@@ -12,6 +12,7 @@
 #include "ExtremeSettings.h"
 #include "Settings.h"
 #include "SlicerKit.h"
+#include "../sampler/PhiTabla.h"
 #include "SlicerWindow.h"
 #include "Theme.h"
 #include "TransportBar.h"
@@ -84,6 +85,7 @@
 #include <QtConcurrent>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <functional>
 #include <map>
@@ -359,6 +361,53 @@ namespace
         return b.finish();
     }
 
+    // Simplest's envelopes and LFOs in a mix file.
+    QJsonObject envelopeJson (const sampler::Envelope& e)
+    {
+        return { { "on", e.on }, { "attack", e.attack }, { "decay", e.decay }, { "sustain", e.sustain }, { "release", e.release },
+                 { "curve", e.curve }, { "amount", e.amount }, { "velocity", e.velocity } };
+    }
+
+    sampler::Envelope envelopeFromJson (const QJsonObject& o)
+    {
+        sampler::Envelope e;
+        e.on = o.value ("on").toBool (false);
+        e.attack = o.value ("attack").toDouble (0);
+        e.decay = o.value ("decay").toDouble (0.3);
+        e.sustain = o.value ("sustain").toDouble (0);
+        e.release = o.value ("release").toDouble (0.2);
+        e.curve = o.value ("curve").toDouble (0);
+        e.amount = o.value ("amount").toDouble (0);
+        e.velocity = o.value ("velocity").toDouble (0);
+        return e;
+    }
+
+    QJsonObject lfoJson (const sampler::Lfo& l)
+    {
+        return { { "wave", (int) l.wave }, { "shape", l.shape }, { "rate", l.rate }, { "sync", l.sync }, { "beats", l.beats },
+                 { "retrigger", (int) l.retrigger }, { "phase", l.phase }, { "randomPhase", l.randomPhase }, { "modWheel", l.modWheel },
+                 { "toPitch", l.toPitch }, { "toFilter", l.toFilter }, { "toVolume", l.toVolume }, { "toPan", l.toPan } };
+    }
+
+    sampler::Lfo lfoFromJson (const QJsonObject& o)
+    {
+        sampler::Lfo l;
+        l.wave = (sampler::Wave) std::clamp (o.value ("wave").toInt (0), 0, (int) sampler::Wave::sampleHold2);
+        l.shape = o.value ("shape").toDouble (0.5);
+        l.rate = o.value ("rate").toDouble (4.0);
+        l.sync = o.value ("sync").toBool (false);
+        l.beats = o.value ("beats").toDouble (1.0);
+        l.retrigger = (sampler::Retrigger) std::clamp (o.value ("retrigger").toInt (0), 0, (int) sampler::Retrigger::eachNote);
+        l.phase = o.value ("phase").toDouble (0);
+        l.randomPhase = o.value ("randomPhase").toBool (false);
+        l.modWheel = o.value ("modWheel").toDouble (0);
+        l.toPitch = o.value ("toPitch").toDouble (0);
+        l.toFilter = o.value ("toFilter").toDouble (0);
+        l.toVolume = o.value ("toVolume").toDouble (0);
+        l.toPan = o.value ("toPan").toDouble (0);
+        return l;
+    }
+
     // The two instruments' settings in a mix file.
     QJsonObject samplerJson (const sampler::Settings& s)
     {
@@ -371,7 +420,9 @@ namespace
                  { "fixedPitch", s.fixedPitch }, { "keyLow", s.keyLow }, { "keyHigh", s.keyHigh }, { "glide", s.glide },
                  { "fingered", s.fingered }, { "legato", s.legato }, { "gate", s.gate }, { "filter", s.filter },
                  { "filterType", (int) s.filterType }, { "steep", s.steep }, { "cutoff", s.cutoff }, { "resonance", s.resonance },
-                 { "drive", s.drive }, { "keyFollow", s.keyFollow }, { "filterVelocity", s.filterVelocity }, { "quality", (int) s.quality } };
+                 { "drive", s.drive }, { "keyFollow", s.keyFollow }, { "filterVelocity", s.filterVelocity }, { "quality", (int) s.quality },
+                 { "pitchEnvelope", envelopeJson (s.pitchEnvelope) }, { "filterEnvelope", envelopeJson (s.filterEnvelope) },
+                 { "lfo1", lfoJson (s.lfo[0]) }, { "lfo2", lfoJson (s.lfo[1]) }, { "tempo", s.tempo }, { "bend", s.bendRange } };
     }
 
     sampler::Settings samplerFromJson (const QJsonObject& o)
@@ -415,6 +466,12 @@ namespace
         s.keyFollow = o.value ("keyFollow").toDouble (0);
         s.filterVelocity = o.value ("filterVelocity").toDouble (0);
         s.quality = (sampler::Quality) std::clamp (o.value ("quality").toInt (0), 0, (int) sampler::Quality::turntable78);
+        s.pitchEnvelope = envelopeFromJson (o.value ("pitchEnvelope").toObject());
+        s.filterEnvelope = envelopeFromJson (o.value ("filterEnvelope").toObject());
+        s.lfo[0] = lfoFromJson (o.value ("lfo1").toObject());
+        s.lfo[1] = lfoFromJson (o.value ("lfo2").toObject());
+        s.tempo = o.value ("tempo").toDouble (120.0);
+        s.bendRange = o.value ("bend").toDouble (2.0);
         return s;
     }
 
@@ -441,10 +498,27 @@ namespace
 
     QString projectFilter()
     {
-        return MixerWindow::tr ("PHI projects (*.phi *.phinyxmix);;All files (*)");
+        return MixerWindow::tr ("PHI projects (*.phi *.phinyxmix);;DAWproject: Bitwig, Studio One, Cubase... (*.dawproject);;Ableton Live Sets (*.als);;All files (*)");
     }
 
-    enum Choice { noInstrument, synthChoice, samplerChoice, slicerChoice, ragaChoice, prismChoice, firstPlugin };
+    enum Choice { noInstrument, synthChoice, samplerChoice, slicerChoice, ragaChoice, prismChoice, tablaChoice, firstPlugin };
+
+    // Whether the lanes and the launcher have something moving to show: playing, counting in,
+    // a launcher clip playing or queued, a take, or a drag. Otherwise they only show edits,
+    // and a few repaints a second do (each one, over the Visualizer, repaints what lies under).
+    bool mixMoving (mixer::Engine& engine)
+    {
+        if (engine.isPlaying() || engine.countingIn() || QApplication::mouseButtons() != Qt::NoButton)
+            return true;
+        for (int t = 0; t < engine.numTracks(); ++t)
+        {
+            const auto launch = engine.launchInfo (t);
+            if (launch.playing >= 0 || launch.queued >= 0 || engine.recordInfo (t).state != mixer::RecordState::none)
+                return true;
+        }
+        return false;
+    }
+    constexpr int idleRepaintTicks = 8;   // about 4 a second at the mixer's 30
 }
 
 //==============================================================================
@@ -456,6 +530,14 @@ LevelMeter::LevelMeter (QWidget* parent) : QWidget (parent)
 
 void LevelMeter::setLevels (const mixer::Meter& m, double seconds)
 {
+    // What is drawn, to repaint only when it changes: below -60 dB a bar sits at the bottom,
+    // so a silent meter stops repainting (with the Visualizer behind, the whole mixer would).
+    const auto drawn = [this]
+    {
+        const auto shown = [] (float x) { return x > 1.0e-3f ? x : 0.0f; };
+        return std::array { shown (peak[0]), shown (peak[1]), shown (rms[0]), shown (rms[1]), shown (hold[0]), shown (hold[1]), clipped ? 1.0f : 0.0f };
+    };
+    const auto before = drawn();
     for (int c = 0; c < 2; ++c)
     {
         // The bar falls at 24 dB a second; the hold stays 1.5 seconds.
@@ -471,7 +553,8 @@ void LevelMeter::setLevels (const mixer::Meter& m, double seconds)
         highest = std::max (highest, m.peak[c]);
         clipped = clipped || m.peak[c] >= 1.0f;
     }
-    update();
+    if (drawn() != before)
+        update();
 }
 
 void LevelMeter::clear()
@@ -1168,7 +1251,7 @@ public:
         {
             box->clear();
             box->addItems ({ MixerWindow::tr ("No instrument"), MixerWindow::tr ("Synth"), MixerWindow::tr ("Sampler"), MixerWindow::tr ("Slicer"),
-                             QString::fromUtf8 ("PHI rāga"), MixerWindow::tr ("Instrument Prism") });
+                             QString::fromUtf8 ("PHI rāga"), MixerWindow::tr ("Instrument Prism"), QStringLiteral ("PHI tabla") });
             for (const auto& p : plugins)
                 box->addItem (QString::fromStdString (p.name) + QStringLiteral (" (") + QString::fromStdString (p.format) + QStringLiteral (")"),
                               QString::fromStdString (p.id));
@@ -1180,7 +1263,9 @@ public:
             {
                 case mixer::Instrument::Kind::synth:   choice = synthChoice; break;
                 case mixer::Instrument::Kind::sampler: choice = samplerChoice; break;
-                case mixer::Instrument::Kind::slicer:  choice = slicerChoice; break;
+                case mixer::Instrument::Kind::slicer:
+                    choice = static_cast<const mixer::SlicerInstrument&> (*inst).phiTabla ? tablaChoice : slicerChoice;
+                    break;
                 case mixer::Instrument::Kind::raga:    choice = ragaChoice; break;
                 case mixer::Instrument::Kind::prism:   choice = prismChoice; break;
                 case mixer::Instrument::Kind::plugin:
@@ -3494,6 +3579,7 @@ private:
             add (MixerWindow::tr ("Built-in"), MixerWindow::tr ("Slicer"), "slicer");
             add (MixerWindow::tr ("Built-in"), QString::fromUtf8 ("PHI rāga"), "raga");
             add (MixerWindow::tr ("Built-in"), MixerWindow::tr ("Instrument Prism"), "prism");
+            add (MixerWindow::tr ("Built-in"), QStringLiteral ("PHI tabla"), "tabla");
             for (const auto& p : window.audio.knownInstruments())
                 add (QString::fromStdString (p.format), QString::fromStdString (p.name), "instrument\n" + QByteArray::fromStdString (p.id));
         }
@@ -6553,10 +6639,13 @@ private:
         recordingNote->setVisible (take.state != mixer::RecordState::none);
         static_cast<TransportButton*> (playButton)->setSymbol (window.engine.isPlaying() || window.engine.countingIn() ? TransportButton::Symbol::pause
                                                                                                                        : TransportButton::Symbol::play);
-        if (gridScroll->isVisible())
-            grid->update();
-        lanes->follow();
-        lanes->update();
+        if (mixMoving (window.engine) || slow % idleRepaintTicks == 0)
+        {
+            if (gridScroll->isVisible())
+                grid->update();
+            lanes->follow();
+            lanes->update();
+        }
         if (++slow % 30 == 0 && ! trackBox->view()->isVisible())
             refresh();   // names and colours changed in the mixer
         else if (slow % 10 == 0)
@@ -7551,6 +7640,32 @@ bool MixerWindow::editNotes()
     return true;
 }
 
+// The MIDI editor's transport tied to the mixer's (owner, 2026-10-30: "Tied to the main
+// transport"): the editor's first tick `offset` seconds into the mix.
+static MidiEditor::Transport mixerTransport (mixer::Engine& engine, double offset, std::function<void()> refresh)
+{
+    MidiEditor::Transport t;
+    t.playing = [&engine] { return engine.isPlaying(); };
+    t.seconds = [&engine, offset] { return (double) engine.position() / engine.sampleRate() - offset; };
+    t.locate = [&engine, offset, refresh] (double seconds)
+    {
+        engine.setPosition (std::max<Frame> (0, (Frame) std::llround ((seconds + offset) * engine.sampleRate())));
+        refresh();
+    };
+    t.play = [&engine, locate = t.locate, refresh] (double seconds)
+    {
+        locate (seconds);
+        engine.play();
+        refresh();
+    };
+    t.stop = [&engine, refresh]
+    {
+        engine.stop();
+        refresh();
+    };
+    return t;
+}
+
 void MixerWindow::noteEditorShownMidi()
 {
     if (! showingClip || ! clipView->showsMidi())
@@ -7599,6 +7714,22 @@ void MixerWindow::noteEditorShownMidi()
         why = QString::fromStdString (error);
         return loaded;
     };
+    // Tied to the mixer's transport: a clip on the timeline from where its file starts there, and
+    // muted meanwhile so the editor's notes are heard in its place; a launcher clip from the start.
+    const auto clipsBefore = engine.clips (track);
+    double offset = 0.0;
+    if (id != 0)
+    {
+        auto muted = clipsBefore;
+        for (auto& c : muted)
+            if (c.id == id)
+            {
+                offset = (double) (c.start - c.offset) / engine.sampleRate();
+                c.muted = true;
+            }
+        engine.setClips (track, std::move (muted));
+    }
+    host.transport = mixerTransport (engine, offset, [this] { refreshTransport(); });
     const auto armed = engine.liveTrack();
     engine.setLiveTrack (track);
     MidiEditor editor (*song, host, this);
@@ -7611,6 +7742,8 @@ void MixerWindow::noteEditorShownMidi()
     const auto accepted = editor.exec() == QDialog::Accepted;
     engine.setLiveListener (nullptr);
     engine.setLiveTrack (armed);
+    if (id != 0)
+        engine.setClips (track, clipsBefore);   // heard again, before the edit replaces it
     if (! accepted)
         return;
     const auto edited = editor.result();
@@ -8527,7 +8660,7 @@ bool MixerWindow::dropPlugin (int track, const QByteArray& what)
     }
     const int choice = kind == QLatin1String ("synth") ? synthChoice : kind == QLatin1String ("sampler") ? samplerChoice
                      : kind == QLatin1String ("slicer") ? slicerChoice : kind == QLatin1String ("raga") ? ragaChoice
-                     : kind == QLatin1String ("prism") ? prismChoice
+                     : kind == QLatin1String ("prism") ? prismChoice : kind == QLatin1String ("tabla") ? tablaChoice
                      : kind == QLatin1String ("instrument") ? firstPlugin : -1;
     if (choice < 0)
         return false;
@@ -8619,14 +8752,16 @@ void MixerWindow::tick()
     masterMeter->setLevels (engine.takeMeter (mixer::masterIndex), seconds);
     masterPeak->setText (peakText (masterMeter->highestPeak()));
     refreshTransport();
-    if (lanes->isVisible())
+    const bool redraw = mixMoving (engine) || ++idleTicks % idleRepaintTicks == 0;
+    if (lanes->isVisible() && redraw)
     {
         lanes->follow();
         lanes->update();
     }
     if (launcherArea->isVisible())
     {
-        grid->update();
+        if (redraw)
+            grid->update();
         rack->tick();
     }
 }
@@ -9428,6 +9563,39 @@ void MixerWindow::placeAllMidi()
     refreshTransport();
 }
 
+// PHI tabla (sampler/PhiTabla.h): a Slicer with the owner's own tablā strokes on 32 pads, for Push.
+mixer::InstrumentPtr MixerWindow::makePhiTabla()
+{
+    const auto installed = QDir (QCoreApplication::applicationDirPath()).absoluteFilePath (QStringLiteral (PHI_SHARE_RELATIVE "/phi-tabla"));
+    const auto folder = QFileInfo (installed).isDir() ? QDir::cleanPath (installed) : QStringLiteral (PHI_SHARE_SOURCE_DIR "/phi-tabla");
+    std::vector<std::string> missing;
+    const auto kit = phitabla::kit (folder.toStdString(), [this] (const std::string& path)
+    {
+        QString error;
+        return slicerkit::loadSound (QString::fromStdString (path), rate(), error);
+    }, &missing);
+    auto made = std::make_shared<mixer::SlicerInstrument>();
+    made->phiTabla = true;
+    // The owner's own default (the Slicer's Kit > Make This the PHI tabla Default), tuning and all, else the built-in kit.
+    if (const auto own = slicerkit::phiTablaDefaultPath(); QFileInfo::exists (own))
+    {
+        slicerkit::Loaded loaded;
+        QString error;
+        if (slicerkit::loadKitFile (own, rate(), loaded, error))
+        {
+            made->engine().setKit (loaded.kit);
+            if (loaded.song != nullptr)
+                made->engine().setSong (*loaded.song);
+            return made;
+        }
+        status->setText (tr ("PHI tabla: your default kit could not be opened (%1), so the built-in one is used").arg (error));
+    }
+    made->engine().setKit (kit);
+    if (! missing.empty())
+        status->setText (tr ("PHI tabla: %1 of its sounds could not be read (in %2)").arg (missing.size()).arg (folder));
+    return made;
+}
+
 void MixerWindow::setInstrumentKind (int track, int choice, const QString& pluginId)
 {
     auto& t = info[(size_t) track];
@@ -9440,6 +9608,7 @@ void MixerWindow::setInstrumentKind (int track, int choice, const QString& plugi
         case synthChoice: made = std::make_shared<mixer::Synth>(); break;
         case ragaChoice: made = std::make_shared<mixer::RagaInstrument>(); break;
         case prismChoice: made = makePrism (track); break;
+        case tablaChoice: made = makePhiTabla(); break;
         case samplerChoice:
         case slicerChoice:
             if (choice == samplerChoice)
@@ -9615,6 +9784,8 @@ void MixerWindow::editInstrument (int track)
             auto* w = new SlicerWindow (s.engine(), this);
             w->setAttribute (Qt::WA_DeleteOnClose);
             w->keepPlayingWhenClosed (true);
+            if (s.phiTabla)
+                w->setPhiTabla();
             if (const auto sound = s.engine().sample(); sound != nullptr)
                 w->setSample (sound, t.sound != nullptr ? t.sound : soundAsAudio (*sound, rate()), rate(), title, true, BeatGrid {}, {});
             w->setWindowTitle (tr ("Slicer: %1").arg (title));
@@ -10722,8 +10893,11 @@ QString MixerWindow::autosavePath() { return configFile ("last.phi"); }
 bool MixerWindow::isProjectFile (const QString& file)
 {
     const auto suffix = QFileInfo (file).suffix();
-    return suffix.compare (projectSuffix, Qt::CaseInsensitive) == 0 || suffix.compare (QLatin1String ("phinyxmix"), Qt::CaseInsensitive) == 0;
+    return suffix.compare (projectSuffix, Qt::CaseInsensitive) == 0 || suffix.compare (QLatin1String ("phinyxmix"), Qt::CaseInsensitive) == 0
+        || isOtherProject (file);
 }
+
+void MixerWindow::showStatus (const QString& text) { status->setText (text); }
 
 bool MixerWindow::askToSave (const QString& title, const QString& question)
 {
@@ -10861,7 +11035,7 @@ void MixerWindow::openMix()
     if (file.isEmpty())
         return;
     QString error;
-    if (! loadMix (file, error))
+    if (! (isOtherProject (file) ? importDawProject (file, error) : loadMix (file, error)))
         QMessageBox::warning (this, tr ("Open Project"), error);
     setFocus();
 }
@@ -10872,7 +11046,8 @@ bool MixerWindow::openMixFile (const QString& file)
                                                                            .arg (QFileInfo (file).fileName(), mixName())) != QMessageBox::Yes)
         return false;
     QString error;
-    if (! loadMix (QFileInfo (file).absoluteFilePath(), error))
+    const auto full = QFileInfo (file).absoluteFilePath();
+    if (! (isOtherProject (full) ? importDawProject (full, error) : loadMix (full, error)))
     {
         QMessageBox::warning (this, tr ("Open Project"), error);
         return false;
@@ -10990,7 +11165,7 @@ bool MixerWindow::writeMix (const QString& file, QString& error)
                 case mixer::Instrument::Kind::slicer:
                 {
                     auto& sl = static_cast<mixer::SlicerInstrument&> (*inst);
-                    io = { { "kind", "slicer" }, { "sound", soundFile (sl.engine().sample(), sl.samplePath) }, { "kit", slicerkit::toJson (sl.engine().kit(), base, [&] (const sampler::Sample& padSound, int pad, int layer)
+                    io = { { "kind", "slicer" }, { "phiTabla", sl.phiTabla }, { "sound", soundFile (sl.engine().sample(), sl.samplePath) }, { "kit", slicerkit::toJson (sl.engine().kit(), base, [&] (const sampler::Sample& padSound, int pad, int layer)
                          {
                              // A pad's own sound that came from no file goes beside the mix too.
                              const auto folderName = QFileInfo (file).completeBaseName() + tr (" Samples");
@@ -11185,6 +11360,7 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
                 auto& sl = static_cast<mixer::SlicerInstrument&> (*inst);
                 QStringList missing;
                 sl.engine().setKit (slicerkit::fromJson (io.value ("kit").toObject(), base, rate(), &missing));
+                sl.phiTabla = io.value ("phiTabla").toBool();
                 for (const auto& m : missing)
                     problems << tr ("Track %1: %2").arg (i + 1).arg (m);
             }
@@ -12617,7 +12793,8 @@ std::vector<int> MixerWindow::colourTracks (const QStringList& names, const QLis
     return out;
 }
 
-void MixerWindow::openScore (const midifile::Song& score, mixer::TuningChoice tuning, const QString& title, const QString& notation)
+void MixerWindow::openScore (const midifile::Song& score, mixer::TuningChoice tuning, const QString& title, const QString& notation,
+                             mixer::InstrumentPtr instrument)
 {
     MidiEditor::Host host;
     host.notation = notation;
@@ -12629,6 +12806,7 @@ void MixerWindow::openScore (const midifile::Song& score, mixer::TuningChoice tu
     host.title = title;
     host.staff = true;   // a score opens on the staff, PHI's notation
     host.inputSource = inputSource;
+    host.transport = mixerTransport (engine, 0.0, [this] { refreshTransport(); });   // from the mix's start
     host.loadAudio = [] (const QString& file, QString& why) -> AudioDataPtr
     {
         std::vector<Marker> markers;
@@ -12641,6 +12819,11 @@ void MixerWindow::openScore (const midifile::Song& score, mixer::TuningChoice tu
     const auto armed = engine.liveTrack();
     if (selected < engine.numTracks())
         engine.setLiveTrack (selected);
+    // The score's own instrument plays it while it is edited, in the selected track's place.
+    const auto previewTrack = selected < engine.numTracks() ? selected : -1;
+    const auto before = previewTrack >= 0 && instrument != nullptr ? engine.instrument (previewTrack) : nullptr;
+    if (previewTrack >= 0 && instrument != nullptr)
+        engine.setInstrument (previewTrack, instrument);
     MidiEditor editor (score, host, this);
     auto* target = &editor;
     engine.setLiveListener ([target] (uint8_t s, uint8_t a, uint8_t b)
@@ -12650,6 +12833,8 @@ void MixerWindow::openScore (const midifile::Song& score, mixer::TuningChoice tu
     const auto accepted = editor.exec() == QDialog::Accepted;
     engine.setLiveListener (nullptr);
     engine.setLiveTrack (armed);
+    if (previewTrack >= 0 && instrument != nullptr)
+        engine.setInstrument (previewTrack, before);
     if (! accepted)
         return;
     const auto kept = editor.result();
@@ -12680,6 +12865,11 @@ void MixerWindow::openScore (const midifile::Song& score, mixer::TuningChoice tu
     }
     info[(size_t) track].tuning = tuning;
     applyTunings();
+    if (instrument != nullptr)
+    {
+        engine.setInstrument (track, instrument);
+        strips[(size_t) track]->refresh();
+    }
     addFiles (track, { file }, 0);
     changed();
     status->setText (tr ("%1 is on %2, from the start: %3").arg (title, trackName (track), editor.summary()));

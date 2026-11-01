@@ -116,6 +116,10 @@ private:
     std::vector<float> ringLeft, ringRight;
     size_t ringPos = 0;
     qint64 lastSamplesAt = 0;
+    qint64 lastSoundAt = 0;   // when a sample was last above silence
+    int quietTicks = 0;
+    static constexpr float silence = 1.0e-5f;   // -100 dBFS
+    static constexpr qint64 quietAfterMs = 2000;
     QElapsedTimer clock;
     qint64 lastTick = 0;
 
@@ -158,6 +162,7 @@ private:
     std::vector<Star> stars;
 
     qint64 modeShownAt = -100000;   // when the view's name was last shown
+    static constexpr qint64 titleMs = 3000;   // how long it shows, the last 800 ms fading
 };
 
 // The Visualizer window (Shift+F11), which can go full screen (F11). Floating by default.

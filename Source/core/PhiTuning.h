@@ -56,7 +56,7 @@ namespace phi
     // pressure apply to every note on it.
     struct Expression
     {
-        double bendSemitones = 0.0;   // the member channel's bend plus the zone's master bend
+        double bendSemitones = 0.0;   // the member channel's bend plus the zone's manager bend
         double pressure = 0.0;        // 0..1 (channel pressure, or polyphonic aftertouch)
         double timbre = 0.5;          // 0..1 (CC74; MPE's "slide", centred by default)
     };
@@ -96,8 +96,8 @@ namespace phi
             std::array<std::uint8_t, Tuning::numKeys> polyPressure {};
             int rpnMsb = 127, rpnLsb = 127;   // the RPN selected (127/127: none)
         };
-        int masterOf (int channel) const;     // the zone's master channel, or -1
-        void configureZone (int master, int members);
+        int managerOf (int channel) const;     // the zone's manager channel, or -1
+        void configureZone (int manager, int members);
 
         std::array<Channel, 16> channels {};
         int lowerMembers = 15, upperMembers = 0;

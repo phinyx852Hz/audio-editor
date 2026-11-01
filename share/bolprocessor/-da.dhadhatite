@@ -1,0 +1,92 @@
+// Bol Processor BP3
+// Data saved as "-da.dhadhatite". Date: 2026-05-05 10:29:09
+-se.dhadhatite_data
+-al.dhadhatite
+-gr.dhadhatite
+-kb.dhadhatite
+
+// Data for tests…
+
+[Single line]
+dhadhatitedhadhadheenadheenatitedheenateenadhadhatitedhadhadheenadhadhatitedhadhateenatatatitetatateenateenatiteteenateenadhadhatitedhadhadheenadhadhatitedhadhadheena
+
+[On 4 lines]
+dhadhatitedhadhadheenadheenatitedheenateena
+dhadhatitedhadhadheenadhadhatitedhadhateena
+tatatitetatateenateenatiteteenateena
+dhadhatitedhadhadheenadhadhatitedhadhadheena
+
+dha dha ti te dha dha dhee na dha dha dhee na ti te tee na
+dha dha ti te dha dha dhee na dha dha ti te dha dha tee na
+ta ta ti te ta ta tee na ta ta tee na ti te tee na
+dha dha ti te dha dha dhee na dha dha ti te dha dha dhee na
+
+// Period notation
+// Periods are ignored because they are not in the grammar
+
+dha dha ti te . dha dha dhee na . dha dha dhee na . ti te tee na .
+dha dha ti te . dha dha dhee na . dha dha ti te . dha dha tee na .
+ta ta ti te . ta ta tee na . ta ta tee na . ti te tee na .
+dha dha ti te . dha dha dhee na . dha dha ti te . dha dha dhee na
+
+[With speed]
+/4 dha dha ti te dha dha dhee na dha dha dhee na ti te tee na
+dha dha ti te dha dha dhee na dha dha ti te dha dha tee na
+ta ta ti te ta ta tee na ta ta tee na ti te tee na
+dha dha ti te dha dha dhee na dha dha ti te dha dha dhee na
+
+[With periods + speed]
+/4 dha dha ti te . dha dha dhee na . dha dha dhee na . ti te tee na .
+dha dha ti te . dha dha dhee na . dha dha ti te . dha dha tee na .
+ta ta ti te . ta ta tee na . ta ta tee na . ti te tee na .
+dha dha ti te . dha dha dhee na . dha dha ti te . dha dha dhee na
+
+[With ancient section setting]
+4+4+4+4*1/4 dha dha ti te . dha dha dhee na . dha dha dhee na . ti te tee na .
+dha dha ti te . dha dha dhee na . dha dha ti te . dha dha tee na .
+ta ta ti te . ta ta tee na . ta ta tee na . ti te tee na .
+dha dha ti te . dha dha dhee na . dha dha ti te . dha dha dhee na
+
+[With section setting]
+4+4+4+4/4 dha dha tee na . dha dha dhee na . dha dha ti te . dha dha tee na .
+dha dha ti te . dha dha dhee na . dha dha ti te . dha dha tee na .
+ta ta tee na . ta ta tee na . ta ta ti te . ta ta tee na .
+dha dha ti te . dha dha dhee na . dha dha ti te . dha dha dhee na
+
+// More examples
+
+4+4+4+4/4 dha dha ti te . dha dha dhee na . dhee na ti te . dhee na tee na .
+dha dha ti te . dha dha dhee na . dha dha ti te . dha dha tee na .
+ta ta ti te . ta ta tee na . tee na ti te . tee na tee na .
+dha dha ti te . dha dha dhee na . dha dha ti te . dha dha dhee na
+
+[Using _tempo()]
+_tempo(4) dha dha ti te . dha dha dhee na . dha dha ti te . dha dha tee na .
+tee na dhee na . dha dha ti te . dha dha ti te . dha dha tee na .
+ta ta ti te . ta ta tee na . ta ta ti te . ta ta tee na .
+tee na dhee na . dha dha ti te . dha dha ti te . dha dha dhee na
+
+4+4+4+4/4 dha dha ti te . dha dha dhee na . dha dha ti te . dha dha tee na .
+ti te dhee na . dhee na dhee na . dha dha ti te . dha dha tee na .
+ta ta ti te . ta ta tee na . ta ta ti te . ta ta tee na .
+ti te dhee na . dhee na dhee na . dha dha ti te . dha dha dhee na
+
+4+4+4+4/4 dha dha ti te . dha dha dhee na . dha dha dha dha . tee na tee na .
+dha dha ti te . dha dha dhee na . dha dha ti te . dha dha tee na .
+ta ta ti te . ta ta tee na . ta ta ta ta . tee na tee na .
+dha dha ti te . dha dha dhee na . dha dha ti te . dha dha dhee na
+
+4+4+4+4/4 dha dha dha dha . tee na ti te . dha dha ti te . dha dha tee na .
+dha dha ti te . dha dha dhee na . dha dha ti te . dha dha tee na .
+ta ta ta ta . tee na ti te . ta ta ti te . ta ta tee na .
+dha dha ti te . dha dha dhee na . dha dha ti te . dha dha dhee na
+
+4+4+4+4/4 dha tee na dha . dha dha dha dha . dha dha ti te . dha dha tee na .
+dha dha ti te . dha dha dhee na . dha dha ti te . dha dha tee na .
+ta tee na ta . ta ta ta ta . ta ta ti te . ta ta tee na .
+dha dha ti te . dha dha dhee na . dha dha ti te . dha dha dhee na
+
+4+4+4+4/4 dhadhatite . dhadhadheena . dhadha-- . titeteena .
+dhadhatite . dhadhadheena . dhadhatite . dhadhateena .
+tatatite . tatateena . tata-- . titeteena .
+dhadhatite . dhadhadheena . dhadhatite . dhadhadheena
