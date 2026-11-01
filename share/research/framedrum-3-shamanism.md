@@ -221,9 +221,9 @@ from many traditions what he called "core shamanism", the practices he believed 
 taught them in *The Way of the Shaman* (1980) and through the Foundation for Shamanic Studies,
 founded in 1985. Its central practice is the shamanic journey to a steady drumbeat on a
 single-headed frame drum, at about five beats a second, ending in a fast "callback" rhythm
-that brings the journeyer back; the Foundation insists that this drumming is not music and is
-not meant for musical enjoyment; Harner made the first journey drumming
-tape so that his readers could journey without a drummer. Core shamanism and the neo-shamanism
+that brings the journeyer back. The Foundation insists that this drumming is not music and is
+not meant for musical enjoyment. Harner made the first journey drumming tape so that his readers
+could journey without a drummer. Core shamanism and the neo-shamanism
 around it brought the frame drum to many Westerners, alongside the frame drum revival of Glen
 Velez and Layne Redmond. Anthropologists and many Indigenous people have criticized it for
 lifting practices out of the cultures that made them.
