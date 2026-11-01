@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**142 pull requests:** 132 merged, 10 open.
+**143 pull requests:** 132 merged, 11 open.
 
 ## Contents
 
@@ -241,6 +241,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#131](https://github.com/phinyx852Hz/audio-editor/pull/131) | Compose: Congolese guitar, rumba and sebene | merged |  | `Source/mixer/Compose.cpp`<br>`tests/CoreTests.cpp`<br>`docs/compose.md` |
 | [#132](https://github.com/phinyx852Hz/audio-editor/pull/132) | Compose: Mbuti interlocking, the Bol Processor (BP3) with an Ajrada qāʿida, and PHI tabla | merged |  | `share/bolprocessor/-so.EkDoTin`<br>`Source/mixer/BolProcessor.cpp`<br>`share/bolprocessor/-so.dhati` |
 | [#134](https://github.com/phinyx852Hz/audio-editor/pull/134) | Research: check the Metadata section against Wikipedia | merged |  | `share/research/metadata.md` |
+| [#143](https://github.com/phinyx852Hz/audio-editor/pull/143) | Ruler: bars and time together, or time only | open |  | `Source/ui/MixerWindow.cpp`<br>`Source/ui/WarpSection.cpp`<br>`Source/ui/TimeRuler.h` |
 
 ## By number
 
@@ -388,3 +389,4 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#140](https://github.com/phinyx852Hz/audio-editor/pull/140) | Mixer: narrower return strips, any effect in their slot | The two send/return FX strips (A and B) in the mixer: *(auto)* | open | 2026-11-01 | Mixer and clip launcher |
 | [#141](https://github.com/phinyx852Hz/audio-editor/pull/141) | Research: an entry for every Compose menu item | The owner asked for every Compose menu option to have a Research entry. *(auto)* | open | 2026-11-01 | Interface and branding |
 | [#142](https://github.com/phinyx852Hz/audio-editor/pull/142) | Mixer: folders as group buses, with Reaper's three fold levels | Group buses that work like Reaper's folder tracks: *(auto)* | open | 2026-11-01 | Mixer and clip launcher |
+| [#143](https://github.com/phinyx852Hz/audio-editor/pull/143) | Ruler: bars and time together, or time only | Mixer timeline ruler (tracks across time): two rows by default, bar numbers above and minutes:seconds below (0:00, 1:30, 1:02:03, with tenths or hundredths w... *(auto)* | open | 2026-11-01 | Not yet sorted |
