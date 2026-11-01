@@ -2,6 +2,7 @@
 #include "BuiltinEffects.h"
 #include "MasteringEffect.h"
 #include "PhiEffects.h"
+#include "AudioDrivenEffects.h"
 #include "../core/Dsp.h"
 #include "../core/MidSide.h"
 
@@ -407,6 +408,8 @@ namespace builtin
                                                            LimiterProcessor::description() };
         for (auto& d : phifx::descriptions())
             list.push_back (std::move (d));
+        for (auto& d : drivenfx::descriptions())
+            list.push_back (std::move (d));
         return list;
     }
 
@@ -430,6 +433,8 @@ namespace builtin
             return std::make_unique<LimiterProcessor>();
         if (isBuiltin (d) && d.fileOrIdentifier == DitherProcessor::identifier)
             return std::make_unique<DitherProcessor>();
+        if (auto made = drivenfx::create (d))
+            return made;
         return phifx::create (d);
     }
 }

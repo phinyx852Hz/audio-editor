@@ -24,6 +24,7 @@
 #include "../Source/mixer/MixerEngine.h"
 #include "../Source/mixer/InstrumentPrism.h"
 #include "../Source/mixer/EffectPrism.h"
+#include "../Source/core/AudioDriven.h"
 #include "../Source/mixer/DrumsToMidi.h"
 #include "../Source/mixer/Rhythms.h"
 #include "../Source/mixer/Architectonics.h"
@@ -4545,6 +4546,144 @@ namespace
             int samples, at = 0;
             std::vector<std::pair<float, float>> line;
         };
+    }
+
+    // The effects that play from what they hear (core/AudioDriven.h).
+    void testAudioDriven()
+    {
+        constexpr double rate = 48000.0;
+        constexpr int frames = 48000;
+        constexpr double pi = 3.14159265358979323846;
+        auto rms = [] (const std::vector<float>& v, int from, int to)
+        {
+            double e = 0.0;
+            for (int i = from; i < to; ++i)
+                e += (double) v[(size_t) i] * v[(size_t) i];
+            return std::sqrt (e / std::max (1, to - from));
+        };
+        auto tone = [&] (double hz, double level, int length)
+        {
+            std::vector<float> v ((size_t) frames, 0.0f);
+            for (int i = 0; i < length; ++i)
+                v[(size_t) i] = (float) (level * std::sin (2.0 * pi * hz * i / rate));
+            return v;
+        };
+
+        // The pitch tracker, within a few cents from a low E to E5.
+        for (const auto hz : { 82.41, 110.0, 220.0, 440.0, 659.26 })
+        {
+            phi::PitchTracker t;
+            t.prepare (rate);
+            for (int i = 0; i < frames / 2; ++i)
+            {
+                const auto phase = std::fmod (i * hz / rate, 1.0);
+                t.push ((float) (0.5 * (2.0 * phase - 1.0)));
+            }
+            const auto cents = 1200.0 * std::log2 (t.hz() / hz);
+            check (std::abs (cents) < 5.0 && t.confidence() > 0.9, "the pitch tracker finds " + std::to_string ((int) hz) + " Hz");
+        }
+        {
+            phi::PitchTracker t;
+            t.prepare (rate);
+            for (int i = 0; i < frames / 4; ++i)
+                t.push (0.0f);
+            check (t.hz() == 0.0, "the pitch tracker hears no pitch in silence");
+        }
+
+        // Φ Double: an octave above a 220 Hz line, as loud as it, and quiet after it.
+        {
+            phi::Double d;
+            d.prepare (rate);
+            phi::Double::Settings s;
+            s.interval = 12.0;
+            s.wave = phi::Double::Wave::sine;
+            s.mix = 1.0;
+            d.set (s);
+            auto left = tone (220.0, 0.5, frames / 2), right = left;
+            float* io[] { left.data(), right.data() };
+            d.process (io, 2, frames);
+            check (std::abs (d.playingHz() - 440.0) < 2.0, "Φ Double follows an octave up");
+            check (rms (left, frames / 4, frames / 2) > 0.1, "Φ Double plays along with the line");
+            check (rms (left, frames * 3 / 4, frames) < 1.0e-3, "Φ Double stops when the line does");
+        }
+
+        // Φ Vocoder: sound while the voice speaks, none after.
+        {
+            phi::Vocoder v;
+            v.prepare (rate);
+            phi::Vocoder::Settings s;
+            s.mix = 1.0;
+            v.set (s);
+            std::vector<float> left ((size_t) frames, 0.0f);
+            for (int i = 0; i < frames / 2; ++i)
+                left[(size_t) i] = (float) (0.3 * (2.0 * std::fmod (i * 150.0 / rate, 1.0) - 1.0));
+            auto right = left;
+            float* io[] { left.data(), right.data() };
+            v.process (io, 2, frames);
+            check (rms (left, frames / 4, frames / 2) > 0.02, "Φ Vocoder speaks with the voice");
+            check (rms (left, frames * 3 / 4, frames) < 1.0e-3, "Φ Vocoder is quiet without it");
+            std::array<int, 4> offsets {};
+            check (phi::Vocoder::chordNotes (phi::Vocoder::Chord::major, offsets) == 4 && offsets[1] == 4 && offsets[2] == 7, "Φ Vocoder's major chord");
+        }
+
+        // Φ Strings: tuned to the chord, and ringing on after a burst.
+        {
+            phi::Strings::Settings s;
+            s.note = 45;
+            s.chord = phi::Strings::Chord::fifths;
+            check (std::abs (phi::Strings::stringHz (s, 0) - 110.0) < 0.01 && std::abs (phi::Strings::stringHz (s, 1) - 164.81) < 0.05
+                       && std::abs (phi::Strings::stringHz (s, 2) - 220.0) < 0.01, "Φ Strings tunes to fifths");
+            phi::Strings st;
+            st.prepare (rate);
+            s.mix = 1.0;
+            s.decaySeconds = 2.0;
+            st.set (s);
+            auto left = tone (110.0, 0.5, 4800), right = left;
+            float* io[] { left.data(), right.data() };
+            st.process (io, 2, frames);
+            const auto early = rms (left, 4800, 9600), late = rms (left, 40000, 48000);
+            check (early > 1.0e-3 && late < early && late > 1.0e-6, "Φ Strings rings on and dies away");
+        }
+
+        // Φ Grains: grains of what came in, and a frozen loop keeps playing in silence.
+        {
+            phi::Grains g;
+            g.prepare (rate);
+            phi::Grains::Settings s;
+            s.mix = 1.0;
+            g.set (s);
+            auto left = tone (330.0, 0.3, frames), right = left;
+            float* io[] { left.data(), right.data() };
+            g.process (io, 2, frames);
+            check (rms (left, frames / 2, frames) > 0.02, "Φ Grains plays grains of the sound");
+            s.freeze = true;
+            g.set (s);
+            std::vector<float> l2 ((size_t) frames, 0.0f), r2 ((size_t) frames, 0.0f);
+            float* io2[] { l2.data(), r2.data() };
+            g.process (io2, 2, frames);
+            check (rms (l2, frames / 2, frames) > 0.02, "Φ Grains frozen keeps playing what it holds");
+        }
+
+        // Φ Trigger: four hits, four drums; none from steady sound or silence.
+        {
+            phi::Trigger t;
+            t.prepare (rate);
+            t.set ({});
+            std::vector<float> left ((size_t) frames, 0.0f);
+            for (int h = 0; h < 4; ++h)
+                for (int i = 0; i < 200; ++i)
+                    left[(size_t) (h * 12000 + 1000 + i)] = 0.8f * std::exp (-i / 40.0f) * (i % 2 ? 1.0f : -1.0f);
+            auto right = left;
+            float* io[] { left.data(), right.data() };
+            t.process (io, 2, frames);
+            check (t.hits() == 4, "Φ Trigger fires once a hit");
+            check (rms (left, 0, frames) > 0.01, "Φ Trigger plays its drum");
+            t.reset();
+            auto steady = tone (220.0, 0.01, frames), steadyR = steady;
+            float* io2[] { steady.data(), steadyR.data() };
+            t.process (io2, 2, frames);
+            check (t.hits() == 0, "Φ Trigger ignores sound under its threshold");
+        }
     }
 
     // An Effect Prism (a mixer return's): rays of effects, the input divided among them and joined again.
@@ -10987,6 +11126,7 @@ int main()
     testPrismSplit();
     testInstrumentPrism();
     testEffectPrism();
+    testAudioDriven();
     testMasterAssist();
     testMixAssist();
     testSonify();

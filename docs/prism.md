@@ -167,7 +167,9 @@ the Prism opens in a window. Clicking the effect button again opens the Prism.
   Parallel Prism with a reverb on one ray and nothing on the other blends wet and dry.
 - Each ray has its gain (−60 dB is off, up to +12 dB), mute, solo and a level bar. Rays whose
   effects have less latency wait for the slowest, so they stay together when joined.
-- No instruments: a send carries sound, not notes. The return's strip after the Prism (pan, mute,
+- No instruments: a send carries sound, not notes. The five effects that play from what they hear (Φ Vocoder, Φ Strings, Φ Grains, Φ Double, Φ Trigger; `Source/core/AudioDriven.*`) fill that role.
+- Presets: Save Preset keeps a Prism (its rays' effects and settings, as in a project) in the settings; From PHI has nine made of the Φ effects.
+- The return's strip after the Prism (pan, mute,
   fader) is unchanged, and projects save the Prism with every ray's effects and settings.
 
 Code: `Source/mixer/EffectPrism.*` (`mixer::EffectPrism`, a `mixer::Effect`: the split, the rays'

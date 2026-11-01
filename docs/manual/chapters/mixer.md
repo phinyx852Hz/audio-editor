@@ -139,10 +139,16 @@ From top to bottom, each strip has:
 
 []{.ix t="Sends"}[]{.ix t="Returns"}Two return strips sit between the tracks and the master:
 
-- **A Reverb** starts with Φ Space (1.8 s, fully wet).
-- **B Delay** starts with Φ Echo: one tap, a dotted eighth at the mix's tempo, 30 % feedback, fully wet.
+- **Return A** starts with Φ Space (1.8 s, fully wet), a reverb.
+- **Return B** starts with Φ Echo: one tap, a dotted eighth at the mix's tempo, 30 % feedback, fully wet.
 
-Right-click a return's effect to choose another, or none. Each return has a balance pan, a fader and a mute, and its own meter.
+Each return's slot takes any effect: click the ▾ beside its name (or right-click it) for the same list as the inserts, the built-in and stock effects and every plugin found by the scan, or drag an effect from the browser onto the strip. Clicking the effect's name opens it. Each return has a balance pan, a fader and a mute, and its own meter.
+
+#### A Prism in a return {#mixer-return-prism}
+
+[]{.ix t="Returns!Prism"}[]{.ix t="Prism!in a return"}Choose **Prism (Rays of Effects)** from a return's ▾ to put a Prism of effects in its slot: the effect that was there moves into its first ray, and the Prism opens. **Split** divides what the sends bring in among the rays: Parallel (every ray hears all of it), Bands (up to four, with their crossovers beside the Split), Mid/Side or Left/Right. Each ray is a chain of up to eight effects with its own gain, mute, solo and level bar; an empty ray passes its share as it came in. A return's Prism holds effects only, since a send carries sound, not notes, but [the effects that play from what they hear](#driven-effects), such as Φ Vocoder and Φ Grains, make it play like one.
+
+**Presets** keeps Prisms to use again: **Save Preset** stores this one with every ray's effects and settings, and **From PHI** has ready-made ones: Plate and Shimmer, Robot Choir, Talking Synth, Sympathetic Strings, Granular Cloud, Octave Shadow, Drum Replacer, Low Echo High Space, and Mid Echo Side Space.
 
 Every track has a **Send A** and a **Send B** pot, showing its level in dB. A send is taken after the fader and pan; right-click the pot for **Pre-Fader**, which takes it after the inserts and width instead. A muted track's sends are silent, and bounces have none.
 
