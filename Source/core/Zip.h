@@ -20,6 +20,9 @@ namespace zip
         uint64_t headerOffset = 0;     // its local header
     };
 
+    // A gzip file's contents (an Ableton Live Set is gzipped XML); false with `error` set.
+    bool gunzip (const std::string& path, std::string& out, std::string& error);
+
     class Reader
     {
     public:
