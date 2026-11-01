@@ -5,14 +5,15 @@ shaman's mount; the science and the doubts about drumming and trance; and the dr
 neo-shamanism. The owner asked for "the connection to Shamanism".
 
 Checked on 2026-11-01 against the Wikipedia articles linked below, every one of which was opened.
-The Neher and Rouget, Hultkrantz, Harner and Foundation for Shamanic Studies entries were
+The Rouget, Hultkrantz, Harner and Foundation for Shamanic Studies entries were
 checked against search-engine extracts of the sources named, since sites other than Wikipedia
 could not be opened from the machine these entries were written on; those links are listed in
 the pull request for the owner to open by hand. The Siberian drum's construction and the
 cosmos painted on it are partly from memory. The circumpolar drum types, Honko, Bogoras on the
 Chukchi, Bäckman, the painting of Sámi drums and the three hidden South Sámi drums are from
 Birgitta Berglund's 2010 chapter, and the Khakas drums from Victoria Soyan Peemot's 2017
-article, both of which the owner supplied as PDFs.
+article, both of which the owner supplied as PDFs, as was Neher's 1962 paper, from which his
+entry is taken.
 Later the same day the owner allowed those sites; the Library of Congress post on the Paulsen
 drum was opened and agrees with the entry.
 -->
@@ -164,11 +165,18 @@ healing, and are treated as living beings with a voice of their own.
 
 ## Drumming and trance
 
-Does the drum itself cause trance? In 1962 the psychologist Andrew Neher argued that it does: the
-low, loud, rhythmic sound of drumming, at about the frequency of the brain's own rhythms, could
-"drive" them, as a flickering light does, producing the unusual behaviour seen in drum
-ceremonies. The idea was taken up widely and is still repeated. The ethnomusicologist Gilbert
-Rouget answered it at length in *La musique et la transe* (1980; *Music and Trance*, 1985). Neher's
+Does the drum itself cause trance? In 1962 the psychologist Andrew Neher argued that it does.
+A flickering light near the brain's alpha rhythm, 8 to 13 cycles a second, was known to build up
+the brain's electrical waves and pull them to its own rate. A drumbeat, Neher reasoned, holds
+many frequencies at once, so it reaches more of the brain than a pure tone, and mostly low ones,
+which the ear can take loud without pain, so it carries more energy. In his laboratory,
+drumming changed the electrical activity of the brain's auditory region, and his subjects
+reported unusual perceptions; some twitched. He predicted that trance ceremonies would drum at
+just under 8 to 13 beats a second, and found support in A. M. Jones's analyses of African dance
+drumming, at 7 to 9 a second, and in Haitian Vodou drumming at 8 or 9. Fatigue, hunger and
+overbreathing, he added, would make dancers more susceptible. The idea was taken up widely and
+is still repeated. The ethnomusicologist Gilbert Rouget answered it at length in *La musique et
+la transe* (1980; *Music and Trance*, 1985). Neher's
 laboratory drumming was steady, Rouget observed, while the drumming of real ceremonies changes
 constantly; those who enter trance learn to, in a setting that expects it, while others hearing
 the same drums do not; and "if Neher were right, half of Africa would be in a trance from the
