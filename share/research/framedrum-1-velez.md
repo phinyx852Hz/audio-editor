@@ -101,8 +101,9 @@ rhythmic cycle, so that rhythm is felt in the feet, heard in the voice and playe
 together. Its exercises join voice warm-ups and walking to the drum. Velez published it in instructional videos, *The Fantastic
 World of Frame Drums* (1990) and *Handance Method 1* and *2* (1996), in *Handance Method with
 Cueing and Performance Guide* (2002) and *Handance Duets for Frame Drums* (2001), and in manuals
-for the bodhrán, tar and shakers (2004). Cooperman makes a series of tars and bendirs to his
-design.
+for the bodhrán, tar and shakers (2004). Cooperman makes two series of drums with him: the
+Glen Velez Series of tars, bendirs and a bodhrán, and a Handance Series of five tunable frame
+drums and a ghaval for teaching his method.
 
 - [Glen Velez](https://pas.org/glen-velez/), Percussive Arts Society Hall of Fame, on the
   unified technical vocabulary.
