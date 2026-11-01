@@ -2341,6 +2341,79 @@ namespace
         check (copy.settings().wave == mixer::SynthSettings::square && near (copy.settings().cutoff, 1234.0, 1.0e-9), "synth: settings saved and restored");
     }
 
+    // Group buses (Reaper's folder tracks): the tracks in a group play into it, after their faders,
+    // through the group's strip; a group counts as one track; no loops; solo and bounce follow.
+    void testGroupBuses()
+    {
+        const double rate = 48000.0;
+        mixer::Engine m;
+        m.prepare (rate);
+        m.setNumTracks (4);
+        auto dcOf = [&] (float level, int frames)
+        {
+            AudioData::Builder b (1, rate);
+            std::vector<float> v ((size_t) frames, level);
+            const float* one[1] = { v.data() };
+            b.append (one, frames);
+            return mixer::makeAudioClip (*b.finish(), "dc.wav");
+        };
+        m.setClips (0, { mixer::makeClip (dcOf (0.5f, 48000), 0) });
+        m.setClips (1, { mixer::makeClip (dcOf (0.25f, 24000), 0) });
+        const auto centre = 0.70710678f;
+        auto renderAt = [&] (Frame at)
+        {
+            std::vector<float> l (256), r (256);
+            m.setPosition (at);
+            m.play();
+            m.render (l.data(), r.data(), 256);
+            m.stop();
+            return l[200];
+        };
+        check (near (renderAt (0), 0.75f * centre, 1.0e-4), "groups: without one, the tracks go to the master");
+
+        check (m.setGroup (0, 2) && m.setGroup (1, 2), "groups: two tracks into track 3");
+        check (m.isGroup (2) && ! m.isGroup (0) && m.groupOf (0) == 2 && m.groupOf (3) == -1, "groups: who is a group, and in which");
+        check (! m.setGroup (2, 0) && ! m.setGroup (2, 2) && m.groupOf (2) == -1, "groups: no group goes into itself or a track in it");
+        check (m.topLevelTracks() == 2, "groups: a group and its tracks count as one track");
+        check (m.roomForTracks (6) && ! m.roomForTracks (7), "groups: room up to the limit by the tracks outside groups, and the 16 there are");
+
+        m.strip (2).faderDb = -6.0f;
+        const auto g = std::pow (10.0f, -6.0f / 20.0f);
+        check (near (renderAt (0), 0.75f * centre * g, 1.0e-3), "groups: the tracks play through the group's fader");
+        m.strip (2).mute = true;
+        check (std::abs (renderAt (0)) < 1.0e-6f, "groups: muting the group mutes its tracks");
+        m.strip (2).mute = false;
+        m.strip (0).solo = true;
+        check (near (renderAt (0), 0.5f * centre * g, 1.0e-3), "groups: a soloed track is heard through its group");
+        m.strip (0).solo = false;
+        m.strip (2).solo = true;
+        check (near (renderAt (0), 0.75f * centre * g, 1.0e-3), "groups: soloing a group keeps its tracks heard");
+        m.strip (2).solo = false;
+
+        // Nested: track 3 into track 4, which is in no group; the order puts the deepest first.
+        check (m.setGroup (2, 3) && m.groupDepth (0) == 2 && m.within (0, 3), "groups: a group in a group");
+        m.strip (3).faderDb = -6.0f;
+        check (near (renderAt (0), 0.75f * centre * g * g, 1.0e-3), "groups: through both groups' faders");
+        check (! m.setGroup (3, 0), "groups: no loop through a group in a group");
+
+        check (m.trackEnd (3) == 48000 && m.trackEnd (1) == 24000, "groups: a group lasts as long as its tracks");
+        std::string error;
+        auto leftAt = [] (const AudioDataPtr& d, Frame at)
+        {
+            float a[1], c[1];
+            float* pa[2] = { a, c };
+            d->read (at, 1, pa);
+            return a[0];
+        };
+        auto bounced = m.mixdown (0.0, error, nullptr, nullptr, 3);
+        check (bounced != nullptr && near (leftAt (bounced, 1000), 0.75f * centre * g, 1.0e-3),
+               "groups: bouncing a group takes its tracks, at their faders, before the group's fader");
+        auto alone = m.mixdown (0.0, error, nullptr, nullptr, 1);
+        check (alone != nullptr && near (leftAt (alone, 1000), 0.25f, 1.0e-3), "groups: a track in a group bounces alone");
+        m.setGroup (2, -1);
+        check (m.groupOf (2) == -1 && m.topLevelTracks() == 2, "groups: a group taken out of its group");
+    }
+
     // The clip launcher: launches on the quantise, loops, one-shots, stops, scenes and the timeline hand-back.
     void testLauncher()
     {
@@ -11128,6 +11201,7 @@ int main()
     testMidiEdits();
     testMixer();
     testLauncher();
+    testGroupBuses();
     testPatchBay();
     testMixerStrip();
     testSpatialStudio();
