@@ -41,6 +41,7 @@
 #include "../Source/core/RiffChunks.h"
 #include "../Source/core/Xmp.h"
 #include "../Source/core/Fft.h"
+#include "../Source/core/LinearPhase.h"
 #include "../Source/core/Windows.h"
 #include "../Source/core/Album.h"
 #include "../Source/core/Nyquist.h"
@@ -8462,6 +8463,63 @@ namespace
             for (int i = 4790; i < 4810; ++i)
                 jump = std::max (jump, std::abs (tone[(size_t) i + 1] - tone[(size_t) i]));
             check (jump < 0.2f, "phi EQ changes one band without a click in another");
+        }
+
+        // Φ EQ, linear phase: the same magnitude as the filters, every frequency late by
+        // the same latency, and a new setting faded in without a click.
+        {
+            phi::Eq e;
+            e.prepare (rate, 1);
+            phi::Eq::Settings s;
+            s.bands[5].gainDb = 6.0;
+            s.bands[8].gainDb = -4.0;
+            e.set (s);
+            const auto taps = phi::LinearPhaseFir::tapsFor (rate);
+            const auto magnitude = [&] (double hz) { return std::pow (10.0, e.responseDb (std::max (hz, 0.1)) / 20.0); };
+            const auto impulse = phi::LinearPhaseFir::design (magnitude, taps, rate);
+            float asymmetry = 0.0f;
+            for (int n = 1; n < taps / 2; ++n)
+                asymmetry = std::max (asymmetry, std::abs (impulse[(size_t) (taps / 2 + n)] - impulse[(size_t) (taps / 2 - n)]));
+            check ((int) impulse.size() == taps && asymmetry < 1.0e-6f, "linear-phase impulse is symmetric about its centre");
+
+            phi::LinearPhaseFir fir;
+            fir.prepare (taps, 2);
+            check (fir.latency() == taps / 2 + phi::LinearPhaseFir::blockSize, "linear-phase latency is the centre plus one block");
+            fir.give (phi::LinearPhaseFir::prepareKernel (impulse));
+            const int frames = 3 * taps;
+            for (const auto hz : { phi::Eq::bandHz (5), phi::Eq::bandHz (8), 3000.0 })
+            {
+                fir.reset();
+                auto left = sine (hz, frames), right = sine (hz * 1.5, frames);
+                const auto dryLeft = left, dryRight = right;
+                for (int done = 0; done < frames; done += 300)   // blocks that are not the partition's size
+                {
+                    float* io[] { left.data() + done, right.data() + done };
+                    fir.process (io, 2, std::min (300, frames - done));
+                }
+                const auto at = fir.latency();
+                float error = 0.0f;
+                const auto gainL = (float) magnitude (hz), gainR = (float) magnitude (hz * 1.5);
+                for (int i = taps + at; i < frames; ++i)
+                    error = std::max ({ error, std::abs (left[(size_t) i] - gainL * dryLeft[(size_t) (i - at)]),
+                                        std::abs (right[(size_t) i] - gainR * dryRight[(size_t) (i - at)]) });
+                check (error < 2.0e-3f, "linear-phase EQ at " + std::to_string ((int) hz) + " Hz has the filters' gain and no phase shift");
+            }
+
+            // A new kernel fades in over one block.
+            fir.reset();
+            auto tone = sine (1000.0, 2 * taps);
+            float* t[] { tone.data() };
+            fir.process (t, 1, taps);
+            s.bands[5].gainDb = -6.0;
+            e.set (s);
+            fir.give (phi::LinearPhaseFir::prepareKernel (phi::LinearPhaseFir::design (magnitude, taps, rate)));
+            float* rest[] { tone.data() + taps };
+            fir.process (rest, 1, taps);
+            float jump = 0.0f;
+            for (int i = taps; i < 2 * taps - 1; ++i)
+                jump = std::max (jump, std::abs (tone[(size_t) i + 1] - tone[(size_t) i]));
+            check (jump < 0.2f && fir.takeRetired() != nullptr, "linear-phase EQ changes setting without a click");
         }
 
         // Φ Echo: an impulse comes back at t, tφ, tφ²..., each 1/φ quieter.

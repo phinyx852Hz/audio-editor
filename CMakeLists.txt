@@ -93,6 +93,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/Repair.cpp
     Source/core/Restoration.cpp
     Source/core/Fft.cpp
+    Source/core/LinearPhase.cpp
     Source/core/Windows.cpp
     Source/core/SpectrumView.cpp
     Source/core/Generate.cpp
@@ -525,6 +526,7 @@ if(PHI_BUILD_TESTS)
         Source/core/Repair.cpp
         Source/core/Restoration.cpp
         Source/core/Fft.cpp
+        Source/core/LinearPhase.cpp
         Source/core/Windows.cpp
         Source/core/SpectrumView.cpp
         Source/core/Generate.cpp
