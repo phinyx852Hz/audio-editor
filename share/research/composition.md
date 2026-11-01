@@ -498,7 +498,7 @@ pianists, choirs, rock bands and films. Cage and Lejaren Hiller's *HPSCHD* (1969
 seven harpsichords and 51 computer-generated tapes, was a Musicircus of the same kind. Cage put on
 Musicircuses until his last years, and many have been put on since in his memory.
 
-- [Musicircus](https://en.wikipedia.org/wiki/Musicircus), Wikipedia.
+- [John Cage](https://en.wikipedia.org/wiki/John_Cage) and [HPSCHD](https://en.wikipedia.org/wiki/HPSCHD), Wikipedia.
 - James Pritchett, *The Music of John Cage* (Cambridge, 1993).
 - Richard Kostelanetz (ed.), *Conversing with Cage* (Limelight, 1988).
 
