@@ -1684,27 +1684,32 @@ void SlicerWindow::saveKit()
 
 void SlicerWindow::setPhiTabla()
 {
+    setBuiltInKit (QStringLiteral ("PHI tabla"), slicerkit::phiTablaDefaultPath());
+}
+
+void SlicerWindow::setBuiltInKit (const QString& name, const QString& defaultFile)
+{
     if (phiTablaActions || kitMenu == nullptr)
         return;
     phiTablaActions = true;
     kitMenu->addSeparator();
-    kitMenu->addAction (tr ("Make This the PHI tabla Default"), this, [this]
+    kitMenu->addAction (tr ("Make This the %1 Default").arg (name), this, [this, name, defaultFile]
     {
-        const auto file = slicerkit::phiTablaDefaultPath();
+        const auto file = defaultFile;
         QDir().mkpath (QFileInfo (file).absolutePath());
         QString error;
         const auto song = engine.song();
         if (! slicerkit::saveKitFile (file, kit, sample, soundRate(), error, song.get()))
-            status->setText (tr ("PHI tabla's default could not be saved: %1").arg (error));
+            status->setText (tr ("%1's default could not be saved: %2").arg (name, error));
         else
-            status->setText (tr ("Every new PHI tabla now starts from this kit, tuning and all (and the Bol Processor plays it)"));
-    })->setToolTip (tr ("Your tuning, levels, trims and sounds become what a new PHI tabla starts from"));
-    kitMenu->addAction (tr ("Restore PHI tabla's Built-in Default"), this, [this]
+            status->setText (tr ("Every new %1 now starts from this kit, tuning and all (and the Bol Processor and the rhythms play it)").arg (name));
+    })->setToolTip (tr ("Your tuning, levels, trims and sounds become what a new %1 starts from").arg (name));
+    kitMenu->addAction (tr ("Restore %1's Built-in Default").arg (name), this, [this, name, defaultFile]
     {
-        const auto file = slicerkit::phiTablaDefaultPath();
+        const auto file = defaultFile;
         QFile::remove (file);
         QDir (QFileInfo (file).absolutePath() + QStringLiteral ("/") + QFileInfo (file).completeBaseName() + QStringLiteral (" Sounds")).removeRecursively();
-        status->setText (tr ("A new PHI tabla starts from the built-in kit again; this one keeps its edits"));
+        status->setText (tr ("A new %1 starts from the built-in kit again; this one keeps its edits").arg (name));
     });
 }
 

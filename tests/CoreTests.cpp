@@ -29,6 +29,7 @@
 #include "../Source/mixer/Compose.h"
 #include "../Source/mixer/BolProcessor.h"
 #include "../Source/sampler/PhiTabla.h"
+#include "../Source/sampler/PhiFrameDrum.h"
 #include "../Source/mixer/Harmonies.h"
 #include "../Source/mixer/ModalHarmony.h"
 #include "../Source/mixer/RhythmGenerator.h"
@@ -9482,10 +9483,63 @@ namespace
         check (brightness (0.5) < 0.5 * brightness (0.0), "phi tabla: a soft hit is darker");
 
         // The Bol Processor on PHI tabla: dha twice is its two takes.
-        const auto score = bolprocessor::toScore ({ bolprocessor::parse ("dha dha ne") }, 90.0, true);
+        const auto score = bolprocessor::toScore ({ bolprocessor::parse ("dha dha ne") }, 90.0, bolprocessor::On::phiTabla);
         check (score.parts[0].notes.size() == 3 && score.parts[0].notes[0].key == pt::noteFor ("dha", 0) && score.parts[0].notes[1].key == pt::noteFor ("dha", 1)
                    && score.parts[0].notes[0].key != score.parts[0].notes[1].key,
                "phi tabla: the Bol Processor's bols on its pads, the takes in turn");
+    }
+
+    // PHI frame drum (owner, 2026-11-01): the owner's frame drum as a Slicer kit for Push, softer hits
+    // darker, and PHI's rhythms and the Bol Processor played on it by stroke, the takes in turn.
+    void testPhiFrameDrum()
+    {
+        namespace fd = phiframedrum;
+        bool files = true, unique = true, onGrid = true;
+        std::set<int> seen;
+        for (const auto& p : fd::pads())
+        {
+            unique = unique && seen.insert (p.pad).second;
+            onGrid = onGrid && p.pad >= 0 && p.pad < 64;
+            files = files && std::filesystem::exists (std::string (PHI_SHARE_SOURCE_DIR "/phi-frame-drum/") + p.sound.file + ".wav");
+        }
+        check (unique && onGrid && files && fd::pads().size() == 49, "phi frame drum: 49 pads on Push's grid, each sound in share/phi-frame-drum");
+        // The bottom row is dum, the one above tak, from Push's first note.
+        check (fd::padFor ("dum", 0) == 0 && fd::noteFor ("dum", 0) == 36 && fd::noteFor ("tak", 0) == 44 && fd::noteFor ("ka", 0) == 52
+                   && fd::padFor ("dum", 1) == 1 && fd::padFor ("dum", 6) == 0 && fd::padFor ("Doum", 0) == 0 && fd::padFor ("tek", 0) == fd::padFor ("tak", 0)
+                   && fd::padFor ("dha", 0) < 0,
+               "phi frame drum: dum, tak and ka on the bottom rows, each stroke's takes in turn, its spellings as one");
+
+        auto sound = std::make_shared<sampler::Sample>();
+        for (int i = 0; i < 4800; ++i)
+        {
+            sound->left.push_back (0.1f);
+            sound->right.push_back (0.1f);
+        }
+        const auto kit = fd::kit ("folder", [&] (const std::string&) { return sound; });
+        check (kit.velocityTone > 0.0 && kit.layout == slicer::Layout::push && kit.pads[0].name == "Bass1" && kit.pads[0].layerCount() == 1
+                   && kit.pads[(size_t) fd::gridPad (4, 5)].name == "chiftitelli",
+               "phi frame drum: softer hits darker, the owner's names on the pads");
+
+        // An iqāʿ on the frame drum: maqsūm's dums on the bass, its taks on the rimshots in turn.
+        const auto maqsum = rhythm::rhythms()[(size_t) rhythm::findRhythm ("maqsum")];
+        int moved = 0;
+        const auto played = fd::fromGeneralMidi (*rhythm::toSong (maqsum, 1, 110.0), &moved);
+        std::vector<int> notes;
+        for (const auto& e : played->events)
+            if (e.kind() == 0x90 && e.data2 > 0)
+                notes.push_back (e.data1);
+        check (moved == 5 && notes.size() == 5 && notes[0] == fd::noteFor ("dum", 0) && notes[1] == fd::noteFor ("tak", 0)
+                   && notes[2] == fd::noteFor ("tak", 1) && notes[3] == fd::noteFor ("dum", 1),
+               "phi frame drum: maqsum's dum tak - tak dum on the frame drum, the takes in turn");
+        // A ghost note on a tak is a ka, a kick a dum.
+        check (fd::strokeForDrum (63, 56) == "ka" && fd::strokeForDrum (63, 96) == "tak" && fd::strokeForDrum (36, 100) == "dum",
+               "phi frame drum: soft taks are ka, the kick dum");
+
+        // The Bol Processor on PHI frame drum.
+        const auto score = bolprocessor::toScore ({ bolprocessor::parse ("dum tak - tak dum - tak -") }, 110.0, bolprocessor::On::phiFrameDrum);
+        check (score.parts[0].notes.size() == 5 && score.parts[0].notes[0].key == fd::noteFor ("dum", 0)
+                   && score.parts[0].notes[2].key == fd::noteFor ("tak", 1),
+               "phi frame drum: the Bol Processor's dum and tak on its pads, the takes in turn");
     }
 
     void testRhythmGenerator()
@@ -10872,6 +10926,7 @@ int main()
     testCompose();
     testBolProcessor();
     testPhiTabla();
+    testPhiFrameDrum();
     testStochastic();
     testCubify();
     testSerial();

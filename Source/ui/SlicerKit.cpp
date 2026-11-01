@@ -375,4 +375,9 @@ namespace slicerkit
     {
         return QStandardPaths::writableLocation (QStandardPaths::GenericDataLocation) + QStringLiteral ("/" APP_ID "/phi-tabla/PHI tabla.phikit");
     }
+
+    QString phiFrameDrumDefaultPath()
+    {
+        return QStandardPaths::writableLocation (QStandardPaths::GenericDataLocation) + QStringLiteral ("/" APP_ID "/phi-frame-drum/PHI frame drum.phikit");
+    }
 }

@@ -29,4 +29,9 @@ settings it uses, all in this folder.
 - `-da.kathak`: kathak material composed by Pandit Birju Maharaj and documented by Andréine Bel,
   in tīntāl, with its changes of speed, a chakkardār and others.
 
+## PHI's own
+
+- `-da.iqaat`: the 43 iqāʿāt of PHI's rhythms (Mode > rhythm > iqāʿāt) as items of dum, tak and ka,
+  to play on PHI frame drum, the owner's own frame drum (docs/phi-frame-drum.md).
+
 Open them with Compose > South and West Asia > Bol Processor... (docs/bol-processor.md).

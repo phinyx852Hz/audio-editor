@@ -26,3 +26,5 @@ install(FILES third_party/bolprocessor/License.txt DESTINATION "${CMAKE_INSTALL_
 install(FILES third_party/bolprocessor/Credits.txt DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/${APP_ID}" RENAME BolProcessor-Credits.txt)
 # PHI tabla (Source/sampler/PhiTabla.h): the owner's own recorded strokes, a Slicer kit.
 install(DIRECTORY share/phi-tabla/ DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/phi-tabla")
+# PHI frame drum (Source/sampler/PhiFrameDrum.h): the owner's own frame drum recordings, a Slicer kit.
+install(DIRECTORY share/phi-frame-drum/ DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/phi-frame-drum")
