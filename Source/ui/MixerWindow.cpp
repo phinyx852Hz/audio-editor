@@ -944,7 +944,8 @@ public:
         placeBy (elDial, [] (mixer::Panner3d& p, int v) { p.elevation = (float) v; });
         placeBy (spreadDial, [] (mixer::Panner3d& p, int v) { p.spread = (float) v; });
         placeBy (distDial, [] (mixer::Panner3d& p, int v) { p.distance = (float) v / 10.0f; });
-        auto* sendRow = new QHBoxLayout;
+        // Two sends a row: A and B, then C and D... as far as the returns in use go.
+        auto* sendRow = new QGridLayout;
         sendRow->setSpacing (2);
         for (int r = 0; r < mixer::numReturns; ++r)
         {
@@ -953,11 +954,10 @@ public:
             dial->setFixedSize (knob, knob);
             dial->setFocusPolicy (Qt::NoFocus);
             dial->setContextMenuPolicy (Qt::CustomContextMenu);
-            dial->setToolTip (MixerWindow::tr ("Send %1 to %2, -∞ to 0 dB, after the fader (right-click: before it; double-click: -∞)")
-                                  .arg (QChar ('A' + r)).arg (MixerWindow::returnName (r)));
             sendDials[(size_t) r] = dial;
             sendLabels[(size_t) r] = new QLabel (this);
-            sendRow->addWidget (knobColumn (dial, sendLabels[(size_t) r], r == 0 ? MixerWindow::tr ("Send A") : MixerWindow::tr ("Send B")));
+            sendColumns[(size_t) r] = knobColumn (dial, sendLabels[(size_t) r], MixerWindow::tr ("Send %1").arg (QChar ('A' + r)));
+            sendRow->addWidget (sendColumns[(size_t) r], r / 2, r % 2);
             dial->installEventFilter (this);
             QObject::connect (dial, &QDial::valueChanged, this, [this, r] (int v)
             {
@@ -985,6 +985,7 @@ public:
             });
         }
         sendLayout->addLayout (sendRow);
+        applyReturns();
 
         auto layerDial = [this] (int minimum, int maximum, const QString& tip)
         {
@@ -1604,6 +1605,17 @@ public:
         showPlace();
     }
 
+    // The sends to the returns in use, named after them.
+    void applyReturns()
+    {
+        for (int r = 0; r < mixer::numReturns; ++r)
+        {
+            sendColumns[(size_t) r]->setVisible (r < window.engine.returnsInUse());
+            sendDials[(size_t) r]->setToolTip (MixerWindow::tr ("Send %1 to %2, -∞ to 0 dB, after the fader (right-click: before it; double-click: -∞)")
+                                                   .arg (QChar ('A' + r)).arg (window.returnTitle (r)));
+        }
+    }
+
     // The 3D panner's dials (Spatial mode); a track sent to the Pre-Master is placed with it.
     void showPlace()
     {
@@ -1778,8 +1790,8 @@ protected:
                 panDial->setValue (0);
             else if (o == widthDial)
                 widthDial->setValue (100);
-            else if (o == sendDials[0] || o == sendDials[1] || o == duckDial || o == lfeDial)
-                static_cast<QDial*> (o)->setValue (0);
+            else if (std::find (sendDials.begin(), sendDials.end(), o) != sendDials.end() || o == duckDial || o == lfeDial)
+                static_cast<QAbstractSlider*> (o)->setValue (0);
             else if (o == audioLayerDial || o == instLayerDial)
                 static_cast<QDial*> (o)->setValue (faderPosition (0.0));
             else if (o == faderValue)
@@ -1918,6 +1930,7 @@ public:
     QWidget* sendPart;
     std::array<QDial*, mixer::numReturns> sendDials {};
     std::array<QLabel*, mixer::numReturns> sendLabels {};
+    std::array<QWidget*, mixer::numReturns> sendColumns {};
     QWidget* panPart;
     QWidget* widthPart;
     QWidget* trimPart;
@@ -4895,12 +4908,14 @@ public:
         auto* layout = new QVBoxLayout (this);
         layout->setContentsMargins (3, 4, 3, 4);
         layout->setSpacing (3);
-        auto* title = new QLabel (MixerWindow::returnName (index), this);
+        title = new QLabel (this);
         auto bold = title->font();
         bold.setBold (true);
         title->setFont (bold);
         title->setAlignment (Qt::AlignCenter);
+        title->setContextMenuPolicy (Qt::CustomContextMenu);
         layout->addWidget (title);
+        QObject::connect (title, &QWidget::customContextMenuRequested, this, [this] (QPoint at) { window.returnMenu (index, title->mapToGlobal (at)); });
         effectButton = new QToolButton (this);
         effectButton->setFocusPolicy (Qt::NoFocus);
         effectButton->setPopupMode (QToolButton::MenuButtonPopup);
@@ -5015,10 +5030,13 @@ public:
         auto& c = controls();
         const auto fx = window.engine.returnEffect (index);
         const auto name = fx != nullptr ? QString::fromStdString (fx->name()) : MixerWindow::tr ("None");
+        const auto heading = window.returnTitle (index);
+        title->setText (title->fontMetrics().elidedText (heading, Qt::ElideRight, stripWidth - 8));
+        title->setToolTip (MixerWindow::tr ("%1. Right-click: rename it, add a return, or remove the last one").arg (heading));
         effectButton->setText (effectButton->fontMetrics().elidedText (name, Qt::ElideRight, stripWidth - 26));
         effectButton->setToolTip (MixerWindow::tr ("%1's effect, fully wet: %2. Click opens it; the arrow (or a right-click) picks any "
                                                    "effect, built-in, stock or a plug-in; or drop one here from the browser")
-                                      .arg (MixerWindow::returnName (index), name));
+                                      .arg (heading, name));
         panDial->setValue ((int) std::lround (c.pan.load() * 100.0f));
         panLabel->setText (panText (c.pan.load()));
         muteButton->setChecked (c.mute.load());
@@ -5070,6 +5088,7 @@ private:
     MixerWindow& window;
     const int index;
     bool updating = false;
+    QLabel* title;
     QToolButton* effectButton;
     QDial* panDial;
     QLabel* panLabel;
@@ -5112,16 +5131,16 @@ public:
                                                  "to open it; right-click to bypass, move or remove it"));
         layout->addWidget (insertList);
 
-        auto* sendRow = new QHBoxLayout;
+        auto* sendRow = new QGridLayout;
         sendRow->setSpacing (2);
         for (int r = 0; r < mixer::numReturns; ++r)
         {
-            auto* dial = pot (0, faderPosition (0.0), MixerWindow::tr ("Send %1 to %2, -∞ to 0 dB, after the fader (right-click: before it; double-click: -∞)")
-                                                          .arg (QChar ('A' + r)).arg (MixerWindow::returnName (r)));
+            auto* dial = pot (0, faderPosition (0.0), QString());
             dial->setContextMenuPolicy (Qt::CustomContextMenu);
             sendDials[(size_t) r] = dial;
             sendLabels[(size_t) r] = new QLabel (this);
-            sendRow->addWidget (column (dial, sendLabels[(size_t) r], r == 0 ? MixerWindow::tr ("Send A") : MixerWindow::tr ("Send B")));
+            sendColumns[(size_t) r] = column (dial, sendLabels[(size_t) r], MixerWindow::tr ("Send %1").arg (QChar ('A' + r)));
+            sendRow->addWidget (sendColumns[(size_t) r], r / 2, r % 2);
             QObject::connect (dial, &QDial::valueChanged, this, [this, r] (int v)
             {
                 if (updating)
@@ -5146,6 +5165,7 @@ public:
             });
         }
         layout->addLayout (sendRow);
+        applyReturns();
 
         trimDial = pot (-240, 240, MixerWindow::tr ("Trim, ±24 dB, before the inserts (double-click: 0 dB)"));
         static_cast<Potentiometer*> (trimDial)->setOrigin (0);
@@ -5230,6 +5250,17 @@ public:
     }
 
     mixer::BusStrip& bus() { return window.engine.busStrip(); }
+
+    // The sends to the returns in use, named after them.
+    void applyReturns()
+    {
+        for (int r = 0; r < mixer::numReturns; ++r)
+        {
+            sendColumns[(size_t) r]->setVisible (r < window.engine.returnsInUse());
+            sendDials[(size_t) r]->setToolTip (MixerWindow::tr ("Send %1 to %2, -∞ to 0 dB, after the fader (right-click: before it; double-click: -∞)")
+                                                   .arg (QChar ('A' + r)).arg (window.returnTitle (r)));
+        }
+    }
 
     void applyLayout()
     {
@@ -5392,6 +5423,7 @@ private:
     QListWidget* insertList;
     std::array<QDial*, mixer::numReturns> sendDials {};
     std::array<QLabel*, mixer::numReturns> sendLabels {};
+    std::array<QWidget*, mixer::numReturns> sendColumns {};
     QDial* trimDial;
     QDial* panDial;
     QDial* azDial;
@@ -10469,15 +10501,18 @@ void MixerWindow::defaultReturns (int only)
             c.pan = 0.0f;
             c.mute = false;
             c.placed.set ({ 0.0f, 0.0f, mixer::Panner3d::returnSpread, 1.0f });
-            setReturnEffect (r, r == 0 ? space : echo);
+            returnNames[(size_t) r].clear();
+            setReturnEffect (r, r == 0 ? space : r == 1 ? echo : std::string());
         }
+    if (only < 0)
+        setReturnsInUse (mixer::defaultReturns);
     // A: a plate-like 1.8 s; B: a dotted eighth at the tempo, 30 % feedback; both fully wet.
-    if (auto a = engine.returnEffect (0); a != nullptr && only != 1)
+    if (auto a = engine.returnEffect (0); a != nullptr && (only < 0 || only == 0))
     {
         setKnob (a, "Decay", 1.8);
         setKnob (a, "Mix", 100.0);
     }
-    if (auto b = engine.returnEffect (1); b != nullptr && only != 0)
+    if (auto b = engine.returnEffect (1); b != nullptr && (only < 0 || only == 1))
     {
         setKnob (b, "Time", 0.75 * 60000.0 / std::max (20.0, tempoBox->value()));
         setKnob (b, "Taps", 1.0);
@@ -10525,7 +10560,8 @@ void MixerWindow::returnEffectsMenu (int index, QMenu& menu)
     menu.addAction (isPrism ? tr ("Edit the &Prism...") : tr ("&Prism (Rays of Effects)..."), this, [this, index] { makeReturnPrism (index); });
     menu.addSeparator();
     menu.addAction (tr ("No Effect (the sends as they are)"), this, [this, index] { setReturnEffect (index, {}); });
-    menu.addAction (index == 0 ? tr ("Back to the Default (Φ Space)") : tr ("Back to the Default (Φ Echo)"), this, [this, index] { defaultReturns (index); });
+    if (index < mixer::defaultReturns)
+        menu.addAction (index == 0 ? tr ("Back to the Default (Φ Space)") : tr ("Back to the Default (Φ Echo)"), this, [this, index] { defaultReturns (index); });
     menu.addSeparator();
     // Any effect, as for the inserts: the built-in ones, the stock ones and the plug-ins by format.
     effectsMenu (menu, [this, index] (const std::string& id) { setReturnEffect (index, id); });
@@ -10556,7 +10592,7 @@ void MixerWindow::editReturn (int index)
         fx->showWindow();
         return;
     }
-    auto* d = effectDialog (fx, tr ("%1: %2").arg (returnName (index), QString::fromStdString (fx->name())), this, [this] { changed(); });
+    auto* d = effectDialog (fx, tr ("%1: %2").arg (returnTitle (index), QString::fromStdString (fx->name())), this, [this] { changed(); });
     d->show();
     d->raise();
     d->activateWindow();
@@ -10565,11 +10601,13 @@ void MixerWindow::editReturn (int index)
 QJsonArray MixerWindow::returnsJson() const
 {
     QJsonArray list;
-    for (int r = 0; r < mixer::numReturns; ++r)
+    for (int r = 0; r < engine.returnsInUse(); ++r)
     {
         auto& c = engine.returnStrip (r);
         const auto fx = engine.returnEffect (r);
         QJsonObject o { { "fader", c.faderDb.load() }, { "pan", c.pan.load() }, { "mute", c.mute.load() }, { "spatial", placeJson (c.placed) } };
+        if (! returnNames[(size_t) r].isEmpty())
+            o.insert ("name", returnNames[(size_t) r]);
         if (fx != nullptr && mixer::EffectPrism::is (*fx))
             o.insert ("effect", returnPrismJson (*fx));
         else if (fx != nullptr)
@@ -10590,6 +10628,7 @@ void MixerWindow::loadReturns (const QJsonArray& list, QStringList& problems)
         c.pan = (float) o.value ("pan").toDouble();
         c.mute = o.value ("mute").toBool();
         loadPlace (c.placed, o.value ("spatial"), mixer::Panner3d::returnSpread);
+        returnNames[(size_t) r] = o.value ("name").toString();
         const auto e = o.value ("effect").toObject();
         mixer::EffectPtr made;
         if (auto& open = returnPrismEditors[(size_t) r]; open != nullptr)
@@ -10607,16 +10646,127 @@ void MixerWindow::loadReturns (const QJsonArray& list, QStringList& problems)
         }
         engine.setReturnEffect (r, made);
     }
+    // A mix saved with two returns has C to H empty.
+    for (int r = std::max ((int) list.size(), mixer::defaultReturns); r < mixer::numReturns; ++r)
+    {
+        if (auto& open = returnPrismEditors[(size_t) r]; open != nullptr)
+            open->close();
+        engine.setReturnEffect (r, nullptr);
+        returnNames[(size_t) r].clear();
+    }
+    setReturnsInUse (std::max ((int) list.size(), mixer::defaultReturns));
+}
+
+// The sends to the returns in use.
+QJsonArray MixerWindow::sendsJson (const std::array<std::atomic<float>, mixer::numReturns>& db, const std::array<std::atomic<bool>, mixer::numReturns>& pre) const
+{
+    QJsonArray list;
+    for (int r = 0; r < engine.returnsInUse(); ++r)
+        list.append (QJsonObject { { "db", db[(size_t) r].load() }, { "pre", pre[(size_t) r].load() } });
+    return list;
+}
+
+// "Return A", or the name it was given ("Chorus", an imported effect track's).
+QString MixerWindow::returnTitle (int index) const
+{
+    const auto& name = returnNames[(size_t) index];
+    return name.isEmpty() ? returnName (index) : name;
+}
+
+void MixerWindow::setReturnsInUse (int n)
+{
+    engine.setReturnsInUse (n);
+    for (int r = 0; r < mixer::numReturns; ++r)
+        if (returnStrips[(size_t) r] != nullptr)
+            returnStrips[(size_t) r]->setVisible (r < engine.returnsInUse());
+    applyReturnNames();
+}
+
+void MixerWindow::applyReturnNames()
+{
+    for (int r = 0; r < mixer::numReturns; ++r)
+        refreshReturn (r);
+    for (auto* s : strips)
+        if (s != nullptr)
+            s->applyReturns();
+    if (inspectorStrip != nullptr)
+        inspectorStrip->applyReturns();
+    if (busStrip != nullptr)
+        busStrip->applyReturns();
+    if (roomView != nullptr)
+        roomView->update();
+}
+
+void MixerWindow::returnMenu (int index, QPoint at)
+{
+    QMenu menu (this);
+    menu.addAction (tr ("&Rename %1...").arg (returnTitle (index)), this, [this, index]
+    {
+        bool ok = false;
+        const auto name = QInputDialog::getText (this, tr ("Rename Return"), tr ("%1's name (empty: %1):").arg (returnName (index)),
+                                                 QLineEdit::Normal, returnNames[(size_t) index], &ok).trimmed();
+        if (! ok)
+            return;
+        returnNames[(size_t) index] = name;
+        applyReturnNames();
+        changed();
+    });
+    menu.addSeparator();
+    const auto used = engine.returnsInUse();
+    menu.addAction (used < mixer::numReturns ? tr ("&Add %1").arg (returnName (used)) : tr ("&Add a Return (all %1 are in use)").arg (mixer::numReturns),
+                    this, [this] { addReturn(); })->setEnabled (used < mixer::numReturns);
+    menu.addAction (tr ("Re&move %1").arg (returnTitle (used - 1)), this, [this] { removeLastReturn(); })->setEnabled (used > mixer::defaultReturns);
+    menu.exec (at);
+}
+
+// One more return (C, then D...), empty, and every send to it at -∞.
+void MixerWindow::addReturn()
+{
+    const auto r = engine.returnsInUse();
+    if (r >= mixer::numReturns)
+        return;
+    auto& c = engine.returnStrip (r);
+    c.faderDb = 0.0f;
+    c.pan = 0.0f;
+    c.mute = false;
+    c.placed.set ({ 0.0f, 0.0f, mixer::Panner3d::returnSpread, 1.0f });
+    returnNames[(size_t) r].clear();
+    engine.setReturnEffect (r, nullptr);
+    for (int t = 0; t < mixer::maxTracks; ++t)
+    {
+        engine.strip (t).sendDb[(size_t) r] = -100.0f;
+        engine.strip (t).sendPre[(size_t) r] = false;
+    }
+    engine.busStrip().sendDb[(size_t) r] = -100.0f;
+    engine.busStrip().sendPre[(size_t) r] = false;
+    setReturnsInUse (r + 1);
+    stripsChanged();
+    status->setText (tr ("%1 added: the strips' Send %2 feeds it. Its effect slot takes any effect, or a Prism of them.")
+                         .arg (returnName (r)).arg (QChar ('A' + r)));
+}
+
+// The last return goes, with its effect and the sends to it (A and B stay).
+void MixerWindow::removeLastReturn()
+{
+    const auto r = engine.returnsInUse() - 1;
+    if (r < mixer::defaultReturns)
+        return;
+    if (auto& open = returnPrismEditors[(size_t) r]; open != nullptr)
+        open->close();
+    engine.setReturnEffect (r, nullptr);
+    returnNames[(size_t) r].clear();
+    for (int t = 0; t < mixer::maxTracks; ++t)
+        engine.strip (t).sendDb[(size_t) r] = -100.0f;
+    engine.busStrip().sendDb[(size_t) r] = -100.0f;
+    setReturnsInUse (r);
+    stripsChanged();
 }
 
 QJsonObject MixerWindow::busJson() const
 {
     const auto& b = engine.busStrip();
-    QJsonArray sends;
-    for (int r = 0; r < mixer::numReturns; ++r)
-        sends.append (QJsonObject { { "db", b.sendDb[(size_t) r].load() }, { "pre", b.sendPre[(size_t) r].load() } });
     return { { "trim", b.trimDb.load() }, { "fader", b.faderDb.load() }, { "pan", b.pan.load() }, { "width", b.width.load() },
-             { "mute", b.mute.load() }, { "sends", sends }, { "inserts", insertsJson (mixer::busTrack) }, { "spatial", placeJson (b.placed) } };
+             { "mute", b.mute.load() }, { "sends", sendsJson (b.sendDb, b.sendPre) }, { "inserts", insertsJson (mixer::busTrack) }, { "spatial", placeJson (b.placed) } };
 }
 
 void MixerWindow::loadBus (const QJsonObject& o, QStringList& problems)
@@ -11152,8 +11302,7 @@ bool MixerWindow::writeMix (const QString& file, QString& error)
             { "duck", QJsonObject { { "db", s.duckDb.load() }, { "audioLeads", s.audioDucksInstrument.load() },
                                     { "attack", s.duckAttackMs.load() }, { "release", s.duckReleaseMs.load() },
                                     { "key", s.duckKey.load() }, { "below", s.duckBelowHz.load() } } },
-            { "sends", QJsonArray { QJsonObject { { "db", s.sendDb[0].load() }, { "pre", s.sendPre[0].load() } },
-                                    QJsonObject { { "db", s.sendDb[1].load() }, { "pre", s.sendPre[1].load() } } } },
+            { "sends", sendsJson (s.sendDb, s.sendPre) },
             { "tuning", tuningJson (t.tuning) }, { "toPreMaster", s.toBus.load() }, { "spatial", placeJson (s.placed) },
             { "lfe", s.lfeDb.load() },
         };

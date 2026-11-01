@@ -4160,6 +4160,28 @@ namespace
         m.setReturnEffect (0, nullptr);
         m.strip (0).faderDb = 0.0f;
 
+        // Returns past A and B (C to H): fed and heard only while they are in use.
+        check (m.returnsInUse() == mixer::defaultReturns, "mixer returns: two in use at first");
+        check (m.strip (0).sendDb[7].load() <= -96.0f && ! m.strip (0).sendPre[7].load() && m.busStrip().sendDb[7].load() <= -96.0f,
+               "mixer returns: every send starts at -inf");
+        m.strip (0).sendDb[2] = 0.0f;
+        settle();
+        check (near (l[300], 0.5, 1.0e-4), "mixer returns: a send to return C does nothing while it is not in use");
+        m.setReturnsInUse (3);
+        settle();
+        check (near (l[300], 1.0, 1.0e-4), "mixer returns: return C in use");
+        m.setReturnEffect (2, twice);
+        settle();
+        check (near (l[300], 1.5, 1.0e-3), "mixer returns: return C's effect");
+        m.setReturnsInUse (99);
+        check (m.returnsInUse() == mixer::numReturns, "mixer returns: eight at most");
+        m.setReturnsInUse (0);
+        check (m.returnsInUse() == mixer::defaultReturns, "mixer returns: A and B always");
+        settle();
+        check (near (l[300], 0.5, 1.0e-4), "mixer returns: return C out of use again");
+        m.setReturnEffect (2, nullptr);
+        m.strip (0).sendDb[2] = -100.0f;
+
         // Track modes: a steady 0.25 from the instrument with the 0.5 audio clip.
         struct Steady final : mixer::Instrument
         {

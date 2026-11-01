@@ -666,6 +666,15 @@ private:
     QJsonObject returnPrismJson (const mixer::Effect&) const;
     mixer::EffectPtr returnPrismFromJson (const QJsonObject&, int index, QStringList& problems);
     void setReturnEffect (int index, const std::string& pluginId);   // empty: none
+    // Returns C to H when a mix has them (an imported project's effect tracks, or Add from a
+    // return's name); A and B are always there. A return can be given a name.
+    QString returnTitle (int index) const;   // its name, else "Return A"
+    void setReturnsInUse (int n);            // shows returns A.. and the sends to them
+    void applyReturnNames();                 // the strips' return names and sends, again
+    void returnMenu (int index, QPoint at);
+    void addReturn();
+    void removeLastReturn();
+    QJsonArray sendsJson (const std::array<std::atomic<float>, mixer::numReturns>& db, const std::array<std::atomic<bool>, mixer::numReturns>& pre) const;
     void editReturn (int index);
     void defaultReturns (int only = -1);   // Φ Space on A, Φ Echo on B (a dotted eighth at the tempo); -1 both
     QJsonArray returnsJson() const;
@@ -797,6 +806,7 @@ private:
     QPushButton* bypassInsertsButton = nullptr;
     QPushButton* bypassSendsButton = nullptr;
     std::array<ReturnStripWidget*, mixer::numReturns> returnStrips {};
+    std::array<QString, mixer::numReturns> returnNames {};   // empty: Return A, B...
     std::array<QPointer<QWidget>, mixer::numReturns> returnPrismEditors {};          // StripSection bits (MixerWindow.cpp) shown on every strip
     QString path;                    // the mix file; empty: not saved yet
     bool modified = false;

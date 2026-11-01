@@ -18,6 +18,7 @@
 #include "Tunings.h"
 #include "../core/AudioData.h"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <functional>
@@ -33,13 +34,18 @@ namespace mixer
     constexpr int maxTracks = 16;
     constexpr int defaultTrackLimit = 8;
     constexpr int masterIndex = maxTracks;   // meters: 0..15 the tracks, 16 the master
-    constexpr int numReturns = 2;            // A (a reverb) and B (a delay), fed by each track's sends
-    constexpr int returnIndex = masterIndex + 1;   // meters: 17 return A, 18 return B
+    // The returns, fed by each track's sends: A and B always, and up to six more (C to H) when a
+    // mix asks for them (Engine::setReturnsInUse), as a project imported with more effect tracks
+    // does (owner, 2026-11-01).
+    constexpr int numReturns = 8;
+    constexpr int defaultReturns = 2;
+    constexpr int returnIndex = masterIndex + 1;   // meters: 17 return A .. 24 return H
     // The Pre-Master (owner, 2026-10-28): a bus the tracks can go to instead of the master,
     // with its own inserts, sends, width, pan, fader and mute, then into the master.
-    constexpr int busIndex = returnIndex + numReturns;   // meters: 19 the Pre-Master
+    constexpr int busIndex = returnIndex + numReturns;   // meters: 25 the Pre-Master
     constexpr int busTrack = maxTracks;                  // inserts() and setInserts(): 16 the Pre-Master's
     constexpr int maxBusInserts = 4;
+    static_assert (numReturns == 8, "the sends' first values below are written out for eight returns");
 
     // A source's 3D panner, in Spatial mode (Spatial.h): its place in the scene.
     struct Panner3d
@@ -243,10 +249,10 @@ namespace mixer
         // After the inserts: the stereo width, 0 mono .. 1 as it is .. 2 twice as wide.
         // Tracks of mono files only have none.
         std::atomic<float> width { 1.0f };
-        // Sends to the returns A and B (Ableton): after the fader (and pan) unless `sendPre`,
+        // Sends to the returns A, B... (Ableton): after the fader (and pan) unless `sendPre`,
         // then after the inserts and width but before the fader. Muting the track mutes them.
-        std::array<std::atomic<float>, numReturns> sendDb { -100.0f, -100.0f };   // -inf (below -96) .. 0
-        std::array<std::atomic<bool>, numReturns> sendPre { false, false };
+        std::array<std::atomic<float>, numReturns> sendDb { -100.0f, -100.0f, -100.0f, -100.0f, -100.0f, -100.0f, -100.0f, -100.0f };   // -inf (below -96) .. 0
+        std::array<std::atomic<bool>, numReturns> sendPre {};
         // Recording: what a take on the track records (InputKind), and whether the audio input is
         // heard through the track (Monitor: auto while the track is armed and records audio).
         // inputInstrument: the track's own instrument, played from the keyboard, recorded as audio.
@@ -269,8 +275,8 @@ namespace mixer
         std::atomic<float> pan { 0.0f };        // balance
         std::atomic<float> width { 1.0f };      // 0 mono .. 2 twice as wide
         std::atomic<bool> mute { false };
-        std::array<std::atomic<float>, numReturns> sendDb { -100.0f, -100.0f };
-        std::array<std::atomic<bool>, numReturns> sendPre { false, false };
+        std::array<std::atomic<float>, numReturns> sendDb { -100.0f, -100.0f, -100.0f, -100.0f, -100.0f, -100.0f, -100.0f, -100.0f };
+        std::array<std::atomic<bool>, numReturns> sendPre {};
         Panner3d placed;
     };
 
@@ -348,6 +354,9 @@ namespace mixer
         // fader and mute, into the master (or, with the patchbay, its Mix Bus).
         void setReturnEffect (int index, EffectPtr);   // prepared here
         EffectPtr returnEffect (int index) const;
+        // Only the first returnsInUse() are fed and heard; the others keep their settings.
+        int returnsInUse() const { return usedReturns.load(); }
+        void setReturnsInUse (int n) { usedReturns = std::clamp (n, defaultReturns, numReturns); }
         ReturnStrip& returnStrip (int index) { return returnStrips[(size_t) index]; }
         BusStrip& busStrip() { return bus; }
         const BusStrip& busStrip() const { return bus; }
@@ -680,6 +689,7 @@ namespace mixer
         float speakerGain = 1.0f;
         std::array<ReturnStrip, numReturns> returnStrips;
         std::array<EffectPtr, numReturns> returnEffects;
+        std::atomic<int> usedReturns { defaultReturns };
         std::array<std::array<float, 2>, numReturns> returnGain {};   // last block's, left and right
         std::array<std::vector<float>, numReturns> returnL, returnR;
 

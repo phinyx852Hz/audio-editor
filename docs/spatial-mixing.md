@@ -30,7 +30,7 @@ farther, so none hides another.
 
 ## Placing the sounds
 
-Each track, the Pre-Master and the two returns has a 3D panner, which takes the place of pan
+Each track, the Pre-Master and each return in use has a 3D panner, which takes the place of pan
 and width:
 - **Azimuth**: where it is around you, 0° ahead, 90° to the right, ±180° behind.
 - **Elevation**: 90° overhead, −90° below.
