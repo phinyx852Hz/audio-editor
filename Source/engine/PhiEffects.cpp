@@ -6,6 +6,7 @@
 #include "../core/PhiDynamics.h"
 #include "../core/PhiModulation.h"
 #include "../core/PhiPhaser.h"
+#include "../core/PhiRepeat.h"
 
 #include <algorithm>
 #include <array>
@@ -719,6 +720,151 @@ namespace
         juce::AudioParameterChoice *step = nullptr, *density = nullptr;
         phi::Rhythm core;
         std::atomic<std::int64_t> playing { 0 };   // the step heard last, for the window
+    };
+
+    //==========================================================================
+    // Φ Repeat: a beat repeat. At each Interval (moved by Offset) it may, by Chance, catch a
+    // Grid's worth of the sound and repeat it for the Gate, lower (Pitch, Pitch Decay) and
+    // quieter (Decay) each time, the grid wandering with Variation, through a band Filter,
+    // under the dry sound (Mix), in its place (Insert) or alone (Gate). Held Repeat repeats
+    // now. Golden makes the repeats fall on the golden rhythm instead of the dice.
+    class PhiRepeatProcessor final : public MasteringEffect
+    {
+    public:
+        static constexpr const char* identifier = "phinyx:phi-repeat";
+
+        PhiRepeatProcessor() : MasteringEffect ("PHI_REPEAT")
+        {
+            auto sixteenths = [] (float v, int) { return juce::String (juce::roundToInt (v)) + "/16"; };
+            auto readSixteenths = [] (const juce::String& t) { return t.upToFirstOccurrenceOf ("/", false, false).retainCharacters ("0123456789.").getFloatValue(); };
+
+            auto add = [this] (auto p) { auto* raw = p.get(); addHostedParameter (std::move (p)); return raw; };
+            interval = add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "interval", 1 }, "Interval",
+                juce::StringArray { "1/32", "1/16", "1/8", "1/4", "1/2", "1 Bar", "2 Bars", "4 Bars" }, 5));
+            offset = add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "offset", 1 }, "Offset",
+                juce::NormalisableRange<float> (0.0f, 15.0f, 1.0f), 8.0f,
+                juce::AudioParameterFloatAttributes().withStringFromValueFunction (sixteenths).withValueFromStringFunction (readSixteenths)));
+            grid = add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "grid", 1 }, "Grid",
+                juce::StringArray { "1/2", "1/4", "1/8", "1/16", "1/32", "1/64", "1/128" }, 3));
+            triplets = add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "triplets", 1 }, "Triplets", false));
+            gate = add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "gate", 1 }, "Gate",
+                juce::NormalisableRange<float> (1.0f, 64.0f, 1.0f), 8.0f,
+                juce::AudioParameterFloatAttributes().withStringFromValueFunction (sixteenths).withValueFromStringFunction (readSixteenths)));
+            chance = add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "chance", 1 }, "Chance",
+                juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 100.0f, percent()));
+            golden = add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "golden", 1 }, named ("Φ Golden"), false));
+            variation = add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "variation", 1 }, "Variation",
+                juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f, percent()));
+            variationMode = add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "variationMode", 1 }, "Var. Mode",
+                juce::StringArray { "Trigger", "1/4", "1/8", "1/16", "Auto" }, 0));
+            repeat = add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "repeat", 1 }, "Repeat", false));
+            pitch = add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "pitch", 1 }, "Pitch",
+                juce::NormalisableRange<float> (-48.0f, 0.0f, 1.0f), 0.0f, number (0, "st")));
+            pitchDecay = add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "pitchDecay", 1 }, "Pitch Decay",
+                juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f, percent()));
+            decay = add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "decay", 1 }, "Decay",
+                juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f, percent()));
+            filter = add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "filter", 1 }, "Filter", false));
+            frequency = add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "frequency", 1 }, "Frequency",
+                skewed (50.0f, 18000.0f, 1.0f, 1000.0f), 1000.0f, number (0, "Hz")));
+            width = add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "width", 1 }, "Width",
+                juce::NormalisableRange<float> (0.5f, 9.0f, 0.1f), 3.0f, number (1, "oct")));
+            mix = add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "mix", 1 }, "Mode",
+                juce::StringArray { "Mix", "Insert", "Gate" }, 1));
+            volume = add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "volume", 1 }, "Volume",
+                juce::NormalisableRange<float> (-36.0f, 6.0f, 0.1f), 0.0f, number (1, "dB")));
+            tempo = add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "tempo", 1 }, "Tempo",
+                juce::NormalisableRange<float> (20.0f, 400.0f, 0.1f), 120.0f, number (1, "BPM")));
+        }
+
+        static juce::PluginDescription description()
+        {
+            return describe (named ("Φ Repeat"), identifier, "Rhythm", 0x50484252);   // "PHBR"
+        }
+        void fillInPluginDescription (juce::PluginDescription& d) const override { d = description(); }
+        const juce::String getName() const override { return named ("Φ Repeat"); }
+        double getTailLengthSeconds() const override { return 0.0; }
+
+        void prepareToPlay (double sampleRate, int) override
+        {
+            core.prepare (sampleRate, std::max (1, getTotalNumInputChannels()));
+            core.set (current (tempo->get()));
+        }
+
+        using AudioPluginInstance::processBlock;
+        void processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override
+        {
+            double bpm = tempo->get();
+            if (auto* head = getPlayHead())
+                if (const auto position = head->getPosition())
+                {
+                    if (const auto hostBpm = position->getBpm(); hostBpm.hasValue() && *hostBpm > 0.0)
+                        bpm = *hostBpm;
+                    if (const auto ppq = position->getPpqPosition(); ppq.hasValue() && position->getIsPlaying())
+                        core.setPosition (*ppq);
+                }
+            core.set (current (bpm));
+            core.process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples());
+            playing = core.currentSixteenth();
+            on = core.repeating();
+        }
+
+        DeviceDisplay display() override
+        {
+            // The bar the playing sixteenth is in: where repeats may start, and the one playing.
+            DeviceDisplay d;
+            d.kind = DeviceDisplay::Kind::steps;
+            const auto s = current (tempo->get());
+            const auto every = phi::Repeat::intervalBeats[(size_t) s.interval] * 4.0;   // in sixteenths
+            const auto now = playing.load();
+            const auto first = now - (now % 16 + 16) % 16;
+            for (std::int64_t n = first; n < first + 16; ++n)
+            {
+                const auto from = std::fmod ((double) n - s.offsetSixteenths, every);
+                const bool point = every <= 1.0 || std::abs (from) < 1.0e-9 || std::abs (from - every) < 1.0e-9 || std::abs (from + every) < 1.0e-9;
+                d.front.push_back (point ? 1.0f : 0.0f);
+                d.back.push_back (n == now ? 1.0f : 0.0f);
+            }
+            d.caption = std::string (on.load() ? "repeating " : "waiting · ") + grid->getCurrentChoiceName().toStdString()
+                      + (s.triplets ? "T" : "") + " over " + decimal (s.gateSixteenths, 0) + "/16"
+                      + (s.golden ? " · golden" : " · " + decimal (100.0 * s.chance, 0) + " % chance");
+            return d;
+        }
+
+    private:
+        phi::Repeat::Settings current (double bpm) const
+        {
+            phi::Repeat::Settings s;
+            s.bpm = bpm;
+            s.interval = interval->getIndex();
+            s.offsetSixteenths = offset->get();
+            s.grid = grid->getIndex();
+            s.triplets = triplets->get();
+            s.gateSixteenths = gate->get();
+            s.chance = chance->get() / 100.0;
+            s.golden = golden->get();
+            s.variation = variation->get() / 100.0;
+            s.variationMode = (phi::Repeat::Variation) std::clamp (variationMode->getIndex(), 0, 4);
+            s.repeat = repeat->get();
+            s.pitch = pitch->get();
+            s.pitchDecay = pitchDecay->get() / 100.0;
+            s.decay = decay->get() / 100.0;
+            s.filter = filter->get();
+            s.filterHz = frequency->get();
+            s.filterOctaves = width->get();
+            s.mix = (phi::Repeat::Mix) std::clamp (mix->getIndex(), 0, 2);
+            s.volumeDb = volume->get();
+            return s;
+        }
+
+        juce::AudioParameterChoice *interval = nullptr, *grid = nullptr, *variationMode = nullptr, *mix = nullptr;
+        juce::AudioParameterBool *triplets = nullptr, *golden = nullptr, *repeat = nullptr, *filter = nullptr;
+        juce::AudioParameterFloat *offset = nullptr, *gate = nullptr, *chance = nullptr, *variation = nullptr, *pitch = nullptr,
+                                  *pitchDecay = nullptr, *decay = nullptr, *frequency = nullptr, *width = nullptr,
+                                  *volume = nullptr, *tempo = nullptr;
+        phi::Repeat core;
+        std::atomic<std::int64_t> playing { 0 };   // the sixteenth heard last, for the window
+        std::atomic<bool> on { false };
     };
 
     //==========================================================================
@@ -1829,7 +1975,7 @@ namespace phifx
     std::vector<juce::PluginDescription> descriptions()
     {
         return { PhiEqProcessor::description(), PhiEchoProcessor::description(), PhiSpaceProcessor::description(),
-                 PhiDriftProcessor::description(), PhiPhaserProcessor::description(), PhiRhythmProcessor::description(), PhiResonatorProcessor::description(),
+                 PhiDriftProcessor::description(), PhiPhaserProcessor::description(), PhiRhythmProcessor::description(), PhiRepeatProcessor::description(), PhiResonatorProcessor::description(),
                  PhiStackProcessor::description(), PhiTameProcessor::description(), PhiDeresonatorProcessor::description(),
                  PhiCompressorProcessor::description(), PhiMultibandProcessor::description(), PhiLimiterProcessor::description(),
                  PhiChorusProcessor::description(), PhiModulationProcessor::description() };
@@ -1846,6 +1992,7 @@ namespace phifx
         if (id == PhiDriftProcessor::identifier)  return std::make_unique<PhiDriftProcessor>();
         if (id == PhiPhaserProcessor::identifier) return std::make_unique<PhiPhaserProcessor>();
         if (id == PhiRhythmProcessor::identifier) return std::make_unique<PhiRhythmProcessor>();
+        if (id == PhiRepeatProcessor::identifier) return std::make_unique<PhiRepeatProcessor>();
         if (id == PhiResonatorProcessor::identifier)   return std::make_unique<PhiResonatorProcessor>();
         if (id == PhiStackProcessor::identifier)       return std::make_unique<PhiStackProcessor>();
         if (id == PhiTameProcessor::identifier)        return std::make_unique<PhiTameProcessor>();
