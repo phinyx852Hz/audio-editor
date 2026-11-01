@@ -2398,7 +2398,7 @@ void MidiEditor::viewsUpdate()
     if (spectrum->isVisible())
         spectrum->update();
     if (staff->isVisible())
-        staff->update();
+        staff->playheadMoved();
     if (wheel->isVisible())
         wheel->update();
     updateTransport();
