@@ -123,8 +123,12 @@ Velez's students and the players he influenced made the frame drum an instrument
 Western music. **Layne Redmond** (1952–2013) studied with him from 1981 and recorded with
 him, beginning with *Handdance* (1984), before writing *When the Drummers Were Women* (1997)
 and teaching her own method. **Yousif Sheronick**, a Lebanese American percussionist,
-teaches online at the Frame Drum School, joining South Indian vocalizations with Velez's Handance
-of stepping, playing and vocalizing at once. Many of today's frame drum teachers learned the lap
+studied and worked with Velez for thirty years and teaches his style online at the Frame Drum
+School. His course shows the method's shape: lap style first, then the drum held in the hand;
+the basic strokes, the low *dum*, the high *tek* and the *pa*, then split-hand technique,
+snapping, Velez's fast fingerings and a brush in the left hand; rhythms counted not in numbers
+but in South Indian vocal cycles, with ratio exercises (3:2, 4:3, 5:3, 7:3) for odd meters; and
+Velez's Handance of stepping, playing and vocalizing at once. Many of today's frame drum teachers learned the lap
 style and the unified technique from him or from his students, and the instrument now has its
 own festivals. Tamburi Mundi in Freiburg, Germany, has held its festival of frame drum concerts
 and courses for twenty years and runs a Frame Drum Academy; among the players it presents are
