@@ -11,7 +11,8 @@ and Yousif Sheronick's Frame Drum School. Those sites could not be opened from t
 entries were written on and were checked against search-engine extracts; the links are listed in
 the pull request for the owner to open by hand.
 Later the same day the owner allowed those sites, and the PAS pages, the Christian Science
-Monitor interview and glenvelez.com's programs and books pages were opened and the entry
+Monitor interview, glenvelez.com's programs and books pages and (by the owner) the Mannes
+faculty page were opened and the entry
 corrected against them (Reich and Winter dates, the Cage title, Redmond's 1981 start).
 -->
 
@@ -25,8 +26,8 @@ grew up in Texas, played jazz drums, studied classical percussion at the Manhatt
 of Music and with Fred Hinger, served as a percussionist in the U.S. Army's 1st Armored Division
 Band (1968–70) and settled in New York, where he toured and recorded with Steve Reich and Musicians from 1973 to 1993
 (he is on the first recording of *Music for 18 Musicians*, 1978) and with the Paul Winter
-Consort from 1983 to 1998. His recordings with the Paul Winter Consort brought him several
-Grammy awards.
+Consort from 1983 to 1998. He has won four Grammy awards, most notably for his recordings with
+the Paul Winter Consort.
 
 From the 1970s he turned to the hand drums of the world and above all to the frame drum, seeking
 out teachers from one tradition after another. The bodhrán, pandeiro, riq, bendir, tar, kanjira,
@@ -35,9 +36,11 @@ Indian konnakol, and composes for cross-cultural ensembles, often in several met
 first album, *Handdance: Frame Drum Music* (Nomad, 1984), was recorded with Layne Redmond; others
 include *Internal Combustion* (1985), *Seven Heaven* (1987), *Assyrian Rose* (1989), *Doctrine of
 Signatures* (1994), *Rhythms of the Chakras* (1998) and *Breathing Rhythms* (2000). John Cage
-wrote *Composed Improvisation No. 3 for One-sided Drums With or Without Jangles* (1989) for him. He has taught
-at the Mannes School of Music and The Juilliard School, and the Percussive Arts Society inducted
-him into its Hall of Fame in 2014.
+wrote *Composed Improvisation No. 3 for One-sided Drums With or Without Jangles* (1989) for
+him. He teaches at the Mannes School of Music in New York, gives regular master classes at The
+Juilliard School and the Tanglewood summer program, and was inducted into the Percussive Arts
+Society Hall of Fame in 2014. Mannes calls him the founding father of the modern frame drum
+movement.
 
 - [Glen Velez](https://en.wikipedia.org/wiki/Glen_Velez), Wikipedia, with a full discography and
   a bibliography of interviews.
