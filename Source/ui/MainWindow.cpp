@@ -902,6 +902,11 @@ void MainWindow::registerCommands()
         if (chooseWallpaper() && ! commands.action (QStringLiteral ("options.wallpaper"))->isChecked())
             toggleWallpaper();
     });
+    // Visualizer only: the wallpaper moving with the music, for making visuals.
+    add ("options.wallpaperMoves", Category::options, tr ("Wallpaper &Moves with the Music"), {}, [this] { toggleWallpaperMoves(); });
+    commands.action (QStringLiteral ("options.wallpaperMoves"))->setCheckable (true);
+    commands.action (QStringLiteral ("options.wallpaperMoves"))->setStatusTip (tr ("The wallpaper breathes with the bass, drifts and flashes with the music. Heavy on the CPU: "
+                                                                                   "meant for making visuals, or for a computer with power to spare beside the DAW"));
 
     add ("help.palette", Category::help, tr ("&Command Palette..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_P), KS (Qt::Key_F1) },
          [this] { CommandPalette (commands, this).exec(); });
@@ -975,6 +980,7 @@ void MainWindow::buildMenus()
         { tr ("Visuali&zer"), { "view.visualizer", "view.visualizerFullScreen", "view.visualizerBehind", "-",
                                "view.visualizerNext", "view.visualizerPrevious", "view.visualizerChoose", "-",
                                "@visual.artistic", "@visual.science", "-", "@visual.milkdrop", "@visual.rain", "@visual.web", "@visual.sonify", "-",
+                               "options.wallpaper", "options.chooseWallpaper", "options.wallpaperMoves", "-",
                                "view.opacityUp", "view.opacityDown", "view.opacityFull" } },
         { tr ("&Warp"),      { "warp.showGrid", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "-", "warp.detectGrid", "warp.autoDetect", "warp.setTempo", "warp.downbeat", "warp.halve", "warp.double", "-",
                                "warp.edit", "warp.previousHit", "warp.nextHit", "warp.toggleMarker", "warp.nudgeEarlier", "warp.nudgeLater", "-",

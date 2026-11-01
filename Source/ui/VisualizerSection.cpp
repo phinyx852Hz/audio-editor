@@ -393,6 +393,11 @@ void MainWindow::feedVisualizers()
             view->addSamples (scopeLeft, scopeRight, rate);
             view->tick();
         }
+    if (wallpaper != nullptr && wallpaper->isVisible() && wallpaper->isMoving())
+    {
+        wallpaper->addSamples (scopeLeft, scopeRight, rate);
+        wallpaper->tick();
+    }
     sonifyTick();
 }
 
@@ -651,7 +656,7 @@ bool MainWindow::chooseWebAddress (bool reload)
 #endif
 
 //==============================================================================
-// Options > Wallpaper: a still picture behind PHI. One background at a time: the
+// Options or Visualizer > Wallpaper: a picture behind PHI, still or moving with the music. One background at a time: the
 // Visualizer or a web page behind PHI hides it while they show.
 void MainWindow::toggleWallpaper()
 {
@@ -691,6 +696,20 @@ void MainWindow::toggleWallpaper()
     }
 }
 
+// Visualizer > Wallpaper Moves with the Music: turns the wallpaper on too, since moving
+// is all this asks for.
+void MainWindow::toggleWallpaperMoves()
+{
+    const auto key = QStringLiteral ("appearance/wallpaperMoves");
+    const bool moves = ! appSettings().value (key, false).toBool();
+    appSettings().setValue (key, moves);
+    if (moves && ! appSettings().value (QStringLiteral ("appearance/wallpaperOn"), false).toBool())
+        toggleWallpaper();
+    syncWallpaper();
+    statusBar()->showMessage (moves ? tr ("Wallpaper moves with the music while it plays: heavy on the CPU, meant for making visuals")
+                                    : tr ("Wallpaper still: it costs nothing while PHI is idle"), 6000);
+}
+
 bool MainWindow::chooseWallpaper()
 {
     QStringList patterns;
@@ -716,7 +735,9 @@ void MainWindow::syncWallpaper()
 {
     const bool on = appSettings().value (QStringLiteral ("appearance/wallpaperOn"), false).toBool();
     const auto path = appSettings().value (QStringLiteral ("appearance/wallpaper")).toString();
+    const bool moves = appSettings().value (QStringLiteral ("appearance/wallpaperMoves"), false).toBool();
     commands.action (QStringLiteral ("options.wallpaper"))->setChecked (on);
+    commands.action (QStringLiteral ("options.wallpaperMoves"))->setChecked (moves);
     bool covered = visualBackdrop != nullptr && visualBackdrop->isVisible();
 #if PHI_WEB_BACKDROP
     covered = covered || (webBackdrop != nullptr && webBackdrop->isVisible());
@@ -731,6 +752,7 @@ void MainWindow::syncWallpaper()
     }
     if (wallpaper != nullptr)
     {
+        wallpaper->setMoving (moves);
         wallpaper->setVisible (show);
         if (show)
         {
