@@ -15,7 +15,7 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
     message(FATAL_ERROR "${APP_DISPLAY_NAME} targets Linux only.")
 endif()
 
-find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Concurrent)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Concurrent Network)
 
 # JUCE provides the audio engine only (devices, codecs, DSP, plugin hosting); no JUCE UI.
 # Use a local checkout (needed for offline package builds) or fetch the pinned tag.
@@ -107,6 +107,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/SpatialStudio.cpp
     Source/core/PrismSplit.cpp
     Source/core/Phi.cpp
+    Source/core/ThemeGen.cpp
     Source/core/PhiDynamics.cpp
     Source/core/PhiModulation.cpp
     Source/core/Modulators.cpp
@@ -185,6 +186,8 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/Recovery.cpp
     Source/ui/Spectrogram.cpp
     Source/ui/Theme.cpp
+    Source/ui/ThemeAi.cpp
+    Source/ui/ThemeGenerator.cpp
     Source/ui/TransportBar.cpp
     Source/ui/InfoStrip.cpp
     Source/ui/TimeRuler.cpp
@@ -354,6 +357,7 @@ target_link_libraries(${APP_ID}
     PRIVATE
         Qt6::Widgets
         Qt6::Concurrent
+        Qt6::Network
         juce::juce_audio_devices
         juce::juce_audio_formats
         juce::juce_audio_processors
@@ -539,6 +543,7 @@ if(PHI_BUILD_TESTS)
     Source/core/SpatialStudio.cpp
         Source/core/PrismSplit.cpp
         Source/core/Phi.cpp
+        Source/core/ThemeGen.cpp
         Source/core/PhiDynamics.cpp
         Source/core/PhiModulation.cpp
         Source/core/Modulators.cpp

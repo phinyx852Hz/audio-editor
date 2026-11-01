@@ -37,6 +37,7 @@
 #include "../Source/patchbay/PatchBay.h"
 #include "../Source/core/EbuCore.h"
 #include "../Source/core/Ixml.h"
+#include "../Source/core/ThemeGen.h"
 #include "../Source/core/Metadata.h"
 #include "../Source/core/RiffChunks.h"
 #include "../Source/core/Xmp.h"
@@ -10721,6 +10722,94 @@ namespace
         fs::remove_all (folder);
     }
 
+    void testThemeGenerator()
+    {
+        using namespace themegen;
+        Rgb gold;
+        check (fromHex ("#c8a24a", gold) && toHex (gold) == "#c8a24a", "theme: hex round trip");
+        Rgb seeThrough;
+        check (fromHex ("#c8a24a40", seeThrough) && near (seeThrough.a, 64.0 / 255.0, 1e-9) && toHex (seeThrough) == "#c8a24a40", "theme: hex with alpha");
+        Rgb shortHex;
+        check (fromHex ("#fff", shortHex) && toHex (shortHex) == "#ffffff" && ! fromHex ("c8a24a", shortHex) && ! fromHex ("#12345", shortHex),
+               "theme: short and bad hex");
+        check (near (contrastRatio ({ 0, 0, 0 }, { 1, 1, 1 }), 21.0, 1e-6) && near (contrastRatio (gold, gold), 1.0, 1e-9), "theme: contrast ratio");
+
+        for (const bool dark : { true, false })
+            for (auto harmony : { Harmony::mono, Harmony::analogous, Harmony::complementary, Harmony::splitComplementary, Harmony::triadic })
+                for (const double contrast : { 0.0, 0.5, 1.0 })
+                {
+                    Settings s;
+                    s.seed = gold;
+                    s.dark = dark;
+                    s.harmony = harmony;
+                    s.contrast = contrast;
+                    const auto t = generate (s);
+                    const auto name = std::string ("theme: ") + harmonyName (harmony) + (dark ? " dark " : " light ") + std::to_string (contrast);
+                    bool all = t.colors.size() == colorKeys().size();
+                    for (const auto& key : colorKeys())
+                        all = all && t.colors.count (key) == 1;
+                    check (all, name + ": every colour");
+                    check (t.spectrogram.size() >= 2, name + ": spectrogram");
+                    check ((luminance (t.colors.at ("window")) < 0.2) == dark, name + ": dark or light");
+                    int failing = 0;
+                    for (const auto& c : checkContrast (t.colors))
+                        failing += c.ok() ? 0 : 1;
+                    check (failing == 0 || contrast < 0.5, name + ": passes its contrast checks");
+                    auto fixed = t.colors;
+                    fixContrast (fixed);
+                    bool ok = true;
+                    for (const auto& c : checkContrast (fixed))
+                        ok = ok && c.ok();
+                    check (ok, name + ": fixed contrast passes");
+                }
+
+        // Locked colours are kept, and selected text follows a locked highlight.
+        Settings s;
+        Colors locked { { "highlight", { 1, 1, 0 } } };
+        const auto t = generate (s, locked);
+        check (toHex (t.colors.at ("highlight")) == "#ffff00", "theme: a locked colour is kept");
+        check (contrastRatio (t.colors.at ("highlightedText"), t.colors.at ("highlight")) >= 4.5, "theme: selected text on a locked highlight");
+        auto colors = t.colors;
+        Colors lockText { { "text", { 0.3, 0.3, 0.3 } } };
+        colors["text"] = { 0.3, 0.3, 0.3 };
+        colors["base"] = { 0.25, 0.25, 0.25 };
+        fixContrast (colors, lockText);
+        check (toHex (colors.at ("text")) == "#4d4d4d" && contrastRatio (colors.at ("text"), colors.at ("base")) >= 4.5,
+               "theme: a locked text colour moves its background instead");
+
+        // A grey seed and zero saturation give a grey theme.
+        Settings grey;
+        grey.seed = { 0.5, 0.5, 0.5 };
+        grey.saturation = 0;
+        const auto g = generate (grey);
+        const auto w = g.colors.at ("waveform");
+        check (near (w.r, w.g, 0.01) && near (w.g, w.b, 0.01), "theme: grey stays grey");
+
+        // A picture: mostly dark blue with a little orange gives a dark theme built on the orange.
+        std::vector<Rgb> pixels (900, Rgb { 0.05, 0.07, 0.2 });
+        pixels.insert (pixels.end(), 100, Rgb { 1.0, 0.55, 0.1 });
+        const auto palette = paletteFromPixels (pixels, 4);
+        check (palette.size() == 2 && near (palette[0].share, 0.9, 1e-9), "theme: palette of a picture");
+        const auto fromPicture = settingsFromPalette (palette);
+        check (fromPicture.dark && fromPicture.seed.r > 0.9, "theme: settings from a picture");
+
+        // The theme file names every colour and can be read back.
+        const auto json = toJson ("Quote \"Test\"", t, s);
+        check (json.find ("\"name\": \"Quote \\\"Test\\\"\"") != std::string::npos, "theme: name escaped in JSON");
+        check (json.find ("\"levelPeak\"") != std::string::npos && json.find ("\"generator\"") != std::string::npos, "theme: JSON has colours and settings");
+        // REAPER colours are 0x00bbggrr in decimal, sometimes with flags in the top byte.
+        Colors reaper;
+        Settings fromReaper;
+        check (fromReaperTheme ("[color theme]\r\ncol_main_bg2=1315860\r\ncol_tr1_peaks=255\r\ncol_main_bg=-2134456634\r\nui_img=Foo\r\n", reaper, fromReaper),
+               "theme: reads a REAPER theme");
+        check (toHex (reaper["window"]) == "#141414" && toHex (reaper["waveform"]) == "#ff0000" && toHex (fromReaper.seed) == "#ff0000"
+               && fromReaper.dark && reaper.count ("text") == 0, "theme: REAPER colours mapped");
+        check (! fromReaperTheme ("[REAPER]\nfoo=bar\n", reaper, fromReaper), "theme: not a REAPER colour theme");
+
+        Harmony h;
+        check (harmonyFromName ("split-complementary", h) && h == Harmony::splitComplementary && ! harmonyFromName ("plaid", h), "theme: harmony names");
+    }
+
 int main()
 {
     testStorage();
@@ -10802,6 +10891,7 @@ int main()
     testPluginMeasure();
     testDawProject();
     testAbletonSet();
+    testThemeGenerator();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");

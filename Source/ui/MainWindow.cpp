@@ -58,6 +58,7 @@
 #include "RecordDialog.h"
 #include "ReferencePanel.h"
 #include "Theme.h"
+#include "ThemeGenerator.h"
 #include "Wallpaper.h"
 #include "WaveformView.h"
 
@@ -613,6 +614,8 @@ void MainWindow::registerCommands()
     registerReferenceCommands();
     registerMacroCommands();
     registerResearchCommands();
+    add ("tools.themeGenerator", Category::tools, tr ("&Theme Generator..."), {}, [this] { ThemeGeneratorDialog (this).exec(); });
+    commands.action (QStringLiteral ("tools.themeGenerator"))->setStatusTip (tr ("Make a theme from a colour, a picture, a REAPER theme or a description"));
     add ("tools.managePlugins", Category::tools, tr ("Manage &Plug-ins..."), {}, [this] { managePlugins(); });
     add ("tools.resetConfig", Category::tools, tr ("Reset &Configuration..."), {}, [this] { resetConfiguration(); });
 
@@ -968,7 +971,7 @@ void MainWindow::buildMenus()
                                "sample.midiInputs", "sample.panic" } },
         { tr ("Trac&ker"),   { "tracker.window", "tracker.furnace", "-", "tracker.new", "tracker.open", "tracker.save", "tracker.saveAs", "tracker.loadSample", "-", "tracker.playSong", "tracker.playPattern", "tracker.stop", "-",
                                "tracker.recordStereo", "tracker.recordMulti", "-", "tracker.resetTracks", "tracker.about" } },
-        { tr ("&Tools"),     { "#markers", "-", "tools.macroRecord", "tools.macroApply", "tools.macros", "-", "tools.batch", "-", "tools.managePlugins", "-", "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan", "-", "tools.resetConfig" } },
+        { tr ("&Tools"),     { "#markers", "-", "tools.macroRecord", "tools.macroApply", "tools.macros", "-", "tools.batch", "-", "tools.themeGenerator", "-", "tools.managePlugins", "-", "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan", "-", "tools.resetConfig" } },
         { tr ("&View"),      { "#transport", "-", "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
                                "view.audioEditor", "view.midiEditor", "-", "view.overview", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "view.cpuMeter", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.inspector", "view.master", "view.chain", "view.modulators", "view.history", "view.markers", "view.meters", "analyze.window", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "view.fullScreen", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },

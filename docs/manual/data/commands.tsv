@@ -260,6 +260,7 @@ tools.macroRecord	Tools	Record Macro	Ctrl+F9
 tools.macroApply	Tools	Apply Macro	F9
 tools.macros	Tools	Macros	Shift+F9
 tools.managePlugins	Tools	Manage Plug-ins	
+tools.themeGenerator	Tools	Theme Generator	
 tools.resetConfig	Tools	Reset Configuration	
 transport.playStop	Transport	Play / Stop	Space
 transport.stop	Transport	Stop	K
