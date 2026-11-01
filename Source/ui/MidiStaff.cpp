@@ -15,6 +15,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QScrollBar>
+#include <QTimer>
 #include <QToolTip>
 #include <QWheelEvent>
 
@@ -64,7 +65,7 @@ MidiEditor::Staff::Staff (MidiEditor& e) : QWidget (&e), ed (e)
     setMinimumHeight (220);
     setAttribute (Qt::WA_OpaquePaintEvent);
     scroll = new QScrollBar (Qt::Horizontal, this);
-    connect (scroll, &QScrollBar::valueChanged, this, [this] { update(); });
+    connect (scroll, &QScrollBar::valueChanged, this, [this] { if (! following) update(); });
 
     static const QString family = []
     {
@@ -82,17 +83,22 @@ MidiEditor::Staff::Staff (MidiEditor& e) : QWidget (&e), ed (e)
     jeongganFamily = jeonggan;
     lines = new QScrollBar (Qt::Vertical, this);
     lines->hide();
-    connect (lines, &QScrollBar::valueChanged, this, [this] { update(); });
+    connect (lines, &QScrollBar::valueChanged, this, [this] { if (! following) update(); });
     setToolTip (tr ("The staff: click picks a note, double-click writes one on that line or space, Ctrl+Up/Down moves the picked notes "
                     "to the next pitch the notation writes, Ctrl+wheel zooms"));
 }
 
 QString MidiEditor::Staff::tuningsFolder()
 {
-    const auto installed = QDir (QCoreApplication::applicationDirPath()).absoluteFilePath (QStringLiteral (PHI_SHARE_RELATIVE "/xen-tuner/tunings"));
-    if (QFileInfo (installed).isDir())
-        return QDir::cleanPath (installed);
-    return QStringLiteral (PHI_SHARE_SOURCE_DIR "/xen-tuner/tunings");
+    // Looked for once: the staff asks for it at each note of each frame.
+    static const QString folder = []
+    {
+        const auto installed = QDir (QCoreApplication::applicationDirPath()).absoluteFilePath (QStringLiteral (PHI_SHARE_RELATIVE "/xen-tuner/tunings"));
+        if (QFileInfo (installed).isDir())
+            return QDir::cleanPath (installed);
+        return QStringLiteral (PHI_SHARE_SOURCE_DIR "/xen-tuner/tunings");
+    }();
+    return folder;
 }
 
 void MidiEditor::Staff::setNotation (const notation::Choice& c, bool automatic)
@@ -120,6 +126,26 @@ QString MidiEditor::Staff::titleFor (const PitchSystem& s) const
 }
 
 const phi::xen::Speller* MidiEditor::Staff::spellerFor (const PitchSystem& s) const
+{
+    if (! painting)
+        return makeSpeller (s);
+    auto [it, fresh] = paintSpellers.emplace (&s, nullptr);
+    if (fresh)
+        it->second = makeSpeller (s);
+    return it->second;
+}
+
+const phi::xen::Spelling& MidiEditor::Staff::spelled (const phi::xen::Speller& sp, double pitch) const
+{
+    if (spellings.size() > 8192)
+        spellings.clear();
+    auto [it, fresh] = spellings.try_emplace ({ &sp, pitch, flats });
+    if (fresh)
+        it->second = sp.best (pitch, flats);
+    return it->second;
+}
+
+const phi::xen::Speller* MidiEditor::Staff::makeSpeller (const PitchSystem& s) const
 {
     const auto c = choiceFor (s);
     if (c.kind != notation::Kind::staff)
@@ -184,7 +210,7 @@ void MidiEditor::Staff::fit()
             continue;
         if (const auto* sp = spellerFor (ed.systemAt (n.start)))
         {
-            const auto s = sp->best (n.pitch, flats).staff;
+            const auto s = spelled (*sp, n.pitch).staff;
             low = std::min (low, s - 3);
             high = std::max (high, s + 3);
         }
@@ -195,8 +221,70 @@ void MidiEditor::Staff::fit()
     highest = high + std::max (0.0, (room / half - (high - low)) / 2.0);
 }
 
+void MidiEditor::Staff::playheadMoved()
+{
+    if (! ed.playTimer->isActive() || ed.playheadTick < 0)
+    {
+        update();
+        return;
+    }
+    following = true;
+    const auto scrolled = followPlayhead();
+    following = false;
+    // A frame at most every 15 ms (the play clock ticks every 4); the next tick draws what this skips.
+    if (! sinceFrame.isValid() || sinceFrame.elapsed() >= 15 || (scrolled && sinceFrame.elapsed() >= 8))
+        update();
+}
+
+bool MidiEditor::Staff::followPlayhead()
+{
+    const auto tick = ed.playheadTick;
+    if (writingShown && grid.shown)
+    {
+        const auto index = (int64_t) std::floor ((tick - grid.start) / (double) grid.beat);
+        const auto at = (int64_t) std::floor (index / (double) grid.per) - grid.first;
+        if (grid.columns)
+        {
+            // Read right to left: the playhead's column at the right edge once it would leave the view.
+            if (scroll->isSliderDown())
+                return false;
+            const auto x = width() - 20.0 - (at + 1) * grid.step + scroll->value() + 14.0;
+            if (x >= 0.0 && x + grid.step <= width())
+                return false;
+            const auto before = scroll->value();
+            scroll->setValue ((int) std::lround (std::max<int64_t> (0, at) * grid.step));
+            return scroll->value() != before;
+        }
+        // Down the lines: the playhead's line second from the top once it reaches the bottom.
+        if (lines->isSliderDown())
+            return false;
+        const auto y = grid.top + at * grid.step - lines->value();
+        if (y >= rulerHeight && y + grid.step <= height())
+            return false;
+        const auto before = lines->value();
+        lines->setValue ((int) std::lround (std::max<int64_t> (0, at - 1) * grid.step));
+        return lines->value() != before;
+    }
+    // Across the staff (and the cipher): it moves on to a third of the way, then the page slides
+    // under it and it stays there; out of view (a jump, a loop round), the page goes to it.
+    if (scroll->isSliderDown())
+        return false;
+    const auto left = clefWidth + keyWidth + 12.0;
+    const auto hold = (width() - left) / 3.0;
+    const auto x = xOf (tick);
+    if (x >= left && x <= left + hold)
+        return false;
+    const auto before = scroll->value();
+    scroll->setValue ((int) std::lround (std::max (0.0, tick * pixelsPerTick - hold)));
+    return scroll->value() != before;
+}
+
 void MidiEditor::Staff::paintEvent (QPaintEvent*)
 {
+    sinceFrame.start();
+    painting = true;
+    paintSpellers.clear();
+    struct Done { const Staff& s; ~Done() { s.painting = false; s.paintSpellers.clear(); } } done { *this };
     QPainter g (this);
     g.setRenderHint (QPainter::Antialiasing);
     const auto pal = palette();
@@ -356,7 +444,7 @@ void MidiEditor::Staff::paintStaff (QPainter& g, int w)
         const auto* sp = spellerFor (sys);
         if (sp == nullptr)
             continue;
-        const auto spelled = sp->best (n.pitch, flats);
+        const auto spelled = this->spelled (*sp, n.pitch);
         const auto y = yOf (spelled.staff);
         const auto colour = n.selected ? pal.color (QPalette::Highlight) : text;
         if (n.start != chordTick)
@@ -897,6 +985,7 @@ void MidiEditor::Staff::paintLines (QPainter& g, const notation::Choice& c, cons
     const auto firstLine = (int64_t) std::floor (firstIndex / (double) perLine);
     const auto lineCount = wr.beats.empty() ? 1 : (int64_t) std::floor ((((wr.beats.back().tick - wr.start) / beat) / (double) perLine)) - firstLine + 1;
 
+    grid = { true, false, wr.start, beat, firstLine, perLine, top + 28.0, lineHeight };
     lines->show();
     lines->setRange (0, std::max (0, (int) (top + 28.0 + lineCount * lineHeight - (height() - rulerHeight))));
     lines->setPageStep (std::max (1, height() - rulerHeight - 40));
@@ -927,12 +1016,15 @@ void MidiEditor::Staff::paintLines (QPainter& g, const notation::Choice& c, cons
         const auto baseline = y + 26.0;
         const QRectF cell (x, y - 6.0, beatWidth, lineHeight - 8.0);
 
-        // The playhead's beat, and the step cursor's.
+        // The playhead's beat, and the playhead through it; the step cursor's.
         if (ed.playheadTick >= b.tick && ed.playheadTick < b.tick + b.length)
         {
             auto h = pal.color (QPalette::Highlight);
             h.setAlphaF (0.18);
             g.fillRect (cell, h);
+            const auto px = cell.left() + cell.width() * (double) (ed.playheadTick - b.tick) / (double) std::max<int64_t> (1, b.length);
+            g.setPen (QPen (text, 1.5));
+            g.drawLine (QPointF (px, cell.top()), QPointF (px, cell.bottom()));
         }
         if (ed.stepBox->isChecked() && ed.step.position >= b.tick && ed.step.position < b.tick + b.length)
         {
@@ -1134,6 +1226,7 @@ void MidiEditor::Staff::paintColumns (QPainter& g, const notation::Writing& wr, 
     const auto firstIndex = wr.beats.empty() ? 0 : (int64_t) std::floor ((wr.beats.front().tick - wr.start) / (double) beat);
     const auto firstColumn = (int64_t) std::floor (firstIndex / (double) perColumn);
     const auto columns = wr.beats.empty() ? 1 : (int64_t) std::floor (((wr.beats.back().tick - wr.start) / beat) / (double) perColumn) - firstColumn + 1;
+    grid = { true, true, wr.start, beat, firstColumn, perColumn, top, columnWidth };
     scroll->setRange (0, std::max (0, (int) (columns * columnWidth + 40.0 - w)));
     scroll->setPageStep (std::max (1, w - 40));
     scroll->setSingleStep (20);
@@ -1163,6 +1256,10 @@ void MidiEditor::Staff::paintColumns (QPainter& g, const notation::Writing& wr, 
             auto h = pal.color (QPalette::Highlight);
             h.setAlphaF (0.18);
             g.fillRect (cell, h);
+            // The playhead down the box, as the box is read.
+            const auto py = cell.top() + cell.height() * (double) (ed.playheadTick - b.tick) / (double) std::max<int64_t> (1, b.length);
+            g.setPen (QPen (text, 1.5));
+            g.drawLine (QPointF (cell.left(), py), QPointF (cell.right(), py));
         }
         g.setPen (QPen (text, 1.0));
         g.setBrush (Qt::NoBrush);
