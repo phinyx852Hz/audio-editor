@@ -50,9 +50,10 @@ namespace composition
         chineseSuite,     // Chinese: sǎn-màn-zhōng-kuài-sǎn, phrases in qǐ-chéng-zhuǎn-hé
         // Africa.
         ostinato,         // Ewe (Ghana, Togo): layered ostinati on the bell's timeline, the lead drum's calls
-        hocket            // Central Africa (Banda-Linda horns, Aka): one note a player, interlocked
+        hocket,           // Central Africa (Banda-Linda horns, Aka): one note a player, interlocked
+        congolese         // Congolese rumba and soukous: interlocking guitars, a sung rumba, then the sebene
     };
-    constexpr int numMethods = 18;
+    constexpr int numMethods = 19;
 
     struct MethodInfo
     {

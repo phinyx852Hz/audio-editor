@@ -360,6 +360,53 @@ namespace
         return b.finish();
     }
 
+    // Simplest's envelopes and LFOs in a mix file.
+    QJsonObject envelopeJson (const sampler::Envelope& e)
+    {
+        return { { "on", e.on }, { "attack", e.attack }, { "decay", e.decay }, { "sustain", e.sustain }, { "release", e.release },
+                 { "curve", e.curve }, { "amount", e.amount }, { "velocity", e.velocity } };
+    }
+
+    sampler::Envelope envelopeFromJson (const QJsonObject& o)
+    {
+        sampler::Envelope e;
+        e.on = o.value ("on").toBool (false);
+        e.attack = o.value ("attack").toDouble (0);
+        e.decay = o.value ("decay").toDouble (0.3);
+        e.sustain = o.value ("sustain").toDouble (0);
+        e.release = o.value ("release").toDouble (0.2);
+        e.curve = o.value ("curve").toDouble (0);
+        e.amount = o.value ("amount").toDouble (0);
+        e.velocity = o.value ("velocity").toDouble (0);
+        return e;
+    }
+
+    QJsonObject lfoJson (const sampler::Lfo& l)
+    {
+        return { { "wave", (int) l.wave }, { "shape", l.shape }, { "rate", l.rate }, { "sync", l.sync }, { "beats", l.beats },
+                 { "retrigger", (int) l.retrigger }, { "phase", l.phase }, { "randomPhase", l.randomPhase }, { "modWheel", l.modWheel },
+                 { "toPitch", l.toPitch }, { "toFilter", l.toFilter }, { "toVolume", l.toVolume }, { "toPan", l.toPan } };
+    }
+
+    sampler::Lfo lfoFromJson (const QJsonObject& o)
+    {
+        sampler::Lfo l;
+        l.wave = (sampler::Wave) std::clamp (o.value ("wave").toInt (0), 0, (int) sampler::Wave::sampleHold2);
+        l.shape = o.value ("shape").toDouble (0.5);
+        l.rate = o.value ("rate").toDouble (4.0);
+        l.sync = o.value ("sync").toBool (false);
+        l.beats = o.value ("beats").toDouble (1.0);
+        l.retrigger = (sampler::Retrigger) std::clamp (o.value ("retrigger").toInt (0), 0, (int) sampler::Retrigger::eachNote);
+        l.phase = o.value ("phase").toDouble (0);
+        l.randomPhase = o.value ("randomPhase").toBool (false);
+        l.modWheel = o.value ("modWheel").toDouble (0);
+        l.toPitch = o.value ("toPitch").toDouble (0);
+        l.toFilter = o.value ("toFilter").toDouble (0);
+        l.toVolume = o.value ("toVolume").toDouble (0);
+        l.toPan = o.value ("toPan").toDouble (0);
+        return l;
+    }
+
     // The two instruments' settings in a mix file.
     QJsonObject samplerJson (const sampler::Settings& s)
     {
@@ -372,7 +419,9 @@ namespace
                  { "fixedPitch", s.fixedPitch }, { "keyLow", s.keyLow }, { "keyHigh", s.keyHigh }, { "glide", s.glide },
                  { "fingered", s.fingered }, { "legato", s.legato }, { "gate", s.gate }, { "filter", s.filter },
                  { "filterType", (int) s.filterType }, { "steep", s.steep }, { "cutoff", s.cutoff }, { "resonance", s.resonance },
-                 { "drive", s.drive }, { "keyFollow", s.keyFollow }, { "filterVelocity", s.filterVelocity }, { "quality", (int) s.quality } };
+                 { "drive", s.drive }, { "keyFollow", s.keyFollow }, { "filterVelocity", s.filterVelocity }, { "quality", (int) s.quality },
+                 { "pitchEnvelope", envelopeJson (s.pitchEnvelope) }, { "filterEnvelope", envelopeJson (s.filterEnvelope) },
+                 { "lfo1", lfoJson (s.lfo[0]) }, { "lfo2", lfoJson (s.lfo[1]) }, { "tempo", s.tempo }, { "bend", s.bendRange } };
     }
 
     sampler::Settings samplerFromJson (const QJsonObject& o)
@@ -416,6 +465,12 @@ namespace
         s.keyFollow = o.value ("keyFollow").toDouble (0);
         s.filterVelocity = o.value ("filterVelocity").toDouble (0);
         s.quality = (sampler::Quality) std::clamp (o.value ("quality").toInt (0), 0, (int) sampler::Quality::turntable78);
+        s.pitchEnvelope = envelopeFromJson (o.value ("pitchEnvelope").toObject());
+        s.filterEnvelope = envelopeFromJson (o.value ("filterEnvelope").toObject());
+        s.lfo[0] = lfoFromJson (o.value ("lfo1").toObject());
+        s.lfo[1] = lfoFromJson (o.value ("lfo2").toObject());
+        s.tempo = o.value ("tempo").toDouble (120.0);
+        s.bendRange = o.value ("bend").toDouble (2.0);
         return s;
     }
 
@@ -7581,6 +7636,32 @@ bool MixerWindow::editNotes()
     return true;
 }
 
+// The MIDI editor's transport tied to the mixer's (owner, 2026-10-30: "Tied to the main
+// transport"): the editor's first tick `offset` seconds into the mix.
+static MidiEditor::Transport mixerTransport (mixer::Engine& engine, double offset, std::function<void()> refresh)
+{
+    MidiEditor::Transport t;
+    t.playing = [&engine] { return engine.isPlaying(); };
+    t.seconds = [&engine, offset] { return (double) engine.position() / engine.sampleRate() - offset; };
+    t.locate = [&engine, offset, refresh] (double seconds)
+    {
+        engine.setPosition (std::max<Frame> (0, (Frame) std::llround ((seconds + offset) * engine.sampleRate())));
+        refresh();
+    };
+    t.play = [&engine, locate = t.locate, refresh] (double seconds)
+    {
+        locate (seconds);
+        engine.play();
+        refresh();
+    };
+    t.stop = [&engine, refresh]
+    {
+        engine.stop();
+        refresh();
+    };
+    return t;
+}
+
 void MixerWindow::noteEditorShownMidi()
 {
     if (! showingClip || ! clipView->showsMidi())
@@ -7629,6 +7710,22 @@ void MixerWindow::noteEditorShownMidi()
         why = QString::fromStdString (error);
         return loaded;
     };
+    // Tied to the mixer's transport: a clip on the timeline from where its file starts there, and
+    // muted meanwhile so the editor's notes are heard in its place; a launcher clip from the start.
+    const auto clipsBefore = engine.clips (track);
+    double offset = 0.0;
+    if (id != 0)
+    {
+        auto muted = clipsBefore;
+        for (auto& c : muted)
+            if (c.id == id)
+            {
+                offset = (double) (c.start - c.offset) / engine.sampleRate();
+                c.muted = true;
+            }
+        engine.setClips (track, std::move (muted));
+    }
+    host.transport = mixerTransport (engine, offset, [this] { refreshTransport(); });
     const auto armed = engine.liveTrack();
     engine.setLiveTrack (track);
     MidiEditor editor (*song, host, this);
@@ -7641,6 +7738,8 @@ void MixerWindow::noteEditorShownMidi()
     const auto accepted = editor.exec() == QDialog::Accepted;
     engine.setLiveListener (nullptr);
     engine.setLiveTrack (armed);
+    if (id != 0)
+        engine.setClips (track, clipsBefore);   // heard again, before the edit replaces it
     if (! accepted)
         return;
     const auto edited = editor.result();
@@ -12650,6 +12749,7 @@ void MixerWindow::openScore (const midifile::Song& score, mixer::TuningChoice tu
     host.title = title;
     host.staff = true;   // a score opens on the staff, PHI's notation
     host.inputSource = inputSource;
+    host.transport = mixerTransport (engine, 0.0, [this] { refreshTransport(); });   // from the mix's start
     host.loadAudio = [] (const QString& file, QString& why) -> AudioDataPtr
     {
         std::vector<Marker> markers;

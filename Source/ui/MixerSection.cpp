@@ -28,6 +28,8 @@
 #include <QStatusBar>
 #include <QtConcurrent>
 
+#include <cmath>
+
 void MainWindow::registerMixerCommands()
 {
     using KS = QKeySequence;
@@ -429,6 +431,29 @@ void MainWindow::showMidiEditor (bool on)
         MidiPanel::Host host;
         host.engine = &engine;
         host.patchBay = patchBay.get();
+        // Its transport tied to the audio editor's, when a file is open: its first tick at the
+        // file's start, so the notes play against the sound.
+        auto& t = host.transport;
+        t.available = [this] { return data() != nullptr; };
+        t.playing = [this] { return engine.isPlaying(); };
+        t.seconds = [this] { return engine.position(); };
+        t.play = [this] (double seconds)
+        {
+            if (engine.hasLiveSource())
+                trackerStop();
+            if (const auto d = data())
+            {
+                setCursor ((Frame) std::llround (seconds * d->sampleRate()));
+                playStart = cursor;
+                engine.play();
+            }
+        };
+        t.stop = [this] { engine.stop(); };
+        t.locate = [this] (double seconds)
+        {
+            if (const auto d = data())
+                setCursor ((Frame) std::llround (seconds * d->sampleRate()));
+        };
         host.heard = [this] { playInstruments(); };
         host.keyboard = [this] (int synth)
         {
