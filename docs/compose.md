@@ -117,6 +117,17 @@ cycles, its layers and how its parts relate. All of them are in mixer/Compose.h,
 - **Hocket and Interlocking** (Banda-Linda horns, Aka; Arom). A cyclic melody of 24 pulses is shared
   out note by note, one pitch a player, one player a pulse. Then each figure varies while the
   melody stays.
+- **Congolese Guitar: Rumba and Sebene** (Congolese rumba and soukous, Kinshasa and Brazzaville).
+  Three guitars interlock on a short cycle of I, IV and V, built on the mode's own degrees. The
+  accompagnement repeats a figure that arpeggiates each chord. The mi-solo plays only in its gaps,
+  in the middle register, some notes in thirds. The solo plays short cells above both. First comes
+  a sung rumba: a verse with the voices in thirds, then a refrain in call and response, the solo
+  answering each phrase. A break leads into the sebene, where the cycle repeats over the cavacha,
+  the snare's running figure. The sebene builds in four stages. The accompagnement and mi-solo lock
+  together. Then the solo calls and the mi-solo answers. Then the solo's cell varies a little each
+  cycle while the voices shout to the dancers. Last comes the climax, higher and denser. All close
+  together on the tonic. The parts are the solo, mi-solo, accompagnement, bass, drums, lead voice,
+  second voice and congas.
 
 ## Eight parts
 
@@ -132,4 +143,5 @@ Formalized Music, Pritchett on Cage, Reich's "Music as a Gradual Process", Hilli
 Fineberg on spectral music. For Asia and Africa: Jairazbhoy, Bor and Clayton (rāga); Marcus, Racy
 and Touma (maqām); During, Nettl and Farhat (radif); Becker, Sumarsam and Pickvance (gamelan);
 Zeami, Malm and Garfias (gagaku); Howard and Provine (sanjo); Witzleben, Lau and Jones (Chinese);
-Locke and Agawu (Ewe); and Arom (Central African polyphony). No other program's code is used.
+Locke and Agawu (Ewe); Arom (Central African polyphony); and Stewart, White and Eyre (Congolese
+rumba). No other program's code is used.

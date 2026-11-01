@@ -107,6 +107,12 @@ namespace composition
               "figure varies within the cycle while the melody stays.",
               "Arom, African Polyphony and Polyrhythm (1991); Kubik", "",
               5, 8, "horn 1|horn 2|horn 3|horn 4|horn 5|horn 6|horn 7|horn 8" },
+            { Method::congolese, "congolese", "Congolese Guitar: Rumba and Sebene", "Congolese rumba and soukous (Kinshasa and Brazzaville, from the 1940s)", "africa",
+              "Three guitars interlocking on a short I–IV–V cycle: the accompagnement's repeating figure, the mi-solo in its gaps in the "
+              "middle register, and the solo's short cells above. A sung rumba first, the voices in thirds and the solo answering them; then "
+              "the sebene, the cycle repeated over the cavacha while the solo's cell varies, calls, answers and climbs to a climax.",
+              "Stewart, Rumba on the River (2000); White, Rumba Rules (2008); Eyre, Guitar Atlas: Africa", "",
+              5, 8, "solo (lead guitar)|mi-solo|accompagnement (rhythm guitar)|bass|drums (cavacha)|lead voice|second voice|congas" },
         };
         return all;
     }
@@ -339,7 +345,8 @@ namespace composition
             constexpr int kick = 36, acousticKick = 35, rim = 37, snare = 38, lowFloorTom = 41, lowTom = 45, lowMidTom = 47,
                           hiMidTom = 48, highTom = 50, chineseCymbal = 52, rideBell = 53, tambourine = 54, cowbell = 56,
                           muteHiConga = 62, openHiConga = 63, lowConga = 64, highTimbale = 65, lowTimbale = 66,
-                          highAgogo = 67, lowAgogo = 68, cabasa = 69, maracas = 70, highWood = 76, lowWood = 77, shaker = 82;
+                          highAgogo = 67, lowAgogo = 68, cabasa = 69, maracas = 70, highWood = 76, lowWood = 77, shaker = 82,
+                          closedHat = 42, openHat = 46, crash = 49;
         }
 
         void hit (Part& p, int64_t at, int drum, int velocity, int64_t length = Q / 4) { add (p, at, length, drum, velocity); }
@@ -2177,6 +2184,414 @@ namespace composition
             out.summary = "A cycle of " + std::to_string (period) + " pulses shared out among " + std::to_string (players) + " players, one pitch each, interlocking";
             return out;
         }
+
+        //======================================================================
+        // Congolese rumba and the sebene: three guitars interlocking on a short I–IV–V cycle, a sung
+        // rumba with the voices in thirds, then the sebene over the cavacha, the solo's cell varied
+        // and climbing to a climax. The guitars' figures are written as chord tones near a register,
+        // so each follows the chords and keeps its own range; the mi-solo plays only in the
+        // accompagnement's gaps, so the two lock together.
+        Result congolese (const Settings& s, Random& r)
+        {
+            Scale sc (s.mode);
+            auto out = begin (s);
+            const int parts = std::clamp (s.parts, 1, 8);
+            enum { solo, miSolo, accomp, bass, drums, voice, voice2, congas };
+            out.parts[drums].drums = out.parts[congas].drums = true;
+            const int n = sc.n();
+            const auto step = Q / 4;          // a sixteenth
+            const auto bar = barTicks();
+
+            // The chords: I, IV and V on the mode's own degrees, each of every other degree from its root.
+            struct Chord { int root; int beats; };
+            using Cycle = std::vector<Chord>;
+            const int I = 0, IV = sc.fourth(), V = sc.fifth();
+            const std::array<Cycle, 3> songChoices { Cycle { { I, 4 }, { IV, 4 }, { I, 4 }, { V, 4 } },
+                                                    Cycle { { I, 4 }, { IV, 4 }, { V, 4 }, { IV, 4 } },
+                                                    Cycle { { I, 4 }, { V, 4 }, { IV, 4 }, { V, 4 } } };
+            const std::array<Cycle, 3> sebeneChoices { Cycle { { I, 2 }, { IV, 2 }, { V, 2 }, { IV, 2 } },
+                                                      Cycle { { I, 4 }, { V, 4 } },
+                                                      Cycle { { I, 2 }, { IV, 2 }, { I, 2 }, { V, 2 } } };
+            const auto& songCycle = songChoices[(size_t) below (r, 3)];
+            const auto& sebeneCycle = sebeneChoices[(size_t) below (r, 3)];
+            auto rootAt = [] (const Cycle& cyc, int64_t t)
+            {
+                int64_t total = 0;
+                for (const auto& c : cyc)
+                    total += c.beats * Q;
+                t = (t % total + total) % total;
+                for (const auto& c : cyc)
+                {
+                    if (t < c.beats * Q)
+                        return c.root;
+                    t -= c.beats * Q;
+                }
+                return cyc.front().root;
+            };
+            auto isTone = [&] (int root, int d)
+            {
+                const auto i = sc.index (d - root);
+                return i == 0 || i == 2 % n || i == 4 % n;
+            };
+            auto nearestTone = [&] (int root, int target)
+            {
+                for (int k = 0; k <= n; ++k)
+                {
+                    if (isTone (root, target + k))
+                        return target + k;
+                    if (isTone (root, target - k))
+                        return target - k;
+                }
+                return target;
+            };
+
+            // A figure: hits on a grid of steps, each a chord tone near the register's centre plus
+            // `target`, or the mode's step above or below it (a passing note); `third` adds the
+            // third above, the guitars' double stops.
+            struct Hit { int at = 0, len = 1, target = 0, passing = 0; bool third = false; };
+            using Figure = std::vector<Hit>;
+            auto degree = [&] (const Hit& h, int64_t t, int centre, const Cycle& cyc, int64_t cycleStart)
+            {
+                auto d = nearestTone (rootAt (cyc, t - cycleStart), centre + h.target);
+                if (h.passing > 0)
+                    d = sc.stepUp (d);
+                else if (h.passing < 0)
+                    d = sc.stepDown (d);
+                return d;
+            };
+            auto play = [&] (int part, const Figure& f, int64_t at, int64_t unit, int centre, const Cycle& cyc, int64_t cycleStart, int velocity)
+            {
+                for (const auto& h : f)
+                {
+                    const auto t = at + h.at * unit;
+                    const auto d = degree (h, t, centre, cyc, cycleStart);
+                    const auto len = h.len * unit - unit / 8;
+                    const auto v = velocity + (h.at % 4 == 0 ? 8 : 0);
+                    add (out.parts[(size_t) part], t, len, sc.key (d), v);
+                    if (h.third)
+                        add (out.parts[(size_t) part], t, len, sc.key (d + 2), v - 6);
+                }
+            };
+            auto lengths = [] (Figure& f, int span, int most)
+            {
+                std::sort (f.begin(), f.end(), [] (const Hit& a, const Hit& b) { return a.at < b.at; });
+                for (size_t i = 0; i < f.size(); ++i)
+                    f[i].len = std::clamp ((i + 1 < f.size() ? f[i + 1].at : span) - f[i].at, 1, most);
+            };
+
+            // The accompagnement: a bar's figure arpeggiating the chord, the same all through.
+            const std::array<const char*, 4> rhythms { "x.xx.x.xx.xx.x.x", "xx.x.xx.x.xx.x.x", "x.x.xx.xx.x.xx.x", "x.xx.xx.x.xx.xx." };
+            const std::array<std::vector<int>, 4> contours { std::vector<int> { 0, 2, 4, 2 }, { 4, 2, 0, 2 }, { 0, 4, 2, 4, 7, 4 }, { 2, 0, 2, 4 } };
+            Figure acc;
+            {
+                const std::string rhythm = rhythms[(size_t) below (r, (int) rhythms.size())];
+                const auto& contour = contours[(size_t) below (r, (int) contours.size())];
+                for (int i = 0, k = 0; i < 16; ++i)
+                    if (rhythm[(size_t) i] == 'x')
+                        acc.push_back ({ i, 1, contour[(size_t) (k++ % (int) contour.size())], 0, false });
+                lengths (acc, 16, 2);
+            }
+            // The mi-solo: in the accompagnement's gaps, a line of chord tones, some in thirds.
+            Figure mi;
+            {
+                std::vector<int> gaps;
+                for (int i = 0; i < 16; ++i)
+                    if (std::none_of (acc.begin(), acc.end(), [i] (const Hit& h) { return h.at == i; }))
+                        gaps.push_back (i);
+                int t = 0;
+                for (size_t g = 0; g < gaps.size(); ++g)
+                    if (chance (r, 0.75) || (int) (gaps.size() - g) <= 3 - (int) mi.size())
+                    {
+                        t = std::clamp (t + between (r, -2, 2), -2, 4);
+                        mi.push_back ({ gaps[g], 1, t, mi.empty() || ! chance (r, 0.15) ? 0 : (chance (r, 0.5) ? 1 : -1), chance (r, 0.4) });
+                    }
+                lengths (mi, 16, 2);
+            }
+            // The solo's cell: a bar of chord tones and passing notes in the high register; in
+            // eighths for the call, in sixteenths once it varies.
+            auto soloCell = [&] (bool sixteenths)
+            {
+                Figure f;
+                int t = between (r, 0, 3);
+                for (int i = 0; i < 16; ++i)
+                {
+                    if ((! sixteenths && i % 2 == 1) || ! chance (r, sixteenths ? 0.62 : 0.7))
+                        continue;
+                    t = std::clamp (t + (chance (r, 0.15) ? (chance (r, 0.5) ? 3 : -3) : between (r, -2, 2)), -3, 6);
+                    f.push_back ({ i, 1, t, chance (r, 0.25) ? (chance (r, 0.5) ? 1 : -1) : 0, false });
+                }
+                if (f.size() < 4)
+                    for (int i : { 2, 6, 10, 14 })
+                        if (std::none_of (f.begin(), f.end(), [i] (const Hit& h) { return h.at == i; }))
+                            f.push_back ({ i, 1, between (r, 0, 4), 0, false });
+                lengths (f, 16, 4);
+                return f;
+            };
+            // A variation: a note moved up or down, a passing note made or undone, a note taken out
+            // or one added in a gap. The cell changes a little at a time.
+            auto vary = [&] (Figure f, int changes, bool onsets)
+            {
+                for (int c = 0; c < changes && ! f.empty(); ++c)
+                {
+                    auto& h = f[(size_t) below (r, (int) f.size())];
+                    const auto what = below (r, onsets ? 4 : 2);
+                    if (what == 0)
+                        h.target = std::clamp (h.target + (chance (r, 0.5) ? 1 : -1) * between (r, 1, 2), -3, 7);
+                    else if (what == 1)
+                        h.passing = h.passing != 0 ? 0 : (chance (r, 0.5) ? 1 : -1);
+                    else if (what == 2 && f.size() > 4)
+                        f.erase (f.begin() + below (r, (int) f.size()));
+                    else
+                    {
+                        const auto at = below (r, 16);
+                        if (std::none_of (f.begin(), f.end(), [at] (const Hit& x) { return x.at == at; }))
+                            f.push_back ({ at, 1, between (r, -1, 5), 0, false });
+                    }
+                }
+                lengths (f, 16, 4);
+                return f;
+            };
+            // A sung phrase of two bars: eighths and quarters, chord tones on the beats, the last
+            // two beats left for the solo's answer.
+            auto phrase = [&] (bool ending)
+            {
+                Figure f;
+                int t = between (r, 1, 3);
+                for (int i = 0; i <= 22; i += 2)
+                {
+                    if (i > 0 && ! chance (r, 0.62))
+                        continue;
+                    t = std::clamp (t + between (r, -2, 2), -1, 5);
+                    f.push_back ({ i, 1, t, i % 8 != 0 && chance (r, 0.35) ? (chance (r, 0.5) ? 1 : -1) : 0, false });
+                }
+                if (ending)
+                {
+                    f.back().target = 0;
+                    f.back().passing = 0;
+                }
+                lengths (f, 24, 8);
+                return f;
+            };
+            auto sing = [&] (const Figure& f, int64_t at, const Cycle& cyc, int64_t cycleStart, int velocity, bool both)
+            {
+                for (const auto& h : f)
+                {
+                    const auto t = at + h.at * step;
+                    const auto d = degree (h, t, 2, cyc, cycleStart);
+                    add (out.parts[voice], t, h.len * step - step / 4, sc.key (d), velocity);
+                    if (both)
+                        add (out.parts[voice2], t, h.len * step - step / 4, sc.key (d - 2), velocity - 8);   // a third below
+                }
+            };
+            // The solo's answer to the voices: a run down the chord in the phrase's last two beats.
+            auto fill = [&]
+            {
+                Figure f;
+                int t = between (r, 4, 7);
+                for (int i : { 0, 1, 2, 3, 4, 6 })
+                {
+                    f.push_back ({ i, 1, t, i % 2 == 1 && chance (r, 0.4) ? -1 : 0, false });
+                    t -= between (r, 1, 2);
+                }
+                lengths (f, 8, 2);
+                return f;
+            };
+
+            const std::map<char, int> kit { { 'k', gm::kick }, { 's', gm::snare }, { 'r', gm::rim }, { 'h', gm::closedHat }, { 'o', gm::openHat },
+                                            { 'm', gm::muteHiConga }, { 'p', gm::openHiConga }, { 'l', gm::lowConga } };
+            auto bassBar = [&] (int64_t t, const Cycle& cyc, int64_t cycleStart, bool sebene, int velocity)
+            {
+                const auto root = rootAt (cyc, t - cycleStart) - 2 * n;
+                const auto next = rootAt (cyc, t + bar - cycleStart) - 2 * n;
+                const auto lead = next > root ? sc.stepDown (next) : next < root ? sc.stepUp (next) : root + 4;
+                auto& b = out.parts[bass];
+                if (! sebene)   // the rumba's bass: three, three and two, the last leading to the next chord
+                {
+                    add (b, t, 5 * step, sc.key (root), velocity + 6);
+                    add (b, t + 6 * step, 5 * step, sc.key (root + 4), velocity);
+                    add (b, t + 12 * step, 3 * step, sc.key (lead), velocity - 4);
+                }
+                else
+                {
+                    add (b, t, 3 * step, sc.key (root), velocity + 8);
+                    add (b, t + 6 * step, 2 * step, sc.key (root), velocity);
+                    add (b, t + 10 * step, 2 * step, sc.key (root + 4), velocity);
+                    add (b, t + 12 * step, 2 * step, sc.key (root + n), velocity - 4);
+                    add (b, t + 14 * step, 2 * step, sc.key (lead), velocity - 2);
+                }
+            };
+
+            // The plan, in bars: an opening, the song (verse and refrain, cycles of four bars), the
+            // break, the sebene (cycles of two bars) in four stages, and the close.
+            const int total = std::max (s.bars, 16);
+            const int introBars = 2;
+            const int songBars = std::max (4, (int) std::lround (total * 0.4 / 4.0) * 4);
+            const int sebeneCycles = std::max (4, (total - introBars - songBars - 2) / 2);
+            const std::array<int, 4> stages { std::max (1, sebeneCycles / 8), std::max (1, sebeneCycles / 4), 0, std::max (1, sebeneCycles / 4) };
+            const int growing = sebeneCycles - stages[0] - stages[1] - stages[3];
+
+            // 1. The opening: the solo's phrase over the accompagnement.
+            mark (out, 0, "opening: the solo's phrase");
+            {
+                const auto call = soloCell (false);
+                for (int b = 0; b < introBars; ++b)
+                    play (solo, b == 0 ? call : vary (call, 1, false), b * bar, step, n + 4, songCycle, 0, 80);
+                play (accomp, acc, 0, 2 * step, -1, songCycle, 0, 64);   // half speed in the song: the figure across two bars
+            }
+
+            // 2. The song: verse, then the refrain's call and response.
+            const auto songStart = introBars * bar;
+            const int units = songBars / 2;
+            const int verseUnits = units <= 2 ? units : (units / 2 + 1) / 2 * 2;
+            const auto verseA = phrase (false), verseB = phrase (true);
+            Figure call;
+            for (const auto& h : phrase (false))
+                if (h.at < 16)
+                    call.push_back (h);
+            auto response = phrase (true);
+            for (auto& h : response)
+                h.at = h.at / 2 + 16;   // the answer, quicker, in the second bar
+            lengths (call, 16, 8);
+            lengths (response, 30, 4);
+            for (int u = 0; u < units; ++u)
+            {
+                const auto at = songStart + (int64_t) u * 2 * bar;
+                if (u == 0)
+                    mark (out, at, "the song (rumba): verse, the voices in thirds");
+                else if (u == verseUnits)
+                    mark (out, at, "refrain: call and response");
+                play (accomp, acc, at, 2 * step, -1, songCycle, songStart, 66);
+                play (miSolo, mi, at, 2 * step, n - 1, songCycle, songStart, 68);
+                if (u < verseUnits)
+                    sing (u % 2 == 0 ? verseA : vary (verseB, 1, false), at, songCycle, songStart, 86, true);
+                else
+                {
+                    sing (vary (call, 1, false), at, songCycle, songStart, 90, false);
+                    sing (response, at, songCycle, songStart, 84, true);
+                }
+                play (solo, fill(), at + 24 * step, step, n + 3, songCycle, songStart, 76);
+                for (int b = 0; b < 2; ++b)
+                {
+                    const auto t = at + b * bar;
+                    bassBar (t, songCycle, songStart, false, 80);
+                    pattern (out.parts[drums], t, step, "k.......k.......", kit, 78);
+                    pattern (out.parts[drums], t, step, "h.h.h.h.h.h.h.h.", kit, 52);
+                    pattern (out.parts[drums], t, step, b == 0 ? "r..r..r........." : "....r...r.......", kit, 70);   // a clave on the rim
+                    pattern (out.parts[congas], t, step, "..m.p...m.m.p.l.", kit, 66);
+                }
+            }
+
+            // 3. The break: everyone stops on the chord, the snare rolls into the sebene.
+            const auto breakAt = songStart + (int64_t) songBars * bar;
+            mark (out, breakAt, "the break: into the sebene");
+            {
+                const Cycle tonic { { I, 4 } };
+                for (int part : { solo, miSolo, accomp })
+                    play (part, Figure { { 0, 2, part == solo ? 4 : part == miSolo ? 2 : 0, 0, false } }, breakAt, step, part == solo ? n + 4 : part == miSolo ? n - 1 : -1, tonic, breakAt, 96);
+                add (out.parts[bass], breakAt, 2 * step, sc.key (-2 * n), 100);
+                hit (out.parts[drums], breakAt, gm::kick, 104);
+                for (int i = 4; i < 16; ++i)
+                    hit (out.parts[drums], breakAt + i * step, gm::snare, 54 + i * 4);
+            }
+
+            // 4. The sebene: the cycle over and over, building.
+            const auto sebeneStart = breakAt + bar;
+            const auto cycleTicks = 2 * bar;
+            auto cell = soloCell (false);
+            const auto shout = Figure { { 0, 1, 4, 0, false }, { 2, 1, 4, 0, false }, { 4, 2, 4, 0, false }, { 7, 1, 2, 0, false }, { 9, 1, 4, 0, false }, { 11, 2, 4, 0, false } };
+            auto miNow = mi;
+            for (int c = 0; c < sebeneCycles; ++c)
+            {
+                const auto at = sebeneStart + (int64_t) c * cycleTicks;
+                const int stage = c < stages[0] ? 0 : c < stages[0] + stages[1] ? 1 : c < stages[0] + stages[1] + growing ? 2 : 3;
+                if (c == 0)
+                    mark (out, at, "sebene: the accompagnement and mi-solo lock together");
+                else if (c == stages[0])
+                    mark (out, at, "sebene: the solo calls, the mi-solo answers");
+                else if (c == stages[0] + stages[1])
+                {
+                    mark (out, at, "sebene: the solo's cell, varied cycle by cycle");
+                    cell = soloCell (true);
+                }
+                else if (c == stages[0] + stages[1] + growing)
+                    mark (out, at, "sebene: the climax, higher and denser");
+                if (stage >= 2 && chance (r, 0.3))
+                    miNow = vary (mi, 1, false);   // its notes change now and then, never its places
+                if (c == 0 || c == stages[0] + stages[1] + growing)
+                    hit (out.parts[drums], at, gm::crash, 100);
+                for (int b = 0; b < 2; ++b)
+                {
+                    const auto t = at + b * bar;
+                    const int lift = stage * 4;
+                    play (accomp, acc, t, step, -1, sebeneCycle, sebeneStart, 70 + lift);
+                    play (miSolo, miNow, t, step, n - 1, sebeneCycle, sebeneStart, 72 + lift + (stage == 1 && b == 1 ? 12 : 0));
+                    if (stage == 1 && b == 0)
+                        play (solo, vary (cell, 1, false), t, step, n + 4, sebeneCycle, sebeneStart, 84);
+                    else if (stage == 2)
+                    {
+                        auto f = vary (cell, between (r, 1, 2), true);
+                        if (chance (r, 0.3))
+                            cell = f;   // the variation kept: the cell moves on
+                        play (solo, f, t, step, n + 4, sebeneCycle, sebeneStart, 86);
+                    }
+                    else if (stage == 3)
+                    {
+                        if (b == 1 && chance (r, 0.5))   // two chord tones high, picked fast
+                        {
+                            Figure tremolo;
+                            for (int i = 0; i < 16; ++i)
+                                tremolo.push_back ({ i, 1, i % 2 == 0 ? 6 : 4, 0, false });
+                            play (solo, tremolo, t, step, n + 4, sebeneCycle, sebeneStart, 92);
+                        }
+                        else
+                        {
+                            auto f = vary (cell, 2, true);
+                            for (int i = 0; i < 16; ++i)
+                                if (chance (r, 0.4) && std::none_of (f.begin(), f.end(), [i] (const Hit& h) { return h.at == i; }))
+                                    f.push_back ({ i, 1, between (r, 0, 6), 0, false });
+                            lengths (f, 16, 2);
+                            play (solo, f, t, step, n + 7, sebeneCycle, sebeneStart, 94);
+                        }
+                    }
+                    bassBar (t, sebeneCycle, sebeneStart, true, 84 + lift);
+                    pattern (out.parts[drums], t, step, "k...k...k...k...", kit, 84 + lift);
+                    pattern (out.parts[drums], t, step, "S.ssS.ssS.ssS.ss", kit, 60 + lift);   // the cavacha: the snare's running figure
+                    pattern (out.parts[drums], t, step, "..o...o...o...o.", kit, 58);
+                    pattern (out.parts[congas], t, step, "m.pmm.p.m.pmm.pl", kit, 70 + lift);
+                    // The voices' shouts to the dancers, from the third stage.
+                    if (stage >= 2 && b == 0)
+                        for (const auto& h : shout)
+                        {
+                            const auto x = t + h.at * step;
+                            const auto d = degree (h, x, 2, sebeneCycle, sebeneStart);
+                            add (out.parts[voice], x, h.len * step - step / 4, sc.key (d), 96);
+                            if (stage == 3)
+                                add (out.parts[voice2], x, h.len * step - step / 4, sc.key (d - 2), 88);
+                        }
+                }
+            }
+
+            // 5. The close: all together on the tonic.
+            const auto end = sebeneStart + (int64_t) sebeneCycles * cycleTicks;
+            mark (out, end, "the close");
+            {
+                const Cycle tonic { { I, 4 } };
+                for (int part : { solo, miSolo, accomp })
+                    play (part, Figure { { 0, 8, part == solo ? 4 : part == miSolo ? 2 : 0, 0, part == miSolo } }, end, step, part == solo ? n + 4 : part == miSolo ? n - 1 : -1, tonic, end, 100);
+                add (out.parts[bass], end, 8 * step, sc.key (-2 * n), 104);
+                add (out.parts[voice], end, 8 * step, sc.key (nearestTone (I, 2)), 90);
+                add (out.parts[voice2], end, 8 * step, sc.key (nearestTone (I, 2) - 2), 84);
+                hit (out.parts[drums], end, gm::kick, 110);
+                hit (out.parts[drums], end, gm::crash, 110, 8 * step);
+                hit (out.parts[congas], end, gm::openHiConga, 100);
+            }
+            out.end = end + bar;
+            out.parts.resize ((size_t) parts);
+            out.summary = "A rumba in " + std::to_string (songBars) + " bars, the voices in thirds and the solo answering them, then a sebene of "
+                          + std::to_string (sebeneCycles) + " two-bar cycles: the accompagnement and mi-solo interlocking, the solo's cell "
+                          "varied from call and answer to the climax";
+            return out;
+        }
     }
 
     //==========================================================================
@@ -2208,6 +2623,7 @@ namespace composition
             case Method::chineseSuite: out = chineseSuite (s, r); break;
             case Method::ostinato:     out = ostinato (s, r); break;
             case Method::hocket:       out = hocket (s, r); break;
+            case Method::congolese:    out = congolese (s, r); break;
         }
         if ((int) out.parts.size() > maxParts)
             out.parts.resize ((size_t) maxParts);
