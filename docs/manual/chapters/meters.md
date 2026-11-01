@@ -39,6 +39,8 @@ PHI measures in three places. The **Meters panel** sits beside the waveform whil
 
 []{.ix t="Analysis Meters window"}Analyze > Analysis Meters Window (`Ctrl+Alt+A`) is a mega meter suite in its own window, with Adobe Audition's analysis detail and the look of a mastering meter.
 
+[]{.ix t="Window opacity!Analysis Meters"}The **Opacity** slider at the right of its bar makes this window see-through on its own, so it can float over the editor or the Visualizer; `Ctrl+Alt+-` and `Ctrl+Alt+=` change it from the keyboard while the window is in front. It starts at the main window's opacity, and PHI remembers its own setting from then on.
+
 ![The Analysis Meters window: loudness gauge, history, levels and spectrum.](images/analysis-meters.png)
 
 | Meter | Shows |

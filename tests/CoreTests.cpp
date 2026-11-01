@@ -770,6 +770,65 @@ namespace
         };
         check (lowNoise (q) < lowNoise (p) * 0.1, "noise shaping moves the dither noise out of the low frequencies");
 
+        // The error's level in a band, for comparing the dither kinds.
+        auto bandNoise = [&] (const std::vector<float>& y, double from, double to)
+        {
+            double total = 0.0;
+            for (double hz = from; hz < to; hz += (to - from) / 8.0)
+            {
+                double re = 0.0, im = 0.0;
+                for (size_t i = 0; i < y.size(); ++i)
+                {
+                    const auto e = (double) y[i] - x[i];
+                    re += e * std::cos (2.0 * M_PI * hz * (double) i / 48000.0);
+                    im -= e * std::sin (2.0 * M_PI * hz * (double) i / 48000.0);
+                }
+                total += re * re + im * im;
+            }
+            return total;
+        };
+        {
+            // Wannamaker's 9th-order shape: far less noise where hearing is keenest (3-4 kHz), more up high.
+            const auto w = samples (*dsp::quantize (*quiet, 16, dsp::Dither::wannamaker), 0, 48000);
+            const auto l = samples (*dsp::quantize (*quiet, 16, dsp::Dither::lipshitz), 0, 48000);
+            check (bandNoise (w, 3000.0, 4000.0) < bandNoise (p, 3000.0, 4000.0) * 0.03, "Wannamaker shaping: at least 15 dB less noise at 3-4 kHz than TPDF");
+            check (bandNoise (l, 3500.0, 4500.0) < bandNoise (p, 3500.0, 4500.0) * 0.1, "Lipshitz shaping: at least 10 dB less noise near 4 kHz than TPDF");
+            check (bandNoise (w, 17000.0, 20000.0) > bandNoise (p, 17000.0, 20000.0), "Wannamaker shaping: the noise goes up high");
+
+            // High-passed TPDF: on the grid, within ±1 LSB, less noise in the bass than plain TPDF.
+            const auto h = samples (*dsp::quantize (*quiet, 16, dsp::Dither::hpTpdf), 0, 48000);
+            bool within = true;
+            for (size_t i = 0; i < h.size(); ++i)
+                within = within && std::abs (h[i] - x[i]) < 1.5 / 32768.0;
+            check (within && bandNoise (h, 100.0, 1000.0) < bandNoise (p, 100.0, 1000.0) * 0.85, "high-passed TPDF: less bass noise, within the dither");
+
+            // Truncation always rounds down; rounding without dither is never more than half a step out.
+            const auto t = samples (*dsp::quantize (*quiet, 16, dsp::Dither::truncate), 0, 48000);
+            const auto r = samples (*dsp::quantize (*quiet, 16, dsp::Dither::none), 0, 48000);
+            bool down = true, half = true;
+            for (size_t i = 0; i < t.size(); ++i)
+            {
+                down = down && t[i] <= x[i] && x[i] - t[i] <= 1.0f / 32768.0f;
+                half = half && std::abs (r[i] - x[i]) <= 0.5f / 32768.0f + 1.0e-9f;
+            }
+            check (down && half, "truncate rounds down, plain rounding stays within half a step");
+        }
+        {
+            // Auto-blanking: after about 11 ms of digital silence the dither stops, for every kind.
+            auto gap = makeSignal (48000, [] (Frame f) { return f < 12000 ? (float) (0.001 * std::sin (2.0 * M_PI * 440.0 * f / 48000.0)) : 0.0f; });
+            bool silent = true, dithered = false;
+            for (const auto kind : dsp::ditherOrder)
+            {
+                const auto y = samples (*dsp::quantize (*gap, 16, kind), 0, 48000);
+                for (size_t i = 12000 + dsp::Quantizer::silenceRun; i < y.size(); ++i)
+                    silent = silent && y[i] == 0.0f;
+                if (kind == dsp::Dither::wannamaker)
+                    for (size_t i = 12000; i < 12000 + dsp::Quantizer::silenceRun; ++i)
+                        dithered = dithered || y[i] != 0.0f;
+            }
+            check (silent && dithered, "auto-blanking: digital silence stays silent once it has lasted a moment");
+        }
+
         // The true-peak limiter keeps a loud tone under its ceiling, including the
         // peaks between samples (fs/4 at 45 degrees peaks 3 dB above its samples).
         auto loudTone = makeSignal (96000, [] (Frame f) { return (float) (1.6 * std::sin (2.0 * M_PI * 997.0 * f / 48000.0)); });
@@ -8017,6 +8076,13 @@ namespace
             const auto report = forensic::analyse (measure::run (*plain, s));
             check (report.verdict != forensic::Verdict::strong && report.verdict != forensic::Verdict::suggestive,
                    "forensic: echoes 3:2 apart are no evidence of φ (" + report.summary + ")");
+        }
+        {
+            // Bands far apart: a cut at 80 Hz × φ² and a boost at 80 Hz × φ¹⁰ are φ⁸ (47) apart.
+            const std::vector<forensic::Feature> features { { "frequency", "Notch at 209.4 Hz", 209.44, 0.003, "Hz" },
+                                                            { "frequency", "Peak at 9836 Hz", 9839.2, 0.003, "Hz" } };
+            const auto report = forensic::analyse (features);
+            check (report.matches.size() == 1 && report.matches.front().target == "φ⁸", "forensic: finds golden ratios wider than φ⁶");
         }
     }
 

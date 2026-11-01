@@ -766,7 +766,7 @@ void MasterChain::FinalDither::process (int bits, dsp::Dither type, float* const
 {
     if (bits <= 0)
         return;
-    const auto settings = (bits * 4 + (int) type) * 64 + numChannels;
+    const auto settings = (bits * dsp::numDitherTypes + (int) type) * 64 + numChannels;
     if (settings != applied)
     {
         quantizer.set (bits, type, numChannels);
@@ -1162,7 +1162,7 @@ std::string MasterChain::restore()
 
     setGainDb (xml->getDoubleAttribute ("gainDb", 0.0));
     allBypassed = xml->getBoolAttribute ("bypassed", false);
-    setDither (xml->getIntAttribute ("ditherBits", 0), (dsp::Dither) std::clamp (xml->getIntAttribute ("ditherType", 1), 0, 2));
+    setDither (xml->getIntAttribute ("ditherBits", 0), (dsp::Dither) std::clamp (xml->getIntAttribute ("ditherType", 1), 0, dsp::numDitherTypes - 1));
 
     juce::StringArray problems;
     for (auto* slot : xml->getChildWithTagNameIterator ("SLOT"))

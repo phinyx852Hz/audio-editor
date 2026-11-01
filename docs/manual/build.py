@@ -44,8 +44,9 @@ FRONT = ["copyright", "preface", "conventions"]
 PARTS = [
     ("Getting Started", ["welcome", "installation", "tour", "keyboard"]),
     ("Editing", ["files", "recording", "editing", "markers", "processing", "spectral", "repair", "warp", "nyquist-macros"]),
-    ("Mastering", ["master-section", "effects", "meters", "references-assistant", "export", "batch", "album", "metadata"]),
-    ("Producing and Performing", ["find", "mixer", "clip-launcher", "samplers", "instruments", "trackers", "spatial", "visualizer", "performance"]),
+    ("Mastering", ["master-section", "effects", "plugin-analyzer", "meters", "references-assistant", "export", "batch", "album", "metadata"]),
+    ("Producing and Performing", ["find", "mixer", "midi-editor", "clip-launcher", "samplers", "instruments", "trackers", "spatial", "visualizer", "controllers", "performance"]),
+    ("Composing", ["compose"]),
     ("Φ", ["phi"]),
     ("Making PHI Yours", ["customising"]),
 ]

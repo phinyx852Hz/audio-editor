@@ -2611,6 +2611,10 @@ void MainWindow::convertSampleType()
         rateNames << tr ("%1 Hz").arg ((int) rates[i]);
     const auto channelsNow = QString::fromStdString (dsp::speakerLayout (d->numChannels()).name);
     const int depths[] { 0, 24, 16, 8 };
+    QStringList ditherNames;
+    for (const auto kind : dsp::ditherOrder)
+        ditherNames << ditherLabel (kind);
+    const auto shapedIndex = (double) (std::find (dsp::ditherOrder.begin(), dsp::ditherOrder.end(), dsp::Dither::shaped) - dsp::ditherOrder.begin());
 
     // The choices start at "keep" each time rather than at what was picked last.
     for (auto key : { "convert/rate", "convert/channels", "convert/bits" })
@@ -2624,10 +2628,10 @@ void MainWindow::convertSampleType()
                                { tr ("Keep %1").arg (channelsNow), tr ("Mono (mix all channels)"), tr ("Stereo") } },
                              { QStringLiteral ("convert/bits"), tr ("&Bit depth:"), 0, 0, 0, 1, 0, {}, {},
                                { tr ("Keep (32-bit float while editing)"), tr ("24-bit"), tr ("16-bit"), tr ("8-bit") } },
-                             { QStringLiteral ("convert/dither"), tr ("&Dither:"), 2, 0, 0, 1, 0, {},
+                             { QStringLiteral ("convert/ditherKind"), tr ("&Dither:"), shapedIndex, 0, 0, 1, 0, {},
                                tr ("Dither hides the rounding of a lower bit depth as faint hiss; noise shaping moves that hiss "
                                    "where it is hardest to hear"),
-                               { tr ("None"), tr ("TPDF"), tr ("TPDF with noise shaping") } },
+                               ditherNames },
                          }, this);
     if (dialog.exec() != QDialog::Accepted)
         return;
@@ -2636,7 +2640,7 @@ void MainWindow::convertSampleType()
     const auto newRate = rates[std::clamp ((int) dialog.value (0), 0, (int) std::size (rates) - 1)];
     const auto channels = (int) dialog.value (1);
     const auto bits = depths[std::clamp ((int) dialog.value (2), 0, 3)];
-    const auto dither = (dsp::Dither) std::clamp ((int) dialog.value (3), 0, 2);
+    const auto dither = dsp::ditherOrder[(size_t) std::clamp ((int) dialog.value (3), 0, dsp::numDitherTypes - 1)];
     const auto changeRate = newRate > 0.0 && std::abs (newRate - d->sampleRate()) > 0.5;
     const auto changeChannels = (channels == 1 && d->numChannels() != 1) || (channels == 2 && d->numChannels() != 2);
     if (! changeRate && ! changeChannels && bits == 0)
