@@ -407,6 +407,9 @@ private:
     void registerComposeCommands();
     void fillComposeMenu (QMenu*);
     void composeDialog (int method = -1);
+    // The Bol Processor (BolProcessorDialog.cpp, docs/bol-processor.md): Bel and Kippen's BP3 run
+    // on a grammar file, its items read back as bols on the tablā, or its MIDI file.
+    void bolProcessorDialog();
     // A blank score in the MIDI editor on `notation` ("phi": PHI's microtonal staff).
     void newMicrotonalScore (const QString& notation);
     class ArchitectonicsConductor* conductor = nullptr;

@@ -1,2 +1,3 @@
 cmake/patches/*.patch -text
 cmake/instruments/**/*.patch -text
+third_party/bolprocessor/** -text

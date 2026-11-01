@@ -97,6 +97,8 @@ As a rhythm it feels like a groove that keeps nearly repeating and then shifts. 
 
 Sonify uses the same word for its drums: with **Φ rhythm** on, a drum only strikes on the ones.
 
+[]{.ix t="Φ Repeat"}[]{.ix t="beat repeat"}**Φ Repeat** is a beat repeat, for glitches and rhythmic variations. At every **Interval** (1/32 to 4 bars), moved later by **Offset** in sixteenths, it may catch one **Grid** of the sound (1/2 to 1/128, or **Triplets**) and play it again and again for the **Gate**, in sixteenths. **Chance** decides whether each interval repeats; turn on **Φ Golden** and the Fibonacci word decides instead, so the repeats fall on Φ Rhythm's never-repeating, never-clumping pattern at Chance's share of the points. **Variation** halves the grid at random, up to four times, once per repeat (*Trigger*), every 1/4, 1/8 or 1/16, or on every repetition (*Auto*). **Pitch** plays the slice lower (down to −48 semitones), **Pitch Decay** drops each repetition up to 3 semitones more, and **Decay** fades the repeats out by the gate's end. **Filter** passes a band (**Frequency**, **Width** in octaves) of the repeats only. **Mode** keeps the dry sound under them (*Mix*), cuts it while they play (*Insert*) or never lets it through (*Gate*); **Volume** sets their level; hold **Repeat** (or map it to a macro) to repeat right now, whatever the chance. Put it on a ray of a Prism to glitch one band or only the side. It follows the host's tempo when there is one, else its **Tempo**.
+
 ### Motion that never repeats
 
 []{.ix t="Φ Drift"}[]{.ix t="Quasi-periodic motion"}An LFO repeats: a chorus or tremolo at 1 Hz sounds exactly the same every second, and the ear soon hears the loop. Add a second LFO at 2 Hz and the pair still repeats every second. Add one at 1.618 Hz instead and the pair never comes back to the same shape. **Φ Drift** sums three LFOs at the rate, the rate × φ and the rate × φ² (0.618, 1 and 1.618 Hz by default). The result is motion that is smooth and steady but never loops. It drives a chorus, a tremolo or an auto-pan.
@@ -184,7 +186,7 @@ What the golden ratio really offers is the one property this chapter began with:
 | Φ Tame | A cut at the fundamental × 8.09 | A rule of thumb that often helps |
 | Φ Echo | Taps that never meet, panned by the golden angle | Character |
 | Φ Drift | Motion that never loops | Character |
-| Φ Rhythm, Sonify's Φ rhythm | A rhythm that never repeats and never clumps | Experiment |
+| Φ Rhythm, Φ Repeat's Golden, Sonify's Φ rhythm | A rhythm that never repeats and never clumps | Experiment |
 | Φ Stack, Φ Resonator, Sonify's Φ scale | Pitches between the keys that still belong together | Experiment |
 
 ::: tip
@@ -202,6 +204,7 @@ The quality features are safe to leave on: the Φ switches in Stereoize and Mid/
 | Φ Space | Size, Decay (2 s), Damping, Mix, Pre-delay (13 ms) | Eight lines √φ apart: a smooth reverb |
 | Φ Drift | Mode (Chorus, Tremolo, Pan), Rate (0.618 Hz), Depth, Mix | Three LFOs at rate × 1, φ, φ² |
 | Φ Rhythm | Tempo, Density (61.8 % to 14.6 %), Shift, Depth, Step, Smooth | A gate playing the Fibonacci word |
+| Φ Repeat | Interval (1 bar), Offset (8/16), Grid (1/16), Triplets, Gate (8/16), Chance (100 %), Φ Golden, Variation, Var. Mode, Repeat, Pitch, Pitch Decay, Decay, Filter, Frequency, Width, Mode (Insert), Volume, Tempo | A beat repeat: slices repeated on the beat, by chance or the golden rhythm |
 | Φ Resonator | Root (220 Hz), Bands (5), Sharpness (Q 30), Mix, Width, Noise, Output | Narrow bands at root × φⁿ |
 | Φ Stack | Copies (4), Decay, Tone (8 kHz), Mix, Width | Copies pitched up by φ, φ², φ³, φ⁴ |
 | Φ Tame | Depth, Fundamental (55 Hz), Width (Q 1.618), Find Fundamental | A cut at the fundamental × φ ÷ 2 × 10 |

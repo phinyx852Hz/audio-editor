@@ -51,9 +51,12 @@ namespace composition
         // Africa.
         ostinato,         // Ewe (Ghana, Togo): layered ostinati on the bell's timeline, the lead drum's calls
         hocket,           // Central Africa (Banda-Linda horns, Aka): one note a player, interlocked
-        congolese         // Congolese rumba and soukous: interlocking guitars, a sung rumba, then the sebene
+        congolese,        // Congolese rumba and soukous: interlocking guitars, a sung rumba, then the sebene
+        // Added later, so the earlier methods keep their seeds; methods() lists them by region.
+        interlocking,     // Mbuti and Aka voices: independent short figures whose composite is a melody none sings
+        bolGrammar        // Bol Processor (Bel and Kippen): a tablā qāʿida derived by a weighted grammar
     };
-    constexpr int numMethods = 19;
+    constexpr int numMethods = 21;
 
     struct MethodInfo
     {

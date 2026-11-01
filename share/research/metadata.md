@@ -76,7 +76,7 @@ its maker and its history.
 - [Semiotics](https://en.wikipedia.org/wiki/Semiotics), Wikipedia.
 - [Jakobson's functions of language](https://en.wikipedia.org/wiki/Jakobson%27s_functions_of_language),
   Wikipedia.
-- [Metacommunication](https://en.wikipedia.org/wiki/Metacommunication), Wikipedia.
+- [Meta-communication](https://en.wikipedia.org/wiki/Meta-communication), Wikipedia.
 - [Paratext](https://en.wikipedia.org/wiki/Paratext), Wikipedia.
 - Charles Sanders Peirce, *Collected Papers*, vol. 2, *Elements of Logic* (Harvard, 1932).
 - Roman Jakobson, "Linguistics and Poetics", in Thomas Sebeok (ed.), *Style in Language* (MIT
@@ -116,7 +116,7 @@ any sound.
 - [Jean-Jacques Nattiez](https://en.wikipedia.org/wiki/Jean-Jacques_Nattiez), Wikipedia.
 - [Pierre Schaeffer](https://en.wikipedia.org/wiki/Pierre_Schaeffer), Wikipedia.
 - [Soundscape](https://en.wikipedia.org/wiki/Soundscape), Wikipedia.
-- [Musical semiotics](https://en.wikipedia.org/wiki/Musical_semiotics), Wikipedia.
+- [Music semiology](https://en.wikipedia.org/wiki/Music_semiology), Wikipedia.
 - [Acousmatic sound](https://en.wikipedia.org/wiki/Acousmatic_sound), Wikipedia.
 - Jean-Jacques Nattiez, *Music and Discourse: Toward a Semiology of Music* (Princeton University
   Press, 1990).
@@ -242,8 +242,8 @@ be paid on.
 
 The audio CD (Philips and Sony's Red Book, 1980) carried almost no metadata: track starts and
 the subcode's Q channel, which can hold each track's ISRC and the disc's Media Catalog Number.
-**CD-Text** (Sony, 1996) added titles and performers in the lead-in. The **CUE sheet**, a plain
-text file from Jeff Arnold's CDRWIN in the late 1990s, describes a disc's tracks, pauses, ISRCs
+**CD-Text**, backed by Sony and specified in the MMC-3 standard of September 1996, added titles
+and performers in the lead-in. The **CUE sheet**, a plain text file first introduced by the CD burning program CDRWIN, describes a disc's tracks, pauses, ISRCs
 and CD-Text beside a single audio file, and is still the common sidecar for album masters. The
 **DDP** (Disc Description Protocol, Doug Carson & Associates) is the image factories press from.
 
@@ -298,8 +298,7 @@ a SMPTE **UMID** (a unique material identifier), five **loudness** values (integ
 loudness range, maximum true peak, maximum momentary and short-term loudness) and the **coding
 history**, one line per conversion the audio has been through.
 
-The European Broadcasting Union published it as EBU Tech 3285 in 1997; version 1 (2001) added
-the UMID and version 2 (2011) the loudness fields after EBU R 128. AES31 made it the file format
+The European Broadcasting Union published it as EBU Tech 3285 in 1997; version 1 (2001) added the UMID and version 2 (2011) the loudness fields after EBU R 128. AES31 made it the file format
 for exchanging projects between DAWs. PHI writes version 2 and fills the loudness from its own
 measurement.
 
@@ -320,8 +319,8 @@ producer application and version, a user field, the level reference, a URL, tag 
 **timers** in samples (SEG segue points, INT intro, AUD audio start and end and others) for the
 automation to fade and talk over.
 
-Named after the NAB tape cartridges radio stations played spots and songs from from the 1960s
-on. A group of radio automation makers drew it up as CartChunk around 2000, and the Audio
+Named after the NAB tape cartridges (the Fidelipac, introduced at the 1959 NAB convention) that
+radio stations played spots, jingles and songs from until the late 1990s. A group of radio automation makers drew it up as CartChunk around 2000, and the Audio
 Engineering Society standardized it as AES46-2002. Its fields have fixed lengths, which PHI's
 editor enforces.
 
@@ -330,7 +329,7 @@ intro and segue timers let DJs and automation talk up to the vocal and crossfade
 point.
 
 - [Fidelipac](https://en.wikipedia.org/wiki/Fidelipac), Wikipedia. (the NAB cartridge)
-- [Radio automation](https://en.wikipedia.org/wiki/Radio_automation), Wikipedia.
+- [Broadcast automation](https://en.wikipedia.org/wiki/Broadcast_automation), Wikipedia.
 - [Broadcast Wave Format](https://en.wikipedia.org/wiki/Broadcast_Wave_Format), Wikipedia.
 - AES46-2002, *Radio traffic audio delivery extension to the broadcast-WAVE-file format*,
   [Audio Engineering Society standards](https://www.aes.org/publications/standards/).
@@ -343,15 +342,17 @@ frame, sample rate, the timestamp since midnight), the track list with each trac
 function, the file set of a multitrack recording, history (original and parent files), location
 (name, GPS, altitude) and user fields.
 
-Proposed in 2004 by a group of field recorder and post-production software makers, coordinated
-by Gallery Software, so that what a sound recordist types on set reaches the editor. It
+Agreed at a meeting of makers of field recorders, editing systems and DAWs hosted by the
+Institute of Broadcast Sound in London on 8 July 2004 (the "i" is for the IBS); Mark Gilbert of
+Gallery, John Ellwood of Synchro Arts and Jean-Pierre Beauviala of Aaton started the
+specification, so that what a sound recordist types on set reaches the editor. It
 is open and extensible: PHI keeps every element by its path, so fields it has no name for survive.
 
 For music production: essential for film and television sound, location and session
 recordings, where track names and timecode must reach the editing room. In a music studio it is
 a good place for take and scene notes of a multitrack session.
 
-- [iXML specification](http://www.gallery.co.uk/ixml/).
+- [iXML specification](http://www.ixml.info/).
 - [iXML](https://en.wikipedia.org/wiki/IXML), Wikipedia.
 
 ## AIFF text chunks
@@ -381,7 +382,7 @@ fields, the W frames for web pages, TXXX user frames (PHI's barcode and catalogu
 **APIC** pictures (cover art), **CHAP** and **CTOC** chapters, and **PRIV** private frames, where
 PHI keeps an MP3's XMP.
 
-Eric Kemp wrote ID3 in 1996 for his program Studio3; Michael Mutschler added the track number in
+Eric Kemp proposed ID3 in 1996, a year after MP3 was published without any place for tags; Michael Mutschler added the track number in
 1997 (v1.1). Martin Nilsson and others designed ID3v2 in 1998; version 2.3 (1999) is still the
 most widely read, and 2.4 (2000) added UTF-8 and new date frames. The chapter frames came in 2005
 for podcasts and audiobooks. PHI writes either 2.3 or 2.4, with v1 as well if wanted, and writes
@@ -423,7 +424,7 @@ cprt copyright, tmpo tempo, ©grp grouping, ©too encoder, cpil compilation, **c
 freeform `----:com.apple.iTunes:` atoms for ISRC, label, barcode, key, lyricist, conductor,
 subtitle and language. XMP goes in Adobe's top-level uuid box.
 
-The MP4 container is ISO/IEC 14496-14 (2003), built on Apple's QuickTime format (1991). The
+The MP4 container is ISO/IEC 14496-14 (MPEG-4 Part 14, 2001), built on Apple's QuickTime format (1991). The
 iTunes atoms are Apple's, not ISO's, from iTunes (2001) and the iTunes Store (2003); they became
 the de facto standard because every player follows Apple.
 
@@ -441,8 +442,8 @@ The tags of WavPack, Monkey's Audio (APE), Musepack and OptimFROG: items with fr
 Lyricist, Conductor, Lyrics, Copyright, Publisher, ISRC, Barcode, BPM, Language, Related URL,
 Media, Catalog), UTF-8 values, and binary items such as the cover art, at the end of the file.
 
-APE tags came with Matthew Ashland's Monkey's Audio around 2000; Frank Klemm revised them as
-APEv2 for Musepack. They are free form like Vorbis comments but binary-safe.
+APEv1 was designed for Matthew T. Ashland's Monkey's Audio; Frank Klemm, the developer of
+Musepack, extended it as APEv2, with a header so that the tag can also sit at the start of a file. They are free form like Vorbis comments but binary-safe.
 
 For music production: mostly for lossless archives in WavPack, which also stores floating point
 and multichannel audio.
@@ -459,7 +460,7 @@ are simple text, language alternatives (one per language, with x-default), unord
 ordered sequences, and structures. Anyone can define a namespace, so it holds what no other
 schema does.
 
-Adobe introduced XMP in 2001 with Acrobat 5 and made it the metadata of all its applications;
+Adobe introduced XMP in April 2001 with Acrobat 5.0 (it had been called XAP before) and made it the metadata of all its applications;
 it became ISO 16684-1 in 2012. In audio files it lives in the WAV **_PMX** chunk, the AIFF APPL
 chunk, the MP4 **uuid** box, an ID3 **PRIV** frame in MP3, or a **sidecar .xmp** beside a file
 that cannot hold it. Audition stores its markers and the edit history here (xmpDM:Tracks,
@@ -484,7 +485,7 @@ subject (keywords), rights, publisher, contributor, date, language, format, iden
 relation, coverage and type.
 
 Agreed at the OCLC and NCSA workshop in Dublin, Ohio, in March 1995 so that web documents could
-be described without a librarian; it became ISO 15836 (2003) and is kept by the Dublin Core
+be described without a librarian; it became ISO 15836 (2003; ISO 15836-1 since 2017) and is kept by the Dublin Core
 Metadata Initiative. XMP took it as its first namespace.
 
 For music production: the most portable of the XMP schemas. dc:title, dc:creator, dc:rights and
