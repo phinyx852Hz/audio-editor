@@ -12,8 +12,8 @@ the pull request for the owner to open by hand. The Siberian drum's construction
 cosmos painted on it are partly from memory. The circumpolar drum types, Honko, Bogoras on the
 Chukchi, Bäckman, the painting of Sámi drums and the three hidden South Sámi drums are from
 Birgitta Berglund's 2010 chapter, and the Khakas drums from Victoria Soyan Peemot's 2017
-article, both of which the owner supplied as PDFs, as was Neher's 1962 paper, from which his
-entry is taken.
+article, both of which the owner supplied as PDFs, as were Neher's 1962 paper and Fachner's 2011
+chapter, from which the trance entry is taken.
 Later the same day the owner allowed those sites; the Library of Congress post on the Paulsen
 drum was opened and agrees with the entry.
 -->
@@ -182,15 +182,26 @@ constantly; those who enter trance learn to, in a setting that expects it, while
 the same drums do not; and "if Neher were right, half of Africa would be in a trance from the
 beginning of the year to the end". For Rouget music is the trigger of trance only within a
 culture's expectations, and the relation between music and trance takes as many forms as there
-are cultures. Later studies have not settled the question.
+are cultures.
+
+Jörg Fachner's review (2011) weighs both. Neher's laboratory drums beat at 3, 4, 6 and 8 a
+second, in the brain's theta range rather than the alpha range of flicker; 8 to 13 beats a second
+is hard for one drummer, though a group can reach it by interlocking their strokes, and
+sequencers can now hold it indefinitely, which is how the idea came back in rave culture, to
+explain trance on the techno dance floor. Brain waves do follow outside rhythms, but Neher read
+his result by eye from the EEG trace rather than by measurement, and no one has replicated it; a
+2006 Stanford symposium on brainwave entrainment presented no replication. What is better
+established is the body's part: in long drumming and dancing, movement, breath and heartbeat fall
+into step, and the pressure swings this sets up in the blood lower cortical arousal and raise
+theta activity.
 
 - Andrew Neher, "A Physiological Explanation of Unusual Behavior in Ceremonies Involving Drums",
   *Human Biology* 34, no. 2 (1962), pp. 151–160.
 - Gilbert Rouget, *Music and Trance: A Theory of the Relations Between Music and Possession*,
   translated by Brunhilde Biebuyck (University of Chicago Press, 1985).
 - Jörg Fachner, "Time Is the Key: Music and Altered States of Consciousness", in Etzel Cardeña
-  and Michael Winkelman (eds), *Altering Consciousness: Multidisciplinary Perspectives*, vol. 1
-  (Praeger, 2011), pp. 355–376,
+  and Michael Winkelman (eds), *Altering Consciousness: A Multidisciplinary Perspective*, vol. 1:
+  *History, Culture and the Humanities* (Praeger, 2011), pp. 355–376,
   [online](https://jyx.jyu.fi/handle/123456789/36926).
 
 ## Core shamanism and the modern drum
