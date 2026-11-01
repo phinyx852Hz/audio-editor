@@ -69,6 +69,35 @@ namespace
 }
 
 //==============================================================================
+bool gunzip (const std::string& path, std::string& out, std::string& error)
+{
+    out.clear();
+    auto* f = gzopen (path.c_str(), "rb");
+    if (f == nullptr)
+    {
+        error = path + " could not be opened";
+        return false;
+    }
+    char buffer[1 << 16];
+    for (;;)
+    {
+        const auto n = gzread (f, buffer, sizeof (buffer));
+        if (n < 0)
+        {
+            int code = 0;
+            error = path + ": " + gzerror (f, &code);
+            gzclose (f);
+            return false;
+        }
+        if (n == 0)
+            break;
+        out.append (buffer, (size_t) n);
+    }
+    gzclose (f);
+    return true;
+}
+
+//==============================================================================
 bool Reader::open (const std::string& path, std::string& error)
 {
     list.clear();

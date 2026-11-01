@@ -1959,7 +1959,7 @@ void MainWindow::showOpenDialog()
 
     const auto start = doc.path().empty() ? QString() : QFileInfo (QString::fromStdString (doc.path())).absolutePath();
     patterns << QStringLiteral ("*.") + albumfile::extension << QStringLiteral ("*.") + albumfile::oldExtension
-             << QStringLiteral ("*.") + MixerWindow::projectSuffix << QStringLiteral ("*.dawproject");
+             << QStringLiteral ("*.") + MixerWindow::projectSuffix << QStringLiteral ("*.dawproject") << QStringLiteral ("*.als");
     const auto path = QFileDialog::getOpenFileName (this, tr ("Open Audio File"), start,
                                                     tr ("Audio files, albums and projects (%1);;All files (*)").arg (patterns.join (QLatin1Char (' '))));
     if (! path.isEmpty())

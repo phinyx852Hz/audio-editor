@@ -93,6 +93,20 @@ namespace dawproject
         std::vector<NoteClip> noteClips;
         std::vector<Slot> slots;
 
+        // A drum machine's pads (Live's Drum Rack), for PHI's Slicer: each pad a sound file.
+        struct Pad
+        {
+            int note = 36;                 // the MIDI note it answers
+            std::string name, file;
+            double start = 0.0, end = -1.0;   // seconds into the file; end -1: to its end
+            double gainDb = 0.0, pan = 0.0, pitch = 0.0;   // pitch in semitones
+            int choke = 0;                 // 0 none, else 1..16
+            bool gate = false, mute = false;
+        };
+        std::vector<Pad> kit;
+        // A one-sample instrument (Live's Simpler), for PHI's Sampler: the file, or empty.
+        std::string samplerFile;
+
         const Device* instrument() const;
     };
 
@@ -124,6 +138,10 @@ namespace dawproject
     // The notes of a MIDI file heard in a clip: from `offset` seconds into it for `length`
     // seconds, its time from its own tempo map (`fixedBpm` 0) or that tempo, in beats at `bpm`.
     std::vector<Note> notesOf (const midifile::Song&, double offset, double length, double fixedBpm, double bpm);
+
+    // A clip's notes over its `length` from `playStart` in its content (beats), once, or with
+    // the loop from loopStart to loopEnd over and over; notes are cut at the loop's end.
+    std::vector<Note> laidOut (const std::vector<Note>& content, double playStart, double length, double loopStart, double loopEnd, bool loops);
 
     // A .vstpreset's class id (32 hex digits), empty when it is not one.
     std::string vstPresetClassId (const std::vector<uint8_t>&);
