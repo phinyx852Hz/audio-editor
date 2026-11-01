@@ -11,7 +11,7 @@ their facts were checked against search-engine extracts of the pages, and the li
 in the pull request for the owner to open by hand.
 Later the same day the owner allowed those sites, and the Percussive Arts Society pages, Layne
 Redmond's 2012 article and the World History Encyclopedia were opened and checked; Britannica
-refuses automated reading and is still to be opened by hand.
+refuses automated reading; the owner opened its frame drum article by hand and it agrees.
 -->
 
 # Frame Drums
