@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**135 pull requests:** 130 merged, 5 open.
+**136 pull requests:** 131 merged, 5 open.
 
 ## Contents
 
@@ -55,6 +55,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#118](https://github.com/phinyx852Hz/audio-editor/pull/118) | MIDI editor: Ableton-style note keys and mouse gestures | merged |  | `Source/ui/MidiEditor.cpp`<br>`Source/mixer/NoteEditor.cpp`<br>`docs/midi-editor.md` |
 | [#119](https://github.com/phinyx852Hz/audio-editor/pull/119) | Closing the main editor's MIDI editor stops playback and offers to save | merged |  | `Source/ui/MidiPanel.cpp`<br>`Source/ui/MixerSection.cpp`<br>`Source/ui/MidiPanel.h` |
 | [#123](https://github.com/phinyx852Hz/audio-editor/pull/123) | Research: add an Editing section | merged | Research > Editing | `share/research/editing-1-editors.md`<br>`share/research/editing-0-basics.md` |
+| [#136](https://github.com/phinyx852Hz/audio-editor/pull/136) | Mixer: open Ableton Live Sets (.als), a Drum Rack on the Slicer | open |  | `Source/mixer/AbletonSet.cpp`<br>`tests/CoreTests.cpp`<br>`Source/ui/DawProjectSection.cpp` |
 
 ### Analysis and meters
 
@@ -96,7 +97,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#101](https://github.com/phinyx852Hz/audio-editor/pull/101) | Mixer: room for 16 tracks, and strips that zoom from wide to just the fader | merged | Strips > 16 Tracks | `Source/ui/MixerWindow.cpp`<br>`Source/ui/MixerWindow.h`<br>`docs/mixer.md` |
 | [#108](https://github.com/phinyx852Hz/audio-editor/pull/108) | Mixer: Arm on Select prefs, system input, close the Inspector, black names, drag tracks to reorder | merged | Options > Mixer Preferences... | `Source/ui/MixerWindow.cpp`<br>`Source/ui/MixerWindow.h`<br>`docs/mixer.md` |
 | [#113](https://github.com/phinyx852Hz/audio-editor/pull/113) | Fix the crash on quit with the mixer open | merged |  | `Source/ui/MainWindow.cpp`<br>`Source/ui/Panels.h`<br>`Source/ui/Panels.cpp` |
-| [#135](https://github.com/phinyx852Hz/audio-editor/pull/135) | Mixer: open and write DAWproject (Bitwig, Studio One, Cubase) | open |  | `Source/mixer/DawProject.cpp`<br>`Source/ui/DawProjectSection.cpp`<br>`Source/core/Zip.cpp` |
+| [#135](https://github.com/phinyx852Hz/audio-editor/pull/135) | Mixer: open and write DAWproject (Bitwig, Studio One, Cubase) | merged |  | `Source/mixer/DawProject.cpp`<br>`Source/ui/DawProjectSection.cpp`<br>`Source/core/Zip.cpp` |
 
 ### Routing and racks
 
@@ -373,4 +374,5 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#132](https://github.com/phinyx852Hz/audio-editor/pull/132) | Compose: Mbuti interlocking, the Bol Processor (BP3) with an Ajrada qāʿida, and PHI tabla | 1. *(auto)* | merged | 2026-11-01 | Not yet sorted |
 | [#133](https://github.com/phinyx852Hz/audio-editor/pull/133) | Add Φ Repeat, a beat repeat effect | A new built-in Φ effect, Φ Repeat: a tempo-synced beat repeat for glitches and rhythmic variations. *(auto)* | merged | 2026-11-01 | Φ effects and sounds |
 | [#134](https://github.com/phinyx852Hz/audio-editor/pull/134) | Research: check the Metadata section against Wikipedia | Links *(auto)* | merged | 2026-11-01 | Not yet sorted |
-| [#135](https://github.com/phinyx852Hz/audio-editor/pull/135) | Mixer: open and write DAWproject (Bitwig, Studio One, Cubase) | PHI can now open and write DAWproject, the open format from Bitwig and PreSonus (MIT). *(auto)* | open | 2026-10-31 | Mixer and clip launcher |
+| [#135](https://github.com/phinyx852Hz/audio-editor/pull/135) | Mixer: open and write DAWproject (Bitwig, Studio One, Cubase) | PHI can now open and write DAWproject, the open format from Bitwig and PreSonus (MIT). *(auto)* | merged | 2026-11-01 | Mixer and clip launcher |
+| [#136](https://github.com/phinyx852Hz/audio-editor/pull/136) | Mixer: open Ableton Live Sets (.als), a Drum Rack on the Slicer | The second of two PRs (the first, #135, added DAWproject). *(auto)* | open | 2026-11-01 | Editing and warping |
