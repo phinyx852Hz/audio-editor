@@ -7802,6 +7802,18 @@ bool MixerWindow::eventFilter (QObject* o, QEvent* e)
             }
             return true;
         }
+        // Shift+wheel over the strips scrolls them sideways, Alt+wheel up and down (owner,
+        // 2026-11-01), whatever fader or pot is under the mouse. Qt gives Alt+wheel as sideways
+        // already, so both deltas count.
+        const auto mods = wheel->modifiers() & (Qt::ShiftModifier | Qt::AltModifier | Qt::ControlModifier);
+        if (overStrips && (mods == Qt::ShiftModifier || mods == Qt::AltModifier))
+        {
+            auto* bar = mods == Qt::ShiftModifier ? stripScroll->horizontalScrollBar() : stripScroll->verticalScrollBar();
+            const auto delta = wheel->pixelDelta().isNull() ? (wheel->angleDelta().y() + wheel->angleDelta().x()) / 2
+                                                            : wheel->pixelDelta().y() + wheel->pixelDelta().x();
+            bar->setValue (bar->value() - delta);
+            return true;
+        }
     }
     return QWidget::eventFilter (o, e);
 }
@@ -11200,6 +11212,40 @@ void MixerWindow::keyPressEvent (QKeyEvent* e)
         changed();
     };
 
+    // Keyboard picking (owner, 2026-11-01): Shift+Left/Right picks the next strip too (or lets
+    // the last go), for Ctrl+G without the mouse; Ctrl+Left/Right goes to the previous or next
+    // track in no folder, over a folder's tracks; Ctrl+Space picks or lets go of the selected one.
+    if (! master && (key == Qt::Key_Left || key == Qt::Key_Right) && (mods == Qt::ShiftModifier || mods == Qt::ControlModifier))
+    {
+        const int step = key == Qt::Key_Right ? 1 : -1, count = engine.numTracks();
+        if (mods == Qt::ShiftModifier)
+        {
+            const auto next = std::clamp (selected + step, 0, count - 1);
+            if (picked.size() == 1)
+                pickAnchor = selected;
+            pickRange (next);
+        }
+        else
+        {
+            auto next = selected + step;
+            while (next >= 0 && next < count && engine.groupOf (next) >= 0)
+                next += step;
+            if (next >= 0 && next < count)
+                pickOnly (next);
+        }
+        if (stripScroll != nullptr && selected < count)
+            stripScroll->ensureWidgetVisible (strips[(size_t) selected], 40, 0);
+        return;
+    }
+    if (! master && key == Qt::Key_Space && mods == Qt::ControlModifier)
+    {
+        if (picked.count (selected) && picked.size() > 1)
+            picked.erase (selected);
+        else
+            picked.insert (selected);
+        showPicks();
+        return;
+    }
     if (mods == Qt::ControlModifier || mods == (Qt::ControlModifier | Qt::ShiftModifier))
     {
         const bool withShift = (mods & Qt::ShiftModifier) != 0;

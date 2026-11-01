@@ -760,6 +760,12 @@ is the patchbay's Mix Bus. Mix Down still renders the mixer's own sum.
   a click picks one track, Ctrl+click adds or takes one, Shift+click picks the range from the last
   one clicked, and a click in empty space (between the strips, under the rows) leaves only the
   selected track picked. Picked tracks show a dashed outline; Q-Link uses the same picks.
+- From the keyboard (owner, 2026-11-01, "what would you suggest for keyboard only navigation"):
+  Left/Right move between the strips as before; Shift+Left/Right picks the next strip too (back
+  towards where it started lets it go), Ctrl+Space picks or lets go of the selected track, and
+  Ctrl+Left/Right jumps to the previous or next track in no folder, over a folder's tracks. Over
+  the strips, Shift+wheel scrolls them sideways and Alt+wheel up and down, whatever is under the
+  mouse.
 - Ctrl+G makes the first picked track a folder and puts the other picked tracks in it, moved right
   under it in their order (after any tracks already in it), the tracks in any picked folder going
   along; no track is added. Ctrl+Shift+G takes the picked tracks out of their folder (a level up);
