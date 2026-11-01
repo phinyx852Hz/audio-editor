@@ -5595,6 +5595,14 @@ namespace
         check (near (ga.hz, 293.6647679174076 * 32.0 / 27.0, 1.0e-9) && near (player.hzAt (ga, 0.0), ga.hz, 1.0e-9)
                && near (1200.0 * std::log2 (ga.hz / player.hzAt (ga, 1.0)), 20.0, 1.0e-9) && near (player.hzAt (ga, 2.0), ga.hz, 1.0e-9),
                "raga player: tuned svaras, and andolan swings below and back");
+        // In equal temperament the swing is centred: it starts on the svara and averages it.
+        player.setCentredSwing (true);
+        double meanCents = 0.0;
+        for (int i = 0; i < 200; ++i)
+            meanCents += 1200.0 * std::log2 (player.hzAt (ga, i / 100.0) / ga.hz) / 200.0;
+        check (near (player.hzAt (ga, 0.0), ga.hz, 1.0e-9) && std::abs (meanCents) < 0.5 && near (1200.0 * std::log2 (ga.hz / player.hzAt (ga, 0.5)), 10.0, 1.0e-9),
+               "raga player: a centred andolan swings either side of the svara");
+        player.setCentredSwing (false);
         // Mīṇḍ in khamāj from G up to S': through m, P, D and N (the āroha's), 0.4 s, then there.
         player.setOrnaments (1.0);
         player.setRaga (&byPlain ("khamaj"), 60);

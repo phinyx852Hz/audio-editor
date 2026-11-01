@@ -249,6 +249,7 @@ mixer.sendToTimeline	Mixer	Send to Timeline	Alt+Shift+F3
 mixer.editNotes	Mixer	Edit MIDI Notes	Alt+Shift+N
 mixer.trackToEditor	Mixer	Render the Editor's Track to a Tab	
 mixer.assistant	Mixer	Mix Assistant	Alt+Shift+X
+view.inspector	Mixer	Mixer Inspector	Ctrl+I
 mixer.patchbay	Mixer	Patchbay	F4
 reference.toggle	References	Switch Between Your Audio and Reference	A
 reference.next	References	Next Reference	Shift+A
@@ -362,3 +363,5 @@ mode.tuneTrack	Mode	tune the track
 research.search	Research	Search Research	
 research.all	Research	All References	
 research.edit	Research	Edit References	
+options.wallpaper	Options	Wallpaper	
+options.chooseWallpaper	Options	Choose Wallpaper Picture	

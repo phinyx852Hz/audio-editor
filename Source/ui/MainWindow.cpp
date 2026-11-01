@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MainWindow.h"
+#include "MidiPanel.h"
 #include "MixerWindow.h"
 #include "PatchBayWindow.h"
 #include "../patchbay/PatchBay.h"
@@ -57,6 +58,7 @@
 #include "RecordDialog.h"
 #include "ReferencePanel.h"
 #include "Theme.h"
+#include "Wallpaper.h"
 #include "WaveformView.h"
 
 #include <QActionGroup>
@@ -220,6 +222,7 @@ MainWindow::MainWindow (AudioEngine& e)
     });
     restoreLayout();
     buildNavigation();
+    syncWallpaper();
 
     connect (waveform, &WaveformView::cursorRequested, this, [this] (Frame f) { setCursor (waveform->snapToGrid (f)); });
     connect (waveform, &WaveformView::selectionMoved, this, &MainWindow::moveSelection);
@@ -334,8 +337,21 @@ MainWindow::~MainWindow()
     delete midiPanel;            // lets go of its patchbay synth
     midiPanel = nullptr;
     patchBay = nullptr;          // its synths and effects, and it lets go of the mixer
-    delete mixerWin;             // before the mixer's engine and its instruments
-    mixerWin = nullptr;
+    // Nothing reacts to the pages coming down (crash on quit, 2026-10-30): taking the mixer out
+    // of the stack switches the page, and that laid the instruments out in its half-gone hosts.
+    if (centralStack != nullptr)
+        disconnect (centralStack, &QStackedWidget::currentChanged, this, nullptr);
+    if (mixerWin != nullptr)
+    {
+        disconnect (mixerWin, nullptr, this, nullptr);
+        for (QObject* sender : { (QObject*) qApp, (QObject*) findWidget, (QObject*) findPanel->dock() })
+            disconnect (sender, nullptr, mixerWin, nullptr);
+        for (auto* p : { samplerPanel, slicerPanel })
+            if (p != nullptr)
+                p->takeBack();   // lent into the mixer, they would go with it
+    }
+    // Null while it goes, so whatever still looks finds no mixer rather than half of one.
+    delete std::exchange (mixerWin, nullptr);   // before the mixer's engine and its instruments
     controlTimer.stop();
     pushDisplay = nullptr;
     surfaces = nullptr;          // dark, and back to their own modes
@@ -878,6 +894,14 @@ void MainWindow::registerCommands()
          [this] { WaveformColorsDialog (this).exec(); });
     add ("options.theme", Category::options, tr ("&Theme..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_T) },
          [this] { ThemeDialog (this).exec(); });
+    add ("options.wallpaper", Category::options, tr ("Wa&llpaper"), {}, [this] { toggleWallpaper(); });
+    commands.action (QStringLiteral ("options.wallpaper"))->setCheckable (true);
+    commands.action (QStringLiteral ("options.wallpaper"))->setStatusTip (tr ("A picture of your own behind PHI; a still picture costs no CPU while PHI is idle, unlike the Visualizer or a video"));
+    add ("options.chooseWallpaper", Category::options, tr ("Choose Wallpaper &Picture..."), {}, [this]
+    {
+        if (chooseWallpaper() && ! commands.action (QStringLiteral ("options.wallpaper"))->isChecked())
+            toggleWallpaper();
+    });
 
     add ("help.palette", Category::help, tr ("&Command Palette..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_P), KS (Qt::Key_F1) },
          [this] { CommandPalette (commands, this).exec(); });
@@ -925,9 +949,9 @@ void MainWindow::buildMenus()
         { tr ("&Compose"),   { "@compose" } },
         { tr ("&Master"),    { "#album", "-", "view.master", "view.chain", "view.modulators", "master.addPlugin", "master.bypass", "analyze.plugin", "-", "master.assistant", "-", "master.render", "master.renderNew", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
         { tr ("Mi&xer"),     { "mixer.window", "mixer.dock", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "-", "mixer.addTrack", "mixer.removeTrack", "-",
-                               "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "mixer.sendToTimeline", "-", "mixer.editNotes", "mixer.trackToEditor", "-", "mixer.assistant" } },
+                               "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "mixer.sendToTimeline", "-", "mixer.editNotes", "mixer.trackToEditor", "-", "view.inspector", "-", "mixer.assistant", "mixer.preferences" } },
         { tr ("Mo&de"),      { "@mode" } },
-        { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "-", "options.keymap", "options.theme", "options.waveformColors" } },
+        { tr ("&Options"),   { "options.audio", "options.separateOutputs", "options.interfaceMixer", "options.interfaceMixerProgram", "mixer.preferences", "-", "options.keymap", "options.theme", "options.waveformColors", "-", "options.wallpaper", "options.chooseWallpaper" } },
         { tr ("Performan&ce"), { "performance.launcher", "-", "control.surfaces", "control.learn", "control.mapMode", "-", "performance.record", "performance.stream", "-", "performance.settings", "performance.folder" } },
         { tr ("&Repair"),    { "view.diagnostics", "-", "repair.autoHeal", "repair.spectralGain", "repair.findSimilar", "repair.correctPitch", "-", "repair.learnNoise", "repair.noiseReduction", "-",
                                "repair.declick", "repair.declip", "repair.dehum", "repair.deess", "-",
@@ -946,7 +970,7 @@ void MainWindow::buildMenus()
                                "tracker.recordStereo", "tracker.recordMulti", "-", "tracker.resetTracks", "tracker.about" } },
         { tr ("&Tools"),     { "#markers", "-", "tools.macroRecord", "tools.macroApply", "tools.macros", "-", "tools.batch", "-", "tools.managePlugins", "-", "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan", "-", "tools.resetConfig" } },
         { tr ("&View"),      { "#transport", "-", "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
-                               "view.audioEditor", "view.midiEditor", "-", "view.overview", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "view.cpuMeter", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.master", "view.chain", "view.modulators", "view.history", "view.markers", "view.meters", "analyze.window", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "view.fullScreen", "-",
+                               "view.audioEditor", "view.midiEditor", "-", "view.overview", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "view.cpuMeter", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.inspector", "view.master", "view.chain", "view.modulators", "view.history", "view.markers", "view.meters", "analyze.window", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "view.fullScreen", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
         { tr ("Visuali&zer"), { "view.visualizer", "view.visualizerFullScreen", "view.visualizerBehind", "-",
                                "view.visualizerNext", "view.visualizerPrevious", "view.visualizerChoose", "-",
@@ -1082,6 +1106,8 @@ void MainWindow::changeOpacity (double value, bool announce)
         const QSignalBlocker block (s);
         s->setValue (percent);
     }
+    if (wallpaper != nullptr)
+        wallpaper->update();   // still, it repaints only when asked
 
     if (announce)
         statusBar()->showMessage (tr ("Window opacity %1%").arg (percent), 2000);
