@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**135 pull requests:** 122 merged, 13 open.
+**135 pull requests:** 125 merged, 10 open.
 
 ## Contents
 
@@ -146,7 +146,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#42](https://github.com/phinyx852Hz/audio-editor/pull/42) | Add the Φ Phaser, and the Φ DSP as a library the PHI synth can link | merged | Add plugin, Built-in, Φ Phaser | `Source/core/PhiPhaser.cpp`<br>`Source/engine/PhiEffects.cpp`<br>`Source/core/CMakeLists.txt` |
 | [#43](https://github.com/phinyx852Hz/audio-editor/pull/43) | Φ Compressor, Φ Multiband, Φ Limiter and Φ Chorus | merged | Add plugin, Built-in | `Source/core/PhiDynamics.cpp`<br>`Source/core/PhiChorus.cpp`<br>`Source/engine/PhiEffects.cpp` |
 | [#89](https://github.com/phinyx852Hz/audio-editor/pull/89) | Φ Modulation (PhiFlow, PhiSpace, PhiGrain, PhiMatrix) and a Cubase-style Modulators panel | merged |  | `Source/core/PhiModulation.cpp`<br>`Source/ui/ModulatorsPanel.cpp`<br>`Source/core/Modulators.cpp` |
-| [#115](https://github.com/phinyx852Hz/audio-editor/pull/115) | Plugin Analyzer manual, wider Forensic Φ, LINpro-style dither | open |  | `docs/manual/chapters/plugin-analyzer.md`<br>`Source/core/Dsp.cpp`<br>`tests/CoreTests.cpp` |
+| [#115](https://github.com/phinyx852Hz/audio-editor/pull/115) | Plugin Analyzer manual, wider Forensic Φ, LINpro-style dither | open |  | `docs/manual/chapters/plugin-analyzer.md`<br>`docs/manual/chapters/mixer.md`<br>`docs/manual/chapters/midi-editor.md` |
 | [#133](https://github.com/phinyx852Hz/audio-editor/pull/133) | Add Φ Repeat, a beat repeat effect | open |  | `Source/core/PhiRepeat.cpp`<br>`Source/engine/PhiEffects.cpp`<br>`tests/CoreTests.cpp` |
 
 ### Instruments and plugins
@@ -203,7 +203,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#109](https://github.com/phinyx852Hz/audio-editor/pull/109) | Window opacity keys work from every window and any focus | merged |  | `Source/ui/PanelNavigation.cpp`<br>`README.md` |
 | [#117](https://github.com/phinyx852Hz/audio-editor/pull/117) | UI fixes: Alt+menu letters, strip hover, Find panel width, Interface Size | open | Options > Interface Size | `Source/ui/ToolsSection.cpp`<br>`Source/ui/InterfaceSize.h`<br>`Source/ui/PanelNavigation.cpp` |
 | [#122](https://github.com/phinyx852Hz/audio-editor/pull/122) | Research: add Engineering, the audio engineering behind PHI's menus | merged |  | `share/research/engineering-1-analysis-meters.md`<br>`share/research/engineering-4-process.md`<br>`share/research/engineering-6-restoration.md` |
-| [#125](https://github.com/phinyx852Hz/audio-editor/pull/125) | Research menu: a MIDI section | open |  | `share/research/midi.md` |
+| [#125](https://github.com/phinyx852Hz/audio-editor/pull/125) | Research menu: a MIDI section | merged |  | `share/research/midi.md` |
 
 ### Documentation
 
@@ -227,13 +227,13 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#114](https://github.com/phinyx852Hz/audio-editor/pull/114) | Build an Arch package and an AppImage in CI | open |  | `.github/workflows/build.yml`<br>`packaging/arch/ci.PKGBUILD`<br>`packaging/arch/PKGBUILD` |
 | [#120](https://github.com/phinyx852Hz/audio-editor/pull/120) | Research: add a Metadata section | merged |  | `share/research/metadata.md` |
 | [#121](https://github.com/phinyx852Hz/audio-editor/pull/121) | Research: open source, licensing, copyright and Creative Commons | merged | Licensing › Software | `share/research/licensing.md` |
-| [#124](https://github.com/phinyx852Hz/audio-editor/pull/124) | Research: add Audio file formats | open |  | `share/research/file-formats.md` |
+| [#124](https://github.com/phinyx852Hz/audio-editor/pull/124) | Research: add Audio file formats | merged |  | `share/research/file-formats.md` |
 | [#126](https://github.com/phinyx852Hz/audio-editor/pull/126) | Research: add a Sampling section | merged | Research > Sampling | `share/research/sampling-1-techniques.md`<br>`share/research/sampling-0-history.md`<br>`share/research/sampling-2-instruments.md` |
 | [#128](https://github.com/phinyx852Hz/audio-editor/pull/128) | Research: add Acoustic Ecology (Schafer, composers, Feld and the Kaluli, noise music) | open |  | `share/research/ecology-1-composers.md`<br>`share/research/ecology-3-noise.md`<br>`share/research/ecology-0-schafer.md` |
 | [#129](https://github.com/phinyx852Hz/audio-editor/pull/129) | Compose: John Cage's and Pauline Oliveros's techniques | open |  | `Source/mixer/Compose.cpp`<br>`tests/CoreTests.cpp`<br>`docs/compose.md` |
 | [#131](https://github.com/phinyx852Hz/audio-editor/pull/131) | Compose: Congolese guitar, rumba and sebene | merged |  | `Source/mixer/Compose.cpp`<br>`tests/CoreTests.cpp`<br>`docs/compose.md` |
 | [#132](https://github.com/phinyx852Hz/audio-editor/pull/132) | Compose: Mbuti interlocking, the Bol Processor (BP3) with an Ajrada qāʿida, and PHI tabla | open |  | `share/bolprocessor/-so.EkDoTin`<br>`Source/mixer/BolProcessor.cpp`<br>`share/bolprocessor/-so.dhati` |
-| [#134](https://github.com/phinyx852Hz/audio-editor/pull/134) | Research: check the Metadata section against Wikipedia | open |  | `share/research/metadata.md` |
+| [#134](https://github.com/phinyx852Hz/audio-editor/pull/134) | Research: check the Metadata section against Wikipedia | merged |  | `share/research/metadata.md` |
 
 ## By number
 
@@ -362,8 +362,8 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#121](https://github.com/phinyx852Hz/audio-editor/pull/121) | Research: open source, licensing, copyright and Creative Commons | Adds a Licensing group to the Research menu, as one new file, share/research/licensing.md. *(auto)* | merged | 2026-10-31 | Not yet sorted |
 | [#122](https://github.com/phinyx852Hz/audio-editor/pull/122) | Research: add Engineering, the audio engineering behind PHI's menus | Adds an Engineering submenu to Research. *(auto)* | merged | 2026-10-31 | Interface and branding |
 | [#123](https://github.com/phinyx852Hz/audio-editor/pull/123) | Research: add an Editing section | Adds Research > Editing as two new Markdown files in share/research/ (new files only, so no conflict with the Engineering, Metadata and Licensing PRs): *(auto)* | merged | 2026-10-31 | Editing and warping |
-| [#124](https://github.com/phinyx852Hz/audio-editor/pull/124) | Research: add Audio file formats | Adds an Audio file formats submenu to Research, as one new file, share/research/file-formats.md, so it does not touch the other open Research PRs. *(auto)* | open | 2026-10-31 | Not yet sorted |
-| [#125](https://github.com/phinyx852Hz/audio-editor/pull/125) | Research menu: a MIDI section | Adds share/research/midi.md, a MIDI submenu of the Research menu, in the same form as the other sections: what each thing is, its history, what PHI does with... *(auto)* | open | 2026-10-31 | Interface and branding |
+| [#124](https://github.com/phinyx852Hz/audio-editor/pull/124) | Research: add Audio file formats | Adds an Audio file formats submenu to Research, as one new file, share/research/file-formats.md, so it does not touch the other open Research PRs. *(auto)* | merged | 2026-11-01 | Not yet sorted |
+| [#125](https://github.com/phinyx852Hz/audio-editor/pull/125) | Research menu: a MIDI section | Adds share/research/midi.md, a MIDI submenu of the Research menu, in the same form as the other sections: what each thing is, its history, what PHI does with... *(auto)* | merged | 2026-11-01 | Interface and branding |
 | [#126](https://github.com/phinyx852Hz/audio-editor/pull/126) | Research: add a Sampling section | Adds Research > Sampling, a companion to the Synthesis section, as three new Markdown files in share/research/ (no code changes, so no conflicts with #120 to... *(auto)* | merged | 2026-10-31 | Not yet sorted |
 | [#127](https://github.com/phinyx852Hz/audio-editor/pull/127) | Research: add Synthesis, its types and its history | Adds a Synthesis submenu to the Research menu: the major types of synthesis with example instruments, and the history from the origins to today's virtual syn... *(auto)* | merged | 2026-10-31 | Instruments and plugins |
 | [#128](https://github.com/phinyx852Hz/audio-editor/pull/128) | Research: add Acoustic Ecology (Schafer, composers, Feld and the Kaluli, noise music) | Adds an Acoustic Ecology submenu to Research, as four new files in share/research/. *(auto)* | open | 2026-10-31 | Not yet sorted |
@@ -372,5 +372,5 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#131](https://github.com/phinyx852Hz/audio-editor/pull/131) | Compose: Congolese guitar, rumba and sebene | Adds a new Compose method, Congolese Guitar: Rumba and Sebene. *(auto)* | merged | 2026-10-31 | Not yet sorted |
 | [#132](https://github.com/phinyx852Hz/audio-editor/pull/132) | Compose: Mbuti interlocking, the Bol Processor (BP3) with an Ajrada qāʿida, and PHI tabla | 1. *(auto)* | open | 2026-10-31 | Not yet sorted |
 | [#133](https://github.com/phinyx852Hz/audio-editor/pull/133) | Add Φ Repeat, a beat repeat effect | A new built-in Φ effect, Φ Repeat: a tempo-synced beat repeat for glitches and rhythmic variations. *(auto)* | open | 2026-10-31 | Φ effects and sounds |
-| [#134](https://github.com/phinyx852Hz/audio-editor/pull/134) | Research: check the Metadata section against Wikipedia | Links *(auto)* | open | 2026-10-31 | Not yet sorted |
+| [#134](https://github.com/phinyx852Hz/audio-editor/pull/134) | Research: check the Metadata section against Wikipedia | Links *(auto)* | merged | 2026-11-01 | Not yet sorted |
 | [#135](https://github.com/phinyx852Hz/audio-editor/pull/135) | Mixer: open and write DAWproject (Bitwig, Studio One, Cubase) | PHI can now open and write DAWproject, the open format from Bitwig and PreSonus (MIT). *(auto)* | open | 2026-10-31 | Mixer and clip launcher |
