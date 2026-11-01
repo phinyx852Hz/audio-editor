@@ -649,7 +649,9 @@ private:
     // Alt+Shift sends it to every track. `fn` gets each strip, and whether it is the one changed.
     void forLinked (int track, const std::function<void (mixer::Strip&, bool self)>& fn);
     void pick (int track, bool add);  // Ctrl+click: add or take a strip from the picked ones
-    // The returns: A Reverb and B Delay.
+    // The returns, A and B: Φ Space and Φ Echo by default, but any effect (built-in, stock or a plug-in).
+    static QString returnName (int index);   // "Return A"
+    void returnEffectsMenu (int index, QMenu&);
     void chooseReturnEffect (int index, QPoint at);
     void setReturnEffect (int index, const std::string& pluginId);   // empty: none
     void editReturn (int index);
