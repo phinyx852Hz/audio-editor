@@ -9,7 +9,10 @@ The Neher and Rouget, Hultkrantz, Harner and Foundation for Shamanic Studies ent
 checked against search-engine extracts of the sources named, since sites other than Wikipedia
 could not be opened from the machine these entries were written on; those links are listed in
 the pull request for the owner to open by hand. The Siberian drum's construction and the
-cosmos painted on it are partly from memory.
+cosmos painted on it are partly from memory. The circumpolar drum types, Honko, Bogoras on the
+Chukchi, Bäckman, the painting of Sámi drums and the three hidden South Sámi drums are from
+Birgitta Berglund's 2010 chapter, and the Khakas drums from Victoria Soyan Peemot's 2017
+article, both of which the owner supplied as PDFs.
 Later the same day the owner allowed those sites; the Library of Congress post on the Paulsen
 drum was opened and agrees with the entry.
 -->
@@ -33,7 +36,17 @@ shaman fly to the centre of the world, where the tree joins earth, sky and under
 scholars have pulled back from his sweeping claims. Åke Hultkrantz, in "The Drum in Shamanism"
 (1991), called Eliade's view that the drum is indispensable to shamanism hard to accept, since
 many shamans have worked without one, while still calling him the foremost scholar of the
-subject.
+subject. The Finnish folklorist Lauri Honko put the opposite view in a phrase (1964): "from
+Altai to Lappland the drum is the liturgical handbook of shamanism".
+
+Across the north the drum is nearly always a frame drum: in Alaska, Greenland, Sápmi and
+Siberia alike, a sliver of wood bent into an oval, egg-shaped, round or angular hoop, with a
+skin over it and a handle behind. The drums of Greenland, Alaska and the Chukchi have a handle
+that sticks out from the frame; the Altai peoples carved theirs as a human figure hung with
+strips of cloth. Among the Chukchi, the Russian ethnographer Waldemar Bogoras found that almost
+every adult had a drum and beat it for pleasure at home, and distinguished the "family
+shamanism" that every household performed by day from the shaman's own séance, at night and in
+the dark.
 
 - [Shamanism](https://en.wikipedia.org/wiki/Shamanism), Wikipedia.
 - [Mircea Eliade](https://en.wikipedia.org/wiki/Mircea_Eliade), Wikipedia.
@@ -42,6 +55,12 @@ subject.
   and Drum".
 - Åke Hultkrantz, "The Drum in Shamanism: Some Reflections", in Tore Ahlbäck and Jan Bergman
   (eds), *The Saami Shaman Drum* (Donner Institute, Åbo, 1991).
+- Birgitta Berglund, "Shamanism and Material Culture in the Northern Circumpolar Area, brought
+  to the fore by some newly discovered South-Saami Drums with Accessories in the Norwegian
+  Mountains", in Christer Westerdahl (ed.), *A Circumpolar Reappraisal: The Legacy of Gutorm
+  Gjessing (1906–1979)*, BAR International Series 2154 (Archaeopress, 2010), pp. 17–41,
+  [record](https://ntnuopen.ntnu.no/ntnu-xmlui/handle/11250/2623116), NTNU Open.
+- Waldemar Bogoras, *The Chukchee* (Jesup North Pacific Expedition, 1904–1909).
 
 ## Siberia and Central Asia
 
@@ -50,12 +69,26 @@ reindeer, elk or horse hide, held from behind by a handle or crossbars and hung 
 pendants, bells and rattles that sound with every stroke. Its skin is often painted with the
 three worlds, upper, middle and lower, and the spirits who live in them, and its handle carved
 with the face of an ancestor or helping spirit. A new drum is not an instrument until it has been
-brought to life: the shaman journeys to find the animal whose hide it bears and the tree whose
-wood it is, and in a ceremony of "enlivening" the drum's spirit is woken, after which no one else
+brought to life: in a ceremony of "enlivening" the drum's spirit is woken, after which no one else
 may touch it. Among the Tuvans, the Buryats, the Altai and the Mongols the drum is the horse on
 which the shaman rides to the spirit world. Under Soviet rule drums were confiscated and burned
 and shamans persecuted; since the 1990s shamanism has been openly practised again in Tuva,
 Buryatia and Mongolia.
+
+The Khakas drums of the Minusinsk valley on the upper Yenisei show how much a single drum
+holds. Grigory Potanin sorted Siberian drums by their handles into an Altai-Sayan, a Tungus and
+a Samoyed type; the Khakas drums are of the first, large, up to 75 cm high, with a wooden
+handle behind. Two drums the Finnish geologist J. J. Sederholm brought home from Siberia in
+1917, studied by Victoria Soyan Peemot a century later, are Kača Khakas drums of the early 20th
+century. The larger, the "Painted Drum", is 60 cm high on a frame of aspen 12 to 14 cm deep.
+Six knobs under the skin are its "horns" or "nipples", which feed the shaman and the spirits.
+An iron bar through the handle, the *kipic* or "bowstring", hung with bells, rattles and cloth,
+and six iron blades on the frame, the "sabres", are the shaman's weapons. A zigzag border
+around the skin is the "sky-belt", read by different shamans as the Milky Way, the shaman's road
+across the sky, a bridge or a rainbow, and lines across it divide the skin into the upper,
+middle and lower worlds, peopled with sun and moon, trees, birds, animals and riders on
+horses who are the shaman's guardians. The Soviet scholar Sergei Ivanov counted about 70 known
+Khakas drums.
 
 - [Shamanism in Siberia](https://en.wikipedia.org/wiki/Shamanism_in_Siberia), Wikipedia.
 - [Ongon](https://en.wikipedia.org/wiki/Ongon), Wikipedia, on the spirit figures of the Mongols
@@ -64,15 +97,26 @@ Buryatia and Mongolia.
   Diószegi (ed.), *Popular Beliefs and Folklore Tradition in Siberia* (Indiana University /
   Akadémiai Kiadó, 1968).
 - Mongush B. Kenin-Lopsan, *Shamanic Songs and Myths of Tuva* (Akadémiai Kiadó, 1997).
+- Victoria Soyan Peemot, "Fractures of the Whole: A Depiction of the Shamanic Universe on Kača
+  Drums Brought by J. J. Sederholm from Siberia in 1917", *Studia Orientalia Electronica* 5
+  (2017), pp. 27–45, [online](https://journal.fi/store/article/view/59323).
 
 ## The Sámi drum
 
-The Sámi of northern Norway, Sweden, Finland and Russia had two kinds of drum, both oval and both headed
-with reindeer hide: a bowl drum, its skin strapped over a hollowed burl, called *goavddis* in
+The Sámi of northern Norway, Sweden, Finland and Russia had two kinds of drum, both oval and
+both headed with reindeer hide: a bowl drum, its skin strapped over a hollowed burl, called *goavddis* in
 Northern Sámi, and a frame drum of thin bentwood, called *gievrie* in Southern Sámi. The *noaidi*
 used it to enter trance, when his free spirit left the body to visit the spirit world, and to
 divine: a small pointer of brass or horn, the *vuorbi*, was set on the head, and where it stopped
 among the figures painted there, of gods, animals, people and the sun, the future was read.
+Louise Bäckman has noted that divining with a pointer on the drumhead seems to be known only
+among the Sámi; other peoples divined with the drumstick or a staff. Cords hung with metal
+rings and charms, tied to the frame, rattled as the noaidi beat the skin with a hammer.
+
+The figures were painted in red, with a dye boiled from alder bark. On the South Sámi frame
+drums they ran in one band around the edge with the sun, *biejjie*, in the centre; on the bowl
+drums of the north they were set in rows, in fields that stood for the worlds the noaidi
+travelled between: the sky above, the earth below it, and sometimes an underworld beneath.
 
 The oldest mention is in the *Historia Norvegiae* of the late 12th century, which describes a
 drum painted with whales, a boat, reindeer and snowshoes. In the 17th and 18th centuries
@@ -84,10 +128,23 @@ the National Museum of Denmark to the Sámi museum in Karasjok, where it had bee
 1979: the first Sámi object returned to Sápmi from abroad. The drum is today a symbol of the
 Sámi people.
 
+Some drums were never found by the missionaries. Three South Sámi frame drums have turned up in
+the Norwegian mountains of Helgeland and Nord-Trøndelag, each hidden under a rock. The
+Henriksdalen drum, found in 1969 by Kristine Andersen Vesterfjell, belonged to her grandfather
+Nils Johan Johannessen Vesterfjell, who died in 1871. The Røyrtjønna drum was found by three men
+on a coffee break in 1993. The Visten drum was found by two brothers out hunting in 1997, with
+its hammer, a brass pointer, a small white stone that probably served as a second pointer,
+copper buttons given to the drum as gifts, and scraps of cloth. Its pinewood frame, worn by long
+use and mended with copper, has been radiocarbon dated to after 1530 and its hammer to after
+1685: a drum perhaps a century or two old when it was hidden, and the more trusted for its age.
+
 - [Sámi drum](https://en.wikipedia.org/wiki/S%C3%A1mi_drum) and
   [Anders Paulsen](https://en.wikipedia.org/wiki/Anders_Paulsen), Wikipedia.
 - [Return of a Sámi drum](https://blogs.loc.gov/law/2022/02/return-of-a-smi-drum/), Library of
   Congress blog, 2022.
+- Birgitta Berglund (2010), as above, on the Henriksdalen, Røyrtjønna and Visten drums.
+- Louise Bäckman, "Types of Shamanism: Comparative Perspectives", in Louise Bäckman and Åke
+  Hultkrantz, *Studies in Lapp Shamanism* (Stockholm, 1978).
 - Ernst Manker, *Die lappische Zaubertrommel*, 2 vols. (Nordiska museet, Stockholm, 1938–1950).
 - Francis Joy, "What Influence Do the Old Sámi Noaidi Drums from Lapland Play in the
   Construction of New Shaman Drums by Sámi Persons Today?", *Folklore: Electronic Journal of
