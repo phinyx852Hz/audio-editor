@@ -842,7 +842,10 @@ void FindPanel::dragFiles (QTreeWidgetItem* pressed)
     mime->setUrls (urls);
     auto* drag = new QDrag (results);
     drag->setMimeData (mime);
-    drag->exec (Qt::CopyAction, Qt::CopyAction);
+    // Dropped somewhere that took it (the clip launcher, the tracks, the editor): the
+    // audition has done its job and stops.
+    if (drag->exec (Qt::CopyAction, Qt::CopyAction) != Qt::IgnoreAction)
+        endAudition();
 }
 
 void FindPanel::startAudition (QTreeWidgetItem* row)
@@ -856,8 +859,8 @@ void FindPanel::startAudition (QTreeWidgetItem* row)
 
 void FindPanel::endAudition()
 {
-    if (auditioning.isEmpty())
-        return;
+    // Stopped even when the panel thinks nothing plays: a sound still decoding, or one that
+    // was reported ended, must not carry on behind a file just sent somewhere.
     auditioning.clear();
     if (stopAudition)
         stopAudition();
@@ -1230,6 +1233,14 @@ bool FindPanel::eventFilter (QObject* watched, QEvent* e)
         return false;
     }
 
+    // K (in the results or the sidebar: in the search it types) or Escape stops a file
+    // being auditioned; Escape's other jobs wait for the next press.
+    if (plain && ! auditioning.isEmpty() && (k->key() == Qt::Key_Escape || (k->key() == Qt::Key_K && watched != search)))
+    {
+        endAudition();
+        return true;
+    }
+
     if (k->key() == Qt::Key_Escape && plain)
     {
         if (watched == search && ! search->text().isEmpty())
@@ -1302,12 +1313,6 @@ bool FindPanel::eventFilter (QObject* watched, QEvent* e)
 
     if (watched == results)
     {
-        // K stops an audition (and otherwise starts a search like any letter).
-        if (plain && k->key() == Qt::Key_K && ! auditioning.isEmpty())
-        {
-            endAudition();
-            return true;
-        }
         if (browsing() && plain)
         {
             auto* row = results->currentItem();

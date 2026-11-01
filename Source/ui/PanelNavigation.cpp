@@ -227,6 +227,9 @@ void MainWindow::focusDirection (int arrowKey)
 // hidden), the mixer in the editor's place closes, and only from the editor does the file close.
 void MainWindow::closeFocused()
 {
+    // Simplest, the Slicer or a track's instrument under the mixer's strips closes, not the mixer.
+    if (mixerWin != nullptr && mixerWin->isVisible() && mixerWin->closeFocusedInstrument())
+        return;
     // The mixer in the editor's place, when it or nothing else has the keyboard.
     const bool panelFocused = std::any_of (panels.begin(), panels.end(), [] (DockablePanel* p) { return p->isShown() && p->containsFocus(); });
     if (mixerDocked() && mixerWin->isVisible() && (holds (mixerWin, QApplication::focusWidget()) || ! panelFocused))
@@ -364,7 +367,7 @@ bool MainWindow::navigationKey (QObject* o, QEvent* e)
         {
             if (w == nullptr)
                 return;
-            if (closeKey)
+            if (closeKey && ! (w == mixerWin && mixerWin->closeFocusedInstrument()))
                 w->close();
             else if (fullKey)
                 toggleFullScreen (w);

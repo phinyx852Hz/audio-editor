@@ -252,6 +252,11 @@ public:
     bool instrumentOpen (int which) const { return instrumentOpens[(size_t) std::clamp (which, 0, 1)]; }
     bool instrumentInFront() const { return lowerFront >= 0; }
     void showDeviceChainInFront();
+    // Closes Simplest (0), the Slicer (1) or a track's own Sampler or Slicer (2) under the
+    // strips, as the close button on its tab does; the mixer stays open.
+    void closeLowerInstrument (int which);
+    // Ctrl+W or Super+W with the keyboard in one of them: it closes, not the mixer (true).
+    bool closeFocusedInstrument();
     bool toggleLowerZone();   // the Device Chain or the instrument in front last; false: none open
     void toggleDevices();
     // What the browser's Instruments and Audio Effects lists drag: "effect\n<id>",

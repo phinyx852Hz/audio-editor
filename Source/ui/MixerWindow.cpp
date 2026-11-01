@@ -78,6 +78,7 @@
 #include <QSplitter>
 #include <QSpinBox>
 #include <QStandardPaths>
+#include <QStyle>
 #include <QTreeView>
 #include <QTreeWidget>
 #include <QVBoxLayout>
@@ -7318,7 +7319,14 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     lowerTabs->setFocusPolicy (Qt::NoFocus);
     lowerTabs->setDrawBase (false);
     lowerTabs->setExpanding (false);
+    lowerTabs->setTabsClosable (true);
     lowerTabs->hide();
+    // Later: the tab bar is rebuilt, its close button too, while the button is still busy.
+    connect (lowerTabs, &QTabBar::tabCloseRequested, this, [this] (int i)
+    {
+        if (i >= 0)
+            closeLowerInstrument (lowerTabs->tabData (i).toInt());
+    }, Qt::QueuedConnection);
     connect (lowerTabs, &QTabBar::tabBarClicked, this, [this] (int i)
     {
         if (i < 0)
@@ -8491,7 +8499,7 @@ bool MixerWindow::devicePanelShown() const { return devicePanel != nullptr && ! 
 
 void MixerWindow::setInstrumentOpen (int which, bool open)
 {
-    which = std::clamp (which, 0, 1);
+    which = std::clamp (which, 0, (int) instrumentOpens.size() - 1);
     instrumentOpens[(size_t) which] = open;
     if (open)
         lowerFront = which;
@@ -8503,6 +8511,34 @@ void MixerWindow::setInstrumentOpen (int which, bool open)
                 lowerFront = i;
     }
     updateLowerZone();
+}
+
+void MixerWindow::closeLowerInstrument (int which)
+{
+    if (which < 0 || which >= (int) instrumentOpens.size())
+        return;
+    if (which == 2 && trackEditor != nullptr)
+        trackEditor->close();   // deleted on close, which gives the place back
+    else
+        setInstrumentOpen (which, false);
+}
+
+bool MixerWindow::closeFocusedInstrument()
+{
+    auto* focus = QApplication::focusWidget();
+    if (focus == nullptr)
+        return false;
+    for (int i = 0; i < (int) instrumentHosts.size(); ++i)
+    {
+        auto* host = instrumentHosts[(size_t) i];
+        if (instrumentOpens[(size_t) i] && host->isVisible() && (focus == host || host->isAncestorOf (focus)))
+        {
+            closeLowerInstrument (i);
+            setFocus (Qt::ShortcutFocusReason);
+            return true;
+        }
+    }
+    return false;
 }
 
 void MixerWindow::showDeviceChainInFront()
@@ -8582,6 +8618,12 @@ void MixerWindow::updateLowerZone()
             for (int i = 0; i < 3; ++i)
                 if (instrumentOpens[(size_t) i])
                     lowerTabs->setTabData (lowerTabs->addTab (names[i]), i);
+            // Every instrument's tab has a close button; the Device Chain's stays.
+            const auto side = (QTabBar::ButtonPosition) lowerTabs->style()->styleHint (QStyle::SH_TabBar_CloseButtonPosition, nullptr, lowerTabs);
+            lowerTabs->setTabButton (0, side, nullptr);
+            for (int t = 1; t < lowerTabs->count(); ++t)
+                if (auto* b = lowerTabs->tabButton (t, side))
+                    b->setToolTip (tr ("Close %1 (Ctrl+W); the mixer stays open").arg (lowerTabs->tabText (t)));
             for (int t = 0; t < lowerTabs->count(); ++t)
                 if (lowerTabs->tabData (t).toInt() == lowerFront)
                     lowerTabs->setCurrentIndex (t);
@@ -10733,7 +10775,10 @@ void MixerWindow::keyPressEvent (QKeyEvent* e)
             case Qt::Key_O: openMix(); return;
             case Qt::Key_S: saveMix (withShift); return;
             case Qt::Key_N: newMix(); return;
-            case Qt::Key_W: close(); return;
+            case Qt::Key_W:
+                if (! closeFocusedInstrument())
+                    close();
+                return;
             case Qt::Key_Z: withShift ? redo() : undo(); return;
             case Qt::Key_B:
             case Qt::Key_F:

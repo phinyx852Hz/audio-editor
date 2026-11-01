@@ -9,6 +9,7 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <functional>
 #include <vector>
 
@@ -22,6 +23,8 @@
 // instrument keeps playing), Ctrl+F or Super+F takes it full screen and back to its
 // floating size, Ctrl+Tab and Ctrl+Shift+Tab go to the next and previous plugin window.
 // Ctrl+W, Ctrl+F, Super+W and Super+F work even while the plugin's own view has the keyboard.
+// On Hyprland and sway, which draw no title bars, PHI draws one with a close button.
+// An editor that cannot scale and is bigger than that opens whole: the window grows to it.
 class PluginWindow final : public juce::DocumentWindow
 {
 public:
@@ -31,7 +34,16 @@ public:
         : DocumentWindow (title, juce::Colours::black, DocumentWindow::closeButton),
           closed (std::move (onClose)), cycle (std::move (onCycle))
     {
-        setUsingNativeTitleBar (true);
+        // Where the window manager draws no title bar (Hyprland, sway), PHI draws its own, with
+        // a close button: otherwise only keys close the window, and a plugin drawn with
+        // baseview (CA-72, OctaSine...) keeps every key its view is given, Esc and Ctrl+W too,
+        // which left Super+W (the window manager's own close) as the only way out.
+        setUsingNativeTitleBar (! drawsOwnTitleBar());
+        if (! isUsingNativeTitleBar())
+        {
+            setTitleBarHeight (24);
+            setTitleBarButtonsRequired (DocumentWindow::closeButton, false);
+        }
         if (contentResizes)
             setContentOwned (content, true);
         else
@@ -40,6 +52,7 @@ public:
         setResizeLimits (160, 120, 16384, 16384);
         const auto size = standardSize();
         centreWithSize (size.x, size.y);
+        showWholeEditor();
         setWantsKeyboardFocus (true);
         // Before it is shown: the class for window rules.
         if (auto* peer = getPeer())
@@ -56,12 +69,13 @@ public:
         applyOpacity();
         // Again once the window manager has the window (Hyprland finds it by its title),
         // and on Hyprland it floats at that size rather than tiling.
-        juce::Timer::callAfterDelay (400, [w = juce::Component::SafePointer<PluginWindow> (this), size]
+        juce::Timer::callAfterDelay (400, [w = juce::Component::SafePointer<PluginWindow> (this)]
         {
             if (w == nullptr)
                 return;
             w->applyOpacity();
-            x11::floatWindow (w->getName().toStdString(), size.x, size.y);
+            w->showWholeEditor();   // an editor that took its scale late
+            x11::floatWindow (w->getName().toStdString(), w->getWidth(), w->getHeight());
         });
     }
 
@@ -115,6 +129,51 @@ public:
     }
 
 private:
+    // The window managers that give a window no title bar of its own.
+    static bool drawsOwnTitleBar()
+    {
+        for (const auto* name : { "HYPRLAND_INSTANCE_SIGNATURE", "SWAYSOCK" })
+            if (const auto* value = std::getenv (name); value != nullptr && *value != 0)
+                return true;
+        return false;
+    }
+
+    static juce::AudioProcessorEditor* findEditor (juce::Component* c)
+    {
+        if (c == nullptr)
+            return nullptr;
+        if (auto* e = dynamic_cast<juce::AudioProcessorEditor*> (c))
+            return e;
+        for (auto* child : c->getChildren())
+            if (auto* e = findEditor (child))
+                return e;
+        return nullptr;
+    }
+
+    // An editor of fixed size that does not scale itself (CA-72 opens at four fifths of the
+    // screen and takes no scale) would be cut off in a window of the standard size, showing
+    // only its middle: the window grows until the whole editor shows, up to the screen.
+    void showWholeEditor()
+    {
+        auto* editor = findEditor (getContentComponent());
+        if (editor == nullptr || editor->isResizable())
+            return;
+        auto* holder = editor->getParentComponent();
+        if (holder == nullptr)
+            return;
+        const auto dx = std::max (0, editor->getWidth() - holder->getWidth());
+        const auto dy = std::max (0, editor->getHeight() - holder->getHeight());
+        if (dx == 0 && dy == 0)
+            return;
+        auto w = getWidth() + dx, h = getHeight() + dy;
+        if (const auto* display = juce::Desktop::getInstance().getDisplays().getDisplayForRect (getScreenBounds()))
+        {
+            w = std::min (w, display->userArea.getWidth());
+            h = std::min (h, display->userArea.getHeight());
+        }
+        centreWithSize (w, h);
+    }
+
     // The size a plugin window opens at: its content scaled up (or down) to about three
     // fifths of the screen, keeping its proportions; smaller than the screen, never small
     // (owner, 2026-10-30). Ctrl+F or Super+F takes it full screen and back.
