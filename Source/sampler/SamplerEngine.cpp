@@ -9,6 +9,16 @@ namespace sampler
     namespace
     {
         constexpr double quiet = 1.0e-4;   // -80 dB: a releasing voice is done
+        constexpr int control = 16;        // frames between updates of pitch, cutoff, envelopes and LFOs
+        constexpr int maxBlock = 1024;     // render() works in blocks of up to this many frames
+        constexpr int maxSteps = maxBlock / control;
+
+        // A segment's progress (0..1) bowed by a curve: above 0 it moves fast first, below 0 slow first.
+        double bowed (double p, double curve)
+        {
+            p = std::clamp (p, 0.0, 1.0);
+            return curve >= 0.0 ? 1.0 - std::pow (1.0 - p, 1.0 + 4.0 * curve) : std::pow (p, 1.0 - 4.0 * curve);
+        }
         // A one-pole curve that falls 60 dB in `seconds`.
         double fall (double seconds, double rate) { return seconds > 0.0 ? std::exp (-std::log (1000.0) / (seconds * rate)) : 0.0; }
     }
@@ -112,7 +122,20 @@ namespace sampler
             return;
         }
         if (current.mode == Mode::classic || current.gate)
-            v.stage = 3;
+            startRelease (v);
+    }
+
+    // The amp and the pitch and filter envelopes go on to their releases together.
+    void Engine::startRelease (Voice& v)
+    {
+        v.stage = 3;
+        for (auto& e : v.envelope)
+            if (e.stage < 3)
+            {
+                e.stage = 3;
+                e.time = 0.0;
+                e.from = e.level;
+            }
     }
 
     void Engine::push (int note)
@@ -145,6 +168,7 @@ namespace sampler
             return;
         const bool othersHeld = stacked > 0;
         push (note);
+        retrigger (! othersHeld);
         // Glide comes from the last note, or with Fingered only from one still held.
         const auto from = current.fingered && ! othersHeld ? -1.0 : lastPitch;
 
@@ -221,7 +245,7 @@ namespace sampler
             if (v.active)
             {
                 v.held = v.sustained = false;
-                v.stage = 3;
+                startRelease (v);
             }
     }
 
@@ -240,6 +264,25 @@ namespace sampler
         bend = std::clamp (amount, -1.0, 1.0);
     }
 
+    void Engine::modWheel (double amount)
+    {
+        std::lock_guard g (lock);
+        wheel = std::clamp (amount, 0.0, 1.0);
+    }
+
+    // Each Note starts the LFOs again at every note, First Note only when no other key is held.
+    void Engine::retrigger (bool firstNote)
+    {
+        for (size_t k = 0; k < lfos.size(); ++k)
+        {
+            const auto& o = current.lfo[k];
+            if (o.retrigger == Retrigger::off || (o.retrigger == Retrigger::firstNote && ! firstNote))
+                continue;
+            noise = noise * 1664525u + 1013904223u;
+            lfos[k].phase = o.randomPhase ? (double) (noise >> 8) / 16777216.0 : std::clamp (o.phase, 0.0, 1.0);
+        }
+    }
+
     void Engine::sustainPedal (bool down)
     {
         std::lock_guard g (lock);
@@ -250,7 +293,7 @@ namespace sampler
                 {
                     v.sustained = false;
                     if (current.mode == Mode::classic || current.gate)
-                        v.stage = 3;
+                        startRelease (v);
                 }
     }
 
@@ -299,6 +342,82 @@ namespace sampler
             }
         }
 
+        // A pitch or filter envelope `dt` seconds on.
+        template <typename Stage>
+        void advance (Stage& e, const Envelope& o, double dt)
+        {
+            const auto sustain = std::clamp (o.sustain, 0.0, 1.0);
+            switch (e.stage)
+            {
+                case 0:
+                    e.time += dt;
+                    if (o.attack <= 0.0 || e.time >= o.attack)
+                    {
+                        e.level = 1.0;
+                        e.stage = 1;
+                        e.time = 0.0;
+                    }
+                    else
+                        e.level = bowed (e.time / o.attack, o.curve);
+                    break;
+                case 1:
+                    e.time += dt;
+                    if (o.decay <= 0.0 || e.time >= o.decay)
+                    {
+                        e.level = sustain;
+                        e.stage = 2;
+                    }
+                    else
+                        e.level = 1.0 + (sustain - 1.0) * bowed (e.time / o.decay, o.curve);
+                    break;
+                case 2: e.level = sustain; break;
+                case 3:
+                    e.time += dt;
+                    if (o.release <= 0.0 || e.time >= o.release)
+                    {
+                        e.level = 0.0;
+                        e.stage = 4;
+                    }
+                    else
+                        e.level = e.from * (1.0 - bowed (e.time / o.release, o.curve));
+                    break;
+                default: e.level = 0.0; break;
+            }
+        }
+
+        // One cycle of an LFO's wave at phase p (0..1), from -1 to 1; the random waves are drawn elsewhere.
+        double waveAt (Wave w, double p, double shape)
+        {
+            shape = std::clamp (shape, 0.0, 1.0);
+            switch (w)
+            {
+                case Wave::sine:
+                {
+                    const auto x = std::sin (2.0 * M_PI * p);
+                    return (1.0 - shape) * x + shape * std::tanh (3.0 * x) / std::tanh (3.0);   // rounder to squarer
+                }
+                case Wave::triangle:
+                {
+                    const auto x = p < 0.25 ? 4.0 * p : p < 0.75 ? 2.0 - 4.0 * p : 4.0 * p - 4.0;
+                    return std::clamp (x * (1.0 + 4.0 * shape), -1.0, 1.0);   // flattened into a trapezoid
+                }
+                case Wave::saw:
+                {
+                    // The peak's place: 0 a ramp down, 0.5 a triangle, 1 a ramp up.
+                    const auto peak = std::clamp (shape, 0.001, 0.999);
+                    return p < peak ? -1.0 + 2.0 * p / peak : 1.0 - 2.0 * (p - peak) / (1.0 - peak);
+                }
+                case Wave::pulse: return p < std::clamp (shape, 0.02, 0.98) ? 1.0 : -1.0;
+                case Wave::ramp:
+                {
+                    const auto wait = std::min (shape, 0.98);
+                    return p < wait ? -1.0 : -1.0 + 2.0 * (p - wait) / (1.0 - wait);
+                }
+                case Wave::log: return 2.0 * bowed (p, 2.0 * shape - 1.0) - 1.0;
+                default: return 0.0;
+            }
+        }
+
         // Vintage and Turntable: the rate and bits the sound is brought down to.
         double vintageRate (Quality q)
         {
@@ -315,6 +434,16 @@ namespace sampler
     void Engine::render (float* left, float* right, int frames)
     {
         std::lock_guard g (lock);
+        for (int done = 0; done < frames;)
+        {
+            const auto n = std::min (frames - done, maxBlock);
+            renderBlock (left + done, right + done, n);
+            done += n;
+        }
+    }
+
+    void Engine::renderBlock (float* left, float* right, int frames)
+    {
         if (data == nullptr)
         {
             for (auto& h : heads)
@@ -335,7 +464,6 @@ namespace sampler
         // The seam is blended with what comes just before the loop's start, so there must be some.
         const auto crossfade = alternate ? 0.0 : std::min ({ s.loopCrossfade * rate, loopStart, loopLength / 2.0 });
         const auto gain = std::pow (10.0, s.gainDb / 20.0);
-        const auto leftGain = (float) (gain * std::min (1.0, 1.0 - s.pan)), rightGain = (float) (gain * std::min (1.0, 1.0 + s.pan));
         const auto attackStep = s.attack > 0.0 ? 1.0 / (s.attack * rate) : 1.0;
         const auto decayCoeff = fall (s.decay, rate), releaseCoeff = fall (s.release, rate);
         const auto sustain = std::clamp (s.sustain, 0.0, 1.0);
@@ -346,7 +474,6 @@ namespace sampler
         // Resonance from flat (2, no peak) to almost ringing; a 24 dB filter's second stage stays flat.
         const auto k = 2.0 - 1.96 * std::clamp (s.resonance, 0.0, 1.0);
         const auto holdStep = vintageRate (s.quality) / rate;
-        constexpr int control = 16;   // frames between updates of pitch and cutoff
 
         auto loopOn = [&] (const Voice& v)
         {
@@ -361,6 +488,45 @@ namespace sampler
             }
         };
 
+        // The LFOs, one value for each control step of this block, shared by the voices.
+        const auto steps = (frames + control - 1) / control;
+        std::array<std::array<double, maxSteps>, 2> lfoAt {};
+        std::array<double, 2> lfoDepth {};   // how far the mod wheel lets each in
+        for (size_t k = 0; k < lfos.size(); ++k)
+        {
+            const auto& o = s.lfo[k];
+            auto& st = lfos[k];
+            if (o.toPitch == 0.0 && o.toFilter == 0.0 && o.toVolume == 0.0 && o.toPan == 0.0)
+                continue;
+            const auto hz = o.sync ? s.tempo / 60.0 / std::max (o.beats, 1.0 / 64.0) : o.rate;
+            const auto advanceBy = std::clamp (hz, 0.0, 200.0) * control / rate;
+            lfoDepth[k] = 1.0 - std::clamp (o.modWheel, 0.0, 1.0) * (1.0 - wheel);
+            const bool random = o.wave == Wave::sampleHold || o.wave == Wave::sampleHold2;
+            for (int j = 0; j < steps; ++j)
+            {
+                if (random)
+                {
+                    // Shape glides from the last step to this one over that much of the cycle.
+                    const auto glide = std::clamp (o.shape, 0.0, 1.0);
+                    st.value = glide > 0.0 && st.phase < glide ? st.previous + (st.held - st.previous) * (st.phase / glide) : st.held;
+                }
+                else
+                    st.value = waveAt (o.wave, st.phase, o.shape);
+                lfoAt[k][(size_t) j] = st.value;
+                st.phase += advanceBy;
+                if (st.phase >= 1.0)
+                {
+                    st.phase -= std::floor (st.phase);
+                    noise = noise * 1664525u + 1013904223u;
+                    const auto r = (double) (noise >> 8) / 16777216.0;   // 0..1
+                    st.previous = st.value;
+                    st.high = ! st.high;
+                    st.held = o.wave == Wave::sampleHold2 ? (st.high ? r : -r) : 2.0 * r - 1.0;
+                }
+            }
+        }
+        const auto dt = (double) control / rate;
+
         std::array<bool, 128> on {};
         for (size_t n = 0; n < voice.size(); ++n)
         {
@@ -371,7 +537,8 @@ namespace sampler
                 continue;
             }
             const auto velocityGain = (float) (1.0 - std::clamp (s.velocity, 0.0, 1.0) * (1.0 - (double) v.velocity * v.velocity));
-            double step = 1.0;
+            double step = 1.0, tremolo = 1.0;
+            float leftGain = 1.0f, rightGain = 1.0f;
             FilterCoefficients first, second;
             for (int i = 0; i < frames && v.active; ++i)
             {
@@ -385,12 +552,36 @@ namespace sampler
                         if (v.glideLeft == 0)
                             v.pitch = v.note;
                     }
+                    // The envelopes and LFOs: semitones on the pitch, octaves on the cutoff.
+                    const auto j = (size_t) (i / control);
+                    double pitchBy = 0.0, octaves = 0.0, panBy = 0.0;
+                    tremolo = 1.0;
+                    for (int e = 0; e < 2; ++e)
+                    {
+                        const auto& o = e == 0 ? s.pitchEnvelope : s.filterEnvelope;
+                        if (! o.on)
+                            continue;
+                        advance (v.envelope[e], o, dt);
+                        const auto by = o.amount * v.envelope[e].level * (1.0 - std::clamp (o.velocity, 0.0, 1.0) * (1.0 - v.velocity));
+                        (e == 0 ? pitchBy : octaves) += by;
+                    }
+                    for (size_t k = 0; k < lfos.size(); ++k)
+                    {
+                        const auto x = lfoAt[k][j], depth = lfoDepth[k];
+                        pitchBy += s.lfo[k].toPitch * x * depth;
+                        octaves += s.lfo[k].toFilter * x * depth;
+                        panBy += s.lfo[k].toPan * x * depth;
+                        tremolo *= 1.0 - std::clamp (s.lfo[k].toVolume, 0.0, 1.0) * depth * (0.5 - 0.5 * x);
+                    }
+                    const auto pan = std::clamp (s.pan + panBy, -1.0, 1.0);
+                    leftGain = (float) (gain * std::min (1.0, 1.0 - pan));
+                    rightGain = (float) (gain * std::min (1.0, 1.0 + pan));
                     const auto played = s.fixedPitch ? (double) s.rootNote : v.pitch;
-                    step = std::pow (2.0, (played - s.rootNote + s.transpose + s.detune / 100.0 + bend * s.bendRange) / 12.0);
+                    step = std::pow (2.0, (played - s.rootNote + s.transpose + s.detune / 100.0 + bend * s.bendRange + pitchBy) / 12.0);
                     if (s.filter)
                     {
                         const auto cutoff = s.cutoff * std::pow (2.0, s.keyFollow * (v.pitch - s.rootNote) / 12.0
-                                                                       - 4.0 * std::clamp (s.filterVelocity, 0.0, 1.0) * (1.0 - v.velocity));
+                                                                       - 4.0 * std::clamp (s.filterVelocity, 0.0, 1.0) * (1.0 - v.velocity) + octaves);
                         first = FilterCoefficients (cutoff, rate, k);
                         second = FilterCoefficients (cutoff, rate, std::sqrt (2.0));
                     }
@@ -493,7 +684,7 @@ namespace sampler
                         r = filtered (r, v.filter[1][1], second, s.filterType);
                     }
                 }
-                const auto a = (float) std::max (0.0, amp) * velocityGain;
+                const auto a = (float) (std::max (0.0, amp) * tremolo) * velocityGain;
                 left[i] += (float) l * a * leftGain;
                 right[i] += (float) r * a * rightGain;
 
