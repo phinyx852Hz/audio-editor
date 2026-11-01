@@ -53,9 +53,10 @@ the *tympanon* and the Latin the *tympanum*; they belonged above all to the cult
 goddesses, Inanna and Ishtar, Astarte, Isis and Cybele, and to the rites of Dionysus. The
 Hebrew Bible's *tof* is the drum Miriam takes up to sing at the crossing of the Red Sea
 (Exodus 15:20), the drum of the women who meet David returning from battle, and of the
-prophets' ecstatic processions. Britannica dates the drum's arrival in Greece to about the 6th
-century BC, with the cult of Cybele, and has Crusaders bringing the jingled tambourine back to
-Europe in the 13th century.
+prophets' ecstatic processions. In Sumer large frame drums were played in the temple rites. In
+the Middle East the frame drum has stayed largely a women's instrument, and it accompanies
+recitation of the Qurʾān. Crusaders brought it to Europe in the 13th century, where as the
+timbrel or tabret it too was played mainly by women, to accompany song and dance.
 
 Most of what is known comes from images: reliefs, painted vases, figurines of women holding a
 round drum flat against the chest. The skins and frames themselves rarely survive. A small

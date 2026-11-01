@@ -65,9 +65,12 @@ grain made into a drum, or a tambourine that lost its jingles in the 19th centur
 the drum of Irish traditional music only in the revival of the 1960s, when Seán Ó Riada made it
 part of Ceoltóirí Chualann and the Chieftains carried it abroad. Johnny "Ringo" McDonagh of De
 Dannan introduced brush beaters and rim shots. The jingled **tambourine** itself, the *buben* of
-Russia and Ukraine, entered the Western orchestra in the 18th century.
+Russia and Ukraine, came back into Europe with the fashion for Turkish Janissary bands in the
+18th century, appeared now and then in the operas of Gluck and Grétry, and joined the orchestra
+for good in the 19th, with Berlioz and Rimsky-Korsakov.
 
 - [Adufe](https://en.wikipedia.org/wiki/Adufe), Wikipedia.
+- [Tambourine](https://www.britannica.com/art/tambourine), *Encyclopaedia Britannica*.
 - [Bodhrán](https://en.wikipedia.org/wiki/Bodhr%C3%A1n), Wikipedia.
 - [Seán Ó Riada](https://en.wikipedia.org/wiki/Se%C3%A1n_%C3%93_Riada), Wikipedia.
 - [Tarantella](https://en.wikipedia.org/wiki/Tarantella) and
