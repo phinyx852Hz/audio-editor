@@ -249,7 +249,7 @@ algorithmic systems of Laurie Spiegel's *Music Mouse* (1986). Eno and Peter Chil
 *Bloom* (2008) and *Reflection* (2017) carried the idea onto phones.
 
 - [Generative music](https://en.wikipedia.org/wiki/Generative_music), Wikipedia.
-- Brian Eno, "Generative Music" (talk, San Francisco, 1996), in *In Motion Magazine*
+- Brian Eno, "Generative Music", a talk at the Imagination Conference, San Francisco, 8 June 1996, in *In Motion Magazine* (7 July 1996)
   ([inmotionmagazine.com](https://inmotionmagazine.com/eno1.html)).
 - Brian Eno, *A Year with Swollen Appendices* (Faber, 1996).
 
