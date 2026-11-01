@@ -2204,41 +2204,8 @@ protected:
         auto softer = text;
         softer.setAlpha (150);
 
-        // The ruler: bars, labelled so they stay apart.
-        g.fillRect (QRect (0, 0, width(), rulerHeight), pal.color (QPalette::Window));
-        if (window.engine.isLooping())
-        {
-            auto loop = Theme::current().color (QStringLiteral ("selection"));
-            loop.setAlpha (110);
-            g.fillRect (QRectF (xOf (0.0), 0, xOf ((double) window.engine.length()) - xOf (0.0), rulerHeight), loop);
-        }
-        const auto barFrames = std::max (1, window.engine.beatsPerBar.load()) * beatFrames();
-        int every = 1;
-        while (every < 4096 && barFrames * every / framesPerPixel < 56.0)
-            every *= 2;
-        const auto firstBar = std::max (0, (int) std::floor (start / barFrames));
-        const auto lastBar = (int) std::ceil ((start + framesPerPixel * timelineWidth()) / barFrames);
-        g.setFont (smallFont());
-        for (int bar = firstBar; bar <= lastBar; ++bar)
-        {
-            const auto x = xOf (bar * barFrames);
-            if (x < headerWidth)
-                continue;
-            const bool labelled = bar % every == 0;
-            if (! labelled && barFrames / framesPerPixel < 6.0)
-                continue;
-            auto line = faint;
-            line.setAlpha (labelled ? 46 : 24);
-            g.setPen (line);
-            g.drawLine (QPointF (x, labelled ? 0 : rulerHeight - 6), QPointF (x, height()));
-            if (labelled)
-            {
-                g.setPen (softer);
-                g.drawText (QPointF (x + 3, rulerHeight - 6), QString::number (bar + 1));
-            }
-        }
-        g.setPen (faint);
-        g.drawLine (0, rulerHeight - 1, width(), rulerHeight - 1);
+        // The ruler: bars above and minutes:seconds below, or time alone.
+        drawRuler (g, faint, softer);
 
         // The rows.
         bool anySolo = false;
@@ -2360,7 +2327,7 @@ protected:
         if (px >= headerWidth && px <= width())
         {
             g.setPen (QPen (Theme::current().color (QStringLiteral ("highlight")), 1.5));
-            g.drawLine (QPointF (px, 0), QPointF (px, rulerHeight + (rowCount() + (single ? 0 : 1)) * rowH));
+            g.drawLine (QPointF (px, 0), QPointF (px, rulerHeight() + (rowCount() + (single ? 0 : 1)) * rowH));
         }
         if (dropHint.x() >= headerWidth)
         {
@@ -2386,7 +2353,7 @@ protected:
             Q_EMIT window.activated();
         const auto pos = e->position();
         const int row = rowAt (pos.y());
-        if (row >= 0 && pos.y() >= rulerHeight)
+        if (row >= 0 && pos.y() >= rulerHeight())
         {
             window.select (row);
             window.engageTrack();
@@ -2402,7 +2369,7 @@ protected:
             return;
         }
 
-        const auto hit = pos.y() >= rulerHeight ? clipAt (pos) : Hit {};
+        const auto hit = pos.y() >= rulerHeight() ? clipAt (pos) : Hit {};
         if (hit.id == 0)
         {
             // Empty space or the ruler: the playhead goes there.
@@ -2437,7 +2404,7 @@ protected:
         const auto pos = e->position();
         if (drag == Drag::none)
         {
-            const auto hit = pos.y() >= rulerHeight && pos.x() >= headerWidth ? clipAt (pos) : Hit {};
+            const auto hit = pos.y() >= rulerHeight() && pos.x() >= headerWidth ? clipAt (pos) : Hit {};
             setCursor (hit.edge != Edge::none ? Qt::SizeHorCursor : Qt::ArrowCursor);
             return;
         }
@@ -2487,7 +2454,7 @@ protected:
 
     void mouseDoubleClickEvent (QMouseEvent* e) override
     {
-        if (e->position().y() < rulerHeight)
+        if (e->position().y() < rulerHeight())
         {
             fit = true;
             update();
@@ -2629,8 +2596,13 @@ protected:
     void contextMenuEvent (QContextMenuEvent* e) override
     {
         const QPointF pos (e->pos());
+        if (pos.y() < rulerHeight() && pos.x() >= headerWidth)
+        {
+            rulerMenu (e->globalPos());
+            return;
+        }
         const int row = rowAt (pos.y());
-        if (row < 0 || pos.y() < rulerHeight || pos.x() < headerWidth)
+        if (row < 0 || pos.y() < rulerHeight() || pos.x() < headerWidth)
             return;
         window.select (row);
         const auto hit = clipAt (pos);
@@ -2740,7 +2712,6 @@ protected:
 
 private:
     static constexpr int headerWidth = 132;
-    static constexpr int rulerHeight = 20;
     static constexpr int titleHeight = 13;
     static constexpr Frame peakBlock = 256;   // frames per waveform peak
 
@@ -2769,27 +2740,175 @@ private:
         return f;
     }
 
+    // The ruler shows bars and time together (bars above, time below), or time alone.
+    // One choice for every timeline, kept between sessions.
+    static bool& rulerShowsBars()
+    {
+        static bool shown = appSettings().value (QStringLiteral ("mixer/ruler"), QStringLiteral ("both")).toString() != QLatin1String ("time");
+        return shown;
+    }
+
+    int rulerHeight() const
+    {
+        const auto row = (int) std::ceil (QFontMetricsF (smallFont()).height()) + 4;
+        return rulerShowsBars() ? row * 2 + 1 : row + 3;
+    }
+
+    void rulerMenu (const QPoint& at)
+    {
+        QMenu menu (this);
+        auto* modes = new QActionGroup (&menu);
+        const auto choose = [this] (bool bars)
+        {
+            rulerShowsBars() = bars;
+            appSettings().setValue (QStringLiteral ("mixer/ruler"), bars ? QStringLiteral ("both") : QStringLiteral ("time"));
+            for (auto* w : window.findChildren<QWidget*>())
+                if (auto* lanes = dynamic_cast<TrackLanes*> (w))
+                    lanes->update();
+            update();
+        };
+        auto* both = menu.addAction (MixerWindow::tr ("Ruler in &Bars and Time"), this, [choose] { choose (true); });
+        auto* time = menu.addAction (MixerWindow::tr ("Ruler in &Time Only"), this, [choose] { choose (false); });
+        for (auto* a : { both, time })
+        {
+            a->setCheckable (true);
+            modes->addAction (a);
+        }
+        (rulerShowsBars() ? both : time)->setChecked (true);
+        menu.exec (at);
+    }
+
+    // Time labels: 0:00, 1:30, 1:02:03, and tenths or hundredths when zoomed in.
+    static QString clockLabel (double seconds, int decimals)
+    {
+        const auto scale = std::pow (10.0, decimals);
+        const auto ticks = std::llround (seconds * scale);
+        const auto unit = (long long) std::llround (scale);
+        const auto whole = ticks / unit, fraction = ticks % unit;
+        const auto h = whole / 3600, m = (whole / 60) % 60, s = whole % 60;
+        auto text = h > 0 ? QStringLiteral ("%1:%2:%3").arg (h).arg (m, 2, 10, QLatin1Char ('0')).arg (s, 2, 10, QLatin1Char ('0'))
+                          : QStringLiteral ("%1:%2").arg (m).arg (s, 2, 10, QLatin1Char ('0'));
+        if (decimals > 0)
+            text += QLatin1Char ('.') + QStringLiteral ("%1").arg (fraction, decimals, 10, QLatin1Char ('0'));
+        return text;
+    }
+
+    void drawRuler (QPainter& g, const QColor& faint, const QColor& softer) const
+    {
+        const auto pal = palette();
+        const auto bottom = rulerHeight();
+        const bool bars = rulerShowsBars();
+        const auto middle = bars ? bottom / 2 : 0;   // the line between the rows
+        g.fillRect (QRect (0, 0, width(), bottom), pal.color (QPalette::Window));
+        if (window.engine.isLooping())
+        {
+            auto loop = Theme::current().color (QStringLiteral ("selection"));
+            loop.setAlpha (110);
+            g.fillRect (QRectF (xOf (0.0), 0, xOf ((double) window.engine.length()) - xOf (0.0), bottom), loop);
+        }
+        g.setFont (smallFont());
+        const QFontMetricsF fm (g.font());
+        const auto span = framesPerPixel * timelineWidth();
+
+        // Bars, on the top row; their lines run down through the tracks.
+        if (bars)
+        {
+            const auto barFrames = std::max (1, window.engine.beatsPerBar.load()) * beatFrames();
+            int every = 1;
+            while (every < 4096 && barFrames * every / framesPerPixel < 40.0)
+                every *= 2;
+            const auto firstBar = std::max (0, (int) std::floor (start / barFrames));
+            const auto lastBar = (int) std::ceil ((start + span) / barFrames);
+            for (int bar = firstBar; bar <= lastBar; ++bar)
+            {
+                const auto x = xOf (bar * barFrames);
+                if (x < headerWidth)
+                    continue;
+                const bool labelled = bar % every == 0;
+                if (! labelled && barFrames / framesPerPixel < 6.0)
+                    continue;
+                auto line = faint;
+                line.setAlpha (labelled ? 46 : 24);
+                g.setPen (line);
+                g.drawLine (QPointF (x, labelled ? 0 : middle - 5), QPointF (x, middle));
+                g.drawLine (QPointF (x, bottom), QPointF (x, height()));
+                if (labelled)
+                {
+                    g.setPen (softer);
+                    g.drawText (QPointF (x + 3, middle - 4 - fm.descent() + 1), QString::number (bar + 1));
+                }
+            }
+            g.setPen (faint);
+            g.drawLine (headerWidth, middle, width(), middle);
+        }
+
+        // Time, on the bottom row (or the only one). Without bars its lines run through the tracks.
+        static constexpr double clockSteps[] { 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30,
+                                               60, 120, 300, 600, 900, 1800, 3600, 7200 };
+        const auto rate = std::max (1.0, (double) window.rate());
+        const auto pixelsPerSecond = rate / framesPerPixel;
+        const auto t0 = start / rate, t1 = (start + span) / rate;
+        auto step = clockSteps[std::size (clockSteps) - 1];
+        for (const auto candidate : clockSteps)
+        {
+            const auto decimals = std::max (0, (int) std::ceil (-std::log10 (candidate) - 1e-9));
+            if (candidate * pixelsPerSecond >= fm.horizontalAdvance (clockLabel (std::max (t1, 599.0), decimals)) + 14.0)
+            {
+                step = candidate;
+                break;
+            }
+        }
+        const auto decimals = std::max (0, (int) std::ceil (-std::log10 (step) - 1e-9));
+        const auto parts = step >= 60.0 ? 4 : (std::lround (step / std::pow (10.0, std::floor (std::log10 (step) + 1e-9))) == 2 ? 4 : 5);
+        const auto minor = step / parts;
+        for (auto i = (long long) std::floor (t0 / minor); (double) i * minor <= t1 + 1e-9; ++i)
+        {
+            const auto t = (double) i * minor;
+            const auto x = xOf (t * rate);
+            if (t < 0.0 || x < headerWidth)
+                continue;
+            const bool labelled = i % parts == 0;
+            auto line = faint;
+            line.setAlpha (labelled ? 46 : 30);
+            g.setPen (line);
+            g.drawLine (QPointF (x, labelled ? middle : bottom - 4), QPointF (x, bottom));
+            if (labelled && ! bars)
+            {
+                line.setAlpha (24);
+                g.setPen (line);
+                g.drawLine (QPointF (x, bottom), QPointF (x, height()));
+            }
+            if (labelled)
+            {
+                g.setPen (softer);
+                g.drawText (QPointF (x + 3, bottom - 4 - fm.descent() + 1), clockLabel (t, decimals));
+            }
+        }
+        g.setPen (faint);
+        g.drawLine (0, bottom - 1, width(), bottom - 1);
+    }
+
     double beatFrames() const { return 60.0 / window.tempoBox->value() * window.rate(); }
     int timelineWidth() const { return std::max (1, width() - headerWidth); }
 
     // The rows shown: every track, or the editor's one.
     int firstRow() const { return single ? window.editorTrack() : 0; }
     int rowCount() const { return single ? 1 : window.engine.numTracks(); }
-    int rowTop (int track) const { return rulerHeight + (track - firstRow()) * rowHeight(); }
+    int rowTop (int track) const { return rulerHeight() + (track - firstRow()) * rowHeight(); }
 
     int rowHeight() const
     {
         const auto count = std::max (1, rowCount() + (single ? 0 : 1));   // and the Pre-Master's
-        return std::clamp ((height() - rulerHeight) / count, 22, single ? 600 : 140);
+        return std::clamp ((height() - rulerHeight()) / count, 22, single ? 600 : 140);
     }
 
     int rowAt (double y) const
     {
         if (single)
             return firstRow();
-        if (y < rulerHeight)
+        if (y < rulerHeight())
             return window.selected < mixer::masterIndex ? window.selected : -1;
-        const auto row = (int) ((y - rulerHeight) / rowHeight());
+        const auto row = (int) ((y - rulerHeight()) / rowHeight());
         return row < window.engine.numTracks() ? row : -1;
     }
 

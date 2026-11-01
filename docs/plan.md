@@ -734,3 +734,5 @@ Order: cava-style first (small, useful), then projectM, then GLava's shaders if 
 - ~~Start Phase 1~~ Done: editing, undo, markers, meters, Master Section, spectrogram view (chunked copy-on-write audio document)
 - Test on the owner's Omarchy machine, then finish the open Phase 1 items
 - First Audacity reuse candidates: `au3-fft`, `au3-dynamic-range-processor`, NoiseReduction (see 3b)
+
+- **Ruler in bars and time (done 2026-11-01; owner: "I like this combo view of bar and time... we can eliminate the bar/beat only view (since we will always want the time). But we can only have time if we wish").** The editor's TimeRuler drops the beats-only mode (an old `view/ruler=beats` setting shows both). The mixer's tracks-across-time ruler has two rows, bar numbers above and m:ss below (tenths and hundredths when zoomed in, h:mm:ss past an hour), or time only; right-click the ruler to choose, setting `mixer/ruler` (`both` or `time`, default both). In time-only mode the timeline's vertical lines follow the time ticks; snapping still uses beats.
