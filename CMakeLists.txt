@@ -83,6 +83,7 @@ target_sources(${APP_ID} PRIVATE
     Source/mixer/Recording.cpp
     Source/mixer/DrumsToMidi.cpp
     Source/patchbay/PatchBay.cpp
+    Source/core/EbuCore.cpp
     Source/core/Ixml.cpp
     Source/core/Metadata.cpp
     Source/core/MiniXml.cpp
@@ -517,6 +518,7 @@ if(PHI_BUILD_TESTS)
         Source/control/MidiLearn.cpp
         Source/mixer/DrumsToMidi.cpp
         Source/patchbay/PatchBay.cpp
+        Source/core/EbuCore.cpp
         Source/core/Ixml.cpp
         Source/core/Metadata.cpp
         Source/core/MiniXml.cpp

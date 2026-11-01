@@ -24,7 +24,7 @@
 // "raw:wav:<id>" (a WAV chunk PHI does not know, kept as base64).
 namespace meta
 {
-    enum class Schema { common, riff, bext, cart, ixml, id3, vorbis, mp4, ape, xmp };
+    enum class Schema { common, riff, bext, cart, ixml, ebucore, id3, vorbis, mp4, ape, xmp };
 
     // How a schema field follows its common key.
     enum class Follow { same, number, total, year };   // "3/12" -> "3", "12"; "2026-10-18" -> "2026"

@@ -109,6 +109,7 @@ tagio::Options MetadataEditor::writeOptionsFor (const QString& extension)
     o.bext = read ("bext", true);
     o.cart = read ("cart", true);
     o.ixml = read ("ixml", true);
+    o.ebucore = read ("ebucore", false);
     o.id3 = read ("id3", extension.toLower() != QStringLiteral ("wav"));   // ID3 in WAV only when asked
     o.id3v1 = read ("id3v1", true);
     o.vorbis = read ("vorbis", true);
@@ -124,7 +125,7 @@ tagio::Options MetadataEditor::writeOptionsFor (const QString& extension)
 void MetadataEditor::saveWriteOptions (const QString& extension, const tagio::Options& o)
 {
     auto s = appSettings();
-    const std::pair<const char*, bool> flags[] { { "riff", o.riff }, { "bext", o.bext }, { "cart", o.cart }, { "ixml", o.ixml }, { "id3", o.id3 },
+    const std::pair<const char*, bool> flags[] { { "riff", o.riff }, { "bext", o.bext }, { "cart", o.cart }, { "ixml", o.ixml }, { "ebucore", o.ebucore }, { "id3", o.id3 },
                                                  { "id3v1", o.id3v1 }, { "vorbis", o.vorbis }, { "mp4", o.mp4 }, { "ape", o.ape },
                                                  { "xmp", o.xmp }, { "chapters", o.chapters } };
     for (const auto& [name, on] : flags)
@@ -186,6 +187,7 @@ MetadataEditor::MetadataEditor (const Tags& tagsIn, const QString& filePath, dou
     buildSchema (tabs, meta::Schema::riff, tr ("RIFF"), tr ("RIFF INFO list and Display Title (WAV)."));
     buildSchema (tabs, meta::Schema::cart, tr ("Cart"), tr ("AES46 cart chunk for radio playout systems (WAV). Timers count samples from the start."));
     buildSchema (tabs, meta::Schema::ixml, tr ("iXML"), tr ("iXML production sound metadata (WAV). Other elements of the file are kept as they are."));
+    buildSchema (tabs, meta::Schema::ebucore, tr ("EBUCore"), tr ("EBUCore (EBU Tech 3293) in an axml chunk (WAV), written when chosen on the Write tab. Elements PHI does not show, such as an ADM description, are kept as they are."));
     buildSchema (tabs, meta::Schema::vorbis, tr ("Vorbis"), tr ("Vorbis comments, in FLAC, Ogg Vorbis, Opus and Speex."));
     buildSchema (tabs, meta::Schema::mp4, tr ("MP4"), tr ("iTunes atoms, in M4A (AAC and ALAC)."));
     buildSchema (tabs, meta::Schema::ape, tr ("APE"), tr ("APEv2 tags, in WavPack, Monkey's Audio and Musepack."));
@@ -868,6 +870,7 @@ void MetadataEditor::buildWrite (QTabWidget* tabs)
     box (tr ("Broadcast Wave (bext)"), writeOptions.bext, wav);
     box (tr ("Cart chunk"), writeOptions.cart, wav);
     box (tr ("iXML"), writeOptions.ixml, wav);
+    box (tr ("EBUCore (an \"axml\" chunk, for broadcasters and archives)"), writeOptions.ebucore, wav);
     box (wav ? tr ("ID3 (an \"id3\" chunk, read by many players)") : tr ("ID3v2"), writeOptions.id3, has (meta::Schema::id3));
     box (tr ("ID3v1 as well (MP3)"), writeOptions.id3v1, extension == QStringLiteral ("mp3"));
     auto* version = new QComboBox;

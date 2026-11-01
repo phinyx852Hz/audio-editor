@@ -19,6 +19,7 @@ namespace tagio
     struct Options
     {
         bool riff = true, bext = true, cart = true, ixml = true;
+        bool ebucore = false;       // EBUCore in a WAV axml chunk: only when asked
         bool id3 = true, id3v1 = true, vorbis = true, mp4 = true, ape = true, xmp = true;
         int id3Version = 4;         // 3 or 4
         bool chapters = true;       // MP3: ID3 chapters from the markers

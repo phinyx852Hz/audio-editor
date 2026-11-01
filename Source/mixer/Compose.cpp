@@ -69,9 +69,12 @@ namespace composition
               "Jairazbhoy, The Rāgs of North Indian Music; Bor, The Raga Guide; Clayton, Time in Indian Music", "yaman (kalyan)",
               4, 7, "sitār|tānpūrā|tablā|chikārī|sāraṅgī|swarmaṇḍal|drone" },
             { Method::maqam, "maqam", "Maqām: Taqsīm and Waṣla", "Arab music (Egypt, the Levant)", "south and west asia",
-              "A taqsīm through the maqām's ajnās, from the qarār up to the ghammāz and the jawāb, a modulation and a qafla home; "
-              "then a waṣla: a samāʿī in four khānāt with its taslīm, a muwashshaḥ, and a closing qafla.",
-              "Marcus, Music in Egypt; Racy, Making Music in the Arab World; Touma, The Music of the Arabs", "rast",
+              "A taqsīm through the maqām's ajnās in sections that grow longer, each opened by a set figure and closed by a qafla and a "
+              "silence, from the qarār up to the ghammāz and the jawāb, a late modulation and a qafla home, the drone early and broken "
+              "off, the line freer as it goes; then a waṣla: a samāʿī in four khānāt with its taslīm, a layālī, a muwashshaḥ, and a "
+              "closing qafla.",
+              "Marcus, Music in Egypt; Racy, Making Music in the Arab World; Touma, The Music of the Arabs; Nettl and Riddle, "
+              "\"Taqsim Nahawand\" (1973)", "rast",
               4, 8, "ʿūd|darbukka|qānūn|nāy|riqq|kamān|voice|bass" },
             { Method::radif, "radif", "Radif and Dastgāh", "Persian classical music (Iran)", "south and west asia",
               "A dastgāh's gushe-hā in the order of the radif: the darāmad, then each gushe on a higher shāhed with its own ist, to "
@@ -1373,19 +1376,61 @@ namespace composition
                 add (out.parts[5], at + Q / 16, len - Q / 16, sc.key (d), vel - 20);   // the kamān, a little behind
             };
             // Taqsīm: free; the lower jins, rising to the ghammāz, the upper jins and the jawāb, a
-            // modulation (the line centred a jins away), the descent and qafla.
+            // modulation (the line centred a jins away), the descent and qafla. After Nettl and Riddle
+            // (1973) and Marcus: the sections grow longer, the longest and the modulation in the second
+            // half; each opens on a set figure and ends on a qafla of three falling notes and a silence;
+            // the drone is heard early and broken off, and the line loosens from a near-metre to free
+            // rhythm as it goes.
             int64_t t = 0;
             int d = 0, dir = 0;
             const auto taqsimEnd = total * 30 / 100;
-            struct Stage { const char* name; int lo, hi, rest; };
-            const std::array<Stage, 5> stages { Stage { "taqsīm: the lower jins", -1, ghammaz - 1, 0 }, { "taqsīm: the ghammāz", 0, ghammaz + 1, ghammaz },
-                                                { "taqsīm: the upper jins, the jawāb", ghammaz - 1, n + 1, n }, { "taqsīm: a modulation", 1, ghammaz + 2, 2 },
-                                                { "taqsīm: the descent and qafla", -1, ghammaz, 0 } };
+            struct Stage { const char* name; int lo, hi, rest; int weight; };
+            const std::array<Stage, 5> stages { Stage { "taqsīm: the lower jins", -1, ghammaz - 1, 0, 3 },
+                                                { "taqsīm: the ghammāz", 0, ghammaz + 1, ghammaz, 4 },
+                                                { "taqsīm: the upper jins, the jawāb", ghammaz - 1, n + 1, n, 6 },
+                                                { "taqsīm: a modulation", 1, ghammaz + 2, 2, 6 },
+                                                { "taqsīm: the descent and qafla", -1, ghammaz, 0, 4 } };
+            int weights = 0;
+            for (const auto& st : stages)
+                weights += st.weight;
+            const auto fourth = sc.fourth();
             for (size_t k = 0; k < stages.size(); ++k)
             {
                 const auto& st = stages[k];
                 mark (out, t, st.name);
-                const auto stageEnd = t + taqsimEnd / (int64_t) stages.size();
+                const auto stageEnd = t + taqsimEnd * st.weight / weights;
+                // The looseness: 0 at the start (lengths in eighths, a near-metre), 1 at the end (any length).
+                const double loose = (double) k / (double) (stages.size() - 1);
+                auto noteLen = [&]
+                {
+                    if (chance (r, loose * 0.7))
+                        return std::max<int64_t> (Q / 6, (int64_t) (Q * (0.25 + 1.5 * r.uniform())));
+                    return Q / 2 * between (r, 1, 2);
+                };
+                // The drone (the qarār, as on the buzuq) early on, in strokes with gaps, then gone.
+                if (k < 2)
+                    for (int64_t x = t; x < stageEnd; x += 4 * Q)
+                        if (x == 0 || chance (r, 0.7))
+                            add (out.parts[7], x, between (r, 2, 3) * Q, sc.key (-2 * n), 44);
+                // The opening figure: a leap of a fourth up from the stage's note, or three notes falling to it.
+                if (chance (r, 0.5))
+                {
+                    for (auto x : { st.rest, st.rest + fourth })
+                    {
+                        ensemble (t, Q, x, 80, false);
+                        t += Q;
+                    }
+                    d = st.rest + fourth;
+                }
+                else
+                {
+                    for (auto x : { st.rest + 2, st.rest + 1, st.rest })
+                    {
+                        ensemble (t, Q / 2, x, 80, false);
+                        t += Q / 2;
+                    }
+                    d = st.rest;
+                }
                 while (t < stageEnd)
                 {
                     // A phrase, often in sequence (a motif repeated a step lower), then a rest on the stage's note.
@@ -1396,13 +1441,25 @@ namespace composition
                     for (int rep = 0; rep < reps; ++rep)
                         for (auto x : motif)
                         {
-                            const auto len = Q / 2 * between (r, 1, 3) / (chance (r, 0.4) ? 2 : 1);
+                            const auto len = noteLen();
                             ensemble (t, len, std::clamp (x - rep, st.lo - 1, st.hi), 76, false);
                             t += len;
                         }
                     d = st.rest;
                     ensemble (t, 2 * Q, d, 80, false);
                     t += 3 * Q;
+                }
+                // The section's qafla: three falling notes to its note, held, then a silence.
+                if (k + 1 < stages.size())
+                {
+                    for (auto x : { st.rest + 2, st.rest + 1 })
+                    {
+                        ensemble (t, Q / 2, x, 82, false);
+                        t += Q / 2;
+                    }
+                    ensemble (t, 2 * Q, st.rest, 84, false);
+                    t += 2 * Q + 2 * Q;
+                    d = st.rest;
                 }
             }
             // The qafla: down the lower jins to the qarār, a turn below it first.
@@ -1412,7 +1469,6 @@ namespace composition
                 t += x == 0 ? Q : Q / 2;
             }
             t += 2 * Q;
-            add (out.parts[7], 0, t, sc.key (-2 * n), 44);   // the qarār held under the taqsīm
             // Samāʿī thaqīl, 10/8: dum . . tak . dum dum tak . . ; four khānāt, each followed by the taslīm.
             const std::map<char, int> darbukka { { 'd', gm::lowConga }, { 't', gm::openHiConga }, { 'k', gm::muteHiConga } };
             const std::map<char, int> riqq { { 's', gm::tambourine }, { 't', gm::highTimbale } };
@@ -1471,6 +1527,39 @@ namespace composition
                 drums (t, khanaCycles, eighth, "D..T.DDT..", "sstssstsss");
                 t = playPhrase (t, taslim, eighth, 86);
             }
+            // A layālī before the sung piece: the voice free on "yā layl, yā ʿayn", long notes and melismas
+            // rising from the qarār toward the ghammāz, each phrase answered by the ʿūd; no drums.
+            mark (out, t, "layālī");
+            {
+                int ld = 0, ldir = 0;
+                const int phrases = std::clamp (s.bars / 16, 2, 4);
+                for (int ph = 0; ph < phrases; ++ph)
+                {
+                    const int top = std::min (ghammaz + 1, 1 + ph * std::max (1, ghammaz / phrases + 1));
+                    std::vector<std::pair<int, int64_t>> line;
+                    for (int i = 0, m = between (r, 4, 7); i < m; ++i)
+                    {
+                        ld = walk (sc, ld, -1, top, r, ldir, 0.1);
+                        line.push_back ({ ld, i == 0 || chance (r, 0.3) ? Q * between (r, 2, 3) : Q / 3 });
+                    }
+                    line.push_back ({ ph + 1 == phrases ? 0 : std::min (top, ghammaz), 3 * Q });
+                    int64_t x = t;
+                    for (const auto& [ln, len] : line)
+                    {
+                        add (out.parts[6], x, len, sc.key (ln), 88);
+                        x += len;
+                    }
+                    x += Q;
+                    for (const auto& [ln, len] : line)   // the ʿūd's answer, the phrase again more quickly
+                    {
+                        const auto ul = std::max<int64_t> (Q / 4, len / 2);
+                        add (ud, x, ul, sc.key (ln), 74);
+                        x += ul;
+                    }
+                    t = x + Q;
+                    ld = line.back().first;
+                }
+            }
             // A muwashshaḥ in maqsūm (dum tak . tak dum . tak .): the dawr twice, the khāna, the qafla.
             std::vector<std::pair<int, int>> dawr, khana;
             phraseIn (8 * khanaCycles, -1, ghammaz + 1, dawr);
@@ -1505,7 +1594,7 @@ namespace composition
             out.end = t;
             out.parts.resize ((size_t) parts);
             out.summary = "A taqsīm in five stages through the ajnās (the ghammāz on the " + std::to_string (ghammaz + 1) + "th degree), then a waṣla: "
-                          "a samāʿī of four khānāt with its taslīm, a muwashshaḥ in maqsūm and the qafla";
+                          "a samāʿī of four khānāt with its taslīm, a layālī, a muwashshaḥ in maqsūm and the qafla";
             return out;
         }
 
