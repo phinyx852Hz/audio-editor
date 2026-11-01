@@ -31,6 +31,8 @@ and Anthony Kozar. The full license and credits are installed with PHI.
   - **the bols on PHI tabla** (the default): the owner's own strokes (below). Each use of a bol
     plays its next take. The score's track gets PHI tabla, and PHI tabla plays it while it is
     edited.
+  - **the strokes on PHI frame drum**: dum, tak, ka, pa, snap and sweep on the owner's own frame
+    drum, each stroke's takes in turn (docs/phi-frame-drum.md). `-da.iqaat` holds the iqāʿāt.
   - **the bols on General MIDI drums**: each item in turn on a tablā part, a section per item, laid out
     by BP's notation. Fields between periods take a beat each, `/6` and `*2` set the speed, a
     `{a, b}` expression fits its other fields to the first one, `-` is a rest, and `_` lengthens

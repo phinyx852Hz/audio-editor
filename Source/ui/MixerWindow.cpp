@@ -12,6 +12,7 @@
 #include "ExtremeSettings.h"
 #include "Settings.h"
 #include "SlicerKit.h"
+#include "../sampler/PhiFrameDrum.h"
 #include "../sampler/PhiTabla.h"
 #include "SlicerWindow.h"
 #include "Theme.h"
@@ -501,7 +502,7 @@ namespace
         return MixerWindow::tr ("PHI projects (*.phi *.phinyxmix);;DAWproject: Bitwig, Studio One, Cubase... (*.dawproject);;Ableton Live Sets (*.als);;All files (*)");
     }
 
-    enum Choice { noInstrument, synthChoice, samplerChoice, slicerChoice, ragaChoice, prismChoice, tablaChoice, firstPlugin };
+    enum Choice { noInstrument, synthChoice, samplerChoice, slicerChoice, ragaChoice, prismChoice, tablaChoice, frameDrumChoice, firstPlugin };
 
     // Whether the lanes and the launcher have something moving to show: playing, counting in,
     // a launcher clip playing or queued, a take, or a drag. Otherwise they only show edits,
@@ -1251,7 +1252,7 @@ public:
         {
             box->clear();
             box->addItems ({ MixerWindow::tr ("No instrument"), MixerWindow::tr ("Synth"), MixerWindow::tr ("Sampler"), MixerWindow::tr ("Slicer"),
-                             QString::fromUtf8 ("PHI rāga"), MixerWindow::tr ("Instrument Prism"), QStringLiteral ("PHI tabla") });
+                             QString::fromUtf8 ("PHI rāga"), MixerWindow::tr ("Instrument Prism"), QStringLiteral ("PHI tabla"), QStringLiteral ("PHI frame drum") });
             for (const auto& p : plugins)
                 box->addItem (QString::fromStdString (p.name) + QStringLiteral (" (") + QString::fromStdString (p.format) + QStringLiteral (")"),
                               QString::fromStdString (p.id));
@@ -1264,8 +1265,11 @@ public:
                 case mixer::Instrument::Kind::synth:   choice = synthChoice; break;
                 case mixer::Instrument::Kind::sampler: choice = samplerChoice; break;
                 case mixer::Instrument::Kind::slicer:
-                    choice = static_cast<const mixer::SlicerInstrument&> (*inst).phiTabla ? tablaChoice : slicerChoice;
+                {
+                    const auto& sl = static_cast<const mixer::SlicerInstrument&> (*inst);
+                    choice = sl.phiTabla ? tablaChoice : sl.phiFrameDrum ? frameDrumChoice : slicerChoice;
                     break;
+                }
                 case mixer::Instrument::Kind::raga:    choice = ragaChoice; break;
                 case mixer::Instrument::Kind::prism:   choice = prismChoice; break;
                 case mixer::Instrument::Kind::plugin:
@@ -3580,6 +3584,7 @@ private:
             add (MixerWindow::tr ("Built-in"), QString::fromUtf8 ("PHI rāga"), "raga");
             add (MixerWindow::tr ("Built-in"), MixerWindow::tr ("Instrument Prism"), "prism");
             add (MixerWindow::tr ("Built-in"), QStringLiteral ("PHI tabla"), "tabla");
+            add (MixerWindow::tr ("Built-in"), QStringLiteral ("PHI frame drum"), "framedrum");
             for (const auto& p : window.audio.knownInstruments())
                 add (QString::fromStdString (p.format), QString::fromStdString (p.name), "instrument\n" + QByteArray::fromStdString (p.id));
         }
@@ -8661,6 +8666,7 @@ bool MixerWindow::dropPlugin (int track, const QByteArray& what)
     const int choice = kind == QLatin1String ("synth") ? synthChoice : kind == QLatin1String ("sampler") ? samplerChoice
                      : kind == QLatin1String ("slicer") ? slicerChoice : kind == QLatin1String ("raga") ? ragaChoice
                      : kind == QLatin1String ("prism") ? prismChoice : kind == QLatin1String ("tabla") ? tablaChoice
+                     : kind == QLatin1String ("framedrum") ? frameDrumChoice
                      : kind == QLatin1String ("instrument") ? firstPlugin : -1;
     if (choice < 0)
         return false;
@@ -9563,37 +9569,86 @@ void MixerWindow::placeAllMidi()
     refreshTransport();
 }
 
-// PHI tabla (sampler/PhiTabla.h): a Slicer with the owner's own tablā strokes on 32 pads, for Push.
-mixer::InstrumentPtr MixerWindow::makePhiTabla()
+namespace
 {
-    const auto installed = QDir (QCoreApplication::applicationDirPath()).absoluteFilePath (QStringLiteral (PHI_SHARE_RELATIVE "/phi-tabla"));
-    const auto folder = QFileInfo (installed).isDir() ? QDir::cleanPath (installed) : QStringLiteral (PHI_SHARE_SOURCE_DIR "/phi-tabla");
-    std::vector<std::string> missing;
-    const auto kit = phitabla::kit (folder.toStdString(), [this] (const std::string& path)
+    // A built-in kit's sounds: installed beside PHI, else in the source tree's share folder.
+    QString builtInKitFolder (const char* name)
     {
-        QString error;
-        return slicerkit::loadSound (QString::fromStdString (path), rate(), error);
-    }, &missing);
+        const auto installed = QDir (QCoreApplication::applicationDirPath()).absoluteFilePath (QStringLiteral (PHI_SHARE_RELATIVE "/") + QLatin1String (name));
+        return QFileInfo (installed).isDir() ? QDir::cleanPath (installed) : QStringLiteral (PHI_SHARE_SOURCE_DIR "/") + QLatin1String (name);
+    }
+}
+
+// A Slicer with a built-in kit: the owner's own default for it (the Slicer's Kit > Make This the
+// ... Default), tuning and all, else `kit`.
+mixer::InstrumentPtr MixerWindow::makeBuiltInKit (const QString& name, const QString& defaultFile, const slicer::Kit& kit,
+                                                  const std::vector<std::string>& missing, const QString& folder)
+{
     auto made = std::make_shared<mixer::SlicerInstrument>();
-    made->phiTabla = true;
-    // The owner's own default (the Slicer's Kit > Make This the PHI tabla Default), tuning and all, else the built-in kit.
-    if (const auto own = slicerkit::phiTablaDefaultPath(); QFileInfo::exists (own))
+    if (QFileInfo::exists (defaultFile))
     {
         slicerkit::Loaded loaded;
         QString error;
-        if (slicerkit::loadKitFile (own, rate(), loaded, error))
+        if (slicerkit::loadKitFile (defaultFile, rate(), loaded, error))
         {
             made->engine().setKit (loaded.kit);
             if (loaded.song != nullptr)
                 made->engine().setSong (*loaded.song);
             return made;
         }
-        status->setText (tr ("PHI tabla: your default kit could not be opened (%1), so the built-in one is used").arg (error));
+        status->setText (tr ("%1: your default kit could not be opened (%2), so the built-in one is used").arg (name, error));
     }
     made->engine().setKit (kit);
     if (! missing.empty())
-        status->setText (tr ("PHI tabla: %1 of its sounds could not be read (in %2)").arg (missing.size()).arg (folder));
+        status->setText (tr ("%1: %2 of its sounds could not be read (in %3)").arg (name).arg (missing.size()).arg (folder));
     return made;
+}
+
+// PHI tabla (sampler/PhiTabla.h): a Slicer with the owner's own tablā strokes on 32 pads, for Push.
+mixer::InstrumentPtr MixerWindow::makePhiTabla()
+{
+    const auto folder = builtInKitFolder ("phi-tabla");
+    std::vector<std::string> missing;
+    const auto kit = phitabla::kit (folder.toStdString(), [this] (const std::string& path)
+    {
+        QString error;
+        return slicerkit::loadSound (QString::fromStdString (path), rate(), error);
+    }, &missing);
+    auto made = makeBuiltInKit (QStringLiteral ("PHI tabla"), slicerkit::phiTablaDefaultPath(), kit, missing, folder);
+    static_cast<mixer::SlicerInstrument&> (*made).phiTabla = true;
+    return made;
+}
+
+// PHI frame drum (sampler/PhiFrameDrum.h): a Slicer with the owner's own frame drum, for Push.
+mixer::InstrumentPtr MixerWindow::makePhiFrameDrum()
+{
+    const auto folder = builtInKitFolder ("phi-frame-drum");
+    std::vector<std::string> missing;
+    const auto kit = phiframedrum::kit (folder.toStdString(), [this] (const std::string& path)
+    {
+        QString error;
+        return slicerkit::loadSound (QString::fromStdString (path), rate(), error);
+    }, &missing);
+    auto made = makeBuiltInKit (QStringLiteral ("PHI frame drum"), slicerkit::phiFrameDrumDefaultPath(), kit, missing, folder);
+    static_cast<mixer::SlicerInstrument&> (*made).phiFrameDrum = true;
+    return made;
+}
+
+// A rhythm of General MIDI drums on PHI frame drum: the clip on the selected track, which gets PHI
+// frame drum (unless it has it already, with the owner's edits).
+bool MixerWindow::addRhythmOnPhiFrameDrum (const midifile::Song& song, const QString& stem)
+{
+    if (selected >= mixer::masterIndex || selected >= engine.numTracks())
+        return false;
+    const auto current = engine.instrument (selected);
+    const bool has = current != nullptr && current->kind() == mixer::Instrument::Kind::slicer
+                     && static_cast<const mixer::SlicerInstrument&> (*current).phiFrameDrum;
+    if (! has)
+        setInstrumentKind (selected, frameDrumChoice, {});
+    int moved = 0;
+    const auto played = phiframedrum::fromGeneralMidi (song, &moved);
+    addRhythm (*played, stem + QStringLiteral (" (frame drum)"));
+    return true;
 }
 
 void MixerWindow::setInstrumentKind (int track, int choice, const QString& pluginId)
@@ -9609,6 +9664,7 @@ void MixerWindow::setInstrumentKind (int track, int choice, const QString& plugi
         case ragaChoice: made = std::make_shared<mixer::RagaInstrument>(); break;
         case prismChoice: made = makePrism (track); break;
         case tablaChoice: made = makePhiTabla(); break;
+        case frameDrumChoice: made = makePhiFrameDrum(); break;
         case samplerChoice:
         case slicerChoice:
             if (choice == samplerChoice)
@@ -9786,6 +9842,8 @@ void MixerWindow::editInstrument (int track)
             w->keepPlayingWhenClosed (true);
             if (s.phiTabla)
                 w->setPhiTabla();
+            else if (s.phiFrameDrum)
+                w->setBuiltInKit (QStringLiteral ("PHI frame drum"), slicerkit::phiFrameDrumDefaultPath());
             if (const auto sound = s.engine().sample(); sound != nullptr)
                 w->setSample (sound, t.sound != nullptr ? t.sound : soundAsAudio (*sound, rate()), rate(), title, true, BeatGrid {}, {});
             w->setWindowTitle (tr ("Slicer: %1").arg (title));
@@ -11150,7 +11208,7 @@ bool MixerWindow::writeMix (const QString& file, QString& error)
                 case mixer::Instrument::Kind::slicer:
                 {
                     auto& sl = static_cast<mixer::SlicerInstrument&> (*inst);
-                    io = { { "kind", "slicer" }, { "phiTabla", sl.phiTabla }, { "sound", soundFile (sl.engine().sample(), sl.samplePath) }, { "kit", slicerkit::toJson (sl.engine().kit(), base, [&] (const sampler::Sample& padSound, int pad, int layer)
+                    io = { { "kind", "slicer" }, { "phiTabla", sl.phiTabla }, { "phiFrameDrum", sl.phiFrameDrum }, { "sound", soundFile (sl.engine().sample(), sl.samplePath) }, { "kit", slicerkit::toJson (sl.engine().kit(), base, [&] (const sampler::Sample& padSound, int pad, int layer)
                          {
                              // A pad's own sound that came from no file goes beside the mix too.
                              const auto folderName = QFileInfo (file).completeBaseName() + tr (" Samples");
@@ -11346,6 +11404,7 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
                 QStringList missing;
                 sl.engine().setKit (slicerkit::fromJson (io.value ("kit").toObject(), base, rate(), &missing));
                 sl.phiTabla = io.value ("phiTabla").toBool();
+                sl.phiFrameDrum = io.value ("phiFrameDrum").toBool();
                 for (const auto& m : missing)
                     problems << tr ("Track %1: %2").arg (i + 1).arg (m);
             }
