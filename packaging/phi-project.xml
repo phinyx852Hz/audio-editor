@@ -5,4 +5,9 @@
     <comment>PHI project</comment>
     <glob pattern="*.phi"/>
   </mime-type>
+  <mime-type type="application/x-dawproject">
+    <sub-class-of type="application/zip"/>
+    <comment>DAWproject</comment>
+    <glob pattern="*.dawproject"/>
+  </mime-type>
 </mime-info>
