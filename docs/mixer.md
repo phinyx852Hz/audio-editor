@@ -772,7 +772,9 @@ is the patchbay's Mix Bus. Mix Down still renders the mixer's own sum.
   is saved with the project.
 - On screen: a folder's strip has a "▼ FOLDER · n" tag on its colour, and each strip in it a
   "↳ name" tag outlined in the folder's colour (its PM button is off, since its sound goes to the
-  folder). Across time, the rows of a folder's tracks are indented under it with the folder's
+  folder). Owner: in Reaper's mixer a folder's strip sits lower than its tracks' strips; to keep
+  every strip level, a 4 px bar in the folder's colour under the name joins the folder's strip and
+  its tracks' strips instead (clear on tracks in no folder, so nothing moves). Across time, the rows of a folder's tracks are indented under it with the folder's
   colour down their side.
 - Saved in the project as each track's `group` (its folder's index, -1 none) and `fold`. Deleting
   a folder leaves its tracks in none; Ctrl+Z puts them back in it.

@@ -1088,6 +1088,12 @@ public:
         values->addWidget (peakValue);
         layout->addLayout (values);
         layout->addWidget (nameBox);
+        // Under the name, a bar in the folder's colour joins a folder's strip and its tracks' strips,
+        // as Reaper's mixer sets a folder apart, without moving any strip up or down: every strip
+        // has it, clear when the track is in no folder.
+        folderBar = new QFrame (this);
+        folderBar->setFixedHeight (4);
+        layout->addWidget (folderBar);
         if (inspecting)
         {
             // The Inspector: its name on top, no fader (the strip has it).
@@ -1689,9 +1695,13 @@ public:
         if (members == 0 && g < 0)
         {
             groupTag->setVisible (false);
+            folderBar->setStyleSheet (QStringLiteral ("background: transparent;"));
+            folderBar->setToolTip ({});
             return;
         }
         const auto colour = members > 0 ? window.info[(size_t) index].colour : window.info[(size_t) g].colour;
+        folderBar->setStyleSheet (QStringLiteral ("background: %1; border-radius: 2px;").arg (colour.name()));
+        folderBar->setToolTip (window.groupText (index));
         const bool slim = window.slimLanes();
         auto text = members > 0 ? (slim ? QStringLiteral ("▼ %1").arg (members) : MixerWindow::tr ("▼ FOLDER · %1").arg (members))
                                 : QStringLiteral ("↳ %1").arg (window.info[(size_t) g].name);
@@ -2032,6 +2042,7 @@ public:
     QWidget* spaceExtra;   // the elevation, spread and LFE send, in the Inspector
     QFrame* colourBar;
     QLabel* groupTag = nullptr;
+    QFrame* folderBar = nullptr;
     QFrame* nameBox;
     QLabel* formatLabel;
     QWidget* modePart;
