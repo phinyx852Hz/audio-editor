@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**136 pull requests:** 132 merged, 4 open.
+**137 pull requests:** 132 merged, 5 open.
 
 ## Contents
 
@@ -163,6 +163,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#34](https://github.com/phinyx852Hz/audio-editor/pull/34) | Plugin windows: view follows its frame, standard size, PHI's opacity | merged | Any plugin or instrument window | `Source/engine/PluginWindow.h`<br>`Source/engine/EmbeddedView.h`<br>`Source/engine/X11Windows.cpp` |
 | [#37](https://github.com/phinyx852Hz/audio-editor/pull/37) | Stop Cardinal crashing PHI on quit | merged | Quitting the app | `Source/main.cpp` |
 | [#127](https://github.com/phinyx852Hz/audio-editor/pull/127) | Research: add Synthesis, its types and its history | merged |  | `share/research/synthesis-1-types.md`<br>`share/research/synthesis-2-history.md`<br>`share/research/synthesis-0-overview.md` |
+| [#137](https://github.com/phinyx852Hz/audio-editor/pull/137) | Fit synth windows, close docked instruments and plugin windows normally, stop Find previews | open |  | `Source/engine/PluginWindow.h`<br>`Source/ui/MixerWindow.cpp`<br>`Source/ui/FindPanel.cpp` |
 
 ### Trackers
 
@@ -376,3 +377,4 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#134](https://github.com/phinyx852Hz/audio-editor/pull/134) | Research: check the Metadata section against Wikipedia | Links *(auto)* | merged | 2026-11-01 | Not yet sorted |
 | [#135](https://github.com/phinyx852Hz/audio-editor/pull/135) | Mixer: open and write DAWproject (Bitwig, Studio One, Cubase) | PHI can now open and write DAWproject, the open format from Bitwig and PreSonus (MIT). *(auto)* | merged | 2026-11-01 | Mixer and clip launcher |
 | [#136](https://github.com/phinyx852Hz/audio-editor/pull/136) | Mixer: open Ableton Live Sets (.als), a Drum Rack on the Slicer | The second of two PRs (the first, #135, added DAWproject). *(auto)* | open | 2026-11-01 | Editing and warping |
+| [#137](https://github.com/phinyx852Hz/audio-editor/pull/137) | Fit synth windows, close docked instruments and plugin windows normally, stop Find previews | 1. *(auto)* | open | 2026-11-01 | Instruments and plugins |
