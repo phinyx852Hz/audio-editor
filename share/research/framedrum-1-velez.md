@@ -129,7 +129,7 @@ School. His course shows the method's shape: lap style first, then the drum held
 the basic strokes, the low *dum*, the high *tek* and the *pa*, then split-hand technique,
 snapping, Velez's fast fingerings and a brush in the left hand; rhythms counted not in numbers
 but in South Indian vocal cycles, with ratio exercises (3:2, 4:3, 5:3, 7:3) for odd meters; and
-Velez's Handance of stepping, playing and vocalizing at once. **David Kuckhermann**, a German percussionist who studied with Velez among others and has
+Velez's Handance of stepping, playing and vocalizing at once. **David Kuckhermann**, a percussionist who studied with Velez among others and has
 played with Dead Can Dance, teaches lap-style frame drumming online through his World Percussion
 Academy. Many of today's frame drum teachers learned the lap
 style and the unified technique from him or from his students, and the instrument now has its
