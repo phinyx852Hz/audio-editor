@@ -731,3 +731,48 @@ is the patchbay's Mix Bus. Mix Down still renders the mixer's own sum.
 - The audio input, with none chosen in Record Options, is the system's default input; it was the
   first input by name, which could be a webcam's or the board's microphone instead of the
   interface.
+
+## Folders: group buses (2026-11-01)
+
+- Owner: "allow for group busses. any two or more busses can be grouped and that single bus would
+  count as a single track. So, users could theoretically override the track count limit through
+  bussing. ctrl + G would group any of the tracks a user selects. The bus track would have all the
+  functionality of the regular tracks... the bus track would appear in the horizontal time line and
+  in the channel strips as how Reaper handles it." Then, with screenshots of Reaper: "there's no
+  need for a separate bus track... the behaviour is that of a folder... there are three levels of
+  folding in the horizontal track view... I do not want the UI to look like this... just create the
+  same folding and bus behaviors."
+- As Reaper's folder tracks: any track can be a folder, and stays an ordinary track (clips,
+  instrument, inserts, sends, pan, fader, mute, solo, record). Its input also gets the sound of the
+  tracks in it, after their faders and pan, and it goes on through its own strip to the master,
+  the Pre-Master or the folder it is in. Folders can hold folders. The engine (`Strip::group`,
+  `Engine::setGroup`, which refuses loops) plays the tracks in folders before their folders, the
+  deepest first, then in the patchbay's order.
+- Muting a folder mutes its tracks; soloing a track keeps the folders it plays into heard, and
+  soloing a folder keeps its tracks heard. A track in a folder skips the Pre-Master and, in Spatial
+  mode, the scene: its folder is placed instead. Bouncing a folder renders it with its tracks (at
+  their faders) before its own fader; a track in a folder bounces alone.
+- A folder with the tracks in it counts as one track: only tracks in no folder count against the
+  limit of 8 (or 16), so an 8-track mix can hold, say, 3 folders of 3 tracks and 2 more tracks. The
+  engine still has room for 16 tracks in all (`mixer::maxTracks`; going past it would renumber the
+  patchbay's nodes and the meters, left for later).
+- Picking tracks, in the strips and in the track headers across time alike (owner, 2026-11-01):
+  a click picks one track, Ctrl+click adds or takes one, Shift+click picks the range from the last
+  one clicked, and a click in empty space (between the strips, under the rows) leaves only the
+  selected track picked. Picked tracks show a dashed outline; Q-Link uses the same picks.
+- Ctrl+G makes the first picked track a folder and puts the other picked tracks in it, moved right
+  under it in their order (after any tracks already in it), the tracks in any picked folder going
+  along; no track is added. Ctrl+Shift+G takes the picked tracks out of their folder (a level up);
+  with only a folder picked, its tracks come out. The strip's right-click menu has the same, and
+  Play into Folder puts a track in any folder there is. One Ctrl+Z undoes a Ctrl+G.
+- Folding across time, Reaper's three levels: the folder's button before its number (▼, ▸, ▶)
+  steps through its tracks shown, its tracks small (a thin row each), and its tracks folded away,
+  when the folder's lane shows their clips faintly. Up and Down skip folded rows. The strips all
+  stay, as Reaper's mixer keeps them (and the launcher's columns stay lined up with them). The fold
+  is saved with the project.
+- On screen: a folder's strip has a "▼ FOLDER · n" tag on its colour, and each strip in it a
+  "↳ name" tag outlined in the folder's colour (its PM button is off, since its sound goes to the
+  folder). Across time, the rows of a folder's tracks are indented under it with the folder's
+  colour down their side.
+- Saved in the project as each track's `group` (its folder's index, -1 none) and `fold`. Deleting
+  a folder leaves its tracks in none; Ctrl+Z puts them back in it.

@@ -691,6 +691,17 @@ public:
         colourBar = new QFrame (this);
         colourBar->setFixedHeight (5);
         layout->addWidget (colourBar);
+        // A group (owner, 2026-11-01, Reaper's folders): its strip says so, and the strips of the
+        // tracks in it name it, on its colour. Hidden for a track in no group.
+        groupTag = new QLabel (this);
+        groupTag->setAlignment (Qt::AlignCenter);
+        groupTag->setVisible (false);
+        {
+            auto f = groupTag->font();
+            f.setPointSizeF (std::max (6.5, f.pointSizeF() * 0.85));
+            groupTag->setFont (f);
+        }
+        layout->addWidget (groupTag);
         // The name sits at the bottom, under the fader's value, in black on the track's colour
         // (owner, 2026-10-25); built here, placed after the fader below.
         nameBox = new QFrame (this);
@@ -1092,6 +1103,10 @@ public:
         QObject::connect (nameEdit, &QLineEdit::textEdited, this, [this] (const QString& t)
         {
             window.info[(size_t) index].name = t;
+            // The tracks in it name it.
+            for (int k = 0; k < window.engine.numTracks(); ++k)
+                if (window.engine.groupOf (k) == index && window.strips[(size_t) k] != nullptr)
+                    window.strips[(size_t) k]->refreshGroup();
             window.changed();
         });
         QObject::connect (nameEdit, &QLineEdit::editingFinished, &window, [this] { window.setFocus(); });
@@ -1548,6 +1563,7 @@ public:
         auto& s = strip();
         const auto& info = window.info[(size_t) index];
         colourBar->setStyleSheet (QStringLiteral ("background: %1;").arg (info.colour.name()));
+        refreshGroup();
         nameBox->setStyleSheet (QStringLiteral ("QFrame#nameBox { background: %1; border-radius: 3px; } "
                                                 "QFrame#nameBox QLabel, QFrame#nameBox QLineEdit { color: black; background: transparent; }")
                                     .arg (info.colour.name()));
@@ -1661,6 +1677,37 @@ public:
     }
 
     // Picked strips (Ctrl+click, for Q-Link) have a dashed border, the selected one a solid one.
+    // The folder tag: "▼ FOLDER · 3" on a folder, "↳ Drums" on a track in one.
+    void refreshGroup()
+    {
+        const auto& e = window.engine;
+        int members = 0;
+        for (int k = 0; k < e.numTracks(); ++k)
+            members += e.groupOf (k) == index ? 1 : 0;
+        const auto g = e.groupOf (index);
+        busButton->setEnabled (g < 0);   // its sound goes to the group: the Pre-Master button has nothing to do
+        if (members == 0 && g < 0)
+        {
+            groupTag->setVisible (false);
+            return;
+        }
+        const auto colour = members > 0 ? window.info[(size_t) index].colour : window.info[(size_t) g].colour;
+        const bool slim = window.slimLanes();
+        auto text = members > 0 ? (slim ? QStringLiteral ("▼ %1").arg (members) : MixerWindow::tr ("▼ FOLDER · %1").arg (members))
+                                : QStringLiteral ("↳ %1").arg (window.info[(size_t) g].name);
+        if (members > 0 && g >= 0 && ! slim)
+            text += QStringLiteral (" ↳ %1").arg (g + 1);
+        const auto room = inspecting ? 160 : std::max (24, window.laneWidth() - MixerWindow::stripGap - 14);
+        groupTag->setText (groupTag->fontMetrics().elidedText (text, Qt::ElideRight, room));
+        groupTag->setToolTip (window.groupText (index) + (members > 0 ? MixerWindow::tr (": their sound goes through this strip, all of it, "
+                                                                                          "and they count as one track. Ctrl+Shift+G takes them out.")
+                                                                       : MixerWindow::tr (": this track's sound goes there after its fader, not to the master. "
+                                                                                          "Ctrl+Shift+G takes it out.")));
+        groupTag->setStyleSheet (members > 0 ? QStringLiteral ("QLabel { background: %1; color: black; border-radius: 3px; font-weight: bold; }").arg (colour.name())
+                                             : QStringLiteral ("QLabel { border: 1px solid %1; border-radius: 3px; }").arg (colour.name()));
+        groupTag->setVisible (true);
+    }
+
     void setSelected (bool on, bool picked = false)
     {
         const auto colour = Theme::current().color (QStringLiteral ("highlight")).name();
@@ -1807,20 +1854,61 @@ protected:
 
     void mousePressEvent (QMouseEvent* e) override
     {
-        if (e->modifiers() & Qt::ControlModifier)
+        if (inspecting)
+            window.select (index);
+        else if (e->modifiers() & Qt::ControlModifier)
+        {
             window.pick (index, true);
+            window.pickAnchor = index;
+        }
+        else if (e->modifiers() & Qt::ShiftModifier)
+            window.pickRange (index);   // from the last one clicked
         else
         {
-            window.select (index);
+            window.pickOnly (index);
             window.engageTrack();
             window.showDevices();   // a click on the strip brings its Device Chain back from a clip
         }
         QFrame::mousePressEvent (e);
     }
 
+    // Grouping: the picked tracks into a new group, this track into a group there is, or out.
+    void groupMenu (QMenu& menu)
+    {
+        auto& e = window.engine;
+        const auto pickedCount = std::max<int> (2, (int) window.picked.size());
+        menu.addAction (MixerWindow::tr ("Make a &Folder of the %n Picked Track(s) (Ctrl+G)", "", pickedCount), this, [this] { window.groupTracks(); })
+            ->setEnabled (window.picked.size() > 1);
+        auto* into = menu.addMenu (MixerWindow::tr ("Play &into Folder"));
+        auto* none = into->addAction (MixerWindow::tr ("None (the master)"), this, [this]
+        {
+            window.setGroups ({ { index, -1 } }, MixerWindow::tr ("Track %1 out of its folder.").arg (index + 1));
+        });
+        none->setCheckable (true);
+        none->setChecked (e.groupOf (index) < 0);
+        into->addSeparator();
+        for (int g = 0; g < e.numTracks(); ++g)
+        {
+            if (g == index || ! e.isGroup (g))
+                continue;
+            auto* a = into->addAction (QStringLiteral ("%1  %2").arg (g + 1).arg (window.info[(size_t) g].name), this, [this, g]
+            {
+                window.setGroups ({ { index, g } }, MixerWindow::tr ("Track %1 into folder %2.").arg (index + 1).arg (g + 1));
+            });
+            a->setCheckable (true);
+            a->setChecked (e.groupOf (index) == g);
+            a->setEnabled (! e.within (g, index));   // not into a group inside it
+        }
+        menu.addAction (e.isGroup (index) && e.groupOf (index) < 0 ? MixerWindow::tr ("&Take Its Tracks Out (Ctrl+Shift+G)")
+                                                                  : MixerWindow::tr ("Take &Out of Its Folder (Ctrl+Shift+G)"),
+                        this, [this] { window.ungroupTracks(); })
+            ->setEnabled (e.isGroup (index) || e.groupOf (index) >= 0);
+        menu.addSeparator();
+    }
+
     void contextMenuEvent (QContextMenuEvent* e) override
     {
-        window.select (index);
+        window.select (index);   // a right-click on a picked strip keeps the picks, for Group
         QMenu menu (this);
         const bool hasSound = ! window.engine.clips (index).empty();
         menu.addAction (MixerWindow::tr ("Add &Audio File at the Playhead... (A)"), this, [this] { window.chooseAudio (index); });
@@ -1849,6 +1937,8 @@ protected:
         toBus->setCheckable (true);
         toBus->setChecked (strip().toBus.load());
         QObject::connect (toBus, &QAction::toggled, this, [this] (bool on) { window.routeToBus (index, on); });
+        toBus->setEnabled (window.engine.groupOf (index) < 0);
+        groupMenu (menu);
         menu.addAction (MixerWindow::tr ("Add &Track After This (Ctrl+T)"), this, [this] { window.insertTrack (index + 1); })
             ->setEnabled (window.engine.numTracks() < mixer::maxTracks);
         menu.addAction (MixerWindow::tr ("&Delete Track (Delete)"), this, [this] { window.deleteTrack (index); })
@@ -1941,6 +2031,7 @@ public:
     QWidget* distPart;
     QWidget* spaceExtra;   // the elevation, spread and LFE send, in the Inspector
     QFrame* colourBar;
+    QLabel* groupTag = nullptr;
     QFrame* nameBox;
     QLabel* formatLabel;
     QWidget* modePart;
@@ -2244,34 +2335,60 @@ protected:
         bool anySolo = false;
         for (int i = 0; i < count; ++i)
             anySolo = anySolo || window.engine.strip (i).solo.load();
-        const auto rowH = rowHeight();
+        const auto fullH = rowHeight();
         std::set<const void*> live;
         for (int i = firstRow(); i < firstRow() + rowCount(); ++i)
         {
+            const auto rowH = trackHeight (i);
+            if (rowH <= 0)
+                continue;   // folded away under its folder
             const QRect row (0, rowTop (i), width(), rowH);
             const auto& s = window.engine.strip (i);
             const auto colour = window.info[(size_t) i].colour;
             const bool heard = ! s.mute.load() && (! anySolo || s.solo.load());
-            if (i == window.selected)
+            if (i == window.selected || window.picked.count (i))
             {
                 auto tint = colour;
-                tint.setAlpha (26);
+                tint.setAlpha (i == window.selected ? 26 : 16);
                 g.fillRect (row, tint);
             }
             g.setPen (faint);
             g.drawLine (row.bottomLeft(), row.bottomRight());
 
-            // The header: colour, number and name, and what is on.
+            // The header: colour, number and name, and what is on. A track in a group is indented
+            // under it, with its group's colour down the side, as Reaper's folders; a group's
+            // name has a ▼ before it.
             const QRect header (0, row.top(), headerWidth, rowH);
             g.fillRect (header, pal.color (QPalette::Window));
-            g.fillRect (QRect (0, row.top(), 5, rowH - 1), colour);
+            const auto depth = std::min (3, window.engine.groupDepth (i));
+            const int indent = depth * 9;
+            for (int d = 0, up = window.engine.groupOf (i); d < depth && up >= 0; ++d, up = window.engine.groupOf (up))
+                g.fillRect (QRect ((depth - 1 - d) * 9 + 2, row.top(), 3, rowH), window.info[(size_t) up].colour);
+            g.fillRect (QRect (indent, row.top(), 5, rowH - 1), colour);
+            if (window.picked.count (i) && window.picked.size() > 1)
+            {
+                g.setPen (QPen (Theme::current().color (QStringLiteral ("highlight")), 1.0, Qt::DashLine));
+                g.drawRect (header.adjusted (0, 0, -1, -1));
+            }
             g.setPen (text);
             auto bold = smallFont();
             bold.setBold (true);
             g.setFont (bold);
-            g.drawText (header.adjusted (10, 3, -4, 0), Qt::AlignLeft | Qt::AlignTop,
-                        QStringLiteral ("%1  %2").arg (i + 1).arg (g.fontMetrics().elidedText (window.info[(size_t) i].name, Qt::ElideRight, headerWidth - 34)));
+            const bool group = window.engine.isGroup (i);
+            if (group && ! single)
+            {
+                const auto fold = window.info[(size_t) i].fold;
+                g.setPen (softer);
+                g.drawText (foldButton (i), Qt::AlignCenter, fold == 0 ? QStringLiteral ("▼") : fold == 1 ? QStringLiteral ("▸") : QStringLiteral ("▶"));
+                g.setPen (text);
+            }
+            const int nameAt = 10 + indent + (group && ! single ? 14 : 0);
+            g.drawText (header.adjusted (nameAt, rowH < 22 ? 1 : 3, -4, 0), Qt::AlignLeft | Qt::AlignTop,
+                        QStringLiteral ("%1  %2").arg (i + 1)
+                            .arg (g.fontMetrics().elidedText (window.info[(size_t) i].name, Qt::ElideRight, headerWidth - 24 - nameAt)));
             QStringList flags;
+            if (group)
+                flags << MixerWindow::tr ("Folder");
             if (s.mute.load())
                 flags << MixerWindow::tr ("M");
             if (s.solo.load())
@@ -2283,7 +2400,7 @@ protected:
             g.setFont (smallFont());
             g.setPen (softer);
             if (! flags.isEmpty() && rowH >= 34)
-                g.drawText (header.adjusted (10, 0, -4, -3), Qt::AlignLeft | Qt::AlignBottom, flags.join (QLatin1Char (' ')));
+                g.drawText (header.adjusted (10 + indent, 0, -4, -3), Qt::AlignLeft | Qt::AlignBottom, flags.join (QLatin1Char (' ')));
 
             const QRect lane (headerWidth, row.top() + 2, timelineWidth(), rowH - 5);
             const auto list = window.engine.clips (i);
@@ -2314,7 +2431,19 @@ protected:
                 g.drawText (lane.adjusted (8, 0, 0, 0), Qt::AlignVCenter | Qt::AlignLeft,
                             window.engine.countingIn() ? MixerWindow::tr ("● Counting in...") : MixerWindow::tr ("● Waiting for the transport"));
             }
-            if (list.empty() && rowH >= 30 && window.engine.recordInfo (i).state == mixer::RecordState::none)
+            // A folder folded away: its tracks' clips, faint, in its lane (as Reaper shows them).
+            if (group && ! single && window.info[(size_t) i].fold == 2)
+                for (int k = 0; k < window.engine.numTracks(); ++k)
+                    if (window.engine.within (k, i))
+                    {
+                        auto ghost = window.info[(size_t) k].colour;
+                        ghost.setAlpha (70);
+                        for (const auto& c : window.engine.clips (k))
+                            if (! c.muted)
+                                g.fillRect (QRectF (xOf ((double) c.start), lane.bottom() - lane.height() / 3.0,
+                                                    std::max (2.0, (double) c.length / framesPerPixel), lane.height() / 3.0), ghost);
+                    }
+            if (list.empty() && rowH >= 30 && ! group && window.engine.recordInfo (i).state == mixer::RecordState::none)
             {
                 g.setPen (softer);
                 g.setFont (smallFont());
@@ -2330,6 +2459,7 @@ protected:
         // The Pre-Master's row under the tracks (owner, 2026-10-28): no clips, unnumbered.
         if (! single)
         {
+            const auto rowH = fullH;
             const QRect row (0, rowTop (count), width(), rowH);
             g.setPen (faint);
             g.drawLine (row.bottomLeft(), row.bottomRight());
@@ -2360,7 +2490,7 @@ protected:
         if (px >= headerWidth && px <= width())
         {
             g.setPen (QPen (Theme::current().color (QStringLiteral ("highlight")), 1.5));
-            g.drawLine (QPointF (px, 0), QPointF (px, rulerHeight + (rowCount() + (single ? 0 : 1)) * rowH));
+            g.drawLine (QPointF (px, 0), QPointF (px, rowTop (firstRow() + rowCount()) + (single ? 0 : fullH)));
         }
         if (dropHint.x() >= headerWidth)
         {
@@ -2369,7 +2499,7 @@ protected:
             if (row >= 0)
             {
                 g.setPen (QPen (Theme::current().color (QStringLiteral ("highlight")), 2.0));
-                g.drawLine (QPointF (x, rowTop (row)), QPointF (x, rowTop (row) + rowH));
+                g.drawLine (QPointF (x, rowTop (row)), QPointF (x, rowTop (row) + trackHeight (row)));
             }
         }
         if (hasFocus())
@@ -2386,11 +2516,34 @@ protected:
             Q_EMIT window.activated();
         const auto pos = e->position();
         const int row = rowAt (pos.y());
-        if (row >= 0 && pos.y() >= rulerHeight)
+        // A track's name: a click picks it, Ctrl+click adds or takes it, Shift+click picks the
+        // range (owner, 2026-11-01); in its lane a click selects it, keeping the picks.
+        const auto mods = e->modifiers();
+        if (row >= 0 && ! single && e->button() == Qt::LeftButton && window.engine.isGroup (row) && foldButton (row).contains (pos.toPoint()))
+        {
+            window.cycleFold (row);   // a folder's fold button
+            return;
+        }
+        if (row >= 0 && pos.y() >= rulerHeight && ! single && pos.x() < headerWidth && e->button() == Qt::LeftButton)
+        {
+            if (mods & Qt::ControlModifier)
+            {
+                window.pick (row, true);
+                window.pickAnchor = row;
+            }
+            else if (mods & Qt::ShiftModifier)
+                window.pickRange (row);
+            else
+                window.pickOnly (row);
+            window.engageTrack();
+        }
+        else if (row >= 0 && pos.y() >= rulerHeight)
         {
             window.select (row);
             window.engageTrack();
         }
+        else if (! single && pos.y() >= rowTop (rowCount()))
+            window.clearPicks();   // empty space under the tracks
         drag = Drag::none;
         pressPos = pos;
         moved = false;
@@ -2574,7 +2727,14 @@ protected:
                     if (! ctrl)
                     {
                         const auto current = window.selected >= mixer::masterIndex ? 0 : window.selected;
-                        window.select (std::clamp (current + (key == Qt::Key_Down ? 1 : -1), 0, window.engine.numTracks() - 1));
+                        // The next row shown: past the tracks a folder has folded away.
+                        const int step = key == Qt::Key_Down ? 1 : -1, last = window.engine.numTracks() - 1;
+                        auto next = std::clamp (current + step, 0, last);
+                        while (next != current && next > 0 && next < last && trackHeight (next) == 0)
+                            next += step;
+                        if (trackHeight (next) == 0)
+                            next = current;
+                        window.select (next);
                         update();
                         return;
                     }
@@ -2775,12 +2935,38 @@ private:
     // The rows shown: every track, or the editor's one.
     int firstRow() const { return single ? window.editorTrack() : 0; }
     int rowCount() const { return single ? 1 : window.engine.numTracks(); }
-    int rowTop (int track) const { return rulerHeight + (track - firstRow()) * rowHeight(); }
+    // Folders (owner, 2026-11-01, as Reaper's): the rows of a folder's tracks are as tall as the
+    // others, small, or folded away (0 high) by its fold button.
+    static constexpr int smallRow = 18;
+    int foldOf (int track) const { return single || track >= window.engine.numTracks() ? 0 : window.foldShown (track); }
+    int trackHeight (int track) const
+    {
+        const auto f = foldOf (track);
+        return f == 2 ? 0 : f == 1 ? smallRow : rowHeight();
+    }
+    // The top of a track's row (numTracks(): the Pre-Master's row).
+    int rowTop (int track) const
+    {
+        auto y = rulerHeight;
+        for (int k = firstRow(); k < track; ++k)
+            y += trackHeight (k);
+        return y;
+    }
 
+    // A full row's height: what the small and folded rows leave, shared by the others and the Pre-Master's.
     int rowHeight() const
     {
-        const auto count = std::max (1, rowCount() + (single ? 0 : 1));   // and the Pre-Master's
-        return std::clamp ((height() - rulerHeight) / count, 22, single ? 600 : 140);
+        int full = single ? 1 : 1, small = 0;   // the Pre-Master's row
+        if (! single)
+            for (int k = 0; k < rowCount(); ++k)
+            {
+                const auto f = window.foldShown (k);
+                full += f == 0 ? 1 : 0;
+                small += f == 1 ? 1 : 0;
+            }
+        if (single)
+            full = 1;
+        return std::clamp ((height() - rulerHeight - small * smallRow) / std::max (1, full), 22, single ? 600 : 140);
     }
 
     int rowAt (double y) const
@@ -2789,8 +2975,22 @@ private:
             return firstRow();
         if (y < rulerHeight)
             return window.selected < mixer::masterIndex ? window.selected : -1;
-        const auto row = (int) ((y - rulerHeight) / rowHeight());
-        return row < window.engine.numTracks() ? row : -1;
+        auto top = rulerHeight;
+        for (int k = 0; k < window.engine.numTracks(); ++k)
+        {
+            const auto h = trackHeight (k);
+            if (h > 0 && y < top + h)
+                return k;
+            top += h;
+        }
+        return -1;
+    }
+
+    // A folder's button: the ▼ (shown), ▸ (small) or ▶ (folded away) before its number.
+    QRect foldButton (int track) const
+    {
+        const auto indent = std::min (3, window.engine.groupDepth (track)) * 9;
+        return { 8 + indent, rowTop (track) + 2, 14, std::min (16, std::max (12, trackHeight (track) - 4)) };
     }
 
     double fitFramesPerPixel() const
@@ -2869,8 +3069,8 @@ private:
     {
         int count = 1;
         const auto layer = layers (list, count)[k];
-        const auto rowH = (double) rowHeight();
-        const auto height = (rowH - 5.0) / count;
+        const auto rowH = (double) trackHeight (track);
+        const auto height = std::max (1.0, rowH - 5.0) / count;
         const auto top = rowTop (track) + 2.0 + layer * height;
         const auto& c = list[k];
         return { xOf ((double) c.start), top, std::max (2.0, (double) c.length / framesPerPixel), height - (count > 1 ? 1.0 : 0.0) };
@@ -6971,6 +7171,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     // See-through like the return strips when the window is.
     scroll->viewport()->setAutoFillBackground (false);
     stripArea->setAutoFillBackground (false);
+    stripArea->installEventFilter (this);   // a click in its empty space clears the picks
 
     masterStrip = new QFrame (this);
     masterStrip->setObjectName (QStringLiteral ("masterStrip"));
@@ -7564,6 +7765,9 @@ void MixerWindow::applyStripWidths()
 
 bool MixerWindow::eventFilter (QObject* o, QEvent* e)
 {
+    // A click in the strips' empty space leaves only the selected track picked.
+    if (e->type() == QEvent::MouseButtonPress && o == stripArea)
+        clearPicks();
     if (e->type() == QEvent::Resize && ((stripScroll != nullptr && o == stripScroll->viewport()) || (gridScroll != nullptr && o == gridScroll->viewport())))
         QTimer::singleShot (0, this, [this] { applyStripWidths(); });
     // Ctrl+wheel over the strips or the launcher's clips: the strips' zoom, the strip under the
@@ -8846,6 +9050,7 @@ static void copyStrip (const mixer::Strip& a, mixer::Strip& b)
     b.monitor = a.monitor.load();
     b.inputChannels = a.inputChannels.load();
     b.toBus = a.toBus.load();
+    b.group = a.group.load();
     b.placed.set (a.placed.place());
     b.lfeDb = a.lfeDb.load();
 }
@@ -8869,6 +9074,7 @@ void MixerWindow::copyTrack (int from, int to)
     t.colour = f.colour;
     t.sound = f.sound;
     t.tuning = f.tuning;
+    t.fold = f.fold;
     givenDefaults[(size_t) to] = givenDefaults[(size_t) from];
     heardTunings[(size_t) to] = heardTunings[(size_t) from];
     timelinePasses[(size_t) to] = timelinePasses[(size_t) from];
@@ -8920,12 +9126,14 @@ void MixerWindow::clearTrack (int k)
     s.monitor = mixer::Strip::monitorAuto;
     s.inputChannels = 0;
     s.toBus = false;
+    s.group = -1;
     auto& t = info[(size_t) k];
     const auto d = defaultTrack (k);
     t.name = d.first;
     t.colour = d.second;
     t.sound = nullptr;
     t.tuning = {};
+    t.fold = 0;
     givenDefaults[(size_t) k] = d;
     heardTunings[(size_t) k] = {};
     timelinePasses[(size_t) k].clear();
@@ -8959,12 +9167,17 @@ bool MixerWindow::readyToMoveTracks (int from)
     return true;
 }
 
-// The keys of the ducks, which name other tracks, follow the tracks that moved.
+// The keys of the ducks, and the groups the tracks play into, which name other tracks, follow
+// the tracks that moved (a group taken away leaves its tracks in none).
 void MixerWindow::moveDuckKeys (const std::function<int (int)>& moved)
 {
     for (int k = 0; k < engine.numTracks(); ++k)
+    {
         if (auto& key = engine.strip (k).duckKey; key.load() >= 0)
             key = moved (key.load());
+        if (auto& group = engine.strip (k).group; group.load() >= 0)
+            group = moved (group.load());
+    }
 }
 
 bool MixerWindow::openTrack (int at)
@@ -8972,8 +9185,8 @@ bool MixerWindow::openTrack (int at)
     const auto count = engine.numTracks();
     if (! roomForTracks (1, tr ("Add Track")))
     {
-        status->setText (engine.trackLimit() < mixer::maxTracks ? tr ("The mixer has 8 tracks at most; Strips > 16 Tracks makes room for more.")
-                                                                 : tr ("The mixer has 16 tracks at most."));
+        status->setText (engine.numTracks() >= mixer::maxTracks ? tr ("The mixer has 16 tracks at most, groups and the tracks in them included.")
+                         : tr ("The mixer has 8 tracks at most outside groups: group some (Ctrl+G), or Strips > 16 Tracks makes room for more."));
         return false;
     }
     at = std::clamp (at, 0, count);
@@ -9037,8 +9250,12 @@ std::shared_ptr<const MixerWindow::TrackCopy> MixerWindow::takeTrack (int index,
     auto copy = std::make_shared<TrackCopy>();
     copyOut (index, *copy);
     for (int k = 0; k < count; ++k)
+    {
         if (k != index && engine.strip (k).duckKey.load() == index)
             copy->duckedBy.push_back (k);
+        if (k != index && engine.groupOf (k) == index)
+            copy->members.push_back (k);
+    }
     const auto live = engine.liveTrack();
     copy->live = live == index;
     for (auto it = stack.rbegin(); it != stack.rend(); ++it)
@@ -9073,6 +9290,7 @@ void MixerWindow::copyOut (int index, TrackCopy& copy)
     copy.colour = t.colour;
     copy.sound = t.sound;
     copy.tuning = t.tuning;
+    copy.fold = t.fold;
     copy.givenDefault = givenDefaults[(size_t) index];
     copy.heardTuning = heardTunings[(size_t) index];
     copy.timelinePasses = timelinePasses[(size_t) index];
@@ -9095,6 +9313,7 @@ void MixerWindow::copyIn (const TrackCopy& copy, int at)
     t.colour = copy.colour;
     t.sound = copy.sound;
     t.tuning = copy.tuning;
+    t.fold = copy.fold;
     givenDefaults[(size_t) at] = copy.givenDefault;
     heardTunings[(size_t) at] = copy.heardTuning;
     timelinePasses[(size_t) at] = copy.timelinePasses;
@@ -9210,6 +9429,9 @@ bool MixerWindow::putTrack (const TrackCopy& copy, std::vector<Step>& stack)
     for (const auto k : copy.duckedBy)
         if (k < engine.numTracks())
             engine.strip (k).duckKey = at;
+    for (const auto k : copy.members)
+        if (k < engine.numTracks())
+            engine.setGroup (k, at);
     if (copy.live)
         engine.setLiveTrack (at);
     for (size_t i = 0; i < copy.history.size() && i < stack.size(); ++i)
@@ -9282,6 +9504,44 @@ void MixerWindow::pushUndo (Step step)
 
 bool MixerWindow::apply (const Step& step, std::vector<Step>& from, const std::vector<Step>& to, Step& inverse)
 {
+    if (! step.parts.empty())
+    {
+        // Each part in order; the inverse undoes them the other way round. A part that cannot be
+        // done takes back the ones done before it.
+        std::vector<Step> undone;
+        for (const auto& part : step.parts)
+        {
+            Step back;
+            if (! apply (part, from, to, back))
+            {
+                for (auto it = undone.rbegin(); it != undone.rend(); ++it)
+                {
+                    Step ignored;
+                    apply (*it, from, to, ignored);
+                }
+                return false;
+            }
+            undone.push_back (std::move (back));
+        }
+        inverse.parts.assign (std::make_move_iterator (undone.rbegin()), std::make_move_iterator (undone.rend()));
+        return true;
+    }
+    if (! step.groups.empty())
+    {
+        // All let go first, so no loop is seen half way through.
+        for (const auto& [track, group] : step.groups)
+            if (track < engine.numTracks())
+            {
+                inverse.groups.push_back ({ track, engine.strip (track).group.load() });
+                engine.setGroup (track, -1);
+            }
+        for (const auto& [track, group] : step.groups)
+            if (track < engine.numTracks())
+                engine.setGroup (track, group);
+        rebuildStrips();
+        changed();
+        return true;
+    }
     if (step.restores != nullptr)
     {
         if (! putTrack (*step.restores, from))
@@ -10169,7 +10429,7 @@ void MixerWindow::stripsMenu (QPoint at)
     sixteen->setCheckable (true);
     sixteen->setChecked (engine.trackLimit() > mixer::defaultTrackLimit);
     sixteen->setToolTip (tr ("Room for 16 tracks in this project instead of 8; back to 8 once tracks 9 to 16 are gone"));
-    sixteen->setEnabled (engine.numTracks() <= mixer::defaultTrackLimit || engine.trackLimit() == mixer::defaultTrackLimit);
+    sixteen->setEnabled (engine.topLevelTracks() <= mixer::defaultTrackLimit || engine.trackLimit() == mixer::defaultTrackLimit);
     connect (sixteen, &QAction::toggled, this, [this] (bool on) { setSixteenTracks (on); });
     auto* follow = menu.addAction (tr ("Focus Follows &Mouse"));
     follow->setCheckable (true);
@@ -10214,9 +10474,9 @@ void MixerWindow::showPreferences()
 
 void MixerWindow::setSixteenTracks (bool on)
 {
-    if (! on && engine.numTracks() > mixer::defaultTrackLimit)
+    if (! on && engine.topLevelTracks() > mixer::defaultTrackLimit)
     {
-        status->setText (tr ("Tracks 9 to %1 are in use: delete them first to go back to 8.").arg (engine.numTracks()));
+        status->setText (tr ("%1 tracks are outside groups: delete some (or group them, Ctrl+G) to go back to 8.").arg (engine.topLevelTracks()));
         return;
     }
     engine.setTrackLimit (on ? mixer::maxTracks : mixer::defaultTrackLimit);
@@ -10229,7 +10489,7 @@ bool MixerWindow::roomForTracks (int needed, const QString& title)
     if (engine.roomForTracks (needed))
         return true;
     if (engine.trackLimit() >= mixer::maxTracks || engine.numTracks() + needed > mixer::maxTracks)
-        return false;
+        return false;   // the 16 there are, groups or not
     if (QMessageBox::question (this, title, tr ("The project has room for 8 tracks, and this needs %n more. Make room for 16?", "", needed))
         != QMessageBox::Yes)
         return false;
@@ -10393,6 +10653,205 @@ void MixerWindow::pick (int track, bool add)
     }
     if (picked.size() > 1 && ! qLinkButton->isChecked())
         status->setText (tr ("%1 strips picked: turn on Q-Link to change them together.").arg (picked.size()));
+}
+
+void MixerWindow::showPicks()
+{
+    for (int i = 0; i < mixer::maxTracks; ++i)
+        strips[(size_t) i]->setSelected (i == selected, picked.count (i) > 0);
+    if (lanes != nullptr)
+        lanes->update();
+}
+
+void MixerWindow::pickOnly (int track)
+{
+    if (track < 0 || track >= engine.numTracks())
+        return;
+    picked = { track };
+    pickAnchor = track;
+    select (track);
+    showPicks();
+}
+
+void MixerWindow::pickRange (int track)
+{
+    const auto count = engine.numTracks();
+    if (track < 0 || track >= count)
+        return;
+    const auto from = std::clamp (pickAnchor, 0, count - 1);
+    picked.clear();
+    for (int k = std::min (from, track); k <= std::max (from, track); ++k)
+        picked.insert (k);
+    select (track);
+    showPicks();
+    if (picked.size() > 1)
+        status->setText (tr ("Tracks %1 to %2 picked: Ctrl+G groups them.").arg (std::min (from, track) + 1).arg (std::max (from, track) + 1));
+}
+
+void MixerWindow::clearPicks()
+{
+    if (picked.size() <= 1)
+        return;
+    picked.clear();
+    if (selected < engine.numTracks())
+        picked.insert (selected);
+    showPicks();
+}
+
+int MixerWindow::foldShown (int track) const
+{
+    int shown = 0;
+    for (int g = engine.groupOf (track), steps = 0; g >= 0 && steps < mixer::maxTracks; g = engine.groupOf (g), ++steps)
+        shown = std::max (shown, info[(size_t) g].fold);
+    return shown;
+}
+
+void MixerWindow::cycleFold (int track)
+{
+    if (track < 0 || track >= engine.numTracks() || ! engine.isGroup (track))
+        return;
+    auto& f = info[(size_t) track].fold;
+    f = (f + 1) % 3;
+    if (selected < engine.numTracks() && foldShown (selected) == 2)
+        select (track);   // the selected track folded away: its folder takes the selection
+    if (lanes != nullptr)
+        lanes->update();
+    changed();
+    status->setText (f == 0 ? tr ("Folder %1: its tracks shown.").arg (track + 1)
+                   : f == 1 ? tr ("Folder %1: its tracks small.").arg (track + 1)
+                            : tr ("Folder %1: its tracks folded away (their strips stay).").arg (track + 1));
+}
+
+QString MixerWindow::groupText (int track) const
+{
+    if (track < 0 || track >= engine.numTracks())
+        return {};
+    int members = 0;
+    for (int k = 0; k < engine.numTracks(); ++k)
+        members += engine.groupOf (k) == track ? 1 : 0;
+    if (members > 0)
+        return tr ("Folder: %n track(s) play into it", "", members);
+    if (const auto g = engine.groupOf (track); g >= 0)
+        return tr ("In folder %1, “%2”").arg (g + 1).arg (info[(size_t) g].name);
+    return {};
+}
+
+void MixerWindow::setGroups (const std::vector<std::pair<int, int>>& trackAndGroup, const QString& what)
+{
+    Step step;
+    step.groups = trackAndGroup;
+    Step inverse;
+    if (! apply (step, undoStack, redoStack, inverse))
+        return;
+    pushUndo (std::move (inverse));
+    status->setText (what);
+}
+
+void MixerWindow::groupTracks()
+{
+    const auto count = engine.numTracks();
+    std::set<int> chosen;
+    for (const auto k : picked)
+        if (k >= 0 && k < count)
+            chosen.insert (k);
+    if (selected < count)
+        chosen.insert (selected);
+    // A group picked with tracks in it: they go with it, staying in it.
+    for (auto it = chosen.begin(); it != chosen.end();)
+    {
+        const auto k = *it;
+        const bool inside = std::any_of (chosen.begin(), chosen.end(), [this, k] (int c) { return c != k && engine.within (k, c); });
+        it = inside ? chosen.erase (it) : std::next (it);
+    }
+    if (chosen.size() < 2)
+    {
+        status->setText (tr ("Pick two or more tracks first (Ctrl+click, or Shift+click for a range), then Ctrl+G: "
+                             "the first becomes the folder and the others go in it."));
+        return;
+    }
+    if (! readyToMoveTracks (0))
+        return;
+
+    // No new track (owner, 2026-11-01, as Reaper's folders): the first picked track becomes the
+    // folder, the others go in it and move right under it (after any tracks already in it), in
+    // their order, with the tracks in them going along.
+    const auto head = *chosen.begin();
+    std::vector<int> movers;
+    for (int k = 0; k < count; ++k)
+        if (k != head && (chosen.count (k) || std::any_of (chosen.begin(), chosen.end(), [this, k, head] (int c) { return c != head && engine.within (k, c); })))
+            movers.push_back (k);
+    int already = 0;   // the tracks right under the head that are in it already
+    while (head + 1 + already < count && engine.within (head + 1 + already, head)
+           && std::find (movers.begin(), movers.end(), head + 1 + already) == movers.end())
+        ++already;
+
+    // Where each track is now, as the moves go (ids[k]: the track first at k now at k).
+    std::vector<int> ids ((size_t) count);
+    for (int k = 0; k < count; ++k)
+        ids[(size_t) k] = k;
+    const auto now = [&ids] (int track) { return (int) (std::find (ids.begin(), ids.end(), track) - ids.begin()); };
+    std::vector<Step> undoParts;   // in the order they were done
+    for (size_t j = 0; j < movers.size(); ++j)
+    {
+        const auto from = now (movers[j]);
+        auto to = now (head) + 1 + already + (int) j;
+        if (from < to)
+            --to;   // taken out from above, the rest moves up
+        if (from == to || ! moveTrack (from, to))
+            continue;
+        const auto id = ids[(size_t) from];
+        ids.erase (ids.begin() + from);
+        ids.insert (ids.begin() + to, id);
+        Step back;
+        back.moveFrom = to;
+        back.moveTo = from;
+        undoParts.push_back (std::move (back));
+    }
+    // Into the folder (the moves kept the groups' indices up to date).
+    const auto folder = now (head);
+    Step regroup;
+    for (const auto k : chosen)
+        if (k != head)
+            regroup.groups.push_back ({ now (k), folder });
+    Step back;
+    apply (regroup, undoStack, redoStack, back);
+    undoParts.push_back (std::move (back));
+
+    Step undoAll;
+    undoAll.parts.assign (std::make_move_iterator (undoParts.rbegin()), std::make_move_iterator (undoParts.rend()));
+    pushUndo (std::move (undoAll));
+    rebuildStrips();
+    pickOnly (folder);
+    changed();
+    status->setText (tr ("%n track(s) into track %1, “%2”, now a folder: they play through its strip, and it counts as one track. "
+                         "Its fold button across time folds them small, then away (Ctrl+Z undoes it).", "", (int) chosen.size() - 1)
+                         .arg (folder + 1).arg (info[(size_t) folder].name));
+}
+
+void MixerWindow::ungroupTracks()
+{
+    const auto count = engine.numTracks();
+    std::set<int> chosen (picked.begin(), picked.end());
+    if (selected < count)
+        chosen.insert (selected);
+    std::vector<std::pair<int, int>> changes;
+    for (const auto k : chosen)
+    {
+        if (k >= count)
+            continue;
+        if (const auto g = engine.groupOf (k); g >= 0)
+            changes.push_back ({ k, engine.groupOf (g) });   // a level up
+        else if (chosen.size() == 1 && engine.isGroup (k))
+            for (int c = 0; c < count; ++c)   // a group alone: its tracks out of it
+                if (engine.groupOf (c) == k)
+                    changes.push_back ({ c, engine.groupOf (k) });
+    }
+    if (changes.empty())
+    {
+        status->setText (tr ("No picked track is in a folder."));
+        return;
+    }
+    setGroups (changes, tr ("%n track(s) taken out of their folder (Ctrl+Z puts them back).", "", (int) changes.size()));
 }
 
 namespace
@@ -10667,7 +11126,13 @@ bool MixerWindow::event (QEvent* e)
 {
     // Docked in the editor's place, its Zoom In and Out (=, -, Ctrl+= and Ctrl+-) would take
     // these keys first; while the mixer has the keyboard they are the mixer's.
-    if (e->type() == QEvent::ShortcutOverride && zoomKey (static_cast<QKeyEvent*> (e)) != 0)
+    // So are Ctrl+G and Ctrl+Shift+G, grouping tracks, which the editor gives its Gain.
+    const auto groupKey = [] (const QKeyEvent* k)
+    {
+        const auto mods = k->modifiers() & (Qt::ControlModifier | Qt::ShiftModifier | Qt::AltModifier | Qt::MetaModifier);
+        return k->key() == Qt::Key_G && (mods == Qt::ControlModifier || mods == (Qt::ControlModifier | Qt::ShiftModifier));
+    };
+    if (e->type() == QEvent::ShortcutOverride && (zoomKey (static_cast<QKeyEvent*> (e)) != 0 || groupKey (static_cast<QKeyEvent*> (e))))
     {
         e->accept();
         return true;
@@ -10751,6 +11216,7 @@ void MixerWindow::keyPressEvent (QKeyEvent* e)
                 }
                 break;
             case Qt::Key_Y: redo(); return;
+            case Qt::Key_G: withShift ? ungroupTracks() : groupTracks(); return;   // group buses (owner, 2026-11-01)
             case Qt::Key_R: withShift ? captureMidi() : recordPressed(); return;
             case Qt::Key_Return:
             case Qt::Key_Enter: Q_EMIT mixdownRequested(); return;
@@ -10930,6 +11396,7 @@ bool MixerWindow::newMix()
         s.duckKey = -1;
         s.duckBelowHz = 0.0f;
         s.toBus = false;
+        s.group = -1;
         s.placed.set ({});
         s.lfeDb = -100.0f;
         for (int r = 0; r < mixer::numReturns; ++r)
@@ -10947,6 +11414,7 @@ bool MixerWindow::newMix()
         ++t.generation;
         t.busy = 0;
         t.tuning = {};
+        t.fold = 0;
     }
     for (int t = 0; t < mixer::maxTracks; ++t)
         for (int sc = 0; sc < mixer::maxScenes; ++sc)
@@ -11094,7 +11562,7 @@ bool MixerWindow::writeMix (const QString& file, QString& error)
             { "sends", QJsonArray { QJsonObject { { "db", s.sendDb[0].load() }, { "pre", s.sendPre[0].load() } },
                                     QJsonObject { { "db", s.sendDb[1].load() }, { "pre", s.sendPre[1].load() } } } },
             { "tuning", tuningJson (t.tuning) }, { "toPreMaster", s.toBus.load() }, { "spatial", placeJson (s.placed) },
-            { "lfe", s.lfeDb.load() },
+            { "lfe", s.lfeDb.load() }, { "group", engine.groupOf (i) }, { "fold", t.fold },
         };
         // The clips, in seconds so a mix opens the same at any rate.
         QJsonArray clips;
@@ -11262,7 +11730,11 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
         followTempoBox->setChecked (root.value ("midiFollowsTempo").toBool());
     }
     const auto tracks = root.value ("tracks").toArray();
-    engine.setTrackLimit (std::max (root.value ("trackLimit").toInt (mixer::defaultTrackLimit), (int) tracks.size()));
+    // The tracks in groups do not count against the limit (owner, 2026-11-01).
+    int outside = 0;
+    for (const auto& x : tracks)
+        outside += x.toObject().value ("group").toInt (-1) < 0 ? 1 : 0;
+    engine.setTrackLimit (std::max (root.value ("trackLimit").toInt (mixer::defaultTrackLimit), outside));
     engine.setNumTracks (std::clamp ((int) tracks.size(), 1, mixer::maxTracks));
     for (int i = 0; i < std::min ((int) tracks.size(), mixer::maxTracks); ++i)
     {
@@ -11273,6 +11745,7 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
         if (const QColor c (o.value ("colour").toString()); c.isValid())
             t.colour = c;
         t.tuning = tuningFromJson (o.value ("tuning"));
+        t.fold = std::clamp (o.value ("fold").toInt(), 0, 2);
         s.transpose = o.value ("transpose").toInt();
         s.channels = (uint32_t) o.value ("channels").toInt (0xFFFF);
         s.trimDb = (float) o.value ("trim").toDouble();
@@ -11283,6 +11756,7 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
         s.mute = o.value ("mute").toBool();
         s.solo = o.value ("solo").toBool();
         s.toBus = o.value ("toPreMaster").toBool();
+        s.group = -1;   // set once every track is in (below)
         loadPlace (s.placed, o.value ("spatial"), mixer::Panner3d::defaultSpread);
         s.lfeDb = (float) std::clamp (o.value ("lfe").toDouble (-100.0), -100.0, 0.0);
         const auto lowCut = o.value ("lowCut").toObject(), highCut = o.value ("highCut").toObject();
@@ -11417,6 +11891,10 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
             addClipFrom (QStringLiteral ("audio"), audioFile, audioPlace);
         }
     }
+    // The groups, now that every track is there (a loop in a hand-edited file is left out).
+    for (int i = 0; i < std::min ((int) tracks.size(), mixer::maxTracks); ++i)
+        if (const auto g = tracks[i].toObject().value ("group").toInt (-1); g >= 0 && ! engine.setGroup (i, g))
+            problems << tr ("Track %1 could not go into group %2.").arg (i + 1).arg (g + 1);
     engine.tempo = tempoBox->value();
     if (root.contains (QStringLiteral ("returns")))
         loadReturns (root.value ("returns").toArray(), problems);

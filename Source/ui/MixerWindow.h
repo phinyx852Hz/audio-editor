@@ -381,7 +381,14 @@ private:
         int generation = 0;          // a cleared track outdates loads still running
         int busy = 0;                // audio files loading
         mixer::TuningChoice tuning;  // the PHI synth's, when neither the clip nor the scene has one
+        // A folder's fold across time, as Reaper's folder button: its tracks shown (0), small (1)
+        // or folded away under it (2). The strips stay, as Reaper's mixer keeps them.
+        int fold = 0;
     };
+    // How a track's row shows across time, by the folds of the folders it is in: 0 as it is,
+    // 1 small, 2 folded away.
+    int foldShown (int track) const;
+    void cycleFold (int track);      // a folder's button: shown, small, folded away, shown...
 
     void copyTrack (int from, int to);
     void clearTrack (int track);
@@ -649,6 +656,22 @@ private:
     // Alt+Shift sends it to every track. `fn` gets each strip, and whether it is the one changed.
     void forLinked (int track, const std::function<void (mixer::Strip&, bool self)>& fn);
     void pick (int track, bool add);  // Ctrl+click: add or take a strip from the picked ones
+    // Picking tracks (owner, 2026-11-01), in the strips and the timeline alike: a click picks one
+    // track, Ctrl+click adds or takes one, Shift+click picks the range from the last one clicked,
+    // and a click in empty space leaves only the selected track picked.
+    void pickOnly (int track);
+    void pickRange (int track);
+    void clearPicks();
+    void showPicks();                // the strips and the timeline show what is picked
+    int pickAnchor = 0;
+    // Folders, the group buses (owner, 2026-11-01, as Reaper's folder tracks; docs/mixer.md): Ctrl+G
+    // makes the first picked track a folder and puts the other picked tracks in it, moved right under
+    // it; their sound goes through its strip, and it counts as one track. Ctrl+Shift+G takes the
+    // picked tracks out of their folder. Undone in one step.
+    void groupTracks();
+    void ungroupTracks();
+    void setGroups (const std::vector<std::pair<int, int>>& trackAndGroup, const QString& what);   // with an undo step
+    QString groupText (int track) const;   // "Group 2, “Drums”, with 3 tracks", "In 4, “Drums”", or empty
     // The returns: A Reverb and B Delay.
     void chooseReturnEffect (int index, QPoint at);
     void setReturnEffect (int index, const std::string& pluginId);   // empty: none
@@ -801,11 +824,13 @@ private:
         QColor colour;
         AudioDataPtr sound;
         mixer::TuningChoice tuning;
+        int fold = 0;
         std::pair<QString, QColor> givenDefault;
         HeardTuning heardTuning;
         std::vector<uint32_t> timelinePasses;
         LayerTake layerTake;
         std::vector<int> duckedBy;           // the tracks its sound ducked
+        std::vector<int> members;            // the tracks in it, when it was a group
         bool live = false;
         std::vector<mixer::Clips> history;   // its clips in the steps below this one's, the nearest first
     };
@@ -816,6 +841,8 @@ private:
         int removes = -1;                      // this track goes (undoing its adding)
         std::shared_ptr<const TrackCopy> restores;   // this track comes back (undoing its deleting)
         int moveFrom = -1, moveTo = -1;        // this track moves back (undoing its dragging)
+        std::vector<std::pair<int, int>> groups;   // these tracks go (back) into these groups (-1: none)
+        std::vector<Step> parts;               // several steps as one (grouping), done in order
     };
     void copyOut (int index, TrackCopy&);          // all of track `index` that copyTrack moves
     void copyIn (const TrackCopy&, int at);

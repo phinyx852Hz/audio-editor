@@ -385,6 +385,9 @@ namespace mixer
         marks.reserve (16384);
         for (auto& k : keyLevels)
             k.resize (block);
+        for (auto* v : { &groupL, &groupR })
+            for (auto& g : *v)
+                g.resize (block);
         for (int r = 0; r < numReturns; ++r)
         {
             returnL[(size_t) r].resize (block);
@@ -789,6 +792,62 @@ namespace mixer
         return peaks;
     }
 
+    int Engine::groupOf (int track) const
+    {
+        const auto count = tracks.load();
+        if (track < 0 || track >= count)
+            return -1;
+        const auto g = strips[(size_t) track].group.load();
+        return g >= 0 && g < count && g != track ? g : -1;
+    }
+
+    // Walks up from `track`, at most maxTracks steps (a loop set straight on the strips ends there).
+    bool Engine::within (int track, int group) const
+    {
+        auto g = groupOf (track);
+        for (int steps = 0; g >= 0 && steps < maxTracks; ++steps)
+        {
+            if (g == group)
+                return true;
+            g = groupOf (g);
+        }
+        return false;
+    }
+
+    int Engine::groupDepth (int track) const
+    {
+        int depth = 0;
+        for (auto g = groupOf (track); g >= 0 && depth < maxTracks; g = groupOf (g))
+            ++depth;
+        return depth;
+    }
+
+    bool Engine::setGroup (int track, int group)
+    {
+        if (track < 0 || track >= maxTracks)
+            return false;
+        if (group >= 0 && (group == track || group >= maxTracks || within (group, track)))
+            return false;
+        strips[(size_t) track].group = group < 0 ? -1 : group;
+        return true;
+    }
+
+    bool Engine::isGroup (int track) const
+    {
+        for (int i = 0; i < tracks.load(); ++i)
+            if (groupOf (i) == track)
+                return true;
+        return false;
+    }
+
+    int Engine::topLevelTracks() const
+    {
+        int n = 0;
+        for (int i = 0; i < tracks.load(); ++i)
+            n += groupOf (i) < 0 ? 1 : 0;
+        return n;
+    }
+
     bool Engine::anyToBus() const
     {
         for (int i = 0; i < tracks.load(); ++i)
@@ -1069,7 +1128,18 @@ namespace mixer
         Frame end = 0;
         for (const auto& c : lanes[(size_t) i].clips)
             end = std::max (end, c.end());
-        return end > 0 ? std::max<Frame> (0, end + delayFrames (i)) : 0;
+        end = end > 0 ? std::max<Frame> (0, end + delayFrames (i)) : 0;
+        // A group lasts as long as the tracks in it.
+        for (int k = 0; k < tracks.load(); ++k)
+            if (k != i && within (k, i))
+            {
+                Frame e = 0;
+                for (const auto& c : lanes[(size_t) k].clips)
+                    e = std::max (e, c.end());
+                if (e > 0)
+                    end = std::max (end, std::max<Frame> (0, e + delayFrames (k)));
+            }
+        return end;
     }
 
     Frame Engine::trackEnd (int i) const
@@ -1325,9 +1395,48 @@ namespace mixer
                 t.playingScene = t.queuedScene = -1;
             }
 
+        // Soloing a track keeps the groups it plays into heard, and the tracks in a soloed group.
         bool anySolo = false;
+        std::array<bool, maxTracks> soloed {};
         for (int i = 0; i < count; ++i)
-            anySolo = anySolo || strips[(size_t) i].solo.load();
+            if (strips[(size_t) i].solo.load())
+            {
+                anySolo = true;
+                soloed[(size_t) i] = true;
+                for (auto g = groupOf (i), steps = 0; g >= 0 && steps < maxTracks; g = groupOf (g), ++steps)
+                    soloed[(size_t) g] = true;
+            }
+        if (anySolo)
+            for (int i = 0; i < count; ++i)
+                for (auto g = groupOf (i), steps = 0; g >= 0 && steps < maxTracks && ! soloed[(size_t) i]; g = groupOf (g), ++steps)
+                    if (strips[(size_t) g].solo.load())
+                        soloed[(size_t) i] = true;
+
+        // The order: as the patchbay says (or by number), then the tracks in groups before their
+        // groups, the deepest first, so a group has all its tracks' sound when its turn comes.
+        std::array<int, maxTracks> order {};
+        std::array<int, maxTracks> depth {};
+        int ordered = 0;
+        bool anyGroup = false;
+        for (int slot = 0; slot < (routed != nullptr ? maxTracks : count); ++slot)
+        {
+            const auto i = routed != nullptr ? routed->trackAt (slot) : slot;
+            if (i < 0 || i >= count)
+                continue;
+            order[(size_t) ordered++] = i;
+            depth[(size_t) i] = groupDepth (i);
+            anyGroup = anyGroup || depth[(size_t) i] > 0;
+        }
+        if (anyGroup)
+        {
+            std::stable_sort (order.begin(), order.begin() + ordered, [&depth] (int a, int b) { return depth[(size_t) a] > depth[(size_t) b]; });
+            for (int k = 0; k < ordered; ++k)
+            {
+                std::fill (groupL[(size_t) order[(size_t) k]].begin(), groupL[(size_t) order[(size_t) k]].begin() + frames, 0.0f);
+                std::fill (groupR[(size_t) order[(size_t) k]].begin(), groupR[(size_t) order[(size_t) k]].begin() + frames, 0.0f);
+            }
+        }
+        std::array<bool, maxTracks> fed {};   // a group's tracks gave it sound this block
 
         std::fill (mixL.begin(), mixL.begin() + frames, 0.0f);
         std::fill (mixR.begin(), mixR.begin() + frames, 0.0f);
@@ -1347,13 +1456,13 @@ namespace mixer
         }
         const auto armedTrack = armed.load();
 
-        for (int slot = 0; slot < (routed != nullptr ? maxTracks : count); ++slot)
+        for (int k = 0; k < ordered; ++k)
         {
-            const auto i = routed != nullptr ? routed->trackAt (slot) : slot;
-            if (i < 0 || i >= count)
+            const auto i = order[(size_t) k];
+            // A bounce: this track alone, with the tracks in it when it is a group.
+            if (only >= 0 && i != only && ! within (i, only))
                 continue;
-            if (only >= 0 && i != only)
-                continue;   // a bounce: this track alone
+            const auto into = i == only ? -1 : groupOf (i);   // the group it plays into, -1 none (or bounced)
             auto& t = lanes[(size_t) i];
             auto& s = strips[(size_t) i];
             events.clear();
@@ -1476,7 +1585,7 @@ namespace mixer
             bool hasMono = false, hasBeds = false;
             // In Spatial mode a surround file's front L and R go through the strip and the rest of
             // its speakers straight into the scene (placeBeds); an ambisonic file goes in whole.
-            const bool inScene = spatialMix && ! s.toBus.load();
+            const bool inScene = spatialMix && ! s.toBus.load() && into < 0;
             if (play && mode != TrackMode::instrument)
                 for (const auto& c : clips)
                 {
@@ -1524,14 +1633,22 @@ namespace mixer
                 }
             }
             layers (i, t, s, mode, hasMono, frames, jumped);
+            // A group: its tracks' sound joins its own, before its strip (trim, inserts, fader...).
+            if (fed[(size_t) i])
+                for (int f = 0; f < frames; ++f)
+                {
+                    instL[(size_t) f] += groupL[(size_t) i][(size_t) f];
+                    instR[(size_t) f] += groupR[(size_t) i][(size_t) f];
+                }
+            const bool mono = t.mono && ! fed[(size_t) i];
             if (routed != nullptr)
                 routed->trackInput (i, blockOffset, instL.data(), instR.data(), frames);   // through the strip like the instrument
 
             // Trim, polarity, pan, fader, mute and solo, as one gain a side for each source.
             // A bounce takes the track before its fader and pan (trim and polarity included),
             // whatever mute and solo say; a mono file is then on both sides at full level.
-            const bool bouncing = only >= 0;
-            const bool audible = bouncing || (! s.mute.load() && (! anySolo || s.solo.load()));
+            const bool bouncing = only == i;
+            const bool audible = bouncing || (! s.mute.load() && (! anySolo || soloed[(size_t) i]));
             const auto trim = dbToGain (s.trimDb.load());
             const auto fader = audible ? (bouncing ? 1.0f : dbToGain (s.faderDb.load())) : 0.0f;
             const auto level = trim * fader;
@@ -1549,7 +1666,7 @@ namespace mixer
             // What the strip does besides gains: the cuts, the inserts and the width.
             t.lowCut.update (s.lowCut.load(), s.lowCutHz.load(), s.lowCutSlope.load(), false, rate.load());
             t.highCut.update (s.highCut.load(), s.highCutHz.load(), s.highCutSlope.load(), true, rate.load());
-            const auto width = t.mono || placing ? 1.0f : std::clamp (s.width.load(), 0.0f, 2.0f);
+            const auto width = mono || placing ? 1.0f : std::clamp (s.width.load(), 0.0f, 2.0f);
             const bool insertsOn = ! bypassInserts.load();
             const bool anyInsert = insertsOn && std::any_of (t.inserts.begin(), t.inserts.end(), [] (const Insert& x) { return ! x.bypassed; });
             // The sends (none in a bounce); a pre-fader one needs the signal before the fader.
@@ -1565,7 +1682,7 @@ namespace mixer
             // Before the inserts, trim and polarity; after them, pan and fader (equal power when
             // the track only has mono files, balance otherwise), and mute.
             const auto preL = trim * signL, preR = trim * signR;
-            const auto postL = fader * (t.mono ? equalL : balanceL), postR = fader * (t.mono ? equalR : balanceR);
+            const auto postL = fader * (mono ? equalL : balanceL), postR = fader * (mono ? equalR : balanceR);
 
             // After a jump there is nothing to ramp from: the new place starts at its level.
             if (jumped)
@@ -1659,6 +1776,19 @@ namespace mixer
                 keyLevels[(size_t) i][(size_t) k] = std::max (std::abs (sumL[k]), std::abs (sumR[k]));
             if (withLive)
                 meter (i, sumL, sumR, frames);
+            // Into its group, after its fader and pan, as Reaper's folders.
+            if (into >= 0)
+            {
+                fed[(size_t) into] = true;
+                auto& gl = groupL[(size_t) into];
+                auto& gr = groupR[(size_t) into];
+                for (int f = 0; f < frames; ++f)
+                {
+                    gl[(size_t) f] += sumL[f];
+                    gr[(size_t) f] += sumR[f];
+                }
+                continue;
+            }
             // A bounce takes the track alone, never through the Pre-Master.
             const bool toBus = s.toBus.load() && only < 0;
             if (spatialMix && ! toBus)

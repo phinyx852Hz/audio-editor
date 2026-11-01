@@ -256,6 +256,12 @@ namespace mixer
         std::atomic<int> monitor { monitorAuto };
         std::atomic<int> inputChannels { 0 };       // 0 the stereo pair, 1 the left alone, 2 the right alone (both sides)
         std::atomic<bool> toBus { false };          // after the fader into the Pre-Master, not the master
+        // Group buses (owner, 2026-11-01, as Reaper's folder tracks): the track whose input this
+        // track's sound goes into, after its fader and pan, instead of the master or the
+        // Pre-Master; -1 none. That track is then a group: it plays its children summed with its
+        // own clips and instrument, through all of its strip. Groups can hold groups. Set it with
+        // Engine::setGroup, which keeps out loops.
+        std::atomic<int> group { -1 };
         Panner3d placed;                            // in Spatial mode, in place of pan and width
         // In Spatial mode: a send after the fader to the subwoofers (the speakers marked LFE), low-passed at 120 Hz.
         std::atomic<float> lfeDb { -100.0f };       // -inf (below -96) .. 0
@@ -329,7 +335,20 @@ namespace mixer
         // How many tracks the mix may have: 8 (the default) or 16. Adding tracks stops there.
         int trackLimit() const { return allowedTracks.load(); }
         void setTrackLimit (int n) { allowedTracks = n > defaultTrackLimit ? maxTracks : defaultTrackLimit; }
-        bool roomForTracks (int n = 1) const { return numTracks() + n <= trackLimit(); }
+        // A group with the tracks in it counts as one track (owner, 2026-11-01): only the tracks
+        // outside any group count against the limit, up to the room there is (maxTracks).
+        bool roomForTracks (int n = 1) const { return topLevelTracks() + n <= trackLimit() && numTracks() + n <= maxTracks; }
+        int topLevelTracks() const;   // the tracks in no group: what counts against trackLimit()
+
+        // Group buses (Strip::group). groupOf: the group a track plays into, -1 none (or one past
+        // the tracks there are). setGroup: false (nothing changed) when `group` is the track itself
+        // or one of the tracks in it. isGroup: a track has tracks in it. within: `track` is in
+        // `group`, directly or through groups in it.
+        int groupOf (int track) const;
+        bool setGroup (int track, int group);
+        bool isGroup (int track) const;
+        bool within (int track, int group) const;
+        int groupDepth (int track) const;   // 0 a track in no group, 1 in one, 2 in a group in a group...
 
         // A track's clips (kept in order of their starts) and its instrument; null
         // clears it. Safe while playing: notes the old clips held are let go.
@@ -739,6 +758,7 @@ namespace mixer
 
         std::vector<float> mixL, mixR, trackL, trackR, instL, instR, monoBuf, outL, outR, sendPreL, sendPreR, audL, audR, dryL, dryR, duckGains;
         std::array<std::vector<float>, maxTracks> keyLevels;   // each track's sound, for ducks
+        std::array<std::vector<float>, maxTracks> groupL, groupR;   // what a group's tracks give it this block
         std::vector<NoteEvent> events;
     };
 }
