@@ -12,7 +12,8 @@ the pull request for the owner to open by hand. The Siberian drum's construction
 cosmos painted on it are partly from memory. The circumpolar drum types, Honko, Bogoras on the
 Chukchi, Bäckman, the painting of Sámi drums and the three hidden South Sámi drums are from
 Birgitta Berglund's 2010 chapter, and the Khakas drums from Victoria Soyan Peemot's 2017
-article, both of which the owner supplied as PDFs, as were Neher's 1962 paper and Fachner's 2011
+article, and the new drums from Francis Joy's 2014 article, all of which the owner supplied as
+PDFs, as were Neher's 1962 paper and Fachner's 2011
 chapter, from which the trance entry is taken.
 Later the same day the owner allowed those sites; the Library of Congress post on the Paulsen
 drum was opened and agrees with the entry.
@@ -139,6 +140,14 @@ copper buttons given to the drum as gifts, and scraps of cloth. Its pinewood fra
 use and mended with copper, has been radiocarbon dated to after 1530 and its hammer to after
 1685: a drum perhaps a century or two old when it was hidden, and the more trusted for its age.
 
+Sámi makers now build drums again, drawing on the forms and figures of the 17th- and
+18th-century drums. Francis Joy interviewed two of them. Elle-Maaret Helander, from Utsjoki in
+Finnish Lapland, came to drum making through a course in core shamanism in 1997 and a drum
+building course at the Sámi education centre in Inari; she paints figures still tied to the old
+worldview and does not make drums as souvenirs. Ovlla Gaup of Kautokeino in Norway made a
+replica of Anders Paulsen's drum, a bowl drum, after a handicraft course at the Sámi duodji
+school in Jokkmokk in 2001.
+
 - [Sámi drum](https://en.wikipedia.org/wiki/S%C3%A1mi_drum) and
   [Anders Paulsen](https://en.wikipedia.org/wiki/Anders_Paulsen), Wikipedia.
 - [Return of a Sámi drum](https://blogs.loc.gov/law/2022/02/return-of-a-smi-drum/), Library of
@@ -149,7 +158,8 @@ use and mended with copper, has been radiocarbon dated to after 1530 and its ham
 - Ernst Manker, *Die lappische Zaubertrommel*, 2 vols. (Nordiska museet, Stockholm, 1938–1950).
 - Francis Joy, "What Influence Do the Old Sámi Noaidi Drums from Lapland Play in the
   Construction of New Shaman Drums by Sámi Persons Today?", *Folklore: Electronic Journal of
-  Folklore* 56 (2014), pp. 117–158, [online](https://www.folklore.ee/Folklore/vol56/joy.pdf).
+  Folklore* 56 (2014), pp. 117–158,
+  [doi:10.7592/FEJF2014.56.joy](https://doi.org/10.7592/FEJF2014.56.joy).
 
 ## The Arctic and the Americas
 
