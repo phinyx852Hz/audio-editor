@@ -360,18 +360,7 @@ namespace
             }
             if (clip.attribute ("playStop") != nullptr && ! loops)
                 length = std::min (length, beats (number (clip, "playStop", 0.0), contentUnit) - playStart);
-            std::vector<Note> out;
-            for (const auto& s : segments (playStart, length, loopStart, loopEnd, loops))
-                for (const auto& n : content)
-                    if (n.time >= s.from - 1.0e-9 && n.time < s.to - 1.0e-9)
-                    {
-                        auto placed = n;
-                        placed.time = s.at + (n.time - s.from);
-                        placed.duration = std::min ({ n.duration, s.to - n.time, length - placed.time });   // cut at the loop's end
-                        out.push_back (placed);
-                    }
-            std::stable_sort (out.begin(), out.end(), [] (const Note& a, const Note& b) { return a.time < b.time; });
-            return out;
+            return laidOut (content, playStart, length, loopStart, loopEnd, loops);
         }
 
         //======================================================================
@@ -1166,6 +1155,22 @@ std::vector<Note> notesOf (const midifile::Song& song, double offset, double len
     for (auto& [key, list] : open)
         while (! list.empty())
             close (key, std::max (last, list.front().start + 1.0e-3), -1);
+    std::stable_sort (out.begin(), out.end(), [] (const Note& a, const Note& b) { return a.time < b.time; });
+    return out;
+}
+
+std::vector<Note> laidOut (const std::vector<Note>& content, double playStart, double length, double loopStart, double loopEnd, bool loops)
+{
+    std::vector<Note> out;
+    for (const auto& s : segments (playStart, length, loopStart, loopEnd, loops))
+        for (const auto& n : content)
+            if (n.time >= s.from - 1.0e-9 && n.time < s.to - 1.0e-9)
+            {
+                auto placed = n;
+                placed.time = s.at + (n.time - s.from);
+                placed.duration = std::min ({ n.duration, s.to - n.time, length - placed.time });   // cut at the loop's end
+                out.push_back (placed);
+            }
     std::stable_sort (out.begin(), out.end(), [] (const Note& a, const Note& b) { return a.time < b.time; });
     return out;
 }
