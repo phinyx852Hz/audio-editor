@@ -148,7 +148,10 @@ public:
     // others: one opened becomes a PHI project in a folder beside it ("<name> PHI"), with its
     // audio and its note clips as MIDI files; this one is written as one, its audio in it.
     // What does not carry over is listed when it is done. DawProjectSection.cpp.
+    // Ableton Live Sets (.als, docs/ableton-sets.md) open the same way, a Drum Rack on the Slicer.
     static bool isDawProject (const QString& path);
+    static bool isAbletonSet (const QString& path);
+    static bool isOtherProject (const QString& path);   // either
     bool importDawProject (const QString& path, QString& error);
     void importDawProjectFromMenu();
     void exportDawProject();

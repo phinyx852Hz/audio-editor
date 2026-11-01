@@ -8,6 +8,7 @@
 #include "../Source/sampler/SlicerEngine.h"
 #include "../Source/mixer/MidiFile.h"
 #include "../Source/mixer/DawProject.h"
+#include "../Source/mixer/AbletonSet.h"
 #include "../Source/core/Zip.h"
 #include "../Source/mixer/Tunings.h"
 #include "../Source/mixer/NoteEditor.h"
@@ -74,6 +75,8 @@
 #include "../Source/control/ControlSurface.h"
 #include "../Source/control/MidiLearn.h"
 #include "../Source/engine/PushDisplay.h"
+
+#include <zlib.h>
 
 #include <algorithm>
 #include <chrono>
@@ -10485,6 +10488,221 @@ namespace
         fs::remove_all (folder);
     }
 
+    // Ableton Live Sets: a small set as Live 10 and 11 write them, gzipped, with a Drum Rack.
+    void testAbletonSet()
+    {
+        namespace fs = std::filesystem;
+        const auto folder = fs::temp_directory_path() / "phi-als-test";
+        fs::remove_all (folder);
+        fs::create_directories (folder / "Samples" / "Recorded");
+        for (const auto* name : { "Samples/Recorded/kick.wav", "snare.wav", "loop.wav" })
+            std::ofstream (folder / name, std::ios::binary) << std::string (100, 's');
+        const auto snare = (folder / "snare.wav").string();
+
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+<Ableton MajorVersion="5" MinorVersion="11.0_433" Creator="Ableton Live 11.3">
+  <LiveSet>
+    <Tracks>
+      <MidiTrack Id="1">
+        <Name><EffectiveName Value="Drums" /><UserName Value="Drums" /></Name>
+        <DeviceChain>
+          <Mixer>
+            <Sends>
+              <TrackSendHolder Id="0"><Send><Manual Value="0.5" /></Send></TrackSendHolder>
+            </Sends>
+            <Speaker><Manual Value="true" /></Speaker>
+            <SoloSink Value="true" />
+            <Pan><Manual Value="-0.5" /></Pan>
+            <Volume><Manual Value="0.5" /></Volume>
+          </Mixer>
+          <MainSequencer>
+            <ClipSlotList>
+              <ClipSlot Id="0"><ClipSlot><Value /></ClipSlot></ClipSlot>
+              <ClipSlot Id="1"><ClipSlot><Value>
+                <MidiClip Id="2" Time="0">
+                  <CurrentStart Value="0" /><CurrentEnd Value="4" />
+                  <Loop><LoopStart Value="0" /><LoopEnd Value="4" /><StartRelative Value="0" /><LoopOn Value="true" /></Loop>
+                  <Name Value="Beat" />
+                  <Notes><KeyTracks>
+                    <KeyTrack Id="0"><Notes><MidiNoteEvent Time="1" Duration="0.5" Velocity="127" OffVelocity="64" IsEnabled="true" /></Notes><MidiKey Value="37" /></KeyTrack>
+                  </KeyTracks></Notes>
+                </MidiClip>
+              </Value></ClipSlot></ClipSlot>
+            </ClipSlotList>
+            <ClipTimeable><ArrangerAutomation><Events>
+              <MidiClip Id="1" Time="8">
+                <CurrentStart Value="8" /><CurrentEnd Value="14" />
+                <Loop><LoopStart Value="0" /><LoopEnd Value="4" /><StartRelative Value="1" /><LoopOn Value="true" /></Loop>
+                <Name Value="Groove" />
+                <Disabled Value="false" />
+                <Notes><KeyTracks>
+                  <KeyTrack Id="0"><Notes>
+                    <MidiNoteEvent Time="0" Duration="0.5" Velocity="127" OffVelocity="64" IsEnabled="true" />
+                    <MidiNoteEvent Time="2" Duration="0.5" Velocity="64" OffVelocity="64" IsEnabled="false" />
+                  </Notes><MidiKey Value="36" /></KeyTrack>
+                  <KeyTrack Id="1"><Notes><MidiNoteEvent Time="1" Duration="0.5" Velocity="63.5" OffVelocity="64" IsEnabled="true" /></Notes><MidiKey Value="37" /></KeyTrack>
+                </KeyTracks></Notes>
+              </MidiClip>
+            </Events></ArrangerAutomation></ClipTimeable>
+          </MainSequencer>
+          <DeviceChain><Devices>
+            <MidiVelocity Id="0" />
+            <DrumGroupDevice Id="1">
+              <Branches>
+                <DrumBranch Id="0">
+                  <Name><EffectiveName Value="Kick" /></Name>
+                  <DeviceChain><MidiToAudioDeviceChain Id="0"><Devices>
+                    <OriginalSimpler Id="0">
+                      <Player><MultiSampleMap><SampleParts>
+                        <MultiSamplePart Id="0">
+                          <Volume Value="1" /><Panorama Value="0.25" />
+                          <SampleStart Value="4800" /><SampleEnd Value="47999" />
+                          <SampleRef>
+                            <FileRef>
+                              <RelativePathType Value="3" />
+                              <RelativePath><RelativePathElement Id="0" Dir="Samples" /><RelativePathElement Id="1" Dir="Recorded" /></RelativePath>
+                              <Name Value="kick.wav" />
+                            </FileRef>
+                            <DefaultDuration Value="48000" /><DefaultSampleRate Value="48000" />
+                          </SampleRef>
+                        </MultiSamplePart>
+                      </SampleParts></MultiSampleMap></Player>
+                      <Globals><PlaybackMode Value="1" /></Globals>
+                      <TransposeKey><KeyMidi><NoteOrController Value="60" /></KeyMidi><Manual Value="-2" /></TransposeKey>
+                      <TransposeFine><Manual Value="50" /></TransposeFine>
+                      <Volume><Manual Value="-12" /></Volume>
+                    </OriginalSimpler>
+                  </Devices>
+                  <Mixer><Volume><Manual Value="1" /></Volume><Pan><Manual Value="0" /></Pan><Speaker><Manual Value="true" /></Speaker></Mixer>
+                  </MidiToAudioDeviceChain></DeviceChain>
+                  <BranchInfo><ReceivingNote Value="92" /><SendingNote Value="60" /><ChokeGroup Value="0" /></BranchInfo>
+                </DrumBranch>
+                <DrumBranch Id="1">
+                  <Name><EffectiveName Value="Snare" /></Name>
+                  <DeviceChain><MidiToAudioDeviceChain Id="0"><Devices>
+                    <OriginalSimpler Id="0">
+                      <Player><MultiSampleMap><SampleParts>
+                        <MultiSamplePart Id="0">
+                          <Volume Value="2" /><Panorama Value="0" />
+                          <SampleStart Value="0" /><SampleEnd Value="0" />
+                          <SampleRef>
+                            <FileRef><RelativePath Value="nowhere/snare.wav" /><Path Value="/no/such/folder/snare.wav" /></FileRef>
+                            <DefaultDuration Value="44100" /><DefaultSampleRate Value="44100" />
+                          </SampleRef>
+                        </MultiSamplePart>
+                      </SampleParts></MultiSampleMap></Player>
+                      <Globals><PlaybackMode Value="0" /></Globals>
+                      <Volume><Manual Value="0" /></Volume>
+                    </OriginalSimpler>
+                  </Devices>
+                  <Mixer><Volume><Manual Value="0.5" /></Volume><Pan><Manual Value="-0.5" /></Pan><Speaker><Manual Value="false" /></Speaker></Mixer>
+                  </MidiToAudioDeviceChain></DeviceChain>
+                  <BranchInfo><ReceivingNote Value="91" /><ChokeGroup Value="1" /></BranchInfo>
+                </DrumBranch>
+              </Branches>
+            </DrumGroupDevice>
+            <Reverb Id="2"><On><Manual Value="true" /></On></Reverb>
+          </Devices></DeviceChain>
+        </DeviceChain>
+      </MidiTrack>
+      <AudioTrack Id="2">
+        <Name><EffectiveName Value="Loop" /></Name>
+        <DeviceChain>
+          <Mixer><Volume><Manual Value="1" /></Volume><Speaker><Manual Value="false" /></Speaker></Mixer>
+          <MainSequencer>
+            <Sample><ArrangerAutomation><Events>
+              <AudioClip Id="0" Time="4">
+                <CurrentStart Value="4" /><CurrentEnd Value="12" />
+                <Loop><LoopStart Value="0" /><LoopEnd Value="8" /><StartRelative Value="0" /><LoopOn Value="false" /></Loop>
+                <Name Value="loop" />
+                <SampleRef><FileRef><Path Value=")" + (folder / "loop.wav").string() + R"(" /></FileRef><DefaultDuration Value="96000" /><DefaultSampleRate Value="48000" /></SampleRef>
+                <IsWarped Value="true" />
+                <WarpMarkers><WarpMarker Id="0" SecTime="0" BeatTime="0" /><WarpMarker Id="1" SecTime="4" BeatTime="8" /></WarpMarkers>
+              </AudioClip>
+              <AudioClip Id="1" Time="16">
+                <CurrentStart Value="16" /><CurrentEnd Value="18" />
+                <Loop><LoopStart Value="0.5" /><LoopEnd Value="2" /><StartRelative Value="0" /><LoopOn Value="false" /></Loop>
+                <SampleRef><FileRef><Path Value=")" + (folder / "loop.wav").string() + R"(" /></FileRef></SampleRef>
+                <IsWarped Value="false" />
+              </AudioClip>
+            </Events></ArrangerAutomation></Sample>
+          </MainSequencer>
+        </DeviceChain>
+      </AudioTrack>
+      <GroupTrack Id="3"><Name><EffectiveName Value="Bus" /></Name></GroupTrack>
+      <ReturnTrack Id="4">
+        <Name><EffectiveName Value="A-Reverb" /></Name>
+        <DeviceChain><Mixer><Volume><Manual Value="1" /></Volume></Mixer></DeviceChain>
+      </ReturnTrack>
+    </Tracks>
+    <MasterTrack>
+      <DeviceChain><Mixer><Tempo><Manual Value="120" /></Tempo><Volume><Manual Value="1" /></Volume></Mixer></DeviceChain>
+    </MasterTrack>
+    <SceneNames><Scene Id="0" Value="Intro" /><Scene Id="1" Value="Verse" /><Scene Id="2" Value="" /></SceneNames>
+  </LiveSet>
+</Ableton>)";
+        const auto set = (folder / "song.als").string();
+        {
+            auto* gz = gzopen (set.c_str(), "wb");
+            gzwrite (gz, xml.data(), (unsigned) xml.size());
+            gzclose (gz);
+        }
+        dawproject::Project p;
+        std::string error;
+        check (ableton::read (set, p, error), "als: read (" + error + ")");
+        check (p.application == "Ableton Live 11.3" && near (p.bpm, 120.0, 1e-9), "als: creator and tempo");
+        check (p.tracks.size() == 2 && p.returns.size() == 1, "als: two tracks (the group left out) and a return");
+        check (p.scenes.size() == 2 && p.scenes[1] == "Verse", "als: the scenes up to the last used");
+        if (p.tracks.size() == 2)
+        {
+            const auto& d = p.tracks[0];
+            check (d.name == "Drums" && d.notes && d.solo && ! d.mute && near (d.volumeDb, -6.02, 0.01) && near (d.pan, -0.5, 1e-9), "als: the drum track's mixer");
+            check (d.sends.size() == 1 && d.sends[0].target == 0 && near (d.sends[0].db, -6.02, 0.01), "als: the send to the return");
+            check (d.kit.size() == 2, "als: two pads");
+            if (d.kit.size() == 2)
+            {
+                const auto& k = d.kit[0];
+                check (k.note == 36 && k.name == "Kick" && fs::path (k.file).filename() == "kick.wav" && fs::exists (k.file), "als: kick pad, its sample found beside the set");
+                check (near (k.start, 0.1, 1e-9) && near (k.end, 1.0, 1e-9) && near (k.gainDb, -12.0, 1e-6) && near (k.pan, 0.25, 1e-9)
+                       && near (k.pitch, -1.5, 1e-9) && ! k.gate, "als: kick's start, end, level, pan, transpose and one-shot");
+                const auto& s = d.kit[1];
+                check (s.note == 37 && s.file == snare && s.choke == 1 && s.mute && s.gate && s.end < 0.0, "als: snare found by name, choke group, muted, classic");
+                check (near (s.gainDb, 20.0 * std::log10 (2.0) + 20.0 * std::log10 (0.5), 1e-6) && near (s.pan, -0.5, 1e-9), "als: snare's levels and its chain's pan");
+            }
+            check (d.noteClips.size() == 1, "als: one arrangement clip");
+            if (d.noteClips.size() == 1)
+            {
+                const auto& c = d.noteClips[0];
+                check (near (c.start, 4.0, 1e-9) && near (c.lengthBeats, 6.0, 1e-9) && c.name == "Groove", "als: the clip placed");
+                // From beat 1 of a 4-beat loop for 6 beats: the 37 at 0, the 36 at 3, the 37 at 4; the disabled note left out.
+                std::vector<std::pair<double, int>> got;
+                for (const auto& n : c.notes)
+                    got.emplace_back (n.time, n.key);
+                check (got == (std::vector<std::pair<double, int>> { { 0.0, 37 }, { 3.0, 36 }, { 4.0, 37 } }), "als: the loop unrolled");
+                check (! c.notes.empty() && near (c.notes[0].velocity, 0.5, 1e-9), "als: velocity");
+            }
+            check (d.slots.size() == 1 && d.slots[0].scene == 1 && d.slots[0].noteClip.notes.size() == 1, "als: the Session clip in its scene");
+            const auto& l = p.tracks[1];
+            check (l.name == "Loop" && l.mute && l.audio, "als: the audio track");
+            check (l.audioClips.size() == 2, "als: two audio clips");
+            if (l.audioClips.size() == 2)
+            {
+                // 8 beats over 4 s at 120 BPM: not stretched.
+                check (near (l.audioClips[0].start, 2.0, 1e-9) && near (l.audioClips[0].length, 4.0, 1e-9) && ! l.audioClips[0].warped
+                       && near (l.audioClips[0].fileLength, 2.0, 1e-9), "als: the warped clip at its tempo");
+                check (near (l.audioClips[1].start, 8.0, 1e-9) && near (l.audioClips[1].offset, 0.5, 1e-9) && near (l.audioClips[1].length, 1.0, 1e-9),
+                       "als: the unwarped clip, its start in seconds");
+            }
+        }
+        auto said = [&] (const std::string& part)
+        {
+            return std::any_of (p.notes.begin(), p.notes.end(), [&] (const std::string& n) { return n.find (part) != std::string::npos; });
+        };
+        check (said ("MidiVelocity") && said ("Reverb") && said ("group"), "als: what did not carry over is said");
+        check (! ableton::parse ("<Project/>", folder.string(), p, error), "als: not a set");
+        fs::remove_all (folder);
+    }
+
 int main()
 {
     testStorage();
@@ -10565,6 +10783,7 @@ int main()
     testSerial();
     testPluginMeasure();
     testDawProject();
+    testAbletonSet();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");

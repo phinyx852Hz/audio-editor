@@ -499,7 +499,7 @@ namespace
 
     QString projectFilter()
     {
-        return MixerWindow::tr ("PHI projects (*.phi *.phinyxmix);;DAWproject: Bitwig, Studio One, Cubase... (*.dawproject);;All files (*)");
+        return MixerWindow::tr ("PHI projects (*.phi *.phinyxmix);;DAWproject: Bitwig, Studio One, Cubase... (*.dawproject);;Ableton Live Sets (*.als);;All files (*)");
     }
 
     enum Choice { noInstrument, synthChoice, samplerChoice, slicerChoice, ragaChoice, prismChoice, tablaChoice, firstPlugin };
@@ -10940,7 +10940,7 @@ bool MixerWindow::isProjectFile (const QString& file)
 {
     const auto suffix = QFileInfo (file).suffix();
     return suffix.compare (projectSuffix, Qt::CaseInsensitive) == 0 || suffix.compare (QLatin1String ("phinyxmix"), Qt::CaseInsensitive) == 0
-        || isDawProject (file);
+        || isOtherProject (file);
 }
 
 void MixerWindow::showStatus (const QString& text) { status->setText (text); }
@@ -11081,7 +11081,7 @@ void MixerWindow::openMix()
     if (file.isEmpty())
         return;
     QString error;
-    if (! (isDawProject (file) ? importDawProject (file, error) : loadMix (file, error)))
+    if (! (isOtherProject (file) ? importDawProject (file, error) : loadMix (file, error)))
         QMessageBox::warning (this, tr ("Open Project"), error);
     setFocus();
 }
@@ -11093,7 +11093,7 @@ bool MixerWindow::openMixFile (const QString& file)
         return false;
     QString error;
     const auto full = QFileInfo (file).absoluteFilePath();
-    if (! (isDawProject (full) ? importDawProject (full, error) : loadMix (full, error)))
+    if (! (isOtherProject (full) ? importDawProject (full, error) : loadMix (full, error)))
     {
         QMessageBox::warning (this, tr ("Open Project"), error);
         return false;

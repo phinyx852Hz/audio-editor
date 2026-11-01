@@ -5,13 +5,13 @@ PreSonus made so that projects can move between programs. Bitwig Studio (5.0.9 o
 (6.5 on), Cubase (14 on) and others read and write it. PHI opens one as a PHI project and writes
 its own projects as one.
 
-- **Open:** Mixer > Import DAWproject..., or open the `.dawproject` file like a project (Mixer >
+- **Open:** Mixer > Import DAWproject or Live Set..., or open the `.dawproject` file like a project (Mixer >
   Open Project, File > Open, the command line, the file manager).
 - **Write:** Mixer > Export DAWproject...
 
 Bitwig's own `.bwproject` files are closed and undocumented; export the project from Bitwig as a
 DAWproject (File > Export > DAWproject) and open that. Ableton Live does not write DAWproject; its
-`.als` sets are a separate importer (planned).
+`.als` sets open the same way, a Drum Rack on PHI's Slicer: [ableton-sets.md](ableton-sets.md).
 
 ## Opening one
 

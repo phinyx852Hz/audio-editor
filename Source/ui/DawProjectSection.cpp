@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // DAWproject (docs/dawproject.md): a project of Bitwig Studio, Studio One, Cubase or another
 // program that writes the open format, brought in as a PHI project, and a PHI project
-// written as one. The format is Source/mixer/DawProject.*; this is what it means for the mixer.
+// written as one; and Ableton Live Sets (docs/ableton-sets.md), brought in the same way. The
+// formats are Source/mixer/DawProject.* and AbletonSet.*; this is what they mean for the mixer.
 #include "MixerWindow.h"
 #include "../engine/AudioEngine.h"
+#include "../mixer/AbletonSet.h"
 #include "../mixer/DawProject.h"
 #include "Settings.h"
 
@@ -87,22 +89,32 @@ bool MixerWindow::isDawProject (const QString& file)
     return QFileInfo (file).suffix().compare (dawSuffix, Qt::CaseInsensitive) == 0;
 }
 
+bool MixerWindow::isAbletonSet (const QString& file)
+{
+    return QFileInfo (file).suffix().compare (QLatin1String ("als"), Qt::CaseInsensitive) == 0;
+}
+
+bool MixerWindow::isOtherProject (const QString& file) { return isDawProject (file) || isAbletonSet (file); }
+
 //==============================================================================
-// In: the .dawproject is unpacked into a folder beside it ("<name> PHI"), with its audio,
-// its note clips as MIDI files and a .phi, which is then opened.
+// In: a folder beside the file ("<name> PHI") gets a .phi, the note clips as MIDI files and,
+// from a .dawproject, its audio unpacked (a Live Set's samples stay where they are); then
+// the .phi is opened.
 bool MixerWindow::importDawProject (const QString& file, QString& error)
 {
     const QFileInfo source (file);
     const auto folderPath = freeFolder (source.absoluteDir(), source.completeBaseName() + tr (" PHI"));
     QDir folder (folderPath);
-    if (! QDir().mkpath (folder.filePath (QStringLiteral ("Audio"))) || ! QDir().mkpath (folder.filePath (QStringLiteral ("MIDI"))))
+    const auto live = isAbletonSet (file);   // its audio stays where it is; a DAWproject's is unpacked
+    if ((! live && ! QDir().mkpath (folder.filePath (QStringLiteral ("Audio")))) || ! QDir().mkpath (folder.filePath (QStringLiteral ("MIDI"))))
     {
         error = tr ("%1 could not be made").arg (folderPath);
         return false;
     }
     dawproject::Project p;
     std::string why;
-    if (! dawproject::read (file.toStdString(), folder.filePath (QStringLiteral ("Audio")).toStdString(), p, why))
+    if (live ? ! ableton::read (file.toStdString(), p, why)
+             : ! dawproject::read (file.toStdString(), folder.filePath (QStringLiteral ("Audio")).toStdString(), p, why))
     {
         error = fromStd (why);
         folder.removeRecursively();
@@ -226,6 +238,31 @@ bool MixerWindow::importDawProject (const QString& file, QString& error)
             else if (inst->isPlugin())
                 say (tr ("%1: the instrument %2 (%3) is not among PHI's plug-ins; the Synth plays it").arg (fromStd (t.name), fromStd (inst->name), fromStd (inst->format())));
         }
+        // A drum machine (Live's Drum Rack) on PHI's Slicer: a pad each, in order from bank A,
+        // each answering the note it did, so the clips play the same sounds and Push has them.
+        if (! o.contains (QStringLiteral ("instrument")) && ! t.kit.empty())
+        {
+            QJsonArray pads;
+            const auto r = rate();
+            for (int k = 0; k < std::min ((int) t.kit.size(), slicer::numPads); ++k)
+            {
+                const auto& pad = t.kit[(size_t) k];
+                const auto start = std::max (0.0, pad.start) * r;
+                const auto end = pad.end > pad.start ? pad.end * r : 1.0e12;   // to the sound's end
+                QJsonObject layer { { "layer", 0 }, { "file", fromStd (pad.file) }, { "start", std::floor (start) }, { "end", std::ceil (end) },
+                                    { "gain", 0.0 }, { "pitch", 0.0 }, { "fadeIn", 0.0 }, { "fadeOut", 0.0 }, { "reverse", false } };
+                pads.append (QJsonObject { { "pad", k }, { "name", fromStd (pad.name) }, { "layers", QJsonArray { layer } },
+                                           { "gain", std::clamp (pad.gainDb, -60.0, 24.0) }, { "pan", pad.pan }, { "pitch", std::clamp (pad.pitch, -48.0, 48.0) },
+                                           { "gate", pad.gate }, { "choke", pad.choke }, { "mute", pad.mute }, { "receive", pad.note } });
+            }
+            if ((int) t.kit.size() > slicer::numPads)
+                say (tr ("%1: the pads after pad %2 are left out").arg (fromStd (t.name)).arg (slicer::numPads));
+            o.insert ("instrument", QJsonObject { { "kind", "slicer" },
+                                                  { "kit", QJsonObject { { "version", 2 }, { "pads", pads }, { "layout", "push" }, { "pushPage", 0 } } } });
+        }
+        // A one-sample instrument (Live's Simpler) on PHI's Sampler.
+        if (! o.contains (QStringLiteral ("instrument")) && ! t.samplerFile.empty())
+            o.insert ("instrument", QJsonObject { { "kind", "sampler" }, { "sound", fromStd (t.samplerFile) } });
         // Notes need something to play them: the Synth, as for a MIDI file put on a track.
         if (! o.contains (QStringLiteral ("instrument")) && (! t.noteClips.empty() || std::any_of (t.slots.begin(), t.slots.end(), [] (const dawproject::Slot& x) { return ! x.audio; })))
             o.insert ("instrument", QJsonObject { { "kind", "synth" }, { "state", QString() } });
@@ -338,21 +375,23 @@ bool MixerWindow::importDawProject (const QString& file, QString& error)
         writeMix (phiFile, why2);   // the plugins' states in PHI's own form, in the .phi
     }
     showStatus (tr ("Opened %1 from %2 (%3), saved as %4").arg (source.fileName(), fromStd (p.application).isEmpty() ? tr ("another program") : fromStd (p.application),
-                                                                      QStringLiteral ("DAWproject"), phiFile));
-    showNotes (this, tr ("Open DAWproject"), tr ("%1 is open as a PHI project in %2.").arg (source.fileName(), folderPath), notes);
+                                                                      live ? tr ("a Live Set") : QStringLiteral ("DAWproject"), phiFile));
+    showNotes (this, live ? tr ("Open Live Set") : tr ("Open DAWproject"), tr ("%1 is open as a PHI project in %2.").arg (source.fileName(), folderPath), notes);
     return true;
 }
 
 void MixerWindow::importDawProjectFromMenu()
 {
-    if (modified && QMessageBox::question (this, tr ("Import DAWproject"), tr ("Open another project? Changes to %1 that were not saved are lost.").arg (mixName())) != QMessageBox::Yes)
+    const auto title = tr ("Import a Project");
+    if (modified && QMessageBox::question (this, title, tr ("Open another project? Changes to %1 that were not saved are lost.").arg (mixName())) != QMessageBox::Yes)
         return;
-    const auto file = QFileDialog::getOpenFileName (this, tr ("Import DAWproject"), folder(), tr ("DAWproject (*.dawproject);;All files (*)"));
+    const auto file = QFileDialog::getOpenFileName (this, title, folder(),
+                                                    tr ("Projects of other programs (*.dawproject *.als);;DAWproject: Bitwig, Studio One, Cubase... (*.dawproject);;Ableton Live Sets (*.als);;All files (*)"));
     if (file.isEmpty())
         return;
     QString error;
     if (! importDawProject (file, error))
-        QMessageBox::warning (this, tr ("Import DAWproject"), error);
+        QMessageBox::warning (this, title, error);
 }
 
 //==============================================================================

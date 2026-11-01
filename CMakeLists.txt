@@ -54,6 +54,7 @@ target_sources(${APP_ID} PRIVATE
     Source/sampler/StepSequencer.cpp
     Source/mixer/MidiFile.cpp
     Source/mixer/DawProject.cpp
+    Source/mixer/AbletonSet.cpp
     Source/mixer/Tunings.cpp
     Source/mixer/Atlas.cpp
     Source/mixer/NoteEditor.cpp
@@ -485,6 +486,7 @@ if(PHI_BUILD_TESTS)
         Source/sampler/StepSequencer.cpp
         Source/mixer/MidiFile.cpp
         Source/mixer/DawProject.cpp
+        Source/mixer/AbletonSet.cpp
         Source/mixer/Tunings.cpp
         Source/mixer/Atlas.cpp
         Source/mixer/NoteEditor.cpp
