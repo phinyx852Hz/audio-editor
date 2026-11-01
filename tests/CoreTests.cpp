@@ -572,6 +572,21 @@ namespace
         doc.apply ("Other", { d, {}, {} });
         check (doc.isModified() && ! doc.canRedo(), "branching drops redo");
         check (doc.historyDescriptions().size() == 2, "history list");
+
+        // A script's changes squashed into one undo step.
+        doc.reset (d, {}, "x.wav");
+        doc.apply ("Before", { d->slice (0, 900), {}, {} });
+        const auto from = doc.historyPosition();
+        doc.apply ("One", { d->slice (0, 800), {}, {} });
+        doc.apply ("Two", { d->slice (0, 700), {}, {} });
+        doc.apply ("Three", { d->slice (0, 600), {}, {} });
+        doc.squash (from, "Script: test");
+        check (doc.historyPosition() == from + 1 && doc.historyDescriptions().size() == 3 && doc.undoDescription() == "Script: test"
+               && doc.current().data->length() == 600, "squash: the script's steps become one, its result kept");
+        doc.undo();
+        check (doc.current().data->length() == 900, "squash: one undo goes back to before the script");
+        doc.squash (from, "nothing");
+        check (doc.historyDescriptions().size() == 3 && doc.canRedo(), "squash: nothing to squash leaves the history");
     }
 
     void testDsp()

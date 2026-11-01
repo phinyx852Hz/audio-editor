@@ -137,7 +137,7 @@ namespace macro
 
     bool recordable (const QString& id)
     {
-        for (const auto* prefix : { "view.", "help.", "options.", "tools.macro", "transport.playStop", "transport.stop", "transport.loop", "file.quit" })
+        for (const auto* prefix : { "view.", "help.", "options.", "tools.macro", "tools.script", "transport.playStop", "transport.stop", "transport.loop", "file.quit" })
             if (id.startsWith (QLatin1String (prefix)))
                 return false;
         return true;

@@ -612,6 +612,7 @@ void MainWindow::registerCommands()
     registerPatchBayCommands();
     registerReferenceCommands();
     registerMacroCommands();
+    registerScriptCommands();
     registerResearchCommands();
     add ("tools.managePlugins", Category::tools, tr ("Manage &Plug-ins..."), {}, [this] { managePlugins(); });
     add ("tools.resetConfig", Category::tools, tr ("Reset &Configuration..."), {}, [this] { resetConfiguration(); });
@@ -932,6 +933,7 @@ void MainWindow::buildMenus()
                                "album.properties", "album.twoTracks", "album.export" } } },
         { QStringLiteral ("#effect"), { tr ("&Effect"),    { "effect.repeat", "-", "@nyquist.generate", "-", "@nyquist.effect" } } },
         { QStringLiteral ("#markers"), { tr ("Mar&kers"),   { "marker.add", "marker.addRegion", "-", "marker.next", "marker.previous", "-", "marker.exportSlices", "warp.exportLoop", "marker.exportLabels", "-", "view.markers" } } },
+        { QStringLiteral ("#scripts"), { tr ("&Scripts"),  { "tools.scriptEditor", "tools.scriptRun", "tools.scriptStop", "-", "@scripts", "-", "tools.scriptsFolder" } } },
         { QStringLiteral ("#transport"), { tr ("Tr&ansport"), { "transport.playStop", "transport.stop", "transport.loop", "-", "transport.start", "transport.end",
                                "cursor.back", "cursor.forward", "cursor.backLarge", "cursor.forwardLarge" } } },
     };
@@ -968,7 +970,7 @@ void MainWindow::buildMenus()
                                "sample.midiInputs", "sample.panic" } },
         { tr ("Trac&ker"),   { "tracker.window", "tracker.furnace", "-", "tracker.new", "tracker.open", "tracker.save", "tracker.saveAs", "tracker.loadSample", "-", "tracker.playSong", "tracker.playPattern", "tracker.stop", "-",
                                "tracker.recordStereo", "tracker.recordMulti", "-", "tracker.resetTracks", "tracker.about" } },
-        { tr ("&Tools"),     { "#markers", "-", "tools.macroRecord", "tools.macroApply", "tools.macros", "-", "tools.batch", "-", "tools.managePlugins", "-", "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan", "-", "tools.resetConfig" } },
+        { tr ("&Tools"),     { "#markers", "-", "tools.macroRecord", "tools.macroApply", "tools.macros", "#scripts", "-", "tools.batch", "-", "tools.managePlugins", "-", "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan", "-", "tools.resetConfig" } },
         { tr ("&View"),      { "#transport", "-", "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
                                "view.audioEditor", "view.midiEditor", "-", "view.overview", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "view.cpuMeter", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.inspector", "view.master", "view.chain", "view.modulators", "view.history", "view.markers", "view.meters", "analyze.window", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "view.fullScreen", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
@@ -1025,6 +1027,14 @@ void MainWindow::buildMenus()
                 // Built as it opens, from the references file the owner curates (ResearchSection.cpp).
                 connect (menu, &QMenu::aboutToShow, this, [this, menu] { fillResearchMenu (menu); });
                 fillResearchMenu (menu);
+            }
+            else if (id == QLatin1String ("@scripts"))
+            {
+                // The scripts folder, read as the menu opens (fillScriptsMenu), listed before this hidden marker.
+                scriptsAnchor = menu->addAction (QString());
+                scriptsAnchor->setVisible (false);
+                connect (menu, &QMenu::aboutToShow, this, [this, menu] { fillScriptsMenu (menu); });
+                fillScriptsMenu (menu);
             }
             else if (id == QLatin1String ("@nyquist.generate"))
                 generateMenu = menu->addMenu (tr ("&Generate"));

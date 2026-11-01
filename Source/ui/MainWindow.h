@@ -12,6 +12,7 @@
 #include "../engine/AudioEngine.h"
 #include "CommandRegistry.h"
 #include "Macros.h"
+#include "../script/ScriptApi.h"
 #include "Recovery.h"
 
 #include <mutex>
@@ -23,6 +24,7 @@
 #include <QFutureWatcher>
 #include <QHash>
 #include <QMainWindow>
+#include <QSet>
 #include <QTimer>
 #include <atomic>
 #include <memory>
@@ -183,6 +185,24 @@ private:
     class ResearchView* researchView = nullptr;
     DockablePanel* researchPanel = nullptr;
     bool researchShowing = false, researchHidFind = false, researchHidMixerSide = false;
+    // Scripts (ScriptSection.cpp, ScriptEditor.h, docs/scripting.md): Lua and Python scripts
+    // working PHI through the phi API, a command each, and the Script Editor.
+    void registerScriptCommands();
+    void registerScript (const QString& path);   // its command, script.<file name>, once
+    void fillScriptsMenu (QMenu*);
+    void showScriptEditor();
+    void runScriptFile (const QString& path);
+    bool runScript (script::Language, const QString& code, const QString& name, const QString& folder);
+    void runNyquistCode (const QString& code, const QString& name);   // a .ny script, as the Nyquist Prompt runs it
+    QVariant scriptCall (const QString& name, const QVariantList& args);
+    void settleLoading();   // waits while a file opens, so a script's next call finds it
+    class ScriptRunner* scriptRunner = nullptr;
+    class ScriptEditor* scriptEditor = nullptr;
+    class QPushButton* scriptStopButton = nullptr;
+    QAction* scriptsAnchor = nullptr;    // the Scripts menu lists the scripts before this
+    QList<QAction*> scriptMenuItems;
+    QString scriptOutput, scriptUndoName;
+    QSet<std::uint64_t> scriptMadeDocuments;   // files the running script made or opened
     void toggleMacroRecording();
     void runMacro (const macro::Macro&);
     MacroRecorder* macroRecorder = nullptr;
