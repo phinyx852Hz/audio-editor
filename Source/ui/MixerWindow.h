@@ -213,6 +213,11 @@ public:
                     mixer::InstrumentPtr instrument = nullptr);
     // PHI tabla (sampler/PhiTabla.h): a Slicer with the owner's own strokes on 32 pads.
     mixer::InstrumentPtr makePhiTabla();
+    // PHI frame drum (sampler/PhiFrameDrum.h): a Slicer with the owner's own frame drum.
+    mixer::InstrumentPtr makePhiFrameDrum();
+    // A rhythm of General MIDI drums played on PHI frame drum (phiframedrum::fromGeneralMidi): a clip
+    // on the selected track, which gets PHI frame drum. False: no track is selected.
+    bool addRhythmOnPhiFrameDrum (const midifile::Song&, const QString& stem);
     void composeScene (int scene, const std::vector<int>& tracks, const QStringList& files,
                        const std::vector<midifile::SongPtr>& midi, mixer::TuningChoice tuning, const QString& name);
     // A file chosen in the Find panel's Selector: into the first empty slot of the track with
@@ -417,6 +422,8 @@ private:
     void chooseMidi (int track);
     void placeAllMidi();             // again, after a tempo change
     void setInstrumentKind (int track, int choice, const QString& pluginId);
+    mixer::InstrumentPtr makeBuiltInKit (const QString& name, const QString& defaultFile, const slicer::Kit&,
+                                         const std::vector<std::string>& missing, const QString& folder);
     void editInstrument (int track);
     void loadInstrumentSound (int track, const QString& path);   // into the track's Sampler or Slicer
     void takeInstrumentSound (int track);                         // from the Sample menu's

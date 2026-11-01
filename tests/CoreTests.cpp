@@ -30,6 +30,7 @@
 #include "../Source/mixer/Compose.h"
 #include "../Source/mixer/BolProcessor.h"
 #include "../Source/sampler/PhiTabla.h"
+#include "../Source/sampler/PhiFrameDrum.h"
 #include "../Source/mixer/Harmonies.h"
 #include "../Source/mixer/ModalHarmony.h"
 #include "../Source/mixer/RhythmGenerator.h"
@@ -9310,6 +9311,82 @@ namespace
                        && r.parts[4].drums && r.parts[7].drums && ! r.parts[0].drums,
                    "compose: Congolese guitar, solo above mi-solo above accompagnement above bass");
         }
+        // 4′33″: three movements of 33″, 2′40″ and 1′20″ (273 seconds in all) at the tempo, the lid closed at each.
+        {
+            co::Settings s;
+            s.method = co::Method::silence;
+            s.parts = 8;
+            s.bpm = 60.0;
+            const auto r = co::generate (s);
+            size_t lid = 0;
+            for (const auto& n : r.parts[0].notes)
+                lid += n.velocity > 20;
+            bool quiet = true;
+            for (const auto& p : r.parts)
+                for (const auto& n : p.notes)
+                    quiet = quiet && n.velocity <= 40;
+            check (r.end == 273 * co::ticksPerQuarter && r.sections.size() == 3 && r.sections[1].start == 33 * co::ticksPerQuarter
+                       && r.sections[2].start == 193 * co::ticksPerQuarter && lid == 3 && quiet,
+                   "compose: 4′33″, three tacet movements in the premiere's lengths, only quiet sounds");
+        }
+        // Star charts: the brighter a star, the louder.
+        {
+            const auto r = run (co::Method::starCharts, 4);
+            bool levels = true;
+            for (const auto& p : r.parts)
+                for (const auto& n : p.notes)
+                    levels = levels && (n.velocity - 28) % 18 == 0;
+            check (levels && r.sections.front().name.rfind ("page 1", 0) == 0, "compose: star charts, six magnitudes, six loudnesses, by pages");
+        }
+        // Musicircus: every act a different method, each coming in.
+        {
+            const auto r = run (co::Method::musicircus, 6);
+            std::set<std::string> acts;
+            for (const auto& p : r.parts)
+                acts.insert (p.name.substr (0, p.name.find (" (")));
+            size_t comings = 0;
+            for (const auto& x : r.sections)
+                for (size_t at = x.name.find ("comes in"); at != std::string::npos; at = x.name.find ("comes in", at + 1))
+                    ++comings;
+            check (acts.size() == 6 && comings >= 6, "compose: Musicircus, six acts from six methods, each coming in by chance");
+        }
+        // Time brackets: one quiet sound (or a few) a bracket, never louder than mf, on a small gamut.
+        {
+            const auto r = run (co::Method::timeBrackets, 4);
+            std::set<int> gamut;
+            bool soft = true;
+            for (const auto& p : r.parts)
+                for (const auto& n : p.notes)
+                {
+                    soft = soft && n.velocity <= 76;
+                    if (! p.drums)
+                        gamut.insert (n.key);
+                }
+            check (soft && ! gamut.empty() && gamut.size() <= 9 * 2 && r.parts[2].drums, "compose: time brackets, quiet sounds from a small gamut");
+        }
+        // Tuning Meditation: voices tune to one another, so unisons sound between different voices.
+        {
+            const auto r = run (co::Method::tuningMeditation, 6);
+            size_t unisons = 0;
+            for (size_t a = 0; a < r.parts.size(); ++a)
+                for (size_t b = a + 1; b < r.parts.size(); ++b)
+                    for (const auto& x : r.parts[a].notes)
+                        for (const auto& y : r.parts[b].notes)
+                            unisons += x.key == y.key && x.start < y.end && y.start < x.end;
+            check (unisons >= 4 && r.sections.size() >= 2, "compose: Tuning Meditation, voices tuned to one another in unison");
+        }
+        // Deep Listening: global and focal attention by turns; the EIS repeats the accordion three times, softer.
+        {
+            const auto r = run (co::Method::deepListening, 8);
+            bool turns = r.sections.size() >= 2;
+            for (size_t k = 0; k < r.sections.size(); ++k)
+                turns = turns && r.sections[k].name.rfind (k % 2 == 0 ? "global" : "focal", 0) == 0;
+            const auto& first = r.parts[0].notes.front();
+            size_t echoes = 0;
+            for (const auto& n : r.parts[4].notes)
+                echoes += n.key == first.key && n.start > first.start && n.velocity < first.velocity;
+            check (turns && echoes >= 3 && ! r.parts[6].notes.empty(), "compose: Deep Listening, global and focal by turns, the EIS's delays, the cistern");
+        }
         // Rāga: the gat ends on sam with a tihāī.
         {
             const auto r = run (co::Method::raga, 3, "yaman (kalyan)");
@@ -9522,10 +9599,63 @@ namespace
         check (brightness (0.5) < 0.5 * brightness (0.0), "phi tabla: a soft hit is darker");
 
         // The Bol Processor on PHI tabla: dha twice is its two takes.
-        const auto score = bolprocessor::toScore ({ bolprocessor::parse ("dha dha ne") }, 90.0, true);
+        const auto score = bolprocessor::toScore ({ bolprocessor::parse ("dha dha ne") }, 90.0, bolprocessor::On::phiTabla);
         check (score.parts[0].notes.size() == 3 && score.parts[0].notes[0].key == pt::noteFor ("dha", 0) && score.parts[0].notes[1].key == pt::noteFor ("dha", 1)
                    && score.parts[0].notes[0].key != score.parts[0].notes[1].key,
                "phi tabla: the Bol Processor's bols on its pads, the takes in turn");
+    }
+
+    // PHI frame drum (owner, 2026-11-01): the owner's frame drum as a Slicer kit for Push, softer hits
+    // darker, and PHI's rhythms and the Bol Processor played on it by stroke, the takes in turn.
+    void testPhiFrameDrum()
+    {
+        namespace fd = phiframedrum;
+        bool files = true, unique = true, onGrid = true;
+        std::set<int> seen;
+        for (const auto& p : fd::pads())
+        {
+            unique = unique && seen.insert (p.pad).second;
+            onGrid = onGrid && p.pad >= 0 && p.pad < 64;
+            files = files && std::filesystem::exists (std::string (PHI_SHARE_SOURCE_DIR "/phi-frame-drum/") + p.sound.file + ".wav");
+        }
+        check (unique && onGrid && files && fd::pads().size() == 49, "phi frame drum: 49 pads on Push's grid, each sound in share/phi-frame-drum");
+        // The bottom row is dum, the one above tak, from Push's first note.
+        check (fd::padFor ("dum", 0) == 0 && fd::noteFor ("dum", 0) == 36 && fd::noteFor ("tak", 0) == 44 && fd::noteFor ("ka", 0) == 52
+                   && fd::padFor ("dum", 1) == 1 && fd::padFor ("dum", 6) == 0 && fd::padFor ("Doum", 0) == 0 && fd::padFor ("tek", 0) == fd::padFor ("tak", 0)
+                   && fd::padFor ("dha", 0) < 0,
+               "phi frame drum: dum, tak and ka on the bottom rows, each stroke's takes in turn, its spellings as one");
+
+        auto sound = std::make_shared<sampler::Sample>();
+        for (int i = 0; i < 4800; ++i)
+        {
+            sound->left.push_back (0.1f);
+            sound->right.push_back (0.1f);
+        }
+        const auto kit = fd::kit ("folder", [&] (const std::string&) { return sound; });
+        check (kit.velocityTone > 0.0 && kit.layout == slicer::Layout::push && kit.pads[0].name == "Bass1" && kit.pads[0].layerCount() == 1
+                   && kit.pads[(size_t) fd::gridPad (4, 5)].name == "chiftitelli",
+               "phi frame drum: softer hits darker, the owner's names on the pads");
+
+        // An iqāʿ on the frame drum: maqsūm's dums on the bass, its taks on the rimshots in turn.
+        const auto maqsum = rhythm::rhythms()[(size_t) rhythm::findRhythm ("maqsum")];
+        int moved = 0;
+        const auto played = fd::fromGeneralMidi (*rhythm::toSong (maqsum, 1, 110.0), &moved);
+        std::vector<int> notes;
+        for (const auto& e : played->events)
+            if (e.kind() == 0x90 && e.data2 > 0)
+                notes.push_back (e.data1);
+        check (moved == 5 && notes.size() == 5 && notes[0] == fd::noteFor ("dum", 0) && notes[1] == fd::noteFor ("tak", 0)
+                   && notes[2] == fd::noteFor ("tak", 1) && notes[3] == fd::noteFor ("dum", 1),
+               "phi frame drum: maqsum's dum tak - tak dum on the frame drum, the takes in turn");
+        // A ghost note on a tak is a ka, a kick a dum.
+        check (fd::strokeForDrum (63, 56) == "ka" && fd::strokeForDrum (63, 96) == "tak" && fd::strokeForDrum (36, 100) == "dum",
+               "phi frame drum: soft taks are ka, the kick dum");
+
+        // The Bol Processor on PHI frame drum.
+        const auto score = bolprocessor::toScore ({ bolprocessor::parse ("dum tak - tak dum - tak -") }, 110.0, bolprocessor::On::phiFrameDrum);
+        check (score.parts[0].notes.size() == 5 && score.parts[0].notes[0].key == fd::noteFor ("dum", 0)
+                   && score.parts[0].notes[2].key == fd::noteFor ("tak", 1),
+               "phi frame drum: the Bol Processor's dum and tak on its pads, the takes in turn");
     }
 
     void testRhythmGenerator()
@@ -10913,6 +11043,7 @@ int main()
     testCompose();
     testBolProcessor();
     testPhiTabla();
+    testPhiFrameDrum();
     testStochastic();
     testCubify();
     testSerial();

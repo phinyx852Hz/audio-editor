@@ -25,11 +25,13 @@
 #include "MidiEditor.h"
 #include "../mixer/Notation.h"
 
+#include <QElapsedTimer>
 #include <QWidget>
 
 #include <map>
 #include <memory>
 #include <optional>
+#include <tuple>
 
 class QScrollBar;
 
@@ -54,6 +56,10 @@ public:
 
     void showNotes();     // scrolled to the first note
     void refresh();
+    // The playhead moved (or the notes changed): while it plays, the view follows it (the page
+    // slides under it once it is a third across, or the lines and columns turn with it) and is
+    // drawn at most at the screen's rate, so the clock that sends the notes is not held up.
+    void playheadMoved();
 
     // Xen Tuner's tunings folder, as installed or in the source tree.
     static QString tuningsFolder();
@@ -70,6 +76,10 @@ protected:
 
 private:
     const phi::xen::Speller* spellerFor (const noteedit::PitchSystem&) const;
+    const phi::xen::Speller* makeSpeller (const noteedit::PitchSystem&) const;
+    // A pitch's spelling, kept: spelling is slow and the staff spells every note at each frame.
+    const phi::xen::Spelling& spelled (const phi::xen::Speller&, double pitch) const;
+    bool followPlayhead();                // scrolled to keep the playhead in view; true if it moved
     double xOf (int64_t tick) const;
     int64_t tickAt (double x) const;
     double yOf (double staff) const;      // a staff position (C0 0, middle C 28)
@@ -106,4 +116,19 @@ private:
     // The spellers made, by the choice and the tonic they are anchored on.
     mutable std::map<std::string, std::unique_ptr<phi::xen::Speller>> spellers;
     mutable QString loadError;
+    // While a frame is painted: each system's speller, found once (choiceFor looks for files).
+    mutable bool painting = false;
+    mutable std::map<const noteedit::PitchSystem*, const phi::xen::Speller*> paintSpellers;
+    mutable std::map<std::tuple<const phi::xen::Speller*, double, bool>, phi::xen::Spelling> spellings;
+    // How the last beat-by-beat writing was laid out, for following the playhead down its lines
+    // (or across its columns).
+    struct GridLayout
+    {
+        bool shown = false, columns = false;
+        int64_t start = 0, beat = 1, first = 0;   // the writing's start and beat; its first line (column)
+        int per = 1;                              // beats a line (a column)
+        double top = 0.0, step = 1.0;             // the first line's top; a line's height (a column's width)
+    } grid;
+    QElapsedTimer sinceFrame;             // since the last frame was painted
+    bool following = false;               // the view is being scrolled to the playhead
 };

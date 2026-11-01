@@ -36,7 +36,7 @@ TimeRuler::TimeRuler (QWidget* parent) : QWidget (parent)
 QSize TimeRuler::sizeHint() const
 {
     const auto row = (int) std::ceil (QFontMetricsF (font()).height());
-    return { 400, row + 12 + (showsBeats() && showsTime() ? row + 2 : 0) };
+    return { 400, row + 12 + (showsBeats() ? row + 2 : 0) };
 }
 
 void TimeRuler::setGrid (const BeatGrid& g, Mode m)
@@ -109,7 +109,7 @@ void TimeRuler::paintEvent (QPaintEvent*)
         g.fillRect (QRectF (QPointF (frameToX ((double) selStart), 0), QPointF (frameToX ((double) selEnd), bottom)),
                     theme.color (QStringLiteral ("selection")));
 
-    if (showsBeats() && showsTime())
+    if (showsBeats())
     {
         const auto middle = std::round (bottom / 2.0);
         drawBeats (g, 0.0, middle);
@@ -117,8 +117,6 @@ void TimeRuler::paintEvent (QPaintEvent*)
         g.drawLine (QPointF (0, middle - 0.5), QPointF (width(), middle - 0.5));
         drawTime (g, middle, bottom);
     }
-    else if (showsBeats())
-        drawBeats (g, 0.0, bottom);
     else
         drawTime (g, 0.0, bottom);
 

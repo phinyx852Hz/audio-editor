@@ -51,6 +51,7 @@ target_sources(${APP_ID} PRIVATE
     Source/sampler/SamplerEngine.cpp
     Source/sampler/SlicerEngine.cpp
     Source/sampler/PhiTabla.cpp
+    Source/sampler/PhiFrameDrum.cpp
     Source/sampler/StepSequencer.cpp
     Source/mixer/MidiFile.cpp
     Source/mixer/DawProject.cpp
@@ -484,6 +485,7 @@ if(PHI_BUILD_TESTS)
         Source/sampler/SamplerEngine.cpp
         Source/sampler/SlicerEngine.cpp
         Source/sampler/PhiTabla.cpp
+        Source/sampler/PhiFrameDrum.cpp
         Source/sampler/StepSequencer.cpp
         Source/mixer/MidiFile.cpp
         Source/mixer/DawProject.cpp

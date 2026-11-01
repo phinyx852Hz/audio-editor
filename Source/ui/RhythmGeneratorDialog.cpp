@@ -391,13 +391,16 @@ void MainWindow::rhythmGenerator (const rhythmgen::Settings* start, const QStrin
     auto* buttons = new QDialogButtonBox (&dialog);
     auto* toMixer = buttons->addButton (tr ("add to the &mixer"), QDialogButtonBox::AcceptRole);
     toMixer->setToolTip (tr ("a midi clip on the selected track, at the playhead"));
+    auto* toFrameDrum = buttons->addButton (tr ("on PHI &frame drum"), QDialogButtonBox::AcceptRole);
+    toFrameDrum->setToolTip (tr ("a midi clip on the selected track, played on your own frame drum: the low drums dum, the high ones tak, "
+                                 "soft hits and the rest ka, each stroke's takes in turn; the track gets PHI frame drum"));
     auto* toTracker = buttons->addButton (tr ("write a t&racker pattern"), QDialogButtonBox::AcceptRole);
     toTracker->setToolTip (tr ("on the grid, without swing or humanizing; up to 256 rows"));
     auto* toFile = buttons->addButton (tr ("&save as midi..."), QDialogButtonBox::AcceptRole);
     buttons->addButton (QDialogButtonBox::Cancel);
     layout->addWidget (buttons);
     int choice = -1;
-    for (auto [b, n] : { std::pair { toMixer, 0 }, { toTracker, 1 }, { toFile, 2 } })
+    for (auto [b, n] : { std::pair { toMixer, 0 }, { toTracker, 1 }, { toFile, 2 }, { toFrameDrum, 3 } })
         connect (b, &QPushButton::clicked, &dialog, [&choice, &dialog, n] { choice = n; dialog.accept(); });
     connect (buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     const auto accepted = dialog.exec() == QDialog::Accepted;
@@ -424,10 +427,10 @@ void MainWindow::rhythmGenerator (const rhythmgen::Settings* start, const QStrin
         statusBar()->showMessage (text (why), 8000);
         return;
     }
-    if (choice == 0)
+    if (choice == 0 || choice == 3)
     {
         showMixer();
-        if (! mixerWin->addRhythm (*song, name))
+        if (! (choice == 3 ? mixerWin->addRhythmOnPhiFrameDrum (*song, name) : mixerWin->addRhythm (*song, name)))
             statusBar()->showMessage (tr ("Pick a track in the mixer first"), 5000);
         return;
     }
