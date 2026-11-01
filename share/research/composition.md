@@ -101,8 +101,9 @@ colleges of the twentieth century spread it.
 
 - [Carnatic music](https://en.wikipedia.org/wiki/Carnatic_music) and
   [Svara](https://en.wikipedia.org/wiki/Svara), Wikipedia.
-- Subbarama Dikshitar, *Saṅgīta Sampradāya Pradarśini* (Ettayapuram, 1904); English translation
-  online at [ibiblio.org/guruguha](https://www.ibiblio.org/guruguha/ssp.htm).
+- Subbarama Dikshitar (1839–1906), *Saṅgīta Sampradāya Pradarśini* (in Telugu, Ettayapuram,
+  1904); English web edition by Vidya Jayaraman and P. P. Narayanaswami, with every gamaka sign and
+  svara of the original, at [ibiblio.org/guruguha](https://www.ibiblio.org/guruguha/ssp.htm).
 
 ## Jianpu (numbered notation)
 
