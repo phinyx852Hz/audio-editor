@@ -38,7 +38,8 @@ struct FindItem
 // Files and places are browsed one folder at a time until something is typed:
 // Enter or Right opens a folder, Left or Backspace goes up.
 // Moving onto a file with the keys, or clicking it, auditions it; clicking it
-// again or K stops. Keyboard: typing searches everything, Up/Down and Page Up/Down
+// again, K (in the results or the sidebar) or Escape stops, and so does sending it
+// anywhere (Enter, a double-click, or a drop on the launcher, the tracks or the editor). Keyboard: typing searches everything, Up/Down and Page Up/Down
 // move through the results, Enter runs or loads the selection, Tab moves between search,
 // sidebar and results, 1 to 8 toggle a colour on the selected result (0 clears
 // them), F2 or a double-click renames a colour (the right-click menu also renames the set), Escape clears the search or goes
