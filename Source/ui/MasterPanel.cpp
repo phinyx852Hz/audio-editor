@@ -89,7 +89,8 @@ MasterPanel::MasterPanel (AudioEngine& e, QWidget* home, QWidget* parent)
     auto* renderButton = new QPushButton (tr ("&Render in Place"), this);
     auto* scanButton = new QPushButton (tr ("&Scan Plugins"), this);
     auto* analyzeButton = new QPushButton (tr ("Anal&yze"), this);
-    analyzeButton->setToolTip (tr ("Measures the selected plugin (or the whole Master Section) in the Plugin Analyzer (A in the list)"));
+    analyzeButton->setToolTip (tr ("Opens the Analysis Meters window (Ctrl+Alt+A), which measures what the Master Section plays. "
+                                   "To measure a plugin in the Plugin Analyzer, press A in the list"));
     for (auto* b : { addButton, renderButton, scanButton, analyzeButton })
         b->setAutoDefault (false);
 
@@ -118,11 +119,7 @@ MasterPanel::MasterPanel (AudioEngine& e, QWidget* home, QWidget* parent)
     aliasScope = new AliasScope (engine, this);
     layout->addWidget (aliasScope);
     connect (aliasScope, &AliasScope::analyzeRequested, this, [this] { Q_EMIT analyzeRequested (-1); });
-    connect (analyzeButton, &QPushButton::clicked, this, [this]
-    {
-        const auto slot = currentSlot();
-        Q_EMIT analyzeRequested (slot >= 0 && ! engine.masterSlot (slot).empty ? slot : -1);
-    });
+    connect (analyzeButton, &QPushButton::clicked, this, &MasterPanel::metersRequested);
 
     connect (slotList, &QListWidget::itemActivated, this, [this] (QListWidgetItem*)
     {

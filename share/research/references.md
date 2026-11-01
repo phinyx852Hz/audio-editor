@@ -274,56 +274,6 @@ The modal system of Arabic, Persian and Turkish music, with intervals between th
 - Chrysanthos, *Theōrētikon mega* (1832), for the moria.
 - Üzeyir Hacıbəyli, *Principles of Azerbaijani Folk Music* (1945).
 
-# Composition
-
-## Counterpoint and fugue
-
-Writing independent voices that sound well together, by species, and the fugue built from them.
-
-- [Counterpoint](https://en.wikipedia.org/wiki/Counterpoint) and
-  [Fugue](https://en.wikipedia.org/wiki/Fugue), Wikipedia.
-- Johann Joseph Fux, *Gradus ad Parnassum* (1725).
-
-## Twelve-tone rows
-
-A row of the twelve pitch classes and its transformations (prime, inversion, retrograde),
-with Babbitt's combinatoriality and time points.
-
-- [Twelve-tone technique](https://en.wikipedia.org/wiki/Twelve-tone_technique), Wikipedia.
-- Arnold Schoenberg, "Composition with Twelve Tones" (1941), in *Style and Idea* (1950).
-- Andrew Mead, *An Introduction to the Music of Milton Babbitt* (1994).
-
-## Stochastic music and sieves
-
-Stochastic music is Iannis Xenakis's name for music composed with the laws of probability: masses
-of sound (clouds of pizzicati, glissandi, grains) whose overall shape is chosen and whose single
-events follow a distribution, as gas molecules follow the kinetic theory. Sieves are his later
-tool for building scales and rhythms from residue classes, numbers that leave the same remainder.
-
-Xenakis (1922–2001), an engineer and architect who worked with Le Corbusier, reacted against the
-serialism of the 1950s, whose density he said the ear heard only as statistics. *Metastaseis*
-(1953–54) and *Pithoprakta* (1955–56) were the first stochastic works; *Achorripsis* (1956–57)
-used Poisson's law throughout, and from 1962 the ST pieces were calculated on an IBM 7090. He set
-out the theory in *Musiques formelles* (1963), translated as *Formalized Music* (1971); sieves
-came in *Nomos Alpha* (1965–66) and his article "Sieves" (1990). He founded EMAMu (1966, later CEMAMu) and built
-the UPIC drawing system (1977) and the GENDY programs of dynamic stochastic synthesis (1991).
-
-- [Iannis Xenakis](https://en.wikipedia.org/wiki/Iannis_Xenakis), Wikipedia.
-- [Les Amis de Xenakis](https://www.iannis-xenakis.org), the composer's archive and catalogue.
-- Iannis Xenakis, *Formalized Music: Thought and Mathematics in Composition* (Pendragon,
-  revised edition 1992), and "Sieves", *Perspectives of New Music* 28/1 (1990).
-- Thomas DeLio, "Iannis Xenakis' *Nomos Alpha*: The Dialectics of Structure and Materials",
-  *Journal of Music Theory* 24/1 (1980).
-- Nouritza Matossian, *Xenakis* (Kahn & Averill, 1986).
-
-## Minimalism
-
-Music built from repetition and slow change, from La Monte Young and Terry Riley's *In C*
-(1964) to Steve Reich's phasing (*It's Gonna Rain*, 1965; *Piano Phase*, 1967) and Philip
-Glass's additive process.
-
-- [Minimal music](https://en.wikipedia.org/wiki/Minimal_music), Wikipedia.
-
 # Instruments and programs
 
 ## Tracker
@@ -394,8 +344,63 @@ Universal Audio 1176 of the 1960s made it a sound of its own.
 ## Dither
 
 Low noise added before cutting the bit depth, so quiet sounds fade into noise instead of
-distortion. The word was used in the Second World War for the small vibrations that made
-mechanical bomb-sight computers more accurate; Lawrence Roberts applied added noise to
-quantizing pictures (1961), and it became standard in digital audio with the CD.
+distortion. The word appeared just after the Second World War in books on analog computers
+and gun control; the story often told is of mechanical bomb-sight computers that worked better
+shaken in flight than still on the ground. Lawrence Roberts added noise when coding pictures
+in his 1961 MIT thesis, though he did not call it dither, and by the 1960s the word had its
+present meaning. In audio it became standard with the CD.
+
+**Why.** A digital sample can only take one of a fixed set of steps. When a long word (24 bits,
+or 32-bit float) is cut to a short one (16 bits for a CD), each sample has to land on a step,
+either by dropping the extra bits (truncation) or by rounding. Either way the error follows the
+signal: a sine wave hits the same in-between values every cycle and is pushed the same way each
+time, so the error repeats with the wave and is heard as distortion, extra tones at fixed
+frequencies. In a fade or a reverb tail it is worse, because the quiet end breaks up into a
+grainy buzz. Hearing picks out such tones easily but forgives a steady hiss, so dither trades
+the one for the other: a little random noise is added before rounding, and each sample now rounds
+up or down by chance. A value that sits 80 % of the way to the next step rounds up about four
+times in five, so on average the original level survives, even below the smallest step, and
+the error is plain noise that no longer follows the music.
+
+**Kinds of noise.** John Vanderkooy and Stanley Lipshitz showed in the 1980s that the shape of
+the noise's spread of values matters. Noise with every value equally likely (rectangular, RPDF)
+removes the distortion but lets the hiss rise and fall with the music (noise modulation).
+Triangular noise (TPDF), the sum of two rectangular sources, spanning one step either side,
+removes both, and is the least noise that does; Gaussian noise, like a preamp's, needs more.
+**Noise shaping** feeds the rounding error back through a filter so that its energy moves to
+frequencies where hearing is least sensitive, mostly the top of the band. It lowers the hiss you
+hear, but it suits only the last step: shaped noise processed again (equalized, say) can come
+out where it is easily heard, so a file that will be worked on further gets plain TPDF.
+Mastering tools go further: TPDF that is high-passed, so its hiss sits higher, and shaping
+filters of fifth to ninth order fitted to the ear's sensitivity, after work by Michael Gerzon,
+Peter Craven, Robert Wannamaker, Lipshitz and Vanderkooy. MAAT's LINpro (2021), for example,
+offers these, with rectangular dither and plain truncation kept only to compare against.
+
+**When.** Dither belongs at every point where the word length shrinks, not only at the final
+master, because each cut makes its own distortion; that is why mastering engineers teach
+dithering on every save to a shorter word and inside fixed-point plugin chains. Audio that is
+already on the grid of the target depth needs none, and dithering it again only adds noise.
+Now that one master is delivered in several forms (16-bit for CD, 24-bit for high-resolution
+stores, and so on), each gets its own dither as its last step, chosen for that format.
+Floating-point processing (32-bit float) keeps far more resolution than any converter, so a
+float chain needs no dither between its stages.
+
+*In PHI.* Audio is handled in 32-bit float throughout, and plugins pass float to each other,
+so nothing is dithered between plugins. **Saving** below 32-bit float adds TPDF dither by
+default (the Save As dialog can turn it off), and leaves alone audio already on that depth's
+grid, so a file is not dithered twice. **Export** has its own choice for each output: none,
+TPDF (the default) or TPDF noise shaped. The **Master Section** has a final dither on the Master card after the master
+gain, outside the eight slots: off, 16, 20 or 24 bits, with plain rounding, TPDF or shaped
+noise; it applies while listening and to Render in Place, while exports round to their own
+depth last. **Convert Sample Type** reduces to 24, 16 or 8 bits with TPDF or shaped dither
+now, so you hear what will be saved. PHI's TPDF is two rectangular sources of one step each,
+spanning a step either side; its shaping is a second-order error feedback, (1 − z⁻¹)², with
+the dither inside the loop.
 
 - [Dither](https://en.wikipedia.org/wiki/Dither), Wikipedia.
+- [Noise shaping](https://en.wikipedia.org/wiki/Noise_shaping), Wikipedia.
+- John Vanderkooy and Stanley P. Lipshitz, "Dither in Digital Audio", *JAES* 35/12 (1987).
+- Stanley P. Lipshitz, Robert A. Wannamaker and John Vanderkooy, "Quantization and Dither:
+  A Theoretical Survey", *JAES* 40/5 (1992).
+- [MAAT Remasters Dithering Process With New LINpro Plug-In](https://audioxpress.com/news/maat-remasters-dithering-process-with-new-linpro-plug-in),
+  audioXpress (2021), a product announcement.

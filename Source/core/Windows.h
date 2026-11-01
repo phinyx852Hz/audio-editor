@@ -16,6 +16,7 @@ namespace windows
         triangular, blackman, welch, kaiser140, kaiser180,
         nuttall, blackmanNuttall, gaussian, tukey, chebyshev,
         bartlettHann, bohman, parzen, lanczos, exponential,
+        hft95, hft90d,
         numKinds
     };
 

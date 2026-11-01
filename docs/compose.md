@@ -83,9 +83,17 @@ cycles, its layers and how its parts relate. All of them are in mixer/Compose.h,
   drone play beneath. By default it uses the rāga chosen in the Mode menu, else Yaman.
 - **Maqām: Taqsīm and Waṣla** (Arab). The taqsīm moves through the ajnās: the lower jins, the
   ghammāz, the upper jins and the jawāb, a modulation, then the descent and qafla, often in
-  sequence. Then comes a waṣla: a samāʿī thaqīl (10/8) in four khānāt with its taslīm (the fourth
-  in samāʿī dārij), a muwashshaḥ in maqsūm (dawr, dawr, khāna, qafla), and the closing qafla. The
-  qānūn, nāy and kamān play in heterophony.
+  sequence. Its sections grow longer, with the longest and the modulation in the second half.
+  Each opens on a set figure (a rising fourth, or three falling notes) and closes on a qafla of
+  three falling notes and a silence. The drone is heard early in broken strokes, then stops, and
+  the line moves from a near-metre to free rhythm (after Nettl and Riddle, 1973, and Marcus).
+  Then comes a waṣla:
+  - a samāʿī thaqīl (10/8) in four khānāt with its taslīm, the fourth khāna in samāʿī dārij;
+  - a layālī, the voice free on "yā layl, yā ʿayn", each phrase answered by the ʿūd, with no drums;
+  - a muwashshaḥ in maqsūm (dawr, dawr, khāna, qafla);
+  - the closing qafla.
+
+  The qānūn, nāy and kamān play in heterophony.
 - **Radif and Dastgāh** (Persian). A pishdarāmad, then the gushe-hā from the darāmad to the owj,
   each on a higher shāhed with its own ist. Kereshmeh is in its 6/8 rhythm, and the forud returns
   home. The voice's phrases are answered by the tār (javāb). A chahārmezrāb and a reng close it.

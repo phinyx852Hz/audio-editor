@@ -35,6 +35,7 @@
 #include "../Source/mixer/Stochastic.h"
 #include "../Source/mixer/Serial.h"
 #include "../Source/patchbay/PatchBay.h"
+#include "../Source/core/EbuCore.h"
 #include "../Source/core/Ixml.h"
 #include "../Source/core/Metadata.h"
 #include "../Source/core/RiffChunks.h"
@@ -604,6 +605,18 @@ namespace
         check (near (report.truePeakDb, -23.0, 0.3), "true peak " + std::to_string (report.truePeakDb));
         check (report.loudnessRange < 0.5, "steady tone has no loudness range");
 
+        // EBU Tech 3341 signals 16 and 19: sines at fs/4 whose peaks fall exactly between two
+        // samples (phase 45 degrees) must read their true peak, -6.0 and +3.0 dBTP (+0.2/-0.4).
+        for (const auto [amplitude, expected] : { std::pair { 0.5, -6.0 }, std::pair { 1.41, 3.0 } })
+        {
+            dsp::TruePeakDetector detector;
+            float peak = 0.0f;
+            for (int i = 0; i < 4800; ++i)
+                peak = std::max (peak, detector.process ((float) (amplitude * std::sin (M_PI / 2.0 * i + M_PI / 4.0))));
+            const auto db = 20.0 * std::log10 (peak);
+            check (db <= expected + 0.2 && db >= expected - 0.1, "true peak between samples " + std::to_string (db));
+        }
+
         // DC removal.
         AudioData::Builder b (1, 48000.0);
         std::vector<float> dc (48000, 0.25f);
@@ -970,6 +983,55 @@ namespace
                "ixml: paths read");
         Tags again;
         check (ixml::read (ixml::write (t), again, error) && again == t, "ixml: round trip " + error);
+
+        // A BEXT copy is not written back (the bext chunk is the official one), and the
+        // bext loudness is repeated in iXML's own LOUDNESS object.
+        Tags b = t;
+        b["ixml:BEXT/BWF_ORIGINATOR"] = "Old";
+        b[tag::bwfLoudness] = "-23.00";
+        const auto x = ixml::write (b);
+        Tags back;
+        check (ixml::read (x, back, error) && back.count ("ixml:BEXT/BWF_ORIGINATOR") == 0 && back["ixml:LOUDNESS/LOUDNESS_VALUE"] == "-23.00",
+               "ixml: no stale BEXT copy, LOUDNESS from bext");
+    }
+
+    void testEbuCore()
+    {
+        // A new document from the common fields.
+        Tags t;
+        t[tag::title] = "Night Drive";
+        t[tag::artist] = "Ana\nBo";
+        t[tag::composer] = "Cy";
+        t[tag::isrc] = "AA6Q72000047";
+        t[tag::date] = "2026-10-31";
+        const auto x = ebucore::write (t);
+        Tags back;
+        std::string error;
+        check (ebucore::read (x, back, error) && back[tag::title] == "Night Drive" && back[tag::artist] == "Ana\nBo" && back[tag::composer] == "Cy"
+                   && back[tag::isrc] == "AA6Q72000047" && back[tag::date] == "2026-10-31",
+               "ebucore: round trip " + error);
+        check (x.find ("<created startDate=\"2026-10-31\"/>") != std::string::npos && x.find ("typeLabel=\"ISRC\"") != std::string::npos,
+               "ebucore: dates as attributes, ISRC labelled");
+
+        // Merging into a file's document keeps what PHI does not show (an ADM description,
+        // another identifier) and what did not change (a composer's split name).
+        const std::string original = R"(<?xml version="1.0"?><ebucore:ebuCoreMain xmlns:ebucore="urn:ebu:metadata-schema:ebuCore_2014">)"
+            R"(<ebucore:coreMetadata><ebucore:title><dc:title xmlns:dc="http://purl.org/dc/elements/1.1/">Old</dc:title></ebucore:title>)"
+            R"(<ebucore:identifier typeLabel="UUID"><dc:identifier xmlns:dc="http://purl.org/dc/elements/1.1/">u-1</dc:identifier></ebucore:identifier>)"
+            R"(<ebucore:creator><ebucore:contactDetails><ebucore:givenName>Dee</ebucore:givenName><ebucore:familyName>Eff</ebucore:familyName>)"
+            R"(</ebucore:contactDetails><ebucore:role typeLabel="Composer"/></ebucore:creator><ebucore:format><ebucore:audioFormatExtended>)"
+            R"(<audioProgramme audioProgrammeID="APR_1001"/></ebucore:audioFormatExtended></ebucore:format></ebucore:coreMetadata></ebucore:ebuCoreMain>)";
+        Tags file;
+        check (ebucore::read (original, file, error) && file[tag::title] == "Old" && file[tag::composer] == "Dee Eff", "ebucore: read a file's document");
+        file[tag::title] = "New";
+        const auto merged = ebucore::write (file, original);
+        Tags again;
+        check (merged.find ("<ebucore:title><dc:title>New</dc:title></ebucore:title>") != std::string::npos
+                   && merged.find ("audioProgrammeID=\"APR_1001\"") != std::string::npos && merged.find ("u-1") != std::string::npos
+                   && merged.find ("<ebucore:givenName>Dee</ebucore:givenName>") != std::string::npos
+                   && ebucore::read (merged, again, error) && again[tag::title] == "New",
+               "ebucore: merge keeps the rest " + error);
+        check (ebucore::write (Tags {}).empty() && ebucore::write (t, "<BWFXML/>").empty(), "ebucore: nothing to write, not EBUCore");
     }
 
     uint32_t le32 (const unsigned char* p) { return (uint32_t) p[0] | ((uint32_t) p[1] << 8) | ((uint32_t) p[2] << 16) | ((uint32_t) p[3] << 24); }
@@ -1040,6 +1102,19 @@ namespace
                    && back[tag::bwfTruePeak] == "-1.00" && back.count (tag::bwfLoudnessRange) == 0 && back[tag::bwfCodingHistory] == "A=PCM,F=48000,W=16,M=mono"
                    && back[tag::bwfUmid].compare (0, 8, "060a2b34") == 0 && back.count (tag::bwfDescription) == 0,
                "riff: bext round trip (the description follows the comment)");
+        {
+            // Tech 3285 v2 2.4: round(100x) ties away from zero, and anything out of range is unused.
+            Tags l;
+            l[tag::bwfLoudness] = "-22.645";
+            l[tag::bwfTruePeak] = "12.765";
+            l[tag::bwfLoudnessRange] = "-3";
+            l["bwf.maxMomentaryLoudness"] = "-120";
+            const auto e = riff::encodeBext (l);
+            const auto* u = (const unsigned char*) e.data();
+            const auto w16 = [&] (int at) { return (int) (int16_t) (u[at] | (u[at + 1] << 8)); };
+            check (e.size() >= 602 && w16 (346) == 2 && w16 (412) == -2265 && w16 (416) == 1277 && w16 (414) == 0x7fff && w16 (418) == 0x7fff,
+                   "riff: bext loudness rounded and range-checked as Tech 3285 v2 says");
+        }
         check (back["cart:CutID"] == "C1234" && back["cart:Timer.SEG1"] == "48000" && back["cart:Timers"] == "MRK =96000" && back.count ("cart:Title") == 0,
                "riff: cart round trip");
         check (back["ixml:SCENE"] == "4" && back["xmp:xmpDM:scene"] == "Scene 4" && back["raw:wav:umid"] == read["raw:wav:umid"], "riff: iXML, XMP and raw chunk round trip");
@@ -2809,6 +2884,43 @@ namespace
         for (const auto& [kind, limit] : designed)
             check (highestSidelobeDb (windows::make (kind, n)) <= limit, "window " + std::to_string (kind) + " sidelobes");
         check (near (highestSidelobeDb (windows::make (windows::chebyshev, n)), -windows::chebyshevSidelobeDb, 0.5), "Dolph-Chebyshev sidelobes all at its level");
+
+        // The flat tops, against Heinzel, Ruediger and Schilling (2002): the Stanford Research one
+        // (FTSRS), HFT95 and HFT90D. Highest sidelobe, and the most a tone's level can be off
+        // between bins (here at every tenth of a bin). Heinzel's sidelobe figures are for long
+        // windows; at 256 points HFT95's comes out 0.5 dB higher.
+        struct FlatTop { int kind; double sidelobeDb, maxErrorDb; };
+        for (const auto& [kind, expectedSidelobe, maxError] : { FlatTop { windows::flatTop, -76.6, 0.0156 },
+                                                                 FlatTop { windows::hft95, -95.0, 0.0044 },
+                                                                 FlatTop { windows::hft90d, -90.2, 0.0039 } })
+        {
+            const auto w = windows::make (kind, n);
+            const auto label = "flat top " + std::to_string (kind);
+            // The main lobe is flat on top, so look for the first null from 4 bins out.
+            std::vector<double> magnitude ((size_t) points);
+            for (int f = 0; f < points; ++f)
+            {
+                std::complex<double> sum;
+                for (int i = 0; i < n; ++i)
+                    sum += w[(size_t) i] * std::polar (1.0, -2.0 * M_PI * f * i / (n * pad));
+                magnitude[(size_t) f] = std::abs (sum);
+            }
+            int f = 4 * pad;
+            while (f < points - 1 && magnitude[(size_t) f + 1] < magnitude[(size_t) f])
+                ++f;
+            const auto sidelobe = 20.0 * std::log10 (*std::max_element (magnitude.begin() + f, magnitude.end()) / magnitude[0]);
+            check (near (sidelobe, expectedSidelobe, 0.6), label + " sidelobes " + std::to_string (sidelobe) + " dB");
+            const double onBin = std::accumulate (w.begin(), w.end(), 0.0);
+            double worst = 0.0;
+            for (int tenth = 1; tenth <= 5; ++tenth)
+            {
+                std::complex<double> off;
+                for (int i = 0; i < n; ++i)
+                    off += w[(size_t) i] * std::polar (1.0, 2.0 * M_PI * 0.1 * tenth * i / n);
+                worst = std::max (worst, std::abs (20.0 * std::log10 (std::abs (off) / onBin)));
+            }
+            check (worst <= maxError + 0.0005, label + " level error " + std::to_string (worst) + " dB");
+        }
 
         // The largest FFT size stays finite (the Chebyshev's polynomial and Kaiser's Bessel function).
         for (int kind : { (int) windows::chebyshev, (int) windows::kaiser180 })
@@ -5152,7 +5264,7 @@ namespace
             s.ceilingDb = -1.0;
             l.prepare (rate, 2);
             l.set (s);
-            check (l.latency() == (int) std::lround (phi::Limiter::lookaheadMs * rate / 1000.0) + 6, "phi limiter latency");
+            check (l.latency() == (int) std::lround (phi::Limiter::lookaheadMs * rate / 1000.0) + phi::TruePeak::delay, "phi limiter latency");
             std::mt19937 random (5);
             std::normal_distribution<float> gauss (0.0f, 0.3f);
             std::vector<float> a ((size_t) rate), b ((size_t) rate);
@@ -10632,6 +10744,7 @@ int main()
     testMetadata();
     testXmp();
     testIxml();
+    testEbuCore();
     testRiffChunks();
     testNyquist();
     testAlbum();

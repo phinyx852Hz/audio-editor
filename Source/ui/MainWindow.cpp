@@ -1144,6 +1144,13 @@ void MainWindow::buildPanels()
     masterWidget = new MasterPanel (engine, waveform, this);
     connect (masterWidget, &MasterPanel::renderRequested, this, &MainWindow::renderInPlace);
     connect (masterWidget, &MasterPanel::analyzeRequested, this, &MainWindow::analyzeSlot);
+    connect (masterWidget, &MasterPanel::metersRequested, this, [this]
+    {
+        auto* w = analysisWindow();
+        w->show();
+        w->raise();
+        w->activateWindow();
+    });
     connect (masterWidget, &MasterPanel::message, this, [this] (const QString& text)
     {
         if (! text.isEmpty())
