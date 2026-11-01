@@ -90,9 +90,9 @@ of the riq and daf, and the strokes of the tar and bendir, and joined them, with
 training in Western percussion, into a single
 technical vocabulary that could be used on any frame drum, held in the hand, laid on the lap or
 played freehand. The Percussive Arts Society calls it "a unified technical vocabulary"; the
-articles of the 1990s called it "a unified approach to the frame drum". Much of the modern lap
-style, both hands playing a drum laid flat across the knee, comes from it, and from the
-kanjira's split-hand technique on which it draws. He also brought new techniques of his own,
+articles of the 1990s called it "a unified approach to the frame drum". The modern lap
+style, both hands playing a drum laid on the knee, is taught in his style today, beginning with
+the split-hand technique that comes from the kanjira. He also brought new techniques of his own,
 such as playing the bodhrán with brushes.
 
 He named his teaching the **Handance Method**. In it the voice and the body are part of the
@@ -129,7 +129,9 @@ School. His course shows the method's shape: lap style first, then the drum held
 the basic strokes, the low *dum*, the high *tek* and the *pa*, then split-hand technique,
 snapping, Velez's fast fingerings and a brush in the left hand; rhythms counted not in numbers
 but in South Indian vocal cycles, with ratio exercises (3:2, 4:3, 5:3, 7:3) for odd meters; and
-Velez's Handance of stepping, playing and vocalizing at once. Many of today's frame drum teachers learned the lap
+Velez's Handance of stepping, playing and vocalizing at once. **David Kuckhermann**, a German percussionist who studied with Velez among others and has
+played with Dead Can Dance, teaches lap-style frame drumming online through his World Percussion
+Academy. Many of today's frame drum teachers learned the lap
 style and the unified technique from him or from his students, and the instrument now has its
 own festivals. Tamburi Mundi in Freiburg, Germany, has held its festival of frame drum concerts
 and courses for twenty years and runs a Frame Drum Academy; among the players it presents are
@@ -143,5 +145,5 @@ community proclaimed a yearly World Frame Drum Day, under Glen Velez's patronage
   (in German), on World Frame Drum Day.
 - [Frame Drums 101](https://www.framedrumschool.org/courses/frame-drums-101), Yousif Sheronick's
   Frame Drum School.
-- [Frame drum](https://worldpercussion.net/instruments/frame-drum/), David Kuckhermann's World
-  Percussion, on the lap style and its debt to the kanjira.
+- [Frame drums](https://worldpercussion.net/instruments/frame-drum/), David Kuckhermann's World
+  Percussion Academy, with lap-style courses.
