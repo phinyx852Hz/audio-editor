@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MixerWindow.h"
 #include "ModeAtlas.h"
+#include "../mixer/EffectPrism.h"
 #include "../mixer/InstrumentPrism.h"
 #include "../mixer/RagaInstrument.h"
 #include "../core/PhiRaga.h"
@@ -12,6 +13,7 @@
 #include "ExtremeSettings.h"
 #include "Settings.h"
 #include "SlicerKit.h"
+#include "../sampler/PhiFrameDrum.h"
 #include "../sampler/PhiTabla.h"
 #include "SlicerWindow.h"
 #include "Theme.h"
@@ -501,7 +503,7 @@ namespace
         return MixerWindow::tr ("PHI projects (*.phi *.phinyxmix);;DAWproject: Bitwig, Studio One, Cubase... (*.dawproject);;Ableton Live Sets (*.als);;All files (*)");
     }
 
-    enum Choice { noInstrument, synthChoice, samplerChoice, slicerChoice, ragaChoice, prismChoice, tablaChoice, firstPlugin };
+    enum Choice { noInstrument, synthChoice, samplerChoice, slicerChoice, ragaChoice, prismChoice, tablaChoice, frameDrumChoice, firstPlugin };
 
     // Whether the lanes and the launcher have something moving to show: playing, counting in,
     // a launcher clip playing or queued, a take, or a drag. Otherwise they only show edits,
@@ -963,8 +965,8 @@ public:
             dial->setFixedSize (knob, knob);
             dial->setFocusPolicy (Qt::NoFocus);
             dial->setContextMenuPolicy (Qt::CustomContextMenu);
-            dial->setToolTip (MixerWindow::tr ("Send %1 to the %2 return, -∞ to 0 dB, after the fader (right-click: before it; double-click: -∞)")
-                                  .arg (QChar ('A' + r)).arg (r == 0 ? MixerWindow::tr ("A Reverb") : MixerWindow::tr ("B Delay")));
+            dial->setToolTip (MixerWindow::tr ("Send %1 to %2, -∞ to 0 dB, after the fader (right-click: before it; double-click: -∞)")
+                                  .arg (QChar ('A' + r)).arg (MixerWindow::returnName (r)));
             sendDials[(size_t) r] = dial;
             sendLabels[(size_t) r] = new QLabel (this);
             sendRow->addWidget (knobColumn (dial, sendLabels[(size_t) r], r == 0 ? MixerWindow::tr ("Send A") : MixerWindow::tr ("Send B")));
@@ -1272,7 +1274,7 @@ public:
         {
             box->clear();
             box->addItems ({ MixerWindow::tr ("No instrument"), MixerWindow::tr ("Synth"), MixerWindow::tr ("Sampler"), MixerWindow::tr ("Slicer"),
-                             QString::fromUtf8 ("PHI rāga"), MixerWindow::tr ("Instrument Prism"), QStringLiteral ("PHI tabla") });
+                             QString::fromUtf8 ("PHI rāga"), MixerWindow::tr ("Instrument Prism"), QStringLiteral ("PHI tabla"), QStringLiteral ("PHI frame drum") });
             for (const auto& p : plugins)
                 box->addItem (QString::fromStdString (p.name) + QStringLiteral (" (") + QString::fromStdString (p.format) + QStringLiteral (")"),
                               QString::fromStdString (p.id));
@@ -1285,8 +1287,11 @@ public:
                 case mixer::Instrument::Kind::synth:   choice = synthChoice; break;
                 case mixer::Instrument::Kind::sampler: choice = samplerChoice; break;
                 case mixer::Instrument::Kind::slicer:
-                    choice = static_cast<const mixer::SlicerInstrument&> (*inst).phiTabla ? tablaChoice : slicerChoice;
+                {
+                    const auto& sl = static_cast<const mixer::SlicerInstrument&> (*inst);
+                    choice = sl.phiTabla ? tablaChoice : sl.phiFrameDrum ? frameDrumChoice : slicerChoice;
                     break;
+                }
                 case mixer::Instrument::Kind::raga:    choice = ragaChoice; break;
                 case mixer::Instrument::Kind::prism:   choice = prismChoice; break;
                 case mixer::Instrument::Kind::plugin:
@@ -2306,41 +2311,8 @@ protected:
         auto softer = text;
         softer.setAlpha (150);
 
-        // The ruler: bars, labelled so they stay apart.
-        g.fillRect (QRect (0, 0, width(), rulerHeight), pal.color (QPalette::Window));
-        if (window.engine.isLooping())
-        {
-            auto loop = Theme::current().color (QStringLiteral ("selection"));
-            loop.setAlpha (110);
-            g.fillRect (QRectF (xOf (0.0), 0, xOf ((double) window.engine.length()) - xOf (0.0), rulerHeight), loop);
-        }
-        const auto barFrames = std::max (1, window.engine.beatsPerBar.load()) * beatFrames();
-        int every = 1;
-        while (every < 4096 && barFrames * every / framesPerPixel < 56.0)
-            every *= 2;
-        const auto firstBar = std::max (0, (int) std::floor (start / barFrames));
-        const auto lastBar = (int) std::ceil ((start + framesPerPixel * timelineWidth()) / barFrames);
-        g.setFont (smallFont());
-        for (int bar = firstBar; bar <= lastBar; ++bar)
-        {
-            const auto x = xOf (bar * barFrames);
-            if (x < headerWidth)
-                continue;
-            const bool labelled = bar % every == 0;
-            if (! labelled && barFrames / framesPerPixel < 6.0)
-                continue;
-            auto line = faint;
-            line.setAlpha (labelled ? 46 : 24);
-            g.setPen (line);
-            g.drawLine (QPointF (x, labelled ? 0 : rulerHeight - 6), QPointF (x, height()));
-            if (labelled)
-            {
-                g.setPen (softer);
-                g.drawText (QPointF (x + 3, rulerHeight - 6), QString::number (bar + 1));
-            }
-        }
-        g.setPen (faint);
-        g.drawLine (0, rulerHeight - 1, width(), rulerHeight - 1);
+        // The ruler: bars above and minutes:seconds below, or time alone.
+        drawRuler (g, faint, softer);
 
         // The rows.
         bool anySolo = false;
@@ -2535,7 +2507,7 @@ protected:
             window.cycleFold (row);   // a folder's fold button
             return;
         }
-        if (row >= 0 && pos.y() >= rulerHeight && ! single && pos.x() < headerWidth && e->button() == Qt::LeftButton)
+        if (row >= 0 && pos.y() >= rulerHeight() && ! single && pos.x() < headerWidth && e->button() == Qt::LeftButton)
         {
             if (mods & Qt::ControlModifier)
             {
@@ -2548,7 +2520,7 @@ protected:
                 window.pickOnly (row);
             window.engageTrack();
         }
-        else if (row >= 0 && pos.y() >= rulerHeight)
+        else if (row >= 0 && pos.y() >= rulerHeight())
         {
             window.select (row);
             window.engageTrack();
@@ -2566,7 +2538,7 @@ protected:
             return;
         }
 
-        const auto hit = pos.y() >= rulerHeight ? clipAt (pos) : Hit {};
+        const auto hit = pos.y() >= rulerHeight() ? clipAt (pos) : Hit {};
         if (hit.id == 0)
         {
             // Empty space or the ruler: the playhead goes there.
@@ -2601,7 +2573,7 @@ protected:
         const auto pos = e->position();
         if (drag == Drag::none)
         {
-            const auto hit = pos.y() >= rulerHeight && pos.x() >= headerWidth ? clipAt (pos) : Hit {};
+            const auto hit = pos.y() >= rulerHeight() && pos.x() >= headerWidth ? clipAt (pos) : Hit {};
             setCursor (hit.edge != Edge::none ? Qt::SizeHorCursor : Qt::ArrowCursor);
             return;
         }
@@ -2651,7 +2623,7 @@ protected:
 
     void mouseDoubleClickEvent (QMouseEvent* e) override
     {
-        if (e->position().y() < rulerHeight)
+        if (e->position().y() < rulerHeight())
         {
             fit = true;
             update();
@@ -2800,8 +2772,13 @@ protected:
     void contextMenuEvent (QContextMenuEvent* e) override
     {
         const QPointF pos (e->pos());
+        if (pos.y() < rulerHeight() && pos.x() >= headerWidth)
+        {
+            rulerMenu (e->globalPos());
+            return;
+        }
         const int row = rowAt (pos.y());
-        if (row < 0 || pos.y() < rulerHeight || pos.x() < headerWidth)
+        if (row < 0 || pos.y() < rulerHeight() || pos.x() < headerWidth)
             return;
         window.select (row);
         const auto hit = clipAt (pos);
@@ -2911,7 +2888,6 @@ protected:
 
 private:
     static constexpr int headerWidth = 132;
-    static constexpr int rulerHeight = 20;
     static constexpr int titleHeight = 13;
     static constexpr Frame peakBlock = 256;   // frames per waveform peak
 
@@ -2940,6 +2916,154 @@ private:
         return f;
     }
 
+    // The ruler shows bars and time together (bars above, time below), or time alone.
+    // One choice for every timeline, kept between sessions.
+    static bool& rulerShowsBars()
+    {
+        static bool shown = appSettings().value (QStringLiteral ("mixer/ruler"), QStringLiteral ("both")).toString() != QLatin1String ("time");
+        return shown;
+    }
+
+    int rulerHeight() const
+    {
+        const auto row = (int) std::ceil (QFontMetricsF (smallFont()).height()) + 4;
+        return rulerShowsBars() ? row * 2 + 1 : row + 3;
+    }
+
+    void rulerMenu (const QPoint& at)
+    {
+        QMenu menu (this);
+        auto* modes = new QActionGroup (&menu);
+        const auto choose = [this] (bool bars)
+        {
+            rulerShowsBars() = bars;
+            appSettings().setValue (QStringLiteral ("mixer/ruler"), bars ? QStringLiteral ("both") : QStringLiteral ("time"));
+            for (auto* w : window.findChildren<QWidget*>())
+                if (auto* lanes = dynamic_cast<TrackLanes*> (w))
+                    lanes->update();
+            update();
+        };
+        auto* both = menu.addAction (MixerWindow::tr ("Ruler in &Bars and Time"), this, [choose] { choose (true); });
+        auto* time = menu.addAction (MixerWindow::tr ("Ruler in &Time Only"), this, [choose] { choose (false); });
+        for (auto* a : { both, time })
+        {
+            a->setCheckable (true);
+            modes->addAction (a);
+        }
+        (rulerShowsBars() ? both : time)->setChecked (true);
+        menu.exec (at);
+    }
+
+    // Time labels: 0:00, 1:30, 1:02:03, and tenths or hundredths when zoomed in.
+    static QString clockLabel (double seconds, int decimals)
+    {
+        const auto scale = std::pow (10.0, decimals);
+        const auto ticks = std::llround (seconds * scale);
+        const auto unit = (long long) std::llround (scale);
+        const auto whole = ticks / unit, fraction = ticks % unit;
+        const auto h = whole / 3600, m = (whole / 60) % 60, s = whole % 60;
+        auto text = h > 0 ? QStringLiteral ("%1:%2:%3").arg (h).arg (m, 2, 10, QLatin1Char ('0')).arg (s, 2, 10, QLatin1Char ('0'))
+                          : QStringLiteral ("%1:%2").arg (m).arg (s, 2, 10, QLatin1Char ('0'));
+        if (decimals > 0)
+            text += QLatin1Char ('.') + QStringLiteral ("%1").arg (fraction, decimals, 10, QLatin1Char ('0'));
+        return text;
+    }
+
+    void drawRuler (QPainter& g, const QColor& faint, const QColor& softer) const
+    {
+        const auto pal = palette();
+        const auto bottom = rulerHeight();
+        const bool bars = rulerShowsBars();
+        const auto middle = bars ? bottom / 2 : 0;   // the line between the rows
+        g.fillRect (QRect (0, 0, width(), bottom), pal.color (QPalette::Window));
+        if (window.engine.isLooping())
+        {
+            auto loop = Theme::current().color (QStringLiteral ("selection"));
+            loop.setAlpha (110);
+            g.fillRect (QRectF (xOf (0.0), 0, xOf ((double) window.engine.length()) - xOf (0.0), bottom), loop);
+        }
+        g.setFont (smallFont());
+        const QFontMetricsF fm (g.font());
+        const auto span = framesPerPixel * timelineWidth();
+
+        // Bars, on the top row; their lines run down through the tracks.
+        if (bars)
+        {
+            const auto barFrames = std::max (1, window.engine.beatsPerBar.load()) * beatFrames();
+            int every = 1;
+            while (every < 4096 && barFrames * every / framesPerPixel < 40.0)
+                every *= 2;
+            const auto firstBar = std::max (0, (int) std::floor (start / barFrames));
+            const auto lastBar = (int) std::ceil ((start + span) / barFrames);
+            for (int bar = firstBar; bar <= lastBar; ++bar)
+            {
+                const auto x = xOf (bar * barFrames);
+                if (x < headerWidth)
+                    continue;
+                const bool labelled = bar % every == 0;
+                if (! labelled && barFrames / framesPerPixel < 6.0)
+                    continue;
+                auto line = faint;
+                line.setAlpha (labelled ? 46 : 24);
+                g.setPen (line);
+                g.drawLine (QPointF (x, labelled ? 0 : middle - 5), QPointF (x, middle));
+                g.drawLine (QPointF (x, bottom), QPointF (x, height()));
+                if (labelled)
+                {
+                    g.setPen (softer);
+                    g.drawText (QPointF (x + 3, middle - 4 - fm.descent() + 1), QString::number (bar + 1));
+                }
+            }
+            g.setPen (faint);
+            g.drawLine (headerWidth, middle, width(), middle);
+        }
+
+        // Time, on the bottom row (or the only one). Without bars its lines run through the tracks.
+        static constexpr double clockSteps[] { 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30,
+                                               60, 120, 300, 600, 900, 1800, 3600, 7200 };
+        const auto rate = std::max (1.0, (double) window.rate());
+        const auto pixelsPerSecond = rate / framesPerPixel;
+        const auto t0 = start / rate, t1 = (start + span) / rate;
+        auto step = clockSteps[std::size (clockSteps) - 1];
+        for (const auto candidate : clockSteps)
+        {
+            const auto decimals = std::max (0, (int) std::ceil (-std::log10 (candidate) - 1e-9));
+            if (candidate * pixelsPerSecond >= fm.horizontalAdvance (clockLabel (std::max (t1, 599.0), decimals)) + 14.0)
+            {
+                step = candidate;
+                break;
+            }
+        }
+        const auto decimals = std::max (0, (int) std::ceil (-std::log10 (step) - 1e-9));
+        const auto parts = step >= 60.0 ? 4 : (std::lround (step / std::pow (10.0, std::floor (std::log10 (step) + 1e-9))) == 2 ? 4 : 5);
+        const auto minor = step / parts;
+        for (auto i = (long long) std::floor (t0 / minor); (double) i * minor <= t1 + 1e-9; ++i)
+        {
+            const auto t = (double) i * minor;
+            const auto x = xOf (t * rate);
+            if (t < 0.0 || x < headerWidth)
+                continue;
+            const bool labelled = i % parts == 0;
+            auto line = faint;
+            line.setAlpha (labelled ? 46 : 30);
+            g.setPen (line);
+            g.drawLine (QPointF (x, labelled ? middle : bottom - 4), QPointF (x, bottom));
+            if (labelled && ! bars)
+            {
+                line.setAlpha (24);
+                g.setPen (line);
+                g.drawLine (QPointF (x, bottom), QPointF (x, height()));
+            }
+            if (labelled)
+            {
+                g.setPen (softer);
+                g.drawText (QPointF (x + 3, bottom - 4 - fm.descent() + 1), clockLabel (t, decimals));
+            }
+        }
+        g.setPen (faint);
+        g.drawLine (0, bottom - 1, width(), bottom - 1);
+    }
+
     double beatFrames() const { return 60.0 / window.tempoBox->value() * window.rate(); }
     int timelineWidth() const { return std::max (1, width() - headerWidth); }
 
@@ -2958,7 +3082,7 @@ private:
     // The top of a track's row (numTracks(): the Pre-Master's row).
     int rowTop (int track) const
     {
-        auto y = rulerHeight;
+        auto y = rulerHeight();
         for (int k = firstRow(); k < track; ++k)
             y += trackHeight (k);
         return y;
@@ -2977,16 +3101,16 @@ private:
             }
         if (single)
             full = 1;
-        return std::clamp ((height() - rulerHeight - small * smallRow) / std::max (1, full), 22, single ? 600 : 140);
+        return std::clamp ((height() - rulerHeight() - small * smallRow) / std::max (1, full), 22, single ? 600 : 140);
     }
 
     int rowAt (double y) const
     {
         if (single)
             return firstRow();
-        if (y < rulerHeight)
+        if (y < rulerHeight())
             return window.selected < mixer::masterIndex ? window.selected : -1;
-        auto top = rulerHeight;
+        auto top = rulerHeight();
         for (int k = 0; k < window.engine.numTracks(); ++k)
         {
             const auto h = trackHeight (k);
@@ -3791,6 +3915,7 @@ private:
             add (MixerWindow::tr ("Built-in"), QString::fromUtf8 ("PHI rāga"), "raga");
             add (MixerWindow::tr ("Built-in"), MixerWindow::tr ("Instrument Prism"), "prism");
             add (MixerWindow::tr ("Built-in"), QStringLiteral ("PHI tabla"), "tabla");
+            add (MixerWindow::tr ("Built-in"), QStringLiteral ("PHI frame drum"), "framedrum");
             for (const auto& p : window.audio.knownInstruments())
                 add (QString::fromStdString (p.format), QString::fromStdString (p.name), "instrument\n" + QByteArray::fromStdString (p.id));
         }
@@ -5090,6 +5215,8 @@ private:
 //==============================================================================
 // A return strip (Ableton): what the tracks' A or B sends feed, through one effect
 // (fully wet), then pan, mute, a fader and a meter. Between the tracks and the master.
+// Narrow, with a slim fader (owner, 2026-11-01), and its slot takes any effect: a built-in,
+// stock or third-party one, from its menu or dropped from the browser.
 class ReturnStripWidget final : public QFrame
 {
 public:
@@ -5098,21 +5225,30 @@ public:
         setFrameShape (QFrame::StyledPanel);
         setObjectName (QStringLiteral ("returnStrip"));
         setFocusPolicy (Qt::NoFocus);
-        setMinimumWidth (96);
-        setMaximumWidth (120);
+        setFixedWidth (stripWidth);
+        setAcceptDrops (true);
         auto* layout = new QVBoxLayout (this);
-        layout->setContentsMargins (5, 5, 5, 5);
+        layout->setContentsMargins (3, 4, 3, 4);
         layout->setSpacing (3);
-        auto* title = new QLabel (index == 0 ? MixerWindow::tr ("A Reverb") : MixerWindow::tr ("B Delay"), this);
+        auto* title = new QLabel (MixerWindow::returnName (index), this);
         auto bold = title->font();
         bold.setBold (true);
         title->setFont (bold);
         title->setAlignment (Qt::AlignCenter);
         layout->addWidget (title);
-        effectButton = new QPushButton (this);
+        effectButton = new QToolButton (this);
         effectButton->setFocusPolicy (Qt::NoFocus);
+        effectButton->setPopupMode (QToolButton::MenuButtonPopup);
+        effectButton->setToolButtonStyle (Qt::ToolButtonTextOnly);
+        effectButton->setSizePolicy (QSizePolicy::Ignored, QSizePolicy::Fixed);
         effectButton->setContextMenuPolicy (Qt::CustomContextMenu);
-        effectButton->setToolTip (MixerWindow::tr ("The return's effect, fully wet: click opens it, right-click picks another"));
+        auto* choices = new QMenu (effectButton);
+        QObject::connect (choices, &QMenu::aboutToShow, this, [this, choices]
+        {
+            choices->clear();
+            window.returnEffectsMenu (index, *choices);
+        });
+        effectButton->setMenu (choices);
         layout->addWidget (effectButton);
         panDial = new Potentiometer (this);
         panDial->setRange (-100, 100);
@@ -5139,7 +5275,9 @@ public:
         muteButton->setFocusPolicy (Qt::NoFocus);
         muteButton->setToolTip (MixerWindow::tr ("Mute the return"));
         layout->addWidget (muteButton);
-        fader = new Fader (this);
+        auto* f = new Fader (this);
+        f->setSlim (true);
+        fader = f;
         fader->setToolTip (MixerWindow::tr ("The return's level, -∞ to +6 dB"));
         meter = new LevelMeter (this);
         auto* row = new QHBoxLayout;
@@ -5152,7 +5290,7 @@ public:
         value->setAlignment (Qt::AlignCenter);
         layout->addWidget (value);
 
-        QObject::connect (effectButton, &QPushButton::clicked, this, [this] { window.editReturn (index); });
+        QObject::connect (effectButton, &QToolButton::clicked, this, [this] { window.editReturn (index); });
         QObject::connect (effectButton, &QWidget::customContextMenuRequested, this, [this]
         {
             window.chooseReturnEffect (index, effectButton->mapToGlobal (QPoint (0, effectButton->height())));
@@ -5211,7 +5349,11 @@ public:
         updating = true;
         auto& c = controls();
         const auto fx = window.engine.returnEffect (index);
-        effectButton->setText (fx != nullptr ? QString::fromStdString (fx->name()) : MixerWindow::tr ("No effect"));
+        const auto name = fx != nullptr ? QString::fromStdString (fx->name()) : MixerWindow::tr ("None");
+        effectButton->setText (effectButton->fontMetrics().elidedText (name, Qt::ElideRight, stripWidth - 26));
+        effectButton->setToolTip (MixerWindow::tr ("%1's effect, fully wet: %2. Click opens it; the arrow (or a right-click) picks any "
+                                                   "effect, built-in, stock or a plug-in; or drop one here from the browser")
+                                      .arg (MixerWindow::returnName (index), name));
         panDial->setValue ((int) std::lround (c.pan.load() * 100.0f));
         panLabel->setText (panText (c.pan.load()));
         muteButton->setChecked (c.mute.load());
@@ -5234,11 +5376,36 @@ protected:
         return QFrame::eventFilter (o, e);
     }
 
+    // An effect from the browser (Built-in, Stock, VST3, CLAP, LV2...) becomes the return's.
+    static QString droppedEffect (const QMimeData* m)
+    {
+        if (! m->hasFormat (MixerWindow::pluginMime()))
+            return {};
+        const auto parts = QString::fromUtf8 (m->data (MixerWindow::pluginMime())).split (QLatin1Char ('\n'));
+        return parts.value (0) == QLatin1String ("effect") ? parts.value (1) : QString();
+    }
+
+    void dragEnterEvent (QDragEnterEvent* e) override
+    {
+        if (! droppedEffect (e->mimeData()).isEmpty())
+            e->acceptProposedAction();
+    }
+
+    void dropEvent (QDropEvent* e) override
+    {
+        const auto id = droppedEffect (e->mimeData());
+        if (id.isEmpty())
+            return;
+        window.setReturnEffect (index, id.toStdString());
+        e->acceptProposedAction();
+    }
+
 private:
+    static constexpr int stripWidth = 72;
     MixerWindow& window;
     const int index;
     bool updating = false;
-    QPushButton* effectButton;
+    QToolButton* effectButton;
     QDial* panDial;
     QLabel* panLabel;
     QDial* azDial;
@@ -5284,8 +5451,8 @@ public:
         sendRow->setSpacing (2);
         for (int r = 0; r < mixer::numReturns; ++r)
         {
-            auto* dial = pot (0, faderPosition (0.0), MixerWindow::tr ("Send %1 to the %2 return, -∞ to 0 dB, after the fader (right-click: before it; double-click: -∞)")
-                                                          .arg (QChar ('A' + r)).arg (r == 0 ? MixerWindow::tr ("A Reverb") : MixerWindow::tr ("B Delay")));
+            auto* dial = pot (0, faderPosition (0.0), MixerWindow::tr ("Send %1 to %2, -∞ to 0 dB, after the fader (right-click: before it; double-click: -∞)")
+                                                          .arg (QChar ('A' + r)).arg (MixerWindow::returnName (r)));
             dial->setContextMenuPolicy (Qt::CustomContextMenu);
             sendDials[(size_t) r] = dial;
             sendLabels[(size_t) r] = new QLabel (this);
@@ -8888,6 +9055,7 @@ bool MixerWindow::dropPlugin (int track, const QByteArray& what)
     const int choice = kind == QLatin1String ("synth") ? synthChoice : kind == QLatin1String ("sampler") ? samplerChoice
                      : kind == QLatin1String ("slicer") ? slicerChoice : kind == QLatin1String ("raga") ? ragaChoice
                      : kind == QLatin1String ("prism") ? prismChoice : kind == QLatin1String ("tabla") ? tablaChoice
+                     : kind == QLatin1String ("framedrum") ? frameDrumChoice
                      : kind == QLatin1String ("instrument") ? firstPlugin : -1;
     if (choice < 0)
         return false;
@@ -9846,37 +10014,86 @@ void MixerWindow::placeAllMidi()
     refreshTransport();
 }
 
-// PHI tabla (sampler/PhiTabla.h): a Slicer with the owner's own tablā strokes on 32 pads, for Push.
-mixer::InstrumentPtr MixerWindow::makePhiTabla()
+namespace
 {
-    const auto installed = QDir (QCoreApplication::applicationDirPath()).absoluteFilePath (QStringLiteral (PHI_SHARE_RELATIVE "/phi-tabla"));
-    const auto folder = QFileInfo (installed).isDir() ? QDir::cleanPath (installed) : QStringLiteral (PHI_SHARE_SOURCE_DIR "/phi-tabla");
-    std::vector<std::string> missing;
-    const auto kit = phitabla::kit (folder.toStdString(), [this] (const std::string& path)
+    // A built-in kit's sounds: installed beside PHI, else in the source tree's share folder.
+    QString builtInKitFolder (const char* name)
     {
-        QString error;
-        return slicerkit::loadSound (QString::fromStdString (path), rate(), error);
-    }, &missing);
+        const auto installed = QDir (QCoreApplication::applicationDirPath()).absoluteFilePath (QStringLiteral (PHI_SHARE_RELATIVE "/") + QLatin1String (name));
+        return QFileInfo (installed).isDir() ? QDir::cleanPath (installed) : QStringLiteral (PHI_SHARE_SOURCE_DIR "/") + QLatin1String (name);
+    }
+}
+
+// A Slicer with a built-in kit: the owner's own default for it (the Slicer's Kit > Make This the
+// ... Default), tuning and all, else `kit`.
+mixer::InstrumentPtr MixerWindow::makeBuiltInKit (const QString& name, const QString& defaultFile, const slicer::Kit& kit,
+                                                  const std::vector<std::string>& missing, const QString& folder)
+{
     auto made = std::make_shared<mixer::SlicerInstrument>();
-    made->phiTabla = true;
-    // The owner's own default (the Slicer's Kit > Make This the PHI tabla Default), tuning and all, else the built-in kit.
-    if (const auto own = slicerkit::phiTablaDefaultPath(); QFileInfo::exists (own))
+    if (QFileInfo::exists (defaultFile))
     {
         slicerkit::Loaded loaded;
         QString error;
-        if (slicerkit::loadKitFile (own, rate(), loaded, error))
+        if (slicerkit::loadKitFile (defaultFile, rate(), loaded, error))
         {
             made->engine().setKit (loaded.kit);
             if (loaded.song != nullptr)
                 made->engine().setSong (*loaded.song);
             return made;
         }
-        status->setText (tr ("PHI tabla: your default kit could not be opened (%1), so the built-in one is used").arg (error));
+        status->setText (tr ("%1: your default kit could not be opened (%2), so the built-in one is used").arg (name, error));
     }
     made->engine().setKit (kit);
     if (! missing.empty())
-        status->setText (tr ("PHI tabla: %1 of its sounds could not be read (in %2)").arg (missing.size()).arg (folder));
+        status->setText (tr ("%1: %2 of its sounds could not be read (in %3)").arg (name).arg (missing.size()).arg (folder));
     return made;
+}
+
+// PHI tabla (sampler/PhiTabla.h): a Slicer with the owner's own tablā strokes on 32 pads, for Push.
+mixer::InstrumentPtr MixerWindow::makePhiTabla()
+{
+    const auto folder = builtInKitFolder ("phi-tabla");
+    std::vector<std::string> missing;
+    const auto kit = phitabla::kit (folder.toStdString(), [this] (const std::string& path)
+    {
+        QString error;
+        return slicerkit::loadSound (QString::fromStdString (path), rate(), error);
+    }, &missing);
+    auto made = makeBuiltInKit (QStringLiteral ("PHI tabla"), slicerkit::phiTablaDefaultPath(), kit, missing, folder);
+    static_cast<mixer::SlicerInstrument&> (*made).phiTabla = true;
+    return made;
+}
+
+// PHI frame drum (sampler/PhiFrameDrum.h): a Slicer with the owner's own frame drum, for Push.
+mixer::InstrumentPtr MixerWindow::makePhiFrameDrum()
+{
+    const auto folder = builtInKitFolder ("phi-frame-drum");
+    std::vector<std::string> missing;
+    const auto kit = phiframedrum::kit (folder.toStdString(), [this] (const std::string& path)
+    {
+        QString error;
+        return slicerkit::loadSound (QString::fromStdString (path), rate(), error);
+    }, &missing);
+    auto made = makeBuiltInKit (QStringLiteral ("PHI frame drum"), slicerkit::phiFrameDrumDefaultPath(), kit, missing, folder);
+    static_cast<mixer::SlicerInstrument&> (*made).phiFrameDrum = true;
+    return made;
+}
+
+// A rhythm of General MIDI drums on PHI frame drum: the clip on the selected track, which gets PHI
+// frame drum (unless it has it already, with the owner's edits).
+bool MixerWindow::addRhythmOnPhiFrameDrum (const midifile::Song& song, const QString& stem)
+{
+    if (selected >= mixer::masterIndex || selected >= engine.numTracks())
+        return false;
+    const auto current = engine.instrument (selected);
+    const bool has = current != nullptr && current->kind() == mixer::Instrument::Kind::slicer
+                     && static_cast<const mixer::SlicerInstrument&> (*current).phiFrameDrum;
+    if (! has)
+        setInstrumentKind (selected, frameDrumChoice, {});
+    int moved = 0;
+    const auto played = phiframedrum::fromGeneralMidi (song, &moved);
+    addRhythm (*played, stem + QStringLiteral (" (frame drum)"));
+    return true;
 }
 
 void MixerWindow::setInstrumentKind (int track, int choice, const QString& pluginId)
@@ -9892,6 +10109,7 @@ void MixerWindow::setInstrumentKind (int track, int choice, const QString& plugi
         case ragaChoice: made = std::make_shared<mixer::RagaInstrument>(); break;
         case prismChoice: made = makePrism (track); break;
         case tablaChoice: made = makePhiTabla(); break;
+        case frameDrumChoice: made = makePhiFrameDrum(); break;
         case samplerChoice:
         case slicerChoice:
             if (choice == samplerChoice)
@@ -10069,6 +10287,8 @@ void MixerWindow::editInstrument (int track)
             w->keepPlayingWhenClosed (true);
             if (s.phiTabla)
                 w->setPhiTabla();
+            else if (s.phiFrameDrum)
+                w->setBuiltInKit (QStringLiteral ("PHI frame drum"), slicerkit::phiFrameDrumDefaultPath());
             if (const auto sound = s.engine().sample(); sound != nullptr)
                 w->setSample (sound, t.sound != nullptr ? t.sound : soundAsAudio (*sound, rate()), rate(), title, true, BeatGrid {}, {});
             w->setWindowTitle (tr ("Slicer: %1").arg (title));
@@ -10938,34 +11158,42 @@ void MixerWindow::setReturnEffect (int index, const std::string& pluginId)
         if (made == nullptr)
             status->setText (tr ("The return's effect could not be started: %1").arg (QString::fromStdString (error)));
     }
+    if (auto& open = returnPrismEditors[(size_t) index]; open != nullptr)
+        open->close();   // the Prism it edits leaves the return
     engine.setReturnEffect (index, made);
+    refreshReturn (index);
+    changed();
+}
+
+QString MixerWindow::returnName (int index)
+{
+    return tr ("Return %1").arg (QChar ('A' + index));
+}
+
+void MixerWindow::refreshReturn (int index)
+{
     if (returnStrips[(size_t) index] != nullptr)
         returnStrips[(size_t) index]->refresh();
-    changed();
+}
+
+void MixerWindow::returnEffectsMenu (int index, QMenu& menu)
+{
+    const auto fx = engine.returnEffect (index);
+    const bool isPrism = fx != nullptr && mixer::EffectPrism::is (*fx);
+    // A Prism: rays of effects side by side, the effect there now in its first ray.
+    menu.addAction (isPrism ? tr ("Edit the &Prism...") : tr ("&Prism (Rays of Effects)..."), this, [this, index] { makeReturnPrism (index); });
+    menu.addSeparator();
+    menu.addAction (tr ("No Effect (the sends as they are)"), this, [this, index] { setReturnEffect (index, {}); });
+    menu.addAction (index == 0 ? tr ("Back to the Default (Φ Space)") : tr ("Back to the Default (Φ Echo)"), this, [this, index] { defaultReturns (index); });
+    menu.addSeparator();
+    // Any effect, as for the inserts: the built-in ones, the stock ones and the plug-ins by format.
+    effectsMenu (menu, [this, index] (const std::string& id) { setReturnEffect (index, id); });
 }
 
 void MixerWindow::chooseReturnEffect (int index, QPoint at)
 {
     QMenu menu (this);
-    menu.addAction (tr ("No Effect (the sends as they are)"), this, [this, index] { setReturnEffect (index, {}); });
-    menu.addAction (index == 0 ? tr ("Back to the Default (Φ Space)") : tr ("Back to the Default (Φ Echo)"), this, [this, index] { defaultReturns (index); });
-    menu.addSeparator();
-    auto plugins = audio.knownPlugins();
-    std::sort (plugins.begin(), plugins.end(), [] (const PluginInfo& x, const PluginInfo& y)
-    {
-        return QString::fromStdString (x.name).compare (QString::fromStdString (y.name), Qt::CaseInsensitive) < 0;
-    });
-    std::map<QString, QMenu*> byFormat;
-    for (const auto& p : plugins)
-    {
-        auto& sub = byFormat[QString::fromStdString (p.format)];
-        if (sub == nullptr)
-            sub = new QMenu (QString::fromStdString (p.format), &menu);
-        const auto id = p.id;
-        sub->addAction (QString::fromStdString (p.name), this, [this, index, id] { setReturnEffect (index, id); });
-    }
-    for (const auto& [format, sub] : byFormat)
-        menu.addMenu (sub);
+    returnEffectsMenu (index, menu);
     menu.exec (at);
 }
 
@@ -10977,13 +11205,17 @@ void MixerWindow::editReturn (int index)
         chooseReturnEffect (index, QCursor::pos());
         return;
     }
+    if (mixer::EffectPrism::is (*fx))
+    {
+        openReturnPrism (index);
+        return;
+    }
     if (fx->hasWindow())
     {
         fx->showWindow();
         return;
     }
-    auto* d = effectDialog (fx, index == 0 ? tr ("A Reverb: %1").arg (QString::fromStdString (fx->name()))
-                                           : tr ("B Delay: %1").arg (QString::fromStdString (fx->name())), this, [this] { changed(); });
+    auto* d = effectDialog (fx, tr ("%1: %2").arg (returnName (index), QString::fromStdString (fx->name())), this, [this] { changed(); });
     d->show();
     d->raise();
     d->activateWindow();
@@ -10997,7 +11229,9 @@ QJsonArray MixerWindow::returnsJson() const
         auto& c = engine.returnStrip (r);
         const auto fx = engine.returnEffect (r);
         QJsonObject o { { "fader", c.faderDb.load() }, { "pan", c.pan.load() }, { "mute", c.mute.load() }, { "spatial", placeJson (c.placed) } };
-        if (fx != nullptr)
+        if (fx != nullptr && mixer::EffectPrism::is (*fx))
+            o.insert ("effect", returnPrismJson (*fx));
+        else if (fx != nullptr)
             o.insert ("effect", QJsonObject { { "id", QString::fromStdString (fx->pluginId()) }, { "name", QString::fromStdString (fx->name()) },
                                               { "state", QString::fromStdString (fx->state()) } });
         list.append (o);
@@ -11017,7 +11251,11 @@ void MixerWindow::loadReturns (const QJsonArray& list, QStringList& problems)
         loadPlace (c.placed, o.value ("spatial"), mixer::Panner3d::returnSpread);
         const auto e = o.value ("effect").toObject();
         mixer::EffectPtr made;
-        if (! e.isEmpty())
+        if (auto& open = returnPrismEditors[(size_t) r]; open != nullptr)
+            open->close();
+        if (e.value ("id").toString() == QLatin1String (mixer::EffectPrism::identifier))
+            made = returnPrismFromJson (e, r, problems);
+        else if (! e.isEmpty())
         {
             std::string error;
             made = audio.loadEffectPlugin (e.value ("id").toString().toStdString(), rate(), error);
@@ -11675,7 +11913,7 @@ bool MixerWindow::writeMix (const QString& file, QString& error)
                 case mixer::Instrument::Kind::slicer:
                 {
                     auto& sl = static_cast<mixer::SlicerInstrument&> (*inst);
-                    io = { { "kind", "slicer" }, { "phiTabla", sl.phiTabla }, { "sound", soundFile (sl.engine().sample(), sl.samplePath) }, { "kit", slicerkit::toJson (sl.engine().kit(), base, [&] (const sampler::Sample& padSound, int pad, int layer)
+                    io = { { "kind", "slicer" }, { "phiTabla", sl.phiTabla }, { "phiFrameDrum", sl.phiFrameDrum }, { "sound", soundFile (sl.engine().sample(), sl.samplePath) }, { "kit", slicerkit::toJson (sl.engine().kit(), base, [&] (const sampler::Sample& padSound, int pad, int layer)
                          {
                              // A pad's own sound that came from no file goes beside the mix too.
                              const auto folderName = QFileInfo (file).completeBaseName() + tr (" Samples");
@@ -11877,6 +12115,7 @@ bool MixerWindow::loadMix (const QString& file, QString& error)
                 QStringList missing;
                 sl.engine().setKit (slicerkit::fromJson (io.value ("kit").toObject(), base, rate(), &missing));
                 sl.phiTabla = io.value ("phiTabla").toBool();
+                sl.phiFrameDrum = io.value ("phiFrameDrum").toBool();
                 for (const auto& m : missing)
                     problems << tr ("Track %1: %2").arg (i + 1).arg (m);
             }

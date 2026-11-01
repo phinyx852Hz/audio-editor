@@ -23,23 +23,28 @@
 #include "../Source/mixer/Minimalize.h"
 #include "../Source/mixer/MixerEngine.h"
 #include "../Source/mixer/InstrumentPrism.h"
+#include "../Source/mixer/EffectPrism.h"
 #include "../Source/mixer/DrumsToMidi.h"
 #include "../Source/mixer/Rhythms.h"
 #include "../Source/mixer/Architectonics.h"
 #include "../Source/mixer/Compose.h"
 #include "../Source/mixer/BolProcessor.h"
 #include "../Source/sampler/PhiTabla.h"
+#include "../Source/sampler/PhiFrameDrum.h"
 #include "../Source/mixer/Harmonies.h"
 #include "../Source/mixer/ModalHarmony.h"
 #include "../Source/mixer/RhythmGenerator.h"
 #include "../Source/mixer/Stochastic.h"
 #include "../Source/mixer/Serial.h"
 #include "../Source/patchbay/PatchBay.h"
+#include "../Source/core/EbuCore.h"
 #include "../Source/core/Ixml.h"
+#include "../Source/core/ThemeGen.h"
 #include "../Source/core/Metadata.h"
 #include "../Source/core/RiffChunks.h"
 #include "../Source/core/Xmp.h"
 #include "../Source/core/Fft.h"
+#include "../Source/core/LinearPhase.h"
 #include "../Source/core/Windows.h"
 #include "../Source/core/Album.h"
 #include "../Source/core/Nyquist.h"
@@ -604,6 +609,18 @@ namespace
         check (near (report.truePeakDb, -23.0, 0.3), "true peak " + std::to_string (report.truePeakDb));
         check (report.loudnessRange < 0.5, "steady tone has no loudness range");
 
+        // EBU Tech 3341 signals 16 and 19: sines at fs/4 whose peaks fall exactly between two
+        // samples (phase 45 degrees) must read their true peak, -6.0 and +3.0 dBTP (+0.2/-0.4).
+        for (const auto [amplitude, expected] : { std::pair { 0.5, -6.0 }, std::pair { 1.41, 3.0 } })
+        {
+            dsp::TruePeakDetector detector;
+            float peak = 0.0f;
+            for (int i = 0; i < 4800; ++i)
+                peak = std::max (peak, detector.process ((float) (amplitude * std::sin (M_PI / 2.0 * i + M_PI / 4.0))));
+            const auto db = 20.0 * std::log10 (peak);
+            check (db <= expected + 0.2 && db >= expected - 0.1, "true peak between samples " + std::to_string (db));
+        }
+
         // DC removal.
         AudioData::Builder b (1, 48000.0);
         std::vector<float> dc (48000, 0.25f);
@@ -970,6 +987,55 @@ namespace
                "ixml: paths read");
         Tags again;
         check (ixml::read (ixml::write (t), again, error) && again == t, "ixml: round trip " + error);
+
+        // A BEXT copy is not written back (the bext chunk is the official one), and the
+        // bext loudness is repeated in iXML's own LOUDNESS object.
+        Tags b = t;
+        b["ixml:BEXT/BWF_ORIGINATOR"] = "Old";
+        b[tag::bwfLoudness] = "-23.00";
+        const auto x = ixml::write (b);
+        Tags back;
+        check (ixml::read (x, back, error) && back.count ("ixml:BEXT/BWF_ORIGINATOR") == 0 && back["ixml:LOUDNESS/LOUDNESS_VALUE"] == "-23.00",
+               "ixml: no stale BEXT copy, LOUDNESS from bext");
+    }
+
+    void testEbuCore()
+    {
+        // A new document from the common fields.
+        Tags t;
+        t[tag::title] = "Night Drive";
+        t[tag::artist] = "Ana\nBo";
+        t[tag::composer] = "Cy";
+        t[tag::isrc] = "AA6Q72000047";
+        t[tag::date] = "2026-10-31";
+        const auto x = ebucore::write (t);
+        Tags back;
+        std::string error;
+        check (ebucore::read (x, back, error) && back[tag::title] == "Night Drive" && back[tag::artist] == "Ana\nBo" && back[tag::composer] == "Cy"
+                   && back[tag::isrc] == "AA6Q72000047" && back[tag::date] == "2026-10-31",
+               "ebucore: round trip " + error);
+        check (x.find ("<created startDate=\"2026-10-31\"/>") != std::string::npos && x.find ("typeLabel=\"ISRC\"") != std::string::npos,
+               "ebucore: dates as attributes, ISRC labelled");
+
+        // Merging into a file's document keeps what PHI does not show (an ADM description,
+        // another identifier) and what did not change (a composer's split name).
+        const std::string original = R"(<?xml version="1.0"?><ebucore:ebuCoreMain xmlns:ebucore="urn:ebu:metadata-schema:ebuCore_2014">)"
+            R"(<ebucore:coreMetadata><ebucore:title><dc:title xmlns:dc="http://purl.org/dc/elements/1.1/">Old</dc:title></ebucore:title>)"
+            R"(<ebucore:identifier typeLabel="UUID"><dc:identifier xmlns:dc="http://purl.org/dc/elements/1.1/">u-1</dc:identifier></ebucore:identifier>)"
+            R"(<ebucore:creator><ebucore:contactDetails><ebucore:givenName>Dee</ebucore:givenName><ebucore:familyName>Eff</ebucore:familyName>)"
+            R"(</ebucore:contactDetails><ebucore:role typeLabel="Composer"/></ebucore:creator><ebucore:format><ebucore:audioFormatExtended>)"
+            R"(<audioProgramme audioProgrammeID="APR_1001"/></ebucore:audioFormatExtended></ebucore:format></ebucore:coreMetadata></ebucore:ebuCoreMain>)";
+        Tags file;
+        check (ebucore::read (original, file, error) && file[tag::title] == "Old" && file[tag::composer] == "Dee Eff", "ebucore: read a file's document");
+        file[tag::title] = "New";
+        const auto merged = ebucore::write (file, original);
+        Tags again;
+        check (merged.find ("<ebucore:title><dc:title>New</dc:title></ebucore:title>") != std::string::npos
+                   && merged.find ("audioProgrammeID=\"APR_1001\"") != std::string::npos && merged.find ("u-1") != std::string::npos
+                   && merged.find ("<ebucore:givenName>Dee</ebucore:givenName>") != std::string::npos
+                   && ebucore::read (merged, again, error) && again[tag::title] == "New",
+               "ebucore: merge keeps the rest " + error);
+        check (ebucore::write (Tags {}).empty() && ebucore::write (t, "<BWFXML/>").empty(), "ebucore: nothing to write, not EBUCore");
     }
 
     uint32_t le32 (const unsigned char* p) { return (uint32_t) p[0] | ((uint32_t) p[1] << 8) | ((uint32_t) p[2] << 16) | ((uint32_t) p[3] << 24); }
@@ -1040,6 +1106,19 @@ namespace
                    && back[tag::bwfTruePeak] == "-1.00" && back.count (tag::bwfLoudnessRange) == 0 && back[tag::bwfCodingHistory] == "A=PCM,F=48000,W=16,M=mono"
                    && back[tag::bwfUmid].compare (0, 8, "060a2b34") == 0 && back.count (tag::bwfDescription) == 0,
                "riff: bext round trip (the description follows the comment)");
+        {
+            // Tech 3285 v2 2.4: round(100x) ties away from zero, and anything out of range is unused.
+            Tags l;
+            l[tag::bwfLoudness] = "-22.645";
+            l[tag::bwfTruePeak] = "12.765";
+            l[tag::bwfLoudnessRange] = "-3";
+            l["bwf.maxMomentaryLoudness"] = "-120";
+            const auto e = riff::encodeBext (l);
+            const auto* u = (const unsigned char*) e.data();
+            const auto w16 = [&] (int at) { return (int) (int16_t) (u[at] | (u[at + 1] << 8)); };
+            check (e.size() >= 602 && w16 (346) == 2 && w16 (412) == -2265 && w16 (416) == 1277 && w16 (414) == 0x7fff && w16 (418) == 0x7fff,
+                   "riff: bext loudness rounded and range-checked as Tech 3285 v2 says");
+        }
         check (back["cart:CutID"] == "C1234" && back["cart:Timer.SEG1"] == "48000" && back["cart:Timers"] == "MRK =96000" && back.count ("cart:Title") == 0,
                "riff: cart round trip");
         check (back["ixml:SCENE"] == "4" && back["xmp:xmpDM:scene"] == "Scene 4" && back["raw:wav:umid"] == read["raw:wav:umid"], "riff: iXML, XMP and raw chunk round trip");
@@ -2883,6 +2962,43 @@ namespace
             check (highestSidelobeDb (windows::make (kind, n)) <= limit, "window " + std::to_string (kind) + " sidelobes");
         check (near (highestSidelobeDb (windows::make (windows::chebyshev, n)), -windows::chebyshevSidelobeDb, 0.5), "Dolph-Chebyshev sidelobes all at its level");
 
+        // The flat tops, against Heinzel, Ruediger and Schilling (2002): the Stanford Research one
+        // (FTSRS), HFT95 and HFT90D. Highest sidelobe, and the most a tone's level can be off
+        // between bins (here at every tenth of a bin). Heinzel's sidelobe figures are for long
+        // windows; at 256 points HFT95's comes out 0.5 dB higher.
+        struct FlatTop { int kind; double sidelobeDb, maxErrorDb; };
+        for (const auto& [kind, expectedSidelobe, maxError] : { FlatTop { windows::flatTop, -76.6, 0.0156 },
+                                                                 FlatTop { windows::hft95, -95.0, 0.0044 },
+                                                                 FlatTop { windows::hft90d, -90.2, 0.0039 } })
+        {
+            const auto w = windows::make (kind, n);
+            const auto label = "flat top " + std::to_string (kind);
+            // The main lobe is flat on top, so look for the first null from 4 bins out.
+            std::vector<double> magnitude ((size_t) points);
+            for (int f = 0; f < points; ++f)
+            {
+                std::complex<double> sum;
+                for (int i = 0; i < n; ++i)
+                    sum += w[(size_t) i] * std::polar (1.0, -2.0 * M_PI * f * i / (n * pad));
+                magnitude[(size_t) f] = std::abs (sum);
+            }
+            int f = 4 * pad;
+            while (f < points - 1 && magnitude[(size_t) f + 1] < magnitude[(size_t) f])
+                ++f;
+            const auto sidelobe = 20.0 * std::log10 (*std::max_element (magnitude.begin() + f, magnitude.end()) / magnitude[0]);
+            check (near (sidelobe, expectedSidelobe, 0.6), label + " sidelobes " + std::to_string (sidelobe) + " dB");
+            const double onBin = std::accumulate (w.begin(), w.end(), 0.0);
+            double worst = 0.0;
+            for (int tenth = 1; tenth <= 5; ++tenth)
+            {
+                std::complex<double> off;
+                for (int i = 0; i < n; ++i)
+                    off += w[(size_t) i] * std::polar (1.0, 2.0 * M_PI * 0.1 * tenth * i / n);
+                worst = std::max (worst, std::abs (20.0 * std::log10 (std::abs (off) / onBin)));
+            }
+            check (worst <= maxError + 0.0005, label + " level error " + std::to_string (worst) + " dB");
+        }
+
         // The largest FFT size stays finite (the Chebyshev's polynomial and Kaiser's Bessel function).
         for (int kind : { (int) windows::chebyshev, (int) windows::kaiser180 })
         {
@@ -4506,6 +4622,99 @@ namespace
         };
     }
 
+    // An Effect Prism (a mixer return's): rays of effects, the input divided among them and joined again.
+    void testEffectPrism()
+    {
+        using prismtest::Double;
+        constexpr int frames = 1000;
+        std::vector<float> inL (frames), inR (frames);
+        for (int k = 0; k < frames; ++k)
+        {
+            inL[(size_t) k] = std::sin (0.05f * (float) k);
+            inR[(size_t) k] = 0.3f * std::cos (0.07f * (float) k);
+        }
+        auto run = [&] (mixer::EffectPrism& p, std::vector<float>& l, std::vector<float>& r)
+        {
+            l = inL;
+            r = inR;
+            p.process (l.data(), r.data(), frames);
+        };
+        std::vector<float> l, r;
+        {
+            mixer::EffectPrism p;
+            p.prepare (48000.0, 256);
+            run (p, l, r);
+            check (l == inL && r == inR, "an Effect Prism's one empty ray gives back what went in");
+            check (p.pluginId() == mixer::EffectPrism::identifier && mixer::EffectPrism::is (p), "an Effect Prism knows itself");
+        }
+        {
+            // Two parallel rays, one doubling after 10 samples: the other waits for it, so 1 + 2 = 3x, 10 late.
+            mixer::EffectPrism p;
+            p.prepare (48000.0, 256);
+            auto rays = p.rays();
+            rays.push_back ({});
+            rays[1].effects.push_back ({ std::make_shared<Double> (10), false, 1.0f });
+            p.setRays (rays);
+            check (p.latency() == 10, "an Effect Prism reports its slowest ray");
+            run (p, l, r);
+            float worst = 0.0f;
+            for (int k = 10; k < frames; ++k)
+                worst = std::max (worst, std::abs (l[(size_t) k] - 3.0f * inL[(size_t) k - 10]));
+            check (worst < 1.0e-5f, "an Effect Prism lines its parallel rays up");
+        }
+        {
+            // Mid/side with the side ray off: mono.
+            mixer::EffectPrism p;
+            p.prepare (48000.0, 256);
+            p.setSplit (prism::Split::midSide);
+            auto rays = p.rays();
+            rays.push_back ({});
+            rays[1].gainDb = -60.0f;
+            p.setRays (rays);
+            run (p, l, r);
+            run (p, l, r);   // past the gain's ramp
+            float worst = 0.0f;
+            for (int k = 0; k < frames; ++k)
+            {
+                const auto mid = 0.5f * (inL[(size_t) k] + inR[(size_t) k]);
+                worst = std::max (worst, std::abs (l[(size_t) k] - mid) + std::abs (r[(size_t) k] - mid));
+            }
+            check (worst < 1.0e-5f, "an Effect Prism's mid/side split with the side off is mono");
+        }
+        {
+            // Three empty bands add back to an allpass: an impulse keeps its energy.
+            mixer::EffectPrism p;
+            p.prepare (48000.0, 512);
+            p.setSplit (prism::Split::bands);
+            p.setRays (std::vector<mixer::EffectPrism::Ray> (3));
+            std::vector<float> a (48000, 0.0f), b (48000, 0.0f);
+            a[100] = b[100] = 1.0f;
+            p.process (a.data(), b.data(), (int) a.size());
+            double energy = 0.0;
+            for (auto x : a)
+                energy += (double) x * x;
+            check (std::abs (energy - 1.0) < 1.0e-3, "an Effect Prism's empty bands add back flat");
+        }
+        {
+            mixer::EffectPrism p;
+            p.setRays (std::vector<mixer::EffectPrism::Ray> (2));
+            auto rays = p.rays();
+            rays[1].name = "Wet";
+            rays[1].gainDb = -6.0f;
+            rays[1].muted = true;
+            p.setRays (rays);
+            p.setName ("Space");
+            p.setSplit (prism::Split::leftRight);
+            const auto saved = p.state();
+            mixer::EffectPrism q;
+            q.setRays (std::vector<mixer::EffectPrism::Ray> (2));
+            q.setState (saved);
+            const auto back = q.rays();
+            check (q.name() == "Space" && q.split() == prism::Split::leftRight && back[1].name == "Wet" && back[1].muted
+                       && std::abs (back[1].gainDb + 6.0f) < 1.0e-4f, "an Effect Prism's settings come back");
+        }
+    }
+
     void testInstrumentPrism()
     {
         using prismtest::Tone;
@@ -5225,7 +5434,7 @@ namespace
             s.ceilingDb = -1.0;
             l.prepare (rate, 2);
             l.set (s);
-            check (l.latency() == (int) std::lround (phi::Limiter::lookaheadMs * rate / 1000.0) + 6, "phi limiter latency");
+            check (l.latency() == (int) std::lround (phi::Limiter::lookaheadMs * rate / 1000.0) + phi::TruePeak::delay, "phi limiter latency");
             std::mt19937 random (5);
             std::normal_distribution<float> gauss (0.0f, 0.3f);
             std::vector<float> a ((size_t) rate), b ((size_t) rate);
@@ -8425,6 +8634,63 @@ namespace
             check (jump < 0.2f, "phi EQ changes one band without a click in another");
         }
 
+        // Φ EQ, linear phase: the same magnitude as the filters, every frequency late by
+        // the same latency, and a new setting faded in without a click.
+        {
+            phi::Eq e;
+            e.prepare (rate, 1);
+            phi::Eq::Settings s;
+            s.bands[5].gainDb = 6.0;
+            s.bands[8].gainDb = -4.0;
+            e.set (s);
+            const auto taps = phi::LinearPhaseFir::tapsFor (rate);
+            const auto magnitude = [&] (double hz) { return std::pow (10.0, e.responseDb (std::max (hz, 0.1)) / 20.0); };
+            const auto impulse = phi::LinearPhaseFir::design (magnitude, taps, rate);
+            float asymmetry = 0.0f;
+            for (int n = 1; n < taps / 2; ++n)
+                asymmetry = std::max (asymmetry, std::abs (impulse[(size_t) (taps / 2 + n)] - impulse[(size_t) (taps / 2 - n)]));
+            check ((int) impulse.size() == taps && asymmetry < 1.0e-6f, "linear-phase impulse is symmetric about its centre");
+
+            phi::LinearPhaseFir fir;
+            fir.prepare (taps, 2);
+            check (fir.latency() == taps / 2 + phi::LinearPhaseFir::blockSize, "linear-phase latency is the centre plus one block");
+            fir.give (phi::LinearPhaseFir::prepareKernel (impulse));
+            const int frames = 3 * taps;
+            for (const auto hz : { phi::Eq::bandHz (5), phi::Eq::bandHz (8), 3000.0 })
+            {
+                fir.reset();
+                auto left = sine (hz, frames), right = sine (hz * 1.5, frames);
+                const auto dryLeft = left, dryRight = right;
+                for (int done = 0; done < frames; done += 300)   // blocks that are not the partition's size
+                {
+                    float* io[] { left.data() + done, right.data() + done };
+                    fir.process (io, 2, std::min (300, frames - done));
+                }
+                const auto at = fir.latency();
+                float error = 0.0f;
+                const auto gainL = (float) magnitude (hz), gainR = (float) magnitude (hz * 1.5);
+                for (int i = taps + at; i < frames; ++i)
+                    error = std::max ({ error, std::abs (left[(size_t) i] - gainL * dryLeft[(size_t) (i - at)]),
+                                        std::abs (right[(size_t) i] - gainR * dryRight[(size_t) (i - at)]) });
+                check (error < 2.0e-3f, "linear-phase EQ at " + std::to_string ((int) hz) + " Hz has the filters' gain and no phase shift");
+            }
+
+            // A new kernel fades in over one block.
+            fir.reset();
+            auto tone = sine (1000.0, 2 * taps);
+            float* t[] { tone.data() };
+            fir.process (t, 1, taps);
+            s.bands[5].gainDb = -6.0;
+            e.set (s);
+            fir.give (phi::LinearPhaseFir::prepareKernel (phi::LinearPhaseFir::design (magnitude, taps, rate)));
+            float* rest[] { tone.data() + taps };
+            fir.process (rest, 1, taps);
+            float jump = 0.0f;
+            for (int i = taps; i < 2 * taps - 1; ++i)
+                jump = std::max (jump, std::abs (tone[(size_t) i + 1] - tone[(size_t) i]));
+            check (jump < 0.2f && fir.takeRetired() != nullptr, "linear-phase EQ changes setting without a click");
+        }
+
         // Φ Echo: an impulse comes back at t, tφ, tφ²..., each 1/φ quieter.
         {
             phi::Echo echo;
@@ -9155,6 +9421,82 @@ namespace
                        && r.parts[4].drums && r.parts[7].drums && ! r.parts[0].drums,
                    "compose: Congolese guitar, solo above mi-solo above accompagnement above bass");
         }
+        // 4′33″: three movements of 33″, 2′40″ and 1′20″ (273 seconds in all) at the tempo, the lid closed at each.
+        {
+            co::Settings s;
+            s.method = co::Method::silence;
+            s.parts = 8;
+            s.bpm = 60.0;
+            const auto r = co::generate (s);
+            size_t lid = 0;
+            for (const auto& n : r.parts[0].notes)
+                lid += n.velocity > 20;
+            bool quiet = true;
+            for (const auto& p : r.parts)
+                for (const auto& n : p.notes)
+                    quiet = quiet && n.velocity <= 40;
+            check (r.end == 273 * co::ticksPerQuarter && r.sections.size() == 3 && r.sections[1].start == 33 * co::ticksPerQuarter
+                       && r.sections[2].start == 193 * co::ticksPerQuarter && lid == 3 && quiet,
+                   "compose: 4′33″, three tacet movements in the premiere's lengths, only quiet sounds");
+        }
+        // Star charts: the brighter a star, the louder.
+        {
+            const auto r = run (co::Method::starCharts, 4);
+            bool levels = true;
+            for (const auto& p : r.parts)
+                for (const auto& n : p.notes)
+                    levels = levels && (n.velocity - 28) % 18 == 0;
+            check (levels && r.sections.front().name.rfind ("page 1", 0) == 0, "compose: star charts, six magnitudes, six loudnesses, by pages");
+        }
+        // Musicircus: every act a different method, each coming in.
+        {
+            const auto r = run (co::Method::musicircus, 6);
+            std::set<std::string> acts;
+            for (const auto& p : r.parts)
+                acts.insert (p.name.substr (0, p.name.find (" (")));
+            size_t comings = 0;
+            for (const auto& x : r.sections)
+                for (size_t at = x.name.find ("comes in"); at != std::string::npos; at = x.name.find ("comes in", at + 1))
+                    ++comings;
+            check (acts.size() == 6 && comings >= 6, "compose: Musicircus, six acts from six methods, each coming in by chance");
+        }
+        // Time brackets: one quiet sound (or a few) a bracket, never louder than mf, on a small gamut.
+        {
+            const auto r = run (co::Method::timeBrackets, 4);
+            std::set<int> gamut;
+            bool soft = true;
+            for (const auto& p : r.parts)
+                for (const auto& n : p.notes)
+                {
+                    soft = soft && n.velocity <= 76;
+                    if (! p.drums)
+                        gamut.insert (n.key);
+                }
+            check (soft && ! gamut.empty() && gamut.size() <= 9 * 2 && r.parts[2].drums, "compose: time brackets, quiet sounds from a small gamut");
+        }
+        // Tuning Meditation: voices tune to one another, so unisons sound between different voices.
+        {
+            const auto r = run (co::Method::tuningMeditation, 6);
+            size_t unisons = 0;
+            for (size_t a = 0; a < r.parts.size(); ++a)
+                for (size_t b = a + 1; b < r.parts.size(); ++b)
+                    for (const auto& x : r.parts[a].notes)
+                        for (const auto& y : r.parts[b].notes)
+                            unisons += x.key == y.key && x.start < y.end && y.start < x.end;
+            check (unisons >= 4 && r.sections.size() >= 2, "compose: Tuning Meditation, voices tuned to one another in unison");
+        }
+        // Deep Listening: global and focal attention by turns; the EIS repeats the accordion three times, softer.
+        {
+            const auto r = run (co::Method::deepListening, 8);
+            bool turns = r.sections.size() >= 2;
+            for (size_t k = 0; k < r.sections.size(); ++k)
+                turns = turns && r.sections[k].name.rfind (k % 2 == 0 ? "global" : "focal", 0) == 0;
+            const auto& first = r.parts[0].notes.front();
+            size_t echoes = 0;
+            for (const auto& n : r.parts[4].notes)
+                echoes += n.key == first.key && n.start > first.start && n.velocity < first.velocity;
+            check (turns && echoes >= 3 && ! r.parts[6].notes.empty(), "compose: Deep Listening, global and focal by turns, the EIS's delays, the cistern");
+        }
         // Rāga: the gat ends on sam with a tihāī.
         {
             const auto r = run (co::Method::raga, 3, "yaman (kalyan)");
@@ -9367,10 +9709,63 @@ namespace
         check (brightness (0.5) < 0.5 * brightness (0.0), "phi tabla: a soft hit is darker");
 
         // The Bol Processor on PHI tabla: dha twice is its two takes.
-        const auto score = bolprocessor::toScore ({ bolprocessor::parse ("dha dha ne") }, 90.0, true);
+        const auto score = bolprocessor::toScore ({ bolprocessor::parse ("dha dha ne") }, 90.0, bolprocessor::On::phiTabla);
         check (score.parts[0].notes.size() == 3 && score.parts[0].notes[0].key == pt::noteFor ("dha", 0) && score.parts[0].notes[1].key == pt::noteFor ("dha", 1)
                    && score.parts[0].notes[0].key != score.parts[0].notes[1].key,
                "phi tabla: the Bol Processor's bols on its pads, the takes in turn");
+    }
+
+    // PHI frame drum (owner, 2026-11-01): the owner's frame drum as a Slicer kit for Push, softer hits
+    // darker, and PHI's rhythms and the Bol Processor played on it by stroke, the takes in turn.
+    void testPhiFrameDrum()
+    {
+        namespace fd = phiframedrum;
+        bool files = true, unique = true, onGrid = true;
+        std::set<int> seen;
+        for (const auto& p : fd::pads())
+        {
+            unique = unique && seen.insert (p.pad).second;
+            onGrid = onGrid && p.pad >= 0 && p.pad < 64;
+            files = files && std::filesystem::exists (std::string (PHI_SHARE_SOURCE_DIR "/phi-frame-drum/") + p.sound.file + ".wav");
+        }
+        check (unique && onGrid && files && fd::pads().size() == 49, "phi frame drum: 49 pads on Push's grid, each sound in share/phi-frame-drum");
+        // The bottom row is dum, the one above tak, from Push's first note.
+        check (fd::padFor ("dum", 0) == 0 && fd::noteFor ("dum", 0) == 36 && fd::noteFor ("tak", 0) == 44 && fd::noteFor ("ka", 0) == 52
+                   && fd::padFor ("dum", 1) == 1 && fd::padFor ("dum", 6) == 0 && fd::padFor ("Doum", 0) == 0 && fd::padFor ("tek", 0) == fd::padFor ("tak", 0)
+                   && fd::padFor ("dha", 0) < 0,
+               "phi frame drum: dum, tak and ka on the bottom rows, each stroke's takes in turn, its spellings as one");
+
+        auto sound = std::make_shared<sampler::Sample>();
+        for (int i = 0; i < 4800; ++i)
+        {
+            sound->left.push_back (0.1f);
+            sound->right.push_back (0.1f);
+        }
+        const auto kit = fd::kit ("folder", [&] (const std::string&) { return sound; });
+        check (kit.velocityTone > 0.0 && kit.layout == slicer::Layout::push && kit.pads[0].name == "Bass1" && kit.pads[0].layerCount() == 1
+                   && kit.pads[(size_t) fd::gridPad (4, 5)].name == "chiftitelli",
+               "phi frame drum: softer hits darker, the owner's names on the pads");
+
+        // An iqāʿ on the frame drum: maqsūm's dums on the bass, its taks on the rimshots in turn.
+        const auto maqsum = rhythm::rhythms()[(size_t) rhythm::findRhythm ("maqsum")];
+        int moved = 0;
+        const auto played = fd::fromGeneralMidi (*rhythm::toSong (maqsum, 1, 110.0), &moved);
+        std::vector<int> notes;
+        for (const auto& e : played->events)
+            if (e.kind() == 0x90 && e.data2 > 0)
+                notes.push_back (e.data1);
+        check (moved == 5 && notes.size() == 5 && notes[0] == fd::noteFor ("dum", 0) && notes[1] == fd::noteFor ("tak", 0)
+                   && notes[2] == fd::noteFor ("tak", 1) && notes[3] == fd::noteFor ("dum", 1),
+               "phi frame drum: maqsum's dum tak - tak dum on the frame drum, the takes in turn");
+        // A ghost note on a tak is a ka, a kick a dum.
+        check (fd::strokeForDrum (63, 56) == "ka" && fd::strokeForDrum (63, 96) == "tak" && fd::strokeForDrum (36, 100) == "dum",
+               "phi frame drum: soft taks are ka, the kick dum");
+
+        // The Bol Processor on PHI frame drum.
+        const auto score = bolprocessor::toScore ({ bolprocessor::parse ("dum tak - tak dum - tak -") }, 110.0, bolprocessor::On::phiFrameDrum);
+        check (score.parts[0].notes.size() == 5 && score.parts[0].notes[0].key == fd::noteFor ("dum", 0)
+                   && score.parts[0].notes[2].key == fd::noteFor ("tak", 1),
+               "phi frame drum: the Bol Processor's dum and tak on its pads, the takes in turn");
     }
 
     void testRhythmGenerator()
@@ -10682,6 +11077,94 @@ namespace
         fs::remove_all (folder);
     }
 
+    void testThemeGenerator()
+    {
+        using namespace themegen;
+        Rgb gold;
+        check (fromHex ("#c8a24a", gold) && toHex (gold) == "#c8a24a", "theme: hex round trip");
+        Rgb seeThrough;
+        check (fromHex ("#c8a24a40", seeThrough) && near (seeThrough.a, 64.0 / 255.0, 1e-9) && toHex (seeThrough) == "#c8a24a40", "theme: hex with alpha");
+        Rgb shortHex;
+        check (fromHex ("#fff", shortHex) && toHex (shortHex) == "#ffffff" && ! fromHex ("c8a24a", shortHex) && ! fromHex ("#12345", shortHex),
+               "theme: short and bad hex");
+        check (near (contrastRatio ({ 0, 0, 0 }, { 1, 1, 1 }), 21.0, 1e-6) && near (contrastRatio (gold, gold), 1.0, 1e-9), "theme: contrast ratio");
+
+        for (const bool dark : { true, false })
+            for (auto harmony : { Harmony::mono, Harmony::analogous, Harmony::complementary, Harmony::splitComplementary, Harmony::triadic })
+                for (const double contrast : { 0.0, 0.5, 1.0 })
+                {
+                    Settings s;
+                    s.seed = gold;
+                    s.dark = dark;
+                    s.harmony = harmony;
+                    s.contrast = contrast;
+                    const auto t = generate (s);
+                    const auto name = std::string ("theme: ") + harmonyName (harmony) + (dark ? " dark " : " light ") + std::to_string (contrast);
+                    bool all = t.colors.size() == colorKeys().size();
+                    for (const auto& key : colorKeys())
+                        all = all && t.colors.count (key) == 1;
+                    check (all, name + ": every colour");
+                    check (t.spectrogram.size() >= 2, name + ": spectrogram");
+                    check ((luminance (t.colors.at ("window")) < 0.2) == dark, name + ": dark or light");
+                    int failing = 0;
+                    for (const auto& c : checkContrast (t.colors))
+                        failing += c.ok() ? 0 : 1;
+                    check (failing == 0 || contrast < 0.5, name + ": passes its contrast checks");
+                    auto fixed = t.colors;
+                    fixContrast (fixed);
+                    bool ok = true;
+                    for (const auto& c : checkContrast (fixed))
+                        ok = ok && c.ok();
+                    check (ok, name + ": fixed contrast passes");
+                }
+
+        // Locked colours are kept, and selected text follows a locked highlight.
+        Settings s;
+        Colors locked { { "highlight", { 1, 1, 0 } } };
+        const auto t = generate (s, locked);
+        check (toHex (t.colors.at ("highlight")) == "#ffff00", "theme: a locked colour is kept");
+        check (contrastRatio (t.colors.at ("highlightedText"), t.colors.at ("highlight")) >= 4.5, "theme: selected text on a locked highlight");
+        auto colors = t.colors;
+        Colors lockText { { "text", { 0.3, 0.3, 0.3 } } };
+        colors["text"] = { 0.3, 0.3, 0.3 };
+        colors["base"] = { 0.25, 0.25, 0.25 };
+        fixContrast (colors, lockText);
+        check (toHex (colors.at ("text")) == "#4d4d4d" && contrastRatio (colors.at ("text"), colors.at ("base")) >= 4.5,
+               "theme: a locked text colour moves its background instead");
+
+        // A grey seed and zero saturation give a grey theme.
+        Settings grey;
+        grey.seed = { 0.5, 0.5, 0.5 };
+        grey.saturation = 0;
+        const auto g = generate (grey);
+        const auto w = g.colors.at ("waveform");
+        check (near (w.r, w.g, 0.01) && near (w.g, w.b, 0.01), "theme: grey stays grey");
+
+        // A picture: mostly dark blue with a little orange gives a dark theme built on the orange.
+        std::vector<Rgb> pixels (900, Rgb { 0.05, 0.07, 0.2 });
+        pixels.insert (pixels.end(), 100, Rgb { 1.0, 0.55, 0.1 });
+        const auto palette = paletteFromPixels (pixels, 4);
+        check (palette.size() == 2 && near (palette[0].share, 0.9, 1e-9), "theme: palette of a picture");
+        const auto fromPicture = settingsFromPalette (palette);
+        check (fromPicture.dark && fromPicture.seed.r > 0.9, "theme: settings from a picture");
+
+        // The theme file names every colour and can be read back.
+        const auto json = toJson ("Quote \"Test\"", t, s);
+        check (json.find ("\"name\": \"Quote \\\"Test\\\"\"") != std::string::npos, "theme: name escaped in JSON");
+        check (json.find ("\"levelPeak\"") != std::string::npos && json.find ("\"generator\"") != std::string::npos, "theme: JSON has colours and settings");
+        // REAPER colours are 0x00bbggrr in decimal, sometimes with flags in the top byte.
+        Colors reaper;
+        Settings fromReaper;
+        check (fromReaperTheme ("[color theme]\r\ncol_main_bg2=1315860\r\ncol_tr1_peaks=255\r\ncol_main_bg=-2134456634\r\nui_img=Foo\r\n", reaper, fromReaper),
+               "theme: reads a REAPER theme");
+        check (toHex (reaper["window"]) == "#141414" && toHex (reaper["waveform"]) == "#ff0000" && toHex (fromReaper.seed) == "#ff0000"
+               && fromReaper.dark && reaper.count ("text") == 0, "theme: REAPER colours mapped");
+        check (! fromReaperTheme ("[REAPER]\nfoo=bar\n", reaper, fromReaper), "theme: not a REAPER colour theme");
+
+        Harmony h;
+        check (harmonyFromName ("split-complementary", h) && h == Harmony::splitComplementary && ! harmonyFromName ("plaid", h), "theme: harmony names");
+    }
+
 int main()
 {
     testStorage();
@@ -10705,6 +11188,7 @@ int main()
     testMetadata();
     testXmp();
     testIxml();
+    testEbuCore();
     testRiffChunks();
     testNyquist();
     testAlbum();
@@ -10723,6 +11207,7 @@ int main()
     testSpatialStudio();
     testPrismSplit();
     testInstrumentPrism();
+    testEffectPrism();
     testMasterAssist();
     testMixAssist();
     testSonify();
@@ -10757,12 +11242,14 @@ int main()
     testCompose();
     testBolProcessor();
     testPhiTabla();
+    testPhiFrameDrum();
     testStochastic();
     testCubify();
     testSerial();
     testPluginMeasure();
     testDawProject();
     testAbletonSet();
+    testThemeGenerator();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");

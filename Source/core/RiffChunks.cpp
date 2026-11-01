@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "RiffChunks.h"
 
+#include "EbuCore.h"
 #include "Ixml.h"
 #include "Metadata.h"
 #include "Xmp.h"
@@ -86,7 +87,8 @@ namespace
     const std::set<std::string> wavKnown { "fmt ", "data", "fact", "cue ", "acid", "ds64", "JUNK", "junk", "PAD ", "FLLR",
                                            "PEAK", "levl", "md5 ", "MD5 ", "DISP", "bext", "cart", "iXML", "_PMX", "id3 ", "ID3 " };
     // Chunks writeMetadata replaces.
-    const std::set<std::string> wavOwned { "DISP", "bext", "cart", "iXML", "_PMX", "id3 ", "ID3 " };
+    // axml (EBUCore) is also kept whole as "raw:wav:axml", so what PHI does not read survives.
+    const std::set<std::string> wavOwned { "DISP", "bext", "cart", "iXML", "axml", "_PMX", "id3 ", "ID3 " };
     const std::set<std::string> aiffOwned { "NAME", "AUTH", "(c) ", "ANNO", "ID3 ", "id3 " };
 
     bool isXmpAppl (const std::string& path, const Chunk& c)
@@ -263,8 +265,10 @@ void decodeBext (const std::string& p, Tags& tags)
         const char* names[] { "loudnessValue", "loudnessRange", "maxTruePeakLevel", "maxMomentaryLoudness", "maxShortTermLoudness" };
         for (int i = 0; i < 5; ++i)
         {
+            // Tech 3285 v2 2.4: 7FFFh means unused, and values outside -99.99..99.99 (0..99.99
+            // for the loudness range) are ignored too.
             const auto raw = (int16_t) (u[412 + 2 * i] | (u[413 + 2 * i] << 8));
-            if (raw != 0x7fff)
+            if (raw >= (i == 1 ? 0 : -9999) && raw <= 9999)
                 v.emplace_back (names[i], number (raw / 100.0));
         }
     }
@@ -304,8 +308,12 @@ std::string encodeBext (const Tags& tags)
         out += (char) (2 * i + 1 < umid.size() ? std::strtoul (umid.substr (2 * i, 2).c_str(), nullptr, 16) : 0);
     for (const auto* n : names)
     {
+        // Tech 3285 v2 2.4: round(100x), ties away from zero; a value outside the valid range
+        // (-99.99..99.99, or 0..99.99 for the loudness range) is written as unused (7FFFh).
         const auto s = valueOf (v, n);
-        putLe16 (out, s.empty() ? (uint16_t) 0x7fff : (uint16_t) (int16_t) std::clamp (std::lround (std::atof (s.c_str()) * 100.0), -32767L, 32766L));
+        const auto x = s.empty() ? 0L : std::lround (std::atof (s.c_str()) * 100.0);
+        const bool valid = ! s.empty() && x >= (n == names[1] ? 0L : -9999L) && x <= 9999L;
+        putLe16 (out, valid ? (uint16_t) (int16_t) x : (uint16_t) 0x7fff);
     }
     out.append (180, '\0');
     if (const auto history = valueOf (v, "codingHistory"); ! history.empty())
@@ -488,6 +496,13 @@ std::string readMetadata (const std::string& path, Tags& tags)
         }
         else if (c.id == "id3 " || c.id == "ID3 ")
             id3 = readChunk (path, c);
+        else if (c.id == "axml")
+        {
+            auto x = readChunk (path, c);
+            tags["raw:wav:axml"] = meta::base64Encode (x);
+            x.resize (std::strlen (x.c_str()));
+            ebucore::read (x, tags, error);
+        }
         else if (wavKnown.count (c.id) == 0 && ! (c.id == "LIST" && (c.listType == "INFO" || c.listType == "adtl")))
         {
             if (const auto bytes = readChunk (path, c, 16u << 20); ! bytes.empty() || c.size == 0)
@@ -527,6 +542,21 @@ std::vector<std::pair<std::string, std::string>> wavChunks (const Tags& tags, co
     if (w.ixml)
         if (auto x = ixml::write (tags); ! x.empty())
             out.emplace_back ("iXML", std::move (x));
+    bool ebu = false;
+    if (w.ebucore)
+    {
+        std::string original;
+        if (const auto it = tags.find ("raw:wav:axml"); it != tags.end())
+        {
+            original = meta::base64Decode (it->second);
+            original.resize (std::strlen (original.c_str()));
+        }
+        if (auto x = ebucore::write (tags, original); ! x.empty())
+        {
+            out.emplace_back ("axml", std::move (x));
+            ebu = true;
+        }
+    }
     if (w.xmp)
         if (auto x = xmp::write (tags, w.software); ! x.empty())
             out.emplace_back ("_PMX", std::move (x));
@@ -534,7 +564,7 @@ std::vector<std::pair<std::string, std::string>> wavChunks (const Tags& tags, co
         out.emplace_back ("id3 ", w.id3);
 
     for (auto it = tags.lower_bound ("raw:wav:"); it != tags.end() && it->first.compare (0, 8, "raw:wav:") == 0; ++it)
-        if (it->first.size() >= 12)
+        if (it->first.size() >= 12 && ! (ebu && it->first.compare (8, 4, "axml") == 0))
             out.emplace_back (it->first.substr (8, 4), meta::base64Decode (it->second));
     return out;
 }

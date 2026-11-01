@@ -60,7 +60,9 @@ namespace bolprocessor
     // open on the low conga and closed on the rim; dha is na with ge. Empty for what is no bol.
     std::vector<int> strokes (const std::string& bol);
 
-    // The items one after another as a score: one tablā part, a section an item. On General MIDI
-    // drums (strokes()), or on PHI tabla's pads (sampler/PhiTabla.h), each bol's takes in turn.
-    composition::Result toScore (const std::vector<Item>&, double bpm, bool phiTabla = false);
+    // What the bols play on: General MIDI drums (strokes()), PHI tabla's pads (sampler/PhiTabla.h),
+    // or PHI frame drum's (sampler/PhiFrameDrum.h: dum, tak, ka, pa...), each stroke's takes in turn.
+    enum class On { generalMidi, phiTabla, phiFrameDrum };
+    // The items one after another as a score: one part, a section an item.
+    composition::Result toScore (const std::vector<Item>&, double bpm, On on = On::generalMidi);
 }

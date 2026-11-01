@@ -1,0 +1,134 @@
+// PHI: the iqāʿāt as items, to play on PHI frame drum (the owner's own frame drum, share/phi-frame-drum).
+// Written from PHI's rhythms (Mode > rhythm > iqāʿāt, mixer/Rhythms.cpp): dum, tak, ka, - a rest;
+// /2 two strokes to the beat, /4 four. Each stroke plays its next take. Edit, add pa (the flat hand),
+// snap and sweep, or write your own.
+
+// maqsūm, 4 beats. Egypt: the commonest iqāʿ of popular music, 4/4.
+/2 dum tak - tak dum - tak -
+
+// baladī, 4 beats. Egypt: maqsūm with two dums to begin, 4/4.
+/2 dum dum - tak dum - tak -
+
+// ṣaʿīdī, 4 beats. Upper Egypt: the stick dance's iqāʿ, 4/4.
+/2 dum tak - dum dum - tak -
+
+// malfūf, 2 beats. Egypt: quick 2/4, for entrances.
+/4 dum - - tak - - tak -
+
+// ayyūb, 2 beats. Egypt and Sudan: the zār's driving 2/4.
+/4 dum - - ka dum - tak -
+
+// samāʿī thaqīl, 10 beats. The samāʿī's 10/8, 3+2+2+3: dum on 1, 6 and 7, tak on 4 and 8, the tenth eighth often leading into the next cycle.
+/1 dum - - tak - dum dum tak - -
+
+// waḥda, 4 beats. 4/4, one dum to the bar: the main iqāʿ under the voice in 20th-century ṭarab, leaving the singer room.
+/2 dum - - tak - - tak -
+
+// waḥda ṣaghīra, 2 beats. 2/4, waḥda's one dum in a short bar (also waḥda basīṭa), for songs and instrumental phrases.
+/2 dum - tak tak
+
+// waḥda kabīra, 8 beats. 8/4, waḥda stretched over two bars (also waḥda sunbāṭī), mid-20th-century songs and instrumental music.
+/2 dum - - tak - - tak - dum - - - tak - - -
+
+// waḥda w-nuṣṣ, 4 beats. 4/4, "one and a half": maqsūm with its first tak half an eighth late, popular in mid-20th-century ṭarab.
+/4 dum - - tak - - tak - dum - - - tak - - -
+
+// fox, 2 beats. 2/4, plain and often very fast (probably from the foxtrot): the main iqāʿ of the Ottoman longa.
+/2 dum tak dum tak
+
+// karāchī, 2 beats. 2/4, lazy and slowish, though it often moves to and from malfūf.
+/2 tak - tak dum
+
+// fallāḥī, 2 beats. Egypt: a fast 2/4 for folk music; like maqsūm at double speed but flowing, dum and tak hardly contrasted.
+/4 dum ka tak ka dum - tak -
+
+// hajaʿ, 4 beats. 4/4 (Maqam World spells it hacha‘): Sufi music, especially percussion-only pieces; from a folk iqāʿ in 2/4.
+/2 dum - tak tak tak - tak tak
+
+// nawarī, 4 beats. 4/4, a variation on ṣaʿīdī and baladī for Levantine folk music and the dabke line dance.
+/2 tak dum - tak dum - tak -
+
+// rumba, 4 beats. 4/4, an Arabic adaptation of the Latin American dance, in fashion from the 1930s.
+/2 dum - - tak - - dum -
+
+// zaffa, 4 beats. 4/4, named after the wedding procession; also a modulation from slowed-down baladī and maqsūm.
+/4 dum - tak ka tak - tak - dum - tak - tak - - -
+
+// çiftetelli, 8 beats. 8/4 (also played in 4/4), a Turkish usul that became popular in Arabic music.
+/2 dum - tak tak - tak tak - dum - dum - tak - - -
+
+// maṣmūdī kabīr, 8 beats. 8/4, one of the most popular rhythms of 20th-century ṭarab; baladī is maṣmūdī ṣaghīr.
+/1 dum dum - tak dum - tak tak
+
+// bambī, 8 beats. Egypt: a stretched-out 8/4 under improvisations and sparse vocal sections, usually begun from the dum before last.
+/2 dum - - tak - - tak - - tak - - dum - dum -
+
+// sudāsī, 6 beats. 6/4, "based on six": Lebanese and Palestinian folk line dances such as the dabke.
+/4 dum - tak ka tak - dum - dum - tak ka tak - dum - dum - - - tak - - -
+
+// samāʿī dārij, 3 beats. 3/4, for songs and instrumental pieces, and the iqāʿ of the dārij form.
+/1 dum tak tak
+
+// samāʿī saraband, 3 beats. 3/8, light and fast (also samāʿī ṭāʾir, "flying"), for the muwashshaḥ.
+/1 dum tak tak
+
+// yürük semai, 6 beats. 6/8, a Turkish usul (also yugrug), popular in the muwashshaḥ; quickening, it can move to samāʿī dārij or saraband.
+/1 dum tak tak dum tak -
+
+// thurayyā, 5 beats. 5/8 (also aqṣāq turkī), very rare, for the muwashshaḥ.
+/1 dum - tak - tak
+
+// dawr hindī, 7 beats. 7/8, 3+4: a favourite of the muwashshaḥ.
+/1 dum tak tak dum - tak -
+
+// qatāqūftī, 8 beats. 8/8, 3+2+3, rare, for the muwashshaḥ.
+/1 dum tak tak dum - tak - tak
+
+// aqṣāq, 9 beats. 9/8, 2+2+2+3, much used in the muwashshaḥ: an eighth short of samāʿī thaqīl, and played straight into it in a waṣla.
+/1 dum - tak - dum - tak - tak
+
+// jurjīna, 10 beats. 10/8, 3+2+2+3: Iraq and Iran, the Turkish and Kurdish repertoires, sometimes Tunisian mālūf.
+/1 dum - tak tak - dum - tak - -
+
+// ʿawīṣ, 11 beats. 11/8, 3+4+4, mostly for the muwashshaḥ.
+/1 dum - tak dum - tak tak dum dum - tak
+
+// ẓarāfāt, 13 beats. 13/8, 3+3+4+3 (Maqam World: dharafat), mostly for the muwashshaḥ; elsewhere it lends a classical colour.
+/1 dum - - tak - - dum - dum dum tak - -
+
+// khūsh rānk, 17 beats. 17/8, 3+4+3+4+3 (also khōsh rang), very rare: one known muwashshaḥ and a few modern pieces.
+/1 dum - tak dum - dum dum tak - tak tak - dum dum tak - tak
+
+// nawākht, 7 beats. 7/4, 3+4, popular in the muwashshaḥ, at a mellow speed.
+/1 dum - tak dum - tak tak
+
+// mudawwar shāmī, 10 beats. 10/4, "round", of the Levant, for the muwashshaḥ.
+/1 tak - dum - tak - dum dum dum -
+
+// mudawwar maṣrī, 12 beats. 12/4, the Egyptian mudawwar, for the muwashshaḥ.
+/1 tak - dum - tak - dum dum dum - tak -
+
+// murabbaʿ, 13 beats. 13/4, 3+4+4+2, mostly in the muwashshaḥ (the name means squared, not its length).
+/1 dum tak tak dum - tak - tak - tak tak dum -
+
+// muḥajjar, 14 beats. 14/4, "turned to stone", known by its three dums to begin, popular in the muwashshaḥ.
+/1 dum dum dum - tak - dum - tak - tak - tak tak
+
+// mukhammas, 16 beats. 16/4, mostly in the muwashshaḥ (the name means based on five, not its length).
+/1 dum - dum - dum - tak - tak - tak tak dum - tak tak
+
+// nawākht hindī, 16 beats. 16/4, 2+3+4+3+4, mostly in the muwashshaḥ.
+/1 dum dum dum - tak dum - tak tak dum - tak dum - tak tak
+
+// awfar maṣrī, 19 beats. 19/4, popular in the muwashshaḥ; its second form ends dum – tak tak.
+/1 dum - dum - - - tak - tak - dum - dum tak - tak - - -
+
+// fākhit, 20 beats. 20/4, five bars of 4/4, rare outside the muwashshaḥ.
+/2 dum - tak - dum - dum dum tak - - - tak - - - tak - tak - dum - - - tak - tak - dum - - - tak - - - tak - tak -
+
+// sittatu ʿashar maṣrī, 32 beats. 32/4, "Egyptian sixteen", eight bars of 4/4, rare, mostly in the muwashshaḥ.
+/1 dum - tak - dum - tak - dum - tak - dum - dum - tak - dum - tak - tak - dum - - - tak - tak -
+
+// warshān ʿarabī, 32 beats. 32/4, eight bars of 4/4, rare, mostly in the muwashshaḥ.
+/2 dum - - - - - - - tak - - - dum - - - - - - - tak - - - dum - - tak - - tak - tak - - - tak - tak - dum - - - dum - dum - tak - - tak - - tak - tak - - - tak - tak -
+

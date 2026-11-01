@@ -45,6 +45,7 @@ class LauncherRack;
 class ReturnStripWidget;
 class TrackDevices;
 class PrismDialog;
+class EffectPrismDialog;
 class ClipView;
 class EditorTrack;
 class QStackedWidget;
@@ -212,6 +213,11 @@ public:
                     mixer::InstrumentPtr instrument = nullptr);
     // PHI tabla (sampler/PhiTabla.h): a Slicer with the owner's own strokes on 32 pads.
     mixer::InstrumentPtr makePhiTabla();
+    // PHI frame drum (sampler/PhiFrameDrum.h): a Slicer with the owner's own frame drum.
+    mixer::InstrumentPtr makePhiFrameDrum();
+    // A rhythm of General MIDI drums played on PHI frame drum (phiframedrum::fromGeneralMidi): a clip
+    // on the selected track, which gets PHI frame drum. False: no track is selected.
+    bool addRhythmOnPhiFrameDrum (const midifile::Song&, const QString& stem);
     void composeScene (int scene, const std::vector<int>& tracks, const QStringList& files,
                        const std::vector<midifile::SongPtr>& midi, mixer::TuningChoice tuning, const QString& name);
     // A file chosen in the Find panel's Selector: into the first empty slot of the track with
@@ -370,6 +376,7 @@ private:
     friend class ReturnStripWidget;
     friend class TrackDevices;
     friend class PrismDialog;
+    friend class EffectPrismDialog;
     friend class ClipView;
     friend class EditorTrack;
     friend class BusStripWidget;
@@ -422,6 +429,8 @@ private:
     void chooseMidi (int track);
     void placeAllMidi();             // again, after a tempo change
     void setInstrumentKind (int track, int choice, const QString& pluginId);
+    mixer::InstrumentPtr makeBuiltInKit (const QString& name, const QString& defaultFile, const slicer::Kit&,
+                                         const std::vector<std::string>& missing, const QString& folder);
     void editInstrument (int track);
     void loadInstrumentSound (int track, const QString& path);   // into the track's Sampler or Slicer
     void takeInstrumentSound (int track);                         // from the Sample menu's
@@ -675,8 +684,17 @@ private:
     void ungroupTracks();
     void setGroups (const std::vector<std::pair<int, int>>& trackAndGroup, const QString& what);   // with an undo step
     QString groupText (int track) const;   // "Group 2, “Drums”, with 3 tracks", "In 4, “Drums”", or empty
-    // The returns: A Reverb and B Delay.
+    // The returns, A and B: Φ Space and Φ Echo by default, but any effect (built-in, stock or a plug-in).
+    static QString returnName (int index);   // "Return A"
+    void returnEffectsMenu (int index, QMenu&);
     void chooseReturnEffect (int index, QPoint at);
+    // An Effect Prism in the return: rays of effects (MixerFxPrism.cpp). The effect there goes into its first ray.
+    void makeReturnPrism (int index);
+    void openReturnPrism (int index);
+    void returnPrismChanged (int index);   // its rays were edited: the strip follows, the mix is changed
+    void refreshReturn (int index);
+    QJsonObject returnPrismJson (const mixer::Effect&) const;
+    mixer::EffectPtr returnPrismFromJson (const QJsonObject&, int index, QStringList& problems);
     void setReturnEffect (int index, const std::string& pluginId);   // empty: none
     void editReturn (int index);
     void defaultReturns (int only = -1);   // Φ Space on A, Φ Echo on B (a dotted eighth at the tempo); -1 both
@@ -808,7 +826,8 @@ private:
     QPushButton* qLinkButton = nullptr;
     QPushButton* bypassInsertsButton = nullptr;
     QPushButton* bypassSendsButton = nullptr;
-    std::array<ReturnStripWidget*, mixer::numReturns> returnStrips {};          // StripSection bits (MixerWindow.cpp) shown on every strip
+    std::array<ReturnStripWidget*, mixer::numReturns> returnStrips {};
+    std::array<QPointer<QWidget>, mixer::numReturns> returnPrismEditors {};          // StripSection bits (MixerWindow.cpp) shown on every strip
     QString path;                    // the mix file; empty: not saved yet
     bool modified = false;
     bool restoring = false;

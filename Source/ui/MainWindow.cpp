@@ -58,6 +58,7 @@
 #include "RecordDialog.h"
 #include "ReferencePanel.h"
 #include "Theme.h"
+#include "ThemeGenerator.h"
 #include "Wallpaper.h"
 #include "WaveformView.h"
 
@@ -613,6 +614,8 @@ void MainWindow::registerCommands()
     registerReferenceCommands();
     registerMacroCommands();
     registerResearchCommands();
+    add ("tools.themeGenerator", Category::tools, tr ("&Theme Generator..."), {}, [this] { ThemeGeneratorDialog (this).exec(); });
+    commands.action (QStringLiteral ("tools.themeGenerator"))->setStatusTip (tr ("Make a theme from a colour, a picture, a REAPER theme or a description"));
     add ("tools.managePlugins", Category::tools, tr ("Manage &Plug-ins..."), {}, [this] { managePlugins(); });
     add ("tools.resetConfig", Category::tools, tr ("Reset &Configuration..."), {}, [this] { resetConfiguration(); });
 
@@ -902,6 +905,11 @@ void MainWindow::registerCommands()
         if (chooseWallpaper() && ! commands.action (QStringLiteral ("options.wallpaper"))->isChecked())
             toggleWallpaper();
     });
+    // Visualizer only: the wallpaper moving with the music, for making visuals.
+    add ("options.wallpaperMoves", Category::options, tr ("Wallpaper &Moves with the Music"), {}, [this] { toggleWallpaperMoves(); });
+    commands.action (QStringLiteral ("options.wallpaperMoves"))->setCheckable (true);
+    commands.action (QStringLiteral ("options.wallpaperMoves"))->setStatusTip (tr ("The wallpaper breathes with the bass, drifts and flashes with the music. Heavy on the CPU: "
+                                                                                   "meant for making visuals, or for a computer with power to spare beside the DAW"));
 
     add ("help.palette", Category::help, tr ("&Command Palette..."), { KS (Qt::CTRL | Qt::SHIFT | Qt::Key_P), KS (Qt::Key_F1) },
          [this] { CommandPalette (commands, this).exec(); });
@@ -968,15 +976,16 @@ void MainWindow::buildMenus()
                                "sample.midiInputs", "sample.panic" } },
         { tr ("Trac&ker"),   { "tracker.window", "tracker.furnace", "-", "tracker.new", "tracker.open", "tracker.save", "tracker.saveAs", "tracker.loadSample", "-", "tracker.playSong", "tracker.playPattern", "tracker.stop", "-",
                                "tracker.recordStereo", "tracker.recordMulti", "-", "tracker.resetTracks", "tracker.about" } },
-        { tr ("&Tools"),     { "#markers", "-", "tools.macroRecord", "tools.macroApply", "tools.macros", "-", "tools.batch", "-", "tools.managePlugins", "-", "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan", "-", "tools.resetConfig" } },
+        { tr ("&Tools"),     { "#markers", "-", "tools.macroRecord", "tools.macroApply", "tools.macros", "-", "tools.batch", "-", "tools.themeGenerator", "-", "tools.managePlugins", "-", "tools.nyquistPrompt", "-", "@nyquist.tools", "-", "tools.nyquistFolder", "tools.nyquistRescan", "-", "tools.resetConfig" } },
         { tr ("&View"),      { "#transport", "-", "view.zoomIn", "view.zoomOut", "view.zoomFit", "view.zoomSelection", "-",
-                               "view.audioEditor", "view.midiEditor", "-", "view.overview", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "view.cpuMeter", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.inspector", "view.master", "view.chain", "view.modulators", "view.history", "view.markers", "view.meters", "analyze.window", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "view.fullScreen", "-",
+                               "view.audioEditor", "view.midiEditor", "-", "view.overview", "view.rulerBoth", "view.rulerTime", "view.spectral", "view.blendSpectral", "view.blendWaveform", "view.pitchLine", "view.spectrogramSettings", "view.verticalZoomIn", "view.verticalZoomOut", "view.verticalZoomReset", "view.levelColors", "view.gainKnob", "view.cpuMeter", "-", "view.nextPanel", "view.previousPanel", "view.find", "view.inspector", "view.master", "view.chain", "view.modulators", "view.history", "view.markers", "view.meters", "analyze.window", "view.diagnostics", "view.references", "view.ambiScene", "view.popOut", "view.resetLayout", "view.fullScreen", "-",
                                "opacity", "-", "view.focusWaveform", "view.focusFollowsMouse" } },
         { tr ("Visuali&zer"), { "view.visualizer", "view.visualizerFullScreen", "view.visualizerBehind", "-",
                                "view.visualizerNext", "view.visualizerPrevious", "view.visualizerChoose", "-",
                                "@visual.artistic", "@visual.science", "-", "@visual.milkdrop", "@visual.rain", "@visual.web", "@visual.sonify", "-",
+                               "options.wallpaper", "options.chooseWallpaper", "options.wallpaperMoves", "-",
                                "view.opacityUp", "view.opacityDown", "view.opacityFull" } },
-        { tr ("&Warp"),      { "warp.showGrid", "view.rulerTime", "view.rulerBeats", "view.rulerBoth", "-", "warp.detectGrid", "warp.autoDetect", "warp.setTempo", "warp.downbeat", "warp.halve", "warp.double", "-",
+        { tr ("&Warp"),      { "warp.showGrid", "view.rulerBoth", "view.rulerTime", "-", "warp.detectGrid", "warp.autoDetect", "warp.setTempo", "warp.downbeat", "warp.halve", "warp.double", "-",
                                "warp.edit", "warp.previousHit", "warp.nextHit", "warp.toggleMarker", "warp.nudgeEarlier", "warp.nudgeLater", "-",
                                "warp.quantizePanel", "warp.quantize", "warp.markersFromHits", "warp.sliceAtHits", "warp.resetWarp", "-", "warp.stretch", "warp.halfSpeed", "warp.doubleSpeed", "warp.extremeStretch", "warp.extremeAgain", "-", "warp.exportLoop" } },
         { tr ("&Help"),      { "help.palette", "help.menuBar", "-", "help.about" } },
@@ -1144,6 +1153,13 @@ void MainWindow::buildPanels()
     masterWidget = new MasterPanel (engine, waveform, this);
     connect (masterWidget, &MasterPanel::renderRequested, this, &MainWindow::renderInPlace);
     connect (masterWidget, &MasterPanel::analyzeRequested, this, &MainWindow::analyzeSlot);
+    connect (masterWidget, &MasterPanel::metersRequested, this, [this]
+    {
+        auto* w = analysisWindow();
+        w->show();
+        w->raise();
+        w->activateWindow();
+    });
     connect (masterWidget, &MasterPanel::message, this, [this] (const QString& text)
     {
         if (! text.isEmpty())

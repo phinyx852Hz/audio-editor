@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "BolProcessor.h"
+#include "../sampler/PhiFrameDrum.h"
 #include "../sampler/PhiTabla.h"
 
 #include <algorithm>
@@ -523,12 +524,13 @@ namespace bolprocessor
         return f == table.end() ? std::vector<int> {} : f->second;
     }
 
-    composition::Result toScore (const std::vector<Item>& items, double bpm, bool phiTabla)
+    composition::Result toScore (const std::vector<Item>& items, double bpm, On on)
     {
-        std::map<std::string, int> uses;   // PHI tabla: how often each bol has been played, for its next take
+        const bool phiTabla = on == On::phiTabla, frameDrum = on == On::phiFrameDrum;
+        std::map<std::string, int> uses;   // PHI tabla, PHI frame drum: how often each stroke has been played, for its next take
         composition::Result out;
         out.bpm = bpm;
-        out.parts.push_back ({ "tablā", {}, true });
+        out.parts.push_back ({ frameDrum ? "frame drum" : "tablā", {}, true });
         constexpr int64_t Q = composition::ticksPerQuarter;
         int64_t at = 0;
         std::map<std::string, int> unknown;
@@ -548,6 +550,11 @@ namespace bolprocessor
                     const auto note = phitabla::noteFor (e.symbol, uses[phitabla::bolOf (e.symbol)]++);
                     drums = note < 0 ? std::vector<int> {} : std::vector<int> { note };
                 }
+                else if (frameDrum)
+                {
+                    const auto note = phiframedrum::noteFor (e.symbol, uses[phiframedrum::strokeOf (e.symbol)]++);
+                    drums = note < 0 ? std::vector<int> {} : std::vector<int> { note };
+                }
                 if (drums.empty())
                     ++unknown[e.symbol];
                 else
@@ -560,7 +567,7 @@ namespace bolprocessor
             at += (int64_t) std::ceil (item.beats - 1e-9) * Q;
         }
         out.end = at;
-        out.summary = std::to_string (items.size()) + (items.size() == 1 ? " item, " : " items, ") + std::to_string (bols) + (phiTabla ? " bols on PHI tabla" : " bols on the tablā");
+        out.summary = std::to_string (items.size()) + (items.size() == 1 ? " item, " : " items, ") + std::to_string (bols) + (phiTabla ? " bols on PHI tabla" : frameDrum ? " strokes on PHI frame drum" : " bols on the tablā");
         if (! unknown.empty())
         {
             out.summary += "; not bols, so not played:";

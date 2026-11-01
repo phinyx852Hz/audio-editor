@@ -96,7 +96,7 @@ void AliasScope::paintEvent (QPaintEvent*)
 {
     const auto& theme = Theme::current();
     QPainter g (this);
-    g.fillRect (rect(), theme.color (QStringLiteral ("meterBackground")));
+    g.fillRect (rect(), Theme::withOpacity (theme.color (QStringLiteral ("meterBackground")), this));   // see-through with the window
     g.setRenderHint (QPainter::Antialiasing);
     auto text = theme.color (QStringLiteral ("text"));
     auto dim = text;

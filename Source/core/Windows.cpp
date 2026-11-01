@@ -196,8 +196,11 @@ std::vector<double> make (int kind, int n)
         {
             case hann:            v = 0.5 - 0.5 * std::cos (x); break;
             case blackmanHarris:  v = 0.35875 - 0.48829 * std::cos (x) + 0.14128 * std::cos (2 * x) - 0.01168 * std::cos (3 * x); break;
-            case flatTop:         v = 0.21557895 - 0.41663158 * std::cos (x) + 0.277263158 * std::cos (2 * x)
-                                      - 0.083578947 * std::cos (3 * x) + 0.006947368 * std::cos (4 * x); break;
+            // The Stanford Research SR785's flat top, 1 - 1.93 cos + 1.29 cos 2 - 0.388 cos 3
+            // + 0.028 cos 4, divided by 4.636 to peak at 1 (Heinzel, Ruediger and Schilling 2002,
+            // D.2.4 'FTSRS': highest sidelobe -76.6 dB, scalloping loss 0.0156 dB).
+            case flatTop:         v = (1.0 - 1.93 * std::cos (x) + 1.29 * std::cos (2 * x)
+                                       - 0.388 * std::cos (3 * x) + 0.028 * std::cos (4 * x)) / 4.636; break;
             case hamming:         v = 0.54 - 0.46 * std::cos (x); break;
             case triangular:      v = 1.0 - a; break;
             case blackman:        v = 0.42 - 0.5 * std::cos (x) + 0.08 * std::cos (2 * x); break;
@@ -213,6 +216,13 @@ std::vector<double> make (int kind, int n)
             case parzen:          v = a <= 0.5 ? 1.0 - 6.0 * a * a + 6.0 * a * a * a : 2.0 * (1.0 - a) * (1.0 - a) * (1.0 - a); break;
             case lanczos:         v = a < 1.0e-12 ? 1.0 : std::sin (pi * u) / (pi * u); break;
             case exponential:     v = std::exp (-exponentialDecay * a); break;
+            // Heinzel, Ruediger and Schilling 2002, D.3.2 and D.3.3, divided by the sum of the
+            // coefficients to peak at 1. HFT95: the lowest sidelobes four cosine terms allow
+            // (-95.0 dB); HFT90D: -90.2 dB with sidelobes falling as f^-3.
+            case hft95:           v = (1.0 - 1.9383379 * std::cos (x) + 1.3045202 * std::cos (2 * x)
+                                       - 0.4028270 * std::cos (3 * x) + 0.0350665 * std::cos (4 * x)) / 4.6807516; break;
+            case hft90d:          v = (1.0 - 1.942604 * std::cos (x) + 1.340318 * std::cos (2 * x)
+                                       - 0.440811 * std::cos (3 * x) + 0.043097 * std::cos (4 * x)) / 4.76683; break;
             default:              break;   // rectangular
         }
         w[(size_t) i] = v;

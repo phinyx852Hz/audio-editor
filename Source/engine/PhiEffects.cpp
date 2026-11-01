@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "PhiEffects.h"
 #include "MasteringEffect.h"
+#include "../core/LinearPhase.h"
 #include "../core/Phi.h"
 #include "../core/PhiChorus.h"
 #include "../core/PhiDynamics.h"
@@ -13,6 +14,8 @@
 #include <atomic>
 #include <cmath>
 #include <complex>
+#include <mutex>
+#include <optional>
 
 namespace
 {
@@ -57,8 +60,94 @@ namespace
     // 15.9 kHz. Each band can move along the grid, be widened or narrowed in golden steps
     // and be a bell, shelf, notch or band-pass; low and high cuts and a tilt besides.
     // The first thirteen parameters (the gains and Output) are those of the first Φ EQ.
+    // Phase: Minimum (the filters as they are, no delay) or Linear (an FIR with the same
+    // magnitude and no phase shift, for mastering; it delays the sound by its latency).
     class PhiEqProcessor final : public MasteringEffect
     {
+        // Makes the linear-phase kernels off the audio thread, and frees the old ones.
+        // The audio thread only ever try-locks.
+        class Designer final : public juce::Thread
+        {
+        public:
+            Designer() : juce::Thread ("Phi EQ linear phase") {}
+            ~Designer() override { stopThread (2000); }
+
+            static std::unique_ptr<phi::LinearPhaseFir::Kernel> make (const phi::Eq::Settings& s, double rate, int taps)
+            {
+                phi::Eq eq;
+                eq.prepare (rate, 1);
+                eq.set (s);
+                return phi::LinearPhaseFir::prepareKernel (phi::LinearPhaseFir::design (
+                    [&] (double hz) { return std::pow (10.0, eq.responseDb (std::max (hz, 0.1)) / 20.0); }, taps, rate));
+            }
+
+            void setFormat (double rate, int taps)   // not while the audio thread runs
+            {
+                const std::lock_guard<std::mutex> l (mutex);
+                sampleRate = rate;
+                length = taps;
+                request.reset();
+                ready.reset();
+            }
+
+            // From the audio thread: false when the lock was busy (try again next block).
+            bool ask (const phi::Eq::Settings& s)
+            {
+                std::unique_lock<std::mutex> l (mutex, std::try_to_lock);
+                if (! l.owns_lock())
+                    return false;
+                request = s;
+                l.unlock();
+                notify();
+                return true;
+            }
+
+            // From the audio thread: a finished kernel goes to `fir`, the one it replaced comes here.
+            void deliver (phi::LinearPhaseFir& fir)
+            {
+                std::unique_lock<std::mutex> l (mutex, std::try_to_lock);
+                if (! l.owns_lock())
+                    return;
+                if (ready != nullptr && fir.canTake())
+                    fir.give (std::move (ready));
+                if (trash == nullptr)
+                    trash = fir.takeRetired();
+            }
+
+            void run() override
+            {
+                while (! threadShouldExit())
+                {
+                    wait (100);
+                    std::optional<phi::Eq::Settings> todo;
+                    double rate = 0.0;
+                    int taps = 0;
+                    std::unique_ptr<phi::LinearPhaseFir::Kernel> freed;
+                    {
+                        const std::lock_guard<std::mutex> l (mutex);
+                        todo.swap (request);
+                        rate = sampleRate;
+                        taps = length;
+                        freed = std::move (trash);
+                    }
+                    freed.reset();
+                    if (! todo || taps == 0)
+                        continue;
+                    auto kernel = make (*todo, rate, taps);
+                    const std::lock_guard<std::mutex> l (mutex);
+                    if (rate == sampleRate && taps == length)
+                        ready = std::move (kernel);   // a newer one replaces one not yet taken
+                }
+            }
+
+        private:
+            std::mutex mutex;
+            std::optional<phi::Eq::Settings> request;
+            std::unique_ptr<phi::LinearPhaseFir::Kernel> ready, trash;
+            double sampleRate = 48000.0;
+            int length = 0;
+        };
+
     public:
         static constexpr const char* identifier = "phinyx:phi-eq";
         static constexpr int numSteps = phi::Eq::maxStep - phi::Eq::minStep + 1;
@@ -120,6 +209,11 @@ namespace
             addHostedParameter (std::move (ls));
             addHostedParameter (std::move (hc));
             addHostedParameter (std::move (hs));
+            // Last, so the parameters before it keep their places in saved chains.
+            auto ph = std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "phase", 1 }, "Phase",
+                juce::StringArray { "Minimum", "Linear" }, 0);
+            phase = ph.get();
+            addHostedParameter (std::move (ph));
         }
 
         static juce::PluginDescription description()
@@ -128,12 +222,30 @@ namespace
         }
         void fillInPluginDescription (juce::PluginDescription& d) const override { d = description(); }
         const juce::String getName() const override { return named ("Φ EQ"); }
-        double getTailLengthSeconds() const override { return 0.05; }
+        double getTailLengthSeconds() const override
+        {
+            // Linear: the ringing after the impulse's centre too (the delay before it is the latency).
+            return 0.05 + (linear() ? (double) fir.taps() / 2.0 / std::max (1.0, rate) : 0.0);
+        }
 
         void prepareToPlay (double sampleRate, int) override
         {
+            rate = sampleRate;
+            const auto s = current();
             core.prepare (sampleRate, std::max (1, getTotalNumInputChannels()));
-            core.set (current());
+            core.set (s);
+
+            // The linear-phase filter is made here at once, so a render starts with it right.
+            const auto taps = phi::LinearPhaseFir::tapsFor (sampleRate);
+            designer.setFormat (sampleRate, taps);
+            fir.prepare (taps, std::max (1, getTotalNumInputChannels()));
+            fir.give (Designer::make (s, sampleRate, taps));
+            designed = s;
+            wasLinear = linear();
+            setLatencySamples (wasLinear ? fir.latency() : 0);
+            if (! designer.isThreadRunning())
+                designer.startThread (juce::Thread::Priority::low);
+
             outputGain.reset (sampleRate, 0.03);
             outputGain.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (output->get()));
         }
@@ -141,8 +253,30 @@ namespace
         using AudioPluginInstance::processBlock;
         void processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override
         {
-            core.set (current());
-            core.process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples());
+            const auto s = current();
+            const auto isLinear = linear();
+            if (isLinear != wasLinear)
+            {
+                // Each starts from silence when switched to, rather than from where it stopped.
+                if (isLinear)
+                    fir.reset();
+                else
+                    core.reset();
+                wasLinear = isLinear;
+                setLatencySamples (isLinear ? fir.latency() : 0);
+            }
+            if (isLinear)
+            {
+                if (s != designed && designer.ask (s))
+                    designed = s;
+                designer.deliver (fir);
+                fir.process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples());
+            }
+            else
+            {
+                core.set (s);
+                core.process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples());
+            }
             outputGain.setTargetValue (juce::Decibels::decibelsToGain (output->get()));
             outputGain.applyGain (buffer, buffer.getNumSamples());
         }
@@ -209,12 +343,14 @@ namespace
             for (auto* p : { (juce::RangedAudioParameter*) lowCut, (juce::RangedAudioParameter*) highCut,
                              (juce::RangedAudioParameter*) tilt, (juce::RangedAudioParameter*) output })
                 d.knobs.push_back (index (p));
-            d.caption = "on the golden grid, 80 Hz × φ^(n/4)";
+            d.knobs.push_back (index (phase));
+            d.caption = linear() ? "on the golden grid, 80 Hz × φ^(n/4), linear phase" : "on the golden grid, 80 Hz × φ^(n/4)";
             return d;
         }
 
     private:
         static bool isShelf (int type) { return type == (int) phi::Eq::Type::lowShelf || type == (int) phi::Eq::Type::highShelf; }
+        bool linear() const { return phase != nullptr && phase->getIndex() == 1; }
 
         // A frequency on the grid, from the parameter's value: value + `first` is the step.
         // `offSide` -1: 0 is off (a low cut); 1: the top is off (a high cut).
@@ -280,7 +416,13 @@ namespace
         juce::AudioParameterInt* highCut = nullptr;
         juce::AudioParameterChoice* lowSlope = nullptr;
         juce::AudioParameterChoice* highSlope = nullptr;
+        juce::AudioParameterChoice* phase = nullptr;
         phi::Eq core;
+        phi::LinearPhaseFir fir;
+        Designer designer;
+        phi::Eq::Settings designed;   // what the linear-phase kernel was last asked for
+        double rate = 48000.0;
+        bool wasLinear = false;
         juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> outputGain { 1.0f };
     };
 

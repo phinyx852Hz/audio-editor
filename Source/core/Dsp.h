@@ -160,7 +160,8 @@ namespace dsp
         Biquad shelf, highPass;
     };
 
-    // 4x oversampled peak detector for ITU-R BS.1770 true peak.
+    // 4x oversampled peak detector for ITU-R BS.1770 true peak: a 96-tap Hann-windowed sinc,
+    // late by 12 samples.
     class TruePeakDetector
     {
     public:
@@ -169,7 +170,7 @@ namespace dsp
         void reset();
 
     private:
-        static constexpr int tapsPerPhase = 12;
+        static constexpr int tapsPerPhase = 24;   // within 0.06 dB of the true peak on the EBU signals
         std::array<std::array<float, tapsPerPhase>, 4> phases {};
         std::array<float, tapsPerPhase> history {};
         int writeIndex = 0;
@@ -191,7 +192,7 @@ namespace dsp
     private:
         float nextGain (float required);
 
-        static constexpr int detectorDelay = 6;   // TruePeakDetector's interpolation delay, in samples
+        static constexpr int detectorDelay = 12;  // TruePeakDetector's interpolation delay, in samples
         std::vector<TruePeakDetector> detectors;
         std::vector<std::vector<float>> delay;     // the audio, held back by latency()
         std::vector<std::pair<long long, float>> minQueue;   // sliding minimum of the required gain
