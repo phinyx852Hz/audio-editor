@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**136 pull requests:** 132 merged, 4 open.
+**143 pull requests:** 132 merged, 11 open.
 
 ## Contents
 
@@ -56,6 +56,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#119](https://github.com/phinyx852Hz/audio-editor/pull/119) | Closing the main editor's MIDI editor stops playback and offers to save | merged |  | `Source/ui/MidiPanel.cpp`<br>`Source/ui/MixerSection.cpp`<br>`Source/ui/MidiPanel.h` |
 | [#123](https://github.com/phinyx852Hz/audio-editor/pull/123) | Research: add an Editing section | merged | Research > Editing | `share/research/editing-1-editors.md`<br>`share/research/editing-0-basics.md` |
 | [#136](https://github.com/phinyx852Hz/audio-editor/pull/136) | Mixer: open Ableton Live Sets (.als), a Drum Rack on the Slicer | open |  | `Source/mixer/AbletonSet.cpp`<br>`tests/CoreTests.cpp`<br>`Source/ui/DawProjectSection.cpp` |
+| [#139](https://github.com/phinyx852Hz/audio-editor/pull/139) | Score editor: the playhead moves smoothly and the view follows it | open |  | `Source/ui/MidiStaff.cpp`<br>`Source/ui/MidiStaff.h`<br>`Source/ui/MidiEditor.cpp` |
 
 ### Analysis and meters
 
@@ -98,6 +99,8 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#108](https://github.com/phinyx852Hz/audio-editor/pull/108) | Mixer: Arm on Select prefs, system input, close the Inspector, black names, drag tracks to reorder | merged | Options > Mixer Preferences... | `Source/ui/MixerWindow.cpp`<br>`Source/ui/MixerWindow.h`<br>`docs/mixer.md` |
 | [#113](https://github.com/phinyx852Hz/audio-editor/pull/113) | Fix the crash on quit with the mixer open | merged |  | `Source/ui/MainWindow.cpp`<br>`Source/ui/Panels.h`<br>`Source/ui/Panels.cpp` |
 | [#135](https://github.com/phinyx852Hz/audio-editor/pull/135) | Mixer: open and write DAWproject (Bitwig, Studio One, Cubase) | merged |  | `Source/mixer/DawProject.cpp`<br>`Source/ui/DawProjectSection.cpp`<br>`Source/core/Zip.cpp` |
+| [#140](https://github.com/phinyx852Hz/audio-editor/pull/140) | Mixer: narrower return strips, any effect in their slot | open |  | `Source/ui/MixerWindow.cpp`<br>`Source/ui/MixerWindow.h`<br>`Source/ui/MixerSpatial.cpp` |
+| [#142](https://github.com/phinyx852Hz/audio-editor/pull/142) | Mixer: folders as group buses, with Reaper's three fold levels | open |  | `Source/ui/MixerWindow.cpp`<br>`Source/mixer/MixerEngine.cpp`<br>`tests/CoreTests.cpp` |
 
 ### Routing and racks
 
@@ -163,6 +166,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#34](https://github.com/phinyx852Hz/audio-editor/pull/34) | Plugin windows: view follows its frame, standard size, PHI's opacity | merged | Any plugin or instrument window | `Source/engine/PluginWindow.h`<br>`Source/engine/EmbeddedView.h`<br>`Source/engine/X11Windows.cpp` |
 | [#37](https://github.com/phinyx852Hz/audio-editor/pull/37) | Stop Cardinal crashing PHI on quit | merged | Quitting the app | `Source/main.cpp` |
 | [#127](https://github.com/phinyx852Hz/audio-editor/pull/127) | Research: add Synthesis, its types and its history | merged |  | `share/research/synthesis-1-types.md`<br>`share/research/synthesis-2-history.md`<br>`share/research/synthesis-0-overview.md` |
+| [#137](https://github.com/phinyx852Hz/audio-editor/pull/137) | Fit synth windows, close docked instruments and plugin windows normally, stop Find previews | open |  | `Source/engine/PluginWindow.h`<br>`Source/ui/MixerWindow.cpp`<br>`Source/ui/FindPanel.cpp` |
 
 ### Trackers
 
@@ -187,6 +191,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#15](https://github.com/phinyx852Hz/audio-editor/pull/15) | Visualizer: a web page behind PHINYX (optional, Qt WebEngine) | merged | Visualizer menu, Web Page | `Source/ui/WebBackdrop.cpp`<br>`Source/ui/VisualizerSection.cpp` |
 | [#30](https://github.com/phinyx852Hz/audio-editor/pull/30) | Sonify the Visualizer: pictures, videos, cameras and the web page played as notes | merged | Visualizer menu, Sonify | `Source/core/Sonify.cpp`<br>`Source/ui/SonifySection.cpp`<br>`Source/ui/SonifyPanel.cpp` |
 | [#52](https://github.com/phinyx852Hz/audio-editor/pull/52) | Control surfaces: Launchpad, Launchkey and Push 2/3, and MIDI Learn | merged | Performance menu, Control Surfaces | `Source/control/Devices.cpp`<br>`Source/control/ControlSurface.cpp`<br>`Source/ui/ControlSection.cpp`<br>`docs/control-surfaces.md` |
+| [#138](https://github.com/phinyx852Hz/audio-editor/pull/138) | Remove a Find place; Wallpaper in the Visualizer menu, moving with the music | open | Find > Places: | `Source/ui/Wallpaper.cpp`<br>`Source/ui/FindPanel.cpp`<br>`Source/ui/Wallpaper.h` |
 
 ### Interface and branding
 
@@ -205,6 +210,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#117](https://github.com/phinyx852Hz/audio-editor/pull/117) | UI fixes: Alt+menu letters, strip hover, Find panel width, Interface Size | open | Options > Interface Size | `Source/ui/ToolsSection.cpp`<br>`Source/ui/InterfaceSize.h`<br>`Source/ui/PanelNavigation.cpp` |
 | [#122](https://github.com/phinyx852Hz/audio-editor/pull/122) | Research: add Engineering, the audio engineering behind PHI's menus | merged |  | `share/research/engineering-1-analysis-meters.md`<br>`share/research/engineering-4-process.md`<br>`share/research/engineering-6-restoration.md` |
 | [#125](https://github.com/phinyx852Hz/audio-editor/pull/125) | Research menu: a MIDI section | merged |  | `share/research/midi.md` |
+| [#141](https://github.com/phinyx852Hz/audio-editor/pull/141) | Research: an entry for every Compose menu item | open | Research > Composition | `share/research/composition.md`<br>`share/research/references.md`<br>`Source/ui/ResearchSection.cpp` |
 
 ### Documentation
 
@@ -235,6 +241,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#131](https://github.com/phinyx852Hz/audio-editor/pull/131) | Compose: Congolese guitar, rumba and sebene | merged |  | `Source/mixer/Compose.cpp`<br>`tests/CoreTests.cpp`<br>`docs/compose.md` |
 | [#132](https://github.com/phinyx852Hz/audio-editor/pull/132) | Compose: Mbuti interlocking, the Bol Processor (BP3) with an Ajrada qāʿida, and PHI tabla | merged |  | `share/bolprocessor/-so.EkDoTin`<br>`Source/mixer/BolProcessor.cpp`<br>`share/bolprocessor/-so.dhati` |
 | [#134](https://github.com/phinyx852Hz/audio-editor/pull/134) | Research: check the Metadata section against Wikipedia | merged |  | `share/research/metadata.md` |
+| [#143](https://github.com/phinyx852Hz/audio-editor/pull/143) | Ruler: bars and time together, or time only | open |  | `Source/ui/MixerWindow.cpp`<br>`Source/ui/WarpSection.cpp`<br>`Source/ui/TimeRuler.h` |
 
 ## By number
 
@@ -376,3 +383,10 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#134](https://github.com/phinyx852Hz/audio-editor/pull/134) | Research: check the Metadata section against Wikipedia | Links *(auto)* | merged | 2026-11-01 | Not yet sorted |
 | [#135](https://github.com/phinyx852Hz/audio-editor/pull/135) | Mixer: open and write DAWproject (Bitwig, Studio One, Cubase) | PHI can now open and write DAWproject, the open format from Bitwig and PreSonus (MIT). *(auto)* | merged | 2026-11-01 | Mixer and clip launcher |
 | [#136](https://github.com/phinyx852Hz/audio-editor/pull/136) | Mixer: open Ableton Live Sets (.als), a Drum Rack on the Slicer | The second of two PRs (the first, #135, added DAWproject). *(auto)* | open | 2026-11-01 | Editing and warping |
+| [#137](https://github.com/phinyx852Hz/audio-editor/pull/137) | Fit synth windows, close docked instruments and plugin windows normally, stop Find previews | 1. *(auto)* | open | 2026-11-01 | Instruments and plugins |
+| [#138](https://github.com/phinyx852Hz/audio-editor/pull/138) | Remove a Find place; Wallpaper in the Visualizer menu, moving with the music | Find > Places: right-click a place for *Remove from Places*, or select it and press Delete. *(auto)* | open | 2026-11-01 | Performance and visuals |
+| [#139](https://github.com/phinyx852Hz/audio-editor/pull/139) | Score editor: the playhead moves smoothly and the view follows it | Every frame of the staff notation ran fit() over every note in the clip, spelling each one again with Xen Tuner (Speller::best builds and sorts all spellings... *(auto)* | open | 2026-11-01 | Editing and warping |
+| [#140](https://github.com/phinyx852Hz/audio-editor/pull/140) | Mixer: narrower return strips, any effect in their slot | The two send/return FX strips (A and B) in the mixer: *(auto)* | open | 2026-11-01 | Mixer and clip launcher |
+| [#141](https://github.com/phinyx852Hz/audio-editor/pull/141) | Research: an entry for every Compose menu item | The owner asked for every Compose menu option to have a Research entry. *(auto)* | open | 2026-11-01 | Interface and branding |
+| [#142](https://github.com/phinyx852Hz/audio-editor/pull/142) | Mixer: folders as group buses, with Reaper's three fold levels | Group buses that work like Reaper's folder tracks: *(auto)* | open | 2026-11-01 | Mixer and clip launcher |
+| [#143](https://github.com/phinyx852Hz/audio-editor/pull/143) | Ruler: bars and time together, or time only | Mixer timeline ruler (tracks across time): two rows by default, bar numbers above and minutes:seconds below (0:00, 1:30, 1:02:03, with tenths or hundredths w... *(auto)* | open | 2026-11-01 | Not yet sorted |

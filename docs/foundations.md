@@ -205,6 +205,8 @@ Note-a-Bhairavi's cmtranslit (no licence).
   `Project.xsd` and reference, for `Source/mixer/DawProject.cpp`; the zip format (PKWARE APPNOTE)
   for `Source/core/Zip.cpp`, on zlib; Steinberg's `.vstpreset` layout. PHI's own code, none of
   the reference library's (Java). See [dawproject.md](dawproject.md).
+- Ableton Live Sets (`.als`): undocumented gzipped XML, read from sets Live saved, for
+  `Source/mixer/AbletonSet.cpp`; no one else's code. See [ableton-sets.md](ableton-sets.md).
 - SMuFL (the Standard Music Font Layout, W3C Music Notation Community Group) code points; Xen
   Tuner's tuning config format.
 - MTS-ESP (ODDSound's MIDI Tuning Standard, External Shared Platform).
