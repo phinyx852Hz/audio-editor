@@ -11,9 +11,11 @@
 #include <QCheckBox>
 #include <QApplication>
 #include <QHideEvent>
+#include <QDir>
 #include <QDrag>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QInputDialog>
@@ -633,7 +635,7 @@ SlicerWindow::SlicerWindow (slicer::Engine& e, QWidget* parent)
     auto* midi = tool (tr ("&MIDI..."), tr ("Choose the MIDI keyboards and pads (Push) that play the Slicer"));
     auto* kitButton = tool (tr ("&Kit"), tr ("Save the kit (pads, settings, sounds and patterns) as a .phikit file or open one, "
                                              "take the sound from the editor again, or follow its edits"));
-    auto* kitMenu = new QMenu (kitButton);
+    kitMenu = new QMenu (kitButton);
     kitMenu->addAction (tr ("Save Kit..."), this, &SlicerWindow::saveKit);
     kitMenu->addAction (tr ("Load Kit..."), this, &SlicerWindow::loadKit);
     kitMenu->addSeparator();
@@ -1678,6 +1680,32 @@ void SlicerWindow::saveKit()
     else
         status->setText (error.isEmpty() ? tr ("Saved %1").arg (QFileInfo (file).fileName())
                                          : tr ("Saved %1, but a pad's sound was left out: %2").arg (QFileInfo (file).fileName(), error));
+}
+
+void SlicerWindow::setPhiTabla()
+{
+    if (phiTablaActions || kitMenu == nullptr)
+        return;
+    phiTablaActions = true;
+    kitMenu->addSeparator();
+    kitMenu->addAction (tr ("Make This the PHI tabla Default"), this, [this]
+    {
+        const auto file = slicerkit::phiTablaDefaultPath();
+        QDir().mkpath (QFileInfo (file).absolutePath());
+        QString error;
+        const auto song = engine.song();
+        if (! slicerkit::saveKitFile (file, kit, sample, soundRate(), error, song.get()))
+            status->setText (tr ("PHI tabla's default could not be saved: %1").arg (error));
+        else
+            status->setText (tr ("Every new PHI tabla now starts from this kit, tuning and all (and the Bol Processor plays it)"));
+    })->setToolTip (tr ("Your tuning, levels, trims and sounds become what a new PHI tabla starts from"));
+    kitMenu->addAction (tr ("Restore PHI tabla's Built-in Default"), this, [this]
+    {
+        const auto file = slicerkit::phiTablaDefaultPath();
+        QFile::remove (file);
+        QDir (QFileInfo (file).absolutePath() + QStringLiteral ("/") + QFileInfo (file).completeBaseName() + QStringLiteral (" Sounds")).removeRecursively();
+        status->setText (tr ("A new PHI tabla starts from the built-in kit again; this one keeps its edits"));
+    });
 }
 
 void SlicerWindow::loadKit()

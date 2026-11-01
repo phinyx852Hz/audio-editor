@@ -24,6 +24,8 @@
 #include "../Source/mixer/Rhythms.h"
 #include "../Source/mixer/Architectonics.h"
 #include "../Source/mixer/Compose.h"
+#include "../Source/mixer/BolProcessor.h"
+#include "../Source/sampler/PhiTabla.h"
 #include "../Source/mixer/Harmonies.h"
 #include "../Source/mixer/ModalHarmony.h"
 #include "../Source/mixer/RhythmGenerator.h"
@@ -8879,6 +8881,217 @@ namespace
             const auto r = run (co::Method::raga, 3, "yaman (kalyan)");
             check (r.sections.back().name == "tihāī" && r.parts[2].drums, "compose: rāga, the gat ends in a tihāī");
         }
+        // Interlocking polyphony: with every voice in, the voices together fill most pulses of the period
+        // though none alone fills half of them; and a yodelling voice leaps a sixth or more.
+        {
+            const auto r = run (co::Method::interlocking, 5);
+            int64_t from = -1;
+            for (const auto& x : r.sections)
+                if (x.name == "all the voices interlock")
+                    from = x.start;
+            const int64_t pulse = co::ticksPerQuarter / 2, period = 24;
+            std::set<int64_t> together;
+            size_t most = 0;
+            int leaps = 0;
+            for (size_t v = 0; v < r.parts.size(); ++v)
+            {
+                std::set<int64_t> own;
+                const co::Note* last = nullptr;
+                for (const auto& n : r.parts[v].notes)
+                    if (from >= 0 && n.start >= from && n.start < from + period * pulse)
+                    {
+                        own.insert ((n.start - from) / pulse);
+                        together.insert ((n.start - from) / pulse);
+                        if (v == 1 && last != nullptr && std::abs (n.key - last->key) >= 8)
+                            ++leaps;
+                        last = &n;
+                    }
+                most = std::max (most, own.size());
+            }
+            check (from > 0 && together.size() >= 20 && most < 12, "compose: interlocking, the composite fills the period, no voice alone does");
+            check (leaps >= 2, "compose: interlocking, the yodel leaps between chest and head voice");
+        }
+        // Bol Processor grammar: the theme bharī has the bāyāṅ's open stroke, its khālī half none until the
+        // last two cells open again; variations follow, and the tihāī lands on sam, a tīntāl cycle's start.
+        {
+            const auto r = run (co::Method::bolGrammar, 3);
+            const int64_t beat = co::ticksPerQuarter;
+            auto open = [&] (int64_t a, int64_t b)
+            {
+                int k = 0;
+                for (const auto& n : r.parts[0].notes)
+                    k += n.key == 64 && n.start >= a * beat && n.start < b * beat;
+                return k;
+            };
+            int variations = 0;
+            for (const auto& x : r.sections)
+                variations += x.name.rfind ("variation", 0) == 0;
+            const auto sam = r.sections.back().start;
+            const auto lands = std::any_of (r.parts[0].notes.begin(), r.parts[0].notes.end(), [&] (const co::Note& n) { return n.start == sam && n.key == 64; });
+            check (r.parts[0].drums && open (0, 8) > 0 && open (8, 14) == 0 && open (14, 16) > 0, "compose: bol grammar, bharī then khālī, open again for sam");
+            check (variations >= 2 && r.sections.back().name == "sam" && r.sections[r.sections.size() - 2].name == "tihāī"
+                       && sam % (16 * beat) == 0 && lands, "compose: bol grammar, variations and a tihāī landing on sam");
+        }
+    }
+
+    // The Bol Processor (owner, 2026-10-31): BP3's items read back in time, and BP3 itself (phi-bp3) run on a grammar.
+    void testBolProcessor()
+    {
+        namespace bp = bolprocessor;
+        // Speed /2; a polymetric expression takes its first field's time; fields between periods a beat each; '_' lengthens.
+        const auto t = bp::parse ("/2 a b {c d e, f g} . h _ - i");
+        auto at = [&] (const std::string& s) { for (const auto& e : t.events) if (e.symbol == s) return e; return bp::Event {}; };
+        check (t.events.size() == 9 && std::abs (t.beats - 2.0) < 1e-9 && std::abs (at ("c").beat - 0.4) < 1e-9 && std::abs (at ("f").length - 0.3) < 1e-9
+                   && std::abs (at ("h").length - 0.5) < 1e-9 && std::abs (at ("i").beat - 1.75) < 1e-9,
+               "bol processor: an item laid out by speeds, periods and polymetry");
+        check (bp::splitItems ("dha ti\n\n// a comment\nge na\nka\n\n").size() == 2, "bol processor: the items, a blank line between");
+        check (bp::strokes ("dha").size() == 2 && bp::strokes ("ta").size() == 1 && bp::strokes ("Dhin").size() == 2 && bp::strokes ("C4").empty(),
+               "bol processor: dha is two strokes, ta one, a note none");
+
+        // Bols written together split as BP's alphabets let them be, a unit each; a speed written onto them;
+        // a polymetric expression's written duration.
+        {
+            const auto w = bp::parse ("4+4+4+4/4 dhatidhage . nadhatrkt");
+            const auto d = bp::parse ("/6 dhin--dhagena");
+            const auto k = bp::parse ("/4 dhati dha-/4 taki kite/2tete");
+            const auto p = bp::parse ("{3/2,takiteta kite} {1,dha}");
+            check (w.events.size() == 8 && std::abs (w.beats - 2.0) < 1e-9 && w.events[6].symbol == "tr" && std::abs (w.events[6].beat - 1.5) < 1e-9
+                       && d.events.size() == 4 && std::abs (d.beats - 1.0) < 1e-9 && std::abs (d.events[1].beat - 0.5) < 1e-9
+                       && k.events.size() == 9 && std::abs (k.beats - 3.0) < 1e-9
+                       && p.events.size() == 7 && std::abs (p.beats - 2.5) < 1e-9 && std::abs (p.events[6].beat - 1.5) < 1e-9,
+                   "bol processor: bols written together, speeds on them, and a written duration");
+        }
+
+        // A data file: its items read as written (the header, comments and remarks left out), without BP3.
+        {
+            const auto data = bp::run ("", "", bp::companions (PHI_SHARE_SOURCE_DIR "/bolprocessor/-da.kathak"), 0);
+            const auto items = bp::splitItems (data.items);
+            const auto first = items.empty() ? bp::Item {} : bp::parse (items.front());
+            bool bols = ! first.events.empty();
+            for (const auto& e : first.events)
+                bols = bols && ! bp::strokes (e.symbol).empty();
+            // "Check that the last bol falls on the 17th beat."
+            check (bp::isData (PHI_SHARE_SOURCE_DIR "/bolprocessor/-da.kathak") && data.ok && items.size() >= 5 && bols
+                       && std::abs (first.events.back().beat - 16.0) < 1e-9,
+                   "bol processor: a data file's items, Birju Maharaj's kathak landing on the 17th beat");
+        }
+
+        // BP3 itself, on a grammar of our own: two statements of a cell and a polymetric cadence, at four bols a beat.
+        const std::string exe = PHI_BP3_BUILD_PATH;
+        if (! std::filesystem::exists (exe))
+            return;
+        const auto folder = std::filesystem::temp_directory_path() / "phi-bp3-test";
+        std::filesystem::create_directories (folder);
+        std::ofstream (folder / "-gr.phitest") << "-al.phitest\n\nORD\ngram#1 [1] S --> /4 A A B\ngram#1 [2] A --> dha ti dha ge\n"
+                                                  "gram#1 [3] B --> {dhin na ge na, tin - - tin}\n";
+        std::ofstream (folder / "-al.phitest") << "*\ndha --> ta\nti --> ti\nge --> ke\ndhin --> tin\nna --> na\ntin --> tin\n";
+        const auto files = bp::companions ((folder / "-gr.phitest").string());
+        const auto r = bp::run (exe, PHI_BOLPROCESSOR_SOURCE_DIR "/console_strings.json", files, 7, 30);
+        const auto items = bp::splitItems (r.items);
+        const auto item = items.empty() ? bp::Item {} : bp::parse (items.front());
+        const auto score = bp::toScore ({ item }, 90.0);
+        check (r.ok && ! files.alphabet.empty() && items.size() == 1 && item.events.size() == 14 && std::abs (item.beats - 3.0) < 1e-9
+                   && score.parts.size() == 1 && score.parts[0].drums && score.parts[0].notes.size() == 19,
+               "bol processor: BP3 produces the grammar's item, read back as bols on the tablā");
+        std::filesystem::remove_all (folder);
+
+        // The example PHI has: Kippen and Bel's grammar of an Ajrada qāʿida. Its items are 32 beats, theme and
+        // variations bharī then khālī, every symbol a bol.
+        {
+            const auto q = bp::run (exe, PHI_BOLPROCESSOR_SOURCE_DIR "/console_strings.json", bp::companions (PHI_SHARE_SOURCE_DIR "/bolprocessor/-gr.dhin--"), 3, 30);
+            std::vector<bp::Item> all;
+            for (const auto& i : bp::splitItems (q.items))
+                all.push_back (bp::parse (i));
+            bool bols = ! all.empty();
+            for (const auto& i : all)
+            {
+                bols = bols && std::abs (i.beats - 32.0) < 1e-9;
+                for (const auto& e : i.events)
+                    bols = bols && ! bp::strokes (e.symbol).empty();
+            }
+            check (q.ok && bols, "bol processor: the Ajrada qāʿida's grammar produces items of 32 beats, all bols");
+        }
+        // Kippen and Bel's other qāʿidas: items of 16 beats, every bol played, glued ones split.
+        for (const char* name : { "-gr.dhati2", "-gr.dhadhatite" })
+        {
+            const auto q = bp::run (exe, PHI_BOLPROCESSOR_SOURCE_DIR "/console_strings.json", bp::companions (std::string (PHI_SHARE_SOURCE_DIR "/bolprocessor/") + name), 5, 30);
+            bool bols = q.ok;
+            for (const auto& i : bp::splitItems (q.items))
+            {
+                const auto item = bp::parse (i);
+                bols = bols && std::abs (item.beats - 16.0) < 1e-9 && ! item.events.empty();
+                for (const auto& e : item.events)
+                    bols = bols && ! bp::strokes (e.symbol).empty();
+            }
+            check (bols, std::string ("bol processor: ") + name + " produces 16-beat items, all bols");
+        }
+    }
+
+    // PHI tabla (owner, 2026-10-31): the owner's strokes as a Slicer kit of 32 pads for Push, the takes in turn,
+    // and softer hits darker.
+    void testPhiTabla()
+    {
+        namespace pt = phitabla;
+        bool files = true, unique = true;
+        std::set<int> seen;
+        for (const auto& p : pt::pads())
+        {
+            unique = unique && p.pad >= 0 && p.pad < 48 && seen.insert (p.pad).second;
+            // Every sound there (and any stand-ins).
+            for (const auto& list : { p.sounds, p.fallback })
+                for (const auto& x : list)
+                    files = files && std::filesystem::exists (std::string (PHI_SHARE_SOURCE_DIR "/phi-tabla/") + x.file + ".wav");
+        }
+        // The owner's rack: 32 pads on banks A and B, its note 61 the first pad, 92 the last (dhā).
+        bool rack = true;
+        for (int pad = 0; pad < 32; ++pad)
+            rack = rack && seen.count (pad) == 1;
+        check (unique && files && rack && std::string (pt::pads()[31].name) == "dhā", "phi tabla: the owner's 32-pad rack on banks A and B, each sound in share/phi-tabla");
+        check (pt::padFor ("ta", 0) == 82 - 61 && pt::padFor ("ta", 1) == 91 - 61 && pt::padFor ("ta", 2) == 82 - 61 && pt::padFor ("ne", 0) == pt::padFor ("ta", 0)
+                   && pt::padFor ("dhee", 0) == pt::padFor ("dhi", 0) && pt::padFor ("C4", 0) < 0 && pt::noteFor ("ta", 0) == slicer::noteForPad (21, slicer::Layout::push, 0),
+               "phi tabla: a bol's takes in turn, its spellings as one, on Push's notes");
+
+        auto sound = std::make_shared<sampler::Sample>();
+        uint32_t x = 1;
+        for (int i = 0; i < 4800; ++i)   // white noise: its brightness shows
+        {
+            x = x * 1664525u + 1013904223u;
+            const auto v = (float) ((x >> 8) / 8388608.0 - 1.0) * 0.5f;
+            sound->left.push_back (v);
+            sound->right.push_back (v);
+        }
+        const auto kit = pt::kit ("folder", [&] (const std::string&) { return sound; });
+        const auto dha = pt::padFor ("dhin", 0), ta = pt::padFor ("ta", 0);
+        check (kit.pads[(size_t) dha].layerCount() == 2 && kit.pads[(size_t) ta].layerCount() == 1 && kit.pads[(size_t) ta].name == "tā2"
+                   && kit.pads[69 - 61].layers[0].start == 362 && kit.layout == slicer::Layout::push,
+               "phi tabla: dhin is tin and ge together; the rack's names and start points");
+
+        // A soft hit: quieter, and with less of its highs (the sample to sample difference) for its level.
+        auto brightness = [&] (double tone)
+        {
+            slicer::Engine e;
+            e.prepare (48000.0);
+            auto k = kit;
+            k.velocityTone = tone;
+            e.setKit (k);
+            e.hit (pt::padFor ("ta", 0), 0.3f);
+            std::vector<float> l (2048, 0.0f), r (2048, 0.0f);
+            e.render (l.data(), r.data(), 2048);
+            double level = 0.0, high = 0.0;
+            for (size_t i = 1; i < l.size(); ++i)
+            {
+                level += l[i] * l[i];
+                high += (l[i] - l[i - 1]) * (l[i] - l[i - 1]);
+            }
+            return high / std::max (1e-12, level);
+        };
+        check (brightness (0.5) < 0.5 * brightness (0.0), "phi tabla: a soft hit is darker");
+
+        // The Bol Processor on PHI tabla: dha twice is its two takes.
+        const auto score = bolprocessor::toScore ({ bolprocessor::parse ("dha dha ne") }, 90.0, true);
+        check (score.parts[0].notes.size() == 3 && score.parts[0].notes[0].key == pt::noteFor ("dha", 0) && score.parts[0].notes[1].key == pt::noteFor ("dha", 1)
+                   && score.parts[0].notes[0].key != score.parts[0].notes[1].key,
+               "phi tabla: the Bol Processor's bols on its pads, the takes in turn");
     }
 
     void testRhythmGenerator()
@@ -9758,6 +9971,8 @@ int main()
     testRhythmGenerator();
     testArchitectonics();
     testCompose();
+    testBolProcessor();
+    testPhiTabla();
     testStochastic();
     testCubify();
     testSerial();

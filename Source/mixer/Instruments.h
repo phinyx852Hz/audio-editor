@@ -176,12 +176,13 @@ namespace mixer
     {
     public:
         Kind kind() const override { return Kind::slicer; }
-        std::string name() const override { return "Slicer"; }
+        std::string name() const override { return phiTabla ? "PHI tabla" : "Slicer"; }
         void prepare (double sampleRate, int) override { sound.prepare (sampleRate); }
         void releaseAll() override;
         void reset() override { sound.panic(); }
         slicer::Engine& engine() { return sound; }
         std::string samplePath;
+        bool phiTabla = false;    // its kit is PHI tabla (sampler/PhiTabla.h), the owner's own strokes
 
     protected:
         void handle (const NoteEvent&) override;

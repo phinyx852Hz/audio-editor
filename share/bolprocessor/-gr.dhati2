@@ -1,0 +1,54 @@
+// Bol Processor BP3
+// Data saved as "-gr.dhati2". Date: 2026-05-05 09:06:55
+// Bol Processor BP3
+// Data saved as "-gr.dhati2". Date: 2026-04-26 15:01:11
+// Bol Processor version BP2.6.1
+// Grammar file saved as '-gr.dhati2'. Date: Mer 26 Juin 1996 -- 11:36
+
+-al.dhati
+-se.dhati2
+-da.dhati2
+-wg.dhati2
+-kb.tabla.qwerty
+
+// Grammar of "dhatidhagena" qa'ida commented in Kippen & Bel (1992)
+// "Modelling Music with Grammars...", in Marsden & Pople (eds)
+// "Computer Representations and Models in Music", Academic Press.
+
+RND
+gram#1[1] S <-> 4+4+4+4/4 (=A16)(=V8)(=A'8)*(:A16)(:V8)(=A8)
+gram#1[2] S <-> 4+4+4+4/4 (=V16)(=A'16)*(:V16)(=A16)
+gram#1[3] S <-> 4+4+4+4/4 (=V24)(=A'8)*(:V24)(=A8)
+--------------------------------------------------
+RND
+gram#2[1] V8 <-> M V V V V V V V V
+gram#2[2] V16 <-> M V V V V V V V V V V V V V V V V
+gram#2[3] V24 <-> M V V V V V V V V V V V V V V V V V V V V V V V V
+--------------------------------------------------
+RND
+gram#3[1] LEFT V <-> V1
+gram#3[2] LEFT V V <-> trkt
+gram#3[3] LEFT V V V <-> V3
+--------------------------------------------------
+RND
+gram#4[1] #(M) ? ? M ) <-> ? ? ) [‘#(M)’ is a remote negative context. ‘? ?’ is needed to make sure that ‘)’ is a not a slave parenthesis. This rule must be first in subgrammar.]
+gram#4[2] M V3 <-> dhagena M
+gram#4[3] M trkt <-> trkt M
+gram#4[4] #dha M V1 <-> #dha dha M
+gram#4[5] #- M V1 <-> #- - M
+gram#4[6] dha M V1 #tr <-> dha ti M #tr
+gram#4[7] na M V1 #tr <-> na ti M #tr
+gram#4[8] - M V1 #tr <-> - ti M #tr
+gram#4[9] (= M V1 #tr <-> (= ti M #tr
+--------------------------------------------------
+ORD
+gram#5[1] A8 <-> dhatidhagedheenagena
+gram#5[2] A'8 <-> dhatidhageteenakena
+gram#5[3] A16 <-> dhatidhagenadhatrktdhatidhagedheenagena
+gram#5[4] A'16 <-> dhatidhagenadhatrktdhatidhageteenakena
+----------
+TEMPLATES:
+[1] (@0 ________________)(@0 ________)(@0 ________) * (@3 )(@2 )(@0 ________)
+[2] (@0 ________________)(@0 ________________) * (@2 )(@0 ________________)
+[3] (@0 ________________________)(@0 ________) * (@2 )(@0 ________)
+---------

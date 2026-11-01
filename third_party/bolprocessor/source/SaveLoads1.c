@@ -1,0 +1,1667 @@
+/* SaveLoads1.c (BP3) */ 
+
+/*  This file is a part of Bol Processor
+    Copyright (c) 1990-2000 by Bernard Bel, Jim Kippen and Srikumar K. Subramanian
+    All rights reserved. 
+    
+    Redistribution and use in source and binary forms, with or without
+    modification, are permitted provided that the following conditions are met: 
+    
+       Redistributions of source code must retain the above copyright notice, 
+       this list of conditions and the following disclaimer. 
+    
+       Redistributions in binary form must reproduce the above copyright notice,
+       this list of conditions and the following disclaimer in the documentation
+       and/or other materials provided with the distribution. 
+    
+       Neither the names of the Bol Processor authors nor the names of project
+       contributors may be used to endorse or promote products derived from this
+       software without specific prior written permission. 
+    
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+    AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+    IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+    ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+    LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+    CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+    SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+    INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+    CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+    ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+    POSSIBILITY OF SUCH DAMAGE.
+*/
+
+
+#ifndef _H_BP3
+#include "-BP3.h"
+#endif
+
+#include "-BP3decl.h"
+
+int trace_load_settings = 0;
+int trace_load_prototypes = 0;
+int trace_load_csound_instruments = 0;
+int trace_load_scales = 0;
+
+
+int LoadTonality(void) {
+	int result,length;
+	char name[MAXLIN], note_names[MAXLIN], key_numbers[MAXLIN], fractions[MAXLIN], baseoctave_string[10];
+	char **p_line, **p_completeline;
+	long pos = 0L;
+	int found = 0;
+	FILE *csfile;
+	p_line = p_completeline = NULL;
+	int i_scale = 0;
+	strcpy(name,""); strcpy(note_names,""); strcpy(key_numbers,""); strcpy(baseoctave_string,"");
+	csfile = my_fopen(1, FileName[wTonality], "r");
+	if(csfile == NULL) {
+		BPPrintMessage(0,odError, "=> Could not open tonality file: %s\n", FileName[wTonality]);
+		goto ERREUR;
+		}
+	else BPPrintMessage(0,odInfo, "Loading tonality: %s\n", FileName[wTonality]);
+	while(TRUE) {
+		if(ReadOne(FALSE,FALSE,TRUE,csfile,TRUE,&p_line,&p_completeline,&pos) != OK) goto QUITTER;
+		if(Mystrcmp(p_line,"_begin tables") == 0) {
+			found = 1;
+			break;
+			}
+		}
+	if(!found) goto ERREUR;
+	while(TRUE) {
+		if(ReadOne(FALSE,FALSE,TRUE,csfile,TRUE,&p_line,&p_completeline,&pos) != OK) goto QUITTER;
+		Strip(*p_line);
+		if(strlen(*p_line) == 0) goto QUITTER; // Required because 'pos' is not incremented when reading an empty line
+		if(Mystrcmp(p_line,"_end tables") == 0) break;
+		if(trace_load_scales) BPPrintMessage(0,odInfo, "table line = [%s]\n",*p_line);
+		if((*p_line)[0] == '"') { // This line contains the name of the next scale
+			MystrcpyHandleToString((strlen(*p_line) - 2),1,name,p_line);
+	//		BPPrintMessage(0,odInfo, "Name = [%s]\n",name);
+			continue;
+			}
+		if((*p_line)[0] == '<') continue; // Ignore comments
+		if((*p_line)[0] == '[') { // fractions
+			MystrcpyHandleToString(strlen(*p_line),0,fractions,p_line);
+			continue;
+			}
+		if((*p_line)[0] == 'c') continue; // Ignore comma
+		if((*p_line)[0] == 's') continue; // Ignore series
+		if((*p_line)[0] == '|') { // baseoctave
+			MystrcpyHandleToString(strlen(*p_line)-2,1,baseoctave_string,p_line);
+	//		BPPrintMessage(0,odInfo, "baseoctave_string = [%s]\n",baseoctave_string);
+			continue;
+			}
+		if((*p_line)[0] == '/') { // This line contains note names for this scale
+			MystrcpyHandleToString(strlen(*p_line),0,note_names,p_line);
+			continue;
+			}
+		if((*p_line)[0] == 'k') { // This line contains key numbers for this scale
+			MystrcpyHandleToString(strlen(*p_line),0,key_numbers,p_line);
+			continue;
+			}
+		length = MyHandleLen(p_completeline);
+		if(length > 0) {
+			result = CreateMicrotonalScale(*p_line,name,note_names,key_numbers,fractions,baseoctave_string);
+			strcpy(name,""); strcpy(note_names,""); strcpy(key_numbers,""); strcpy(baseoctave_string,"");
+			if(result == OK) i_scale++;
+			}
+		}
+	if(i_scale > 0) {
+		BPPrintMessage(0,odInfo,"%d tonal scale(s) found\n\n",i_scale);
+		}
+
+QUITTER:
+	MyDisposeHandle((Handle *)&p_line);
+	MyDisposeHandle((Handle *)&p_completeline);
+	my_fclose(csfile);
+ERREUR:
+	return OK;
+	}
+
+
+int LoadCsoundInstruments(int checkversion,int tryname) {
+	int i,iv,ip,j,max_ins,max_chan,chan,ins,ins2,result,length,i_table,ipmax,paramindex,paramnameindex;
+	char **ptr;
+	char line[MAXLIN];
+	CsoundParam **ptr3;
+	long pos,x;
+	char **p_line,**p_completeline;
+	double r;
+	FILE* csfile;
+
+	if(trace_load_csound_instruments) BPPrintMessage(0,odInfo, "LoadCsoundInstruments(%d,%d)\n",checkversion,tryname);
+	if(LoadedCsoundInstruments) {
+		if(trace_load_csound_instruments) BPPrintMessage(0,odInfo,"Csound instruments file has already been loaded\n");
+		return(OK);
+		}
+	iCsoundInstrument = 0;
+	LoadOn++;
+	pos = ZERO;
+	CompiledRegressions = CompiledCsObjects = 0;
+	p_line = p_completeline = ptr = NULL;
+
+	if(trace_load_csound_instruments) BPPrintMessage(0,odInfo,"Opening Csound instruments file: %s\n",FileName[wCsoundResources]);
+
+	// Check whether file is being saved
+	my_sprintf(line,"%s_lock",FileName[wCsoundResources]);
+	csfile = my_fopen(0,line,"r");
+	if(csfile != NULL) {
+		BPPrintMessage(0,odError,"\n=> As the Csound instruments file was locked I waited for 3 seconds...\n");
+		delay(3);
+		}
+
+	csfile = my_fopen(1,FileName[wCsoundResources],"r");
+	if(csfile == NULL) {
+		BPPrintMessage(0,odError,"=> Could not open Csound instruments file: %s\n",FileName[wCsoundResources]);
+		goto ERR;
+		}
+
+	if(ReadOne(FALSE,FALSE,FALSE,csfile,TRUE,&p_line,&p_completeline,&pos) == MISSED) goto ERR;
+	BPPrintMessage(0,odInfo,"Loading: %s\n",FileName[wCsoundResources]);
+	if(trace_load_csound_instruments) BPPrintMessage(0,odInfo, "Line = %s\n",*p_line);
+	if(CheckVersion(&iv,p_line,FileName[wCsoundResources]) != OK) goto ERR;
+	if(ReadOne(FALSE,TRUE,FALSE,csfile,TRUE,&p_line,&p_completeline,&pos) == MISSED) goto ERR;
+	// GetDateSaved(p_completeline,&(p_FileInfo[wCsoundResources]));
+	if(ReadInteger(csfile,&max_chan,&pos) == MISSED) goto ERR;
+	if(max_chan != MAXCHAN) {
+		BPPrintMessage(0,odError,"=> This file is empty or in an unknown format\n");
+		goto QUIT;
+		}
+	for(chan = 1; chan <= max_chan; chan++) {
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		WhichCsoundInstrument[chan] = i;
+		}
+	if(iv > 11) {
+		if(ReadOne(FALSE,TRUE,FALSE,csfile,TRUE,&p_line,&p_completeline,&pos) == MISSED) goto ERR;
+		MystrcpyHandleToString(MAXNAME,0,CsoundOrchestraName,p_completeline);
+		}
+	else CsoundOrchestraName[0] = '\0';
+	if(trace_load_csound_instruments) BPPrintMessage(0,odInfo,"CsoundOrchestraName = %s\n",CsoundOrchestraName);
+	if(ReadInteger(csfile,&max_ins,&pos) == MISSED) goto ERR;
+	if(trace_load_csound_instruments) 
+		BPPrintMessage(0,odInfo,"max_ins = %d\n",max_ins);
+	if(max_ins < 0) {
+		BPPrintMessage(0,odError,"=> This file is empty or in an unknown format\n");
+		goto QUIT;
+		}
+	if(max_ins >= MAXINSTRUMENTS) {
+		BPPrintMessage(0,odError,"=> Too many Csound instruments (%d)\n",max_ins);
+		max_ins = 0; result = ABORT;
+		goto QUIT;
+		}
+	if(max_ins > 0 && (result=ResizeCsoundInstrumentsSpace(max_ins)) != OK) goto ERR;
+	result = MISSED;
+
+	if(trace_load_csound_instruments) BPPrintMessage(0,odInfo,"Jinstr = %d\n",Jinstr);
+
+	MaxParameters = 0;
+	for(ins = 0; ins < max_ins; ins++) {
+		ResetCsoundInstrument(ins,YES,YES);
+		if(trace_load_csound_instruments) BPPrintMessage(0,odInfo,"ins = %d\n",ins);
+		if(ReadOne(FALSE,TRUE,FALSE,csfile,TRUE,&p_line,&p_completeline,&pos) == MISSED) goto ERR;
+		if((*p_completeline)[0] != '\0') {
+			MystrcpyHandleToString(MAXLIN,0,LineBuff,p_completeline);
+			ptr = NULL;
+			if(MySetHandleSize((Handle*)&ptr,(Size)(1L + MyHandleLen(p_completeline)) * sizeof(char)) != OK) goto ERR;
+			MystrcpyHandleToHandle(0,&ptr,p_completeline);
+			(*pp_CsInstrumentName)[ins] = ptr;
+			}
+		else strcpy((*((*pp_CsInstrumentName)[ins])),"");
+		
+		if(trace_load_csound_instruments)
+			BPPrintMessage(0,odInfo,"Loading Csound instrument %d = \"%s\" out of %d\n",(ins+1),(*((*pp_CsInstrumentName)[ins])),max_ins);
+		if(ReadOne(FALSE,TRUE,FALSE,csfile,TRUE,&p_line,&p_completeline,&pos) == MISSED) goto ERR;
+
+		if((*p_completeline)[0] != '\0') {
+			MystrcpyHandleToString(MAXLIN,0,LineBuff,p_completeline);
+			ptr = NULL;
+			if(MySetHandleSize((Handle*)&ptr,(Size)(1L + MyHandleLen(p_completeline)) * sizeof(char)) != OK) goto ERR;
+			MystrcpyHandleToHandle(0,&ptr,p_completeline);
+			(*pp_CsInstrumentComment)[ins] = ptr;
+			}
+		else strcpy((*((*pp_CsInstrumentComment)[ins])),"");
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsInstrument)[ins].iargmax = i;
+		if(trace_load_csound_instruments) BPPrintMessage(0,odInfo,"iargmax = %d\n",i);
+		
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsInstrumentIndex)[ins] = i;
+		if(trace_load_csound_instruments) BPPrintMessage(0,odInfo,"CsInstrumentIndex = %d\n",i);
+		
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsDilationRatioIndex)[ins] = i;
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsAttackVelocityIndex)[ins] = i;
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsReleaseVelocityIndex)[ins] = i;
+		
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsPitchIndex)[ins] = i;
+		
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsPitchFormat)[ins] = i;
+		
+		if(ReadFloat(csfile,&r,&pos) == MISSED) goto ERR;
+		if(r == -1.) r = (float) DeftPitchbendRange;
+		(*p_CsInstrument)[ins].pitchbendrange = r;
+		if(trace_load_csound_instruments) BPPrintMessage(0,odInfo,"pitchbendrange = %.3f for instrument index = %d\n",r,ins);
+		
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsInstrument)[ins].rPitchBend.islogx = i;
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsInstrument)[ins].rPitchBend.islogy = i;
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsInstrument)[ins].rVolume.islogx = i;
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsInstrument)[ins].rVolume.islogy = i;
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsInstrument)[ins].rPressure.islogx = i;
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsInstrument)[ins].rPressure.islogy = i;
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsInstrument)[ins].rModulation.islogx = i;
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsInstrument)[ins].rModulation.islogy = i;
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsInstrument)[ins].rPanoramic.islogx = i;
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsInstrument)[ins].rPanoramic.islogy = i;
+		
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsPitchBendStartIndex)[ins] = i;
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsVolumeStartIndex)[ins] = i;
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsPressureStartIndex)[ins] = i;
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsModulationStartIndex)[ins] = i;
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsPanoramicStartIndex)[ins] = i;
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsPitchBendEndIndex)[ins] = i;
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsVolumeEndIndex)[ins] = i;
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsPressureEndIndex)[ins] = i;
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsModulationEndIndex)[ins] = i;
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsPanoramicEndIndex)[ins] = i;
+		if(trace_load_csound_instruments) BPPrintMessage(0,odInfo,"PanoramicEndIndex = %d\n",i);
+
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsInstrument)[ins].pitchbendtable = i;
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsInstrument)[ins].volumetable = i;
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsInstrument)[ins].pressuretable = i;
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsInstrument)[ins].modulationtable = i;
+		if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+		(*p_CsInstrument)[ins].panoramictable = i;
+		if(trace_load_csound_instruments) BPPrintMessage(0,odInfo,"panoramictable = %d\n",i);
+		
+		if(iv > 13) {
+			if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+			(*p_CsInstrument)[ins].pitchbendGEN = i;
+			if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+			(*p_CsInstrument)[ins].volumeGEN = i;
+			if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+			(*p_CsInstrument)[ins].pressureGEN = i;
+			if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+			(*p_CsInstrument)[ins].modulationGEN = i;
+			if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+			(*p_CsInstrument)[ins].panoramicGEN = i;
+			if(trace_load_csound_instruments) BPPrintMessage(0,odInfo,"panoramicGEN = %d\n",i);
+			}
+		else {
+			(*p_CsInstrument)[ins].pitchbendGEN = (*p_CsInstrument)[ins].volumeGEN
+				= (*p_CsInstrument)[ins].pressureGEN = (*p_CsInstrument)[ins].modulationGEN
+				= (*p_CsInstrument)[ins].panoramicGEN = 7;
+			}
+
+		for(i = 0; i < 6; i++) {
+			if(ReadFloat(csfile,&r,&pos) == MISSED) goto ERR;
+			(*(p_CsPitchBend[i]))[ins] = r;
+			if(ReadFloat(csfile,&r,&pos) == MISSED) goto ERR;
+			(*(p_CsVolume[i]))[ins] = r;
+			if(ReadFloat(csfile,&r,&pos) == MISSED) goto ERR;
+			(*(p_CsPressure[i]))[ins] = r;
+			if(ReadFloat(csfile,&r,&pos) == MISSED) goto ERR;
+			(*(p_CsModulation[i]))[ins] = r;
+			if(ReadFloat(csfile,&r,&pos) == MISSED) goto ERR;
+			(*(p_CsPanoramic[i]))[ins] = r;
+			}
+		
+		if(trace_load_csound_instruments) BPPrintMessage(0,odInfo,"ipmax = %d ins = %d\n",(*p_CsInstrument)[ins].ipmax,ins);
+		
+		for(ip = 0; ip < (*p_CsInstrument)[ins].ipmax; ip++) {
+			if((*p_CsInstrument)[ins].paramlist == NULL) {
+				BPPrintMessage(0,odError,"=> Err. LoadCsoundInstruments(). (*p_CsInstrument)[ins].paramlist == NULL");
+				break;
+				}
+			ptr = (*((*p_CsInstrument)[ins].paramlist))[ip].name;
+			MyDisposeHandle((Handle*)&ptr);
+			(*((*p_CsInstrument)[ins].paramlist))[ip].name = NULL;
+			ptr = (*((*p_CsInstrument)[ins].paramlist))[ip].comment;
+			MyDisposeHandle((Handle*)&ptr);
+			(*((*p_CsInstrument)[ins].paramlist))[ip].comment = NULL;
+			}
+		ptr3 = (*p_CsInstrument)[ins].paramlist;
+		MyDisposeHandle((Handle*)&ptr3);
+		(*p_CsInstrument)[ins].paramlist = NULL;
+		(*p_CsInstrument)[ins].ipmax = 0;
+		
+		if(ReadInteger(csfile,&ipmax,&pos) == MISSED) goto ERR;
+		if(trace_load_csound_instruments) BPPrintMessage(0,odInfo,"Read ipmax again = %d\n",ipmax);
+		if(ipmax < 1) continue;
+		if((ptr3=(CsoundParam**) GiveSpace((Size)(ipmax * sizeof(CsoundParam)))) == NULL)
+			goto ERR;
+		(*p_CsInstrument)[ins].paramlist = ptr3;
+		(*p_CsInstrument)[ins].ipmax = ipmax;
+		// BPPrintMessage(0,odInfo,"@@> ins = %d, ipmax = %d\n",ins,ipmax);
+		for(ip = 0; ip < ipmax; ip++) {
+			(*((*p_CsInstrument)[ins].paramlist))[ip].name = NULL;
+			(*((*p_CsInstrument)[ins].paramlist))[ip].comment = NULL;
+			ResetMoreParameter(ins,ip);
+			}	
+		for(ip = 0; ip < (*p_CsInstrument)[ins].ipmax; ip++) {
+			if(ReadOne(FALSE,TRUE,FALSE,csfile,TRUE,&p_line,&p_completeline,&pos) == MISSED) goto ERR;
+			length = MyHandleLen(p_completeline);
+			// if(strcmp(*p_completeline,"blurb2") == 0) strcpy(*p_completeline,"blurb"); test of duplicate names
+			if(trace_load_csound_instruments) 
+				BPPrintMessage(0,odInfo,"-> Name: \"%s\", instrument index = %d\n",*p_completeline,ins);
+			if(length > 0) {
+				if((ptr=(char**) GiveSpace((Size)((1L + length) * sizeof(char)))) == NULL) goto ERR;
+				MystrcpyHandleToHandle(0,&ptr,p_completeline);
+				(*((*p_CsInstrument)[ins].paramlist))[ip].name = ptr;
+				paramnameindex = FixStringConstant(*p_completeline);
+				if(paramnameindex >= 0) {
+					for(j = 0; j < MAXPARAMS; j++) {
+						ins2 = ParamNameIndexToInstrument[j];
+					//	BPPrintMessage(0,odInfo,"@@@ paramnameindex = %d, j = %d, ins = %d, ins2 = %d\n",paramnameindex,j,ins,ins2);
+						if(ins2 < 0) continue;
+						if((paramnameindex == j) && (ins2 != ins)) {
+							BPPrintMessage(0,odError,"=> Additional parameter « %s » was used by Csound instrument « %s ». We'll now attribute it to « %s ».\n",*p_completeline,(*((*pp_CsInstrumentName)[ins2])),(*((*pp_CsInstrumentName)[ins])));
+							break;
+							}
+						}
+					(*((*p_CsInstrument)[ins].paramlist))[ip].nameindex = paramnameindex;
+					ParamNameIndexToInstrument[paramnameindex] = (*p_CsInstrumentIndex)[ins];
+					MaxParameters++;
+					paramindex = MaxParameters + IPANORAMIC;
+					ParamNameIndexToParameter[paramnameindex] = paramindex;
+					ParamIndexToIp[MaxParameters + IPANORAMIC] = ip;
+					if(trace_load_csound_instruments) BPPrintMessage(0,odInfo,"@@@ ip = %d, paramnameindex = %d, paramindex = %d, MaxParameters = %d\n",ip,paramnameindex,paramindex,MaxParameters);
+					}
+				else BPPrintMessage(0,odError,"=> Error loading Csound instruments: the name of an additional parameter « %s » could not be attributed to Csound instrument « %s »\n",*p_completeline,(*((*pp_CsInstrumentName)[ins])));
+				if(trace_load_csound_instruments) 
+					BPPrintMessage(0,odInfo,"@@@ paramnameindex = %d for ip = %d\n",paramnameindex,ip);
+				}
+			else {
+				BPPrintMessage(0,odError,"=> Error loading Csound instruments: the name of an additional parameter is missing\n");
+				goto ERR;
+				}
+			if(ReadOne(FALSE,TRUE,FALSE,csfile,TRUE,&p_line,&p_completeline,&pos) == MISSED) goto ERR;
+			length = MyHandleLen(p_completeline);
+			if((ptr=(char**) GiveSpace((Size)((1L + length) * sizeof(char)))) == NULL) goto ERR;
+			if(length > 0) {
+				Strip(*p_completeline);
+				(*((*p_CsInstrument)[ins].paramlist))[ip].comment = p_completeline;
+				}
+			else {
+				MystrcpyStringToHandle(&ptr," ");
+				(*((*p_CsInstrument)[ins].paramlist))[ip].comment = ptr;
+				}
+			if(trace_load_csound_instruments) 
+				BPPrintMessage(0,odInfo, "This line: %s\n",*p_completeline);
+
+			if(ReadInteger(csfile,&i,&pos) == MISSED) {
+				BPPrintMessage(0,odError, "Missed the first integer of an additional parameter during LoadCsoundInstruments()\n");
+				goto ERR;
+				}
+			(*((*p_CsInstrument)[ins].paramlist))[ip].startindex = i;
+			if(trace_load_csound_instruments) 
+				BPPrintMessage(0,odInfo,"@@@ startindex = %d\n",i);
+			if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+			(*((*p_CsInstrument)[ins].paramlist))[ip].endindex = i;
+			if(trace_load_csound_instruments) 
+				BPPrintMessage(0,odInfo,"@@@ endindex = %d\n",i);
+			if(iv > 12) {
+				if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+				(*((*p_CsInstrument)[ins].paramlist))[ip].table = i;
+				if(trace_load_csound_instruments) 
+					BPPrintMessage(0,odInfo,"@@@ ip = %d, table = %d\n",ip,i);
+				if(ReadFloat(csfile,&r,&pos) == MISSED) goto ERR;
+				(*((*p_CsInstrument)[ins].paramlist))[ip].defaultvalue = r;
+				if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+				(*((*p_CsInstrument)[ins].paramlist))[ip].GENtype = i;
+				if(ReadInteger(csfile,&i,&pos) == MISSED) goto ERR;
+				(*((*p_CsInstrument)[ins].paramlist))[ip].combinationtype = i;
+				if(i == MULT && fabs(r) < 0.01) {
+					(*((*p_CsInstrument)[ins].paramlist))[ip].defaultvalue = 1.;
+					BPPrintMessage(0,odError,"=> In instrument %ld a default parameter value '%.3f' was replaced with '1' because its combination mode is multiplicative",(long)(*p_CsInstrumentIndex)[ins],r);
+					}
+				}
+			else {
+				(*((*p_CsInstrument)[ins].paramlist))[ip].table = -1;
+				(*((*p_CsInstrument)[ins].paramlist))[ip].defaultvalue = 0.;
+				(*((*p_CsInstrument)[ins].paramlist))[ip].GENtype = 7;
+				(*((*p_CsInstrument)[ins].paramlist))[ip].combinationtype = ADD;
+				}
+			}
+		}
+	if(ins > 0) BPPrintMessage(0,odInfo,"%d Csound instrument(s) found\n",ins);
+	else BPPrintMessage(0,odInfo,"No Csound instrument was found. The default one will be used.\n");
+	if(ReadOne(FALSE,FALSE,TRUE,csfile,TRUE,&p_line,&p_completeline,&pos) == MISSED) goto QUIT;
+	result = OK;
+	i_table = 0;
+	if(Mystrcmp(p_line,"_begin tables") == 0) {
+		while(TRUE) {
+			if(ReadOne(FALSE,FALSE,TRUE,csfile,TRUE,&p_line,&p_completeline,&pos) == MISSED) goto QUIT;
+			Strip(*p_line);
+			if(strlen(*p_line) == 0) goto QUIT; // Required because 'pos' is not incremented when reading an empty line
+			if(Mystrcmp(p_line,"_end tables") == 0) break;
+			if(trace_load_csound_instruments) BPPrintMessage(0,odInfo, "table line = [%s]\n",*p_line);
+			if(i_table >= MaxCsoundTables) {
+				p_CsoundTables = (char****) IncreaseSpace((Handle)p_CsoundTables);
+				MaxCsoundTables = (MyGetHandleSize((Handle)p_CsoundTables) / sizeof(char**));
+				for(i = i_table; i < MaxCsoundTables; i++) (*p_CsoundTables)[i] = NULL;
+				}
+			length = MyHandleLen(p_completeline);
+			if(length > 0) {
+				if((ptr=(char**) GiveSpace((Size)((1L + length) * sizeof(char)))) == NULL) goto ERR;
+				MystrcpyHandleToHandle(0,&ptr,p_completeline);
+				(*p_CsoundTables)[i_table] = ptr;
+				i_table++;
+				}
+			}
+		}
+	goto QUIT;
+
+ERR:
+	BPPrintMessage(0,odError,"=> Error reading Csound instruments file:  %s\n",FileName[wCsoundResources]);
+
+QUIT:
+	MyDisposeHandle((Handle*)&p_line);
+	MyDisposeHandle((Handle*)&p_completeline);
+	my_fclose(csfile);
+	if(result == OK) {
+		Created[wCsoundResources] = TRUE;
+		LoadedCsoundInstruments = TRUE;
+	/*	if(FALSE && NumberScales == 1) {
+			BPPrintMessage(0,odInfo, "\nThis microtonal scale will be used for Csound scores in replacement of the equal-tempered 12-tone scale\nPitch will be adjusted to the diapason\n");
+			DefaultScaleParam = -1;
+			}
+		else */
+		DefaultScaleParam = -1; // Don't use scales until the _scale() instruction has been found
+		}
+	else {
+		Created[wCsoundResources] = FALSE;
+		BPPrintMessage(0,odError, "=> Error reading Csound instruments file:  %s\n", FileName[wCsoundResources]);
+		EmergencyExit = TRUE;
+		}
+	if(iCsoundInstrument >= Jinstr) iCsoundInstrument = 0;
+	// SetCsoundInstrument(iCsoundInstrument,-1);
+	LoadOn--;
+	return(result);
+	}
+
+
+int ReloadSettings(void) {
+	int result;
+	char pathname[MAXNAME];
+	char* filecontents = NULL;
+	if(strlen(LiveFolder) < 1) return MISSED;
+	my_sprintf(pathname,"%s/_saved_settings",LiveFolder);
+//	BPPrintMessage(1,odInfo,"pathname = %s\n",pathname);
+	result = OpenAndReadFile((const char*) pathname,&filecontents);
+	// BPPrintMessage(1,odInfo,"%s\n",filecontents);
+	if(result != OK) return FALSE;
+	if(remove(pathname) != 0) {
+		perror("Error deleting file");
+		BPPrintMessage(1,odError,"=> Cannot delete _saved_settings\n");
+		}
+	if(access(filecontents, F_OK) != 0) {
+    	if(strncmp(filecontents, "../", 3) == 0)
+        	filecontents[1] = '/';  // "../" → "./"
+		}
+	if(TraceLive) BPPrintMessage(1,odInfo,"👉 Loading settings: %s\n",filecontents);
+	result = LoadSettings(filecontents,FALSE);
+	free(filecontents);
+	filecontents = NULL;
+	return result;
+	}
+
+int LoadSettings(const char *filename, int startup) {
+	int i,j,jmax,rep,result,iv,w,wmax,oldoutmidi,oldoutcsound,oldwritemidifile,intvalue,ch;
+	FILE* sefile;
+	float floatvalue;
+	long pos,k;
+	unsigned long kk;
+	double x;
+	char **p_line,**p_completeline;
+	const char* string_value;
+
+	result = OK;
+	oldoutmidi = rtMIDI;
+	p_line = p_completeline = NULL;
+	if(startup) {
+		// FIXME: set filename = location of a startup settings file and continue? We'll see later (BB)
+		return OK;
+		}
+	else {
+		// filename cannot be NULL or empty
+		if(filename == NULL || filename[0] == '\0') {
+			BPPrintMessage(0,odError,"=> Err. LoadSettings(): filename was NULL or empty\n");
+			return MISSED;
+			}
+		}
+	EndFadeOut = 2.; C4key = 60; A4freq = 440.;
+	Quantize = TRUE;
+	Quantization = 10L; // milliseconds
+	UseBullet = TRUE;
+	Code[7] = '.';
+	MIDIfileType = 1;
+	CsoundFileFormat = UNIX;
+	StrikeAgainSettings = PedalReleaseDefault = TRUE;
+	DeftVolume = DEFTVOLUME;
+	VolumeController = VOLUMECONTROL;
+	DeftVelocity = DEFTVELOCITY;
+	DeftPanoramic = DEFTPANORAMIC;
+	PanoramicController = PANORAMICCONTROL;
+	SamplingRate = SAMPLINGRATE;
+	DefaultBlockKey = 60;
+	ShowObjectGraph = TRUE;
+	ShowAllObjects = FALSE;
+	ShowPianoRoll = FALSE;
+	Token = Oms = FALSE;
+	UseBufferLimit = FALSE;
+//	OutCsound = FALSE;
+	CsoundTrace = FALSE;
+// 	WriteMIDIfile = FALSE;
+	NoConstraint = FALSE;
+	AllTemplates = TRUE;
+	ResetControllers = FALSE;
+	FileSaveMode = ALLSAME;
+	FileWriteMode = NOW;
+	SplitLines = FALSE;
+	ProgNrFrom = 1;
+	NotSaidKpress = TRUE;
+	NeverResetWeights = FALSE;
+	ResetFlags = FALSE;
+	ResetWeights = FALSE;
+	NeverResetWeights = FALSE;
+	MinPeriod = 0;
+	MaxConsoleTime = 0; // seconds (not used)
+	strncpy(ParseMode,"ANAL",sizeof(ParseMode) - 1);
+	ParseMode[sizeof(ParseMode) - 1] = '\0';
+
+	if(OutCsound || Create_set) MIDIsetUpTime = 0;
+	int old_livegrammar = LiveGrammar;
+	int old_livesettings = LiveSettings;
+
+   	char *json_data = read_file(filename);
+    if(!json_data) {
+		BPPrintMessage(0,odError,"=> Could not open settings file %s\n", filename);
+		return MISSED;
+		}
+	cJSON *json = cJSON_Parse(json_data);
+    if(!json) {
+        BPPrintMessage(0,odError,"=> Could not parse JSON settings: %s\n",cJSON_GetErrorPtr());
+		free(json_data);
+        return MISSED;
+    	}
+    cJSON *current_element = NULL;
+    cJSON_ArrayForEach(current_element,json) {
+		if(!cJSON_IsObject(current_element)) continue;
+		const char *key = current_element->string; // Get the key name (e.g., "Quantization")
+		if(key == NULL) continue;
+		cJSON *value_field = cJSON_GetObjectItem(current_element,"value");
+		if(value_field == NULL) {
+			BPPrintMessage(0,odError, "=> Key: %s has no 'value' field\n",key);
+			continue;
+			}
+		if(cJSON_IsString(value_field)) {
+			string_value = cJSON_GetStringValue(value_field);
+	//		BPPrintMessage(0, odInfo, "cJSON_IsString %s: %s\n", key, string_value);
+			intvalue = atoi(string_value);
+			floatvalue = strtof(string_value, NULL);
+			}
+		else if(cJSON_IsNumber(value_field)) {
+			intvalue = cJSON_GetNumberValue(value_field);
+			floatvalue = cJSON_GetNumberValue(value_field);
+		//	BPPrintMessage(0, odInfo, "cJSON_IsNumber %s: %f\n", key, intvalue);
+			}
+		else {
+			BPPrintMessage(0, odInfo, "%s: Unsupported 'value' type\n", key);
+			continue;
+			}
+		if(strcmp(key,"Quantization") == 0) Quantization = (long) intvalue;
+		else if(strcmp(key,"Quantize") == 0) Quantize = intvalue;
+		else if(strcmp(key,"Time_res") == 0) Time_res = (long) intvalue;
+		else if(strcmp(key,"MIDIsyncDelay") == 0) MIDIsyncDelay = intvalue;
+		else if(strcmp(key,"Nature_of_time") == 0) Nature_of_time = intvalue;
+		else if(strcmp(key,"Pclock") == 0) Pclock = (double) intvalue;
+		else if(strcmp(key,"Qclock") == 0) Qclock = (double) intvalue;
+		else if(strcmp(key,"Improvize") == 0) Improvize = intvalue;
+		else if(strcmp(key,"MaxItemsProduce") == 0) MaxItemsProduce = intvalue;
+		else if(strcmp(key,"MaxItemsGraphic") == 0) MaxItemsGraphic = intvalue;
+		else if(strcmp(key,"UseEachSub") == 0) UseEachSub = intvalue;
+		else if(strcmp(key,"AllItems") == 0) AllItems = intvalue;
+		else if(strcmp(key,"DisplayProduce") == 0) DisplayProduce = intvalue;
+		else if(strcmp(key,"StepProduce") == 0) StepProduce = intvalue;
+		else if(strcmp(key,"TraceMicrotonality") == 0) TraceMicrotonality = intvalue;
+		else if(strcmp(key,"TraceProduce") == 0) TraceProduce = intvalue;
+		else if(strcmp(key,"TraceDetail") == 0) TraceDetail = intvalue;
+		else if(strcmp(key,"AllTemplates") == 0) AllTemplates = intvalue;
+		else if(strcmp(key,"PlanProduce") == 0) PlanProduce = intvalue;
+		else if(strcmp(key,"DisplayItems") == 0) DisplayItems = intvalue;
+		else if(strcmp(key,"ShowGraphic") == 0) ShowGraphic = intvalue;
+		else if(strcmp(key,"ShowAllObjects") == 0) ShowAllObjects = intvalue;
+		else if(strcmp(key,"AllowRandomize") == 0) AllowRandomize = intvalue;
+		else if(strcmp(key,"DisplayTimeSet") == 0) DisplayTimeSet = intvalue;
+		else if(strcmp(key,"StepTimeSet") == 0) StepTimeSet = intvalue;
+		else if(strcmp(key,"TraceTimeSet") == 0) TraceTimeSet = intvalue;
+		else if(strcmp(key,"TraceNoteOn") == 0) TraceNoteOn = intvalue;
+		else if(strcmp(key,"CsoundTrace") == 0) CsoundTrace = intvalue;
+		else if(strcmp(key,"ResetNotes") == 0) ResetNotes = intvalue;
+		else if(strcmp(key,"ComputeWhilePlay") == 0) ComputeWhilePlay = intvalue;
+		else if(strcmp(key,"AdvanceTime") == 0) AdvanceTime = 1000. * floatvalue; // Milliseconds
+		else if(strcmp(key,"TraceMIDIinteraction") == 0) TraceMIDIinteraction = intvalue;
+		else if(strcmp(key,"ResetWeights") == 0) ResetWeights = intvalue;
+		else if(strcmp(key,"ResetFlags") == 0) ResetFlags = intvalue;
+		else if(strcmp(key,"ResetControllers") == 0) ResetControllers = intvalue;
+		else if(strcmp(key,"NoConstraint") == 0) NoConstraint = intvalue;
+		else if(strcmp(key,"SplitTimeObjects") == 0) SplitTimeObjects = intvalue;
+		else if(strcmp(key,"Split_|SplitVariables|") == 0) SplitVariables = intvalue;
+		else if(strcmp(key,"SplitLines") == 0) SplitLines = intvalue;
+		else if(strcmp(key,"DeftBufferSize") == 0) DeftBufferSize = (long) intvalue;
+		else if(strcmp(key,"MaxConsoleTime") == 0) MaxConsoleTime = (long) intvalue;
+		else if(strcmp(key,"Seed") == 0) {
+			unsigned newseed = (unsigned) (((long) intvalue) % 32768L);
+			if(Seed > 0L)
+				BPPrintMessage(1,odInfo,"👉 Seed for randomisation is forced to the value sent in the command line = %u\n",Seed);
+			else Seed = newseed;
+			}
+		else if(strcmp(key,"NoteConvention") == 0) NoteConvention = intvalue;
+		else if(strcmp(key,"GraphicScaleP") == 0) GraphicScaleP = intvalue;
+		else if(strcmp(key,"GraphicScaleQ") == 0) GraphicScaleQ = intvalue;
+		else if(strcmp(key,"EndFadeOut") == 0) EndFadeOut = floatvalue;
+		else if(strcmp(key,"C4key") == 0) C4key = intvalue;
+		else if(strcmp(key,"A4freq") == 0) A4freq = floatvalue;
+		else if(strcmp(key,"StrikeAgainSettings") == 0) StrikeAgainSettings = intvalue;
+		else if(strcmp(key,"PedalReleaseDefault") == 0) PedalReleaseDefault = intvalue;
+		else if(strcmp(key,"DeftVolume") == 0) DeftVolume = intvalue;
+		else if(strcmp(key,"VolumeController") == 0) VolumeController = intvalue;
+		else if(strcmp(key,"DeftVelocity") == 0) DeftVelocity = intvalue;
+		else if(strcmp(key,"DeftPanoramic") == 0) DeftPanoramic = intvalue;
+		else if(strcmp(key,"PanoramicController") == 0) PanoramicController = intvalue;
+		else if(strcmp(key,"SamplingRate") == 0) SamplingRate = intvalue;
+		else if(strcmp(key,"StopPauseContinue") == 0) StopPauseContinue = intvalue;
+
+		else if(strcmp(key,"IgnoreFields") == 0) IgnoreFields = intvalue;
+		else if(strcmp(key,"TraceZouleb") == 0) TraceZouleb = intvalue;
+
+		else if(strcmp(key,"DefaultBlockKey") == 0) DefaultBlockKey = intvalue;
+		else if(strcmp(key,"B#_instead_of_C") == 0) NameChoice[0] = intvalue;
+		else if(strcmp(key,"Db_instead_of_C#") == 0) NameChoice[1] = intvalue;
+		else if(strcmp(key,"Eb_instead_of_D#") == 0) NameChoice[3] = intvalue;
+		else if(strcmp(key,"Fb_instead_of_E") == 0) NameChoice[4] = intvalue;
+		else if(strcmp(key,"E#_instead_of_F") == 0) NameChoice[5] = intvalue;
+		else if(strcmp(key,"Gb_instead_of_F#") == 0) NameChoice[6] = intvalue;
+		else if(strcmp(key,"Ab_instead_of_G#") == 0) NameChoice[8] = intvalue;
+		else if(strcmp(key,"Bb_instead_of_A#") == 0) NameChoice[10] = intvalue;
+		else if(strcmp(key,"Cb_instead_of_B") == 0) NameChoice[11] = intvalue;
+		else if(strcmp(key,"ShowObjectGraph") == 0) ShowObjectGraph = intvalue;
+		else if(strcmp(key,"ShowPianoRoll") == 0) ShowPianoRoll = intvalue;
+		else if(strcmp(key,"MinPeriod") == 0) MinPeriod = intvalue;
+		else if(strcmp(key,"LiveGrammar") == 0) LiveGrammar = intvalue;
+		else if(strcmp(key,"LiveSettings") == 0) LiveSettings = intvalue;
+		else if(strcmp(key,"TraceLive") == 0) TraceLive = intvalue;
+		else if(strcmp(key,"LearnFromWeights") == 0) LearnFromWeights = intvalue;
+		else if(strcmp(key,"ParseMode") == 0) {
+			strncpy(ParseMode,string_value,sizeof(ParseMode) - 1);
+    		ParseMode[sizeof(ParseMode) - 1] = '\0';
+			}
+		else if(strcmp(key,"UrlToPush") == 0) {
+			strncpy(UrlToPush,string_value,sizeof(UrlToPush) - 1);
+    		UrlToPush[sizeof(UrlToPush) - 1] = '\0';
+			BPPrintMessage(0,odInfo,"UrlToPush = %s\n",UrlToPush);
+			}
+		}
+	if(TraceDetail && (Improvize || Analyzing)) {
+		BPPrintMessage(1,odInfo,"Detailed trace is enabled (production or parsing)\n");
+		}
+	if(NoTracePath) {
+		ShowObjectGraph = ShowPianoRoll = ShowGraphic = FALSE;
+		BPPrintMessage(0,odInfo,"No graphic due to the absence of a trace path\n");
+		}
+	if(DeftBufferSize < 100) DeftBufferSize = 1000;
+	if(rtMIDI && !ComputeWhilePlay && (AdvanceTime <= 0.)) {
+		AdvanceTime = 0.;
+		ComputeWhilePlay = 1;
+		BPPrintMessage(0,odInfo,"Compute while playing has been set to TRUE because Max advance time = 0\n");
+		}
+	BufferSize = DeftBufferSize;
+	SetTempo();
+	if(Seed > 0) {
+		ResetRandom();
+		}
+	else {
+		if(!PlaySelectionOn) BPPrintMessage(1,odInfo,"Not using a random seed: shuffling the cards\n");
+		Randomize();
+		}
+	if((WriteMIDIfile || rtMIDI) && !MIDIcapture) BPPrintMessage(0,odInfo,"Time resolution = %ld ms as per settings\n",Time_res);
+	if(rtMIDI && !ComputeWhilePlay) {
+		BPPrintMessage(0,odInfo,"Compute while playing is off\n");
+		if(AdvanceTime > 0.) BPPrintMessage(0,odInfo,"➡ Advance time limit = %.2f seconds\n",AdvanceTime / 1000.);
+		else BPPrintMessage(0,odInfo,"➡ No advance time allowed\n");
+		}
+	if(rtMIDI && StopPauseContinue) {
+		BPPrintMessage(0,odInfo,"Stop/Pause/Continue messages will control the performance\n");
+		}
+	if((LiveGrammar || LiveSettings) && !rtMIDI) {
+		LiveGrammar = LiveSettings = FALSE;
+		BPPrintMessage(0,odError,"=> Live coding is only possible in real-time MIDI  \n");
+		}
+	if(old_livegrammar != LiveGrammar) {
+		if(LiveGrammar) BPPrintMessage(1,odInfo,"👉 Live coding: start following grammar(s)\n");
+		else BPPrintMessage(1,odInfo,"👉 Live coding: stop following grammar(s)\n");
+		}
+	if(old_livesettings != LiveSettings) {
+		if(LiveSettings) BPPrintMessage(1,odInfo,"👉 Live coding: start following settings\n");
+		else BPPrintMessage(1,odInfo,"👉 Live coding: stop following settings\n");
+		}
+	for(ch=0; ch < MAXCHAN; ch++) {
+		(*p_Oldvalue)[ch].volume = DeftVolume; // 2026-08-07
+		(*p_Oldvalue)[ch].panoramic = DeftPanoramic; // 2026-08-07
+		(*p_Oldvalue)[ch].pressure = 0;
+		(*p_Oldvalue)[ch].pitchbend = DEFTPITCHBEND;
+		(*p_Oldvalue)[ch].modulation = 0;
+		}
+	if(!Quantize) MaxDeltaTime = 20L;
+	else MaxDeltaTime = 2 * Quantization;
+	if(MaxItemsProduce < 1) MaxItemsProduce = 1;
+	if(MaxItemsGraphic < 1) MaxItemsGraphic = 1;
+	if(PlaySelectionOn) Improvize = FALSE;
+	if(AllItems) Improvize = FALSE;
+	if(ShowObjectGraph || ShowPianoRoll) ShowGraphic = TRUE;
+//	if(OutBPdata) ShowGraphic = FALSE;
+//	if(!ShowGraphic) ShowObjectGraph = ShowPianoRoll = FALSE;
+	if(!MIDIcapture) {
+		if(ShowPianoRoll) BPPrintMessage(0,odInfo,"Pianoroll graphics will be displayed\n");
+		if(ShowObjectGraph) BPPrintMessage(0,odInfo,"Object graphics will be displayed\n");
+		BPPrintMessage(0,odInfo,"Metronome will be %.3f beats/mn by default (as per settings)\n",(Qclock * 60.)/Pclock); 
+		if(Nature_of_time == STRIATED) BPPrintMessage(0,odInfo,"Time is STRIATED according to the settings\n");
+		else BPPrintMessage(0,odInfo,"Time is SMOOTH (no metronome)\n");
+		}
+    cJSON_Delete(json);
+    free(json_data);
+	return(result);
+	}
+
+int ExportPrototypeAsJson(FILE *sojson,int j,int iv,int midicodesize,MIDIcode **p_b,const char *this_score) {
+	int i;
+	char mode[MAXNAME];
+	char Message[MAXLIN];
+
+	if(sojson == NULL) return(OK);
+	SaveStringAsJson(sojson,"Name","","Name",*((*p_Bol)[j]));
+	SaveIntAsJson(sojson,"Id","","Identifier",j);
+	thismode_type((*p_Type)[j],mode);
+	SaveStringAsJson(sojson,"Type","enum","Object type",mode);
+	SaveIntAsJson(sojson,"Resolution","ms","Resolution",(*p_Resolution)[j]);
+	if((*p_DefaultChannel)[j] > 0)
+		SaveIntAsJson(sojson,"DefaultChannel","","Default MIDI channel",(*p_DefaultChannel)[j]);
+	else {
+		thismode_channel((*p_DefaultChannel)[j],mode);
+		SaveStringAsJson(sojson,"DefaultChannel","enum","Default MIDI channel",mode);
+		}
+	SaveLongAsJson(sojson,"Tref","ms","Tref",(*p_Tref)[j]);
+	SaveIntAsJson(sojson,"Quan","ms","Quantization",(int)(*p_Quan)[j]);
+	thismode_pivot((*p_PivType)[j],mode);
+	SaveStringAsJson(sojson,"PivType","enum","Pivot type",mode);
+ 	if((*p_PivType)[j] == SETPIVOT) {
+		thismode((*p_PivMode)[j],mode);
+		SaveStringAsJson(sojson,"PivMode","enum","Pivot mode",mode);
+		SaveFloatAsJson(sojson,"PivPos","ms or percent","Pivot position",(*p_PivPos)[j]);
+		}
+	thismode_rescale((*p_RescaleMode)[j],mode);
+	SaveStringAsJson(sojson,"RescaleMode","enum","Rescale mode",mode);
+	// SaveIntAsJson(sojson,"FixScale","boolean","Never rescale",(int)(*p_FixScale)[j]);
+	if((*p_RescaleMode)[j] == OK_RESCALE) {
+		SaveIntAsJson(sojson,"OkExpand","boolean","Expand",(int)(*p_OkExpand)[j]);
+		SaveIntAsJson(sojson,"OkCompress","boolean","Compress",(int)(*p_OkCompress)[j]);
+		}
+	if((*p_RescaleMode)[j] == DILATION_RATIO) {
+		SaveFloatAsJson(sojson,"AlphaMin","","Minimum ratio",(*p_AlphaMin)[j]);
+		SaveFloatAsJson(sojson,"AlphaMax","","Maximum ratio",(*p_AlphaMax)[j]);
+		}
+//	SaveIntAsJson(sojson,"AlphaCtrl","boolean","Alpha control",(int)(*p_AlphaCtrl)[j]);
+	if((*p_AlphaCtrl)[j]) {
+		SaveIntAsJson(sojson,"AlphaCtrlNr","","Send ratio to controller number",(*p_AlphaCtrlNr)[j]);
+		SaveIntAsJson(sojson,"AlphaCtrlChan","","Send ratio to controller channel",(*p_AlphaCtrlChan)[j]);
+		}
+	SaveIntAsJson(sojson,"OkTransp","boolean","Accept transposition",(*p_OkTransp)[j]);
+	SaveIntAsJson(sojson,"OkArticul","boolean","Accept articulation",(*p_OkArticul)[j]);
+	SaveIntAsJson(sojson,"OkVolume","boolean","Accept volume changes",(*p_OkVolume)[j]);
+	SaveIntAsJson(sojson,"OkPan","boolean","Accept panoramic changes",(*p_OkPan)[j]);
+	SaveIntAsJson(sojson,"OkMap","boolean","Accept key expand and mapping",(*p_OkMap)[j]);
+	SaveIntAsJson(sojson,"OkVelocity","boolean","Accept velocity changes",(*p_OkVelocity)[j]);
+	SaveIntAsJson(sojson,"OkRelocate","boolean","Relocate",(int)(*p_OkRelocate)[j]);
+	if(!(*p_OkRelocate)[j]) {
+		thismode((*p_DelayMode)[j],mode);
+		SaveStringAsJson(sojson,"DelayMode","enum","Delay mode",mode);
+		SaveLongAsJson(sojson,"MaxDelay","ms","Max delay",(*p_MaxDelay)[j]);
+		thismode((*p_ForwardMode)[j],mode);
+		SaveStringAsJson(sojson,"ForwardMode","enum","Forward mode",mode);
+		SaveLongAsJson(sojson,"MaxForward","ms","Max forward",(*p_MaxForward)[j]);
+		}
+	SaveIntAsJson(sojson,"BreakTempo","boolean","Break tempo after this object (organum)",(int)(*p_BreakTempo)[j]);
+	
+	SaveIntAsJson(sojson,"ContBeg","boolean","Force continuity at the beginning",(int)(*p_ContBeg)[j]);
+	if((*p_ContBeg)[j]) {
+		thismode((*p_ContBegMode)[j],mode);
+		if((*p_ContBegMode)[j] != IRRELEVANT) {
+			SaveStringAsJson(sojson,"ContBegMode","enum","Max gap at beginning mode",mode);
+			SaveLongAsJson(sojson,"MaxBegGap","ms","Max gap at beginning",(*p_MaxBegGap)[j]);
+			}
+		}
+	SaveIntAsJson(sojson,"ContEnd","boolean","Force continuity at the end",(int)(*p_ContEnd)[j]);
+	if((*p_ContEnd)[j]) {
+		thismode((*p_ContEndMode)[j],mode);
+		if((*p_ContEndMode)[j] != IRRELEVANT) {
+			SaveStringAsJson(sojson,"ContEndMode","enum","Max gap at end mode",mode);
+			SaveLongAsJson(sojson,"MaxEndGap","ms","Max gap at end (ms or percent)",(*p_MaxEndGap)[j]);
+			}
+		}
+	SaveIntAsJson(sojson,"CoverBeg","boolean","Cover beginning",(int)(*p_CoverBeg)[j]);
+	if((*p_CoverBeg)[j]) {
+		thismode((*p_CoverBegMode)[j],mode);
+		if((*p_CoverBegMode)[j] != IRRELEVANT) {
+			SaveStringAsJson(sojson,"CoverBegMode","enum","Cover beginning mode",mode);
+			SaveLongAsJson(sojson,"MaxCoverBeg","ms or percent","Max cover at beginning",(*p_MaxCoverBeg)[j]);
+			}
+		}
+	SaveIntAsJson(sojson,"CoverEnd","boolean","Cover end",(int)(*p_CoverEnd)[j]);
+	if((*p_CoverEnd)[j]) {
+		thismode((*p_CoverEndMode)[j],mode);
+		if((*p_CoverEndMode)[j] != IRRELEVANT) {
+			SaveStringAsJson(sojson,"CoverEndMode","enum","Cover end mode",mode);
+			SaveLongAsJson(sojson,"MaxCoverEnd","ms or percent","Max cover at end",(*p_MaxCoverEnd)[j]);
+			}
+		}
+	SaveIntAsJson(sojson,"TruncBeg","boolean","Truncate beginning",(int)(*p_TruncBeg)[j]);
+	if((*p_TruncBeg)[j] && (*p_MaxTruncBeg)[j] > 0) {
+		thismode((*p_TruncBegMode)[j],mode);
+		SaveStringAsJson(sojson,"TruncBegMode","enum","Truncate beginning mode",mode);
+		SaveLongAsJson(sojson,"MaxTruncBeg","ms or percent","Max truncate beginning",(*p_MaxTruncBeg)[j]);
+		}
+	SaveIntAsJson(sojson,"TruncEnd","boolean","Truncate end",(int)(*p_TruncEnd)[j]);
+	if((*p_TruncEnd)[j] && (*p_MaxTruncEnd)[j] > 0) {
+		thismode((*p_TruncEndMode)[j],mode);
+		SaveStringAsJson(sojson,"TruncEndMode","enum","Truncate end mode",mode);
+		SaveLongAsJson(sojson,"MaxTruncEnd","ms or percent","Max truncate end",(*p_MaxTruncEnd)[j]);
+		}
+	thismode((*p_PreRollMode)[j],mode);
+	SaveStringAsJson(sojson,"PreRollMode","enum","Preroll mode",mode);
+	SaveFloatAsJson(sojson,"Preroll","ms or percent","Preroll value",(*p_PreRoll)[j]);
+	thismode((*p_PostRollMode)[j],mode);
+	SaveStringAsJson(sojson,"PostRollMode","enum","Postroll mode",mode);
+	SaveFloatAsJson(sojson,"Postroll","ms or percent","Postroll value",(*p_PostRoll)[j]);
+	thismode((*p_CyclicMode)[j],mode);
+	SaveStringAsJson(sojson,"CyclicMode","enum","Cyclic mode",mode);
+	if((*p_CyclicMode)[j] != IRRELEVANT) {
+		SaveFloatAsJson(sojson,"CyclicAfter","ms or percent","Cyclic after",(*p_CyclicAfter)[j]);
+		SaveIntAsJson(sojson,"ForceIntegerCycles","boolean","Force integer number of cycles",(*p_ForceIntegerCycles)[j]);
+	//	SaveIntAsJson(sojson,"DiscardNoteOffs","boolean","Discard NoteOff's (cyclic play) except in last cycle (MIDI)",(*p_DiscardNoteOffs)[j]);
+		}
+	switch((*p_StrikeAgain)[j]) {
+		case 1:
+			strcpy(mode,"ALWAYS");
+			break;
+		case 0:
+			strcpy(mode,"NEVER");
+			break;
+		case -1:
+			strcpy(mode,"DEFAULT");
+			break;
+		default:
+			strcpy(mode,"UNKNOWN");
+			break;
+		}
+	SaveStringAsJson(sojson,"StrikeAgain","enum","Strike again NoteOn's",mode);
+
+	if((*p_CsoundInstrumentMode)[j] > 0)
+		SaveIntAsJson(sojson,"CsoundInstr","","Csound instrument #",(*p_CsoundInstr)[j]);
+	else {
+		thismode_csound((*p_CsoundInstrumentMode)[j],mode); ;
+		SaveStringAsJson(sojson,"CsoundInstrumentMode","enum","Csound instrument mode",mode);
+		}
+	SaveLongAsJson(sojson,"Tpict","ms","Tempo of MF2T code",(*p_Tpict)[j]);
+	if((*pp_CsoundScoreText)[j] != NULL)
+		SaveStringAsJson(sojson,"","","Csound score",this_score);
+	else SaveStringAsJson(sojson,"","","Csound score","");
+	SaveIntAsJson(sojson,"MIDIcodesize","","Size of MIDI code",midicodesize);
+	if(p_b != NULL) {
+		for(i=0; i < midicodesize; i++) {
+			my_sprintf(Message,"byte_%d",(i + 1));
+			SaveIntAsJson(sojson,"","",Message,(*p_b)[i].byte);
+			my_sprintf(Message,"time_%d",(i + 1));
+			SaveLongAsJson(sojson,"","",Message,(long)(*p_b)[i].time);
+			}
+		}
+	return(OK);
+	}
+
+int LoadObjectPrototypes(int checkversion,int tryname) {
+	char c,date[80],*newp,*name_of_file = NULL, *final_name = NULL;
+	MIDIcode **p_b;
+	char **p_line,**p_completeline,line[MAXLIN],line2[MAXLIN],this_score[MAXSCORELENGTH];
+	char json_path[MAXNAME];
+	int i,iv,j,jj,co,rep,okt1,diff,stop,maxsounds,s,objecttype,oldjbol,notsaid,
+		pivbeg,pivend,pivbegon,pivendoff,pivmiddle,pivmiddleonoff,pivspec,newbols,okrescale,
+		compilemem,newinstruments,type,dirtymem,longerCsound,result,first;
+	long t,t1,t2,tm,d,kres;
+	long pos,imax;
+	long k,kk;
+	double r;
+	short refnum,refnum2;
+	Handle h,ptr;
+	FILE *sofile, *sojson;
+	sojson = NULL;
+
+	/* snprintf(label,sizeof label,"%s",*((*Scale)[i_scale].label));
+	char scale_path[1024];
+	snprintf(json_path,sizeof json_path,"%s%s.scl",OutputDir,label);
+	int n = snprintf(scale_path, sizeof scale_path,"%s%s.scl",OutputDir,label);
+	if(n < 0 || (size_t)n >= sizeof scale_path) {
+		BPPrintMessage(0,odError,"=> Scale file path is too long\n");
+		return(MISSED);
+		} */
+
+	if((rep=CompileAlphabet()) != OK) return rep;
+	ObjectMode = ObjectTry = TRUE;
+
+	json_path[0] = '\0';
+	if(EventListOn) {
+		const char *path  = FileName[iObjects];
+		const char *slash = strrchr(path, '/');
+		const char *backslash = strrchr(path, '\\');
+		const char *separator;
+		const char *basename;
+		int length;
+
+		// Select the last path separator, whether '/' or '\'
+		if (slash == NULL) separator = backslash;
+		else if (backslash == NULL) separator = slash;
+		else separator = (slash > backslash) ? slash : backslash;
+		basename = (separator != NULL) ? separator + 1 : path;
+
+		if(strncmp(basename, "-so.",4) == 0) {
+			// Keep the directory, remove "-so.", and add "proto-" + ".json"
+			length = snprintf(json_path, sizeof json_path,"%sproto-%s.json", OutputDir, basename + 4);
+			if (length < 0 || (size_t)length >= sizeof json_path) {
+				BPPrintMessage(0, odError,"=> JSON file path is too long: %s\n", path);
+				sojson = NULL;
+				}
+			else sojson = fopen(json_path,"w");
+			}
+		if(sojson == NULL) {
+			int saved_errno = errno;
+    		BPPrintMessage(0, odError,"=> Cannot create JSON file of prototypes \"%s\": %s\n",json_path, strerror(saved_errno));
+			}
+		else {
+			fprintf(sojson,"{\n\"header\": \"Bol Processor sound-object prototypes\",\n");
+			fprintf(sojson,"\"Prototypes\": [\n");
+			BPPrintMessage(1,odInfo,"👉 Creating json file of prototypes: %s\n",json_path);
+			}
+		}
+	rep = MISSED;
+	newinstruments = CompiledCsObjects = 0;
+	pos = 0L;
+	line2[0] = '\0';
+	p_line = p_completeline = NULL;
+
+	LoadOn++;
+
+	sofile = my_fopen(1,FileName[iObjects],"r");
+	if(sofile == NULL) {
+		BPPrintMessage(0,odError,"=> Could not open prototypes file %s\n",FileName[iObjects]);
+		return ABORT;
+		}
+
+	if(ReadOne(FALSE,FALSE,FALSE,sofile,TRUE,&p_line,&p_completeline,&pos) == MISSED) goto ERR;
+	if(trace_load_prototypes) BPPrintMessage(0,odInfo, "Line = %s\n",*p_line);
+	if(CheckVersion(&iv,p_line,FileName[iObjects]) != OK) goto ERR;
+	if(trace_load_prototypes) BPPrintMessage(0,odInfo, "Version = %d\n",iv);
+
+	if(iv > 2) {
+		if(ReadOne(FALSE,TRUE,FALSE,sofile,TRUE,&p_line,&p_completeline,&pos) == MISSED) goto ERR;
+		}
+	newbols = FALSE;
+
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR;
+	PrototypeTickKey = s;
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR;
+	PrototypeTickChannel = s;
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR;
+	PrototypeTickVelocity = s;
+	fseek(sofile,pos,SEEK_SET);
+	if(fgets(line2,sizeof(line2),sofile) != NULL) { // Necessary to read a line that might be empty
+		pos = ftell(sofile);
+		remove_carriage_returns(line2);
+		}
+	else {
+		BPPrintMessage(0,odError,"=> Error reading line2 in LoadObjectPrototypes()\n");
+		goto ERR;
+		}
+	remove_trailing_newline(line2);
+	if(trace_load_prototypes) BPPrintMessage(0,odInfo, "Line (empty?) = [%s]\n",line2);
+	if(strlen(line2) > 5) { // Fixed by BB 2022-02-18
+		// Note that line2 contains the path (csound_resources)
+		my_sprintf(Message,"../%s",line2);
+		strcpy(FileName[wCsoundResources], Message);
+		BPPrintMessage(0,odInfo, "Trying to load Csound instruments: %s\n", FileName[wCsoundResources]);
+		if((result = LoadCsoundInstruments(0,1)) != OK) return(result);
+		}
+MAXSOUNDS:
+	if(ReadInteger(sofile,&s,&pos) == MISSED) {
+		BPPrintMessage(0,odError, "Missed the first integer in LoadObjectPrototypes()\n");
+		goto ERR;
+		}
+	maxsounds = s;
+	if(trace_load_prototypes) BPPrintMessage(0,odInfo, "maxsounds = %d Jbol = %d\n",s,Jbol);
+	oldjbol = Jbol;
+	Jbol += maxsounds;
+	if(ResizeObjectSpace(YES,Jbol + Jpatt,0) != OK) goto ERR;
+	Jbol = oldjbol; newbols = TRUE;
+	NumberTables = 0;
+	rep = notsaid = OK;
+	first = TRUE;
+
+	// Be careful: the following loop will read data forever if the file
+	// was not properly closed...
+
+NEXTBOL:
+	PleaseWait(); j = -1;
+	if(ReadOne(FALSE,TRUE,TRUE,sofile,TRUE,&p_line,&p_completeline,&pos) == MISSED) {
+		my_sprintf(Message,"Unexpected end of '%s' file...  May be old version?",
+			FileName[iObjects]);
+		BPPrintMessage(0,odInfo,Message);
+		goto ERR;
+		}
+	if(trace_load_prototypes) BPPrintMessage(0,odInfo, "line = %s\n",*p_line);
+
+	if(p_completeline == NULL) {
+		BPPrintMessage(0,odError,"=> Err. LoadObjectPrototypes(). p_completeline == NULL");
+		goto SORTIR;
+		}
+	if(MyHandleLen(p_completeline) < 1) goto SORTIR;
+	if(Mystrcmp(p_completeline,"DATA:") == 0) {
+		if(ReadOne(FALSE,TRUE,TRUE,sofile,TRUE,&p_line,&p_completeline,&pos) == MISSED) goto ERR;
+		if((*p_completeline)[0] == '\0')
+			MystrcpyStringToHandle(&p_completeline,"[Comment on prototype file]");
+		MystrcpyHandleToString(MAXFIELDCONTENT,0,line,p_completeline);
+		if(trace_load_prototypes) BPPrintMessage(0,odInfo, "General comment = %s\n",line);
+		goto SORTIR;
+		}
+	if(Mystrcmp(p_completeline,"_endSoundObjectFile_") == 0) goto SORTIR;
+	if((iv > 3) && (Mystrcmp(p_completeline,"TABLES:") == 0)) {
+		if(ReadInteger(sofile,&s,&pos) == MISSED) goto SORTIR;
+		if(s > 0 && 0) {
+			NumberTables = s;
+			for(i=1; i <= s; i++) {
+				// Read table
+				}
+			}
+		goto SORTIR;
+		}
+	if(iv > 4 && newbols) {
+		oldjbol = Jbol;
+		if(Jbol == 0) {
+			Jbol = 2;
+			BPPrintMessage(0,odError,"=> Warning: probable error in CreateBol()\n");
+			GetAlphabetSpace();
+			}
+		if((jj=CreateBol(0,0,p_completeline,0,0,BOL)) < 0) goto ERR;
+		if(jj >= Jbol) {
+			BPPrintMessage(0,odError,"=> Err. LoadObjectPrototypes(). jj >= Jbol");
+			goto ERR;
+			}
+		j = jj;
+		if(trace_load_prototypes) 
+			BPPrintMessage(0,odInfo, "Trying to create sound-object for j = %d named %s\n",j,*p_completeline);
+		if(sojson != NULL) {
+			if(!first) fprintf(sojson,",\n");
+			first = FALSE;
+			fprintf(sojson,"  {\n");
+			}
+		if(Jbol > oldjbol) {
+			Jbol = oldjbol;
+			BPPrintMessage(0,odInfo,"This sound-object has not been created because it is not in the alphabet: « %s » (%d)\n",*p_completeline,j);
+			}
+		}
+	if(trace_load_prototypes) BPPrintMessage(0,odInfo, "Final Jbol = %d\n",Jbol);
+
+	(*p_CsoundSize)[j] = (*p_MIDIsize)[j] = ZERO;
+	(*p_SilentObject)[j] = FALSE;
+	(*p_Dur)[j] = ZERO; // 2025-10-28
+	if(ReadInteger(sofile,&objecttype,&pos) == MISSED) goto ERR;
+	if(trace_load_prototypes) 
+		BPPrintMessage(0,odInfo, "object type [%d] = %d\n",j,objecttype);
+	(*p_Type)[j] = objecttype;
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR;
+	(*p_Resolution)[j] = s;
+	if(trace_load_prototypes) BPPrintMessage(0,odInfo, "(*p_Resolution)[%d] = %d\n",j,(*p_Resolution)[j]);
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR;
+	(*p_DefaultChannel)[j] = s;
+	// BPPrintMessage(0,odInfo,"&&& DefaultChannel[%d] = %d\n",j,(*p_DefaultChannel)[j]);
+	if(ReadLong(sofile,&k,&pos) == MISSED) goto ERR;
+	(*p_Tref)[j] = (long) k;
+	if(ReadFloat(sofile,&r,&pos) == MISSED) goto ERR;
+	(*p_Quan)[j] = r;
+	if(ReadOne(FALSE,FALSE,TRUE,sofile,TRUE,&p_line,&p_completeline,&pos) == MISSED) goto ERR;
+	if(trace_load_prototypes) BPPrintMessage(0,odInfo,"line3 = %s\n",*p_line);
+	i = 0;
+	pivbeg = (*p_line)[i++]-'0';
+	pivend = (*p_line)[i++]-'0';
+	pivbegon = (*p_line)[i++]-'0';
+	pivendoff = (*p_line)[i++]-'0';
+	pivmiddle = (*p_line)[i++]-'0';
+	pivmiddleonoff = (*p_line)[i++]-'0';
+
+	okrescale = (*p_line)[i++]-'0';
+
+	(*p_FixScale)[j] = (*p_line)[i++]-'0';
+	(*p_OkExpand)[j] = (*p_line)[i++]-'0';
+	(*p_OkCompress)[j] = (*p_line)[i++]-'0';
+	(*p_OkRelocate)[j] = (*p_line)[i++]-'0';
+	(*p_BreakTempo)[j] = (*p_line)[i++]-'0';
+	(*p_ContBeg)[j] = (*p_line)[i++]-'0';
+	(*p_ContEnd)[j] = (*p_line)[i++]-'0';
+	(*p_CoverBeg)[j] = (*p_line)[i++]-'0';
+	(*p_CoverEnd)[j] = (*p_line)[i++]-'0';
+	(*p_TruncBeg)[j] = (*p_line)[i++]-'0';
+	(*p_TruncEnd)[j] = (*p_line)[i++]-'0';
+	pivspec = (*p_line)[i++]-'0';
+
+	(*p_PivType)[j] = pivbeg + 2 * pivend + 3 * pivbegon + 4 * pivendoff
+		+ 5 * pivmiddle + 6 * pivmiddleonoff + 7 * pivspec;
+	(*p_AlphaCtrl)[j] = (*p_line)[i++]-'0';
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR; /* rescalemode */
+	if(s == -2) s = 1; // Fixing old bug
+	(*p_RescaleMode)[j] = s;
+	if((*p_RescaleMode)[j] == NEVER_RESCALE) (*p_FixScale)[j] = TRUE;
+	if(trace_load_prototypes) BPPrintMessage(0,odInfo,"RescaleMode = %d\n",(*p_RescaleMode)[j]);
+	if(ReadFloat(sofile,&r,&pos) == MISSED) goto ERR;
+	(*p_AlphaMin)[j] = r;
+	if(ReadFloat(sofile,&r,&pos) == MISSED) goto ERR;
+	(*p_AlphaMax)[j] = r;
+	if(iv < 5) {	/* Fixing a bug in default values */
+		(*p_AlphaMax)[j] = 10.;
+		}
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR; /* delaymode */
+	if(s == -2) s = 1; // Fixing old bug
+	(*p_DelayMode)[j] = s;
+	if(ReadLong(sofile,&k,&pos) == MISSED) goto ERR;
+	(*p_MaxDelay)[j] = k;
+	if(iv > 4) {
+		if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR; /* forwardmode */
+		if(s == -2) s = 1; // Fixing old bug
+		(*p_ForwardMode)[j] = s;
+		}
+	if(ReadLong(sofile,&k,&pos) == MISSED) goto ERR;
+	(*p_MaxForward)[j] = k;
+	if(iv < 5) {	/* Fixing a bug in default values */
+		(*p_MaxDelay)[j] = (*p_MaxForward)[j] = ZERO;
+		}
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR; // Not used
+/*	(*p_BreakTempoMode)[j] = s;
+	thismode(s,mode); */
+	if(ReadLong(sofile,&k,&pos) == MISSED) goto ERR; // ???
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR; /* contbegmode */
+	if(s == -2) s = 1; // Fixing old bug
+	(*p_ContBegMode)[j] = s;
+//	BPPrintMessage(0,odInfo,"@@@ p_ContBegMode = %s\n",s);
+//	SaveStringAsJson(sojson,"ContBegMode","enum","Continuity at beginning mode",mode);
+	if(ReadLong(sofile,&k,&pos) == MISSED) goto ERR;
+	(*p_MaxBegGap)[j] = k;
+	if(iv < 5) {	/* Fixing a bug in default values */
+		(*p_MaxBegGap)[j] = ZERO;
+		}
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR; /* contendmode */
+	if(s == -2) s = 1; // Fixing old bug
+	(*p_ContEndMode)[j] = s;
+	if(ReadLong(sofile,&k,&pos) == MISSED) goto ERR;
+	(*p_MaxEndGap)[j] = k;
+	if(iv < 5) {	/* Fixing a bug in default values */
+		(*p_MaxEndGap)[j] = ZERO;
+		}
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR; /* coverbegmode */
+	if(s == -2) s = 1; // Fixing old bug
+	(*p_CoverBegMode)[j] = s;
+	if(ReadLong(sofile,&k,&pos) == MISSED) goto ERR;
+	(*p_MaxCoverBeg)[j] = k;
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR; /* coverendmode */
+	if(s == -2) s = 1; // Fixing old bug
+	(*p_CoverEndMode)[j] = s;
+	if(trace_load_prototypes) BPPrintMessage(0,odInfo,"CoverEndMode = %d\n",(*p_CoverEndMode)[j]);
+	if(ReadLong(sofile,&k,&pos) == MISSED) goto ERR;
+	(*p_MaxCoverEnd)[j] = k;
+	if(trace_load_prototypes) BPPrintMessage(0,odInfo,"MaxCoverEnd = %ld\n",(*p_MaxCoverEnd)[j]);
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR; /* truncbegmode */
+	if(s == -2) s = 1; // Fixing old bug
+	(*p_TruncBegMode)[j] = s;
+	if(ReadLong(sofile,&k,&pos) == MISSED) goto ERR;
+	(*p_MaxTruncBeg)[j] = k;
+	if(trace_load_prototypes) BPPrintMessage(0,odInfo,"MaxTruncBeg = %ld\n",(*p_MaxTruncBeg)[j]);
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR; /* truncendmode */
+	(*p_TruncEndMode)[j] = s;
+	if(s == -2) s = 1; // Fixing old bug
+	if(ReadLong(sofile,&k,&pos) == MISSED) goto ERR;
+	(*p_MaxTruncEnd)[j] = k;
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR;
+	if(s == -2) s = 1; // Fixing old bug
+	(*p_PivMode)[j] = s;
+	if(ReadFloat(sofile,&r,&pos) == MISSED) goto ERR;
+	(*p_PivPos)[j] = r;
+	if(trace_load_prototypes) 
+		BPPrintMessage(0,odInfo,"PivPos[%d] = %.2f\n",j,(*p_PivPos)[j]);
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR;
+	(*p_AlphaCtrlNr)[j] = s;
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR;
+	(*p_AlphaCtrlChan)[j] = s;
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR;
+	(*p_OkTransp)[j] = s;
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR;
+	(*p_OkArticul)[j] = s;
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR;
+	(*p_OkVolume)[j] = s;
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR;
+	(*p_OkPan)[j] = s;
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR;
+	(*p_OkMap)[j] = s;
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR;
+	(*p_OkVelocity)[j] = s;
+	if(ReadFloat(sofile,&r,&pos) == MISSED) goto ERR;
+	(*p_PreRoll)[j] = r;
+	if(ReadFloat(sofile,&r,&pos) == MISSED) goto ERR;
+	(*p_PostRoll)[j] = r;
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR;
+	if(s == -2) s = 1; // Fixing old bug
+	(*p_PreRollMode)[j] = s; // Currently, PreRollMode is always FIXVALUE
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR;
+	if(s == -2) s = 1; // Fixing old bug
+	(*p_PostRollMode)[j] = s; // Currently, PostRollMode is always FIXVALUE
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR;
+	if(s == -2) s = 1; // Fixing old bug
+	(*p_CyclicMode)[j] = s;
+	if(ReadFloat(sofile,&r,&pos) == MISSED) goto ERR;
+	(*p_CyclicAfter)[j] = r;
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR;
+	(*p_ForceIntegerCycles)[j] = s;
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR;
+//	(*p_DiscardNoteOffs)[j] = s; Obsolete
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR;
+	(*p_StrikeAgain)[j] = s;
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR;
+	(*p_CsoundInstrumentMode)[j] = s;
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR;
+	(*p_CsoundInstr)[j] = s;
+
+	if(ReadLong(sofile,&k,&pos) == MISSED) goto ERR;
+	(*p_Tpict)[j] = k;
+
+	if(iv > 21) { // These are no longer used (object colors)
+		if(ReadLong(sofile,&k,&pos) == MISSED) goto ERR;
+		if(ReadLong(sofile,&k,&pos) == MISSED) goto ERR;
+		if(ReadLong(sofile,&k,&pos) == MISSED) goto ERR;
+		}
+
+	(*pp_CsoundTime)[j] = NULL;
+	(*p_CompiledCsoundScore)[j] = 0;
+//	(*p_CsoundSize)[j]= 0;
+	(*pp_CsoundScore)[j] = NULL;
+	(*pp_CsoundScoreText)[j] = NULL;
+
+	// Read pp_CsoundScoreText
+	if(ReadOne(FALSE,FALSE,TRUE,sofile,TRUE,&p_line,&p_completeline,&pos) == MISSED) goto ERR;
+	// StripHandle(p_line);
+	if(trace_load_prototypes) BPPrintMessage(0,odInfo, "line2 = %s\n",*p_line);
+	if(Mystrcmp(p_line,"_beginCsoundScore_") != 0) goto ERR;
+	if(ReadOne(FALSE,FALSE,TRUE,sofile,TRUE,&p_line,&p_completeline,&pos) == MISSED) goto ERR;
+	strcpy(this_score,*p_line);
+	if(trace_load_prototypes) BPPrintMessage(0,odInfo, "line4 = %s\n",*p_line);
+	if((ptr = (Handle) GiveSpace(MyGetHandleSize((Handle)p_completeline))) == NULL) goto ERR;
+	(*pp_CsoundScoreText)[j] = (char**) ptr;
+	if(MystrcpyHandleToHandle(0,&((*pp_CsoundScoreText)[j]),p_completeline) != OK) goto ERR;
+	if(ReadOne(FALSE,TRUE,TRUE,sofile,TRUE,&p_line,&p_completeline,&pos) == MISSED) goto ERR;
+	if(trace_load_prototypes) BPPrintMessage(0,odInfo, "line5 = %s\n",*p_line);
+	if(Mystrcmp(p_completeline,"_endCsoundScore_") == 0) {
+		CompileObjectScore(j,&longerCsound);
+		if(trace_load_prototypes) BPPrintMessage(0,odInfo,"Compiled Csound score\n");
+		goto READSIZE;
+		}
+	else goto ERR;
+
+	READSIZE:
+	if(ReadInteger(sofile,&s,&pos) == MISSED) goto ERR;
+	if(trace_load_prototypes) BPPrintMessage(0,odInfo, "Size of MIDI code = %d\n",s);
+	imax = s;
+	p_b = NULL;
+	(*p_PasteDone)[j] = FALSE;
+	(*p_MIDIsize)[j] = (*p_Ifrom)[j] = ZERO;
+	(*pp_MIDIcode)[j] = NULL;
+	(*p_SilentObject)[j] = FALSE;
+	if(imax > 0) {
+		if((p_b = (MIDIcode**) GiveSpace((Size)sizeof(MIDIcode)*(imax+1))) == NULL) goto ERR;
+		rep = OK;
+		}
+	if((*p_CsoundSize)[j] == 0) (*p_Dur)[j] = t1 = t2 = ZERO;
+	if(imax > 0) {
+		for(i=0,tm=ZERO,okt1=FALSE; i < imax; i++) {
+			if(ReadLong(sofile,&k,&pos) == MISSED) goto ERR;
+			if(Eucl(k,256L,(unsigned long*)&t,(unsigned long*)&kk) != 0) goto ERR;
+			(*p_b)[i].byte = (int) kk;
+			if(143L < kk  &&  kk < 160L) {   // NoteOn or NoteOff
+				t2 = t;
+				if(!okt1) {
+					okt1 = TRUE;
+					t1 = t;
+					}
+				}
+			(*p_b)[i].time = (Milliseconds) t;
+			}
+		imax = i;
+		if(trace_load_prototypes) BPPrintMessage(0,odInfo, "imax = %d\n",imax);
+		if(MIDItoPrototype(FALSE,FALSE,j,p_b,imax) != OK) goto ERR;
+		}
+	if(CheckConsistency(j,TRUE) != OK) {
+		BPPrintMessage(0,odError,"=> Inconsistency found in '%s'\n",*((*p_Bol)[j]));
+		goto ERR;
+		}
+	if(trace_load_prototypes) 
+		BPPrintMessage(0,odInfo, "CheckConsistency is OK for j = %d\n",j);
+
+	if(ExportPrototypeAsJson(sojson,j,iv,imax,p_b,this_score) != OK) goto ERR;
+	if(p_b != NULL && MyDisposeHandle((Handle*)&p_b) != OK) goto ERR;
+	if(iv > 9) {
+		if(ReadOne(FALSE,TRUE,TRUE,sofile,TRUE,&p_line,&p_completeline,&pos) == MISSED) goto ERR;
+		if(p_completeline == NULL) {
+			BPPrintMessage(0,odError,"=> Err. LoadObjectPrototypes(). p_completeline == NULL");
+			goto ERR;
+			}
+		s = MyHandleLen(p_completeline);
+		if(s > MAXFIELDCONTENT) {
+			s = MAXFIELDCONTENT;
+			(*p_completeline)[s] = '\0';
+			}
+		if((h = (Handle) GiveSpace((Size)(1+s) * sizeof(char))) == NULL) goto ERR;
+		(*pp_Comment)[j] = (char**) h;
+		if(sojson != NULL) {
+			fputs("    \"Comment\": ", sojson);
+			WriteJsonString(sojson,*p_completeline);
+			}
+		MystrcpyHandleToHandle(0,&((*pp_Comment)[j]),p_completeline);
+		if(trace_load_prototypes) BPPrintMessage(0,odInfo,"Comment for %d = %s\n\n",j,*p_completeline);
+		}
+	if(sojson != NULL) fprintf(sojson,"\n  }");
+	goto NEXTBOL;
+
+	ERR:
+	if(j > 1 && j < Jbol && (*p_Tref)[j] == ZERO) ResetPrototype(j);
+	if(CheckEmergency() == OK) {
+		BPPrintMessage(0,odInfo,"The sound-object file may be incomplete or in some unknown format. ");
+		if(j > 1 && j < Jbol) {
+			BPPrintMessage(0,odError,"An error occured while reading « %s »\n",*((*p_Bol)[j]));
+			}
+		else BPPrintMessage(0,odError,"Probably you created a new sound-object which is still empty\n");
+		}
+	else rep = ABORT;
+
+	SORTIR:
+	LoadOn--;
+	MyDisposeHandle((Handle*)&p_line); MyDisposeHandle((Handle*)&p_completeline);
+	my_fclose(sofile);
+	if(sojson != NULL) {
+		fprintf(sojson,"\n  ]\n}\n");
+		fclose(sojson);
+		BPPrintMessage(1,odInfo,"Closing file: %s\n",json_path);
+		if(chmod(json_path, 0664) != 0) 
+			BPPrintMessage(0, odError,"=> Cannot change permissions of %s: %s\n",json_path,strerror(errno));
+		}
+
+	if(check_memory_use) BPPrintMessage(0,odInfo,"MemoryUsed end LoadObjectPrototypes = %ld i_ptr = %d\n",(long)MemoryUsed,i_ptr);
+
+	if(rep == OK) {
+		if(newbols) {
+			ResizeObjectSpace(NO,Jbol + Jpatt,0);
+			// BPPrintMessage(0,odInfo,"Resizing object space for Jbol = %d and Jpatt = %ld\n",Jbol,Jpatt);
+			}
+		}
+	// rep = CompileCsoundObjects();
+	CompiledCsObjects = TRUE;
+	PrototypesLoaded = TRUE;
+	Trace("SaveLoads1");
+	return(rep);
+	}
+
+void thismode(int value,char mode[30]) {
+	if(value == -2) value = 1; // Fixing old bug
+    switch (value) {
+        case PERCENT:
+            strcpy(mode, "PERCENT");
+            break;
+        case FIXVALUE:
+            strcpy(mode, "FIXVALUE");
+            break;
+        case IRRELEVANT:
+            strcpy(mode, "IRRELEVANT");
+            break;
+        default:
+            strcpy(mode, "UNKNOWN");
+            break;
+		}
+	}
+
+void thismode_csound(int value,char mode[30]) {
+		switch(value) {
+		case GLOBAL_CS:
+			strcpy(mode,"GLOBAL_CS");
+			break;
+		case LOCAL_CS:
+			strcpy(mode,"LOCAL_CS");
+			break;
+		default:
+			strcpy(mode,"UNKNOWN");
+			break;
+		}
+	}
+
+void thismode_pivot(int value,char mode[30]) {
+    switch (value) {
+        case PIVBEG:
+            strcpy(mode, "PIVBEG");
+            break;
+        case PIVEND:
+            strcpy(mode, "PIVEND");
+            break;
+        case PIVBEGON:
+            strcpy(mode, "PIVBEGON");
+            break;
+        case PIVENDOFF:
+            strcpy(mode, "PIVENDOFF");
+            break;
+        case PIVMIDDLE:
+            strcpy(mode, "PIVMIDDLE");
+            break;
+        case PIVMIDDLEONOFF:
+            strcpy(mode, "PIVMIDDLEONOFF");
+            break;
+        case SETPIVOT:
+            strcpy(mode, "SETPIVOT");
+            break;
+        default:
+            strcpy(mode, "UNKNOWN");
+            break;
+		}
+	}
+
+void thismode_type(int value,char mode[30]) {
+    switch (value) {
+        case MIDI_TYPE:
+            strcpy(mode, "MIDI_TYPE");
+            break;
+        case CSOUND_TYPE:
+            strcpy(mode, "CSOUND_TYPE");
+            break;
+        case MIDI_CSOUND_TYPE:
+            strcpy(mode, "MIDI_CSOUND_TYPE");
+            break;
+        default:
+            strcpy(mode, "SILENT");
+            break;
+		}
+	}
+
+void thismode_rescale(int value,char mode[30]) {
+    switch (value) {
+        case OK_RESCALE:
+            strcpy(mode, "OK_RESCALE");
+            break;
+        case NEVER_RESCALE:
+            strcpy(mode, "NEVER_RESCALE");
+            break;
+		case DILATION_RATIO:
+            strcpy(mode, "DILATION_RATIO");
+            break;
+        default:
+            strcpy(mode, "UNKNOWN");
+            break;
+		}
+	}
+
+void thismode_channel(int value,char mode[30]) {
+    switch (value) {
+        case GLOBAL_CH:
+            strcpy(mode, "GLOBAL_CH");
+            break;
+        case LOCAL_CH:
+            strcpy(mode, "LOCAL_CH");
+            break;
+        default:
+            strcpy(mode, "UNKNOWN"); // This never happens
+            break;
+		}
+	}
+
+char* read_file(const char *filename) {
+	// Load the content of a text file as a single string
+    FILE *file = fopen(filename, "r");
+    if(!file) {
+        perror("Unable to open file");
+        return NULL;
+    	}
+    // Get the file size
+    fseek(file, 0, SEEK_END);
+    long filesize = ftell(file);
+    rewind(file);
+    // Allocate memory and read the file
+    char *data = (char *)malloc(filesize + 1);
+    if(!data) {
+        perror("Memory allocation failed");
+        fclose(file);
+        return NULL;
+   		}
+    size_t bytes_read = fread(data, 1, filesize, file);
+	if(bytes_read != filesize) {
+		if(ferror(file))
+    		BPPrintMessage(0,odError,"=> Error while reading file: %s\n",strerror(errno));
+		else
+			BPPrintMessage(0,odError,"=> Unexpected end of file: read %zu bytes instead of %zu\n",bytes_read, filesize);
+		return NULL;
+		}
+    data[filesize] = '\0';
+    fclose(file);
+    return data;
+	}
+
+int SaveStringAsJson(FILE *sojson,const char *key,const char *unit,const char *name,const char* value) {
+	if(sojson == NULL) return(MISSED);
+	if(strlen(key) == 0 && strlen(unit) == 0)
+    	fprintf(sojson,"    \"%s\": \"%s\",\n", name, value);
+	else if(strlen(unit) == 0)
+    	fprintf(sojson,"    \"%s\": {\n      \"key\": \"%s\",\n      \"value\": \"%s\"\n      },\n",name,key,value);
+	else 
+    	fprintf(sojson,"    \"%s\": {\n      \"key\": \"%s\",\n      \"value\": \"%s\",\n      \"unit\": \"%s\"\n      },\n",name,key,value,unit);
+	return(OK);
+	}
+int SaveIntAsJson(FILE *sojson,const char *key,const char *unit,const char *name,int value) {
+	if(sojson == NULL) return(MISSED);
+	if(strlen(key) == 0 && strlen(unit) == 0)
+    	fprintf(sojson,"    \"%s\": %d,\n", name, value);
+	else if(strlen(unit) == 0)
+    	fprintf(sojson,"    \"%s\": {\n      \"key\": \"%s\",\n      \"value\": %d\n      },\n",name,key,value);
+	else 
+    	fprintf(sojson,"    \"%s\": {\n      \"key\": \"%s\",\n      \"value\": %d,\n      \"unit\": \"%s\"\n      },\n",name,key,value,unit);
+	return(OK);
+	}
+int SaveLongAsJson(FILE *sojson,const char *key,const char *unit,const char *name,long value) {
+	if(sojson == NULL) return(MISSED);
+	if(strlen(key) == 0 && strlen(unit) == 0)
+    	fprintf(sojson,"    \"%s\": %ld,\n", name, value);
+	else if(strlen(unit) == 0)
+    	fprintf(sojson,"    \"%s\": {\n      \"key\": \"%s\",\n      \"value\": %ld\n      },\n",name,key,value);
+	else 
+    	fprintf(sojson,"    \"%s\": {\n      \"key\": \"%s\",\n      \"value\": %ld,\n      \"unit\": \"%s\"\n      },\n",name,key,value,unit);
+	return(OK);
+	}
+int SaveFloatAsJson(FILE *sojson,const char *key,const char *unit,const char *name,double value) {
+	if(sojson == NULL) return(MISSED);
+	if(strlen(key) == 0 && strlen(unit) == 0)
+    	fprintf(sojson,"    \"%s\": %.4f,\n", name, value);
+	else if(strlen(unit) == 0)
+    	fprintf(sojson,"    \"%s\": {\n      \"key\": \"%s\",\n      \"value\": %.4f\n      },\n",name,key,value);
+	else 
+    	fprintf(sojson,"    \"%s\": {\n      \"key\": \"%s\",\n      \"value\": %.4f,\n      \"unit\": \"%s\"\n      },\n",name,key,value,unit);
+	return(OK);
+	}
+
+static void WriteJsonString(FILE *f, const char *text) {
+    const unsigned char *p = (const unsigned char *)text;
+    fputc('"', f);
+    while (*p != '\0') {
+        switch (*p) {
+            case '"':  fputs("\\\"", f); break;
+            case '\\': fputs("\\\\", f); break;
+            case '\b': fputs("\\b",  f); break;
+            case '\f': fputs("\\f",  f); break;
+            case '\n': fputs("\\n",  f); break;
+            case '\r': fputs("\\r",  f); break;
+            case '\t': fputs("\\t",  f); break;
+            default:
+                if (*p < 0x20) {
+                    fprintf(f, "\\u%04x", (unsigned int)*p);
+                	}
+                else {
+                    fputc(*p, f);
+                	}
+                break;
+        	}
+        p++;
+    	}
+    fputc('"', f);
+	}
+
+void delay(int number_of_seconds) {
+    // Converting time into milli_seconds
+    int milli_seconds = 1000 * number_of_seconds;
+  
+    // Storing start time
+    clock_t start_time = clock();
+  
+    // looping till required time is not achieved
+    while(clock() < start_time + milli_seconds);
+	}

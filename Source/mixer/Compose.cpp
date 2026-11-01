@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstdlib>
 #include <cmath>
 #include <map>
 #include <numeric>
@@ -77,6 +78,13 @@ namespace composition
               "the owj, and the forud back home; the voice's phrases answered by the tār; a chahārmezrāb and a reng to close.",
               "During, Mirabdolbaghi and Safvat, The Art of Persian Music; Nettl, The Radif of Persian Music; Farhat, The Dastgāh Concept",
               "shur", 4, 6, "tār|āvāz (voice)|tonbak|santur|kamāncheh|ney" },
+            { Method::bolGrammar, "bolgrammar", "Bol Processor Grammar", "Tablā qāʿida (Lucknow), after the Bol Processor", "south and west asia",
+              "A tablā qāʿida in tīntāl derived by a weighted grammar, as Bel and Kippen's Bol Processor models it: a theme of bols, then "
+              "variations rewritten from the theme's own cells, each played bharī (open) and then khālī (the bāyāṅ's resonance taken "
+              "away, dha to ta, ge to ke) returning to open for sam, and a tihāī; the lehrā's nagma and the tānpūrā beneath.",
+              "Kippen and Bel, \"Modelling music with grammars: formal language representation in the Bol Processor\" (1992); "
+              "Kippen, The Tabla of Lucknow (1988); Bel, Bol Processor (bolprocessor.org)", "",
+              3, 3, "tablā|lehrā (sāraṅgī)|tānpūrā" },
             { Method::gamelan, "gamelan", "Gamelan Colotomic Form", "Javanese gamelan (Central Java)", "east and southeast asia",
               "A balungan in gatra of four, its last note the seleh, in a ladrang's gong cycle: kenong, kempul, kethuk and the gong "
               "marking its points; saron peking and bonang elaborate it, twice as dense in irama II; a buka to begin and a suwuk to end.",
@@ -113,6 +121,13 @@ namespace composition
               "the sebene, the cycle repeated over the cavacha while the solo's cell varies, calls, answers and climbs to a climax.",
               "Stewart, Rumba on the River (2000); White, Rumba Rules (2008); Eyre, Guitar Atlas: Africa", "",
               5, 8, "solo (lead guitar)|mi-solo|accompagnement (rhythm guitar)|bass|drums (cavacha)|lead voice|second voice|congas" },
+            { Method::interlocking, "interlocking", "Interlocking Polyphony", "Mbuti and Aka singing (Central African rainforest)", "africa",
+              "Each voice sings its own short figure over a common pulse, some yodelled between chest and head voice, the figures of "
+              "different lengths in one period; they overlap and fill each other's gaps, so the melody is in the composite and no one "
+              "sings it. Voices enter one by one, each varies its figure without breaking the whole, and the leader closes alone.",
+              "Arom, African Polyphony and Polyrhythm (1991); Fürniss on Aka yodel and polyphony; Turnbull and Chapman, Mbuti Pygmies "
+              "of the Ituri Rainforest (Smithsonian Folkways, notes ed. Kisliuk); Kisliuk, Seize the Dance! (1998)", "",
+              5, 8, "leader (yodel)|voice 2 (yodel)|voice 3|voice 4|voice 5 (low)|voice 6|voice 7 (yodel)|hand claps" },
         };
         return all;
     }
@@ -342,7 +357,7 @@ namespace composition
         // General MIDI drums for the percussion parts.
         namespace gm
         {
-            constexpr int kick = 36, acousticKick = 35, rim = 37, snare = 38, lowFloorTom = 41, lowTom = 45, lowMidTom = 47,
+            constexpr int kick = 36, acousticKick = 35, rim = 37, snare = 38, handClap = 39, lowFloorTom = 41, lowTom = 45, lowMidTom = 47,
                           hiMidTom = 48, highTom = 50, chineseCymbal = 52, rideBell = 53, tambourine = 54, cowbell = 56,
                           muteHiConga = 62, openHiConga = 63, lowConga = 64, highTimbale = 65, lowTimbale = 66,
                           highAgogo = 67, lowAgogo = 68, cabasa = 69, maracas = 70, highWood = 76, lowWood = 77, shaker = 82,
@@ -2186,6 +2201,453 @@ namespace composition
         }
 
         //======================================================================
+        // Interlocking polyphony (Mbuti, Aka): not one melody shared out, as hocket() does, but each
+        // voice its own short figure, of its own length within one period, placed in the others' gaps;
+        // the melody is what they make together. Some voices yodel, leaping between a chest note and a
+        // head note. An abstraction of the principle (Arom's, Fürniss's), not a transcription.
+        Result interlocking (const Settings& s, Random& r)
+        {
+            Scale sc (s.mode);
+            auto out = begin (s);
+            const int parts = std::clamp (s.parts, 1, 8);
+            const int voices = std::min (parts, 7);   // the eighth part claps
+            if (parts == 8)
+                out.parts[7].drums = true;
+            // The pitches: the mode's degrees nearest an anhemitonic pentatonic, in every period.
+            std::vector<int> penta;
+            for (double c : { 0.0, 200.0, 400.0, 700.0, 900.0 })
+            {
+                const auto d = sc.index (sc.nearest (c));
+                if (std::find (penta.begin(), penta.end(), d) == penta.end())
+                    penta.push_back (d);
+            }
+            std::sort (penta.begin(), penta.end());
+            const int k = (int) penta.size();
+            auto tone = [&] (int i) { return penta[(size_t) (i - floorDiv (i, k) * k)] + floorDiv (i, k) * sc.n(); };
+
+            // The voices: where each sings (an index into the pentatonic), whether it yodels, how long its figure is.
+            constexpr int period = 24;
+            const std::array<int, 7> base { k, 2, 1, 0, -k, 2, k - 1 };
+            const std::array<bool, 7> yodels { true, true, false, false, false, false, true };
+            const std::array<int, 7> lengths { 24, 12, 8, 6, 12, 8, 6 };
+            struct Figure
+            {
+                int length = period;
+                std::vector<std::pair<int, int>> notes;   // pulse in the figure, pentatonic index
+            };
+            std::vector<Figure> figures ((size_t) voices);
+            std::array<int, period> heard {};   // how many voices already sound on each pulse of the period
+            auto occupy = [&] (const Figure& f, int sign)
+            {
+                for (const auto& note : f.notes)
+                    for (int x = note.first; x < period; x += f.length)
+                        heard[(size_t) x] += sign;
+            };
+            // The emptiest pulse of a figure's length: the fewest voices there in all its repetitions.
+            auto emptiest = [&] (const Figure& f, const std::vector<int>& taken)
+            {
+                int best = -1;
+                double bestScore = 1e9;
+                for (int j = 0; j < f.length; ++j)
+                {
+                    if (std::find (taken.begin(), taken.end(), j) != taken.end())
+                        continue;
+                    double score = r.uniform() * 0.8;
+                    for (int x = j; x < period; x += f.length)
+                        score += heard[(size_t) x] * (double) f.length / period;
+                    if (score < bestScore)
+                    {
+                        bestScore = score;
+                        best = j;
+                    }
+                }
+                return best;
+            };
+            for (int v = 0; v < voices; ++v)
+            {
+                auto& f = figures[(size_t) v];
+                f.length = lengths[(size_t) v];
+                const int count = v == 0 ? between (r, 8, 10) : yodels[(size_t) v] ? std::max (2, f.length / 3) : std::max (2, f.length / 4 + below (r, 2));
+                std::vector<int> at;
+                for (int i = 0; i < count; ++i)
+                    if (const auto j = emptiest (f, at); j >= 0)
+                        at.push_back (j);
+                std::sort (at.begin(), at.end());
+                int t = base[(size_t) v], dir = 0;
+                bool high = chance (r, 0.5);
+                for (size_t i = 0; i < at.size(); ++i)
+                {
+                    if (yodels[(size_t) v])
+                    {
+                        // The yodel: chest and head voice by turns, a sixth to an octave apart.
+                        t = high ? base[(size_t) v] + between (r, 3, 4) : base[(size_t) v] + below (r, 2) * (chance (r, 0.5) ? 1 : -1);
+                        high = ! high;
+                    }
+                    else if (i > 0)
+                    {
+                        const int step = chance (r, 0.15) ? 0 : chance (r, 0.25) ? 2 : 1;
+                        dir = std::abs (t + step - base[(size_t) v]) > 2 ? -1 : std::abs (t - step - base[(size_t) v]) > 2 ? 1 : chance (r, 0.5) ? 1 : -1;
+                        t += dir * step;
+                    }
+                    f.notes.push_back ({ at[i], t });
+                }
+                occupy (f, 1);
+            }
+
+            const auto pulse = Q / 2;
+            const auto cycle = (int64_t) period * pulse;
+            const int cycles = std::max (voices + 4, (int) (std::max<int64_t> (s.bars, 8) * barTicks() / cycle));
+            const int full = voices;                  // the cycle where every voice sings
+            const int thin = cycles - 2;              // where they leave
+            auto sing = [&] (int v, int64_t at, int velocityDrop)
+            {
+                const auto& f = figures[(size_t) v];
+                for (int rep = 0; rep * f.length < period; ++rep)
+                    for (size_t i = 0; i < f.notes.size(); ++i)
+                    {
+                        const auto [p, t] = f.notes[i];
+                        const auto next = i + 1 < f.notes.size() ? f.notes[i + 1].first : f.notes.front().first + f.length;
+                        const auto len = std::clamp<int64_t> (next - p, 1, yodels[(size_t) v] ? 1 : 2) * pulse;
+                        const bool head = yodels[(size_t) v] && t >= base[(size_t) v] + 3;
+                        add (out.parts[(size_t) v], at + (int64_t) (rep * f.length + p) * pulse, len, sc.key (tone (t)),
+                             (head ? 76 : 90) - velocityDrop + (p == 0 ? 8 : 0));
+                    }
+            };
+            for (int c = 0; c < cycles; ++c)
+            {
+                const auto at = (int64_t) c * cycle;
+                if (c == 0)
+                    mark (out, at, "the leader's figure");
+                else if (c < full)
+                    mark (out, at, std::string (split (info (s.method).parts)[(size_t) c]) + " enters");
+                else if (c == full)
+                    mark (out, at, "all the voices interlock");
+                else if (c == full + 1 && full + 1 < thin)
+                    mark (out, at, "each voice varies its figure");
+                else if (c == thin)
+                    mark (out, at, "the voices leave");
+                // Each voice's own variation, now and then, kept: a note moved to an empty pulse, or sung a step away.
+                if (c > full && c < thin)
+                    for (int v = 1; v < voices; ++v)
+                        if (chance (r, 0.3))
+                        {
+                            auto& f = figures[(size_t) v];
+                            occupy (f, -1);
+                            const auto i = (size_t) below (r, (int) f.notes.size());
+                            if (yodels[(size_t) v] || chance (r, 0.5))
+                            {
+                                std::vector<int> taken;
+                                for (const auto& n : f.notes)
+                                    taken.push_back (n.first);
+                                if (const auto j = emptiest (f, taken); j >= 0)
+                                    f.notes[i].first = j;
+                                std::sort (f.notes.begin(), f.notes.end());
+                            }
+                            else
+                                f.notes[i].second += chance (r, 0.5) ? 1 : -1;
+                            occupy (f, 1);
+                        }
+                for (int v = 0; v < voices; ++v)
+                {
+                    const bool in = c >= v && (c < thin || v == 0 || (c == thin && v < (voices + 1) / 2));
+                    if (in)
+                        sing (v, at, c >= thin ? 8 : 0);
+                }
+                if (parts == 8 && c >= 2 && c < thin)   // the claps on every third pulse, the period's first accented
+                    for (int x = 0; x < period; x += 3)
+                        hit (out.parts[7], at + x * pulse, gm::handClap, x == 0 ? 96 : 74);
+            }
+            const auto end = (int64_t) cycles * cycle;
+            mark (out, end, "the leader closes");
+            add (out.parts[0], end, 4 * pulse, sc.key (tone (k)), 84);
+            out.end = end + 4 * pulse;
+            out.parts.resize ((size_t) parts);
+            out.summary = std::to_string (voices) + (voices == 1 ? " voice" : " voices") + " in a period of " + std::to_string (period)
+                          + " pulses, each its own figure of 6 to 24 pulses in the others' gaps (" + std::to_string (std::count (yodels.begin(), yodels.begin() + voices, true))
+                          + " yodelling), so the melody is in the composite";
+            return out;
+        }
+
+        //======================================================================
+        // A weighted grammar as the Bol Processor writes one: "X -> <w> a b C | <w-d> d E". A word
+        // beginning with a capital is a variable, the rest are terminals (bols, '-' a rest). <w> is
+        // an alternative's weight, <w-d> a decremental weight that drops by d each time it is used
+        // (so a grammar used again tries its other alternatives). derive() rewrites the leftmost
+        // variable this grammar has rules for until none is left; variables it has no rules for stay,
+        // for the next subgrammar. Our own code after Bel and Kippen's descriptions, not BP's.
+        struct Grammar
+        {
+            struct Alternative
+            {
+                std::vector<std::string> words;
+                double weight = 1.0, decrement = 0.0;
+            };
+            std::map<std::string, std::vector<Alternative>> rules;
+
+            static std::vector<std::string> words (const std::string& text)
+            {
+                std::vector<std::string> out;
+                std::string w;
+                for (char c : text + " ")
+                    if (std::isspace ((unsigned char) c))
+                    {
+                        if (! w.empty())
+                            out.push_back (w);
+                        w.clear();
+                    }
+                    else
+                        w += c;
+                return out;
+            }
+
+            void rule (const std::string& text)
+            {
+                const auto arrow = text.find ("->");
+                const auto left = words (text.substr (0, arrow));
+                if (arrow == std::string::npos || left.size() != 1)
+                    return;
+                auto& alternatives = rules[left[0]];
+                std::string rest = text.substr (arrow + 2) + "|";
+                for (size_t from = 0, bar; (bar = rest.find ('|', from)) != std::string::npos; from = bar + 1)
+                {
+                    Alternative a;
+                    a.words = words (rest.substr (from, bar - from));
+                    if (! a.words.empty() && a.words[0].front() == '<' && a.words[0].back() == '>')
+                    {
+                        const auto w = a.words[0].substr (1, a.words[0].size() - 2);
+                        const auto minus = w.find ('-');
+                        a.weight = std::atof (w.substr (0, minus).c_str());
+                        if (minus != std::string::npos)
+                            a.decrement = std::atof (w.substr (minus + 1).c_str());
+                        a.words.erase (a.words.begin());
+                    }
+                    alternatives.push_back (a);
+                }
+            }
+
+            std::vector<std::string> derive (std::vector<std::string> s, Random& r)
+            {
+                for (int guard = 0; guard < 4000; ++guard)
+                {
+                    auto it = std::find_if (s.begin(), s.end(), [this] (const std::string& w)
+                                            { return std::isupper ((unsigned char) w[0]) && rules.count (w) > 0; });
+                    if (it == s.end())
+                        break;
+                    auto& alternatives = rules[*it];
+                    double total = 0.0;
+                    for (const auto& a : alternatives)
+                        total += std::max (0.0, a.weight);
+                    size_t pick = 0;
+                    if (total <= 0.0)
+                        pick = (size_t) below (r, (int) alternatives.size());
+                    else
+                        for (double x = r.uniform() * total; pick + 1 < alternatives.size(); ++pick)
+                            if ((x -= std::max (0.0, alternatives[pick].weight)) < 0.0)
+                                break;
+                    auto& a = alternatives[pick];
+                    a.weight = std::max (0.0, a.weight - a.decrement);
+                    const auto at = it - s.begin();
+                    s.erase (it);
+                    s.insert (s.begin() + at, a.words.begin(), a.words.end());
+                }
+                return s;
+            }
+        };
+
+        std::string joined (const std::vector<std::string>& w)
+        {
+            std::string out;
+            for (const auto& x : w)
+                out += (out.empty() ? "" : " ") + x;
+            return out;
+        }
+
+        // A tablā qāʿida derived by grammars, after Kippen and Bel's Bol Processor work on the Lucknow
+        // tablā: subgrammar 1 makes the theme's cells, 2 its form, 3 each variation from the theme's
+        // own cells by position, and 4 the tihāī; then each is played bharī and khālī.
+        Result bolGrammar (const Settings& s, Random& r)
+        {
+            Scale sc (s.mode);
+            auto out = begin (s);
+            const int parts = std::clamp (s.parts, 1, 3);
+            out.parts[0].drums = true;
+
+            // 1. The cells, a beat of four bols each; K the cadence (the theme's refrain).
+            Grammar cells;
+            cells.rule ("A -> <30> dha ti dha ge | <20> dha dha ti ra | <20> dha - ti ra | <15> dha ge na dha | <15> dha ti ra ki");
+            cells.rule ("B -> <30> na dha ti ra | <25> ki ta dha ge | <20> ti ra ki ta | <15> dha ti dha ge");
+            cells.rule ("C -> <30> ge na dha ge | <25> dha ge tin na | <20> ti ra ki ta | <15> dha - dha ge");
+            cells.rule ("D -> <30> dha ge dhin na | <25> ti ra ki ta | <20> na dha ti ra");
+            cells.rule ("K -> <40> dhin na ge na | <30> dha ge dhin na | <30> dhi na ge na");
+            const std::array<const char*, 5> letters { "A", "B", "C", "D", "K" };
+            std::map<std::string, std::vector<std::string>> cell;
+            for (const auto* l : letters)
+                cell[l] = cells.derive ({ l }, r);
+
+            // 2. The theme: eight cells, the cadence last.
+            Grammar form;
+            form.rule ("THEME -> <40> A B A C A B D K | <30> A A B C A A D K | <30> A B C B A B D K");
+            const auto theme = form.derive ({ "THEME" }, r);
+
+            // 3. The variations: the theme's cells by position (P1..P8), a new first half and the theme's
+            // second half as refrain, or two new halves and the whole theme.
+            Grammar variation;
+            variation.rule ("VAR -> <60-12> HALF P5 P6 P7 P8 | <40> HALF HALF P1 P2 P3 P4 P5 P6 P7 P8");
+            variation.rule ("HALF -> <20-6> P1 P1 P2 P3 | <20-6> P1 P2 P1 P2 | <15-6> P3 P4 P1 P2 | <15-6> P1 P2 P3 P3 | <15-6> P2 P2 P1 P2 "
+                            "| <10-5> P1 P1 P1 P2 | <10-5> P3 P3 P1 P2 | <10-5> P2 P3 P2 P3 | <10-5> P1 P3 P2 P4 | <10-5> P4 P4 P1 P2");
+            auto letter = [&] (const std::string& p) { return theme[(size_t) std::clamp (std::atoi (p.c_str() + 1) - 1, 0, 7)]; };
+            auto bols = [&] (const std::vector<std::string>& positions)
+            {
+                std::vector<std::string> out2;
+                for (const auto& p : positions)
+                {
+                    const auto& c = cell[p[0] == 'P' ? letter (p) : p];
+                    out2.insert (out2.end(), c.begin(), c.end());
+                }
+                return out2;
+            };
+            auto named = [&] (const std::vector<std::string>& positions)
+            {
+                std::vector<std::string> l;
+                for (const auto& p : positions)
+                    l.push_back (p[0] == 'P' ? letter (p) : p);
+                return joined (l);
+            };
+
+            // The strokes: the dāyāṅ (right) on the high congas, the bāyāṅ (left) open on the low conga, closed on the rim.
+            const std::map<std::string, std::vector<int>> strokes {
+                { "dha", { gm::openHiConga, gm::lowConga } }, { "dhin", { gm::muteHiConga, gm::lowConga } }, { "dhi", { gm::muteHiConga, gm::lowConga } },
+                { "na", { gm::openHiConga } }, { "ta", { gm::openHiConga } }, { "tin", { gm::muteHiConga } }, { "ti", { gm::muteHiConga } },
+                { "ra", { gm::muteHiConga } }, { "tu", { gm::highTimbale } }, { "ge", { gm::lowConga } }, { "ke", { gm::rim } },
+                { "ki", { gm::rim } }, { "ka", { gm::rim } } };
+            // Khālī: the bāyāṅ's open resonance taken away.
+            const std::map<std::string, std::string> closed { { "dha", "ta" }, { "dhin", "tin" }, { "dhi", "ti" }, { "ge", "ke" } };
+            const auto unit = Q / 4;   // four bols a beat
+            const auto cycleLen = 64 * unit;   // tīntāl, sixteen beats
+            auto play = [&] (const std::vector<std::string>& b, int64_t at, bool khali, size_t openFrom)
+            {
+                for (size_t i = 0; i < b.size(); ++i)
+                {
+                    auto bol = b[i];
+                    if (khali && i < openFrom)
+                        if (const auto c = closed.find (bol); c != closed.end())
+                            bol = c->second;
+                    const auto t = at + (int64_t) i * unit;
+                    const auto st = strokes.find (bol);
+                    if (st == strokes.end())
+                        continue;
+                    for (auto drum : st->second)
+                        hit (out.parts[0], t, drum, t % cycleLen == 0 ? 112 : i % 4 == 0 ? 92 : bol == "ra" ? 62 : 78, unit);
+                }
+                return at + (int64_t) b.size() * unit;
+            };
+            // A statement: bharī, then khālī, the last two cells open again to lead back to sam.
+            auto state = [&] (const std::vector<std::string>& positions, int64_t at)
+            {
+                const auto b = bols (positions);
+                at = play (b, at, false, 0);
+                return play (b, at, true, b.size() >= 8 ? b.size() - 8 : 0);
+            };
+
+            const int cycles = std::max (4, s.bars / 4);
+            int64_t t = 0;
+            mark (out, t, "theme: " + joined (theme));
+            t = state ({ "P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8" }, t);
+            std::vector<std::string> done;
+            int count = 0;
+            while (t + cycleLen < (int64_t) cycles * cycleLen)
+            {
+                const auto room = (int64_t) cycles * cycleLen - cycleLen - t;   // the last cycle is the tihāī's
+                std::vector<std::string> v;
+                bool found = false;
+                for (int attempt = 0; attempt < 24 && ! found; ++attempt)
+                {
+                    v = variation.derive ({ "VAR" }, r);
+                    const auto fits = (int64_t) v.size() * 4 * unit * 2 <= room;
+                    found = fits && (std::find (done.begin(), done.end(), named (v)) == done.end() || attempt > 16);
+                    if (! fits)
+                        v.clear();
+                }
+                if (v.empty())
+                {
+                    // The grammar's shortest: a new half and the refrain.
+                    v = Grammar::words ("P1 P1 P2 P3 P5 P6 P7 P8");
+                    if ((int64_t) v.size() * 4 * unit * 2 > room)
+                        break;
+                }
+                done.push_back (named (v));
+                mark (out, t, "variation " + std::to_string (++count) + ": " + named (v));
+                t = state (v, t);
+            }
+            // 4. The tihāī's cycle: the theme bharī on beats 1 to 8, then its last two cells and a dha three
+            // times from beat 9, three bols' rest between: 33 bols, the last dha on the next sam.
+            Grammar tihai;
+            tihai.rule ("TIHAI -> PHRASE - - - PHRASE - - - PHRASE");
+            tihai.rule ("PHRASE -> P7 P8 dha");
+            mark (out, t, "tihāī");
+            t = play (bols ({ "P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8" }), t, false, 0);
+            std::vector<std::string> ti;
+            for (const auto& w : tihai.derive ({ "TIHAI" }, r))
+                if (w[0] == 'P')
+                    for (const auto& b : cell[letter (w)])
+                        ti.push_back (b);
+                else
+                    ti.push_back (w);
+            play (ti, t, false, 0);
+            const auto sam = t + (int64_t) ti.size() * unit - unit;
+            const auto end = sam + 4 * Q;
+            mark (out, sam, "sam");
+
+            // The lehrā: a nagma of one cycle, the same each time, on Sa at sam; the tānpūrā beneath.
+            std::vector<std::pair<int, int>> nagma;   // degree, eighths
+            {
+                int d = 0, dir = 0, eighths = 0;
+                nagma.push_back ({ 0, 2 });
+                eighths = 2;
+                while (eighths < 32)
+                {
+                    const int len = std::min (32 - eighths, chance (r, 0.6) ? 1 : 2);
+                    d = walk (sc, d, -2, sc.n() + 1, r, dir, 0.15);
+                    if (eighths >= 28)   // home toward Sa
+                        d = d > 0 ? sc.stepDown (d) : d < 0 ? sc.stepUp (d) : d;
+                    nagma.push_back ({ d, len });
+                    eighths += len;
+                }
+            }
+            const int n = sc.n();
+            for (int64_t at = 0; at < sam; at += cycleLen)
+            {
+                if (parts >= 2)
+                {
+                    int64_t x = at;
+                    for (const auto& [d, len] : nagma)
+                    {
+                        add (out.parts[1], x, len * Q / 2, sc.key (d), x == at ? 84 : 70);
+                        x += len * Q / 2;
+                    }
+                }
+                if (parts >= 3)
+                    for (int b = 0; b < 16; ++b)
+                        add (out.parts[2], at + b * Q, Q, sc.key (std::array<int, 4> { sc.fifth() - n, 0, 0, -n }[(size_t) (b % 4)]), 54);
+            }
+            for (auto drum : strokes.at ("dha"))
+                hit (out.parts[0], sam, drum, 120, unit);
+            if (parts >= 2)
+                add (out.parts[1], sam, 4 * Q, sc.key (0), 90);
+            if (parts >= 3)
+                add (out.parts[2], sam, 4 * Q, sc.key (-n), 60);
+            out.end = end;
+            out.parts.resize ((size_t) parts);
+            std::string legend;
+            for (const auto* l : { "A", "B", "C", "D", "K" })
+                if (std::find (theme.begin(), theme.end(), l) != theme.end())
+                    legend += std::string (legend.empty() ? "" : ", ") + l + " = " + joined (cell[l]);
+            out.summary = "A qāʿida in tīntāl derived by grammars: the theme " + joined (theme) + " (" + legend + "), " + std::to_string (count)
+                          + " variations from its cells, each bharī then khālī, and a tihāī landing on sam";
+            return out;
+        }
+
+        //======================================================================
         // Congolese rumba and the sebene: three guitars interlocking on a short I–IV–V cycle, a sung
         // rumba with the voices in thirds, then the sebene over the cavacha, the solo's cell varied
         // and climbing to a climax. The guitars' figures are written as chord tones near a register,
@@ -2624,6 +3086,8 @@ namespace composition
             case Method::ostinato:     out = ostinato (s, r); break;
             case Method::hocket:       out = hocket (s, r); break;
             case Method::congolese:    out = congolese (s, r); break;
+            case Method::interlocking: out = interlocking (s, r); break;
+            case Method::bolGrammar:   out = bolGrammar (s, r); break;
         }
         if ((int) out.parts.size() > maxParts)
             out.parts.resize ((size_t) maxParts);

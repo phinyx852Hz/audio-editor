@@ -50,6 +50,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/MidSide.cpp
     Source/sampler/SamplerEngine.cpp
     Source/sampler/SlicerEngine.cpp
+    Source/sampler/PhiTabla.cpp
     Source/sampler/StepSequencer.cpp
     Source/mixer/MidiFile.cpp
     Source/mixer/Tunings.cpp
@@ -71,6 +72,7 @@ target_sources(${APP_ID} PRIVATE
     Source/mixer/RhythmGenerator.cpp
     Source/mixer/Minimalize.cpp
     Source/mixer/Compose.cpp
+    Source/mixer/BolProcessor.cpp
     Source/mixer/Instruments.cpp
     Source/mixer/InstrumentPrism.cpp
     Source/mixer/MixerEngine.cpp
@@ -207,6 +209,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/RhythmSection.cpp
     Source/ui/ArchitectonicsSection.cpp
     Source/ui/ComposeSection.cpp
+    Source/ui/BolProcessorDialog.cpp
     Source/ui/HarmonySection.cpp
     Source/ui/RhythmGeneratorDialog.cpp
     Source/ui/StochasticSection.cpp
@@ -406,6 +409,13 @@ add_library(phi_mtsesp STATIC third_party/MTS-ESP/libMTSMaster.cpp)
 target_link_libraries(phi_mtsesp PRIVATE ${CMAKE_DL_LIBS})
 target_link_libraries(${APP_ID} PRIVATE phi_mtsesp)
 
+# The Bol Processor (cmake/BolProcessor.cmake): Bel and Kippen's grammar engine, run as phi-bp3.
+include(cmake/BolProcessor.cmake)
+add_dependencies(${APP_ID} phi-bp3)
+target_compile_definitions(${APP_ID} PRIVATE
+    PHI_BP3_BUILD_PATH="$<TARGET_FILE:phi-bp3>"
+    PHI_BOLPROCESSOR_SOURCE_DIR="${CMAKE_SOURCE_DIR}/third_party/bolprocessor")
+
 # Nyquist effects (cmake/Nyquist.cmake): libnyquist, its runtime and the bundled plug-ins.
 include(cmake/Nyquist.cmake)
 target_link_libraries(${APP_ID} PRIVATE phi_nyquist)
@@ -461,6 +471,7 @@ if(PHI_BUILD_TESTS)
         Source/core/MidSide.cpp
         Source/sampler/SamplerEngine.cpp
         Source/sampler/SlicerEngine.cpp
+        Source/sampler/PhiTabla.cpp
         Source/sampler/StepSequencer.cpp
         Source/mixer/MidiFile.cpp
         Source/mixer/Tunings.cpp
@@ -481,6 +492,7 @@ if(PHI_BUILD_TESTS)
         Source/mixer/RhythmGenerator.cpp
         Source/mixer/Minimalize.cpp
         Source/mixer/Compose.cpp
+        Source/mixer/BolProcessor.cpp
         Source/mixer/Instruments.cpp
         Source/mixer/InstrumentPrism.cpp
         Source/mixer/MixerEngine.cpp
@@ -534,6 +546,11 @@ if(PHI_BUILD_TESTS)
     target_link_libraries(phi-core-tests PRIVATE phi_nyquist phi_rubberband phi_mysofa)
     target_compile_definitions(phi-core-tests PRIVATE PHI_DEFAULT_HRTF="${PHI_DEFAULT_HRTF}")
     target_compile_definitions(phi-core-tests PRIVATE PHI_SHARE_SOURCE_DIR="${CMAKE_SOURCE_DIR}/share")
+    # The Bol Processor test runs phi-bp3 on a grammar of its own.
+    target_compile_definitions(phi-core-tests PRIVATE
+        PHI_BP3_BUILD_PATH="$<TARGET_FILE:phi-bp3>"
+        PHI_BOLPROCESSOR_SOURCE_DIR="${CMAKE_SOURCE_DIR}/third_party/bolprocessor")
+    add_dependencies(phi-core-tests phi-bp3)
     add_test(NAME core COMMAND phi-core-tests)
 
     # The video writer: an MP4 with H.265 (or H.264) and several AAC tracks, read back.
