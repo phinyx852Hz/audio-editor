@@ -22,6 +22,7 @@
 #include "../Source/mixer/Minimalize.h"
 #include "../Source/mixer/MixerEngine.h"
 #include "../Source/mixer/InstrumentPrism.h"
+#include "../Source/mixer/EffectPrism.h"
 #include "../Source/mixer/DrumsToMidi.h"
 #include "../Source/mixer/Rhythms.h"
 #include "../Source/mixer/Architectonics.h"
@@ -4428,6 +4429,99 @@ namespace
             int samples, at = 0;
             std::vector<std::pair<float, float>> line;
         };
+    }
+
+    // An Effect Prism (a mixer return's): rays of effects, the input divided among them and joined again.
+    void testEffectPrism()
+    {
+        using prismtest::Double;
+        constexpr int frames = 1000;
+        std::vector<float> inL (frames), inR (frames);
+        for (int k = 0; k < frames; ++k)
+        {
+            inL[(size_t) k] = std::sin (0.05f * (float) k);
+            inR[(size_t) k] = 0.3f * std::cos (0.07f * (float) k);
+        }
+        auto run = [&] (mixer::EffectPrism& p, std::vector<float>& l, std::vector<float>& r)
+        {
+            l = inL;
+            r = inR;
+            p.process (l.data(), r.data(), frames);
+        };
+        std::vector<float> l, r;
+        {
+            mixer::EffectPrism p;
+            p.prepare (48000.0, 256);
+            run (p, l, r);
+            check (l == inL && r == inR, "an Effect Prism's one empty ray gives back what went in");
+            check (p.pluginId() == mixer::EffectPrism::identifier && mixer::EffectPrism::is (p), "an Effect Prism knows itself");
+        }
+        {
+            // Two parallel rays, one doubling after 10 samples: the other waits for it, so 1 + 2 = 3x, 10 late.
+            mixer::EffectPrism p;
+            p.prepare (48000.0, 256);
+            auto rays = p.rays();
+            rays.push_back ({});
+            rays[1].effects.push_back ({ std::make_shared<Double> (10), false, 1.0f });
+            p.setRays (rays);
+            check (p.latency() == 10, "an Effect Prism reports its slowest ray");
+            run (p, l, r);
+            float worst = 0.0f;
+            for (int k = 10; k < frames; ++k)
+                worst = std::max (worst, std::abs (l[(size_t) k] - 3.0f * inL[(size_t) k - 10]));
+            check (worst < 1.0e-5f, "an Effect Prism lines its parallel rays up");
+        }
+        {
+            // Mid/side with the side ray off: mono.
+            mixer::EffectPrism p;
+            p.prepare (48000.0, 256);
+            p.setSplit (prism::Split::midSide);
+            auto rays = p.rays();
+            rays.push_back ({});
+            rays[1].gainDb = -60.0f;
+            p.setRays (rays);
+            run (p, l, r);
+            run (p, l, r);   // past the gain's ramp
+            float worst = 0.0f;
+            for (int k = 0; k < frames; ++k)
+            {
+                const auto mid = 0.5f * (inL[(size_t) k] + inR[(size_t) k]);
+                worst = std::max (worst, std::abs (l[(size_t) k] - mid) + std::abs (r[(size_t) k] - mid));
+            }
+            check (worst < 1.0e-5f, "an Effect Prism's mid/side split with the side off is mono");
+        }
+        {
+            // Three empty bands add back to an allpass: an impulse keeps its energy.
+            mixer::EffectPrism p;
+            p.prepare (48000.0, 512);
+            p.setSplit (prism::Split::bands);
+            p.setRays (std::vector<mixer::EffectPrism::Ray> (3));
+            std::vector<float> a (48000, 0.0f), b (48000, 0.0f);
+            a[100] = b[100] = 1.0f;
+            p.process (a.data(), b.data(), (int) a.size());
+            double energy = 0.0;
+            for (auto x : a)
+                energy += (double) x * x;
+            check (std::abs (energy - 1.0) < 1.0e-3, "an Effect Prism's empty bands add back flat");
+        }
+        {
+            mixer::EffectPrism p;
+            p.setRays (std::vector<mixer::EffectPrism::Ray> (2));
+            auto rays = p.rays();
+            rays[1].name = "Wet";
+            rays[1].gainDb = -6.0f;
+            rays[1].muted = true;
+            p.setRays (rays);
+            p.setName ("Space");
+            p.setSplit (prism::Split::leftRight);
+            const auto saved = p.state();
+            mixer::EffectPrism q;
+            q.setRays (std::vector<mixer::EffectPrism::Ray> (2));
+            q.setState (saved);
+            const auto back = q.rays();
+            check (q.name() == "Space" && q.split() == prism::Split::leftRight && back[1].name == "Wet" && back[1].muted
+                       && std::abs (back[1].gainDb + 6.0f) < 1.0e-4f, "an Effect Prism's settings come back");
+        }
     }
 
     void testInstrumentPrism()
@@ -10431,6 +10525,7 @@ int main()
     testSpatialStudio();
     testPrismSplit();
     testInstrumentPrism();
+    testEffectPrism();
     testMasterAssist();
     testMixAssist();
     testSonify();

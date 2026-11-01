@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "MixerWindow.h"
 #include "ModeAtlas.h"
+#include "../mixer/EffectPrism.h"
 #include "../mixer/InstrumentPrism.h"
 #include "../mixer/RagaInstrument.h"
 #include "../core/PhiRaga.h"
@@ -10498,9 +10499,10 @@ void MixerWindow::setReturnEffect (int index, const std::string& pluginId)
         if (made == nullptr)
             status->setText (tr ("The return's effect could not be started: %1").arg (QString::fromStdString (error)));
     }
+    if (auto& open = returnPrismEditors[(size_t) index]; open != nullptr)
+        open->close();   // the Prism it edits leaves the return
     engine.setReturnEffect (index, made);
-    if (returnStrips[(size_t) index] != nullptr)
-        returnStrips[(size_t) index]->refresh();
+    refreshReturn (index);
     changed();
 }
 
@@ -10509,8 +10511,19 @@ QString MixerWindow::returnName (int index)
     return tr ("Return %1").arg (QChar ('A' + index));
 }
 
+void MixerWindow::refreshReturn (int index)
+{
+    if (returnStrips[(size_t) index] != nullptr)
+        returnStrips[(size_t) index]->refresh();
+}
+
 void MixerWindow::returnEffectsMenu (int index, QMenu& menu)
 {
+    const auto fx = engine.returnEffect (index);
+    const bool isPrism = fx != nullptr && mixer::EffectPrism::is (*fx);
+    // A Prism: rays of effects side by side, the effect there now in its first ray.
+    menu.addAction (isPrism ? tr ("Edit the &Prism...") : tr ("&Prism (Rays of Effects)..."), this, [this, index] { makeReturnPrism (index); });
+    menu.addSeparator();
     menu.addAction (tr ("No Effect (the sends as they are)"), this, [this, index] { setReturnEffect (index, {}); });
     menu.addAction (index == 0 ? tr ("Back to the Default (Φ Space)") : tr ("Back to the Default (Φ Echo)"), this, [this, index] { defaultReturns (index); });
     menu.addSeparator();
@@ -10533,6 +10546,11 @@ void MixerWindow::editReturn (int index)
         chooseReturnEffect (index, QCursor::pos());
         return;
     }
+    if (mixer::EffectPrism::is (*fx))
+    {
+        openReturnPrism (index);
+        return;
+    }
     if (fx->hasWindow())
     {
         fx->showWindow();
@@ -10552,7 +10570,9 @@ QJsonArray MixerWindow::returnsJson() const
         auto& c = engine.returnStrip (r);
         const auto fx = engine.returnEffect (r);
         QJsonObject o { { "fader", c.faderDb.load() }, { "pan", c.pan.load() }, { "mute", c.mute.load() }, { "spatial", placeJson (c.placed) } };
-        if (fx != nullptr)
+        if (fx != nullptr && mixer::EffectPrism::is (*fx))
+            o.insert ("effect", returnPrismJson (*fx));
+        else if (fx != nullptr)
             o.insert ("effect", QJsonObject { { "id", QString::fromStdString (fx->pluginId()) }, { "name", QString::fromStdString (fx->name()) },
                                               { "state", QString::fromStdString (fx->state()) } });
         list.append (o);
@@ -10572,7 +10592,11 @@ void MixerWindow::loadReturns (const QJsonArray& list, QStringList& problems)
         loadPlace (c.placed, o.value ("spatial"), mixer::Panner3d::returnSpread);
         const auto e = o.value ("effect").toObject();
         mixer::EffectPtr made;
-        if (! e.isEmpty())
+        if (auto& open = returnPrismEditors[(size_t) r]; open != nullptr)
+            open->close();
+        if (e.value ("id").toString() == QLatin1String (mixer::EffectPrism::identifier))
+            made = returnPrismFromJson (e, r, problems);
+        else if (! e.isEmpty())
         {
             std::string error;
             made = audio.loadEffectPlugin (e.value ("id").toString().toStdString(), rate(), error);

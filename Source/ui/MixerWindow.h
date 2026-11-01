@@ -45,6 +45,7 @@ class LauncherRack;
 class ReturnStripWidget;
 class TrackDevices;
 class PrismDialog;
+class EffectPrismDialog;
 class ClipView;
 class EditorTrack;
 class QStackedWidget;
@@ -367,6 +368,7 @@ private:
     friend class ReturnStripWidget;
     friend class TrackDevices;
     friend class PrismDialog;
+    friend class EffectPrismDialog;
     friend class ClipView;
     friend class EditorTrack;
     friend class BusStripWidget;
@@ -653,6 +655,13 @@ private:
     static QString returnName (int index);   // "Return A"
     void returnEffectsMenu (int index, QMenu&);
     void chooseReturnEffect (int index, QPoint at);
+    // An Effect Prism in the return: rays of effects (MixerFxPrism.cpp). The effect there goes into its first ray.
+    void makeReturnPrism (int index);
+    void openReturnPrism (int index);
+    void returnPrismChanged (int index);   // its rays were edited: the strip follows, the mix is changed
+    void refreshReturn (int index);
+    QJsonObject returnPrismJson (const mixer::Effect&) const;
+    mixer::EffectPtr returnPrismFromJson (const QJsonObject&, int index, QStringList& problems);
     void setReturnEffect (int index, const std::string& pluginId);   // empty: none
     void editReturn (int index);
     void defaultReturns (int only = -1);   // Φ Space on A, Φ Echo on B (a dotted eighth at the tempo); -1 both
@@ -784,7 +793,8 @@ private:
     QPushButton* qLinkButton = nullptr;
     QPushButton* bypassInsertsButton = nullptr;
     QPushButton* bypassSendsButton = nullptr;
-    std::array<ReturnStripWidget*, mixer::numReturns> returnStrips {};          // StripSection bits (MixerWindow.cpp) shown on every strip
+    std::array<ReturnStripWidget*, mixer::numReturns> returnStrips {};
+    std::array<QPointer<QWidget>, mixer::numReturns> returnPrismEditors {};          // StripSection bits (MixerWindow.cpp) shown on every strip
     QString path;                    // the mix file; empty: not saved yet
     bool modified = false;
     bool restoring = false;

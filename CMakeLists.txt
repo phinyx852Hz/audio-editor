@@ -76,6 +76,7 @@ target_sources(${APP_ID} PRIVATE
     Source/mixer/BolProcessor.cpp
     Source/mixer/Instruments.cpp
     Source/mixer/InstrumentPrism.cpp
+    Source/mixer/EffectPrism.cpp
     Source/mixer/MixerEngine.cpp
     Source/mixer/Spatial.cpp
     Source/mixer/Recording.cpp
@@ -208,6 +209,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/MidiMapOverlay.cpp
     Source/ui/MixerSection.cpp
     Source/ui/MixerPrism.cpp
+    Source/ui/MixerFxPrism.cpp
     Source/ui/ModeSection.cpp
     Source/ui/ModeAtlas.cpp
     Source/ui/RhythmSection.cpp
@@ -504,6 +506,7 @@ if(PHI_BUILD_TESTS)
         Source/mixer/BolProcessor.cpp
         Source/mixer/Instruments.cpp
         Source/mixer/InstrumentPrism.cpp
+        Source/mixer/EffectPrism.cpp
         Source/mixer/MixerEngine.cpp
         Source/mixer/Spatial.cpp
         Source/mixer/Recording.cpp
