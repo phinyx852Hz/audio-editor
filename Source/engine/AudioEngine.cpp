@@ -1218,6 +1218,23 @@ void AudioEngine::prismForgetController (const ChainPath& p, int m) { PHI_WITH_P
 void AudioEngine::saveMasterSection() const                          { impl->master.save(); }
 std::string AudioEngine::restoreMasterSection()                      { return impl->master.restore(); }
 
+std::string AudioEngine::saveMasterPreset (const std::string& file, const std::string& name, const std::string& description) const
+{
+    return impl->master.savePreset (juce::File (juce::String::fromUTF8 (file.c_str())), juce::String::fromUTF8 (name.c_str()),
+                                    juce::String::fromUTF8 (description.c_str()));
+}
+
+std::string AudioEngine::loadMasterPreset (const std::string& file)
+{
+    return impl->master.loadPreset (juce::File (juce::String::fromUTF8 (file.c_str())));
+}
+
+AudioEngine::ChainPresetInfo AudioEngine::masterPresetInfo (const std::string& file)
+{
+    const auto i = MasterChain::presetInfo (juce::File (juce::String::fromUTF8 (file.c_str())));
+    return { i.valid, i.name, i.description, i.plugins };
+}
+
 AudioDataPtr AudioEngine::renderThroughMaster (const AudioData& data, Frame start, Frame end, std::string& error,
                                                std::atomic<float>* progress, const std::atomic<bool>* cancel, bool withDither)
 {

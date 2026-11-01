@@ -170,6 +170,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/PluginAnalyzer.cpp
     Source/ui/AliasScope.cpp
     Source/ui/ReferencePanel.cpp
+    Source/ui/ChainPresets.cpp
     Source/ui/ReferenceSection.cpp
     Source/ui/ExportSection.cpp
     Source/ui/BatchWindow.cpp
@@ -459,6 +460,7 @@ qt_add_resources(${APP_ID} music PREFIX "/fonts" BASE third_party/bravura FILES 
 qt_add_resources(${APP_ID} jeonggan PREFIX "/fonts" BASE third_party/tteoi-jeonggan FILES third_party/tteoi-jeonggan/TteoiJeonggan.ttf)
 # Xen Tuner's tuning configs (GPL-3.0-or-later) for the staff notation's spellings.
 install(DIRECTORY "${CMAKE_SOURCE_DIR}/share/xen-tuner/" DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/xen-tuner")
+install(DIRECTORY "${CMAKE_SOURCE_DIR}/share/master-presets/" DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/master-presets")
 install(FILES third_party/bravura/OFL.txt DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/${APP_ID}" RENAME Bravura-OFL.txt)
 install(FILES third_party/tteoi-jeonggan/OFL.txt DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/${APP_ID}" RENAME TteoiJeonggan-OFL.txt)
 

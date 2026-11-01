@@ -1097,8 +1097,13 @@ void MasterChain::save() const
 {
     if (configFolder == juce::File())
         return;
+    toXml()->writeTo (masterFile());
+}
 
-    juce::XmlElement root ("PHINYX_MASTER_SECTION");   // named before the rename to PHI, kept so saved chains still load
+std::unique_ptr<juce::XmlElement> MasterChain::toXml() const
+{
+    auto xml = std::make_unique<juce::XmlElement> (presetTag);   // named before the rename to PHI, kept so saved chains still load
+    auto& root = *xml;
     root.setAttribute ("gainDb", gainDecibels);
     root.setAttribute ("bypassed", (bool) allBypassed);
     root.setAttribute ("ditherBits", finalBits.load());
@@ -1150,16 +1155,93 @@ void MasterChain::save() const
         e->setAttribute ("low", (double) r.low);
         e->setAttribute ("high", (double) r.high);
     }
-
-    root.writeTo (masterFile());
+    return xml;
 }
 
 std::string MasterChain::restore()
 {
     auto xml = juce::XmlDocument::parse (masterFile());
-    if (xml == nullptr || ! xml->hasTagName ("PHINYX_MASTER_SECTION"))
+    if (xml == nullptr || ! xml->hasTagName (presetTag))
         return {};
+    return fromXml (*xml);
+}
 
+std::string MasterChain::savePreset (const juce::File& file, const juce::String& name, const juce::String& description) const
+{
+    auto xml = toXml();
+    xml->setAttribute ("name", name);
+    if (description.isNotEmpty())
+        xml->setAttribute ("description", description);
+    file.getParentDirectory().createDirectory();
+    if (! xml->writeTo (file))
+        return ("Could not write " + file.getFullPathName()).toStdString();
+    return {};
+}
+
+std::string MasterChain::loadPreset (const juce::File& file)
+{
+    auto xml = juce::XmlDocument::parse (file);
+    if (xml == nullptr || ! xml->hasTagName (presetTag))
+        return ("This is not a PHI chain preset: " + file.getFullPathName()).toStdString();
+
+    // The whole Master Section is replaced: every slot, the rack, the gain and the dither.
+    for (size_t i = 0; i < slots.size(); ++i)
+        discard (i);
+    setModulators ({});
+    setModulatorRoutes ({});
+    auto problems = fromXml (*xml);
+    resolveRoutes();
+    save();
+    return problems;
+}
+
+MasterChain::PresetInfo MasterChain::presetInfo (const juce::File& file)
+{
+    PresetInfo info;
+    juce::XmlDocument doc (file);
+    // Only the outer tag is needed; a preset's plugin states can be large.
+    if (auto xml = doc.getDocumentElementIfTagMatches (presetTag))
+    {
+        info.valid = true;
+        info.name = xml->getStringAttribute ("name", file.getFileNameWithoutExtension()).toStdString();
+        info.description = xml->getStringAttribute ("description").toStdString();
+        for (auto* slot : xml->getChildWithTagNameIterator ("SLOT"))
+        {
+            auto plugin = slot->getStringAttribute ("plugin");
+            if (plugin.isEmpty())
+                if (auto* d = slot->getChildByName ("PLUGIN"))
+                    plugin = d->getStringAttribute ("name");
+            if (auto* st = slot->getChildByName ("STATE"); st != nullptr && st->getFirstChildElement() != nullptr)
+                if (const auto effect = st->getFirstChildElement()->getStringAttribute ("currentProcessorName"); effect.isNotEmpty())
+                    plugin += " (" + effect + ")";
+            info.plugins.push_back (plugin.toStdString());
+        }
+    }
+    return info;
+}
+
+std::unique_ptr<juce::PluginDescription> MasterChain::findDescriptionNamed (const juce::String& name) const
+{
+    std::vector<juce::PluginDescription> all;
+    all.push_back (PrismProcessor::description());
+    for (const auto& d : builtin::descriptions())
+        all.push_back (d);
+    for (const auto& d : stockList.getTypes())
+        all.push_back (d);
+    for (const auto& d : pluginList.getTypes())
+        all.push_back (d);
+    for (const auto& d : all)
+        if (d.name == name)
+            return std::make_unique<juce::PluginDescription> (d);
+    for (const auto& d : all)
+        if (d.name.equalsIgnoreCase (name))
+            return std::make_unique<juce::PluginDescription> (d);
+    return nullptr;
+}
+
+std::string MasterChain::fromXml (const juce::XmlElement& root)
+{
+    const auto* xml = &root;
     setGainDb (xml->getDoubleAttribute ("gainDb", 0.0));
     allBypassed = xml->getBoolAttribute ("bypassed", false);
     setDither (xml->getIntAttribute ("ditherBits", 0), (dsp::Dither) std::clamp (xml->getIntAttribute ("ditherType", 1), 0, dsp::numDitherTypes - 1));
@@ -1168,9 +1250,21 @@ std::string MasterChain::restore()
     for (auto* slot : xml->getChildWithTagNameIterator ("SLOT"))
     {
         const auto index = slot->getIntAttribute ("index", -1);
+        if (index < 0 || index >= (int) slots.size())
+            continue;
         juce::PluginDescription d;
-        if (index < 0 || index >= (int) slots.size() || slot->getFirstChildElement() == nullptr
-            || ! d.loadFromXml (*slot->getFirstChildElement()))
+        // A factory preset names its plugin ("Φ EQ") rather than describing it.
+        if (const auto named = slot->getStringAttribute ("plugin"); named.isNotEmpty())
+        {
+            auto found = findDescriptionNamed (named);
+            if (found == nullptr)
+            {
+                problems.add (named + ": not among your plugins");
+                continue;
+            }
+            d = *found;
+        }
+        else if (auto* e = slot->getChildByName ("PLUGIN"); e == nullptr || ! d.loadFromXml (*e))
             continue;
 
         // A stock plugin saved from another place (the build folder, an older
@@ -1186,6 +1280,9 @@ std::string MasterChain::restore()
         juce::MemoryBlock state;
         if (! state.fromBase64Encoding (slot->getStringAttribute ("state")))
             state.reset();
+        // Or written out as XML (a factory preset's Airwindows effect), in the form JUCE plugins keep it.
+        if (auto* st = slot->getChildByName ("STATE"); st != nullptr && st->getFirstChildElement() != nullptr)
+            juce::AudioProcessor::copyXmlToBinary (*st->getFirstChildElement(), state);
 
         juce::String error;
         bool editor = false;
@@ -1194,6 +1291,29 @@ std::string MasterChain::restore()
         {
             problems.add (d.name + ": " + error);
             continue;
+        }
+
+        // A factory preset's knobs, by name, as text ("-3 dB", "Linear") or normalised 0..1.
+        for (auto* p : slot->getChildWithTagNameIterator ("PARAM"))
+        {
+            const auto name = p->getStringAttribute ("name");
+            const auto params = instance->getParameters();
+            int found = -1;
+            for (int i = 0; i < params.size() && found < 0; ++i)
+                if (params[i]->getName (256) == name)
+                    found = i;
+            for (int i = 0; i < params.size() && found < 0; ++i)
+                if (params[i]->getName (256).equalsIgnoreCase (name))
+                    found = i;
+            if (found < 0)
+            {
+                problems.add (d.name + ": no knob named " + name);
+                continue;
+            }
+            if (p->hasAttribute ("value"))
+                params[found]->setValueNotifyingHost ((float) std::clamp (p->getDoubleAttribute ("value"), 0.0, 1.0));
+            else if (! setParameterFromTextUnguarded (*instance, found, p->getStringAttribute ("text").toStdString()))
+                problems.add (d.name + ": " + name + " cannot be " + p->getStringAttribute ("text"));
         }
 
         // The Dither effect used to take a slot; its settings move to the final dither.

@@ -39,6 +39,7 @@
 #include "Overview.h"
 #include "TimeRuler.h"
 #include "TransportBar.h"
+#include "ChainPresets.h"
 #include "ChainRow.h"
 #include "DesktopShortcuts.h"
 #include "BatchWindow.h"
@@ -574,6 +575,21 @@ void MainWindow::registerCommands()
     add ("master.renderNew", Category::master, tr ("Render to &New Tab"), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_Return) }, [this] { renderToNewTab(); });
     add ("master.assistant", Category::master, tr ("Master &Assistant..."), { KS (Qt::ALT | Qt::SHIFT | Qt::Key_M) }, [this] { masterAssistant(); })
         ->setStatusTip (tr ("Tunes the plugins in the Master Section towards a reference track or a loudness target"));
+    add ("master.loadPreset", Category::master, tr ("&Load Chain Preset..."), {}, [this]
+    {
+        ChainPresetDialog dialog (engine, this);
+        if (dialog.exec() == QDialog::Accepted && dialog.loadedOne())
+            chainPresetLoaded();
+    })->setStatusTip (tr ("Replaces the Master Section with a saved chain: a factory preset or one of yours"));
+    add ("master.savePreset", Category::master, tr ("Sa&ve Chain Preset..."), {}, [this]
+    {
+        if (const auto path = chainpresets::saveCurrent (engine, this); ! path.isEmpty())
+        {
+            statusBar()->showMessage (tr ("Saved the chain as %1").arg (QFileInfo (path).completeBaseName()), 6000);
+            if (findWidget != nullptr)
+                findWidget->reload();
+        }
+    })->setStatusTip (tr ("Saves every plugin in the Master Section with its settings, the gain, the dither and the modulators"));
     add ("master.scan", Category::master, tr ("&Scan Plugins"), { KS (Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_S) },
          [this] { masterWidget->scanPlugins(); });
 
@@ -952,7 +968,7 @@ void MainWindow::buildMenus()
                                "process.fadeShape.sCurve", "-", "process.reverse", "process.invert", "process.dcOffset", "-", "process.stereoize", "process.midSide", "process.convert" } },
         { tr ("&Analyze"),   { "analyze.loudness", "-", "analyze.beats", "analyze.onsets", "analyze.tempoKey", "analyze.vamp", "-", "analyze.window", "view.meters", "analyze.imagingView", "analyze.resetMeters", "-", "analyze.plugin", "-", "view.spectral", "-", "@nyquist.analyze" } },
         { tr ("&Compose"),   { "@compose" } },
-        { tr ("&Master"),    { "#album", "-", "view.master", "view.chain", "view.modulators", "master.addPlugin", "master.bypass", "analyze.plugin", "-", "master.assistant", "-", "master.render", "master.renderNew", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
+        { tr ("&Master"),    { "#album", "-", "view.master", "view.chain", "view.modulators", "master.addPlugin", "master.bypass", "analyze.plugin", "-", "master.assistant", "-", "master.loadPreset", "master.savePreset", "-", "master.render", "master.renderNew", "-", "reference.toggle", "reference.next", "reference.add", "reference.match", "view.references", "-", "master.scan" } },
         { tr ("Mi&xer"),     { "mixer.window", "mixer.dock", "mixer.patchbay", "-", "mixer.new", "mixer.newFromSet", "mixer.open", "mixer.save", "mixer.saveAs", "mixer.importDaw", "mixer.exportDaw", "-", "mixer.addTrack", "mixer.removeTrack", "-",
                                "mixer.playStop", "mixer.mixdown", "mixer.sendToLauncher", "mixer.sendToTimeline", "-", "mixer.editNotes", "mixer.trackToEditor", "-", "view.inspector", "-", "mixer.assistant", "mixer.preferences" } },
         { tr ("Mo&de"),      { "@mode" } },
@@ -1425,6 +1441,24 @@ QList<FindItem> MainWindow::findItems()
                 QMessageBox::warning (this, tr ("Plugin"), QString::fromStdString (error));
             else
                 statusBar()->showMessage (tr ("Loaded %1 in slot %2").arg (name).arg (slot + 1), 6000);
+        };
+        list.push_back (item);
+    }
+
+    // Chain presets: Enter loads one in place of the Master Section.
+    for (const auto& p : chainpresets::all())
+    {
+        FindItem item;
+        item.kind = FindItem::Kind::plugin;
+        item.key = QStringLiteral ("chainpreset:") + p.path;
+        item.name = p.name;
+        item.group = tr ("Chain Presets: %1").arg (p.group);
+        item.detail = tr ("Chain Preset");
+        item.searchText = p.description + QLatin1Char (' ') + p.plugins.join (QLatin1Char (' ')) + tr (" master mastering chain preset");
+        item.activate = [this, path = p.path]
+        {
+            if (chainpresets::load (engine, this, path))
+                chainPresetLoaded();
         };
         list.push_back (item);
     }
@@ -3656,6 +3690,16 @@ void MainWindow::renderInPlace()
     masterWidget->refresh();
     commands.action (QStringLiteral ("master.bypass"))->setChecked (true);
     statusBar()->showMessage (tr ("Rendered in place. The Master Section is now bypassed; Ctrl+Shift+B turns it back on."), 8000);
+}
+
+void MainWindow::chainPresetLoaded()
+{
+    masterWidget->refresh();
+    modulatorsWidget->refresh();
+    chainRow->rebuild();
+    commands.action (QStringLiteral ("master.bypass"))->setChecked (engine.isMasterBypassed());
+    masterPanel->show (true);
+    statusBar()->showMessage (tr ("Chain preset loaded"), 5000);
 }
 
 void MainWindow::masterAssistant()
