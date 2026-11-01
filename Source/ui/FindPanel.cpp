@@ -281,6 +281,16 @@ FindPanel::FindPanel (QWidget* home, QWidget* parent)
             sidebar->setCurrentItem (item);
             selectorMenu (sidebar->viewport(), item != nullptr ? sidebar->visualItemRect (item).bottomLeft() : at);
         }
+        else if (item != nullptr && static_cast<Section> (item->data (0, sectionRole).toInt()) == Section::place)
+        {
+            // A place is only a folder Find looks in: removing it leaves the folder on disk.
+            const auto place = item->data (0, placeRole).toString();
+            QMenu menu (this);
+            menu.addAction (tr ("&Remove from Places (Delete)"), this, [this, place] { removePlace (place); })
+                ->setStatusTip (tr ("Find stops looking in %1; nothing is deleted from the disk").arg (QDir::toNativeSeparators (place)));
+            menu.addAction (tr ("Add &Folder..."), this, [this] { addPlace(); });
+            menu.exec (sidebar->viewport()->mapToGlobal (item != nullptr && at == QPoint() ? sidebar->visualItemRect (item).bottomLeft() : at));
+        }
     });
 
     connect (search, &QLineEdit::textChanged, this, &FindPanel::refilter);
@@ -340,6 +350,8 @@ FindPanel::FindPanel (QWidget* home, QWidget* parent)
     {
         files = fileScan.result();
         refilter();
+        if (filesStale)
+            scanFiles();   // the places changed while it scanned
     });
 }
 
@@ -421,7 +433,7 @@ void FindPanel::buildSidebar()
     {
         auto* e = entry (QDir (p).dirName(), Section::place);
         e->setData (0, placeRole, p);
-        e->setToolTip (0, p);
+        e->setToolTip (0, tr ("%1\nRight-click or Delete removes it from Places (the folder stays on disk)").arg (QDir::toNativeSeparators (p)));
     }
     entry (tr ("Add Folder..."), Section::addPlace);
 
@@ -881,6 +893,27 @@ void FindPanel::addPlace()
     scanFiles();
 }
 
+void FindPanel::removePlace (const QString& place)
+{
+    if (! places.removeAll (place))
+        return;
+
+    // Its files go at once (unless another place still holds them); a fresh scan follows.
+    auto within = [] (const QString& key, const QString& folder) { return key.startsWith (QStringLiteral ("file:") + folder + QLatin1Char ('/')); };
+    files.erase (std::remove_if (files.begin(), files.end(), [&] (const FindItem& f)
+    {
+        return within (f.key, place) && std::none_of (places.cbegin(), places.cend(), [&] (const QString& p) { return within (f.key, p); });
+    }), files.end());
+    if (! browseFolder.isEmpty() && (browseFolder == place || browseFolder.startsWith (place + QLatin1Char ('/'))))
+        browseFolder.clear();
+
+    saveSelector();
+    buildSidebar();   // the removed place was selected: All instead
+    refilter();
+    filesStale = true;
+    scanFiles();
+}
+
 void FindPanel::scanFiles()
 {
     if (fileScan.isRunning())
@@ -1222,6 +1255,11 @@ bool FindPanel::eventFilter (QObject* watched, QEvent* e)
                 if (plain)
                     e->accept();
                 break;
+            case Qt::Key_Delete:   // removes a place, not the audio's selection
+                if (plain && watched == sidebar && sidebar->currentItem() != nullptr
+                    && static_cast<Section> (sidebar->currentItem()->data (0, sectionRole).toInt()) == Section::place)
+                    e->accept();
+                break;
             default:
                 if (typing || digit)
                     e->accept();
@@ -1358,6 +1396,14 @@ bool FindPanel::eventFilter (QObject* watched, QEvent* e)
             return true;
         }
     }
+
+    // Delete removes the place selected under Places (the folder stays on disk).
+    if (watched == sidebar && plain && k->key() == Qt::Key_Delete)
+        if (auto* item = sidebar->currentItem(); item != nullptr && static_cast<Section> (item->data (0, sectionRole).toInt()) == Section::place)
+        {
+            removePlace (item->data (0, placeRole).toString());
+            return true;
+        }
 
     if (watched == sidebar && plain && k->key() == Qt::Key_Right)
     {

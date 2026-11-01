@@ -118,6 +118,7 @@ private:
     void activate (QTreeWidgetItem*);
     void toggleColour (QTreeWidgetItem*, int colour);   // -1 clears every colour
     void addPlace();
+    void removePlace (const QString& place);   // from Places only: the folder stays on disk
     void scanFiles();
     bool browsing() const;                        // a folder is listed rather than search results
     void listFolder (const QString& select);      // the browse folder's subfolders and files
