@@ -10,4 +10,9 @@
     <comment>DAWproject</comment>
     <glob pattern="*.dawproject"/>
   </mime-type>
+  <mime-type type="application/x-ableton-live-set">
+    <sub-class-of type="application/gzip"/>
+    <comment>Ableton Live Set</comment>
+    <glob pattern="*.als"/>
+  </mime-type>
 </mime-info>

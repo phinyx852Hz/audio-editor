@@ -81,6 +81,7 @@ and `Ctrl+S` on one saves a `.phi` beside it, leaving the old file alone.
 
 A DAWproject (`.dawproject`, from Bitwig Studio, Studio One, Cubase and others) opens as a PHI
 project in a folder beside it, and Mixer > Export DAWproject writes one: [dawproject.md](dawproject.md).
+Ableton Live Sets (`.als`) open the same way, a Drum Rack on the Slicer: [ableton-sets.md](ableton-sets.md).
 
 ## Not yet
 
