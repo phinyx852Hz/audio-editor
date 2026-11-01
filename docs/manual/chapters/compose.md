@@ -84,11 +84,11 @@ Choosing one opens a dialog with what it is, where it comes from, the intervals 
 
 - **Φ**: the golden ratio, Fibonacci numbers, the golden angle, phase, phase distortion and more;
 - **Music theory**: mode, tuning, rāga, maqām;
-- **Composition**: counterpoint and fugue, twelve-tone rows, stochastic music, minimalism;
+- **Composition**: an entry for every item of the Compose menu, in the same order: the notations of New Score In, Architectonics, and each method by region, from organum to the Rhythm Generator;
 - **Instruments and programs** and **Sound**: the tracker, loudness, Ambisonics, binaural sound, compression, dither;
 - **Modes**: every region's modes, rhythms and harmonies, matching the Mode menu.
 
-An entry opens in the research panel on the left, with a search box above it: type any term and press `Enter`. Links to other entries open there; ← goes back, ⧉ pops the panel out into a window, and ✕ or `Esc` closes it. At the bottom of the menu:
+An entry opens in the research panel on the left, with a search box above it: type any term and press `Enter`. Links to other entries open there, and an entry's "In PHI" link opens the tool it is about; ← goes back, ⧉ pops the panel out into a window, and ✕ or `Esc` closes it. At the bottom of the menu:
 
 - **Search Research...** goes straight to the search box;
 - **All References...** shows every entry in one page;

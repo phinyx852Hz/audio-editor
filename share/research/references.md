@@ -11,6 +11,8 @@ How it is read:
   its history, then the links and books for further reading. How to use it in PHI belongs in
   the manual, not here (owner, 2026-10-29). Markdown links, [text](https://...), open in
   the web browser.
+  [text](research:Title) opens another entry, and [text](phi:compose.organum) runs that menu
+  command, so an entry can open the tool it is about.
 
 Every .md file in this folder is read: this one first, then the others by name
 (modes-1-europe.md, modes-2-west-asia.md..., numbered for the order of the Mode menu). A group with slashes nests: "# Modes / Europe" is a
@@ -273,56 +275,6 @@ The modal system of Arabic, Persian and Turkish music, with intervals between th
 - [Maqam World](https://www.maqamworld.com).
 - Chrysanthos, *Theōrētikon mega* (1832), for the moria.
 - Üzeyir Hacıbəyli, *Principles of Azerbaijani Folk Music* (1945).
-
-# Composition
-
-## Counterpoint and fugue
-
-Writing independent voices that sound well together, by species, and the fugue built from them.
-
-- [Counterpoint](https://en.wikipedia.org/wiki/Counterpoint) and
-  [Fugue](https://en.wikipedia.org/wiki/Fugue), Wikipedia.
-- Johann Joseph Fux, *Gradus ad Parnassum* (1725).
-
-## Twelve-tone rows
-
-A row of the twelve pitch classes and its transformations (prime, inversion, retrograde),
-with Babbitt's combinatoriality and time points.
-
-- [Twelve-tone technique](https://en.wikipedia.org/wiki/Twelve-tone_technique), Wikipedia.
-- Arnold Schoenberg, "Composition with Twelve Tones" (1941), in *Style and Idea* (1950).
-- Andrew Mead, *An Introduction to the Music of Milton Babbitt* (1994).
-
-## Stochastic music and sieves
-
-Stochastic music is Iannis Xenakis's name for music composed with the laws of probability: masses
-of sound (clouds of pizzicati, glissandi, grains) whose overall shape is chosen and whose single
-events follow a distribution, as gas molecules follow the kinetic theory. Sieves are his later
-tool for building scales and rhythms from residue classes, numbers that leave the same remainder.
-
-Xenakis (1922–2001), an engineer and architect who worked with Le Corbusier, reacted against the
-serialism of the 1950s, whose density he said the ear heard only as statistics. *Metastaseis*
-(1953–54) and *Pithoprakta* (1955–56) were the first stochastic works; *Achorripsis* (1956–57)
-used Poisson's law throughout, and from 1962 the ST pieces were calculated on an IBM 7090. He set
-out the theory in *Musiques formelles* (1963), translated as *Formalized Music* (1971); sieves
-came in *Nomos Alpha* (1965–66) and his article "Sieves" (1990). He founded EMAMu (1966, later CEMAMu) and built
-the UPIC drawing system (1977) and the GENDY programs of dynamic stochastic synthesis (1991).
-
-- [Iannis Xenakis](https://en.wikipedia.org/wiki/Iannis_Xenakis), Wikipedia.
-- [Les Amis de Xenakis](https://www.iannis-xenakis.org), the composer's archive and catalogue.
-- Iannis Xenakis, *Formalized Music: Thought and Mathematics in Composition* (Pendragon,
-  revised edition 1992), and "Sieves", *Perspectives of New Music* 28/1 (1990).
-- Thomas DeLio, "Iannis Xenakis' *Nomos Alpha*: The Dialectics of Structure and Materials",
-  *Journal of Music Theory* 24/1 (1980).
-- Nouritza Matossian, *Xenakis* (Kahn & Averill, 1986).
-
-## Minimalism
-
-Music built from repetition and slow change, from La Monte Young and Terry Riley's *In C*
-(1964) to Steve Reich's phasing (*It's Gonna Rain*, 1965; *Piano Phase*, 1967) and Philip
-Glass's additive process.
-
-- [Minimal music](https://en.wikipedia.org/wiki/Minimal_music), Wikipedia.
 
 # Instruments and programs
 
