@@ -54,9 +54,18 @@ namespace composition
         congolese,        // Congolese rumba and soukous: interlocking guitars, a sung rumba, then the sebene
         // Added later, so the earlier methods keep their seeds; methods() lists them by region.
         interlocking,     // Mbuti and Aka voices: independent short figures whose composite is a melody none sings
-        bolGrammar        // Bol Processor (Bel and Kippen): a tablā qāʿida derived by a weighted grammar
+        bolGrammar,       // Bol Processor (Bel and Kippen): a tablā qāʿida derived by a weighted grammar
+        // John Cage after Music of Changes (added 2026-10-31; last so the other methods' seeds stay
+        // as they were; methods() lists them by date among Europe and the Americas).
+        silence,          // 4′33″ (1952): three movements tacet, the place sounding by chance
+        starCharts,       // Atlas Eclipticalis (1961–62): star charts laid over the staves
+        musicircus,       // Musicircus (1967): other methods' parts at once, each at its own tempo, in and out by chance
+        timeBrackets,     // the Number Pieces (1987–92): sounds in flexible time brackets
+        // Pauline Oliveros (added 2026-10-31, after Cage's for the same reason).
+        tuningMeditation, // The Tuning Meditation (1981): a breath at a time, one's own tone, a distant voice's, or a new one
+        deepListening     // Deep Listening (1989): global and focal attention, the EIS's delays, the cistern
     };
-    constexpr int numMethods = 21;
+    constexpr int numMethods = 27;
 
     struct MethodInfo
     {
