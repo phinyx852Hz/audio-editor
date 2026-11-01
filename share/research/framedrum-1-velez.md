@@ -21,8 +21,8 @@ corrected against them (Reich and Winter dates, the Cage title, Redmond's 1981 s
 
 Glen Velez (born 1949, Dallas, Texas) is the American percussionist, singer and composer more
 than anyone responsible for the frame drum's return to the West. Of Mexican American family, he
-grew up in Texas, played jazz drums, studied classical percussion with Fred Hinger at the
-Manhattan School of Music, served as a percussionist in the U.S. Army's 1st Armored Division
+grew up in Texas, played jazz drums, studied classical percussion at the Manhattan School
+of Music and with Fred Hinger, served as a percussionist in the U.S. Army's 1st Armored Division
 Band (1968–70) and settled in New York, where he toured and recorded with Steve Reich and Musicians from 1973 to 1993
 (he is on the first recording of *Music for 18 Musicians*, 1978) and with the Paul Winter
 Consort from 1983 to 1998. His recordings with the Paul Winter Consort brought him several
@@ -46,8 +46,6 @@ him into its Hall of Fame in 2014.
 - [About](https://www.glenvelez.com/biography/), Glen Velez's own site.
 - [Glen Velez](https://www.newschool.edu/mannes/faculty/glen-velez/), Mannes School of Music
   faculty page.
-- [Glen Velez](http://www.nscottrobinson.com/glenvelez.php), N. Scott Robinson's site, with an
-  interview.
 - N. Scott Robinson, "Glen Velez: A World of Sound in His Hands", *Modern Drummer* 24, no. 4
   (April 2000).
 - [Echoing the Beat of Ancient Drums](https://www.csmonitor.com/1989/1206/lvelez.html),
@@ -77,8 +75,6 @@ ancient Western Asia from 1980.
 
 - [Glen Velez](https://pas.org/glen-velez/), Percussive Arts Society Hall of Fame.
 - [Ramnad Raghavan](https://en.wikipedia.org/wiki/Ramnad_Raghavan), Wikipedia.
-- [Glen Velez](http://www.nscottrobinson.com/glenvelez.php), N. Scott Robinson's interview, on
-  his studies with Fred Hinger and Hanna Mirhige.
 - N. Scott Robinson, "Performing the Past, Present and Beyond: Glen Velez and Researching Frame
   Drum History", *Percussive Notes* 51, no. 4 (July 2013),
   [online](https://pas.org/publication-articles/performing-the-past-present-and-beyond-glen-velez-and-researching-frame-drum-history).
