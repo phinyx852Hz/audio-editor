@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**137 pull requests:** 132 merged, 5 open.
+**138 pull requests:** 132 merged, 6 open.
 
 ## Contents
 
@@ -188,6 +188,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#15](https://github.com/phinyx852Hz/audio-editor/pull/15) | Visualizer: a web page behind PHINYX (optional, Qt WebEngine) | merged | Visualizer menu, Web Page | `Source/ui/WebBackdrop.cpp`<br>`Source/ui/VisualizerSection.cpp` |
 | [#30](https://github.com/phinyx852Hz/audio-editor/pull/30) | Sonify the Visualizer: pictures, videos, cameras and the web page played as notes | merged | Visualizer menu, Sonify | `Source/core/Sonify.cpp`<br>`Source/ui/SonifySection.cpp`<br>`Source/ui/SonifyPanel.cpp` |
 | [#52](https://github.com/phinyx852Hz/audio-editor/pull/52) | Control surfaces: Launchpad, Launchkey and Push 2/3, and MIDI Learn | merged | Performance menu, Control Surfaces | `Source/control/Devices.cpp`<br>`Source/control/ControlSurface.cpp`<br>`Source/ui/ControlSection.cpp`<br>`docs/control-surfaces.md` |
+| [#138](https://github.com/phinyx852Hz/audio-editor/pull/138) | Remove a Find place; Wallpaper in the Visualizer menu, moving with the music | open | Find > Places: | `Source/ui/Wallpaper.cpp`<br>`Source/ui/FindPanel.cpp`<br>`Source/ui/Wallpaper.h` |
 
 ### Interface and branding
 
@@ -378,3 +379,4 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#135](https://github.com/phinyx852Hz/audio-editor/pull/135) | Mixer: open and write DAWproject (Bitwig, Studio One, Cubase) | PHI can now open and write DAWproject, the open format from Bitwig and PreSonus (MIT). *(auto)* | merged | 2026-11-01 | Mixer and clip launcher |
 | [#136](https://github.com/phinyx852Hz/audio-editor/pull/136) | Mixer: open Ableton Live Sets (.als), a Drum Rack on the Slicer | The second of two PRs (the first, #135, added DAWproject). *(auto)* | open | 2026-11-01 | Editing and warping |
 | [#137](https://github.com/phinyx852Hz/audio-editor/pull/137) | Fit synth windows, close docked instruments and plugin windows normally, stop Find previews | 1. *(auto)* | open | 2026-11-01 | Instruments and plugins |
+| [#138](https://github.com/phinyx852Hz/audio-editor/pull/138) | Remove a Find place; Wallpaper in the Visualizer menu, moving with the music | Find > Places: right-click a place for *Remove from Places*, or select it and press Delete. *(auto)* | open | 2026-11-01 | Performance and visuals |
