@@ -177,7 +177,7 @@ void Client::describe (const Config& config, const QString& description, const t
             key = qEnvironmentVariable ("ANTHROPIC_API_KEY");
         if (key.isEmpty())
         {
-            emit failed (tr ("Claude needs an API key: add one in AI Settings, or set ANTHROPIC_API_KEY."));
+            Q_EMIT failed (tr ("Claude needs an API key: add one in AI Settings, or set ANTHROPIC_API_KEY."));
             return;
         }
         request.setUrl (QUrl (QString::fromLatin1 (claudeEndpoint)));
@@ -201,7 +201,7 @@ void Client::describe (const Config& config, const QString& description, const t
         const QUrl url (base + QStringLiteral ("/chat/completions"));
         if (! url.isValid() || base.isEmpty())
         {
-            emit failed (tr ("The local AI address is not valid: %1").arg (config.endpoint));
+            Q_EMIT failed (tr ("The local AI address is not valid: %1").arg (config.endpoint));
             return;
         }
         request.setUrl (url);
@@ -235,7 +235,7 @@ void Client::finished()
             message = r->errorString();
         if (replyProvider == Provider::local && r->error() == QNetworkReply::ConnectionRefusedError)
             message = tr ("No AI server is answering at %1. Start Ollama (or your local server) and try again.").arg (r->url().toString());
-        emit failed (message);
+        Q_EMIT failed (message);
         return;
     }
 
@@ -244,7 +244,7 @@ void Client::finished()
     {
         if (json.value (QStringLiteral ("stop_reason")).toString() == QLatin1String ("refusal"))
         {
-            emit failed (tr ("Claude declined this description. Try describing the look in other words."));
+            Q_EMIT failed (tr ("Claude declined this description. Try describing the look in other words."));
             return;
         }
         for (const auto& block : json.value (QStringLiteral ("content")).toArray())
@@ -262,9 +262,9 @@ void Client::finished()
     QString error;
     if (! parseSuggestion (text, replyStart, s, error))
     {
-        emit failed (error);
+        Q_EMIT failed (error);
         return;
     }
-    emit suggested (s);
+    Q_EMIT suggested (s);
 }
 }

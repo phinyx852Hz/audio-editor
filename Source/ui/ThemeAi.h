@@ -61,7 +61,7 @@ namespace themeai
         void cancel();
         bool busy() const { return reply != nullptr; }
 
-    signals:
+    Q_SIGNALS:
         void suggested (const themeai::Suggestion&);
         void failed (const QString& message);
 
