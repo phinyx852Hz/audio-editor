@@ -11,6 +11,8 @@ How it is read:
   its history, then the links and books for further reading. How to use it in PHI belongs in
   the manual, not here (owner, 2026-10-29). Markdown links, [text](https://...), open in
   the web browser.
+  [text](research:Title) opens another entry, and [text](phi:compose.organum) runs that menu
+  command, so an entry can open the tool it is about.
 
 Every .md file in this folder is read: this one first, then the others by name
 (modes-1-europe.md, modes-2-west-asia.md..., numbered for the order of the Mode menu). A group with slashes nests: "# Modes / Europe" is a

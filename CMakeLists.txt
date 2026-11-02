@@ -15,7 +15,7 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
     message(FATAL_ERROR "${APP_DISPLAY_NAME} targets Linux only.")
 endif()
 
-find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Concurrent)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Concurrent Network)
 
 # JUCE provides the audio engine only (devices, codecs, DSP, plugin hosting); no JUCE UI.
 # Use a local checkout (needed for offline package builds) or fetch the pinned tag.
@@ -110,6 +110,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/SpatialStudio.cpp
     Source/core/PrismSplit.cpp
     Source/core/Phi.cpp
+    Source/core/ThemeGen.cpp
     Source/core/PhiDynamics.cpp
     Source/core/PhiModulation.cpp
     Source/core/Modulators.cpp
@@ -170,6 +171,7 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/PluginAnalyzer.cpp
     Source/ui/AliasScope.cpp
     Source/ui/ReferencePanel.cpp
+    Source/ui/ChainPresets.cpp
     Source/ui/ReferenceSection.cpp
     Source/ui/ExportSection.cpp
     Source/ui/BatchWindow.cpp
@@ -188,6 +190,8 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/Recovery.cpp
     Source/ui/Spectrogram.cpp
     Source/ui/Theme.cpp
+    Source/ui/ThemeAi.cpp
+    Source/ui/ThemeGenerator.cpp
     Source/ui/TransportBar.cpp
     Source/ui/InfoStrip.cpp
     Source/ui/TimeRuler.cpp
@@ -358,6 +362,7 @@ target_link_libraries(${APP_ID}
     PRIVATE
         Qt6::Widgets
         Qt6::Concurrent
+        Qt6::Network
         juce::juce_audio_devices
         juce::juce_audio_formats
         juce::juce_audio_processors
@@ -459,6 +464,7 @@ qt_add_resources(${APP_ID} music PREFIX "/fonts" BASE third_party/bravura FILES 
 qt_add_resources(${APP_ID} jeonggan PREFIX "/fonts" BASE third_party/tteoi-jeonggan FILES third_party/tteoi-jeonggan/TteoiJeonggan.ttf)
 # Xen Tuner's tuning configs (GPL-3.0-or-later) for the staff notation's spellings.
 install(DIRECTORY "${CMAKE_SOURCE_DIR}/share/xen-tuner/" DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/xen-tuner")
+install(DIRECTORY "${CMAKE_SOURCE_DIR}/share/master-presets/" DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_ID}/master-presets")
 install(FILES third_party/bravura/OFL.txt DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/${APP_ID}" RENAME Bravura-OFL.txt)
 install(FILES third_party/tteoi-jeonggan/OFL.txt DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/${APP_ID}" RENAME TteoiJeonggan-OFL.txt)
 
@@ -546,6 +552,7 @@ if(PHI_BUILD_TESTS)
     Source/core/SpatialStudio.cpp
         Source/core/PrismSplit.cpp
         Source/core/Phi.cpp
+        Source/core/ThemeGen.cpp
         Source/core/PhiDynamics.cpp
         Source/core/PhiModulation.cpp
         Source/core/Modulators.cpp

@@ -373,6 +373,17 @@ public:
     void saveMasterSection() const;
     std::string restoreMasterSection();  // returns problems, empty when all went well
 
+    // Chain presets (.phchain files, MasterChain::loadPreset): the whole Master Section.
+    struct ChainPresetInfo
+    {
+        bool valid = false;
+        std::string name, description;
+        std::vector<std::string> plugins;
+    };
+    std::string saveMasterPreset (const std::string& file, const std::string& name, const std::string& description) const;
+    std::string loadMasterPreset (const std::string& file);   // replaces the chain; problems, empty when all loaded
+    static ChainPresetInfo masterPresetInfo (const std::string& file);
+
     // Processes [start, end) through the Master Section at the file's sample rate,
     // compensating plugin latency. Playback is silent meanwhile. Call from a worker thread.
     // Exports pass withDither false: they round to their own bit depth as the very last step.

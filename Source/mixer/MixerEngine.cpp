@@ -1557,7 +1557,7 @@ namespace mixer
             bool anyPre = false;
             for (int r = 0; r < numReturns; ++r)
             {
-                sends[(size_t) r] = bouncing || ! audible || bypassSends.load() ? 0.0f : dbToGain (s.sendDb[(size_t) r].load());
+                sends[(size_t) r] = bouncing || ! audible || bypassSends.load() || r >= usedReturns.load() ? 0.0f : dbToGain (s.sendDb[(size_t) r].load());
                 anyPre = anyPre || (s.sendPre[(size_t) r].load() && (sends[(size_t) r] > 0.0f || t.sendGain[(size_t) r] > 0.0f));
             }
             const bool processing = t.lowCut.on || t.highCut.on || anyInsert || std::abs (width - 1.0f) > 1.0e-4f
@@ -1696,9 +1696,9 @@ namespace mixer
         // with the returns into the Mix Bus (the tracks sent to it skip their own patch).
         if (only < 0)
             renderBus (frames, jumped, withLive, spatialMix);
-        // The returns: each through its effect, pan, fader and mute, then with the tracks.
+        // The returns in use: each through its effect, pan, fader and mute, then with the tracks.
         if (only < 0)
-            for (int r = 0; r < numReturns; ++r)
+            for (int r = 0, used = usedReturns.load(); r < used; ++r)
             {
                 auto* rl = returnL[(size_t) r].data();
                 auto* rr = returnR[(size_t) r].data();
@@ -1829,7 +1829,7 @@ namespace mixer
         const bool audible = ! bus.mute.load();
         std::array<float, numReturns> sends {};
         for (int r = 0; r < numReturns; ++r)
-            sends[(size_t) r] = ! audible || bypassSends.load() ? 0.0f : dbToGain (bus.sendDb[(size_t) r].load());
+            sends[(size_t) r] = ! audible || bypassSends.load() || r >= usedReturns.load() ? 0.0f : dbToGain (bus.sendDb[(size_t) r].load());
         const bool anyPre = std::any_of (bus.sendPre.begin(), bus.sendPre.end(), [] (const std::atomic<bool>& p) { return p.load(); });
         if (anyPre)
         {
