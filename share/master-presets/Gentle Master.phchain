@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A PHI chain preset (Master > Load Chain Preset). Factory presets name their plugins
+     and set knobs by name, as text the knob understands ("-18 dB", "Linear") or value=
+     normalised 0..1; an Airwindows effect is chosen in its <STATE>. See README.md. -->
+<PHINYX_MASTER_SECTION name="Gentle Master" gainDb="0.0" ditherBits="0" ditherType="1"
+    description="A light, transparent finishing chain to start from: a linear-phase Φ EQ that cuts the sub rumble and opens the air, slow glue compression at a low ratio, a touch of Airwindows PurestDrive for density, and the Φ Limiter at -1 dBTP. Turn Drive on the limiter for loudness.">
+  <SLOT index="0" plugin="Φ EQ">
+    <PARAM name="Phase" text="Linear"/>
+    <PARAM name="Low Cut" text="20 Hz"/>
+    <PARAM name="Low Cut Slope" text="24 dB/oct"/>
+    <PARAM name="Band 12 Gain" text="1.0"/>
+  </SLOT>
+  <SLOT index="1" plugin="Φ Compressor">
+    <PARAM name="Threshold" text="-20"/>
+    <PARAM name="Ratio" text="1.27:1"/>
+    <PARAM name="Attack" text="34"/>
+    <PARAM name="Release" text="233"/>
+    <PARAM name="Makeup" text="1.0"/>
+  </SLOT>
+  <SLOT index="2" plugin="Airwindows Consolidated">
+    <STATE><awconsolidated streamingVersion="8524" currentProcessorName="PurestDrive" awp_0="0.1"/></STATE>
+  </SLOT>
+  <SLOT index="3" plugin="Φ Limiter">
+    <PARAM name="Drive" text="2.0"/>
+    <PARAM name="Ceiling" text="-1.0"/>
+    <PARAM name="Release" text="89"/>
+  </SLOT>
+</PHINYX_MASTER_SECTION>

@@ -719,6 +719,7 @@ private:
     bool masterWouldChange (const QString& title);   // false (with a note) when rendering would change nothing
     void renderInPlace();     // bounce the selection or file through the Master Section
     void masterAssistant();
+    void chainPresetLoaded();   // the Master Section's views after a chain preset replaced it
     void mixAssistant();      // sets the mixer's faders and pans by role (MixAssistant.h)   // tunes the Master Section's knobs towards a target (MasterAssistant.h)
     void renderToNewTab();    // the same into a new untitled tab
 

@@ -132,6 +132,21 @@ public:
     void save() const;
     std::string restore();
 
+    // Chain presets (.phchain): a whole Master Section in a file, the same XML as the one
+    // kept between sessions plus a name and a description. A factory preset (share/master-presets)
+    // may name a plugin (plugin="Φ EQ"), write its state as XML (<STATE>) and set knobs by name
+    // (<PARAM name="Phase" text="Linear"/>, or value= normalised), so it is written by hand.
+    static constexpr const char* presetTag = "PHINYX_MASTER_SECTION";
+    std::string savePreset (const juce::File&, const juce::String& name, const juce::String& description) const;
+    std::string loadPreset (const juce::File&);   // replaces the whole chain; problems, empty when all loaded
+    struct PresetInfo
+    {
+        bool valid = false;
+        std::string name, description;
+        std::vector<std::string> plugins;   // in slot order, "Airwindows Consolidated (Console7Buss)"
+    };
+    static PresetInfo presetInfo (const juce::File&);
+
     // The channel count everything is processed at (the open file's, at least 2).
     // Plugins that cannot take that many are given stereo and process the first two.
     void setChannels (int);
@@ -223,6 +238,9 @@ private:
                                   juce::OwnedArray<juce::PluginDescription>& found);
     void loadStockPlugins();
     std::unique_ptr<juce::PluginDescription> findDescription (const std::string& pluginId) const;
+    std::unique_ptr<juce::PluginDescription> findDescriptionNamed (const juce::String& name) const;
+    std::unique_ptr<juce::XmlElement> toXml() const;
+    std::string fromXml (const juce::XmlElement&);
     int slotOf (const juce::AudioPluginInstance*) const;
     void setCompareSide (int slot, int side);
     void copyCompareSide (int slot);
