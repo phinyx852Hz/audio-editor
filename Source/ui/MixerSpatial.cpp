@@ -94,9 +94,8 @@ std::vector<RoomView::Source> RoomView::sources() const
     if (anyToBus)
         list.push_back ({ preMasterKey, &e.busStrip().placed, QStringLiteral ("PM"), MixerWindow::tr ("Pre-Master"),
                           Theme::current().color (QStringLiteral ("highlight")) });
-    for (int r = 0; r < mixer::numReturns; ++r)
-        list.push_back ({ returnKey - r, &e.returnStrip (r).placed, QString (QChar ('A' + r)),
-                          MixerWindow::returnName (r), QColor (0x80, 0x86, 0x90) });
+    for (int r = 0; r < e.returnsInUse(); ++r)
+        list.push_back ({ returnKey - r, &e.returnStrip (r).placed, QString (QChar ('A' + r)), window.returnTitle (r), QColor (0x80, 0x86, 0x90) });
     return list;
 }
 

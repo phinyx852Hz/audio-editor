@@ -14,8 +14,8 @@ the `.phi` is open. When it is done, a message lists what did not carry over (Sh
 |---|---|
 | MIDI and audio tracks (16 at most) | Mixer tracks with their names: instrument tracks and audio tracks. |
 | Volume, pan, track on/off, solo | The strip's fader, pan, mute and solo. |
-| Return tracks | Returns A and B, with their fader, pan and mute; a VST3 effect on them if PHI has it. |
-| Sends | Sends A and B. |
+| Return tracks | Returns A, B, C... (8 at most), named after them, with their fader, pan and mute; their VST3 effects if PHI has them, several in series in a Prism of effects. |
+| Sends | Sends A, B, C... |
 | Master volume, tempo | The master fader and the tempo box; the first clip's time signature. |
 | Arrangement MIDI clips | MIDI clips, loops unrolled from the clip's start marker, disabled notes left out, velocity and release velocity kept. |
 | Arrangement audio clips | Audio clips: warped ones through their warp markers to the part of the file heard, unwarped ones by their start in seconds; a looped clip is one clip per pass. |
