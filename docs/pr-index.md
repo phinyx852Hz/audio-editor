@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**151 pull requests:** 143 merged, 8 open.
+**151 pull requests:** 145 merged, 6 open.
 
 ## Contents
 
@@ -58,7 +58,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#136](https://github.com/phinyx852Hz/audio-editor/pull/136) | Mixer: open Ableton Live Sets (.als), a Drum Rack on the Slicer | merged |  | `Source/mixer/AbletonSet.cpp`<br>`tests/CoreTests.cpp`<br>`Source/ui/DawProjectSection.cpp` |
 | [#139](https://github.com/phinyx852Hz/audio-editor/pull/139) | Score editor: the playhead moves smoothly and the view follows it | merged |  | `Source/ui/MidiStaff.cpp`<br>`Source/ui/MidiStaff.h`<br>`Source/ui/MidiEditor.cpp` |
 | [#146](https://github.com/phinyx852Hz/audio-editor/pull/146) | PHI frame drum: your frame drum as a Slicer kit, played by the iqāʿāt, the rhythm generator and the Bol Processor | merged | Mode > rhythm: | `Source/sampler/PhiFrameDrum.cpp`<br>`share/bolprocessor/-da.iqaat`<br>`Source/ui/MixerWindow.cpp` |
-| [#148](https://github.com/phinyx852Hz/audio-editor/pull/148) | Tools > Scripts: Lua and Python scripting with a script editor, after Reaper's ReaScript | open |  | `Source/ui/ScriptSection.cpp`<br>`Source/ui/ScriptEditor.cpp`<br>`Source/script/ScriptRunner.cpp` |
+| [#148](https://github.com/phinyx852Hz/audio-editor/pull/148) | Tools > Scripts: Lua and Python scripting, a script editor and Import Reaper Script | open |  | `Source/ui/ScriptSection.cpp`<br>`Source/script/ReaperImport.cpp`<br>`Source/ui/ScriptEditor.cpp` |
 
 ### Analysis and meters
 
@@ -79,7 +79,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | PR | Title | State | In the app | In the code |
 |---|---|---|---|---|
 | [#31](https://github.com/phinyx852Hz/audio-editor/pull/31) | Add the Master Assistant: tunes the Master Section's knobs towards a target | merged | Master menu, Master Assistant (Alt+Shift+M) | `Source/core/MasterAssist.cpp`<br>`Source/ui/MasterAssistant.cpp` |
-| [#151](https://github.com/phinyx852Hz/audio-editor/pull/151) | Master Section chain presets: save, load and factory presets | open | Master > Load Chain Preset… | `Source/ui/ChainPresets.cpp`<br>`Source/engine/MasterChain.cpp`<br>`Source/ui/ChainPresets.h` |
+| [#151](https://github.com/phinyx852Hz/audio-editor/pull/151) | Master Section chain presets: save, load and factory presets | merged | Master > Load Chain Preset… | `Source/ui/ChainPresets.cpp`<br>`Source/engine/MasterChain.cpp`<br>`Source/ui/ChainPresets.h` |
 
 ### Mixer and clip launcher
 
@@ -103,7 +103,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#113](https://github.com/phinyx852Hz/audio-editor/pull/113) | Fix the crash on quit with the mixer open | merged |  | `Source/ui/MainWindow.cpp`<br>`Source/ui/Panels.h`<br>`Source/ui/Panels.cpp` |
 | [#135](https://github.com/phinyx852Hz/audio-editor/pull/135) | Mixer: open and write DAWproject (Bitwig, Studio One, Cubase) | merged |  | `Source/mixer/DawProject.cpp`<br>`Source/ui/DawProjectSection.cpp`<br>`Source/core/Zip.cpp` |
 | [#142](https://github.com/phinyx852Hz/audio-editor/pull/142) | Mixer: folders as group buses, with Reaper's three fold levels | open |  | `Source/ui/MixerWindow.cpp`<br>`Source/mixer/MixerEngine.cpp`<br>`tests/CoreTests.cpp` |
-| [#149](https://github.com/phinyx852Hz/audio-editor/pull/149) | Mixer: up to eight returns; strips with arm, input and monitoring on top | open |  | `Source/ui/MixerWindow.cpp`<br>`Source/ui/MixerRecording.cpp`<br>`Source/ui/DawProjectSection.cpp` |
+| [#149](https://github.com/phinyx852Hz/audio-editor/pull/149) | Mixer: up to eight returns; strips with arm, input and monitoring on top | merged |  | `Source/ui/MixerWindow.cpp`<br>`Source/ui/MixerRecording.cpp`<br>`Source/ui/DawProjectSection.cpp` |
 
 ### Routing and racks
 
@@ -402,7 +402,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#145](https://github.com/phinyx852Hz/audio-editor/pull/145) | Add Tools > Theme Generator, with optional local or cloud AI | A new Tools > Theme Generator window that builds a complete PHI theme (all 32 colours plus the spectrogram gradient) from a few choices: *(auto)* | merged | 2026-11-01 | Interface and branding |
 | [#146](https://github.com/phinyx852Hz/audio-editor/pull/146) | PHI frame drum: your frame drum as a Slicer kit, played by the iqāʿāt, the rhythm generator and the Bol Processor | PHI frame drum is a new built-in instrument (Mixer > Built-in, and in the track instrument list) built the same way as PHI tabla. *(auto)* | merged | 2026-11-01 | Editing and warping |
 | [#147](https://github.com/phinyx852Hz/audio-editor/pull/147) | Research: add Frame Drums (history, Glen Velez, drums of the world, shamanism) | Adds a Frame Drums submenu to Research, as four new files in share/research/, in the same format as the Acoustic Ecology entries (#128). *(auto)* | open | 2026-11-01 | Not yet sorted |
-| [#148](https://github.com/phinyx852Hz/audio-editor/pull/148) | Tools > Scripts: Lua and Python scripting with a script editor, after Reaper's ReaScript | A Scripts submenu in Tools, next to Macros, built on ReaScript's ideas. *(auto)* | open | 2026-11-01 | Editing and warping |
-| [#149](https://github.com/phinyx852Hz/audio-editor/pull/149) | Mixer: up to eight returns; strips with arm, input and monitoring on top | Imported projects with more than two FX tracks used to lose the extra ones, and the sends to them. *(auto)* | open | 2026-11-01 | Mixer and clip launcher |
+| [#148](https://github.com/phinyx852Hz/audio-editor/pull/148) | Tools > Scripts: Lua and Python scripting, a script editor and Import Reaper Script | A Scripts submenu in Tools, next to Macros, built on ReaScript's ideas. *(auto)* | open | 2026-11-01 | Editing and warping |
+| [#149](https://github.com/phinyx852Hz/audio-editor/pull/149) | Mixer: up to eight returns; strips with arm, input and monitoring on top | Imported projects with more than two FX tracks used to lose the extra ones, and the sends to them. *(auto)* | merged | 2026-11-02 | Mixer and clip launcher |
 | [#150](https://github.com/phinyx852Hz/audio-editor/pull/150) | Effects that play from what they hear (vocoder, strings, grains, double, trigger) and Prism presets | The DSP is plain C++ in Source/core/AudioDriven.* (phi::PitchTracker, Vocoder, Strings, Grains, Double, Trigger). *(auto)* | open | 2026-11-01 | Routing and racks |
-| [#151](https://github.com/phinyx852Hz/audio-editor/pull/151) | Master Section chain presets: save, load and factory presets | Until now the Master Section had no named presets, only the one chain auto-saved between sessions. *(auto)* | open | 2026-11-01 | Mastering |
+| [#151](https://github.com/phinyx852Hz/audio-editor/pull/151) | Master Section chain presets: save, load and factory presets | Until now the Master Section had no named presets, only the one chain auto-saved between sessions. *(auto)* | merged | 2026-11-02 | Mastering |
