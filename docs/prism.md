@@ -152,8 +152,8 @@ routing by range, the rays' chains, alignment and gains; tested in `tests/CoreTe
 Owner's ask (2026-11-01): "Allow for either one of the FX sends to be a Prism, but with fx only, no
 instruments."
 
-Either of the mixer's two returns (Return A and Return B, the strips between the tracks and the
-master that the tracks' sends A and B feed) can hold a Prism of effects in place of a single
+Any of the mixer's returns (Return A, Return B and any added, the strips between the tracks and the
+master that the tracks' sends feed) can hold a Prism of effects in place of a single
 effect. Click the ▾ on the return's effect button (or right-click it) and choose Prism (Rays of
 Effects). The effect that was there moves into the Prism's first ray and keeps its settings, and
 the Prism opens in a window. Clicking the effect button again opens the Prism.

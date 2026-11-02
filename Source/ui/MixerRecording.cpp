@@ -917,31 +917,7 @@ void MixerWindow::recordMenu (QPoint at)
         menu.addSeparator();
         auto& s = engine.strip (track);
         auto* input = menu.addMenu (tr ("%1 &Records").arg (trackName (track)));
-        auto* inputGroup = new QActionGroup (input);
-        const std::pair<int, QString> inputs[] {
-            { mixer::Strip::inputAuto, tr ("&Auto: the Keyboard with an Instrument, else Audio") },
-            { mixer::Strip::inputMidi, tr ("The MIDI &Keyboard") },
-            { mixer::Strip::inputAudio, tr ("The &Audio Input") },
-            { mixer::Strip::inputBoth, tr ("&Both (the Timeline Takes Both)") },
-            { mixer::Strip::inputInstrument, tr ("Its &Instrument, as Audio") },
-        };
-        for (const auto& [value, name] : inputs)
-        {
-            auto* a = input->addAction (name, this, [this, &s, value = value] { s.input = value; changed(); updateInput(); });
-            a->setCheckable (true);
-            a->setChecked (s.input.load() == value);
-            inputGroup->addAction (a);
-        }
-        auto* channels = menu.addMenu (tr ("%1 Input &Channels").arg (trackName (track)));
-        auto* channelGroup = new QActionGroup (channels);
-        const std::pair<int, QString> sides[] { { 0, tr ("&Stereo") }, { 1, tr ("&Left Alone (Mono)") }, { 2, tr ("&Right Alone (Mono)") } };
-        for (const auto& [value, name] : sides)
-        {
-            auto* a = channels->addAction (name, this, [this, &s, value = value] { s.inputChannels = value; changed(); });
-            a->setCheckable (true);
-            a->setChecked (s.inputChannels.load() == value);
-            channelGroup->addAction (a);
-        }
+        trackInputMenu (track, *input);
         auto* monitor = menu.addMenu (tr ("%1 &Monitoring").arg (trackName (track)));
         auto* monitorGroup = new QActionGroup (monitor);
         const std::pair<int, QString> monitors[] {
@@ -951,7 +927,7 @@ void MixerWindow::recordMenu (QPoint at)
         };
         for (const auto& [value, name] : monitors)
         {
-            auto* a = monitor->addAction (name, this, [this, &s, value = value] { s.monitor = value; changed(); updateInput(); });
+            auto* a = monitor->addAction (name, this, [this, &s, track, value = value] { s.monitor = value; inputChanged (track); });
             a->setCheckable (true);
             a->setChecked (s.monitor.load() == value);
             monitorGroup->addAction (a);
@@ -1055,6 +1031,56 @@ bool MixerWindow::ensureInput (QString& error)
     }
     engine.setInput (captureInput.get());
     return true;
+}
+
+// What a track records (inputs) and from which of the input's channels: the strip's input
+// button, and the record menu's for the armed track.
+void MixerWindow::trackInputMenu (int track, QMenu& menu)
+{
+    auto& s = engine.strip (track);
+    auto* inputGroup = new QActionGroup (&menu);
+    const std::pair<int, QString> inputs[] {
+        { mixer::Strip::inputAuto, tr ("&Auto: the Keyboard with an Instrument, else Audio") },
+        { mixer::Strip::inputMidi, tr ("The MIDI &Keyboard") },
+        { mixer::Strip::inputAudio, tr ("The &Audio Input") },
+        { mixer::Strip::inputBoth, tr ("&Both (the Timeline Takes Both)") },
+        { mixer::Strip::inputInstrument, tr ("Its &Instrument, as Audio") },
+    };
+    for (const auto& [value, name] : inputs)
+    {
+        auto* a = menu.addAction (name, this, [this, &s, track, value = value] { s.input = value; inputChanged (track); });
+        a->setCheckable (true);
+        a->setChecked (s.input.load() == value);
+        inputGroup->addAction (a);
+    }
+    menu.addSection (tr ("The Audio Input's Channels"));
+    auto* channelGroup = new QActionGroup (&menu);
+    const std::pair<int, QString> sides[] { { 0, tr ("&Stereo") }, { 1, tr ("&Left Alone (Mono)") }, { 2, tr ("&Right Alone (Mono)") } };
+    for (const auto& [value, name] : sides)
+    {
+        auto* a = menu.addAction (name, this, [this, &s, track, value = value] { s.inputChannels = value; inputChanged (track); });
+        a->setCheckable (true);
+        a->setChecked (s.inputChannels.load() == value);
+        channelGroup->addAction (a);
+    }
+}
+
+// Short for the strip's button ("Audio L"), or in words for its tooltip.
+QString MixerWindow::inputText (const mixer::Strip& s, bool words)
+{
+    const auto input = s.input.load();
+    QString text;
+    switch (input)
+    {
+        case mixer::Strip::inputMidi:       text = words ? tr ("the MIDI keyboard") : tr ("Keys"); break;
+        case mixer::Strip::inputAudio:      text = words ? tr ("the audio input") : tr ("Audio"); break;
+        case mixer::Strip::inputBoth:       text = words ? tr ("the MIDI keyboard and the audio input") : tr ("Both"); break;
+        case mixer::Strip::inputInstrument: text = words ? tr ("its instrument, as audio") : tr ("Inst"); break;
+        default:                            text = words ? tr ("auto, the keyboard with an instrument, else the audio input") : tr ("Auto"); break;
+    }
+    if (input != mixer::Strip::inputMidi && input != mixer::Strip::inputInstrument && s.inputChannels.load() != 0)
+        text += s.inputChannels.load() == 1 ? (words ? tr (" (its left channel)") : tr (" L")) : (words ? tr (" (its right channel)") : tr (" R"));
+    return text;
 }
 
 void MixerWindow::updateInput()

@@ -236,6 +236,7 @@ public:
         std::function<void()> close, undock;
         std::function<void (const QString&)> search;
         std::function<void (const QUrl&)> link;   // a research: link, to another entry
+        std::function<void (const QString&)> run; // a phi: link, a menu command by its id ("phi:compose.organum")
     };
 
     ResearchView (Hooks h, QWidget* parent) : QWidget (parent), hooks (std::move (h))
@@ -267,12 +268,14 @@ public:
         });
 
         browser = new ResearchBrowser (this);
-        browser->setOpenLinks (false);   // research: links open entries here, the rest in the web browser
+        browser->setOpenLinks (false);   // research: links open entries here, phi: links run a command, the rest the web browser
         browser->setFrameShape (QFrame::NoFrame);
         connect (browser, &QTextBrowser::anchorClicked, this, [this] (const QUrl& url)
         {
             if (url.scheme() == QLatin1String ("research"))
                 hooks.link (url);
+            else if (url.scheme() == QLatin1String ("phi"))
+                hooks.run (url.path (QUrl::FullyDecoded));
             else
                 QDesktopServices::openUrl (url);
         });
@@ -436,6 +439,14 @@ void MainWindow::showResearchEntry (const QString& title, const QString& markdow
                 if (e.title == title)
                     return showResearchEntry (e.title, e.markdown);
             searchResearch (title);
+        };
+        hooks.run = [this] (const QString& id)
+        {
+            // An entry's way to the tool it is about (Compose > Europe > Organum...).
+            auto* action = commands.action (id);
+            if (action == nullptr || ! action->isEnabled())
+                return statusBar()->showMessage (tr ("That is not in this version of PHI, or not available now"), 6000);
+            action->trigger();
         };
         hooks.undock = [this]
         {

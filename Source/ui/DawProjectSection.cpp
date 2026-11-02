@@ -4,6 +4,7 @@
 // written as one; and Ableton Live Sets (docs/ableton-sets.md), brought in the same way. The
 // formats are Source/mixer/DawProject.* and AbletonSet.*; this is what they mean for the mixer.
 #include "MixerWindow.h"
+#include "../mixer/EffectPrism.h"
 #include "../engine/AudioEngine.h"
 #include "../mixer/AbletonSet.h"
 #include "../mixer/DawProject.h"
@@ -182,6 +183,7 @@ bool MixerWindow::importDawProject (const QString& file, QString& error)
         say (tr ("PHI has %1 tracks; the %2 after them are left out").arg (mixer::maxTracks).arg ((int) p.tracks.size() - mixer::maxTracks));
     if ((int) p.returns.size() > mixer::numReturns)
         say (tr ("PHI has %1 returns; the effect tracks after the first %1 are left out, and the sends to them").arg (mixer::numReturns));
+    const auto returnCount = std::min ((int) p.returns.size(), mixer::numReturns);
 
     QJsonArray tracks;
     int scenes = (int) p.scenes.size();
@@ -190,7 +192,7 @@ bool MixerWindow::importDawProject (const QString& file, QString& error)
     {
         const auto& t = p.tracks[(size_t) i];
         QJsonArray sends;
-        for (int r = 0; r < mixer::numReturns; ++r)
+        for (int r = 0; r < returnCount; ++r)
         {
             double db = -100.0;
             bool pre = false;
@@ -300,15 +302,18 @@ bool MixerWindow::importDawProject (const QString& file, QString& error)
     }
 
     QJsonArray returns;
-    for (int r = 0; r < std::min ((int) p.returns.size(), mixer::numReturns); ++r)
+    // Every effect track a return (A, B, then C...), with its name. One effect goes in the
+    // return's slot; several go in series into a Prism of effects there, all in its one ray.
+    for (int r = 0; r < returnCount; ++r)
     {
         const auto& t = p.returns[(size_t) r];
-        QJsonObject o { { "fader", std::clamp (t.volumeDb, -100.0, 6.0) }, { "pan", t.pan }, { "mute", t.mute } };
-        const auto effectsHere = insertsFor (t, -1, r, 1000);
-        if (! effectsHere.isEmpty())
+        QJsonObject o { { "fader", std::clamp (t.volumeDb, -100.0, 6.0) }, { "pan", t.pan }, { "mute", t.mute }, { "name", fromStd (t.name) } };
+        const auto effectsHere = insertsFor (t, -1, r, mixer::EffectPrism::maxEffects);
+        if (effectsHere.size() == 1)
             o.insert ("effect", effectsHere.first());
-        if (effectsHere.size() > 1)
-            say (tr ("Return %1 (%2) holds one effect in PHI; the effects after %3 are left out").arg (QChar ('A' + r)).arg (fromStd (t.name), effectsHere.first().toObject().value ("name").toString()));
+        else if (effectsHere.size() > 1)
+            o.insert ("effect", QJsonObject { { "id", QString::fromUtf8 (mixer::EffectPrism::identifier) }, { "name", fromStd (t.name) },
+                                              { "state", QString() }, { "rays", QJsonArray { QJsonObject { { "effects", effectsHere } } } } });
         if (! t.audioClips.empty() || ! t.noteClips.empty())
             say (tr ("The clips on the effect track %1 are left out").arg (fromStd (t.name)));
         returns.append (o);
@@ -350,7 +355,14 @@ bool MixerWindow::importDawProject (const QString& file, QString& error)
         bool ok = false;
         if (n.ret >= 0)
         {
-            if (auto fx = engine.returnEffect (n.ret); fx != nullptr && n.insert == 0 && fx->pluginId() == n.pluginId)
+            // The return's effect, or the n.insert'th in its Prism's ray.
+            if (auto fx = engine.returnEffect (n.ret); fx != nullptr && mixer::EffectPrism::is (*fx))
+            {
+                const auto rays = static_cast<const mixer::EffectPrism&> (*fx).rays();
+                if (! rays.empty() && n.insert < (int) rays.front().effects.size() && rays.front().effects[(size_t) n.insert].effect->pluginId() == n.pluginId)
+                    ok = rays.front().effects[(size_t) n.insert].effect->setNativeState (n.state);
+            }
+            else if (fx != nullptr && n.insert == 0 && fx->pluginId() == n.pluginId)
                 ok = fx->setNativeState (n.state);
         }
         else if (n.insert < 0)
@@ -484,7 +496,7 @@ void MixerWindow::exportDawProject()
         t.solo = s.solo.load();
         t.audio = s.mode.load() != 2;
         t.notes = s.mode.load() != 1;
-        for (int ret = 0; ret < mixer::numReturns; ++ret)
+        for (int ret = 0; ret < engine.returnsInUse(); ++ret)
             if (s.sendDb[(size_t) ret].load() > -100.0f)
                 t.sends.push_back ({ ret, s.sendDb[(size_t) ret].load(), s.sendPre[(size_t) ret].load(), true });
         for (const auto& c : engine.clips (i))
@@ -527,16 +539,27 @@ void MixerWindow::exportDawProject()
             say (tr ("%1: the strip's trim, width, cuts and delay").arg (name));
         p.tracks.push_back (std::move (t));
     }
-    for (int ret = 0; ret < mixer::numReturns; ++ret)
+    for (int ret = 0; ret < engine.returnsInUse(); ++ret)
     {
         auto& c = engine.returnStrip (ret);
         dawproject::Track t;
-        t.name = tr ("Return %1").arg (QChar ('A' + ret)).toStdString();
+        t.name = returnTitle (ret).toStdString();
         t.audio = true;
         t.volumeDb = c.faderDb.load();
         t.pan = c.pan.load();
         t.mute = c.mute.load();
-        if (const auto fx = engine.returnEffect (ret))
+        if (const auto fx = engine.returnEffect (ret); fx != nullptr && mixer::EffectPrism::is (*fx))
+        {
+            // A Prism's first ray, in series, as the effect track's devices.
+            const auto& prism = static_cast<const mixer::EffectPrism&> (*fx);
+            const auto rays = prism.rays();
+            if (! rays.empty())
+                for (const auto& x : rays.front().effects)
+                    pluginOf (*x.effect, "audioFX", ! x.bypassed, fromStd (t.name), t.devices);
+            if (rays.size() > 1 || prism.split() != prism::Split::parallel)
+                say (tr ("%1: its Prism's first ray, in series (the other rays and the split are PHI's own)").arg (returnTitle (ret)));
+        }
+        else if (fx != nullptr)
             pluginOf (*fx, "audioFX", true, fromStd (t.name), t.devices);
         p.returns.push_back (std::move (t));
     }

@@ -24,8 +24,8 @@ message lists what did not carry over (Show Details).
 |---|---|
 | Tracks (16 at most) | Mixer tracks, with their names and colours. A track with only notes is an instrument track, with only audio an audio track, with both a hybrid. |
 | Volume, pan, mute, solo | The strip's fader, pan, mute and solo. |
-| Effect tracks (FX, returns) | Returns A and B, with their fader, pan, mute and first plugin effect. |
-| Sends to effect tracks | Sends A and B, before or after the fader as they were. |
+| Effect tracks (FX, returns) | Returns A, B, C... (8 at most), named after them, with their fader, pan and mute. One plugin effect goes in the return's slot; several go in series into a Prism of effects there (up to 8, in its one ray). |
+| Sends to effect tracks | Sends A, B, C..., before or after the fader as they were. |
 | Master volume | The master fader. |
 | Audio clips on the timeline | Audio clips, with their start, the part of the file heard, and mute. A looped clip is laid out as one clip per pass. |
 | Note clips on the timeline | MIDI clips (a MIDI file each, at the project's tempo). Loops are unrolled, notes are cut at the loop's end, and clips inside clips are flattened. Velocity, release velocity and channel are kept. |
@@ -51,7 +51,7 @@ plugin's settings under `plugins/`. Times are written in beats at the project's 
 | Audio and MIDI clips | Audio clips (the part of the file heard) and note clips (the notes heard, the strip's transpose included, except on the drums' channel 10). |
 | Launcher slots | Scenes with clip slots. |
 | VST3 and CLAP instruments and inserts | Plugins with their settings in their own format, so the other program loads them as they were. |
-| Returns A and B | Two effect tracks, with their plugin effect. |
+| Returns in use (A, B...) | Effect tracks, with their names and plugin effect (a Prism's first ray, in series). |
 | Tempo, beats to the bar, master | Tempo, time signature (over 4), master volume. |
 
 Not written, and said so: PHI's own instruments (Synth, Sampler, Slicer, Raga, Prism; bounce the

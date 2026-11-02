@@ -40,10 +40,12 @@
 #include "../Source/patchbay/PatchBay.h"
 #include "../Source/core/EbuCore.h"
 #include "../Source/core/Ixml.h"
+#include "../Source/core/ThemeGen.h"
 #include "../Source/core/Metadata.h"
 #include "../Source/core/RiffChunks.h"
 #include "../Source/core/Xmp.h"
 #include "../Source/core/Fft.h"
+#include "../Source/core/LinearPhase.h"
 #include "../Source/core/Windows.h"
 #include "../Source/core/Album.h"
 #include "../Source/core/Nyquist.h"
@@ -4273,6 +4275,28 @@ namespace
         m.strip (0).sendPre[0] = false;
         m.setReturnEffect (0, nullptr);
         m.strip (0).faderDb = 0.0f;
+
+        // Returns past A and B (C to H): fed and heard only while they are in use.
+        check (m.returnsInUse() == mixer::defaultReturns, "mixer returns: two in use at first");
+        check (m.strip (0).sendDb[7].load() <= -96.0f && ! m.strip (0).sendPre[7].load() && m.busStrip().sendDb[7].load() <= -96.0f,
+               "mixer returns: every send starts at -inf");
+        m.strip (0).sendDb[2] = 0.0f;
+        settle();
+        check (near (l[300], 0.5, 1.0e-4), "mixer returns: a send to return C does nothing while it is not in use");
+        m.setReturnsInUse (3);
+        settle();
+        check (near (l[300], 1.0, 1.0e-4), "mixer returns: return C in use");
+        m.setReturnEffect (2, twice);
+        settle();
+        check (near (l[300], 1.5, 1.0e-3), "mixer returns: return C's effect");
+        m.setReturnsInUse (99);
+        check (m.returnsInUse() == mixer::numReturns, "mixer returns: eight at most");
+        m.setReturnsInUse (0);
+        check (m.returnsInUse() == mixer::defaultReturns, "mixer returns: A and B always");
+        settle();
+        check (near (l[300], 0.5, 1.0e-4), "mixer returns: return C out of use again");
+        m.setReturnEffect (2, nullptr);
+        m.strip (0).sendDb[2] = -100.0f;
 
         // Track modes: a steady 0.25 from the instrument with the 0.5 audio clip.
         struct Steady final : mixer::Instrument
@@ -8698,6 +8722,63 @@ namespace
             check (jump < 0.2f, "phi EQ changes one band without a click in another");
         }
 
+        // Φ EQ, linear phase: the same magnitude as the filters, every frequency late by
+        // the same latency, and a new setting faded in without a click.
+        {
+            phi::Eq e;
+            e.prepare (rate, 1);
+            phi::Eq::Settings s;
+            s.bands[5].gainDb = 6.0;
+            s.bands[8].gainDb = -4.0;
+            e.set (s);
+            const auto taps = phi::LinearPhaseFir::tapsFor (rate);
+            const auto magnitude = [&] (double hz) { return std::pow (10.0, e.responseDb (std::max (hz, 0.1)) / 20.0); };
+            const auto impulse = phi::LinearPhaseFir::design (magnitude, taps, rate);
+            float asymmetry = 0.0f;
+            for (int n = 1; n < taps / 2; ++n)
+                asymmetry = std::max (asymmetry, std::abs (impulse[(size_t) (taps / 2 + n)] - impulse[(size_t) (taps / 2 - n)]));
+            check ((int) impulse.size() == taps && asymmetry < 1.0e-6f, "linear-phase impulse is symmetric about its centre");
+
+            phi::LinearPhaseFir fir;
+            fir.prepare (taps, 2);
+            check (fir.latency() == taps / 2 + phi::LinearPhaseFir::blockSize, "linear-phase latency is the centre plus one block");
+            fir.give (phi::LinearPhaseFir::prepareKernel (impulse));
+            const int frames = 3 * taps;
+            for (const auto hz : { phi::Eq::bandHz (5), phi::Eq::bandHz (8), 3000.0 })
+            {
+                fir.reset();
+                auto left = sine (hz, frames), right = sine (hz * 1.5, frames);
+                const auto dryLeft = left, dryRight = right;
+                for (int done = 0; done < frames; done += 300)   // blocks that are not the partition's size
+                {
+                    float* io[] { left.data() + done, right.data() + done };
+                    fir.process (io, 2, std::min (300, frames - done));
+                }
+                const auto at = fir.latency();
+                float error = 0.0f;
+                const auto gainL = (float) magnitude (hz), gainR = (float) magnitude (hz * 1.5);
+                for (int i = taps + at; i < frames; ++i)
+                    error = std::max ({ error, std::abs (left[(size_t) i] - gainL * dryLeft[(size_t) (i - at)]),
+                                        std::abs (right[(size_t) i] - gainR * dryRight[(size_t) (i - at)]) });
+                check (error < 2.0e-3f, "linear-phase EQ at " + std::to_string ((int) hz) + " Hz has the filters' gain and no phase shift");
+            }
+
+            // A new kernel fades in over one block.
+            fir.reset();
+            auto tone = sine (1000.0, 2 * taps);
+            float* t[] { tone.data() };
+            fir.process (t, 1, taps);
+            s.bands[5].gainDb = -6.0;
+            e.set (s);
+            fir.give (phi::LinearPhaseFir::prepareKernel (phi::LinearPhaseFir::design (magnitude, taps, rate)));
+            float* rest[] { tone.data() + taps };
+            fir.process (rest, 1, taps);
+            float jump = 0.0f;
+            for (int i = taps; i < 2 * taps - 1; ++i)
+                jump = std::max (jump, std::abs (tone[(size_t) i + 1] - tone[(size_t) i]));
+            check (jump < 0.2f && fir.takeRetired() != nullptr, "linear-phase EQ changes setting without a click");
+        }
+
         // Φ Echo: an impulse comes back at t, tφ, tφ²..., each 1/φ quieter.
         {
             phi::Echo echo;
@@ -11084,6 +11165,94 @@ namespace
         fs::remove_all (folder);
     }
 
+    void testThemeGenerator()
+    {
+        using namespace themegen;
+        Rgb gold;
+        check (fromHex ("#c8a24a", gold) && toHex (gold) == "#c8a24a", "theme: hex round trip");
+        Rgb seeThrough;
+        check (fromHex ("#c8a24a40", seeThrough) && near (seeThrough.a, 64.0 / 255.0, 1e-9) && toHex (seeThrough) == "#c8a24a40", "theme: hex with alpha");
+        Rgb shortHex;
+        check (fromHex ("#fff", shortHex) && toHex (shortHex) == "#ffffff" && ! fromHex ("c8a24a", shortHex) && ! fromHex ("#12345", shortHex),
+               "theme: short and bad hex");
+        check (near (contrastRatio ({ 0, 0, 0 }, { 1, 1, 1 }), 21.0, 1e-6) && near (contrastRatio (gold, gold), 1.0, 1e-9), "theme: contrast ratio");
+
+        for (const bool dark : { true, false })
+            for (auto harmony : { Harmony::mono, Harmony::analogous, Harmony::complementary, Harmony::splitComplementary, Harmony::triadic })
+                for (const double contrast : { 0.0, 0.5, 1.0 })
+                {
+                    Settings s;
+                    s.seed = gold;
+                    s.dark = dark;
+                    s.harmony = harmony;
+                    s.contrast = contrast;
+                    const auto t = generate (s);
+                    const auto name = std::string ("theme: ") + harmonyName (harmony) + (dark ? " dark " : " light ") + std::to_string (contrast);
+                    bool all = t.colors.size() == colorKeys().size();
+                    for (const auto& key : colorKeys())
+                        all = all && t.colors.count (key) == 1;
+                    check (all, name + ": every colour");
+                    check (t.spectrogram.size() >= 2, name + ": spectrogram");
+                    check ((luminance (t.colors.at ("window")) < 0.2) == dark, name + ": dark or light");
+                    int failing = 0;
+                    for (const auto& c : checkContrast (t.colors))
+                        failing += c.ok() ? 0 : 1;
+                    check (failing == 0 || contrast < 0.5, name + ": passes its contrast checks");
+                    auto fixed = t.colors;
+                    fixContrast (fixed);
+                    bool ok = true;
+                    for (const auto& c : checkContrast (fixed))
+                        ok = ok && c.ok();
+                    check (ok, name + ": fixed contrast passes");
+                }
+
+        // Locked colours are kept, and selected text follows a locked highlight.
+        Settings s;
+        Colors locked { { "highlight", { 1, 1, 0 } } };
+        const auto t = generate (s, locked);
+        check (toHex (t.colors.at ("highlight")) == "#ffff00", "theme: a locked colour is kept");
+        check (contrastRatio (t.colors.at ("highlightedText"), t.colors.at ("highlight")) >= 4.5, "theme: selected text on a locked highlight");
+        auto colors = t.colors;
+        Colors lockText { { "text", { 0.3, 0.3, 0.3 } } };
+        colors["text"] = { 0.3, 0.3, 0.3 };
+        colors["base"] = { 0.25, 0.25, 0.25 };
+        fixContrast (colors, lockText);
+        check (toHex (colors.at ("text")) == "#4d4d4d" && contrastRatio (colors.at ("text"), colors.at ("base")) >= 4.5,
+               "theme: a locked text colour moves its background instead");
+
+        // A grey seed and zero saturation give a grey theme.
+        Settings grey;
+        grey.seed = { 0.5, 0.5, 0.5 };
+        grey.saturation = 0;
+        const auto g = generate (grey);
+        const auto w = g.colors.at ("waveform");
+        check (near (w.r, w.g, 0.01) && near (w.g, w.b, 0.01), "theme: grey stays grey");
+
+        // A picture: mostly dark blue with a little orange gives a dark theme built on the orange.
+        std::vector<Rgb> pixels (900, Rgb { 0.05, 0.07, 0.2 });
+        pixels.insert (pixels.end(), 100, Rgb { 1.0, 0.55, 0.1 });
+        const auto palette = paletteFromPixels (pixels, 4);
+        check (palette.size() == 2 && near (palette[0].share, 0.9, 1e-9), "theme: palette of a picture");
+        const auto fromPicture = settingsFromPalette (palette);
+        check (fromPicture.dark && fromPicture.seed.r > 0.9, "theme: settings from a picture");
+
+        // The theme file names every colour and can be read back.
+        const auto json = toJson ("Quote \"Test\"", t, s);
+        check (json.find ("\"name\": \"Quote \\\"Test\\\"\"") != std::string::npos, "theme: name escaped in JSON");
+        check (json.find ("\"levelPeak\"") != std::string::npos && json.find ("\"generator\"") != std::string::npos, "theme: JSON has colours and settings");
+        // REAPER colours are 0x00bbggrr in decimal, sometimes with flags in the top byte.
+        Colors reaper;
+        Settings fromReaper;
+        check (fromReaperTheme ("[color theme]\r\ncol_main_bg2=1315860\r\ncol_tr1_peaks=255\r\ncol_main_bg=-2134456634\r\nui_img=Foo\r\n", reaper, fromReaper),
+               "theme: reads a REAPER theme");
+        check (toHex (reaper["window"]) == "#141414" && toHex (reaper["waveform"]) == "#ff0000" && toHex (fromReaper.seed) == "#ff0000"
+               && fromReaper.dark && reaper.count ("text") == 0, "theme: REAPER colours mapped");
+        check (! fromReaperTheme ("[REAPER]\nfoo=bar\n", reaper, fromReaper), "theme: not a REAPER colour theme");
+
+        Harmony h;
+        check (harmonyFromName ("split-complementary", h) && h == Harmony::splitComplementary && ! harmonyFromName ("plaid", h), "theme: harmony names");
+    }
+
 int main()
 {
     testStorage();
@@ -11168,6 +11337,7 @@ int main()
     testPluginMeasure();
     testDawProject();
     testAbletonSet();
+    testThemeGenerator();
 
     if (failures == 0)
         std::printf ("All core tests passed\n");

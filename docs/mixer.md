@@ -60,6 +60,11 @@ Cubase and Harrison Mixbus mixers. What the owner likes most:
 
 1. **Header**
    - Number, name and colour.
+   - **Recording, at the top** (owner, 2026-11-01): **●** arms the track (R), the **input**
+     button says what it records (Auto, Keys, Audio, Both or Inst, with L or R for one channel of
+     the audio input) and opens the choice, and **Mon** sets monitoring a click at a time: Mon A
+     (heard while armed to record audio), Mon lit (always), Mon struck through (off). A slim strip
+     keeps only ●.
    - Source: Stem file, Live input (mono or stereo, from the interface), or Instrument
      (a VST3/LV2/CLAP instrument played from a MIDI keyboard; it outputs audio only).
    - A stem starts at 0. An offset in samples or milliseconds lines it up when another DAW
@@ -80,8 +85,10 @@ Cubase and Harrison Mixbus mixers. What the owner likes most:
    - Right-click picks a display from a list. Double-click opens it large in a floating
      window.
    - It reuses PHI's existing goniometer, spectrum and meter code.
-5. **Sends (Ableton)**: two send dials, **A Reverb** and **B Delay**, from −∞ to 0 dB, and
-   post-fader by default. Right-click a dial to switch it to pre-fader.
+5. **Sends (Ableton)**: one slim bar for each return in use (A and B, then C to H when the mix
+   has them), its letter on the left and its level in dB on the right, as REAPER lists sends;
+   from −∞ to 0 dB, post-fader by default. Right-click a bar to switch it to pre-fader,
+   double-click it for −∞.
 6. **Panner**: both kinds are on every strip, with no switching between them.
    - **Pan pot**, a traditional knob. Mono tracks use an equal-power law (−3 dB in the
      middle; −4.5 and −6 dB laws are options). Stereo tracks use balance.
@@ -100,15 +107,20 @@ Cubase and Harrison Mixbus mixers. What the owner likes most:
    - Underneath: the fader value and the highest peak, as text. Typing on a selected strip
      sets the value exactly.
 
-## The return strips: A Reverb and B Delay
+## The return strips: A, B and up to six more
 
-These are two narrow strips between the tracks and the master, as Ableton's return tracks
-are. Each one holds a single effect, fully wet, then a pan pot, mute, a fader and a meter.
+These are narrow strips between the tracks and the master, as Ableton's return tracks
+are. Each one holds an effect, fully wet (or a Prism of effects), then a pan pot, mute, a
+fader and a meter.
 - **A** starts with PHI's built-in reverb (a plate, about 1.8 s long).
 - **B** starts with a tempo-synced delay (a dotted eighth, with feedback at 30 %).
 - Either effect can be swapped for any plugin. The templates set their own (the podcast
   templates use a short room reverb and no delay).
-- More sends and returns can come later; two cover most mixes.
+- **C to H** (owner, 2026-11-01): right-click a return's name for Add Return C (then D... up to
+  H, eight in all) and Remove the last one; A and B are always there. Each strip shows a send
+  for every return in use, two to a row. A project opened from Ableton Live or a DAWproject gets a
+  return for each of its effect tracks, named after it; Rename (the same menu) names any return.
+  A mix saves only the returns in use, so one saved with two opens as before.
 
 The master still has no plugins. The returns are part of the mix that feeds it.
 
@@ -324,7 +336,9 @@ Every control has a screen-reader name and announces its value.
   after the inserts and width but before the fader; a muted track's sends are silent and bounces
   have none. `Engine::setReturnEffect` and `returnStrip`: each return runs its effect on the sum
   of its sends, then balance pan, fader and mute, into the master (with the patchbay, into its
-  Mix Bus); meters 9 and 10. The return strips sit between the tracks and the master: A Reverb
+  Mix Bus); meters 17 to 24 (A to H). `numReturns` is 8; `Engine::setReturnsInUse` (2 to 8)
+  says how many are fed and heard (the others keep their settings), and the window shows that
+  many, with `returnNames` and Add/Remove on a return's name (owner, 2026-11-01). The return strips sit between the tracks and the master: A Reverb
   starts with Φ Space (1.8 s, fully wet), B Delay with Φ Echo (one tap, a dotted eighth at the
   tempo, 30 % feedback, fully wet); right-click the effect to pick another. Send A and Send B
   pots on every strip show their level in dB (right-click: pre-fader).
