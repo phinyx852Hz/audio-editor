@@ -5,6 +5,7 @@
 #include "MixerWindow.h"
 #include "../engine/AudioEngine.h"
 #include "../mixer/EffectPrism.h"
+#include "Settings.h"
 
 #include <QComboBox>
 #include <QDialog>
@@ -22,9 +23,12 @@
 #include <QSignalBlocker>
 #include <QTimer>
 #include <QToolButton>
+#include <QJsonDocument>
+#include <QUrl>
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <map>
 #include <cmath>
 
 namespace
@@ -41,6 +45,63 @@ namespace
             case prism::Split::leftRight: return MixerWindow::tr ("Left/Right");
         }
         return {};
+    }
+
+    // The presets that come with PHI, made of the Φ effects (knobs set by name, as text in their own units).
+    struct PresetEffect
+    {
+        const char* name;   // as listed under Built-in
+        std::vector<std::pair<const char*, const char*>> knobs;
+    };
+    struct PresetRay
+    {
+        const char* name;
+        std::vector<PresetEffect> effects;
+        float gainDb = 0.0f;
+    };
+    struct FactoryPreset
+    {
+        const char* name;
+        prism::Split split;
+        std::vector<PresetRay> rays;
+        std::array<double, 3> crossovers { 200.0, 2000.0, 8000.0 };
+    };
+
+    const std::vector<FactoryPreset>& factoryPresets()
+    {
+        static const std::vector<FactoryPreset> list {
+            { "Plate and Shimmer", prism::Split::parallel, {
+                { "Plate", { { "Φ Space", { { "Decay", "2.4" }, { "Size", "70" }, { "Mix", "100" } } } } },
+                { "Shimmer", { { "Φ Grains", { { "Pitch", "12" }, { "Size", "220" }, { "Density", "30" }, { "Mix", "100" } } },
+                               { "Φ Space", { { "Decay", "6" }, { "Mix", "100" } } } }, -8.0f } } },
+            { "Robot Choir", prism::Split::parallel, {
+                { "Choir", { { "Φ Vocoder", { { "Chord", "Major" }, { "Note", "48" }, { "Carrier", "Saw" }, { "Mix", "100" } } },
+                             { "Φ Chorus", {} },
+                             { "Φ Space", { { "Decay", "1.6" }, { "Mix", "30" } } } } } } },
+            { "Talking Synth", prism::Split::parallel, {
+                { "Vocoder", { { "Φ Vocoder", { { "Follow Pitch", "1" }, { "Chord", "Octaves" }, { "Carrier", "Saw + Noise" }, { "Mix", "100" } } } } },
+                { "Sub", { { "Φ Double", { { "Interval", "-12" }, { "Wave", "Sine" }, { "Mix", "100" } } } }, -6.0f } } },
+            { "Sympathetic Strings", prism::Split::parallel, {
+                { "Strings", { { "Φ Strings", { { "Note", "50" }, { "Chord", "Fifths" }, { "Decay", "5" }, { "Mix", "100" } } },
+                               { "Φ Space", { { "Decay", "2" }, { "Mix", "25" } } } } } } },
+            { "Granular Cloud", prism::Split::parallel, {
+                { "Cloud", { { "Φ Grains", { { "Density", "40" }, { "Size", "300" }, { "Position", "1500" }, { "Jitter", "100" },
+                                             { "Detune", "0.3" }, { "Spread", "100" }, { "Mix", "100" } } },
+                             { "Φ Space", { { "Decay", "3" }, { "Mix", "40" } } } } } } },
+            { "Octave Shadow", prism::Split::parallel, {
+                { "Shadow", { { "Φ Double", { { "Interval", "-12" }, { "Wave", "Triangle" }, { "Tone", "40" }, { "Mix", "100" } } },
+                              { "Φ Echo", { { "Taps", "3" }, { "Mix", "30" } } } } } } },
+            { "Drum Replacer", prism::Split::parallel, {
+                { "Kick", { { "Φ Trigger", { { "Sound", "Kick" }, { "Mix", "100" } } } } },
+                { "Room", { { "Φ Space", { { "Size", "30" }, { "Decay", "0.6" }, { "Mix", "100" } } } }, -10.0f } } },
+            { "Low Echo, High Space", prism::Split::bands, {
+                { "Low", { { "Φ Echo", { { "Mix", "100" }, { "Taps", "2" } } } } },
+                { "High", { { "Φ Space", { { "Decay", "2.2" }, { "Mix", "100" } } } } } }, { 400.0, 2000.0, 8000.0 } },
+            { "Mid Echo, Side Space", prism::Split::midSide, {
+                { "Mid", { { "Φ Echo", { { "Mix", "100" } } } } },
+                { "Side", { { "Φ Space", { { "Decay", "3" }, { "Mix", "100" } } } } } } },
+        };
+        return list;
     }
 
     // What a ray is called by its place in the split, until it is named.
@@ -134,6 +195,14 @@ public:
                 edit ([] (std::vector<FxRay>& list) { list.push_back ({}); }, true);
         });
         head->addWidget (addRay);
+        auto* presets = new QToolButton (this);
+        presets->setText (MixerWindow::tr ("Presets"));
+        presets->setPopupMode (QToolButton::InstantPopup);
+        presets->setToolTip (MixerWindow::tr ("Prisms that come with PHI, and your own: Save Preset keeps this one with every ray's effects and settings"));
+        auto* presetMenu = new QMenu (presets);
+        QObject::connect (presetMenu, &QMenu::aboutToShow, this, [this, presetMenu] { fillPresets (*presetMenu); });
+        presets->setMenu (presetMenu);
+        head->addWidget (presets);
         layout->addLayout (head);
 
         auto* note = new QLabel (MixerWindow::tr ("What the tracks send to this return is divided among the rays; each ray plays its effects in "
@@ -170,6 +239,135 @@ private:
     void retitle()
     {
         setWindowTitle (MixerWindow::tr ("%1: %2").arg (MixerWindow::returnName (index), QString::fromStdString (prism->name())));
+    }
+
+    static QString presetKey (const QString& name)
+    {
+        return QStringLiteral ("prism/presets/") + QString::fromUtf8 (QUrl::toPercentEncoding (name));
+    }
+
+    void fillPresets (QMenu& menu)
+    {
+        menu.clear();
+        menu.addAction (MixerWindow::tr ("&Save Preset..."), this, [this] { savePreset(); });
+        menu.addSeparator();
+        auto* factory = menu.addMenu (MixerWindow::tr ("From PHI"));
+        for (const auto& p : factoryPresets())
+        {
+            const auto name = QString::fromUtf8 (p.name);
+            factory->addAction (name, this, [this, &p] { applyFactory (p); });
+        }
+        auto settings = appSettings();
+        settings.beginGroup (QStringLiteral ("prism/presets"));
+        const auto keys = settings.childKeys();
+        settings.endGroup();
+        if (keys.isEmpty())
+            menu.addAction (MixerWindow::tr ("No presets of your own yet"))->setEnabled (false);
+        auto* remove = new QMenu (MixerWindow::tr ("&Delete"), &menu);
+        for (const auto& key : keys)
+        {
+            const auto name = QUrl::fromPercentEncoding (key.toUtf8());
+            menu.addAction (name, this, [this, name] { applyUser (name); });
+            remove->addAction (name, this, [name] { appSettings().remove (presetKey (name)); });
+        }
+        if (! keys.isEmpty())
+        {
+            menu.addSeparator();
+            menu.addMenu (remove);
+        }
+    }
+
+    void savePreset()
+    {
+        bool ok = false;
+        const auto name = QInputDialog::getText (this, MixerWindow::tr ("Save Preset"), MixerWindow::tr ("Preset name:"), QLineEdit::Normal,
+                                                 QString::fromStdString (prism->name()), &ok).trimmed();
+        if (! ok || name.isEmpty())
+            return;
+        prism->setName (name.toStdString());
+        nameEdit->setText (name);
+        retitle();
+        const auto json = window.returnPrismJson (*prism);
+        appSettings().setValue (presetKey (name), QString::fromUtf8 (QJsonDocument (json).toJson (QJsonDocument::Compact)));
+        window.returnPrismChanged (index);
+    }
+
+    void applyUser (const QString& name)
+    {
+        const auto text = appSettings().value (presetKey (name)).toString();
+        const auto o = QJsonDocument::fromJson (text.toUtf8()).object();
+        if (o.isEmpty())
+            return;
+        QStringList problems;
+        std::vector<FxRay> rays;
+        for (const auto& value : o.value ("rays").toArray())
+        {
+            FxRay r;
+            r.effects = window.effectsFromJson (value.toObject().value ("effects").toArray(), MixerWindow::tr ("Ray %1").arg (rays.size() + 1), problems);
+            rays.push_back (std::move (r));
+        }
+        prism->setRays (std::move (rays));
+        prism->setState (o.value ("state").toString().toStdString());
+        finishPreset (problems);
+    }
+
+    void applyFactory (const FactoryPreset& p)
+    {
+        QStringList problems;
+        std::map<QString, std::string> ids;
+        for (const auto& info : window.audio.knownPlugins())
+            ids[QString::fromStdString (info.name)] = info.id;
+        std::vector<FxRay> rays;
+        for (const auto& pr : p.rays)
+        {
+            FxRay r;
+            r.name = pr.name;
+            r.gainDb = pr.gainDb;
+            for (const auto& pe : pr.effects)
+            {
+                const auto name = QString::fromUtf8 (pe.name);
+                const auto it = ids.find (name);
+                std::string error = "it is not in the plugin list";
+                mixer::EffectPtr made = it != ids.end() ? window.audio.loadEffectPlugin (it->second, window.rate(), error) : nullptr;
+                if (made == nullptr)
+                {
+                    problems << MixerWindow::tr ("%1 could not be started (%2)").arg (name, QString::fromStdString (error));
+                    continue;
+                }
+                const auto params = made->parameters();
+                for (const auto& [knob, value] : pe.knobs)
+                    for (size_t k = 0; k < params.size(); ++k)
+                        if (params[k].name == knob)
+                            made->setParameterText ((int) k, value);
+                r.effects.push_back ({ made, false, 1.0f });
+            }
+            rays.push_back (std::move (r));
+        }
+        prism->setSplit (p.split);
+        prism->setCrossovers (p.crossovers);
+        prism->setRays (std::move (rays));
+        prism->setName (p.name);
+        finishPreset (problems);
+    }
+
+    void finishPreset (const QStringList& problems)
+    {
+        {
+            const QSignalBlocker quiet (splitBox);
+            splitBox->setCurrentIndex ((int) prism->split());
+        }
+        const auto hz = prism->crossovers();
+        for (int k = 0; k < 3; ++k)
+        {
+            const QSignalBlocker quiet (crossovers[(size_t) k]);
+            crossovers[(size_t) k]->setValue (hz[(size_t) k]);
+        }
+        nameEdit->setText (QString::fromStdString (prism->name()));
+        retitle();
+        window.returnPrismChanged (index);
+        rebuild();
+        if (! problems.isEmpty())
+            QMessageBox::warning (this, MixerWindow::tr ("Prism preset"), problems.join (QLatin1Char ('\n')));
     }
 
     void edit (const std::function<void (std::vector<FxRay>&)>& change, bool rows)

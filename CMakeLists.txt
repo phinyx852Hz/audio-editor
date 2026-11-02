@@ -118,6 +118,7 @@ target_sources(${APP_ID} PRIVATE
     Source/core/PhiVoice.cpp
     Source/core/PhiPhaser.cpp
     Source/core/PhiRepeat.cpp
+    Source/core/AudioDriven.cpp
     Source/core/PhiTuning.cpp
     Source/core/Scala.cpp
     Source/core/XenTuner.cpp
@@ -134,6 +135,7 @@ target_sources(${APP_ID} PRIVATE
     Source/engine/AudioEngine.cpp
     Source/engine/BuiltinEffects.cpp
     Source/engine/PhiEffects.cpp
+    Source/engine/AudioDrivenEffects.cpp
     Source/engine/MidiInputs.cpp
     Source/engine/ControlSurfaces.cpp
     Source/engine/PushDisplay.cpp
@@ -558,6 +560,7 @@ if(PHI_BUILD_TESTS)
         Source/core/PhiVoice.cpp
         Source/core/PhiPhaser.cpp
         Source/core/PhiRepeat.cpp
+        Source/core/AudioDriven.cpp
         Source/core/PhiTuning.cpp
         Source/core/Scala.cpp
         Source/core/XenTuner.cpp
