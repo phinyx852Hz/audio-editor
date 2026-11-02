@@ -108,12 +108,13 @@ void MainWindow::registerWarpCommands()
     show->setChecked (appSettings().value (QStringLiteral ("warp/showGrid"), true).toBool());
     show->setStatusTip (tr ("Bar and beat lines over the waveform, from the file's tempo"));
 
-    // The time ruler counts time, bars and beats, or both (bars and beats need a tempo).
+    // The time ruler counts time alone, or bars and beats above time (bars and beats need a tempo).
+    // Time is always shown; the old bars-and-beats-only setting now shows both.
     auto* rulerModes = new QActionGroup (this);
-    const auto rulerSetting = appSettings().value (QStringLiteral ("view/ruler"), QStringLiteral ("both")).toString();
-    for (const auto& [id, text, value, tip] : { std::tuple { "view.rulerTime", tr ("Ruler in T&ime"), "time", tr ("The ruler counts minutes and seconds") },
-                                                std::tuple { "view.rulerBeats", tr ("Ruler in &Bars and Beats"), "beats", tr ("The ruler counts bars, beats and sixteenths (1, 1.2, 1.2.3) once the file has a tempo") },
-                                                std::tuple { "view.rulerBoth", tr ("Ruler in Time &and Beats"), "both", tr ("Bars and beats above, time below") } })
+    const auto rulerSetting = appSettings().value (QStringLiteral ("view/ruler"), QStringLiteral ("both")).toString() == QLatin1String ("time")
+                                ? QStringLiteral ("time") : QStringLiteral ("both");
+    for (const auto& [id, text, value, tip] : { std::tuple { "view.rulerBoth", tr ("Ruler in &Bars and Time"), "both", tr ("Bars and beats above, minutes and seconds below") },
+                                                std::tuple { "view.rulerTime", tr ("Ruler in T&ime Only"), "time", tr ("The ruler counts minutes and seconds") } })
     {
         auto* a = add (id, text, {}, [this, value = QString::fromLatin1 (value)]
         {
@@ -233,8 +234,7 @@ void MainWindow::refreshGrid()
 {
     const auto grid = doc.isOpen() ? doc.current().grid : BeatGrid();
     waveform->setGrid (grid, commands.action (QStringLiteral ("warp.showGrid"))->isChecked());
-    const auto ruler = commands.action (QStringLiteral ("view.rulerBeats"))->isChecked() ? TimeRuler::Mode::beats
-                     : commands.action (QStringLiteral ("view.rulerBoth"))->isChecked() ? TimeRuler::Mode::both : TimeRuler::Mode::time;
+    const auto ruler = commands.action (QStringLiteral ("view.rulerBoth"))->isChecked() ? TimeRuler::Mode::both : TimeRuler::Mode::time;
     timeRuler->setGrid (grid, ruler);
     transportBar->setTempo (grid.isSet() ? grid.bpm : 0.0);
     // Any other edit of the audio ends the warp; editing goes on with the hits of the audio as it is now.

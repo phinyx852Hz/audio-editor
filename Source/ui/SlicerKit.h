@@ -52,4 +52,6 @@ namespace slicerkit
 
     // Where the owner's own PHI tabla default is kept (Make This the PHI tabla Default), in PHI's data folder.
     QString phiTablaDefaultPath();
+    // The same for PHI frame drum (Make This the PHI frame drum Default).
+    QString phiFrameDrumDefaultPath();
 }

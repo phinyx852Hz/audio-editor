@@ -132,9 +132,8 @@ analyze.vamp	Analyze	Vamp Plugins	Ctrl+Alt+Shift+V
 marker.exportSlices	Markers	Export Slices at Markers	
 marker.exportLabels	Markers	Export Markers as Labels	
 warp.showGrid	Warp	Show Beat Grid	Ctrl+J
-view.rulerTime	Warp	Ruler in Time	
-view.rulerBeats	Warp	Ruler in Bars and Beats	
-view.rulerBoth	Warp	Ruler in Time and Beats	
+view.rulerBoth	Warp	Ruler in Bars and Time	
+view.rulerTime	Warp	Ruler in Time Only	
 warp.detectGrid	Warp	Detect Beat Grid	
 warp.autoDetect	Warp	Detect Tempo When Opening Loops	
 warp.setTempo	Warp	Set Tempo and Grid	Ctrl+Shift+J
@@ -260,6 +259,7 @@ tools.macroRecord	Tools	Record Macro	Ctrl+F9
 tools.macroApply	Tools	Apply Macro	F9
 tools.macros	Tools	Macros	Shift+F9
 tools.managePlugins	Tools	Manage Plug-ins	
+tools.themeGenerator	Tools	Theme Generator	
 tools.resetConfig	Tools	Reset Configuration	
 transport.playStop	Transport	Play / Stop	Space
 transport.stop	Transport	Stop	K
