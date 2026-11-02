@@ -246,6 +246,11 @@ target_sources(${APP_ID} PRIVATE
     Source/ui/PitchSection.cpp
     Source/ui/MacroSection.cpp
     Source/ui/Macros.cpp
+    Source/ui/ScriptEditor.cpp
+    Source/ui/ScriptSection.cpp
+    Source/script/ScriptApi.cpp
+    Source/script/ScriptRunner.cpp
+    Source/script/ReaperImport.cpp
     Source/ui/ToolsSection.cpp
     Source/ui/ResearchSection.cpp
     Source/ui/AmbiDialogs.cpp
@@ -436,6 +441,10 @@ target_compile_definitions(${APP_ID} PRIVATE
     PHI_BOLPROCESSOR_SOURCE_DIR="${CMAKE_SOURCE_DIR}/third_party/bolprocessor")
 
 # Nyquist effects (cmake/Nyquist.cmake): libnyquist, its runtime and the bundled plug-ins.
+# Scripts (cmake/Lua.cmake, docs/scripting.md): Lua 5.4, built in; Python scripts use the system's python3.
+include(cmake/Lua.cmake)
+target_link_libraries(${APP_ID} PRIVATE phi_lua)
+
 include(cmake/Nyquist.cmake)
 target_link_libraries(${APP_ID} PRIVATE phi_nyquist)
 file(RELATIVE_PATH nyquist_relative "/${CMAKE_INSTALL_BINDIR}" "/${CMAKE_INSTALL_DATADIR}/${APP_ID}")
@@ -581,6 +590,15 @@ if(PHI_BUILD_TESTS)
         PHI_BOLPROCESSOR_SOURCE_DIR="${CMAKE_SOURCE_DIR}/third_party/bolprocessor")
     add_dependencies(phi-core-tests phi-bp3)
     add_test(NAME core COMMAND phi-core-tests)
+
+    # Scripts: the Lua and Python bridges against a dispatch of their own (Qt Core, no editor).
+    add_executable(phi-script-tests
+        tests/ScriptTests.cpp
+        Source/script/ScriptApi.cpp
+        Source/script/ScriptRunner.cpp
+        Source/script/ReaperImport.cpp)
+    target_link_libraries(phi-script-tests PRIVATE Qt6::Core phi_lua)
+    add_test(NAME scripts COMMAND phi-script-tests)
 
     # The video writer: an MP4 with H.265 (or H.264) and several AAC tracks, read back.
     add_executable(phi-performance-tests

@@ -71,6 +71,19 @@ void AudioDocument::apply (const std::string& description, DocumentState newStat
     ++position;
 }
 
+void AudioDocument::squash (int from, const std::string& description)
+{
+    if (from < 0 || position <= from || position >= (int) history.size())
+        return;
+    // The latest state stays; the ones between it and `from` go, and the redo steps with them.
+    history.erase (history.begin() + from + 1, history.begin() + position);
+    history.resize ((size_t) from + 2);
+    if (savedPosition > from)
+        savedPosition = savedPosition == position ? from + 1 : -1;
+    position = from + 1;
+    history[(size_t) position].description = description;
+}
+
 std::vector<std::string> AudioDocument::historyDescriptions() const
 {
     std::vector<std::string> result;

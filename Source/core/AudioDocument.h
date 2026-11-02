@@ -120,6 +120,9 @@ public:
     void setGrid (const BeatGrid& g)     { if (! history.empty()) history[(size_t) position].state.grid = g; }
 
     void apply (const std::string& description, DocumentState newState);
+    // The steps after `from` become one, named `description` (a script's changes: one undo).
+    // Nothing happens when the history is no longer past `from`.
+    void squash (int from, const std::string& description);
 
     bool canUndo() const { return position > 0; }
     bool canRedo() const { return position + 1 < (int) history.size(); }
