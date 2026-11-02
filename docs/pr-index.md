@@ -7,7 +7,7 @@ which runs whenever a pull request is opened, edited, merged or closed. Don't ed
 to change a summary, area or location, edit `docs/pr-index-notes.json`.
 Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 
-**151 pull requests:** 142 merged, 9 open.
+**151 pull requests:** 143 merged, 8 open.
 
 ## Contents
 
@@ -216,7 +216,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#117](https://github.com/phinyx852Hz/audio-editor/pull/117) | UI fixes: Alt+menu letters, strip hover, Find panel width, Interface Size | open | Options > Interface Size | `Source/ui/ToolsSection.cpp`<br>`Source/ui/InterfaceSize.h`<br>`Source/ui/PanelNavigation.cpp` |
 | [#122](https://github.com/phinyx852Hz/audio-editor/pull/122) | Research: add Engineering, the audio engineering behind PHI's menus | merged |  | `share/research/engineering-1-analysis-meters.md`<br>`share/research/engineering-4-process.md`<br>`share/research/engineering-6-restoration.md` |
 | [#125](https://github.com/phinyx852Hz/audio-editor/pull/125) | Research menu: a MIDI section | merged |  | `share/research/midi.md` |
-| [#141](https://github.com/phinyx852Hz/audio-editor/pull/141) | Research: an entry for every Compose menu item | open | Research > Composition | `share/research/composition.md`<br>`share/research/references.md`<br>`Source/ui/ResearchSection.cpp` |
+| [#141](https://github.com/phinyx852Hz/audio-editor/pull/141) | Research: an entry for every Compose menu item | merged | Research > Composition | `share/research/composition.md`<br>`share/research/references.md`<br>`Source/ui/ResearchSection.cpp` |
 | [#145](https://github.com/phinyx852Hz/audio-editor/pull/145) | Add Tools > Theme Generator, with optional local or cloud AI | merged | Tools > Theme Generator | `Source/ui/ThemeGenerator.cpp`<br>`Source/core/ThemeGen.cpp`<br>`Source/ui/ThemeAi.cpp` |
 
 ### Documentation
@@ -395,7 +395,7 @@ Lines marked *auto* were filled in from the PR itself and are waiting for notes.
 | [#138](https://github.com/phinyx852Hz/audio-editor/pull/138) | Remove a Find place; Wallpaper in the Visualizer menu, moving with the music | Find > Places: right-click a place for *Remove from Places*, or select it and press Delete. *(auto)* | merged | 2026-11-01 | Performance and visuals |
 | [#139](https://github.com/phinyx852Hz/audio-editor/pull/139) | Score editor: the playhead moves smoothly and the view follows it | Every frame of the staff notation ran fit() over every note in the clip, spelling each one again with Xen Tuner (Speller::best builds and sorts all spellings... *(auto)* | merged | 2026-11-01 | Editing and warping |
 | [#140](https://github.com/phinyx852Hz/audio-editor/pull/140) | Mixer: narrower return strips, any effect or a Prism of effects in their slot | The two send/return FX strips (A and B) in the mixer: *(auto)* | merged | 2026-11-01 | Routing and racks |
-| [#141](https://github.com/phinyx852Hz/audio-editor/pull/141) | Research: an entry for every Compose menu item | The owner asked for every Compose menu option to have a Research entry. *(auto)* | open | 2026-11-01 | Interface and branding |
+| [#141](https://github.com/phinyx852Hz/audio-editor/pull/141) | Research: an entry for every Compose menu item | The owner asked for every Compose menu option to have a Research entry. *(auto)* | merged | 2026-11-01 | Interface and branding |
 | [#142](https://github.com/phinyx852Hz/audio-editor/pull/142) | Mixer: folders as group buses, with Reaper's three fold levels | Group buses that work like Reaper's folder tracks: *(auto)* | open | 2026-11-01 | Mixer and clip launcher |
 | [#143](https://github.com/phinyx852Hz/audio-editor/pull/143) | Ruler: bars and time together, or time only | Mixer timeline ruler (tracks across time): two rows by default, bar numbers above and minutes:seconds below (0:00, 1:30, 1:02:03, with tenths or hundredths w... *(auto)* | merged | 2026-11-01 | Not yet sorted |
 | [#144](https://github.com/phinyx852Hz/audio-editor/pull/144) | Φ EQ: a Linear phase mode for mastering | Φ EQ gets a Phase parameter: Minimum (default, the IIR biquads as before, no latency) or Linear (for mastering). *(auto)* | merged | 2026-11-01 | Modes, tunings and composition |
