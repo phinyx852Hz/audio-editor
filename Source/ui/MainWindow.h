@@ -162,7 +162,11 @@ private:
     int panelKey = 0;
     bool altArmed = false, altMoved = false;   // Alt down with nothing else yet, and an arrow pressed with it
     void resetConfiguration();
+    // Options > Interface Size (InterfaceSize.h): `percent` chosen at first; Restart Now closes the window.
+    void chooseInterfaceSize (int percent);
+    static bool pendingRestart;
 public:
+    static bool restartRequested() { return pendingRestart; }
     // After the window is gone: clears the settings if Reset Configuration asked to; true if it did (then restart).
     static bool finishReset();
 private:

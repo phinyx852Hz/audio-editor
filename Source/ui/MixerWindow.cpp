@@ -7181,7 +7181,7 @@ MixerWindow::MixerWindow (mixer::Engine& e, AudioEngine& a, Hooks h, QWidget* pa
     // The zoom as it was left; Wide Strips, from before the zoom, as its widest but one.
     stripZoom = appSettings().value (QStringLiteral ("mixer/stripZoom"),
                                      appSettings().value (QStringLiteral ("mixer/wideStrips"), false).toBool() ? 180 : 0).toInt();
-    focusFollowsMouse = appSettings().value (QStringLiteral ("mixer/focusFollowsMouse"), false).toBool();
+    focusFollowsMouse = appSettings().value (QStringLiteral ("mixer/focusFollowsMouse"), true).toBool();
     autoArm = appSettings().value (QStringLiteral ("mixer/autoArm"), true).toBool();
     auto* stripsButton = button (tr ("Strips"), tr ("Which sections the strips and the Inspector show (instrument, Pre, inserts, sends, trim and pan), and wide or narrow strips"));
     qLinkButton = button (tr ("Q-Link"), tr ("Q-Link: a change to one of the picked strips (Ctrl+click picks them) goes to all of them; "
@@ -10641,14 +10641,29 @@ void MixerWindow::syncLauncherScroll()
 
 void MixerWindow::hoverSelect (int track)
 {
-    if (! focusFollowsMouse || track == selected || track >= engine.numTracks() || QApplication::mouseButtons() != Qt::NoButton)
+    if (! focusFollowsMouse || track == selected || track >= engine.numTracks())
         return;
-    // Not while something else has the keyboard: typing a name, or a dialog of the mixer's.
-    if (auto* f = QApplication::focusWidget(); f != nullptr && (qobject_cast<QLineEdit*> (f) != nullptr || qobject_cast<QAbstractSpinBox*> (f) != nullptr))
-        return;
-    keepArm = true;
-    select (track);
-    keepArm = false;
+    if (hoverTimer == nullptr)
+    {
+        hoverTimer = new QTimer (this);
+        hoverTimer->setSingleShot (true);
+        hoverTimer->setInterval (150);
+        connect (hoverTimer, &QTimer::timeout, this, [this]
+        {
+            const int t = hoverTrack;
+            if (! focusFollowsMouse || t < 0 || t == selected || t >= engine.numTracks() || QApplication::mouseButtons() != Qt::NoButton
+                || ! strips[(size_t) t]->underMouse() || QApplication::activePopupWidget() != nullptr)
+                return;
+            // Not while something else has the keyboard: typing a name, or a dialog of the mixer's.
+            if (auto* f = QApplication::focusWidget(); f != nullptr && (qobject_cast<QLineEdit*> (f) != nullptr || qobject_cast<QAbstractSpinBox*> (f) != nullptr))
+                return;
+            keepArm = true;
+            select (t);
+            keepArm = false;
+        });
+    }
+    hoverTrack = track;
+    hoverTimer->start();
 }
 
 QString MixerWindow::applyEqCuts (int track, const std::vector<std::pair<double, double>>& cuts)

@@ -25,6 +25,8 @@
 #include <QDropEvent>
 #include <QKeyEvent>
 #include <QListWidget>
+#include <QMenu>
+#include <QMenuBar>
 #include <QMimeData>
 #include <QStackedWidget>
 #include <QStatusBar>
@@ -382,6 +384,37 @@ bool MainWindow::navigationKey (QObject* o, QEvent* e)
     }
     if (! ours)
         return false;
+
+    // Alt + a menu title's letter opens that menu at once (owner, 2026-10-31): a docked panel's
+    // label with the same letter (Quantize's Groove, Simplest's Voices for Alt+O) took the key
+    // first, and Qt went round those before it got to the menu. A panel popped out into its own
+    // window keeps its letters there, and a command bound to Alt+letter keeps its key.
+    if (window == this && mods == Qt::AltModifier && key >= Qt::Key_A && key <= Qt::Key_Z && type != QEvent::KeyRelease)
+    {
+        const QKeySequence pressed (QKeyCombination (Qt::AltModifier, Qt::Key (key)));
+        QAction* title = nullptr;
+        for (auto* a : menuBar()->actions())
+            if (title == nullptr && a->isVisible() && a->isEnabled() && QKeySequence::mnemonic (a->text()) == pressed)
+                title = a;
+        if (title != nullptr && commands.findConflict (pressed, {}) == nullptr)
+        {
+            altArmed = false;
+            if (type == QEvent::ShortcutOverride)
+                e->accept();
+            else if (! k->isAutoRepeat())
+            {
+                menuBar()->setActiveAction (title);   // as Alt+letter on the menu bar: open, the first item lit
+                if (auto* menu = title->menu())
+                    for (auto* a : menu->actions())
+                        if (! a->isSeparator() && a->isVisible() && a->isEnabled())
+                        {
+                            menu->setActiveAction (a);
+                            break;
+                        }
+            }
+            return true;
+        }
+    }
 
     // Simplest or the Slicer popped out into a window of its own: Ctrl+F, like Super+F, takes
     // it full screen and back to its floating size, as the instruments' own windows do.
